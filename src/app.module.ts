@@ -23,6 +23,8 @@ import { DataSource, DataSourceOptions } from 'typeorm';
 import { AllConfigType } from './config/config.type';
 import { SessionModule } from './session/session.module';
 import { MailerModule } from './mailer/mailer.module';
+import { TenantConnectionService } from './tenant/tenant.service';
+import { TenantModule } from './tenant/tenant.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -79,6 +81,13 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     MailModule,
     MailerModule,
     HomeModule,
+    TenantModule
   ],
+  providers: [TenantConnectionService]
 })
-export class AppModule {}
+export class AppModule {
+  constructor(private readonly tenantConnectionService: TenantConnectionService) {
+    // Ensure that TenantConnectionService is instantiated when the application starts
+    // This ensures the onModuleInit hook is triggered
+  }
+}

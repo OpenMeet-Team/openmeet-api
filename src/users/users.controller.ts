@@ -11,6 +11,7 @@ import {
   HttpStatus,
   HttpCode,
   SerializeOptions,
+  Headers
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -36,16 +37,17 @@ import { UsersService } from './users.service';
 import { RolesGuard } from '../roles/roles.guard';
 import { infinityPagination } from '../utils/infinity-pagination';
 
-@ApiBearerAuth()
-@Roles(RoleEnum.admin)
-@UseGuards(AuthGuard('jwt'), RolesGuard)
+// @ApiBearerAuth()
+// @Roles(RoleEnum.admin)
+// @UseGuards(AuthGuard('jwt'), RolesGuard)
 @ApiTags('Users')
 @Controller({
   path: 'users',
   version: '1',
 })
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService,
+  ) {}
 
   @ApiCreatedResponse({
     type: User,
@@ -58,6 +60,13 @@ export class UsersController {
   create(@Body() createProfileDto: CreateUserDto): Promise<User> {
     return this.usersService.create(createProfileDto);
   }
+
+  @Get('/check')
+@HttpCode(HttpStatus.CREATED)
+check(@Headers('tenant-id') tenantId: string): Promise<any> {
+  console.log('🚀 ~ Headers tenant-id:', tenantId);
+  return this.usersService.getTenantSpecificUserRepository();  // you may need to adjust this to pass tenantId
+}
 
   @ApiOkResponse({
     type: InfinityPaginationResponse(User),
