@@ -4,7 +4,6 @@ import { EventEntity } from '../../../../../events/infrastructure/persistence/re
 
 @Entity({ name: 'event_attendees' })
 export class EventAttendeesEntity {
-
   @PrimaryColumn({ type: 'uuid' })
   eventId: string;
 
@@ -17,12 +16,16 @@ export class EventAttendeesEntity {
   @Column({ type: 'boolean', default: false })
   isHost: boolean;
 
-  @ManyToOne(() => EventEntity, event => event.attendees, { onDelete: 'CASCADE' })
+  @ManyToOne(() => EventEntity, (event) => event.attendees, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'eventId' })
   event: EventEntity;
 
   // Many-to-One relationship with User
-  @ManyToOne(() => UserEntity, user => user.attendedEvents, { onDelete: 'CASCADE' })
+  @ManyToOne(() => UserEntity, (user) => user.attendedEvents, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'userId' })
   user: UserEntity;
 }

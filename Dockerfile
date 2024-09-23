@@ -1,22 +1,41 @@
-FROM node:20.17.0-alpine
-
-RUN apk add --no-cache bash
-RUN npm i -g @nestjs/cli typescript ts-node
-
-COPY package*.json /tmp/app/
-RUN cd /tmp/app && npm install
-
-COPY . /usr/src/app
-RUN cp -a /tmp/app/node_modules /usr/src/app
-COPY ./wait-for-it.sh /opt/wait-for-it.sh
-RUN chmod +x /opt/wait-for-it.sh
-COPY ./startup.relational.dev.sh /opt/startup.relational.dev.sh
-RUN chmod +x /opt/startup.relational.dev.sh
-RUN sed -i 's/\r//g' /opt/wait-for-it.sh
-RUN sed -i 's/\r//g' /opt/startup.relational.dev.sh
-
+# ---- Base Node ----
+FROM node:18.16.1-alpine3.17 AS base
+# Set working directory
 WORKDIR /usr/src/app
-RUN if [ ! -f .env ]; then cp env-example-relational .env; fi
-RUN npm run build
+# Copy project file
+COPY package*.json ./
 
-CMD ["/opt/startup.relational.dev.sh"]
+# Copy ts config
+COPY tsconfig.json ./
+
+
+# ---- Dependencies ----
+FROM base AS dependencies
+# Install production dependencies 
+RUN npm ci
+RUN npm install -g ts-node
+
+
+# ---- Copy Files/Build ----
+FROM dependencies AS build 
+# Copy app files
+COPY . . 
+
+# Build app
+RUN npm run build 
+
+# # Remove devDependencies
+RUN npm prune --production
+
+# ---- Release ----
+FROM base AS release 
+# Copy production dependencies
+COPY --from=dependencies /usr/src/app/node_modules ./node_modules
+# Copy build files from build stage
+COPY --from=build /usr/src/app/dist ./dist
+
+# Expose port
+EXPOSE 3000
+
+CMD npm run migration:run:prod && npm run seed:run:prod && npm run start:prod
+# CMD  npm run start:prod

@@ -1,7 +1,14 @@
-import { Entity, Column, ManyToOne, JoinColumn, PrimaryGeneratedColumn, OneToMany } from "typeorm";
-import { EntityRelationalHelper } from "../../../../../utils/relational-entity-helper";
-import { UserEntity } from "../../../../../users/infrastructure/persistence/relational/entities/user.entity";
-import { EventAttendeesEntity } from "../../../../../event-attende/infrastructure/persistence/relational/entities/event-attende.entity";
+import {
+  Entity,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  PrimaryGeneratedColumn,
+  OneToMany,
+} from 'typeorm';
+import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
+import { UserEntity } from '../../../../../users/infrastructure/persistence/relational/entities/user.entity';
+import { EventAttendeesEntity } from '../../../../../event-attende/infrastructure/persistence/relational/entities/event-attende.entity';
 
 @Entity({ name: 'Event' })
 export class EventEntity extends EntityRelationalHelper {
@@ -26,19 +33,19 @@ export class EventEntity extends EntityRelationalHelper {
   @Column({ type: 'varchar', length: 255 })
   location: string;
 
-  @Column({ type: 'double' })
+  @Column({ type: 'double precision', nullable: true })
   lat: number;
 
-  @Column({ type: 'double' })
+  @Column({ type: 'double precision', nullable: true })
   lon: number;
 
   @Column({ type: 'boolean', default: false })
   is_public: boolean;
 
-  @ManyToOne(() => UserEntity, user => user.events)
+  @ManyToOne(() => UserEntity, (user) => user.events)
   @JoinColumn({ name: 'userId' })
   user: UserEntity;
 
-  @OneToMany(() => EventAttendeesEntity, event => event.event)
+  @OneToMany(() => EventAttendeesEntity, (event) => event.event)
   attendees: EventAttendeesEntity[];
 }

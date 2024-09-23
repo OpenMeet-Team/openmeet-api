@@ -296,3 +296,23 @@ Designing schema for MongoDB is completely different from designing schema for r
 Previous: [Command Line Interface](cli.md)
 
 Next: [Auth](auth.md)
+
+
+
+# Multi Tenancy DB Migrations
+
+<!-- To Run Migration -->
+# Step 1: Gnerate Migration on default Schema
+```
+npm run migration:generate -- {{Name}}
+```    
+
+# Step 2: Run on Migration default Schema
+```
+npm run migration:run 
+```    
+
+# Step 3: Run  Migration File on Every Tenants
+```
+npm run migration:run:tenants
+```  

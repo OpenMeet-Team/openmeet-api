@@ -1,0 +1,83 @@
+# to run in development use this command 
+# `` sudo docker-compose -f docker-compose-dev.yml up --build ``
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16.4-alpine
+    container_name: postgres
+    ports:
+      - ${DATABASE_PORT}:5432
+    env_file:
+      - .env
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${DATABASE_USERNAME}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    networks:
+      - api-network
+
+  # maildev:
+  #   build:
+  #     context: .
+  #     dockerfile: maildev.Dockerfile
+  #   ports:
+  #     - ${MAIL_CLIENT_PORT}:1080
+  #     - ${MAIL_PORT}:1025
+  #   networks:
+  #     - api-network
+
+  pgadmin:
+    image: dpage/pgadmin4
+    depends_on:
+      - postgres
+    ports:
+      - "8080:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    restart: always
+    networks:
+      - api-network
+
+  # Uncomment to use redis
+  redis:
+    image: redis:6.2
+    container_name: redis
+    ports:
+      - "6379:6379"
+    restart: always
+    networks:
+      - api-network
+
+  # api:
+  #   build:
+  #     context: .
+  #     dockerfile: ./Dockerfile.dev
+  #   container_name: api
+  #   hostname: api
+  #   ports:
+  #     - ${APP_PORT}:${APP_PORT}
+  #   env_file:
+  #     - .env
+  #   volumes:
+  #     - ./src/:/app/src/
+  #     # - ./package.json:/app/package.json
+  #     # - /app/node_modules # Use node_modules from the container
+  #     - .env/:/app/.env
+  #   networks:
+  #     - api-network
+  #   depends_on:
+  #     - postgres
+
+volumes:
+  dbdata:
+
+networks:
+  api-network:
+    driver: bridge
+
+

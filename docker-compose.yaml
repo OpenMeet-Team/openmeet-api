@@ -1,41 +1,54 @@
+# to run in development use this command 
+# `` sudo docker-compose -f docker-compose-dev.yml up --build ``
+
+version: '3.8'
+
 services:
   postgres:
     image: postgres:16.4-alpine
+    container_name: postgres
+    env_file:
+      - .env
     ports:
       - ${DATABASE_PORT}:5432
     volumes:
-      - boilerplate-db:/var/lib/postgresql/data
+      - dbdata:/var/lib/postgresql/data
     environment:
       POSTGRES_USER: ${DATABASE_USERNAME}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_DB: ${DATABASE_NAME}
-
-  maildev:
-    build:
-      context: .
-      dockerfile: maildev.Dockerfile
-    ports:
-      - ${MAIL_CLIENT_PORT}:1080
-      - ${MAIL_PORT}:1025
-
-  adminer:
-    image: adminer
-    restart: always
-    ports:
-      - 8080:8080
+    networks:
+      - api-network
 
   # Uncomment to use redis
-  # redis:
-  #   image: redis:7-alpine
-  #   ports:
-  #     - 6379:6379
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    restart: always
+    networks:
+      - api-network
 
   api:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: ./Dockerfile
+    container_name: api
+    hostname: api
+    env_file:
+      - .env
     ports:
       - ${APP_PORT}:${APP_PORT}
+    restart: always
+    depends_on:
+      - postgres
+    networks:
+      - api-network
 
 volumes:
-  boilerplate-db:
+  dbdata:
+
+networks:
+  api-network:
+    driver: bridge

@@ -1,10 +1,10 @@
 import 'reflect-metadata';
 import { DataSource, DataSourceOptions } from 'typeorm';
 
-export const AppDataSource = (tenantId) => {
-  const schemaName = `tenant-${tenantId}`;
+export const AppDataSource = (tenantId = '') => {
+  const schemaName = tenantId ? `tenant_${tenantId}` : '';
   return new DataSource({
-    name: tenantId,
+    name: schemaName,
     type: process.env.DATABASE_TYPE,
     url: process.env.DATABASE_URL,
     host: process.env.DATABASE_HOST,
@@ -22,6 +22,7 @@ export const AppDataSource = (tenantId) => {
     entities: [__dirname + '/../**/*.entity{.ts,.js}'],
     migrations: [__dirname + '/migrations/**/*{.ts,.js}'],
     cli: {
+      migrationsDir: 'src/database/migrations', // path where migrations generated
       entitiesDir: 'src',
 
       subscribersDir: 'subscriber',
@@ -45,3 +46,7 @@ export const AppDataSource = (tenantId) => {
     },
   } as DataSourceOptions);
 };
+
+// Export a single DataSource instance for the default tenant
+const DefaultDataSource = AppDataSource();
+export default DefaultDataSource;

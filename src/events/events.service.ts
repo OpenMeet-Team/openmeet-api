@@ -19,7 +19,7 @@ export class EventService {
 
   async findAll(): Promise<EventEntity[]> {
     return this.eventRepository.find({
-      relations: ['user'], 
+      relations: ['user'],
     });
   }
 
@@ -36,17 +36,18 @@ export class EventService {
     return event;
   }
 
-
-  async update(id: number, updateEventDto: UpdateEventDto): Promise<EventEntity> {
-    const event = await this.findOne(id); 
+  async update(
+    id: number,
+    updateEventDto: UpdateEventDto,
+  ): Promise<EventEntity> {
+    const event = await this.findOne(id);
 
     const updatedEvent = this.eventRepository.merge(event, updateEventDto);
     return this.eventRepository.save(updatedEvent);
   }
 
-
   async remove(id: number): Promise<void> {
-    const event = await this.findOne(id); 
+    const event = await this.findOne(id);
     await this.eventRepository.remove(event);
   }
 }

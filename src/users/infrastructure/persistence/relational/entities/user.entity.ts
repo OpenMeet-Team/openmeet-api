@@ -10,7 +10,7 @@ import {
   UpdateDateColumn,
   JoinColumn,
   OneToOne,
-  OneToMany
+  OneToMany,
 } from 'typeorm';
 import { RoleEntity } from '../../../../../roles/infrastructure/persistence/relational/entities/role.entity';
 import { StatusEntity } from '../../../../../statuses/infrastructure/persistence/relational/entities/status.entity';
@@ -129,9 +129,9 @@ export class UserEntity extends EntityRelationalHelper {
   @DeleteDateColumn()
   deletedAt: Date;
 
-  @OneToMany(() => EventEntity, event => event.user)
+  @OneToMany(() => EventEntity, (event) => event.user)
   events: EventEntity[];
 
-  @OneToMany(() => EventAttendeesEntity, event => event.user)
+  @OneToMany(() => EventAttendeesEntity, (event) => event.user)
   attendedEvents: EventAttendeesEntity[];
 }
