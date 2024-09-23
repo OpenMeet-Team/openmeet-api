@@ -3,7 +3,7 @@ import {
   Injectable,
   UnprocessableEntityException,
   Scope,
-  Inject
+  Inject,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { NullableType } from '../utils/types/nullable.type';
@@ -18,10 +18,8 @@ import { StatusEnum } from '../statuses/statuses.enum';
 import { IPaginationOptions } from '../utils/types/pagination-options';
 import { DeepPartial } from '../utils/types/deep-partial.type';
 import { TenantConnectionService } from '../tenant/tenant.service';
-import { Request } from 'express';
 import { REQUEST } from '@nestjs/core';
 import { User } from './domain/user';
-
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UsersService {
@@ -29,19 +27,22 @@ export class UsersService {
     private readonly usersRepository: UserRepository,
     private readonly filesService: FilesService,
     @Inject(REQUEST) private readonly request: any,
-    private readonly tenantConnectionService: TenantConnectionService, 
+    private readonly tenantConnectionService: TenantConnectionService,
   ) {}
-  
+
   async getTenantSpecificUserRepository() {
-    console.log(this.request)
-    const tenantId = this.request.tenantId; 
-    console.log("🚀 ~ UsersService ~ getTenantSpecificUserRepository ~ tenantId:", tenantId)
-    const dataSource = await this.tenantConnectionService.getTenantConnection(tenantId);  
+    console.log(this.request);
+    const tenantId = this.request.tenantId;
+    console.log(
+      '🚀 ~ UsersService ~ getTenantSpecificUserRepository ~ tenantId:',
+      tenantId,
+    );
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
     // console.log("🚀 ~ UsersService ~ getTenantSpecificUserRepository ~ dataSource:", dataSource)
-    
+
     const userRepo = dataSource.getRepository(UserEntity);
-    return userRepo.find()
-     
+    return userRepo.find();
   }
 
   async create(createProfileDto: CreateUserDto): Promise<User> {
