@@ -2,12 +2,14 @@ import {
   HttpStatus,
   Injectable,
   UnprocessableEntityException,
+  Scope,
+  Inject,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { NullableType } from '../utils/types/nullable.type';
 import { FilterUserDto, SortUserDto } from './dto/query-user.dto';
 import { UserRepository } from './infrastructure/persistence/user.repository';
-import { User } from './domain/user';
+import { UserEntity } from './infrastructure/persistence/relational/entities/user.entity';
 import bcrypt from 'bcryptjs';
 import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { FilesService } from '../files/files.service';
@@ -15,13 +17,33 @@ import { RoleEnum } from '../roles/roles.enum';
 import { StatusEnum } from '../statuses/statuses.enum';
 import { IPaginationOptions } from '../utils/types/pagination-options';
 import { DeepPartial } from '../utils/types/deep-partial.type';
+import { TenantConnectionService } from '../tenant/tenant.service';
+import { REQUEST } from '@nestjs/core';
+import { User } from './domain/user';
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST, durable: true })
 export class UsersService {
   constructor(
     private readonly usersRepository: UserRepository,
     private readonly filesService: FilesService,
+    @Inject(REQUEST) private readonly request: any,
+    private readonly tenantConnectionService: TenantConnectionService,
   ) {}
+
+  async getTenantSpecificUserRepository() {
+    console.log(this.request);
+    const tenantId = this.request.tenantId;
+    console.log(
+      '🚀 ~ UsersService ~ getTenantSpecificUserRepository ~ tenantId:',
+      tenantId,
+    );
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    // console.log("🚀 ~ UsersService ~ getTenantSpecificUserRepository ~ dataSource:", dataSource)
+
+    const userRepo = dataSource.getRepository(UserEntity);
+    return userRepo.find();
+  }
 
   async create(createProfileDto: CreateUserDto): Promise<User> {
     const clonedPayload = {

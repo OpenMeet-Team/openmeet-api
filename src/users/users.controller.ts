@@ -6,24 +6,20 @@ import {
   Patch,
   Param,
   Delete,
-  UseGuards,
   Query,
   HttpStatus,
   HttpCode,
   SerializeOptions,
+  Headers,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import {
-  ApiBearerAuth,
   ApiCreatedResponse,
   ApiOkResponse,
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
-import { Roles } from '../roles/roles.decorator';
-import { RoleEnum } from '../roles/roles.enum';
-import { AuthGuard } from '@nestjs/passport';
 
 import {
   InfinityPaginationResponse,
@@ -33,12 +29,11 @@ import { NullableType } from '../utils/types/nullable.type';
 import { QueryUserDto } from './dto/query-user.dto';
 import { User } from './domain/user';
 import { UsersService } from './users.service';
-import { RolesGuard } from '../roles/roles.guard';
 import { infinityPagination } from '../utils/infinity-pagination';
 
-@ApiBearerAuth()
-@Roles(RoleEnum.admin)
-@UseGuards(AuthGuard('jwt'), RolesGuard)
+// @ApiBearerAuth()
+// @Roles(RoleEnum.admin)
+// @UseGuards(AuthGuard('jwt'), RolesGuard)
 @ApiTags('Users')
 @Controller({
   path: 'users',
@@ -57,6 +52,13 @@ export class UsersController {
   @HttpCode(HttpStatus.CREATED)
   create(@Body() createProfileDto: CreateUserDto): Promise<User> {
     return this.usersService.create(createProfileDto);
+  }
+
+  @Get('/check')
+  @HttpCode(HttpStatus.CREATED)
+  check(@Headers('tenant-id') tenantId: string): Promise<any> {
+    console.log('🚀 ~ Headers tenant-id:', tenantId);
+    return this.usersService.getTenantSpecificUserRepository(); // you may need to adjust this to pass tenantId
   }
 
   @ApiOkResponse({
