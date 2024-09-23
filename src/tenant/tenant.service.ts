@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { DataSource, DataSourceOptions } from 'typeorm';
+import { DataSource } from 'typeorm';
 import { AppDataSource } from '../database/data-source';
 
 @Injectable()
@@ -8,9 +8,9 @@ export class TenantConnectionService implements OnModuleInit {
 
   async onModuleInit() {
     console.log('TenantConnectionService initialized');
-    
+
     // Example: Preload known tenant IDs and establish connections.
-    const knownTenants = ['1', '2', '4'];  // You could fetch this from a database
+    const knownTenants = ['1', '2', '4']; // You could fetch this from a database
 
     for (const tenantId of knownTenants) {
       await this.getTenantConnection(tenantId);

@@ -81,12 +81,14 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     MailModule,
     MailerModule,
     HomeModule,
-    TenantModule
+    TenantModule,
   ],
-  providers: [TenantConnectionService]
+  providers: [TenantConnectionService],
 })
 export class AppModule {
-  constructor(private readonly tenantConnectionService: TenantConnectionService) {
+  constructor(
+    private readonly tenantConnectionService: TenantConnectionService,
+  ) {
     // Ensure that TenantConnectionService is instantiated when the application starts
     // This ensures the onModuleInit hook is triggered
   }
