@@ -25,6 +25,7 @@ import { SessionModule } from './session/session.module';
 import { MailerModule } from './mailer/mailer.module';
 import { TenantConnectionService } from './tenant/tenant.service';
 import { TenantModule } from './tenant/tenant.module';
+import { EventsModule } from './events/events.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -81,7 +82,8 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     MailModule,
     MailerModule,
     HomeModule,
-    TenantModule
+    TenantModule,
+    EventsModule
   ],
   providers: [TenantConnectionService]
 })
