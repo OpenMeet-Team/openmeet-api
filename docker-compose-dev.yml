@@ -6,7 +6,7 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16.4-alpine
-    container_name: postgres
+    container_name: openmeet_postgres
     ports:
       - ${DATABASE_PORT}:5432
     env_file:
@@ -46,7 +46,7 @@ services:
   # Uncomment to use redis
   redis:
     image: redis:6.2
-    container_name: redis
+    container_name: openmeet_redis
     ports:
       - "6379:6379"
     restart: always

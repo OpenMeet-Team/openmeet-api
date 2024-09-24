@@ -31,12 +31,7 @@ export class UsersService {
   ) {}
 
   async getTenantSpecificUserRepository() {
-    console.log(this.request);
     const tenantId = this.request.tenantId;
-    console.log(
-      '🚀 ~ UsersService ~ getTenantSpecificUserRepository ~ tenantId:',
-      tenantId,
-    );
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
     // console.log("🚀 ~ UsersService ~ getTenantSpecificUserRepository ~ dataSource:", dataSource)

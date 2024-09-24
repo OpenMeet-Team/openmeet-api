@@ -56,7 +56,7 @@ export class UsersController {
 
   @Get('/check')
   @HttpCode(HttpStatus.CREATED)
-  check(@Headers('tenant-id') tenantId: string): Promise<any> {
+  check(@Headers('tenant_id') tenantId: string): Promise<any> {
     console.log('🚀 ~ Headers tenant-id:', tenantId);
     return this.usersService.getTenantSpecificUserRepository(); // you may need to adjust this to pass tenantId
   }

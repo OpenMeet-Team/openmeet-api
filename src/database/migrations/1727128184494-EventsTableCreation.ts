@@ -24,16 +24,17 @@ export class EventsTableCreation1727128184494 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    const schema = queryRunner.connection.options.name || 'public'; // Default schema is 'public', replace if needed
     await queryRunner.query(
-      `ALTER TABLE "Event" DROP CONSTRAINT "FK_df4217bb197f7673ebb368ea6e8"`,
+      `ALTER TABLE "${schema}"."Event" DROP CONSTRAINT "FK_df4217bb197f7673ebb368ea6e8"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "event_attendees" DROP CONSTRAINT "FK_07eb323a7b08ba51fe4b582f3f4"`,
+      `ALTER TABLE "${schema}"."event_attendees" DROP CONSTRAINT "FK_07eb323a7b08ba51fe4b582f3f4"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "event_attendees" DROP CONSTRAINT "FK_21056813ffb169d392d38a40c2d"`,
+      `ALTER TABLE "${schema}"."event_attendees" DROP CONSTRAINT "FK_21056813ffb169d392d38a40c2d"`,
     );
-    await queryRunner.query(`DROP TABLE "Event"`);
-    await queryRunner.query(`DROP TABLE "event_attendees"`);
+    await queryRunner.query(`DROP TABLE "${schema}"."Event"`);
+    await queryRunner.query(`DROP TABLE "${schema}"."event_attendees"`);
   }
 }
