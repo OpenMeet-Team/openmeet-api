@@ -2,9 +2,10 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { StatusSeedService } from './status-seed.service';
 import { StatusEntity } from '../../../../statuses/infrastructure/persistence/relational/entities/status.entity';
+import { TenantModule } from '../../../../tenant/tenant.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([StatusEntity])],
+  imports: [TenantModule, TypeOrmModule.forFeature([StatusEntity])],
   providers: [StatusSeedService],
   exports: [StatusSeedService],
 })

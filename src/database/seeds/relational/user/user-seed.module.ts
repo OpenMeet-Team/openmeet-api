@@ -3,9 +3,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { UserSeedService } from './user-seed.service';
 import { UserEntity } from '../../../../users/infrastructure/persistence/relational/entities/user.entity';
+import { TenantModule } from '../../../../tenant/tenant.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([UserEntity])],
+  imports: [TenantModule, TypeOrmModule.forFeature([UserEntity])],
   providers: [UserSeedService],
   exports: [UserSeedService],
 })

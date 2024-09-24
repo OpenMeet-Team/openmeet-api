@@ -4,14 +4,16 @@ import { SeedModule } from './seed.module';
 import { StatusSeedService } from './status/status-seed.service';
 import { UserSeedService } from './user/user-seed.service';
 
+const tenantIds = ['1']; // List of tenant IDs
+
 const runSeed = async () => {
   const app = await NestFactory.create(SeedModule);
-
-  // run
-  await app.get(RoleSeedService).run();
-  await app.get(StatusSeedService).run();
-  await app.get(UserSeedService).run();
-
+  for (const tenantId of tenantIds) {
+    // run
+    await app.get(RoleSeedService).run(tenantId);
+    await app.get(StatusSeedService).run(tenantId);
+    await app.get(UserSeedService).run(tenantId);
+  }
   await app.close();
 };
 

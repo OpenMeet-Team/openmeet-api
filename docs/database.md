@@ -316,3 +316,9 @@ npm run migration:run
 ```
 npm run migration:run:tenants
 ```  
+
+
+## To Seed DB 
+```
+npm run seed:run:relational 
+```
