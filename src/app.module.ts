@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { UsersModule } from './users/users.module';
 import { FilesModule } from './files/files.module';
 import { AuthModule } from './auth/auth.module';
@@ -25,6 +25,7 @@ import { SessionModule } from './session/session.module';
 import { MailerModule } from './mailer/mailer.module';
 import { TenantConnectionService } from './tenant/tenant.service';
 import { TenantModule } from './tenant/tenant.module';
+import { TenantMiddleware } from './tenant/tenant.middleware';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -85,11 +86,15 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   ],
   providers: [TenantConnectionService],
 })
-export class AppModule {
+export class AppModule implements NestModule {
   constructor(
     private readonly tenantConnectionService: TenantConnectionService,
   ) {
     // Ensure that TenantConnectionService is instantiated when the application starts
     // This ensures the onModuleInit hook is triggered
+  }
+
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(TenantMiddleware).exclude('/').forRoutes('*');
   }
 }

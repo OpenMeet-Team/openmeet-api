@@ -42,6 +42,14 @@ async function bootstrap() {
     .setTitle('API')
     .setDescription('API docs')
     .setVersion('1.0')
+    .addGlobalParameters({
+      in: 'header',
+      required: true,
+      name: 'x-tenant-id',
+      schema: {
+        example: 'swagger-testing-tenant-id',
+      },
+    })
     .addBearerAuth()
     .build();
 

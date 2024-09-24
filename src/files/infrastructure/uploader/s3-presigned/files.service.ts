@@ -36,6 +36,7 @@ export class FilesS3PresignedService {
 
   async create(
     file: FileUploadDto,
+    folder?: string,
   ): Promise<{ file: FileType; uploadSignedUrl: string }> {
     if (!file) {
       throw new UnprocessableEntityException({
@@ -68,7 +69,7 @@ export class FilesS3PresignedService {
       });
     }
 
-    const key = `${randomStringGenerator()}.${file.fileName
+    const key = `${folder ? folder + '/' : ''}${randomStringGenerator()}.${file.fileName
       .split('.')
       .pop()
       ?.toLowerCase()}`;
