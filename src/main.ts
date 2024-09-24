@@ -39,10 +39,19 @@ async function bootstrap() {
   );
 
   const options = new DocumentBuilder()
-    .setTitle('API')
+    .setTitle('OpenMeet API')
     .setDescription('API docs')
     .setVersion('1.0')
     .addBearerAuth()
+    .addGlobalParameters({
+      in: 'header',
+      required: false,
+      name: 'tenant-id',
+      description: 'Tenant ID',
+      schema: {
+        example: '1',
+      },
+    })
     .build();
 
   const document = SwaggerModule.createDocument(app, options);

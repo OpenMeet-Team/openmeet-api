@@ -36,14 +36,14 @@ export class CreateEventDto {
   })
   @IsNotEmpty()
   @IsDateString()
-  startDate: string;
+  startDate: Date;
 
   @ApiProperty({
     description: 'The end date of the event in ISO format',
   })
   @IsNotEmpty()
   @IsDateString()
-  endDate: string;
+  endDate: Date;
 
   @ApiProperty({
     description: 'The location of the event',
@@ -76,10 +76,10 @@ export class CreateEventDto {
   @IsBoolean()
   is_public: boolean;
 
-  @ApiProperty({
-    description: 'The ID of the user organizing the event',
-  })
-  @IsNotEmpty()
-  @Type(() => Number)
-  userId: number;
+  // @ApiProperty({
+  //   description: 'The ID of the user organizing the event',
+  // })
+  // @IsNotEmpty()
+  // @Type(() => Number)
+  // userId: number;
 }

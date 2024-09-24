@@ -7,6 +7,7 @@ import {
   Patch,
   Delete,
   NotFoundException,
+  Headers,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -58,6 +59,6 @@ export class EventController {
 
   @Delete(':id')
   async remove(@Param('id') id: number): Promise<void> {
-    return this.eventService.remove(+id);
+    return this.eventService.remove(id);
   }
 }

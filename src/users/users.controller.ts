@@ -10,7 +10,6 @@ import {
   HttpStatus,
   HttpCode,
   SerializeOptions,
-  Headers,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -52,13 +51,6 @@ export class UsersController {
   @HttpCode(HttpStatus.CREATED)
   create(@Body() createProfileDto: CreateUserDto): Promise<User> {
     return this.usersService.create(createProfileDto);
-  }
-
-  @Get('/check')
-  @HttpCode(HttpStatus.CREATED)
-  check(@Headers('tenant-id') tenantId: string): Promise<any> {
-    console.log('🚀 ~ Headers tenant-id:', tenantId);
-    return this.usersService.getTenantSpecificUserRepository(); // you may need to adjust this to pass tenantId
   }
 
   @ApiOkResponse({

@@ -48,26 +48,27 @@ export class CreateUser1715028537217 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    const schema = queryRunner.connection.options.name || 'public'; // Default schema is 'public', replace if needed
     await queryRunner.query(
-      `ALTER TABLE "session" DROP CONSTRAINT "FK_3d2f174ef04fb312fdebd0ddc53"`,
+      `ALTER TABLE "${schema}"."session" DROP CONSTRAINT "FK_3d2f174ef04fb312fdebd0ddc53"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "user" DROP CONSTRAINT "FK_dc18daa696860586ba4667a9d31"`,
+      `ALTER TABLE "${schema}"."user" DROP CONSTRAINT "FK_dc18daa696860586ba4667a9d31"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "user" DROP CONSTRAINT "FK_c28e52f758e7bbc53828db92194"`,
+      `ALTER TABLE "${schema}"."user" DROP CONSTRAINT "FK_c28e52f758e7bbc53828db92194"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "user" DROP CONSTRAINT "FK_75e2be4ce11d447ef43be0e374f"`,
+      `ALTER TABLE "${schema}"."user" DROP CONSTRAINT "FK_75e2be4ce11d447ef43be0e374f"`,
     );
     await queryRunner.query(`DROP INDEX "IDX_3d2f174ef04fb312fdebd0ddc5"`);
-    await queryRunner.query(`DROP TABLE "session"`);
+    await queryRunner.query(`DROP TABLE "${schema}"."session"`);
     await queryRunner.query(`DROP INDEX "IDX_f0e1b4ecdca13b177e2e3a0613"`);
     await queryRunner.query(`DROP INDEX "IDX_58e4dbff0e1a32a9bdc861bb29"`);
     await queryRunner.query(`DROP INDEX "IDX_9bd2fe7a8e694dedc4ec2f666f"`);
-    await queryRunner.query(`DROP TABLE "user"`);
-    await queryRunner.query(`DROP TABLE "file"`);
-    await queryRunner.query(`DROP TABLE "status"`);
-    await queryRunner.query(`DROP TABLE "role"`);
+    await queryRunner.query(`DROP TABLE "${schema}"."user"`);
+    await queryRunner.query(`DROP TABLE "${schema}"."file"`);
+    await queryRunner.query(`DROP TABLE "${schema}"."status"`);
+    await queryRunner.query(`DROP TABLE "${schema}"."role"`);
   }
 }
