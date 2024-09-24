@@ -1,20 +1,25 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 
 import { Repository } from 'typeorm';
 import bcrypt from 'bcryptjs';
 import { RoleEnum } from '../../../../roles/roles.enum';
 import { StatusEnum } from '../../../../statuses/statuses.enum';
 import { UserEntity } from '../../../../users/infrastructure/persistence/relational/entities/user.entity';
+import { TenantConnectionService } from '../../../../tenant/tenant.service';
 
 @Injectable()
 export class UserSeedService {
+  private repository: Repository<UserEntity>;
+
   constructor(
-    @InjectRepository(UserEntity)
-    private repository: Repository<UserEntity>,
+    private readonly tenantConnectionService: TenantConnectionService,
   ) {}
 
-  async run() {
+  async run(tenantId: string) {
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    this.repository = dataSource.getRepository(UserEntity);
+
     const countAdmin = await this.repository.count({
       where: {
         role: {

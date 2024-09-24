@@ -12,8 +12,8 @@ async function runMigrationsForAllTenants() {
       await dataSource.initialize();
       console.log(`Applying migrations to schema: ${schemaName}`);
 
-      // Create the schema if it does not exist
-      await dataSource.query('CREATE SCHEMA IF NOT EXISTS "${schemaName}"');
+      await dataSource.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
+
       // Create a query runner to execute SQL commands
       const queryRunner: QueryRunner = dataSource.createQueryRunner();
 

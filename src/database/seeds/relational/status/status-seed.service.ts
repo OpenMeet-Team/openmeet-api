@@ -1,17 +1,22 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { StatusEntity } from '../../../../statuses/infrastructure/persistence/relational/entities/status.entity';
 import { StatusEnum } from '../../../../statuses/statuses.enum';
+import { TenantConnectionService } from '../../../../tenant/tenant.service';
 
 @Injectable()
 export class StatusSeedService {
+  private repository: Repository<StatusEntity>;
+
   constructor(
-    @InjectRepository(StatusEntity)
-    private repository: Repository<StatusEntity>,
+    private readonly tenantConnectionService: TenantConnectionService,
   ) {}
 
-  async run() {
+  async run(tenantId: string) {
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    this.repository = dataSource.getRepository(StatusEntity);
+
     const count = await this.repository.count();
 
     if (!count) {
