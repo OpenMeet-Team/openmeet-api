@@ -26,6 +26,8 @@ import { MailerModule } from './mailer/mailer.module';
 import { TenantConnectionService } from './tenant/tenant.service';
 import { TenantModule } from './tenant/tenant.module';
 import { EventsModule } from './events/events.module';
+import { APP_GUARD } from '@nestjs/core';
+import { TenantGuard } from './tenant/tenant.guard';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -85,7 +87,13 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     TenantModule,
     EventsModule,
   ],
-  providers: [TenantConnectionService],
+  providers: [
+    TenantConnectionService,
+    {
+      provide: APP_GUARD,
+      useClass: TenantGuard, // Registered TenantGuard globally
+    },
+  ],
 })
 export class AppModule {
   constructor(

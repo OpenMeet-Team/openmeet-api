@@ -8,7 +8,6 @@ import {
 import { CreateUserDto } from './dto/create-user.dto';
 import { NullableType } from '../utils/types/nullable.type';
 import { FilterUserDto, SortUserDto } from './dto/query-user.dto';
-import { UserRepository } from './infrastructure/persistence/user.repository';
 import { UserEntity } from './infrastructure/persistence/relational/entities/user.entity';
 import bcrypt from 'bcryptjs';
 import { AuthProvidersEnum } from '../auth/auth-providers.enum';
@@ -20,27 +19,28 @@ import { DeepPartial } from '../utils/types/deep-partial.type';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import { User } from './domain/user';
+import { Repository } from 'typeorm';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UsersService {
+  private usersRepository: Repository<UserEntity>;
+
   constructor(
-    private readonly usersRepository: UserRepository,
-    private readonly filesService: FilesService,
     @Inject(REQUEST) private readonly request: any,
+    private readonly filesService: FilesService,
     private readonly tenantConnectionService: TenantConnectionService,
   ) {}
 
-  async getTenantSpecificUserRepository() {
+  async getTenantSpecificRepository() {
     const tenantId = this.request.tenantId;
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
-    // console.log("🚀 ~ UsersService ~ getTenantSpecificUserRepository ~ dataSource:", dataSource)
-
-    const userRepo = dataSource.getRepository(UserEntity);
-    return userRepo.find();
+    this.usersRepository = dataSource.getRepository(UserEntity);
   }
 
   async create(createProfileDto: CreateUserDto): Promise<User> {
+    await this.getTenantSpecificRepository();
+
     const clonedPayload = {
       provider: AuthProvidersEnum.email,
       ...createProfileDto,
@@ -52,9 +52,9 @@ export class UsersService {
     }
 
     if (clonedPayload.email) {
-      const userObject = await this.usersRepository.findByEmail(
-        clonedPayload.email,
-      );
+      const userObject = await this.usersRepository.findOneBy({
+        email: clonedPayload.email,
+      });
       if (userObject) {
         throw new UnprocessableEntityException({
           status: HttpStatus.UNPROCESSABLE_ENTITY,
@@ -108,10 +108,14 @@ export class UsersService {
       }
     }
 
-    return this.usersRepository.create(clonedPayload);
+    const userCreated = await this.usersRepository.save(
+      this.usersRepository.create(clonedPayload),
+    );
+
+    return userCreated;
   }
 
-  findManyWithPagination({
+  async findManyWithPagination({
     filterOptions,
     sortOptions,
     paginationOptions,
@@ -120,31 +124,46 @@ export class UsersService {
     sortOptions?: SortUserDto[] | null;
     paginationOptions: IPaginationOptions;
   }): Promise<User[]> {
-    return this.usersRepository.findManyWithPagination({
-      filterOptions,
-      sortOptions,
-      paginationOptions,
+    await this.getTenantSpecificRepository();
+
+    return [];
+    // this.usersRepository.findManyWithPagination({
+    //   filterOptions,
+    //   sortOptions,
+    //   paginationOptions,
+    // });
+  }
+
+  async findById(id: User['id']): Promise<NullableType<User>> {
+    await this.getTenantSpecificRepository();
+
+    return this.usersRepository.findOne({
+      where: { id: Number(id) },
     });
   }
 
-  findById(id: User['id']): Promise<NullableType<User>> {
-    return this.usersRepository.findById(id);
+  async findByEmail(email: User['email']): Promise<NullableType<User>> {
+    if (!email) return null;
+
+    await this.getTenantSpecificRepository();
+    return this.usersRepository.findOne({
+      where: { email },
+    });
   }
 
-  findByEmail(email: User['email']): Promise<NullableType<User>> {
-    return this.usersRepository.findByEmail(email);
-  }
-
-  findBySocialIdAndProvider({
+  async findBySocialIdAndProvider({
     socialId,
     provider,
   }: {
     socialId: User['socialId'];
     provider: User['provider'];
   }): Promise<NullableType<User>> {
-    return this.usersRepository.findBySocialIdAndProvider({
-      socialId,
-      provider,
+    if (!socialId || !provider) return null;
+
+    await this.getTenantSpecificRepository();
+
+    return this.usersRepository.findOne({
+      where: { socialId, provider },
     });
   }
 
@@ -152,6 +171,8 @@ export class UsersService {
     id: User['id'],
     payload: DeepPartial<User>,
   ): Promise<User | null> {
+    await this.getTenantSpecificRepository();
+
     const clonedPayload = { ...payload };
 
     if (
@@ -163,9 +184,7 @@ export class UsersService {
     }
 
     if (clonedPayload.email) {
-      const userObject = await this.usersRepository.findByEmail(
-        clonedPayload.email,
-      );
+      const userObject = await this.findByEmail(clonedPayload.email);
 
       if (userObject && userObject.id !== id) {
         throw new UnprocessableEntityException({
@@ -220,10 +239,11 @@ export class UsersService {
       }
     }
 
-    return this.usersRepository.update(id, clonedPayload);
+    await this.usersRepository.update(id, {}); // FIXME:
+    return await this.findById(id);
   }
 
   async remove(id: User['id']): Promise<void> {
-    await this.usersRepository.remove(id);
+    await this.usersRepository.softDelete(id);
   }
 }

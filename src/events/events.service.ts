@@ -1,12 +1,10 @@
 import { Injectable, NotFoundException, Inject, Scope } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventEntity } from './infrastructure/persistence/relational/entities/events.entity';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
-
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -18,7 +16,7 @@ export class EventService {
   ) {}
 
   async getTenantSpecificEventRepository() {
-    const tenantId = this.request.tenantId; 
+    const tenantId = this.request.tenantId;
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
     this.eventRepository = dataSource.getRepository(EventEntity);
@@ -51,7 +49,10 @@ export class EventService {
     return event;
   }
 
-  async update(id: number, updateEventDto: UpdateEventDto): Promise<EventEntity> {
+  async update(
+    id: number,
+    updateEventDto: UpdateEventDto,
+  ): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
     const event = await this.findOne(id);
 

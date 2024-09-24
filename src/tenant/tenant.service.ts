@@ -21,7 +21,7 @@ export class TenantConnectionService implements OnModuleInit {
     const dataSource = AppDataSource(tenantId);
     await dataSource.initialize();
 
-    const schemaName = `tenant-${tenantId}`;
+    const schemaName = `tenant_${tenantId}`;
 
     // Create the schema if it does not exist
     await dataSource.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);

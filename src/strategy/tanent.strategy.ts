@@ -10,11 +10,7 @@ const tenants = new Map<string, ContextId>();
 
 export class AggregateByTenantContextIdStrategy implements ContextIdStrategy {
   attach(contextId: ContextId, request: Request) {
-    const tenantId = request.headers['tenant_id'] as string;
-    console.log(
-      '🚀 ~ AggregateByTenantContextIdStrategy ~ attach ~ tenantId:',
-      tenantId,
-    );
+    const tenantId = request.headers['tenant-id'] as string;
     let tenantSubTreeId: any;
 
     if (tenants.has(tenantId)) {
