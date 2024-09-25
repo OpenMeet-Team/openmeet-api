@@ -22,13 +22,16 @@ export class EventService {
     this.eventRepository = dataSource.getRepository(EventEntity);
   }
 
-  async create(createEventDto: CreateEventDto, userId: number | undefined): Promise<EventEntity> {
+  async create(
+    createEventDto: CreateEventDto,
+    userId: number | undefined,
+  ): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
     const user = { id: userId };
     const mappedDto = {
       ...createEventDto,
-      user
-    }
+      user,
+    };
     const event = this.eventRepository.create(mappedDto);
     return this.eventRepository.save(event);
   }

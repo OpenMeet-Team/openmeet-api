@@ -26,8 +26,6 @@ import { EventService } from './events.service';
 import { EventEntity } from './infrastructure/persistence/relational/entities/events.entity';
 import { JWTAuthGuard } from '../core/guards/auth.guard';
 
-
-
 @ApiTags('Events')
 @Controller('events')
 @ApiBearerAuth()
@@ -37,8 +35,11 @@ export class EventController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new event' })
-  async create(@Body() createEventDto: CreateEventDto, @Req() req: Request): Promise<EventEntity> {
-    const user  = req.user
+  async create(
+    @Body() createEventDto: CreateEventDto,
+    @Req() req: Request,
+  ): Promise<EventEntity> {
+    const user = req.user;
     const userId = user?.id;
     return this.eventService.create(createEventDto, userId);
   }

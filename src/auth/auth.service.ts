@@ -220,7 +220,31 @@ export class AuthService {
       },
     );
 
-    return true;
+    const sessionHash = crypto
+      .createHash('sha256')
+      .update(randomStringGenerator())
+      .digest('hex');
+
+    const session = await this.sessionService.create({
+      user,
+      hash: sessionHash,
+    });
+
+    const { token, refreshToken, tokenExpires } = await this.getTokensData({
+      id: user.id,
+      role: user.role,
+      sessionId: session.id,
+      hash,
+    });
+
+    const createdUser = await this.usersService.findById(user.id);
+
+    return {
+      refreshToken,
+      token,
+      tokenExpires,
+      user: createdUser,
+    };
 
     // await this.mailService.userSignUp({
     //   to: dto.email,
