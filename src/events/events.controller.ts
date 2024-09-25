@@ -8,6 +8,8 @@ import {
   Delete,
   NotFoundException,
   Headers,
+  UseGuards,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -15,21 +17,30 @@ import {
   ApiResponse,
   ApiBody,
   ApiParam,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
+import { Request } from 'express';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventService } from './events.service';
 import { EventEntity } from './infrastructure/persistence/relational/entities/events.entity';
+import { JWTAuthGuard } from '../core/guards/auth.guard';
+
+
 
 @ApiTags('Events')
 @Controller('events')
+@ApiBearerAuth()
+@UseGuards(JWTAuthGuard)
 export class EventController {
   constructor(private readonly eventService: EventService) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new event' })
-  async create(@Body() createEventDto: CreateEventDto): Promise<EventEntity> {
-    return this.eventService.create(createEventDto);
+  async create(@Body() createEventDto: CreateEventDto, @Req() req: Request): Promise<EventEntity> {
+    const user  = req.user
+    const userId = user?.id;
+    return this.eventService.create(createEventDto, userId);
   }
 
   @Get()
