@@ -25,7 +25,7 @@ import { EntityRelationalHelper } from '../../../../../utils/relational-entity-h
 import { Exclude, Expose } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { EventEntity } from '../../../../../events/infrastructure/persistence/relational/entities/events.entity';
-import { EventAttendeesEntity } from '../../../../../event-attende/infrastructure/persistence/relational/entities/event-attende.entity';
+import { EventAttendeesEntity } from '../../../../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 
 @Entity({
   name: 'user',

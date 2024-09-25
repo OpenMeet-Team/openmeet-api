@@ -8,7 +8,7 @@ import {
 } from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { UserEntity } from '../../../../../users/infrastructure/persistence/relational/entities/user.entity';
-import { EventAttendeesEntity } from '../../../../../event-attende/infrastructure/persistence/relational/entities/event-attende.entity';
+import { EventAttendeesEntity } from '../../../../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 
 @Entity({ name: 'Event' })
 export class EventEntity extends EntityRelationalHelper {
