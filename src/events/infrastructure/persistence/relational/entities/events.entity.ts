@@ -5,10 +5,13 @@ import {
   JoinColumn,
   PrimaryGeneratedColumn,
   OneToMany,
+  ManyToMany,
+  JoinTable,
 } from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { UserEntity } from '../../../../../users/infrastructure/persistence/relational/entities/user.entity';
 import { EventAttendeesEntity } from '../../../../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
+import { CategoryEntity } from '../../../../../categories/infrastructure/persistence/relational/entities/categories.entity';
 
 @Entity({ name: 'Event' })
 export class EventEntity extends EntityRelationalHelper {
@@ -48,4 +51,8 @@ export class EventEntity extends EntityRelationalHelper {
 
   @OneToMany(() => EventAttendeesEntity, (event) => event.event)
   attendees: EventAttendeesEntity[];
+
+  @ManyToMany(()=> CategoryEntity, category => category.events)
+  @JoinTable()
+  categories: CategoryEntity[];
 }
