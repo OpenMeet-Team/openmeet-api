@@ -124,6 +124,12 @@ export class UsersService {
     sortOptions?: SortUserDto[] | null;
     paginationOptions: IPaginationOptions;
   }): Promise<User[]> {
+    console.log(
+      'TODO: this keeps ci from passing ',
+      filterOptions,
+      sortOptions,
+      paginationOptions,
+    );
     await this.getTenantSpecificRepository();
 
     return [];
