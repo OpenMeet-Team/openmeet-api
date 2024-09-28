@@ -2,6 +2,7 @@
 set -e
 
 /opt/wait-for-it.sh postgres:5432
+npm run seed:run:prod
 npm run migration:run
 npm run seed:run:relational
 npm run start:prod > prod.log 2>&1 &
