@@ -3,6 +3,10 @@ import { DataSource, DataSourceOptions } from 'typeorm';
 
 export const AppDataSource = (tenantId = '') => {
   const schemaName = tenantId ? `tenant_${tenantId}` : '';
+  console.log(process.env.DATABASE_URL);
+  console.log(process.env.DATABASE_USERNAME);
+  console.log(process.env.DATABASE_PASSWORD);
+  console.log(process.env.DATABASE_NAME);
   return new DataSource({
     name: schemaName,
     type: process.env.DATABASE_TYPE,
