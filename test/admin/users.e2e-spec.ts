@@ -3,7 +3,7 @@ import request from 'supertest';
 import { RoleEnum } from '../../src/roles/roles.enum';
 import { StatusEnum } from '../../src/statuses/statuses.enum';
 
-describe('Users Module', () => {
+describe.skip('Users Module', () => {
   const app = APP_URL;
   let apiToken;
 

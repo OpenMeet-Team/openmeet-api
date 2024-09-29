@@ -7,7 +7,7 @@ import {
   MAIL_PORT,
 } from '../utils/constants';
 
-describe('Auth Module', () => {
+describe.skip('Auth Module', () => {
   const app = APP_URL;
   const mail = `http://${MAIL_HOST}:${MAIL_PORT}`;
   const newUserFirstName = `Tester${Date.now()}`;

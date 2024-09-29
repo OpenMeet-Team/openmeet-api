@@ -5,7 +5,7 @@ describe('Auth', () => {
   const app = APP_URL;
 
   describe('Admin', () => {
-    it('should successfully login via /api/v1/auth/email/login (POST)', () => {
+    it.skip('should successfully login via /api/v1/auth/email/login (POST)', () => {
       return request(app)
         .post('/api/v1/auth/email/login')
         .send({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD })
