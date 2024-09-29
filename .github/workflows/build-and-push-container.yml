@@ -1,4 +1,4 @@
-name: Docker Build and Push to Registry
+name: Docker Build, Push to Registry, Deploy to Dev
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  build-and-push:
+  build-push-deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -39,7 +39,7 @@ jobs:
       - name: Install kubectl
         uses: azure/setup-kubectl@v3
         with:
-          version: 'v1.30.1' # You can specify the kubectl version you need
+          version: 'v1.30.1'
 
       - name: Update kubeconfig and deploy to EKS
         env:
