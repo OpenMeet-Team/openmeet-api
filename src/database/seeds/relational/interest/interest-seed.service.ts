@@ -14,8 +14,9 @@ export class InterestSeedService {
   ) {}
 
   async run(tenantId: string) {
-    const dataSource = await this.tenantConnectionService.getTenantConnection(tenantId);
-    
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+
     this.repository = dataSource.getRepository(InterestEntity);
     this.categoryRepository = dataSource.getRepository(CategoryEntity);
 
@@ -44,7 +45,9 @@ export class InterestSeedService {
       ];
 
       for (const interest of defaultInterests) {
-        const category = categories.find(cat => cat.name === interest.categoryName);
+        const category = categories.find(
+          (cat) => cat.name === interest.categoryName,
+        );
 
         if (category) {
           await this.repository.save(

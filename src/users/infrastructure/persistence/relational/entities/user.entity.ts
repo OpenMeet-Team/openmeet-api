@@ -138,7 +138,7 @@ export class UserEntity extends EntityRelationalHelper {
   @OneToMany(() => EventAttendeesEntity, (event) => event.user)
   attendedEvents: EventAttendeesEntity[];
 
-  @ManyToMany(()=>InterestEntity, interst => interst.users)
+  @ManyToMany(() => InterestEntity, (interst) => interst.users)
   @JoinTable()
   interests: InterestEntity[];
 }

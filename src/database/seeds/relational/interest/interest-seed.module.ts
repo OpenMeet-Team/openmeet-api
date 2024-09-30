@@ -7,7 +7,10 @@ import { InterestEntity } from '../../../../interests/infrastructure/persistence
 import { InterestSeedService } from './interest-seed.service';
 
 @Module({
-  imports: [TenantModule, TypeOrmModule.forFeature([CategoryEntity, InterestEntity])],
+  imports: [
+    TenantModule,
+    TypeOrmModule.forFeature([CategoryEntity, InterestEntity]),
+  ],
   providers: [InterestSeedService],
   exports: [InterestSeedService],
 })
