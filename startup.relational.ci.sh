@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -e
 
-npm run lint
 /opt/wait-for-it.sh postgres:5432
 npm run migration:run:prod
 npm run seed:run:prod
