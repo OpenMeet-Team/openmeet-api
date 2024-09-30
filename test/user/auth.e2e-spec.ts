@@ -6,7 +6,7 @@ import {
   MAIL_HOST,
   MAIL_PORT,
 } from '../utils/constants';
-
+import { getAuthToken } from '../utils/functions';
 describe('Auth Module', () => {
   const app = APP_URL;
   const mail = `http://${MAIL_HOST}:${MAIL_PORT}`;
@@ -19,19 +19,8 @@ describe('Auth Module', () => {
   let serverApp;
   let serverEmail;
 
-  async function getAuthToken(
-    email: string,
-    password: string,
-  ): Promise<string> {
-    const server = request.agent(app).set('tenant-id', '1');
-    const response = await server
-      .post('/api/v1/auth/email/login')
-      .send({ tenant_id: 1, email, password });
-    return response.body.token;
-  }
-
   beforeAll(async () => {
-    authToken = await getAuthToken(TESTER_EMAIL, TESTER_PASSWORD);
+    authToken = await getAuthToken(app, TESTER_EMAIL, TESTER_PASSWORD);
     serverApp = request
       .agent(app)
       .set('Authorization', authToken)
@@ -148,7 +137,7 @@ describe('Auth Module', () => {
   describe('Logged in user', () => {
     let newUserApiToken: string;
     beforeAll(async () => {
-      newUserApiToken = await getAuthToken(newUserEmail, newUserPassword);
+      newUserApiToken = await getAuthToken(app, newUserEmail, newUserPassword);
     });
 
     it('should retrieve your own profile: /api/v1/auth/me (GET)', async () => {
