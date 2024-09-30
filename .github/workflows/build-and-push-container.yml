@@ -1,10 +1,9 @@
 name: Docker Build, Push to Registry, Deploy to Dev
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_run:
+    workflows: ["NestJS API CI"]
+    types: [completed]
 
 jobs:
   build-push-deploy:
