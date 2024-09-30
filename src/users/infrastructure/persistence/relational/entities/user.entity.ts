@@ -28,7 +28,7 @@ import { Exclude, Expose } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { EventEntity } from '../../../../../events/infrastructure/persistence/relational/entities/events.entity';
 import { EventAttendeesEntity } from '../../../../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
-import { InterestEntity } from '../../../../../interests/infrastructure/persistence/relational/entities/interests.entity';
+import { SubCategoryEntity } from '../../../../../sub-categories/infrastructure/persistence/relational/entities/sub-categories.entity';
 
 @Entity({
   name: 'user',
@@ -138,7 +138,7 @@ export class UserEntity extends EntityRelationalHelper {
   @OneToMany(() => EventAttendeesEntity, (event) => event.user)
   attendedEvents: EventAttendeesEntity[];
 
-  @ManyToMany(()=>InterestEntity, interst => interst.users)
-  @JoinTable()
-  interests: InterestEntity[];
+  @ManyToMany(()=> SubCategoryEntity, SC => SC.users)
+  @JoinTable({name: 'userInterests'})
+  subCategory: SubCategoryEntity[];
 }
