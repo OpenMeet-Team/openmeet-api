@@ -11,6 +11,8 @@ import {
   JoinColumn,
   OneToOne,
   OneToMany,
+  ManyToMany,
+  JoinTable,
 } from 'typeorm';
 import { RoleEntity } from '../../../../../roles/infrastructure/persistence/relational/entities/role.entity';
 import { StatusEntity } from '../../../../../statuses/infrastructure/persistence/relational/entities/status.entity';
@@ -26,6 +28,7 @@ import { Exclude, Expose } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { EventEntity } from '../../../../../events/infrastructure/persistence/relational/entities/events.entity';
 import { EventAttendeesEntity } from '../../../../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
+import { InterestEntity } from '../../../../../interests/infrastructure/persistence/relational/entities/interests.entity';
 
 @Entity({
   name: 'user',
@@ -134,4 +137,8 @@ export class UserEntity extends EntityRelationalHelper {
 
   @OneToMany(() => EventAttendeesEntity, (event) => event.user)
   attendedEvents: EventAttendeesEntity[];
+
+  @ManyToMany(()=>InterestEntity, interst => interst.users)
+  @JoinTable()
+  interests: InterestEntity[];
 }
