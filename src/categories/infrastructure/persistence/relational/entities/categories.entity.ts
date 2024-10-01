@@ -4,16 +4,13 @@ import { EventEntity } from "../../../../../events/infrastructure/persistence/re
 import { SubCategoryEntity } from "../../../../../sub-categories/infrastructure/persistence/relational/entities/sub-categories.entity";
 import { GroupEntity } from "../../../../../groups/infrastructure/persistence/relational/entities/group.entity";
 
-@Entity({name: 'Category'})
+@Entity({ name: 'Category' })
 export class CategoryEntity extends EntityRelationalHelper {
-    @PrimaryGeneratedColumn()
-    id: number;
-  
-    @Column({ type: 'varchar', length: 255 })
-    name: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-    @Column({ type: 'varchar', length: 255 })
-    slug: string;
+  @Column({ type: 'varchar', length: 255 })
+  name: string;
 
     @OneToMany(()=> SubCategoryEntity, SC => SC.category)
     subCategories: SubCategoryEntity[];

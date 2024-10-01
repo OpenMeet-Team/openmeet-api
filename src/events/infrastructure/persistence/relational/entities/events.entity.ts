@@ -52,7 +52,7 @@ export class EventEntity extends EntityRelationalHelper {
   @OneToMany(() => EventAttendeesEntity, (event) => event.event)
   attendees: EventAttendeesEntity[];
 
-  @ManyToMany(()=> CategoryEntity, category => category.events)
+  @ManyToMany(() => CategoryEntity, (category) => category.events)
   @JoinTable()
   categories: CategoryEntity[];
 }

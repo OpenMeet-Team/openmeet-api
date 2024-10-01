@@ -5,9 +5,13 @@ describe('Auth', () => {
   const app = APP_URL;
 
   describe('Admin', () => {
-    it('should successfully login via /api/v1/auth/email/login (POST)', () => {
-      return request(app)
-        .post('/api/v1/auth/email/login')
+    it('should successfully login via /api/v1/auth/email/login (POST)', async () => {
+      const server = request.agent(app).set('tenant-id', '1');
+
+      const req = server.post('/api/v1/auth/email/login');
+      // console.log('req', req);
+
+      const response = await req
         .send({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD })
         .expect(200)
         .expect(({ body }) => {
@@ -15,6 +19,21 @@ describe('Auth', () => {
           expect(body.user.email).toBeDefined();
           expect(body.user.role).toBeDefined();
         });
+      // console.log('response', response);
+
+      return response;
+    });
+
+    it('should be unauthorized if tenant-id is not provided', async () => {
+      const server = request.agent(app);
+
+      const req = server.post('/api/v1/auth/email/login');
+      const response = await req.send({
+        email: ADMIN_EMAIL,
+        password: ADMIN_PASSWORD,
+      });
+
+      expect(response.status).toBe(401);
     });
   });
 });
