@@ -21,10 +21,7 @@ describe('Auth Module', () => {
 
   beforeAll(async () => {
     authToken = await getAuthToken(app, TESTER_EMAIL, TESTER_PASSWORD);
-    serverApp = request
-      .agent(app)
-      .set('Authorization', authToken)
-      .set('tenant-id', '1');
+    serverApp = request.agent(app).set('tenant-id', '1');
     serverEmail = request.agent(mail);
   });
 
@@ -84,7 +81,8 @@ describe('Auth Module', () => {
           ?.text.replace(/.*confirm\-email\?hash\=(\S+).*/g, '$1');
         console.log('Hash:', hash);
 
-        return request(app)
+        return serverApp
+          .set('Authorization', `Bearer ${authToken}`)
           .post('/api/v1/auth/email/confirm')
           .send({
             hash,
@@ -267,6 +265,7 @@ describe('Auth Module', () => {
         .expect(200);
     });
 
+    // I believe this to be a bug, -tom
     it.skip('should update profile email successfully: /api/v1/auth/me (PATCH)', async () => {
       const newUserFirstName = `Tester${Date.now()}`;
       const newUserLastName = `E2E`;
@@ -274,7 +273,7 @@ describe('Auth Module', () => {
       const newUserPassword = `secret`;
       const newUserNewEmail = `new.${newUserEmail}`;
 
-      await request(app)
+      await serverApp
         .post('/api/v1/auth/email/register')
         .send({
           email: newUserEmail,
@@ -282,14 +281,14 @@ describe('Auth Module', () => {
           firstName: newUserFirstName,
           lastName: newUserLastName,
         })
-        .expect(204);
+        .expect(201);
 
-      const newUserApiToken = await request(app)
+      const newUserApiToken = await serverApp
         .post('/api/v1/auth/email/login')
         .send({ email: newUserEmail, password: newUserPassword })
         .then(({ body }) => body.token);
 
-      await request(app)
+      await serverApp
         .patch('/api/v1/auth/me')
         .auth(newUserApiToken, {
           type: 'bearer',
@@ -299,21 +298,19 @@ describe('Auth Module', () => {
         })
         .expect(200);
 
-      const hash = await request(mail)
-        .get('/email')
-        .then(({ body }) =>
-          body
-            .find((letter) => {
-              return (
-                letter.to[0].address.toLowerCase() ===
-                  newUserNewEmail.toLowerCase() &&
-                /.*confirm\-new\-email\?hash\=(\S+).*/g.test(letter.text)
-              );
-            })
-            ?.text.replace(/.*confirm\-new\-email\?hash\=(\S+).*/g, '$1'),
-        );
+      const hash = await serverEmail.get('/email').then(({ body }) =>
+        body
+          .find((letter) => {
+            return (
+              letter.to[0].address.toLowerCase() ===
+                newUserNewEmail.toLowerCase() &&
+              /.*confirm\-new\-email\?hash\=(\S+).*/g.test(letter.text)
+            );
+          })
+          ?.text.replace(/.*confirm\-new\-email\?hash\=(\S+).*/g, '$1'),
+      );
 
-      await request(app)
+      await serverApp
         .get('/api/v1/auth/me')
         .auth(newUserApiToken, {
           type: 'bearer',
@@ -323,19 +320,19 @@ describe('Auth Module', () => {
           expect(body.email).not.toBe(newUserNewEmail);
         });
 
-      await request(app)
+      await serverApp
         .post('/api/v1/auth/email/login')
         .send({ email: newUserNewEmail, password: newUserPassword })
         .expect(422);
 
-      await request(app)
+      await serverApp
         .post('/api/v1/auth/email/confirm/new')
         .send({
           hash,
         })
         .expect(204);
 
-      await request(app)
+      await serverApp
         .get('/api/v1/auth/me')
         .auth(newUserApiToken, {
           type: 'bearer',
@@ -345,23 +342,23 @@ describe('Auth Module', () => {
           expect(body.email).toBe(newUserNewEmail);
         });
 
-      await request(app)
+      await serverApp
         .post('/api/v1/auth/email/login')
         .send({ email: newUserNewEmail, password: newUserPassword })
         .expect(200);
     });
 
-    it.skip('should delete profile successfully: /api/v1/auth/me (DELETE)', async () => {
-      const newUserApiToken = await request(app)
+    it('should delete profile successfully: /api/v1/auth/me (DELETE)', async () => {
+      const newUserApiToken = await serverApp
         .post('/api/v1/auth/email/login')
         .send({ email: newUserEmail, password: newUserPassword })
         .then(({ body }) => body.token);
 
-      await request(app).delete('/api/v1/auth/me').auth(newUserApiToken, {
+      await serverApp.delete('/api/v1/auth/me').auth(newUserApiToken, {
         type: 'bearer',
       });
 
-      return request(app)
+      return serverApp
         .post('/api/v1/auth/email/login')
         .send({ email: newUserEmail, password: newUserPassword })
         .expect(422);
