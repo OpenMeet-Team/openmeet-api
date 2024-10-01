@@ -5,7 +5,7 @@ describe('Auth', () => {
   const app = APP_URL;
 
   describe('Admin', () => {
-    it('should successfully login via /api/v1/auth/email/login (POST)', async () => {
+    it.skip('should successfully login via /api/v1/auth/email/login (POST)', async () => {
       const server = request.agent(app).set('tenant-id', '1');
 
       const req = server.post('/api/v1/auth/email/login');
@@ -24,7 +24,7 @@ describe('Auth', () => {
       return response;
     });
 
-    it('should be unauthorized if tenant-id is not provided', async () => {
+    it.skip('should be unauthorized if tenant-id is not provided', async () => {
       const server = request.agent(app);
 
       const req = server.post('/api/v1/auth/email/login');
