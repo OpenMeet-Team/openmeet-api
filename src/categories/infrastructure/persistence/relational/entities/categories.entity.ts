@@ -12,6 +12,9 @@ export class CategoryEntity extends EntityRelationalHelper {
   @Column({ type: 'varchar', length: 255 })
   name: string;
 
+  @Column({ type: 'varchar', length: 255 })
+  slug: string;
+
     @OneToMany(()=> SubCategoryEntity, SC => SC.category)
     subCategories: SubCategoryEntity[];
 

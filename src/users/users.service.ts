@@ -4,11 +4,11 @@ import {
   UnprocessableEntityException,
   Scope,
   Inject,
+  NotFoundException,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { NullableType } from '../utils/types/nullable.type';
 import { FilterUserDto, SortUserDto } from './dto/query-user.dto';
-import { UserEntity } from './infrastructure/persistence/relational/entities/user.entity';
 import bcrypt from 'bcryptjs';
 import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { FilesService } from '../files/files.service';
@@ -20,6 +20,8 @@ import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import { User } from './domain/user';
 import { Repository } from 'typeorm';
+import { UserEntity } from './infrastructure/persistence/relational/entities/user.entity';
+import { SubCategoryService } from '../sub-categories/sub-category.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UsersService {
@@ -29,6 +31,7 @@ export class UsersService {
     @Inject(REQUEST) private readonly request: any,
     private readonly filesService: FilesService,
     private readonly tenantConnectionService: TenantConnectionService,
+    private readonly subCategoryService: SubCategoryService
   ) {}
 
   async getTenantSpecificRepository() {
@@ -40,9 +43,23 @@ export class UsersService {
 
   async create(createProfileDto: CreateUserDto): Promise<User> {
     await this.getTenantSpecificRepository();
-
+    let subCategoriesEntities: any = [];
+    const subCategoriesIds = createProfileDto.subCategories;
+    if (subCategoriesIds && subCategoriesIds.length > 0) {
+      subCategoriesEntities = await Promise.all(
+        subCategoriesIds.map(async (subCategoriesId) => {
+          const subCategory = await this.subCategoryService.findOne(subCategoriesId);
+          if (!subCategory) {
+            throw new NotFoundException(`SubCategory with ID ${subCategoriesId} not found`);
+          }
+          return subCategory;
+        })
+      );
+    }
+    
     const clonedPayload = {
       provider: AuthProvidersEnum.email,
+      subCategory: subCategoriesEntities,
       ...createProfileDto,
     };
 

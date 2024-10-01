@@ -1,8 +1,8 @@
 import { Column, Entity, JoinColumn, JoinTable, ManyToMany, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
 import { EntityRelationalHelper } from "../../../../../utils/relational-entity-helper";
 import { CategoryEntity } from "../../../../../categories/infrastructure/persistence/relational/entities/categories.entity";
-import { UserEntity } from "../../../../../users/infrastructure/persistence/relational/entities/user.entity";
 import { SubCategoryType } from "../../../../../core/constants/constant";
+import { UserEntity } from "../../../../../users/infrastructure/persistence/relational/entities/user.entity";
 
 @Entity({name: 'subCategory'})
 export class SubCategoryEntity extends EntityRelationalHelper{

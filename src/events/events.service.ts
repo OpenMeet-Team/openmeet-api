@@ -56,7 +56,7 @@ export class EventService {
 
     return event;
   }
-
+   
   async update(
     id: number,
     updateEventDto: UpdateEventDto,

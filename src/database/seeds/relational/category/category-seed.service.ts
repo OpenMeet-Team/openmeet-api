@@ -253,7 +253,7 @@ export class CategorySeedService {
       let category = await this.categoryRepository.findOne({ where: { name: categoryData.category } });
       
       if (!category) {
-        category = this.categoryRepository.create({ name: categoryData.category, slug: categoryData.category.toLowerCase().replace(/\s+/g, '-') });
+        category = this.categoryRepository.create({ name: categoryData.category });
         await this.categoryRepository.save(category);
       }
 
