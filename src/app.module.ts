@@ -91,7 +91,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     EventsModule,
     CategoryModule,
     GroupModule,
-    SubCategoryModule
+    SubCategoryModule,
   ],
   providers: [
     TenantConnectionService,

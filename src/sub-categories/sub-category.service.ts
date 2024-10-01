@@ -3,7 +3,6 @@ import { Repository } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { CreateSubCategoryDto } from './dto/create-subcategory.dto';
-import { SubCategoryType } from '../core/constants/constant';
 import { SubCategoryEntity } from './infrastructure/persistence/relational/entities/sub-categories.entity';
 import { UpdateSubCategoryDto } from './dto/update-subCategory.dto';
 
@@ -23,13 +22,15 @@ export class SubCategoryService {
     this.subCategoryRepository = dataSource.getRepository(SubCategoryEntity);
   }
 
-  async create(createSubCategoryDto: CreateSubCategoryDto): Promise<SubCategoryEntity> {
+  async create(
+    createSubCategoryDto: CreateSubCategoryDto,
+  ): Promise<SubCategoryEntity> {
     await this.getTenantSpecificSubCategoryRepository();
-    const category = {id: createSubCategoryDto.category};
+    const category = { id: createSubCategoryDto.category };
     const mappedDto = {
-        ...createSubCategoryDto,
-        category
-    }
+      ...createSubCategoryDto,
+      category,
+    };
     const subCategory = this.subCategoryRepository.create(mappedDto);
     return this.subCategoryRepository.save(subCategory);
   }
@@ -37,7 +38,7 @@ export class SubCategoryService {
   async findAll(): Promise<SubCategoryEntity[]> {
     await this.getTenantSpecificSubCategoryRepository();
     return this.subCategoryRepository.find({
-      relations: ['category', 'users'], 
+      relations: ['category', 'users'],
     });
   }
 
@@ -61,12 +62,15 @@ export class SubCategoryService {
   ): Promise<SubCategoryEntity> {
     await this.getTenantSpecificSubCategoryRepository();
     const subCategory = await this.findOne(id);
-    const category = {id: updateSubCategoryDto.category};
+    const category = { id: updateSubCategoryDto.category };
     const mappedDto = {
-        ...updateSubCategoryDto,
-        category
-    }
-    const updatedSubCategory = this.subCategoryRepository.merge(subCategory, mappedDto);
+      ...updateSubCategoryDto,
+      category,
+    };
+    const updatedSubCategory = this.subCategoryRepository.merge(
+      subCategory,
+      mappedDto,
+    );
 
     return this.subCategoryRepository.save(updatedSubCategory);
   }

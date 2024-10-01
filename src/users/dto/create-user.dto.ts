@@ -54,7 +54,7 @@ export class CreateUserDto {
 
   @ApiPropertyOptional({
     description: 'The list of sub categories associated with this user',
-    type: [Number]
+    type: [Number],
   })
   @IsOptional()
   @IsArray()

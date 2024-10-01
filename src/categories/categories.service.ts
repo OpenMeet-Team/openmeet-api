@@ -14,7 +14,7 @@ export class CategoryService {
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
-    private readonly eventService: EventService
+    private readonly eventService: EventService,
   ) {}
 
   async getTenantSpecificCategoryRepository() {
@@ -24,9 +24,7 @@ export class CategoryService {
     this.categoryRepository = dataSource.getRepository(CategoryEntity);
   }
 
-  async create(
-    createCategoryDto: CreateCategoryDto,
-  ): Promise<any> {
+  async create(createCategoryDto: CreateCategoryDto): Promise<any> {
     await this.getTenantSpecificCategoryRepository();
     let eventEntities: any = [];
     const eventIds = createCategoryDto.events;
@@ -38,13 +36,13 @@ export class CategoryService {
             throw new NotFoundException(`Event with ID ${eventId} not found`);
           }
           return eventEntity;
-        })
+        }),
       );
     }
-    const mappedCategoryDto ={
+    const mappedCategoryDto = {
       ...createCategoryDto,
-      events: eventEntities
-    }
+      events: eventEntities,
+    };
     const category = this.categoryRepository.create(mappedCategoryDto);
     return this.categoryRepository.save(category);
   }
@@ -76,7 +74,7 @@ export class CategoryService {
   ): Promise<CategoryEntity> {
     await this.getTenantSpecificCategoryRepository();
     const category = await this.findOne(id);
-  
+
     let eventEntities: any[] = [];
     const eventIds = updateCategoryDto.events;
     if (eventIds && eventIds.length > 0) {
@@ -87,19 +85,21 @@ export class CategoryService {
             throw new NotFoundException(`Event with ID ${eventId} not found`);
           }
           return eventEntity;
-        })
+        }),
       );
     }
-  
+
     const mappedCategoryDto = {
       ...updateCategoryDto,
-      events: eventEntities
+      events: eventEntities,
     };
-  
-    const updatedCategory = this.categoryRepository.merge(category, mappedCategoryDto);
+
+    const updatedCategory = this.categoryRepository.merge(
+      category,
+      mappedCategoryDto,
+    );
     return this.categoryRepository.save(updatedCategory);
   }
-  
 
   async remove(id: number): Promise<void> {
     await this.getTenantSpecificCategoryRepository();

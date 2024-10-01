@@ -1,4 +1,4 @@
 export enum SubCategoryType {
-    EVENT = 'EVENT',
-    GROUP = 'GROUP'
+  EVENT = 'EVENT',
+  GROUP = 'GROUP',
 }

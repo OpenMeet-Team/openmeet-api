@@ -7,7 +7,10 @@ import { CategoryEntity } from '../../../../categories/infrastructure/persistenc
 import { SubCategoryEntity } from '../../../../sub-categories/infrastructure/persistence/relational/entities/sub-categories.entity';
 
 @Module({
-  imports: [TenantModule, TypeOrmModule.forFeature([CategoryEntity, SubCategoryEntity])],
+  imports: [
+    TenantModule,
+    TypeOrmModule.forFeature([CategoryEntity, SubCategoryEntity]),
+  ],
   providers: [CategorySeedService],
   exports: [CategorySeedService],
 })

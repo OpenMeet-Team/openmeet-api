@@ -14,7 +14,7 @@ export class GroupService {
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
-    private readonly categoryService: CategoryService
+    private readonly categoryService: CategoryService,
   ) {}
 
   async getTenantSpecificGroupRepository() {
@@ -34,12 +34,14 @@ export class GroupService {
         categoryIds.map(async (categoryId) => {
           const categoryEntity = await this.categoryService.findOne(categoryId);
           if (!categoryEntity) {
-            throw new NotFoundException(`Category with ID ${categoryId} not found`);
+            throw new NotFoundException(
+              `Category with ID ${categoryId} not found`,
+            );
           }
           return categoryEntity;
-        })
+        }),
       );
-    }    
+    }
 
     const mappedGroupDto = {
       ...createGroupDto,
@@ -87,10 +89,12 @@ export class GroupService {
         categoryIds.map(async (categoryId) => {
           const categoryEntity = await this.categoryService.findOne(categoryId);
           if (!categoryEntity) {
-            throw new NotFoundException(`Category with ID ${categoryId} not found`);
+            throw new NotFoundException(
+              `Category with ID ${categoryId} not found`,
+            );
           }
           return categoryEntity;
-        })
+        }),
       );
     }
 
