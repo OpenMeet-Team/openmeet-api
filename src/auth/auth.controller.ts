@@ -24,6 +24,7 @@ import { LoginResponseDto } from './dto/login-response.dto';
 import { NullableType } from '../utils/types/nullable.type';
 import { User } from '../users/domain/user';
 import { RefreshResponseDto } from './dto/refresh-response.dto';
+import { UserRightsDto } from './dto/user-rights.dto';
 
 @ApiTags('Auth')
 @Controller({
@@ -154,5 +155,19 @@ export class AuthController {
   @HttpCode(HttpStatus.NO_CONTENT)
   public async delete(@Request() request): Promise<void> {
     return this.service.softDelete(request.user);
+  }
+
+  @ApiBearerAuth()
+  @SerializeOptions({
+    groups: ['rights'],
+  })
+  @Get('rights')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOkResponse({
+    type: User,
+  })
+  @HttpCode(HttpStatus.OK)
+  public rights(@Request() request): Promise<NullableType<UserRightsDto>> {
+    return this.service.rights(request.user);
   }
 }

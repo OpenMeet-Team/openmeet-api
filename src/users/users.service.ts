@@ -20,6 +20,7 @@ import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import { User } from './domain/user';
 import { Repository } from 'typeorm';
+import { UserRightsDto } from '../auth/dto/user-rights.dto';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UsersService {
@@ -251,5 +252,14 @@ export class UsersService {
 
   async remove(id: User['id']): Promise<void> {
     await this.usersRepository.softDelete(id);
+  }
+
+  getUserRights(id: User['id']): UserRightsDto {
+    // TODO: Replace this logic with actual DB query or service call
+    console.log('Fetching rights for user ID:', id);
+    return {
+      role: 'user', // Example: Fetch user roles from the database
+      permissions: ['create_event', 'delete_event'], // Fetch permissions from DB
+    };
   }
 }
