@@ -3,6 +3,7 @@ import { EntityRelationalHelper } from "../../../../../utils/relational-entity-h
 import { CategoryEntity } from "../../../../../categories/infrastructure/persistence/relational/entities/categories.entity";
 import { GroupStatus } from "../../../../../core/constants/constant";
 import { EventEntity } from "../../../../../events/infrastructure/persistence/relational/entities/events.entity";
+import { GroupMemberEntity } from "../../../../../group-members/infrastructure/persistence/relational/entities/group-member.entity";
 
 @Entity({name: 'Group'})
 export class GroupEntity extends EntityRelationalHelper{
@@ -30,6 +31,9 @@ export class GroupEntity extends EntityRelationalHelper{
     
     @OneToMany(()=> EventEntity, event => event.group)
     events: EventEntity[];
+
+    @OneToMany(()=> GroupMemberEntity, gm=>gm.group)
+    groupMembers: GroupMemberEntity[];
 
     @ManyToMany(()=> CategoryEntity, category => category.groups)
     @JoinTable()
