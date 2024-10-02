@@ -57,8 +57,11 @@ export class EventController {
   async update(
     @Param('id') id: number,
     @Body() updateEventDto: UpdateEventDto,
+    @Req() req: Request,
   ): Promise<EventEntity> {
-    return this.eventService.update(+id, updateEventDto);
+    const user = req.user;
+    const userId = user?.id;
+    return this.eventService.update(+id, updateEventDto, userId);
   }
 
   @Delete(':id')

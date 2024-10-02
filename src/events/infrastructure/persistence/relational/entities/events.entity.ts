@@ -12,6 +12,7 @@ import { EntityRelationalHelper } from '../../../../../utils/relational-entity-h
 import { UserEntity } from '../../../../../users/infrastructure/persistence/relational/entities/user.entity';
 import { EventAttendeesEntity } from '../../../../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { CategoryEntity } from '../../../../../categories/infrastructure/persistence/relational/entities/categories.entity';
+import { GroupEntity } from '../../../../../groups/infrastructure/persistence/relational/entities/group.entity';
 
 @Entity({ name: 'Event' })
 export class EventEntity extends EntityRelationalHelper {
@@ -48,6 +49,10 @@ export class EventEntity extends EntityRelationalHelper {
   @ManyToOne(() => UserEntity, (user) => user.events)
   @JoinColumn({ name: 'userId' })
   user: UserEntity;
+
+  @ManyToOne(()=> GroupEntity, group => group.events)
+  @JoinColumn({name: 'groupId'})
+  group: GroupEntity;
 
   @OneToMany(() => EventAttendeesEntity, (event) => event.event)
   attendees: EventAttendeesEntity[];
