@@ -105,12 +105,12 @@ export class CreateEventDto {
   @IsBoolean()
   is_public: boolean;
 
-  @ApiProperty({
-    description: 'The ID of the user organizing the event',
-  })
-  @IsNotEmpty()
-  @Type(() => Number)
-  userId: number;
+  // @ApiProperty({
+  //   description: 'The ID of the user organizing the event',
+  // })
+  // @IsNotEmpty()
+  // @Type(() => Number)
+  // userId: number;
 
   @ApiProperty({
     description: 'The ID of the group organizing the event',

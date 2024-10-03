@@ -12,6 +12,7 @@ import { EntityRelationalHelper } from '../../../../../utils/relational-entity-h
 import { UserEntity } from '../../../../../users/infrastructure/persistence/relational/entities/user.entity';
 import { EventAttendeesEntity } from '../../../../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { CategoryEntity } from '../../../../../categories/infrastructure/persistence/relational/entities/categories.entity';
+import { Expose } from 'class-transformer';
 
 @Entity({ name: 'Event' })
 export class EventEntity extends EntityRelationalHelper {
@@ -64,4 +65,10 @@ export class EventEntity extends EntityRelationalHelper {
   @ManyToMany(() => CategoryEntity, (category) => category.events)
   @JoinTable()
   categories: CategoryEntity[];
+
+  @Expose()
+  get attendeesCount(): number {
+    // return this.attendees.length;
+    return 123; // TODO fix
+  }
 }
