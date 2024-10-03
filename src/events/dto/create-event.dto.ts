@@ -4,9 +4,10 @@ import {
   IsNotEmpty,
   IsNumber,
   IsOptional,
+  IsBoolean,
   IsString,
 } from 'class-validator';
-// import { Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CategoryEntity } from '../../categories/infrastructure/persistence/relational/entities/categories.entity';
 
@@ -43,7 +44,6 @@ export class CreateEventDto {
     description: 'The end date of the event in ISO format',
     required: false,
   })
-  // @IsNotEmpty()
   @IsOptional()
   @IsDateString()
   endDate?: Date;
@@ -53,12 +53,11 @@ export class CreateEventDto {
   })
   @IsNotEmpty()
   @IsString()
-  type: 'online' | 'in-person' | 'hybrid';
+  type: string;
 
   @ApiProperty({
     description: 'The location of the event',
   })
-  // @IsNotEmpty()
   @IsOptional()
   @IsString()
   location: string;
@@ -68,7 +67,7 @@ export class CreateEventDto {
   })
   @IsString()
   @IsOptional()
-  onlineLocation: string;
+  locationOnline: string;
 
   @ApiProperty({
     description: 'Max number of attendees to the event',
@@ -82,40 +81,40 @@ export class CreateEventDto {
   @IsArray()
   categories: CategoryEntity[];
 
-  // @ApiProperty({
-  //   description: 'The latitude of the event location',
-  // })
-  // @IsNotEmpty()
-  // @IsNumber()
-  // @Type(() => Number)
-  // lat: number;
+  @ApiProperty({
+    description: 'The latitude of the event location',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  lat: number;
 
-  // @ApiProperty({
-  //   description: 'The longitude of the event location',
-  // })
-  // @IsNotEmpty()
-  // @IsNumber()
-  // @Type(() => Number)
-  // lon: number;
+  @ApiProperty({
+    description: 'The longitude of the event location',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  lon: number;
 
-  // @ApiProperty({
-  //   description: 'Flag indicating if the event is public',
-  //   example: true,
-  // })
-  // @IsNotEmpty()
-  // @IsBoolean()
-  // is_public: boolean;
+  @ApiProperty({
+    description: 'Flag indicating if the event is public',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  is_public: boolean;
 
-  // @ApiProperty({
-  //   description: 'The ID of the user organizing the event',
-  // })
-  // @IsNotEmpty()
-  // @Type(() => Number)
-  // userId: number;
+  @ApiProperty({
+    description: 'The ID of the user organizing the event',
+  })
+  @IsNotEmpty()
+  @Type(() => Number)
+  userId: number;
 
-  // @ApiProperty({
-  //   description: 'The ID of the group organizing the event',
-  // })
-  // @Type(() => Number)
-  // groupId: number;
+  @ApiProperty({
+    description: 'The ID of the group organizing the event',
+  })
+  @Type(() => Number)
+  groupId: number;
 }

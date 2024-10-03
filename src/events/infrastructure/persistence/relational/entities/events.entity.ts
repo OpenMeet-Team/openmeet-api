@@ -28,7 +28,7 @@ export class EventEntity extends EntityRelationalHelper {
   type: string;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
-  onlineLocation: string;
+  locationOnline: string;
 
   @Column({ type: 'text' })
   description: string;
