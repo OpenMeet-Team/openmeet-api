@@ -11,12 +11,7 @@ import { SubCategoryService } from './sub-category.service';
     TypeOrmModule.forFeature([SubCategoryEntity]),
   ],
   controllers: [SubCategoryController],
-  providers: [
-    SubCategoryService,
-    TenantConnectionService,
-  ],
-  exports: [
-    SubCategoryService,
-  ],
+  providers: [SubCategoryService, TenantConnectionService],
+  exports: [SubCategoryService],
 })
 export class SubCategoryModule {}

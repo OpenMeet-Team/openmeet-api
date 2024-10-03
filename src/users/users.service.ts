@@ -31,7 +31,7 @@ export class UsersService {
     @Inject(REQUEST) private readonly request: any,
     private readonly filesService: FilesService,
     private readonly tenantConnectionService: TenantConnectionService,
-    private readonly subCategoryService: SubCategoryService
+    private readonly subCategoryService: SubCategoryService,
   ) {}
 
   async getTenantSpecificRepository() {
@@ -48,15 +48,18 @@ export class UsersService {
     if (subCategoriesIds && subCategoriesIds.length > 0) {
       subCategoriesEntities = await Promise.all(
         subCategoriesIds.map(async (subCategoriesId) => {
-          const subCategory = await this.subCategoryService.findOne(subCategoriesId);
+          const subCategory =
+            await this.subCategoryService.findOne(subCategoriesId);
           if (!subCategory) {
-            throw new NotFoundException(`SubCategory with ID ${subCategoriesId} not found`);
+            throw new NotFoundException(
+              `SubCategory with ID ${subCategoriesId} not found`,
+            );
           }
           return subCategory;
-        })
+        }),
       );
     }
-    
+
     const clonedPayload = {
       provider: AuthProvidersEnum.email,
       subCategory: subCategoriesEntities,

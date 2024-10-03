@@ -1,12 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsArray,
-  IsEnum,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  ValidateNested,
-} from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { SubCategoryType } from '../../core/constants/constant';
 
@@ -38,5 +31,4 @@ export class CreateSubCategoryDto {
   @IsOptional()
   @Type(() => Number)
   category: number;
-
 }

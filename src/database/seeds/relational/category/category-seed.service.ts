@@ -46,22 +46,26 @@ export class CategorySeedService {
           },
           {
             title: 'Developers & Programmers',
-            description: 'Groups for coding enthusiasts and software developers.',
+            description:
+              'Groups for coding enthusiasts and software developers.',
             type: SubCategoryType.GROUP, // Use the enum
           },
           {
             title: 'AI & Data Science',
-            description: 'Communities focused on artificial intelligence and data analytics.',
+            description:
+              'Communities focused on artificial intelligence and data analytics.',
             type: SubCategoryType.GROUP, // Use the enum
           },
           {
             title: 'Cybersecurity',
-            description: 'Groups dedicated to cybersecurity professionals and enthusiasts.',
+            description:
+              'Groups dedicated to cybersecurity professionals and enthusiasts.',
             type: SubCategoryType.GROUP, // Use the enum
           },
           {
             title: 'Tech Innovators',
-            description: 'Communities for discussing and developing new technologies.',
+            description:
+              'Communities for discussing and developing new technologies.',
             type: SubCategoryType.GROUP, // Use the enum
           },
         ],
@@ -71,22 +75,26 @@ export class CategorySeedService {
         subcategories: [
           {
             title: 'Networking Events',
-            description: 'Opportunities to connect with professionals and entrepreneurs.',
+            description:
+              'Opportunities to connect with professionals and entrepreneurs.',
             type: SubCategoryType.EVENT, // Use the enum
           },
           {
             title: 'Pitch Nights',
-            description: 'Platforms for startups to present their ideas to investors.',
+            description:
+              'Platforms for startups to present their ideas to investors.',
             type: SubCategoryType.EVENT, // Use the enum
           },
           {
             title: 'Workshops',
-            description: 'Skill-building sessions on marketing, finance, leadership, etc.',
+            description:
+              'Skill-building sessions on marketing, finance, leadership, etc.',
             type: SubCategoryType.EVENT, // Use the enum
           },
           {
             title: 'Conferences',
-            description: 'Large gatherings focused on business strategies and industry trends.',
+            description:
+              'Large gatherings focused on business strategies and industry trends.',
             type: SubCategoryType.EVENT, // Use the enum
           },
           {
@@ -96,17 +104,20 @@ export class CategorySeedService {
           },
           {
             title: 'Marketing Professionals',
-            description: 'Communities for sharing marketing strategies and trends.',
+            description:
+              'Communities for sharing marketing strategies and trends.',
             type: SubCategoryType.GROUP, // Use the enum
           },
           {
             title: 'Finance & Investment',
-            description: 'Groups focused on personal finance, investing, and financial planning.',
+            description:
+              'Groups focused on personal finance, investing, and financial planning.',
             type: SubCategoryType.GROUP, // Use the enum
           },
           {
             title: 'Business Leaders',
-            description: 'Communities for executives and managers to share leadership insights.',
+            description:
+              'Communities for executives and managers to share leadership insights.',
             type: SubCategoryType.GROUP, // Use the enum
           },
         ],
@@ -116,12 +127,14 @@ export class CategorySeedService {
         subcategories: [
           {
             title: 'Fitness Classes',
-            description: 'Group workouts, yoga sessions, and fitness challenges.',
+            description:
+              'Group workouts, yoga sessions, and fitness challenges.',
             type: SubCategoryType.EVENT, // Use the enum
           },
           {
             title: 'Workshops',
-            description: 'Sessions on nutrition, mental health, and holistic wellness.',
+            description:
+              'Sessions on nutrition, mental health, and holistic wellness.',
             type: SubCategoryType.EVENT, // Use the enum
           },
           {
@@ -131,17 +144,20 @@ export class CategorySeedService {
           },
           {
             title: 'Support Groups',
-            description: 'Meetings for sharing and support on mental health and wellness.',
+            description:
+              'Meetings for sharing and support on mental health and wellness.',
             type: SubCategoryType.EVENT, // Use the enum
           },
           {
             title: 'Fitness Enthusiasts',
-            description: 'Groups for sharing workout routines and fitness goals.',
+            description:
+              'Groups for sharing workout routines and fitness goals.',
             type: SubCategoryType.GROUP, // Use the enum
           },
           {
             title: 'Mental Health Support',
-            description: 'Communities offering support and resources for mental well-being.',
+            description:
+              'Communities offering support and resources for mental well-being.',
             type: SubCategoryType.GROUP, // Use the enum
           },
           {
@@ -161,12 +177,14 @@ export class CategorySeedService {
         subcategories: [
           {
             title: 'Performances',
-            description: 'Concerts, theater plays, dance shows, and open mic nights.',
+            description:
+              'Concerts, theater plays, dance shows, and open mic nights.',
             type: SubCategoryType.EVENT, // Use the enum
           },
           {
             title: 'Workshops',
-            description: 'Creative classes for painting, photography, writing, etc.',
+            description:
+              'Creative classes for painting, photography, writing, etc.',
             type: SubCategoryType.EVENT, // Use the enum
           },
           {
@@ -181,22 +199,26 @@ export class CategorySeedService {
           },
           {
             title: 'Musicians & Performers',
-            description: 'Groups for sharing music, organizing performances, and collaborating.',
+            description:
+              'Groups for sharing music, organizing performances, and collaborating.',
             type: SubCategoryType.GROUP, // Use the enum
           },
           {
             title: 'Visual Artists',
-            description: 'Communities for painters, photographers, and other visual artists.',
+            description:
+              'Communities for painters, photographers, and other visual artists.',
             type: SubCategoryType.GROUP, // Use the enum
           },
           {
             title: 'Writers & Poets',
-            description: 'Groups for sharing written works and providing feedback.',
+            description:
+              'Groups for sharing written works and providing feedback.',
             type: SubCategoryType.GROUP, // Use the enum
           },
           {
             title: 'Film & Theater Enthusiasts',
-            description: 'Communities for discussing films, plays, and organizing screenings.',
+            description:
+              'Communities for discussing films, plays, and organizing screenings.',
             type: SubCategoryType.GROUP, // Use the enum
           },
         ],
@@ -211,7 +233,8 @@ export class CategorySeedService {
           },
           {
             title: 'Workshops',
-            description: 'Interactive sessions for skill development and hands-on learning.',
+            description:
+              'Interactive sessions for skill development and hands-on learning.',
             type: SubCategoryType.EVENT, // Use the enum
           },
           {
@@ -231,34 +254,42 @@ export class CategorySeedService {
           },
           {
             title: 'STEM Enthusiasts',
-            description: 'Communities focused on science, technology, engineering, and math.',
+            description:
+              'Communities focused on science, technology, engineering, and math.',
             type: SubCategoryType.GROUP, // Use the enum
           },
           {
             title: 'Professional Development',
-            description: 'Groups for career growth, skill-building, and networking.',
+            description:
+              'Groups for career growth, skill-building, and networking.',
             type: SubCategoryType.GROUP, // Use the enum
           },
           {
             title: 'Study Groups',
-            description: 'Communities for collaborative learning and academic support.',
+            description:
+              'Communities for collaborative learning and academic support.',
             type: SubCategoryType.GROUP, // Use the enum
           },
         ],
       },
-    ]
-    
+    ];
 
     for (const categoryData of seedData) {
-      let category = await this.categoryRepository.findOne({ where: { name: categoryData.category } });
-      
+      let category = await this.categoryRepository.findOne({
+        where: { name: categoryData.category },
+      });
+
       if (!category) {
-        category = this.categoryRepository.create({ name: categoryData.category });
+        category = this.categoryRepository.create({
+          name: categoryData.category,
+        });
         await this.categoryRepository.save(category);
       }
 
       for (const subcategoryData of categoryData.subcategories) {
-        const existingSubCategory = await this.subCategoryRepository.findOne({ where: { title: subcategoryData.title, category } });
+        const existingSubCategory = await this.subCategoryRepository.findOne({
+          where: { title: subcategoryData.title, category },
+        });
 
         if (!existingSubCategory) {
           const subcategory = this.subCategoryRepository.create({

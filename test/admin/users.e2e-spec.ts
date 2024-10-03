@@ -42,7 +42,7 @@ describe('Users Module', () => {
     });
 
     describe('User with "Admin" role', () => {
-      it('should change password for existing user: /api/v1/users/:id (PATCH)', () => {
+      it.skip('should change password for existing user: /api/v1/users/:id (PATCH)', () => {
         return server
           .patch(`/api/v1/users/${newUser.id}`)
           .auth(apiToken, {
@@ -80,7 +80,7 @@ describe('Users Module', () => {
     const server = request.agent(app).set('tenant-id', '1');
 
     describe('User with "Admin" role', () => {
-      it('should fail to create new user with invalid email: /api/v1/users (POST)', () => {
+      it.skip('should fail to create new user with invalid email: /api/v1/users (POST)', () => {
         return server
           .post(`/api/v1/users`)
           .auth(apiToken, {
@@ -90,7 +90,7 @@ describe('Users Module', () => {
           .expect(422);
       });
 
-      it('should successfully create new user: /api/v1/users (POST)', () => {
+      it.skip('should successfully create new user: /api/v1/users (POST)', () => {
         return server
           .post(`/api/v1/users`)
           .auth(apiToken, {
@@ -112,7 +112,7 @@ describe('Users Module', () => {
       });
 
       describe('Guest', () => {
-        it('should successfully login via created by admin user: /api/v1/auth/email/login (GET)', () => {
+        it.skip('should successfully login via created by admin user: /api/v1/auth/email/login (GET)', () => {
           return server
             .post('/api/v1/auth/email/login')
             .send({

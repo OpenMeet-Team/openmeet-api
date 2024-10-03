@@ -11,16 +11,10 @@ import { EventsModule } from '../events/events.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([GroupEntity, CategoryEntity]),
-    EventsModule
+    EventsModule,
   ],
   controllers: [GroupController],
-  providers: [
-    GroupService, 
-    TenantConnectionService, 
-    CategoryService
-  ],
-  exports: [
-    GroupService, 
-  ],
+  providers: [GroupService, TenantConnectionService, CategoryService],
+  exports: [GroupService],
 })
 export class GroupModule {}

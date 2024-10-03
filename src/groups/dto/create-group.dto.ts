@@ -6,7 +6,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsNumber,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { GroupStatus } from '../../core/constants/constant';
