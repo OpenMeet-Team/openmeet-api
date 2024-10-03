@@ -29,6 +29,9 @@ import { ApiProperty } from '@nestjs/swagger';
 import { EventEntity } from '../../../../../events/infrastructure/persistence/relational/entities/events.entity';
 import { EventAttendeesEntity } from '../../../../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { SubCategoryEntity } from '../../../../../sub-categories/infrastructure/persistence/relational/entities/sub-categories.entity';
+import { UserPermissionEntity } from './user-permission.entity';
+import { GroupUserPermissionEntity } from '../../../../../groups/infrastructure/persistence/relational/entities/group-user-permission.entity';
+import { GroupMemberEntity } from '../../../../../group-members/infrastructure/persistence/relational/entities/group-member.entity';
 
 @Entity({
   name: 'user',
@@ -105,14 +108,6 @@ export class UserEntity extends EntityRelationalHelper {
   photo?: FileEntity | null;
 
   @ApiProperty({
-    type: () => RoleEntity,
-  })
-  @ManyToOne(() => RoleEntity, {
-    eager: true,
-  })
-  role?: RoleEntity | null;
-
-  @ApiProperty({
     type: () => StatusEntity,
   })
   @ManyToOne(() => StatusEntity, {
@@ -132,11 +127,24 @@ export class UserEntity extends EntityRelationalHelper {
   @DeleteDateColumn()
   deletedAt: Date;
 
+  @ManyToOne(()=> RoleEntity, role=> role.users)
+  @JoinColumn({name: 'userId'})
+  role: RoleEntity;
+
   @OneToMany(() => EventEntity, (event) => event.user)
   events: EventEntity[];
 
+  @OneToMany(() => GroupMemberEntity, groupUser => groupUser.user)
+  groupUsers: GroupMemberEntity[];
+
+  @OneToMany(()=> UserPermissionEntity, up => up.user)
+  userPermissions: UserPermissionEntity[];
+
   @OneToMany(() => EventAttendeesEntity, (event) => event.user)
   attendedEvents: EventAttendeesEntity[];
+
+  @OneToMany(() => GroupUserPermissionEntity, groupUserPermission => groupUserPermission.user)
+  groupUserPermissions: GroupUserPermissionEntity[];
 
   @ManyToMany(() => SubCategoryEntity, (SC) => SC.users)
   @JoinTable({ name: 'userInterests' })
