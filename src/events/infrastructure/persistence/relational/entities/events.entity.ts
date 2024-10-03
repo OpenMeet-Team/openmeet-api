@@ -24,16 +24,25 @@ export class EventEntity extends EntityRelationalHelper {
   @Column({ type: 'varchar', length: 255, nullable: true })
   image: string;
 
+  @Column({ type: 'varchar', length: 255 })
+  type: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  onlineLocation: string;
+
   @Column({ type: 'text' })
   description: string;
 
   @Column({ type: Date })
   startDate: Date;
 
-  @Column({ type: Date })
+  @Column({ type: Date, nullable: true })
   endDate: Date;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ type: 'int', nullable: true })
+  maxAttendees: number;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
   location: string;
 
   @Column({ type: 'double precision', nullable: true })

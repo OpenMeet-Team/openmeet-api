@@ -1,13 +1,14 @@
 import {
-  IsBoolean,
+  IsArray,
   IsDateString,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+// import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CategoryEntity } from '../../categories/infrastructure/persistence/relational/entities/categories.entity';
 
 export class CreateEventDto {
   @ApiProperty({
@@ -40,41 +41,70 @@ export class CreateEventDto {
 
   @ApiProperty({
     description: 'The end date of the event in ISO format',
+    required: false,
+  })
+  // @IsNotEmpty()
+  @IsOptional()
+  @IsDateString()
+  endDate?: Date;
+
+  @ApiProperty({
+    description: 'The type of the event',
   })
   @IsNotEmpty()
-  @IsDateString()
-  endDate: Date;
+  @IsString()
+  type: 'online' | 'in-person' | 'hybrid';
 
   @ApiProperty({
     description: 'The location of the event',
   })
-  @IsNotEmpty()
+  // @IsNotEmpty()
+  @IsOptional()
   @IsString()
   location: string;
 
   @ApiProperty({
-    description: 'The latitude of the event location',
+    description: 'The online link of the event',
   })
-  @IsNotEmpty()
-  @IsNumber()
-  @Type(() => Number)
-  lat: number;
+  @IsString()
+  @IsOptional()
+  onlineLocation: string;
 
   @ApiProperty({
-    description: 'The longitude of the event location',
+    description: 'Max number of attendees to the event',
   })
-  @IsNotEmpty()
   @IsNumber()
-  @Type(() => Number)
-  lon: number;
+  maxAttendees: number;
 
   @ApiProperty({
-    description: 'Flag indicating if the event is public',
-    example: true,
+    description: 'Categories of the event',
   })
-  @IsNotEmpty()
-  @IsBoolean()
-  is_public: boolean;
+  @IsArray()
+  categories: CategoryEntity[];
+
+  // @ApiProperty({
+  //   description: 'The latitude of the event location',
+  // })
+  // @IsNotEmpty()
+  // @IsNumber()
+  // @Type(() => Number)
+  // lat: number;
+
+  // @ApiProperty({
+  //   description: 'The longitude of the event location',
+  // })
+  // @IsNotEmpty()
+  // @IsNumber()
+  // @Type(() => Number)
+  // lon: number;
+
+  // @ApiProperty({
+  //   description: 'Flag indicating if the event is public',
+  //   example: true,
+  // })
+  // @IsNotEmpty()
+  // @IsBoolean()
+  // is_public: boolean;
 
   // @ApiProperty({
   //   description: 'The ID of the user organizing the event',
@@ -82,4 +112,10 @@ export class CreateEventDto {
   // @IsNotEmpty()
   // @Type(() => Number)
   // userId: number;
+
+  // @ApiProperty({
+  //   description: 'The ID of the group organizing the event',
+  // })
+  // @Type(() => Number)
+  // groupId: number;
 }
