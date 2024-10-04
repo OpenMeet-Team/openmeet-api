@@ -13,6 +13,14 @@ export class CategoriesSubCategories1727688370400
       `CREATE TYPE "${schema}"."subCategory_type_enum" AS ENUM('EVENT', 'GROUP')`,
     );
 
+    await queryRunner.query(`
+      CREATE TABLE "${schema}"."Category" (
+        "id" SERIAL NOT NULL, 
+        "name" character varying(255) NOT NULL, 
+        "slug" character varying(255), 
+        CONSTRAINT "PK_58ac195f4b1005721f6e844dae3" PRIMARY KEY ("id")
+      )
+    `);
     // Creating subCategory table
     await queryRunner.query(`CREATE TABLE "${schema}"."subCategory" (
             "id" SERIAL NOT NULL, 
