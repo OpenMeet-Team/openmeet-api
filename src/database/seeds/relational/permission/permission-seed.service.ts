@@ -15,7 +15,7 @@ export class PermissionSeedService {
   async run(tenantId: string) {
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
-      
+
     // Initialize repository for PermissionEntity
     this.repository = dataSource.getRepository(PermissionEntity);
 
@@ -35,7 +35,9 @@ export class PermissionSeedService {
 
   // Method to check if the permission exists and create it if not
   private async createPermissionIfNotExists(permissionName: string) {
-    const count = await this.repository.count({ where: { name: permissionName } });
+    const count = await this.repository.count({
+      where: { name: permissionName },
+    });
 
     if (count === 0) {
       const newPermission = this.repository.create({ name: permissionName });

@@ -11,9 +11,9 @@ import { GroupUserPermissionEntity } from './infrastructure/persistence/relation
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
-  private groupMembersRepository: Repository<GroupMemberEntity>
+  private groupMembersRepository: Repository<GroupMemberEntity>;
   private groupRepository: Repository<GroupEntity>;
-  private readonly groupMemberPermissionsRepository: Repository<GroupUserPermissionEntity>
+  private readonly groupMemberPermissionsRepository: Repository<GroupUserPermissionEntity>;
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
@@ -29,20 +29,25 @@ export class GroupService {
     this.groupMembersRepository = dataSource.getRepository(GroupMemberEntity);
   }
 
-  async getGroupMembers(userId: number, groupId: number): Promise<GroupMemberEntity[]> {
+  async getGroupMembers(
+    userId: number,
+    groupId: number,
+  ): Promise<GroupMemberEntity[]> {
     await this.getTenantSpecificGroupRepository();
     const groupMembers = await this.groupMembersRepository.find({
       where: {
         user: { id: userId },
         group: { id: groupId },
       },
-      
     });
 
     return groupMembers;
   }
 
-  async getGroupMemberPermissions(userId: number, groupId: number): Promise<GroupUserPermissionEntity[]> {
+  async getGroupMemberPermissions(
+    userId: number,
+    groupId: number,
+  ): Promise<GroupUserPermissionEntity[]> {
     await this.getTenantSpecificGroupRepository();
     return this.groupMemberPermissionsRepository.find({
       where: {

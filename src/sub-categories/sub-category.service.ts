@@ -4,7 +4,7 @@ import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { CreateSubCategoryDto } from './dto/create-subcategory.dto';
 import { SubCategoryEntity } from './infrastructure/persistence/relational/entities/sub-categories.entity';
-import { UpdateSubCategoryDto } from './dto/update-subCategory.dto';
+import { UpdateSubCategoryDto } from './dto/update-subcategory.dto';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class SubCategoryService {

@@ -1,4 +1,11 @@
-import { Column, Entity, JoinTable, ManyToMany, OneToMany, PrimaryColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinTable,
+  ManyToMany,
+  OneToMany,
+  PrimaryColumn,
+} from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { ApiProperty } from '@nestjs/swagger';
 import { PermissionEntity } from '../../../../../permissions/infrastructure/persistence/relational/entities/permission.entity';
@@ -7,7 +14,7 @@ import { UserEntity } from '../../../../../users/infrastructure/persistence/rela
 @Entity({
   name: 'role',
 })
-export class  RoleEntity extends EntityRelationalHelper {
+export class RoleEntity extends EntityRelationalHelper {
   @ApiProperty({
     type: Number,
   })
@@ -21,13 +28,12 @@ export class  RoleEntity extends EntityRelationalHelper {
   @Column()
   name?: string;
 
-  @OneToMany(()=> UserEntity, user => user.role)
+  @OneToMany(() => UserEntity, (user) => user.role)
   users: UserEntity[];
-  
 
   @ManyToMany(() => PermissionEntity, (permission) => permission.roles)
   @JoinTable({
-    name: 'rolePermissions', 
+    name: 'rolePermissions',
     joinColumn: {
       name: 'roleId',
       referencedColumnName: 'id',
