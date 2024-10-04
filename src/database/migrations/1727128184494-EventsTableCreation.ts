@@ -10,7 +10,7 @@ export class EventsTableCreation1727128184494 implements MigrationInterface {
       `CREATE TABLE "${schema}"."event_attendees" ("eventId" integer NOT NULL, "userId" integer NOT NULL, "rsvpStatus" text NOT NULL, "isHost" boolean NOT NULL DEFAULT false, CONSTRAINT "PK_edb4129eb44589ffaccce13f6ce" PRIMARY KEY ("eventId", "userId"))`,
     );
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."Event" ("id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, "image" character varying(255), "description" text NOT NULL, "startDate" TIMESTAMP NOT NULL, "endDate" TIMESTAMP NOT NULL, "location" character varying(255) NOT NULL, "lat" double precision, "lon" double precision, "is_public" boolean NOT NULL DEFAULT false, "userId" integer, CONSTRAINT "PK_894abf6d0c8562b398c717414d6" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."Event" ("id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, "image" character varying(255), "type" character varying(255) NOT NULL, "description" text NOT NULL, "startDate" TIMESTAMP NOT NULL, "endDate" TIMESTAMP, "locationOnline" character varying(255), "location" character varying(255), "lat" double precision, "lon" double precision, "is_public" boolean NOT NULL DEFAULT false, "maxAttendees" integer, "userId" integer, CONSTRAINT "PK_894abf6d0c8562b398c717414d6" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
       `ALTER TABLE "${schema}"."event_attendees" ADD CONSTRAINT "FK_21056813ffb169d392d38a40c2d" FOREIGN KEY ("eventId") REFERENCES "${schema}"."Event"("id") ON DELETE CASCADE ON UPDATE NO ACTION`,
