@@ -25,34 +25,34 @@ export class UserPermissionSeedService {
     this.permissionRepository = dataSource.getRepository(PermissionEntity);
 
     // Fetch users and permissions
-    const users = await this.userRepository.find();
-    const permissions = await this.permissionRepository.find();
+    // const users = await this.userRepository.find();
+    // const permissions = await this.permissionRepository.find();
 
     // Assign permissions to users (customize as per requirements)
-    for (const user of users) {
-      for (const permission of permissions) {
-        await this.assignPermissionToUser(user, permission, true); // Default to granted: true
-      }
-    }
+    // for (const user of users) {
+    //   for (const permission of permissions) {
+    //     await this.assignPermissionToUser(user, permission, true); // Default to granted: true
+    //   }
+    // }
   }
 
   // Method to assign permission to a user
-  private async assignPermissionToUser(
-    user: UserEntity,
-    permission: PermissionEntity,
-    granted: boolean,
-  ) {
-    const existingUserPermission = await this.userPermissionRepository.findOne({
-      where: { user: { id: user.id }, permission: { id: permission.id } },
-    });
+  // private async assignPermissionToUser(
+  //   user: UserEntity,
+  //   permission: PermissionEntity,
+  //   granted: boolean,
+  // ) {
+  //   const existingUserPermission = await this.userPermissionRepository.findOne({
+  //     where: { user: { id: user.id }, permission: { id: permission.id } },
+  //   });
 
-    if (!existingUserPermission) {
-      const newUserPermission = this.userPermissionRepository.create({
-        user,
-        permission,
-        granted,
-      });
-      await this.userPermissionRepository.save(newUserPermission);
-    }
-  }
+  //   if (!existingUserPermission) {
+  //     const newUserPermission = this.userPermissionRepository.create({
+  //       user,
+  //       permission,
+  //       granted,
+  //     });
+  //     await this.userPermissionRepository.save(newUserPermission);
+  //   }
+  // }
 }
