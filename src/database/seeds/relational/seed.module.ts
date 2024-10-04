@@ -10,6 +10,8 @@ import { UserSeedModule } from './user/user-seed.module';
 import databaseConfig from '../../config/database.config';
 import appConfig from '../../../config/app.config';
 import { CategorySeedModule } from './category/category-seed.module';
+import { PermissionSeedModule } from './permission/permission-seed.module';
+import { UserPermissionSeedModule } from './user-permission/user-permission-seed.module';
 // import { InterestSeedModule } from './interest/interest-seed.module';
 
 @Module({
@@ -18,7 +20,8 @@ import { CategorySeedModule } from './category/category-seed.module';
     StatusSeedModule,
     UserSeedModule,
     CategorySeedModule,
-    // InterestSeedModule,
+    PermissionSeedModule,
+    UserPermissionSeedModule,
     ConfigModule.forRoot({
       isGlobal: true,
       load: [databaseConfig, appConfig],

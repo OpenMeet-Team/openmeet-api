@@ -128,7 +128,7 @@ export class UserEntity extends EntityRelationalHelper {
   deletedAt: Date;
 
   @ManyToOne(()=> RoleEntity, role=> role.users)
-  @JoinColumn({name: 'userId'})
+  @JoinColumn({name: 'roleId'})
   role: RoleEntity;
 
   @OneToMany(() => EventEntity, (event) => event.user)

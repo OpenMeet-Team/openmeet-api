@@ -40,10 +40,10 @@ export class CreateUserDto {
   @IsOptional()
   photo?: FileDto | null;
 
-  @ApiPropertyOptional({ type: RoleDto })
-  @IsOptional()
-  @Type(() => RoleDto)
-  role?: RoleDto | null;
+  // @ApiPropertyOptional({ type: RoleDto })
+  // @IsOptional()
+  // @Type(() => RoleDto)
+  // role?: RoleDto | null;
 
   @ApiPropertyOptional({ type: StatusDto })
   @IsOptional()
@@ -60,4 +60,11 @@ export class CreateUserDto {
   @IsArray()
   @Type(() => Number)
   subCategories?: number[];
+
+  // @ApiPropertyOptional({
+  //   description: 'The category associated with the group',
+  // })
+  // @IsOptional()
+  // @Type(() => Number)
+  // role: number;
 }

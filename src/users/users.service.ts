@@ -22,10 +22,12 @@ import { User } from './domain/user';
 import { Repository } from 'typeorm';
 import { UserEntity } from './infrastructure/persistence/relational/entities/user.entity';
 import { SubCategoryService } from '../sub-categories/sub-category.service';
+import { UserPermissionEntity } from './infrastructure/persistence/relational/entities/user-permission.entity';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UsersService {
   private usersRepository: Repository<UserEntity>;
+  private userPermissionRepository: Repository<UserPermissionEntity>
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
@@ -39,6 +41,17 @@ export class UsersService {
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
     this.usersRepository = dataSource.getRepository(UserEntity);
+    this.userPermissionRepository = dataSource.getRepository(UserPermissionEntity);
+  }
+
+  async getUserPermissions(userId: number): Promise<UserPermissionEntity[]> {
+    await this.getTenantSpecificRepository();
+    const userPermissions = await this.userPermissionRepository.find({
+      where: { user: { id: userId } }, 
+      relations: ['permission'], 
+    });
+
+    return userPermissions;
   }
 
   async create(createProfileDto: CreateUserDto): Promise<User> {
@@ -59,6 +72,7 @@ export class UsersService {
         }),
       );
     }
+    
 
     const clonedPayload = {
       provider: AuthProvidersEnum.email,
@@ -100,19 +114,19 @@ export class UsersService {
       clonedPayload.photo = fileObject;
     }
 
-    if (clonedPayload.role?.id) {
-      const roleObject = Object.values(RoleEnum)
-        .map(String)
-        .includes(String(clonedPayload.role.id));
-      if (!roleObject) {
-        throw new UnprocessableEntityException({
-          status: HttpStatus.UNPROCESSABLE_ENTITY,
-          errors: {
-            role: 'roleNotExists',
-          },
-        });
-      }
-    }
+    // if (clonedPayload.role?.id) {
+    //   const roleObject = Object.values(RoleEnum)
+    //     .map(String)
+    //     .includes(String(clonedPayload.role.id));
+    //   if (!roleObject) {
+    //     throw new UnprocessableEntityException({
+    //       status: HttpStatus.UNPROCESSABLE_ENTITY,
+    //       errors: {
+    //         role: 'roleNotExists',
+    //       },
+    //     });
+    //   }
+    // }
 
     if (clonedPayload.status?.id) {
       const statusObject = Object.values(StatusEnum)
