@@ -50,7 +50,7 @@ export class CreateGroupDto {
 
   @ApiPropertyOptional({
     description: 'The list of category IDs associated with this group',
-    type: [Number]
+    type: [Number],
   })
   @IsOptional()
   @IsArray()

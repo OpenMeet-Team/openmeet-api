@@ -60,8 +60,8 @@ export class EventEntity extends EntityRelationalHelper {
   @JoinColumn({ name: 'userId' })
   user: UserEntity;
 
-  @ManyToOne(()=> GroupEntity, group => group.events)
-  @JoinColumn({name: 'groupId'})
+  @ManyToOne(() => GroupEntity, (group) => group.events)
+  @JoinColumn({ name: 'groupId' })
   group: GroupEntity;
 
   @OneToMany(() => EventAttendeesEntity, (event) => event.event)

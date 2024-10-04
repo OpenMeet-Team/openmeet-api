@@ -28,11 +28,11 @@ export class EventService {
   ): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
     const user = { id: userId };
-    const group = {id: createEventDto.group}
+    const group = { id: createEventDto.group };
     const mappedDto = {
       ...createEventDto,
       user,
-      group
+      group,
     };
     const event = this.eventRepository.create(mappedDto);
     return this.eventRepository.save(event);
@@ -66,13 +66,13 @@ export class EventService {
   ): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
     const event = await this.findOne(id);
-    const group = {id: updateEventDto.group}
+    const group = { id: updateEventDto.group };
     const user = { id: userId };
     const mappedDto = {
       ...updateEventDto,
       user,
-      group
-    }
+      group,
+    };
     const updatedEvent = this.eventRepository.merge(event, mappedDto);
     return this.eventRepository.save(updatedEvent);
   }
