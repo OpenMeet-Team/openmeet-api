@@ -1,6 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsArray,
   // decorators here
   IsEmail,
   IsNotEmpty,
@@ -39,10 +40,10 @@ export class CreateUserDto {
   @IsOptional()
   photo?: FileDto | null;
 
-  @ApiPropertyOptional({ type: RoleDto })
-  @IsOptional()
-  @Type(() => RoleDto)
-  role?: RoleDto | null;
+  // @ApiPropertyOptional({ type: RoleDto })
+  // @IsOptional()
+  // @Type(() => RoleDto)
+  // role?: RoleDto | null;
 
   @ApiPropertyOptional({ type: StatusDto })
   @IsOptional()
@@ -50,4 +51,20 @@ export class CreateUserDto {
   status?: StatusDto;
 
   hash?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'The list of sub categories associated with this user',
+    type: [Number],
+  })
+  @IsOptional()
+  @IsArray()
+  @Type(() => Number)
+  subCategories?: number[];
+
+  // @ApiPropertyOptional({
+  //   description: 'The category associated with the group',
+  // })
+  // @IsOptional()
+  // @Type(() => Number)
+  // role: number;
 }

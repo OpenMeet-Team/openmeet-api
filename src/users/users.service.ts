@@ -4,11 +4,11 @@ import {
   UnprocessableEntityException,
   Scope,
   Inject,
+  NotFoundException,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { NullableType } from '../utils/types/nullable.type';
 import { FilterUserDto, SortUserDto } from './dto/query-user.dto';
-import { UserEntity } from './infrastructure/persistence/relational/entities/user.entity';
 import bcrypt from 'bcryptjs';
 import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { FilesService } from '../files/files.service';
@@ -20,15 +20,20 @@ import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import { User } from './domain/user';
 import { Repository } from 'typeorm';
+import { UserEntity } from './infrastructure/persistence/relational/entities/user.entity';
+import { SubCategoryService } from '../sub-categories/sub-category.service';
+import { UserPermissionEntity } from './infrastructure/persistence/relational/entities/user-permission.entity';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UsersService {
   private usersRepository: Repository<UserEntity>;
+  private userPermissionRepository: Repository<UserPermissionEntity>
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly filesService: FilesService,
     private readonly tenantConnectionService: TenantConnectionService,
+    private readonly subCategoryService: SubCategoryService,
   ) {}
 
   async getTenantSpecificRepository() {
@@ -36,13 +41,42 @@ export class UsersService {
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
     this.usersRepository = dataSource.getRepository(UserEntity);
+    this.userPermissionRepository = dataSource.getRepository(UserPermissionEntity);
+  }
+
+  async getUserPermissions(userId: number): Promise<UserPermissionEntity[]> {
+    await this.getTenantSpecificRepository();
+    const userPermissions = await this.userPermissionRepository.find({
+      where: { user: { id: userId } }, 
+      relations: ['permission'], 
+    });
+
+    return userPermissions;
   }
 
   async create(createProfileDto: CreateUserDto): Promise<User> {
     await this.getTenantSpecificRepository();
+    let subCategoriesEntities: any = [];
+    const subCategoriesIds = createProfileDto.subCategories;
+    if (subCategoriesIds && subCategoriesIds.length > 0) {
+      subCategoriesEntities = await Promise.all(
+        subCategoriesIds.map(async (subCategoriesId) => {
+          const subCategory =
+            await this.subCategoryService.findOne(subCategoriesId);
+          if (!subCategory) {
+            throw new NotFoundException(
+              `SubCategory with ID ${subCategoriesId} not found`,
+            );
+          }
+          return subCategory;
+        }),
+      );
+    }
+    
 
     const clonedPayload = {
       provider: AuthProvidersEnum.email,
+      subCategory: subCategoriesEntities,
       ...createProfileDto,
     };
 
@@ -80,19 +114,19 @@ export class UsersService {
       clonedPayload.photo = fileObject;
     }
 
-    if (clonedPayload.role?.id) {
-      const roleObject = Object.values(RoleEnum)
-        .map(String)
-        .includes(String(clonedPayload.role.id));
-      if (!roleObject) {
-        throw new UnprocessableEntityException({
-          status: HttpStatus.UNPROCESSABLE_ENTITY,
-          errors: {
-            role: 'roleNotExists',
-          },
-        });
-      }
-    }
+    // if (clonedPayload.role?.id) {
+    //   const roleObject = Object.values(RoleEnum)
+    //     .map(String)
+    //     .includes(String(clonedPayload.role.id));
+    //   if (!roleObject) {
+    //     throw new UnprocessableEntityException({
+    //       status: HttpStatus.UNPROCESSABLE_ENTITY,
+    //       errors: {
+    //         role: 'roleNotExists',
+    //       },
+    //     });
+    //   }
+    // }
 
     if (clonedPayload.status?.id) {
       const statusObject = Object.values(StatusEnum)

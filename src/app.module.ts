@@ -28,6 +28,9 @@ import { TenantModule } from './tenant/tenant.module';
 import { EventsModule } from './events/events.module';
 import { APP_GUARD } from '@nestjs/core';
 import { TenantGuard } from './tenant/tenant.guard';
+import { CategoryModule } from './categories/categories.module';
+import { GroupModule } from './groups/groups.module';
+import { SubCategoryModule } from './sub-categories/sub-category.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -86,6 +89,9 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     HomeModule,
     TenantModule,
     EventsModule,
+    CategoryModule,
+    GroupModule,
+    SubCategoryModule,
   ],
   providers: [
     TenantConnectionService,

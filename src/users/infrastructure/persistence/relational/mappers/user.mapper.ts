@@ -64,7 +64,7 @@ export class UserMapper {
     persistenceEntity.firstName = domainEntity.firstName;
     persistenceEntity.lastName = domainEntity.lastName;
     persistenceEntity.photo = photo;
-    persistenceEntity.role = role;
+    // persistenceEntity.role = role;
     persistenceEntity.status = status;
     persistenceEntity.createdAt = domainEntity.createdAt;
     persistenceEntity.updatedAt = domainEntity.updatedAt;

@@ -148,7 +148,7 @@ export class AuthService {
         lastName: socialData.lastName ?? null,
         socialId: socialData.id,
         provider: authProvider,
-        role,
+        // role,
         status,
       });
 
@@ -198,9 +198,9 @@ export class AuthService {
       ...dto,
       email: dto.email,
 
-      role: {
-        id: RoleEnum.user,
-      },
+      // role: {
+      //   id: RoleEnum.user,
+      // },
       status: {
         id: StatusEnum.active,
       },

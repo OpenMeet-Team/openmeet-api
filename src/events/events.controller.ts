@@ -17,6 +17,8 @@ import { UpdateEventDto } from './dto/update-event.dto';
 import { EventService } from './events.service';
 import { EventEntity } from './infrastructure/persistence/relational/entities/events.entity';
 import { JWTAuthGuard } from '../core/guards/auth.guard';
+import { PermissionsGuard } from '../shared/guard/permissions.guard';
+import { Permissions } from '../shared/guard/permissions.decorator';
 
 @ApiTags('Events')
 @Controller('events')
@@ -37,6 +39,8 @@ export class EventController {
   }
 
   @Get()
+  @UseGuards(PermissionsGuard)
+  @Permissions('view_example')
   @ApiOperation({ summary: 'Get all events' })
   async findAll(): Promise<EventEntity[]> {
     return this.eventService.findAll();
@@ -57,8 +61,11 @@ export class EventController {
   async update(
     @Param('id') id: number,
     @Body() updateEventDto: UpdateEventDto,
+    @Req() req: Request,
   ): Promise<EventEntity> {
-    return this.eventService.update(+id, updateEventDto);
+    const user = req.user;
+    const userId = user?.id;
+    return this.eventService.update(+id, updateEventDto, userId);
   }
 
   @Delete(':id')
