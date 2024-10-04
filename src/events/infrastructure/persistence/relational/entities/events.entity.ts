@@ -12,6 +12,7 @@ import { EntityRelationalHelper } from '../../../../../utils/relational-entity-h
 import { UserEntity } from '../../../../../users/infrastructure/persistence/relational/entities/user.entity';
 import { EventAttendeesEntity } from '../../../../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { CategoryEntity } from '../../../../../categories/infrastructure/persistence/relational/entities/categories.entity';
+import { Expose } from 'class-transformer';
 
 @Entity({ name: 'Event' })
 export class EventEntity extends EntityRelationalHelper {
@@ -24,16 +25,25 @@ export class EventEntity extends EntityRelationalHelper {
   @Column({ type: 'varchar', length: 255, nullable: true })
   image: string;
 
+  @Column({ type: 'varchar', length: 255 })
+  type: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  locationOnline: string;
+
   @Column({ type: 'text' })
   description: string;
 
   @Column({ type: Date })
   startDate: Date;
 
-  @Column({ type: Date })
+  @Column({ type: Date, nullable: true })
   endDate: Date;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ type: 'int', nullable: true })
+  maxAttendees: number;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
   location: string;
 
   @Column({ type: 'double precision', nullable: true })
@@ -55,4 +65,10 @@ export class EventEntity extends EntityRelationalHelper {
   @ManyToMany(() => CategoryEntity, (category) => category.events)
   @JoinTable()
   categories: CategoryEntity[];
+
+  @Expose()
+  get attendeesCount(): number {
+    // return this.attendees.length;
+    return 123; // TODO fix
+  }
 }

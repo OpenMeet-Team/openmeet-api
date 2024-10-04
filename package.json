@@ -7,6 +7,7 @@
   "license": "MIT",
   "scripts": {
     "typeorm": "env-cmd ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js",
+    "migration:reset": "npm run schema:drop && npm run migration:run && npm run migration:run:tenants && npm run seed:run:relational",
     "migration:run:tenants": "env-cmd ts-node -r tsconfig-paths/register ./src/database/run-multi-tenant-migrations.ts",
     "migration:generate": "npm run typeorm -- --dataSource=src/database/data-source.ts migration:generate",
     "migration:create": "npm run typeorm -- migration:create",
