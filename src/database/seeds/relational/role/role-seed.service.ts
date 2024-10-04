@@ -24,11 +24,19 @@ export class RoleSeedService {
 
     // Seed roles and their permissions
     await this.createRoleIfNotExists(RoleEnum.user, 'User', ['READ']);
-    await this.createRoleIfNotExists(RoleEnum.admin, 'Admin', ['READ', 'WRITE', 'DELETE']);
+    await this.createRoleIfNotExists(RoleEnum.admin, 'Admin', [
+      'READ',
+      'WRITE',
+      'DELETE',
+    ]);
   }
 
   // Helper method to create roles with assigned permissions
-  private async createRoleIfNotExists(roleId: number, roleName: string, permissionNames: string[]) {
+  private async createRoleIfNotExists(
+    roleId: number,
+    roleName: string,
+    permissionNames: string[],
+  ) {
     const count = await this.repository.count({ where: { id: roleId } });
 
     if (!count) {
@@ -46,9 +54,11 @@ export class RoleSeedService {
   }
 
   // Fetch permissions by their names
-  private async getPermissionsByNames(names: string[]): Promise<PermissionEntity[]> {
+  private async getPermissionsByNames(
+    names: string[],
+  ): Promise<PermissionEntity[]> {
     return this.permissionRepository.find({
-      where: names.map(name => ({ name })),
+      where: names.map((name) => ({ name })),
     });
   }
 }

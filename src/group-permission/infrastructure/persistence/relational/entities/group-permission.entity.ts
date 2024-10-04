@@ -1,7 +1,13 @@
-import { Column, Entity, ManyToMany, OneToMany, PrimaryGeneratedColumn } from "typeorm";
-import { EntityRelationalHelper } from "../../../../../utils/relational-entity-helper";
-import { GroupRoleEntity } from "../../../../../group-role/infrastructure/persistence/relational/entities/group-role.entity";
-import { GroupUserPermissionEntity } from "../../../../../groups/infrastructure/persistence/relational/entities/group-user-permission.entity";
+import {
+  Column,
+  Entity,
+  ManyToMany,
+  OneToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
+import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
+import { GroupRoleEntity } from '../../../../../group-role/infrastructure/persistence/relational/entities/group-role.entity';
+import { GroupUserPermissionEntity } from '../../../../../groups/infrastructure/persistence/relational/entities/group-user-permission.entity';
 
 @Entity({ name: 'groupPermission' })
 export class GroupPermissionEntity extends EntityRelationalHelper {
@@ -11,9 +17,12 @@ export class GroupPermissionEntity extends EntityRelationalHelper {
   @Column({ type: 'varchar', length: 255 })
   name: string;
 
-  @OneToMany(() => GroupUserPermissionEntity, groupUserPermission => groupUserPermission.groupPermission)
+  @OneToMany(
+    () => GroupUserPermissionEntity,
+    (groupUserPermission) => groupUserPermission.groupPermission,
+  )
   groupUserPermissions: GroupUserPermissionEntity[];
 
-  @ManyToMany(() => GroupRoleEntity, groupRole => groupRole.groupPermissions)
-  groupRoles:  GroupRoleEntity[];
+  @ManyToMany(() => GroupRoleEntity, (groupRole) => groupRole.groupPermissions)
+  groupRoles: GroupRoleEntity[];
 }

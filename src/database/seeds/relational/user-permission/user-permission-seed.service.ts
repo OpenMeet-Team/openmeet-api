@@ -5,7 +5,6 @@ import { UserPermissionEntity } from '../../../../users/infrastructure/persisten
 import { UserEntity } from '../../../../users/infrastructure/persistence/relational/entities/user.entity';
 import { PermissionEntity } from '../../../../permissions/infrastructure/persistence/relational/entities/permission.entity';
 
-
 @Injectable()
 export class UserPermissionSeedService {
   private userPermissionRepository: Repository<UserPermissionEntity>;
@@ -17,10 +16,12 @@ export class UserPermissionSeedService {
   ) {}
 
   async run(tenantId: string) {
-    const dataSource = await this.tenantConnectionService.getTenantConnection(tenantId);
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
 
     // Initialize repositories
-    this.userPermissionRepository = dataSource.getRepository(UserPermissionEntity);
+    this.userPermissionRepository =
+      dataSource.getRepository(UserPermissionEntity);
     this.userRepository = dataSource.getRepository(UserEntity);
     this.permissionRepository = dataSource.getRepository(PermissionEntity);
 

@@ -127,23 +127,26 @@ export class UserEntity extends EntityRelationalHelper {
   @DeleteDateColumn()
   deletedAt: Date;
 
-  @ManyToOne(()=> RoleEntity, role=> role.users)
-  @JoinColumn({name: 'roleId'})
+  @ManyToOne(() => RoleEntity, (role) => role.users)
+  @JoinColumn({ name: 'roleId' })
   role: RoleEntity;
 
   @OneToMany(() => EventEntity, (event) => event.user)
   events: EventEntity[];
 
-  @OneToMany(() => GroupMemberEntity, groupUser => groupUser.user)
+  @OneToMany(() => GroupMemberEntity, (groupUser) => groupUser.user)
   groupUsers: GroupMemberEntity[];
 
-  @OneToMany(()=> UserPermissionEntity, up => up.user)
+  @OneToMany(() => UserPermissionEntity, (up) => up.user)
   userPermissions: UserPermissionEntity[];
 
   @OneToMany(() => EventAttendeesEntity, (event) => event.user)
   attendedEvents: EventAttendeesEntity[];
 
-  @OneToMany(() => GroupUserPermissionEntity, groupUserPermission => groupUserPermission.user)
+  @OneToMany(
+    () => GroupUserPermissionEntity,
+    (groupUserPermission) => groupUserPermission.user,
+  )
   groupUserPermissions: GroupUserPermissionEntity[];
 
   @ManyToMany(() => SubCategoryEntity, (SC) => SC.users)
