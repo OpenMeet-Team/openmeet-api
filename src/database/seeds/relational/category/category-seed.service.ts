@@ -275,28 +275,38 @@ export class CategorySeedService {
     ];
 
     for (const categoryData of seedData) {
-      let category = await this.categoryRepository.findOne({
-        where: { name: categoryData.category },
-      });
+      console.log('Searching for category:', categoryData.category);
+      const existingCategory = await this.categoryRepository
+        .createQueryBuilder('category')
+        .where('category.name = :name', { name: categoryData.category })
+        .getOne();
 
-      if (!category) {
-        category = this.categoryRepository.create({
+      console.log('Found category:', existingCategory);
+
+      if (!existingCategory) {
+        console.log('Creating new category:', categoryData.category);
+        const newCategory = this.categoryRepository.create({
           name: categoryData.category,
+          slug: categoryData.category.toLowerCase().replace(/ /g, '-'),
         });
-        await this.categoryRepository.save(category);
+        await this.categoryRepository.save(newCategory);
+        console.log('New category created:', newCategory);
       }
 
       for (const subcategoryData of categoryData.subcategories) {
         const existingSubCategory = await this.subCategoryRepository.findOne({
-          where: { title: subcategoryData.title, category },
+          where: {
+            title: subcategoryData.title,
+            category: { id: existingCategory?.id },
+          },
         });
 
-        if (!existingSubCategory) {
+        if (!existingSubCategory && existingCategory) {
           const subcategory = this.subCategoryRepository.create({
             title: subcategoryData.title,
             description: subcategoryData.description,
             type: subcategoryData.type,
-            category, // Associate with the category
+            category: existingCategory,
           });
 
           await this.subCategoryRepository.save(subcategory);
