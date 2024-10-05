@@ -14,6 +14,7 @@ import { AllConfigType } from './config/config.type';
 import { ResolvePromisesInterceptor } from './utils/serializer.interceptor';
 import { AggregateByTenantContextIdStrategy } from './strategy/tanent.strategy';
 import { TenantGuard } from './tenant/tenant.guard';
+import { RequestCounterInterceptor } from './interceptors/request-counter.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { cors: true });
@@ -62,10 +63,13 @@ async function bootstrap() {
   app.setGlobalPrefix(
     configService.getOrThrow('app.apiPrefix', { infer: true }),
     {
-      exclude: ['/health/liveness', '/health/readiness'],
+      exclude: ['/health/liveness', '/health/readiness', '/metrics'],
     },
   );
   app.useGlobalGuards(new TenantGuard(app.get(Reflector)));
+
+  const requestCounterInterceptor = app.get(RequestCounterInterceptor);
+  app.useGlobalInterceptors(requestCounterInterceptor);
 
   await app.listen(configService.getOrThrow('app.port', { infer: true }));
 }

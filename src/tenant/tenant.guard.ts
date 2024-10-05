@@ -27,6 +27,11 @@ export class TenantGuard implements CanActivate {
       return true; // Skip guard for public routes
     }
 
+    const path = request.route.path;
+    // Allow access to the metrics endpoint
+    if (path === '/metrics') {
+      return true;
+    }
     // Check for tenant ID in the headers
     const tenantId = request.headers['tenant-id'];
     if (!tenantId) {
