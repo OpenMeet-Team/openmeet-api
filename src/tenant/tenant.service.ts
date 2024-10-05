@@ -31,4 +31,19 @@ export class TenantConnectionService implements OnModuleInit {
 
     return dataSource;
   }
+
+  async testConnection(): Promise<{
+    status: string;
+    database?: string;
+    error?: any;
+  }> {
+    try {
+      // Test connection to the default tenant or a specific tenant
+      const dataSource = await this.getTenantConnection('1'); // You can use any valid tenant ID
+      await dataSource.query('SELECT 1'); // Simple query to test the connection
+      return { status: 'ok', database: 'connected' };
+    } catch (error) {
+      return { status: 'error', database: 'disconnected', error: error };
+    }
+  }
 }
