@@ -53,25 +53,25 @@ services:
     networks:
       - api-network
 
-  api:
-    build:
-      context: .
-      dockerfile: ./Dockerfile.dev
-    container_name: api
-    hostname: api
-    ports:
-      - ${APP_PORT}:${APP_PORT}
-    env_file:
-      - .env
-    volumes:
-      - ./src/:/app/src/
-      # - ./package.json:/app/package.json
-      # - /app/node_modules # Use node_modules from the container
-      - .env/:/app/.env
-    networks:
-      - api-network
-    depends_on:
-      - postgres
+  # api:
+  #   build:
+  #     context: .
+  #     dockerfile: ./Dockerfile.dev
+  #   container_name: api
+  #   hostname: api
+  #   ports:
+  #     - ${APP_PORT}:${APP_PORT}
+  #   env_file:
+  #     - .env
+  #   volumes:
+  #     - ./src/:/app/src/
+  #     # - ./package.json:/app/package.json
+  #     # - /app/node_modules # Use node_modules from the container
+  #     - .env/:/app/.env
+  #   networks:
+  #     - api-network
+  #   depends_on:
+  #     - postgres
 
 volumes:
   dbdata:

@@ -13,7 +13,12 @@ import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([GroupEntity, CategoryEntity, GroupMemberEntity, GroupUserPermissionEntity]),
+    TypeOrmModule.forFeature([
+      GroupEntity,
+      CategoryEntity,
+      GroupMemberEntity,
+      GroupUserPermissionEntity,
+    ]),
     forwardRef(() => EventsModule), // Use forwardRef here as well
     forwardRef(() => UsersModule),
   ],

@@ -1,4 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { UserEntity } from './user.entity';
 import { PermissionEntity } from '../../../../../permissions/infrastructure/persistence/relational/entities/permission.entity';
 
@@ -11,7 +17,11 @@ export class UserPermissionEntity {
   @JoinColumn({ name: 'userId' })
   user: UserEntity;
 
-  @ManyToOne(() => PermissionEntity, (permission) => permission.userPermissions, { eager: true })
+  @ManyToOne(
+    () => PermissionEntity,
+    (permission) => permission.userPermissions,
+    { eager: true },
+  )
   @JoinColumn({ name: 'permissionId' })
   permission: PermissionEntity;
 

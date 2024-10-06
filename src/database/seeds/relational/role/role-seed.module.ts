@@ -7,7 +7,10 @@ import { TenantModule } from '../../../../tenant/tenant.module';
 import { PermissionEntity } from '../../../../permissions/infrastructure/persistence/relational/entities/permission.entity';
 
 @Module({
-  imports: [TenantModule, TypeOrmModule.forFeature([RoleEntity, PermissionEntity])],
+  imports: [
+    TenantModule,
+    TypeOrmModule.forFeature([RoleEntity, PermissionEntity]),
+  ],
   providers: [RoleSeedService],
   exports: [RoleSeedService],
 })

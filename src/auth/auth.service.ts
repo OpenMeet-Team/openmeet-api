@@ -135,9 +135,9 @@ export class AuthService {
     } else if (userByEmail) {
       user = userByEmail;
     } else if (socialData.id) {
-      const role = {
-        id: RoleEnum.user,
-      };
+      // const role = {
+      //   id: RoleEnum.user,
+      // };
       const status = {
         id: StatusEnum.active,
       };

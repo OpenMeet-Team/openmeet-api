@@ -27,7 +27,7 @@ import { UserPermissionEntity } from './infrastructure/persistence/relational/en
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UsersService {
   private usersRepository: Repository<UserEntity>;
-  private userPermissionRepository: Repository<UserPermissionEntity>
+  private userPermissionRepository: Repository<UserPermissionEntity>;
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
@@ -41,14 +41,15 @@ export class UsersService {
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
     this.usersRepository = dataSource.getRepository(UserEntity);
-    this.userPermissionRepository = dataSource.getRepository(UserPermissionEntity);
+    this.userPermissionRepository =
+      dataSource.getRepository(UserPermissionEntity);
   }
 
   async getUserPermissions(userId: number): Promise<UserPermissionEntity[]> {
     await this.getTenantSpecificRepository();
     const userPermissions = await this.userPermissionRepository.find({
-      where: { user: { id: userId } }, 
-      relations: ['permission'], 
+      where: { user: { id: userId } },
+      relations: ['permission'],
     });
 
     return userPermissions;
@@ -72,7 +73,6 @@ export class UsersService {
         }),
       );
     }
-    
 
     const clonedPayload = {
       provider: AuthProvidersEnum.email,

@@ -6,7 +6,14 @@ import { UserPermissionEntity } from '../../../../users/infrastructure/persisten
 import { UserPermissionSeedService } from './user-permission-seed.service';
 
 @Module({
-  imports: [TenantModule, TypeOrmModule.forFeature([PermissionEntity, PermissionEntity, UserPermissionEntity])],
+  imports: [
+    TenantModule,
+    TypeOrmModule.forFeature([
+      PermissionEntity,
+      PermissionEntity,
+      UserPermissionEntity,
+    ]),
+  ],
   providers: [UserPermissionSeedService],
   exports: [UserPermissionSeedService],
 })
