@@ -22,7 +22,7 @@ export class CreateGroupDto {
     description: 'The slug of the group',
   })
   @IsString()
-  @IsOptional()
+  @IsNotEmpty()
   slug: string;
 
   @ApiProperty({
