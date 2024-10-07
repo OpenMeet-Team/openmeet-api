@@ -40,6 +40,6 @@ export class GroupEntity extends EntityRelationalHelper {
     groupUserPermissions: GroupUserPermissionEntity[];
 
     @ManyToMany(()=> CategoryEntity, category => category.groups)
-    @JoinTable()
+    @JoinTable({name: 'groupCategories'})
     categories: CategoryEntity[];
 }

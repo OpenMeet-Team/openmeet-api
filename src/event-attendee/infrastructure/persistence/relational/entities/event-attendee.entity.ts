@@ -2,7 +2,7 @@ import { Entity, PrimaryColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { UserEntity } from '../../../../../users/infrastructure/persistence/relational/entities/user.entity';
 import { EventEntity } from '../../../../../events/infrastructure/persistence/relational/entities/events.entity';
 
-@Entity({ name: 'event_attendees' })
+@Entity({ name: 'eventAttendees' })
 export class EventAttendeesEntity {
   @PrimaryColumn({ type: 'uuid' })
   eventId: string;
