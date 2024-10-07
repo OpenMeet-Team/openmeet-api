@@ -26,7 +26,7 @@ describe('Auth Module', () => {
   });
 
   describe('Registration', () => {
-    it.skip('should fail with exists email: /api/v1/auth/email/register (POST)', () => {
+    it('should fail with exists email: /api/v1/auth/email/register (POST)', () => {
       return serverApp
         .post('/api/v1/auth/email/register')
         .send({
@@ -41,7 +41,7 @@ describe('Auth Module', () => {
         });
     });
 
-    it.skip('should successfully: /api/v1/auth/email/register (POST)', () => {
+    it('should successfully: /api/v1/auth/email/register (POST)', () => {
       return serverApp
         .post('/api/v1/auth/email/register')
         .set('Authorization', `Bearer ${authToken}`)
@@ -55,7 +55,7 @@ describe('Auth Module', () => {
     });
 
     describe('Login', () => {
-      it.skip('should successfully with unconfirmed email: /api/v1/auth/email/login (POST)', () => {
+      it('should successfully with unconfirmed email: /api/v1/auth/email/login (POST)', () => {
         return serverApp
           .post('/api/v1/auth/email/login')
           .send({ email: newUserEmail, password: newUserPassword })
