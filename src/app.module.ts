@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, Scope } from '@nestjs/common';
 import { UsersModule } from './users/users.module';
 import { FilesModule } from './files/files.module';
 import { AuthModule } from './auth/auth.module';
@@ -31,6 +31,7 @@ import { TenantGuard } from './tenant/tenant.guard';
 import { CategoryModule } from './categories/categories.module';
 import { GroupModule } from './groups/groups.module';
 import { SubCategoryModule } from './sub-categories/sub-category.module';
+import { PermissionsGuard } from './shared/guard/permissions.guard';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -98,6 +99,12 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     {
       provide: APP_GUARD,
       useClass: TenantGuard, // Registered TenantGuard globally
+    },
+    {
+      provide: APP_GUARD,
+      useClass: PermissionsGuard,
+      scope: Scope.REQUEST,
+      durable: true,
     },
   ],
 })

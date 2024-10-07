@@ -1,11 +1,10 @@
 import { Injectable, NotFoundException, Inject, Scope } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { CategoryEntity } from './infrastructure/persistence/relational/entities/categories.entity';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
-import { EventService } from '../events/events.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class CategoryService {
@@ -14,7 +13,6 @@ export class CategoryService {
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
-    private readonly eventService: EventService,
   ) {}
 
   async getTenantSpecificCategoryRepository() {
@@ -26,24 +24,7 @@ export class CategoryService {
 
   async create(createCategoryDto: CreateCategoryDto): Promise<any> {
     await this.getTenantSpecificCategoryRepository();
-    let eventEntities: any = [];
-    const eventIds = createCategoryDto.events;
-    if (eventIds && eventIds.length > 0) {
-      eventEntities = await Promise.all(
-        eventIds.map(async (eventId) => {
-          const eventEntity = await this.eventService.findOne(eventId);
-          if (!eventEntity) {
-            throw new NotFoundException(`Event with ID ${eventId} not found`);
-          }
-          return eventEntity;
-        }),
-      );
-    }
-    const mappedCategoryDto = {
-      ...createCategoryDto,
-      events: eventEntities,
-    };
-    const category = this.categoryRepository.create(mappedCategoryDto);
+    const category = this.categoryRepository.create(createCategoryDto);
     return this.categoryRepository.save(category);
   }
 
@@ -51,6 +32,15 @@ export class CategoryService {
     await this.getTenantSpecificCategoryRepository();
     return this.categoryRepository.find({
       relations: ['subCategories', 'events', 'groups'],
+    });
+  }
+
+  async findByIds(ids: number[]): Promise<CategoryEntity[]> {
+    await this.getTenantSpecificCategoryRepository();
+    return this.categoryRepository.find({
+      where: {
+        id: In(ids),
+      },
     });
   }
 
@@ -71,34 +61,10 @@ export class CategoryService {
   async update(
     id: number,
     updateCategoryDto: UpdateCategoryDto,
-  ): Promise<CategoryEntity> {
-    await this.getTenantSpecificCategoryRepository();
-    const category = await this.findOne(id);
-
-    let eventEntities: any[] = [];
-    const eventIds = updateCategoryDto.events;
-    if (eventIds && eventIds.length > 0) {
-      eventEntities = await Promise.all(
-        eventIds.map(async (eventId) => {
-          const eventEntity = await this.eventService.findOne(eventId);
-          if (!eventEntity) {
-            throw new NotFoundException(`Event with ID ${eventId} not found`);
-          }
-          return eventEntity;
-        }),
-      );
-    }
-
-    const mappedCategoryDto = {
-      ...updateCategoryDto,
-      events: eventEntities,
-    };
-
-    const updatedCategory = this.categoryRepository.merge(
-      category,
-      mappedCategoryDto,
-    );
-    return this.categoryRepository.save(updatedCategory);
+  ): Promise<CategoryEntity | void> {
+    // await this.getTenantSpecificCategoryRepository();
+    // const category = await this.findOne(id);
+    // return this.categoryRepository.save(updatedCategory);
   }
 
   async remove(id: number): Promise<void> {

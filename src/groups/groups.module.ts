@@ -19,8 +19,7 @@ import { UsersModule } from '../users/users.module';
       GroupMemberEntity,
       GroupUserPermissionEntity,
     ]),
-    forwardRef(() => EventsModule), // Use forwardRef here as well
-    forwardRef(() => UsersModule),
+    UsersModule,
   ],
   controllers: [GroupController],
   providers: [GroupService, TenantConnectionService, CategoryService],

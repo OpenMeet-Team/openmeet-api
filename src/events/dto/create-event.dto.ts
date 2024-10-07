@@ -9,7 +9,6 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { CategoryEntity } from '../../categories/infrastructure/persistence/relational/entities/categories.entity';
 
 export class CreateEventDto {
   @ApiProperty({
@@ -77,9 +76,11 @@ export class CreateEventDto {
 
   @ApiProperty({
     description: 'Categories of the event',
+    type: [Number],
   })
-  @IsArray()
-  categories: CategoryEntity[];
+  @IsArray({})
+  @Type(() => Number)
+  categories: number[]; // Array of category IDs
 
   @ApiProperty({
     description: 'The latitude of the event location',
