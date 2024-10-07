@@ -13,6 +13,6 @@ describe('Get', () => {
 
     // console.log('res.body', res.body);
     // TODO: fix this test
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(200);
   });
 });
