@@ -6,9 +6,12 @@ import {
   TypeOrmHealthIndicator,
 } from '@nestjs/terminus';
 
+import { Request } from 'express';
+
 describe('HealthController', () => {
   let controller: HealthController;
   let healthCheckService: HealthCheckService;
+  const req = { headers: { 'tenant-id': '1' } } as unknown as Request;
 
   beforeEach(async () => {
     healthCheckService = {
@@ -74,7 +77,7 @@ describe('HealthController', () => {
           'docs-root': { status: 'up' },
         },
       });
-      const result = await controller.liveness();
+      const result = await controller.liveness(req);
       expect(result).toEqual(expect.objectContaining({ status: 'ok' }));
     });
 
@@ -86,7 +89,7 @@ describe('HealthController', () => {
           'docs-root': { status: 'down' },
         },
       });
-      const result = await controller.liveness();
+      const result = await controller.liveness(req);
       expect(result).toEqual(expect.objectContaining({ status: 'error' }));
     });
   });
