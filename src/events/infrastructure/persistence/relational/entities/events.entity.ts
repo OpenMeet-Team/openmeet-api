@@ -6,7 +6,6 @@ import {
   PrimaryGeneratedColumn,
   OneToMany,
   ManyToMany,
-  JoinTable,
 } from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { UserEntity } from '../../../../../users/infrastructure/persistence/relational/entities/user.entity';
@@ -60,9 +59,9 @@ export class EventEntity extends EntityRelationalHelper {
   @JoinColumn({ name: 'userId' })
   user: UserEntity;
 
-  @ManyToOne(() => GroupEntity, (group) => group.events)
+  @ManyToOne(() => GroupEntity, (group) => group.events, { nullable: true })
   @JoinColumn({ name: 'groupId' })
-  group: GroupEntity;
+  group?: GroupEntity | null;
 
   @OneToMany(() => EventAttendeesEntity, (event) => event.event)
   attendees: EventAttendeesEntity[];

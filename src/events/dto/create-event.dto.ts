@@ -108,20 +108,7 @@ export class CreateEventDto {
   @ApiProperty({
     description: 'The ID of the user organizing the event',
   })
-  @IsNotEmpty()
+  @IsOptional()
   @Type(() => Number)
   group: number;
-
-  // @ApiProperty({
-  //   description: 'The ID of the user organizing the event',
-  // })
-  // @IsNotEmpty()
-  // @Type(() => Number)
-  // userId: number;
-
-  @ApiProperty({
-    description: 'The ID of the group organizing the event',
-  })
-  @Type(() => Number)
-  groupId: number;
 }

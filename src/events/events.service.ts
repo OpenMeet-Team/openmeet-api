@@ -28,7 +28,7 @@ export class EventService {
   ): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
     const user = { id: userId };
-    const group = { id: createEventDto.group };
+    const group = createEventDto.group ? { id: createEventDto.group } : null;
     const mappedDto = {
       ...createEventDto,
       user,
