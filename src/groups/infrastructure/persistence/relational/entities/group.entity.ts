@@ -1,4 +1,5 @@
 import {
+  BeforeInsert,
   Column,
   Entity,
   JoinTable,
@@ -12,6 +13,7 @@ import { GroupStatus } from '../../../../../core/constants/constant';
 import { EventEntity } from '../../../../../events/infrastructure/persistence/relational/entities/events.entity';
 import { GroupMemberEntity } from '../../../../../group-members/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupUserPermissionEntity } from './group-user-permission.entity';
+import slugify from 'slugify';
 
 @Entity({ name: 'Group' })
 export class GroupEntity extends EntityRelationalHelper {
@@ -52,4 +54,11 @@ export class GroupEntity extends EntityRelationalHelper {
   @ManyToMany(() => CategoryEntity, (category) => category.groups)
   @JoinTable({ name: 'groupCategories' })
   categories: CategoryEntity[];
+
+  @BeforeInsert()
+  generateSlug() {
+    if (!this.slug) {
+      this.slug = slugify(this.name, { lower: true });
+    }
+  }
 }
