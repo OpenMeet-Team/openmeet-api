@@ -21,9 +21,9 @@ export class PermissionSeedService {
 
     // List of permissions to seed
     const permissions = [
-      { name: 'READ' },
-      { name: 'WRITE' },
-      { name: 'DELETE' },
+      { name: 'READ_EVENTS' },
+      { name: 'WRITE_EVENTS' },
+      { name: 'DELETE_EVENTS' },
       { name: 'MANAGE_USERS' },
     ];
 

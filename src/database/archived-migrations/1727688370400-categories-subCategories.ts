@@ -8,6 +8,13 @@ export class CategoriesSubCategories1727688370400
   public async up(queryRunner: QueryRunner): Promise<void> {
     const schema = queryRunner.connection.options.name || 'public';
 
+    // Creating subCategory table
+    await queryRunner.query(`CREATE TABLE "${schema}"."Category" (
+          "id" SERIAL NOT NULL, 
+          "name" character varying(255) NOT NULL, 
+          "slug" character varying(255) NOT NULL
+      )`);
+
     // Creating ENUM type
     await queryRunner.query(
       `CREATE TYPE "${schema}"."subCategory_type_enum" AS ENUM('EVENT', 'GROUP')`,
