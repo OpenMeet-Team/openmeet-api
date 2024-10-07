@@ -21,7 +21,7 @@ export class CategoryEntity extends EntityRelationalHelper {
   @Column({ type: 'varchar', length: 255 })
   name: string;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   slug: string;
 
   @OneToMany(() => SubCategoryEntity, (SC) => SC.category)
