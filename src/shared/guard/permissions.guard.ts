@@ -7,15 +7,13 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from './permissions.decorator';
-import { UsersService } from '../../users/users.service';
-import { GroupService } from '../../groups/groups.service';
+import { AuthService } from '../../auth/auth.service';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
-    private readonly userService: UsersService,
-    private readonly groupService: GroupService,
+    private readonly authService: AuthService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -54,7 +52,7 @@ export class PermissionsGuard implements CanActivate {
     const permissions = new Set<string>();
 
     // Fetch user-specific permissions
-    const userPermissions = await this.userService.getUserPermissions(userId);
+    const userPermissions = await this.authService.getUserPermissions(userId);
 
     // Map of permission name to granted status
     const userPermissionsMap = new Map<string, boolean>();
@@ -88,10 +86,7 @@ export class PermissionsGuard implements CanActivate {
     const groupPermissions = new Set<string>();
 
     // Fetch the user's group membership
-    const groupMember = await this.groupService.getGroupMembers(
-      userId,
-      groupId,
-    );
+    const groupMember = await this.authService.getGroupMembers(userId, groupId);
 
     if (!groupMember) {
       // User is not a member of the group
@@ -100,7 +95,7 @@ export class PermissionsGuard implements CanActivate {
 
     // Fetch user-specific group permissions
     const userGroupPermissions =
-      await this.groupService.getGroupMemberPermissions(userId, groupId);
+      await this.authService.getGroupMemberPermissions(userId, groupId);
 
     // Map of permission name to granted status
     const userGroupPermissionsMap = new Map<string, boolean>();

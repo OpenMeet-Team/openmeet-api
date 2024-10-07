@@ -28,12 +28,15 @@ import { Session } from '../session/domain/session';
 import { SessionService } from '../session/session.service';
 import { StatusEnum } from '../statuses/statuses.enum';
 import { User } from '../users/domain/user';
+import { GroupService } from '../groups/groups.service';
+import { GroupMemberEntity } from '../group-members/infrastructure/persistence/relational/entities/group-member.entity';
 
 @Injectable()
 export class AuthService {
   constructor(
     private jwtService: JwtService,
     private usersService: UsersService,
+    private groupService: GroupService,
     private sessionService: SessionService,
     private mailService: MailService,
     private configService: ConfigService<AllConfigType>,
@@ -616,5 +619,23 @@ export class AuthService {
       refreshToken,
       tokenExpires,
     };
+  }
+
+  getUserPermissions(userId: number) {
+    return this.usersService.getUserPermissions(userId);
+  }
+
+  async getGroupMembers(
+    userId: number,
+    groupId: number,
+  ): Promise<GroupMemberEntity[]> {
+    return this.groupService.getGroupMembers(userId, groupId);
+  }
+
+  async getGroupMemberPermissions(
+    userId: number,
+    groupId: number,
+  ): Promise<any[]> {
+    return this.groupService.getGroupMemberPermissions(userId, groupId);
   }
 }

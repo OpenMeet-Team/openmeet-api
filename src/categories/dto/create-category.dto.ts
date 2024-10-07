@@ -1,6 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsNotEmpty, IsOptional, IsString } from 'class-validator';
-import { Type } from 'class-transformer';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsNotEmpty, IsString } from 'class-validator';
 
 export class CreateCategoryDto {
   @ApiProperty({
@@ -16,21 +15,4 @@ export class CreateCategoryDto {
   @IsNotEmpty()
   @IsString()
   slug: string;
-
-  @ApiPropertyOptional({
-    description: 'The list of events associated with this category',
-    type: [Number],
-  })
-  @IsOptional()
-  @IsArray()
-  @Type(() => Number)
-  events?: number[];
-
-  // @ApiPropertyOptional({
-  //   description: 'The list of groups associated with this category',
-  // })
-  // @IsOptional()
-  // @IsArray()
-  // @Type(() => Number)
-  // groups?: number[];
 }

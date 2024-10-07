@@ -5,6 +5,7 @@ import { UpdateEventDto } from './dto/update-event.dto';
 import { EventEntity } from './infrastructure/persistence/relational/entities/events.entity';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
+import { CategoryService } from '../categories/categories.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -13,6 +14,7 @@ export class EventService {
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
+    private readonly categoryService: CategoryService,
   ) {}
 
   async getTenantSpecificEventRepository() {
@@ -29,10 +31,15 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
     const user = { id: userId };
     const group = createEventDto.group ? { id: createEventDto.group } : null;
+    const categories = await this.categoryService.findByIds(
+      createEventDto.categories,
+    );
+
     const mappedDto = {
       ...createEventDto,
       user,
       group,
+      categories,
     };
     const event = this.eventRepository.create(mappedDto);
     return this.eventRepository.save(event);
@@ -66,13 +73,21 @@ export class EventService {
   ): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
     const event = await this.findOne(id);
-    const group = { id: updateEventDto.group };
+    const group = updateEventDto.group ? { id: updateEventDto.group } : null;
     const user = { id: userId };
-    const mappedDto = {
+
+    const mappedDto: any = {
       ...updateEventDto,
       user,
       group,
     };
+
+    if (updateEventDto.categories && updateEventDto.categories.length) {
+      const categories = await this.categoryService.findByIds(
+        updateEventDto.categories,
+      );
+      mappedDto.categories = categories;
+    }
     const updatedEvent = this.eventRepository.merge(event, mappedDto);
     return this.eventRepository.save(updatedEvent);
   }
