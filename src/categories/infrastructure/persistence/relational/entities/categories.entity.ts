@@ -28,11 +28,10 @@ export class CategoryEntity extends EntityRelationalHelper {
   subCategories: SubCategoryEntity[];
 
   @ManyToMany(() => EventEntity, (event) => event.categories)
-  @JoinTable()
+  @JoinTable({ name: 'eventCategories' })
   events: EventEntity[];
 
   @ManyToMany(() => GroupEntity, (group) => group.categories)
-  @JoinTable()
   groups: GroupEntity[];
 
   @BeforeInsert()
