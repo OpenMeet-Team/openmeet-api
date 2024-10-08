@@ -62,5 +62,5 @@ TWITTER_CONSUMER_SECRET=
 
 WORKER_HOST=redis://redis:6379/1
 
-LIVENESS_PROBE_API_URL=https://api.openmeet.net
-LIVENESS_PROBE_DOCS_URL=https://api.openmeet.net/docs
+# LIVENESS_PROBE_API_URL=https://api.openmeet.net
+# LIVENESS_PROBE_DOCS_URL=https://api.openmeet.net/docs

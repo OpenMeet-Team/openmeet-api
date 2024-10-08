@@ -4,6 +4,7 @@ import { Public } from '../auth/decorators/public.decorator';
 import { TypeOrmHealthIndicator } from '@nestjs/terminus';
 import { Req } from '@nestjs/common';
 import { Request } from 'express';
+import { HealthIndicatorResult } from '@nestjs/terminus';
 
 import {
   HealthCheckService,
@@ -30,19 +31,23 @@ export class HealthController {
     // get the tenant_id from the request
     const tenant_id = req.headers['tenant-id'] as string;
 
-    if (!api_url || !docs_url) {
-      throw new Error('Liveness probe URLs are not set');
-    }
+    const checks: Array<() => Promise<HealthIndicatorResult>> = [];
 
-    const result = await this.health.check([
-      () =>
+    if (api_url) {
+      checks.push(() =>
         this.http.pingCheck('api-root', api_url, {
           headers: {
             'Tenant-Id': tenant_id,
           },
         }),
-      () => this.http.pingCheck('docs-root', docs_url),
-    ]);
+      );
+    }
+
+    if (docs_url) {
+      checks.push(() => this.http.pingCheck('docs-root', docs_url));
+    }
+
+    const result = await this.health.check(checks);
     return result;
   }
 
