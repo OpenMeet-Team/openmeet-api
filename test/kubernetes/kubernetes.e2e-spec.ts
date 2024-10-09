@@ -6,13 +6,10 @@ const app = APP_URL;
 describe('Get Kubernetes Metrics', () => {
   const server = request.agent(app);
 
-  it.skip('should have a metrics endpoint (GET)', async () => {
+  it('should have a metrics endpoint (GET)', async () => {
     const req = server;
-    const res = await req.get('/api/metrics');
-
-    console.log('res.body', res.body);
-    // TODO: fix this test
-    expect(res.status).toBe(400);
+    const res = await req.get('/metrics');
+    expect(res.status).toBe(200);
     expect(res.text).toContain('http_requests_total');
   });
 

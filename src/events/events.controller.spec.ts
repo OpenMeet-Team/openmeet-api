@@ -10,6 +10,8 @@ import { UserEntity } from '../users/infrastructure/persistence/relational/entit
 import { CategoryEntity } from '../categories/infrastructure/persistence/relational/entities/categories.entity';
 import { Request } from 'express';
 import { GroupEntity } from '../groups/infrastructure/persistence/relational/entities/group.entity';
+import { AuthService } from '../auth/auth.service';
+import { Reflector } from '@nestjs/core';
 
 // Mock services
 const mockUsersService = {};
@@ -45,7 +47,7 @@ const createEventDto: CreateEventDto = {
   location: 'Test Location',
   locationOnline: 'Test Location Online',
   maxAttendees: 100,
-  categories: [mockCategory],
+  categories: [mockCategory.id],
   lat: 0,
   lon: 0,
   is_public: true,
@@ -56,6 +58,7 @@ const mockEvent: Partial<EventEntity> = {
   ...createEventDto,
   user: mockUser,
   group: mockGroup,
+  categories: createEventDto.categories.map((id) => ({ id }) as CategoryEntity),
 };
 
 describe('EventController', () => {
@@ -74,6 +77,19 @@ describe('EventController', () => {
             findOne: jest.fn(),
             update: jest.fn(),
             remove: jest.fn(),
+          },
+        },
+        {
+          provide: AuthService,
+          useValue: {
+            validateToken: jest.fn().mockResolvedValue(true),
+          },
+        },
+        {
+          provide: Reflector,
+          useValue: {
+            get: jest.fn(),
+            getAllAndOverride: jest.fn(),
           },
         },
         {
