@@ -53,9 +53,6 @@ export class EventEntity extends EntityRelationalHelper {
   @Column({ type: 'double precision', nullable: true })
   lon: number;
 
-  @Column({ type: 'boolean', default: false })
-  is_public: boolean;
-
   @Column({
     nullable: true,
     type: 'enum',

@@ -19,8 +19,9 @@ export class GroupRoleSeedService {
 
     // Initialize repository for group roles and permissions
     this.groupRoleRepository = dataSource.getRepository(GroupRoleEntity);
-    this.groupPermissionRepository =
-      dataSource.getRepository(GroupPermissionEntity);
+    this.groupPermissionRepository = dataSource.getRepository(
+      GroupPermissionEntity,
+    );
 
     // Seed group roles and their permissions
     await this.createGroupRoleIfNotExists('Member', ['READ_GROUP']);
@@ -42,7 +43,9 @@ export class GroupRoleSeedService {
     roleName: string,
     permissionNames: string[],
   ) {
-    const count = await this.groupRoleRepository.count({ where: { name: roleName } });
+    const count = await this.groupRoleRepository.count({
+      where: { name: roleName },
+    });
 
     if (!count) {
       const groupRole = this.groupRoleRepository.create({
@@ -50,7 +53,8 @@ export class GroupRoleSeedService {
       });
 
       // Assign permissions to the group role
-      const permissions = await this.getGroupPermissionsByNames(permissionNames);
+      const permissions =
+        await this.getGroupPermissionsByNames(permissionNames);
       groupRole.groupPermissions = permissions;
 
       await this.groupRoleRepository.save(groupRole);
