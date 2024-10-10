@@ -32,6 +32,8 @@ import { CategoryModule } from './categories/categories.module';
 import { GroupModule } from './groups/groups.module';
 import { SubCategoryModule } from './sub-categories/sub-category.module';
 import { PermissionsGuard } from './shared/guard/permissions.guard';
+import { GroupMemberModule } from './group-members/group-members.module';
+import { EventAttendeeModule } from './event-attendee/event-attendee.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -93,6 +95,8 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     CategoryModule,
     GroupModule,
     SubCategoryModule,
+    GroupMemberModule,
+    EventAttendeeModule
   ],
   providers: [
     TenantConnectionService,

@@ -13,8 +13,9 @@ import { EventAttendeesEntity } from '../../../../../event-attendee/infrastructu
 import { CategoryEntity } from '../../../../../categories/infrastructure/persistence/relational/entities/categories.entity';
 import { GroupEntity } from '../../../../../groups/infrastructure/persistence/relational/entities/group.entity';
 import { Expose } from 'class-transformer';
+import { Status } from '../../../../../core/constants/constant';
 
-@Entity({ name: 'Event' })
+@Entity({ name: 'event' })
 export class EventEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
@@ -54,6 +55,13 @@ export class EventEntity extends EntityRelationalHelper {
 
   @Column({ type: 'boolean', default: false })
   is_public: boolean;
+
+  @Column({
+    nullable: true,
+    type: 'enum',
+    enum: Status,
+  })
+  status: Status;
 
   @ManyToOne(() => UserEntity, (user) => user.events)
   @JoinColumn({ name: 'userId' })

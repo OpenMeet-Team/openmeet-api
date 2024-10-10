@@ -9,7 +9,7 @@ import { EntityRelationalHelper } from '../../../../../utils/relational-entity-h
 import { UserPermissionEntity } from '../../../../../users/infrastructure/persistence/relational/entities/user-permission.entity';
 import { RoleEntity } from '../../../../../roles/infrastructure/persistence/relational/entities/role.entity';
 
-@Entity({ name: 'Permissions' })
+@Entity({ name: 'permissions' })
 export class PermissionEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
