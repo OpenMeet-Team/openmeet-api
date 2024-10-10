@@ -131,4 +131,23 @@ export class EventService {
     const event = await this.findOne(id);
     await this.eventRepository.remove(event);
   }
+  async getEventsByCreator(userId: string) {
+    await this.getTenantSpecificEventRepository();
+    const events = await this.eventRepository.find({
+      where: { user: { id: parseInt(userId, 10) } },
+      relations: ['user', 'attendees'],
+    });
+    return events.map((event) => ({
+      ...event,
+      attendeesCount: event.attendees ? event.attendees.length : 0,
+    }));
+  }
+
+  async getEventsByAttendee(userId: string) {
+    await this.getTenantSpecificEventRepository();
+    return this.eventRepository.find({
+      where: { attendees: { userId } },
+      relations: ['user'],
+    });
+  }
 }

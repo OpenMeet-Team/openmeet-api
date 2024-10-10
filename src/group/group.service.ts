@@ -64,6 +64,25 @@ export class GroupService {
     });
   }
 
+  async getGroupsByCreator(userId: string): Promise<GroupEntity[]> {
+    await this.getTenantSpecificGroupRepository();
+    // find where groupMembers user id == userid
+    return this.groupRepository.find({
+      where: {
+        groupMembers: { user: { id: Number(userId) } },
+      },
+    });
+  }
+
+  async getGroupsByMember(userId: string): Promise<GroupEntity[]> {
+    await this.getTenantSpecificGroupRepository();
+    return this.groupRepository.find({
+      where: {
+        groupMembers: { user: { id: Number(userId) } },
+      },
+    });
+  }
+
   async create(createGroupDto: CreateGroupDto, userId: number): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     let categoryEntities: any[] = [];
