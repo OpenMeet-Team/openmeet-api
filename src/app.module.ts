@@ -102,7 +102,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     GroupModule,
     SubCategoryModule,
     GroupMemberModule,
-    EventAttendeeModule
+    EventAttendeeModule,
     HealthModule,
   ],
   providers: [
