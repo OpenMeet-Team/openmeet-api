@@ -51,5 +51,5 @@ jobs:
         run: |
           aws eks get-token --cluster-name openmeet-dev
           aws eks update-kubeconfig --name openmeet-dev --region ${{ vars.AWS_REGION }}
-          kubectl set image --namespace openmeet-api deployment/openmeet-api openmeet-api=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          kubectl rollout status --namespace openmeet-api deployment/openmeet-api
+          kubectl set image --namespace ${{ vars.DEPLOYMENT_NAMESPACE }} deployment/openmeet-api openmeet-api=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          kubectl rollout status --namespace ${{ vars.DEPLOYMENT_NAMESPACE }} deployment/openmeet-api

@@ -62,7 +62,8 @@ export class CategoryService {
     id: number,
     updateCategoryDto: UpdateCategoryDto,
   ): Promise<CategoryEntity | void> {
-    // await this.getTenantSpecificCategoryRepository();
+    console.log('TODO, fix this id, updateCategoryDto', id, updateCategoryDto);
+    await this.getTenantSpecificCategoryRepository();
     // const category = await this.findOne(id);
     // return this.categoryRepository.save(updatedCategory);
   }

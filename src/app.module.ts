@@ -34,6 +34,10 @@ import { SubCategoryModule } from './sub-categories/sub-category.module';
 import { PermissionsGuard } from './shared/guard/permissions.guard';
 import { GroupMemberModule } from './group-members/group-members.module';
 import { EventAttendeeModule } from './event-attendee/event-attendee.module';
+import { HealthModule } from './health/health.module';
+import { PrometheusModule } from '@willsoto/nestjs-prometheus';
+import { makeCounterProvider } from '@willsoto/nestjs-prometheus';
+import { RequestCounterInterceptor } from './interceptors/request-counter.interceptor';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -81,6 +85,8 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
     }),
+
+    PrometheusModule.register(),
     UsersModule,
     FilesModule,
     AuthModule,
@@ -97,6 +103,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     SubCategoryModule,
     GroupMemberModule,
     EventAttendeeModule
+    HealthModule,
   ],
   providers: [
     TenantConnectionService,
@@ -110,6 +117,11 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       scope: Scope.REQUEST,
       durable: true,
     },
+    RequestCounterInterceptor,
+    makeCounterProvider({
+      name: 'http_requests_total',
+      help: 'Total number of HTTP requests',
+    }),
   ],
 })
 export class AppModule {
