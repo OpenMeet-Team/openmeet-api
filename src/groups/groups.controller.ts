@@ -14,7 +14,7 @@ import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { GroupEntity } from './infrastructure/persistence/relational/entities/group.entity';
 import { GroupService } from './groups.service';
-import { QuerGrouptDto } from './dto/group-query.dto'
+import { QuerGrouptDto } from './dto/group-query.dto';
 
 @ApiTags('Groups')
 @Controller('groups')
