@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateGroupMemberDto {
@@ -24,7 +24,8 @@ export class CreateGroupMemberDto {
   @IsNotEmpty()
   @Type(() => Number)
   @IsNumber()
-  groupRoleId: number;
+  @IsOptional()
+  groupRoleId: number = 1;
 
   @ApiProperty({
     description: 'ID of the group to which the member belongs',

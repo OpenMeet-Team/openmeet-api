@@ -9,7 +9,7 @@ import { UserPermissionSeedService } from './user-permission/user-permission-see
 import { GroupRoleSeedService } from './group-role/group-role.service';
 // import { InterestSeedService } from './interest/interest-seed.service';
 
-const tenantIds = ['1']; // List of tenant IDs
+const tenantIds = ['', '1']; // List of tenant IDs
 
 const runSeed = async () => {
   const app = await NestFactory.create(SeedModule);
