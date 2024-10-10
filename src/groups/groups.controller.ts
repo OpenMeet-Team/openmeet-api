@@ -15,6 +15,7 @@ import { UpdateGroupDto } from './dto/update-group.dto';
 import { GroupEntity } from './infrastructure/persistence/relational/entities/group.entity';
 import { GroupService } from './groups.service';
 import { QuerGrouptDto } from './dto/group-query.dto';
+import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('Groups')
 @Controller('groups')
@@ -27,6 +28,7 @@ export class GroupController {
     return this.groupService.create(createGroupDto);
   }
 
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Get all groups' })
   async findAll(@Query() query: QuerGrouptDto): Promise<GroupEntity[]> {

@@ -21,6 +21,7 @@ import { JWTAuthGuard } from '../core/guards/auth.guard';
 // import { PermissionsGuard } from '../shared/guard/permissions.guard';
 // import { Permissions } from '../shared/guard/permissions.decorator';
 import { QueryEventDto } from './dto/query-events.dto';
+import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('Events')
 @Controller('events')
@@ -40,6 +41,7 @@ export class EventController {
     return this.eventService.create(createEventDto, userId);
   }
 
+  @Public()
   @Get()
   // @UseGuards(PermissionsGuard)
   // @Permissions('view_example')
