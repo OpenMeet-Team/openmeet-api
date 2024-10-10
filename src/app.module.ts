@@ -32,6 +32,8 @@ import { CategoryModule } from './categories/categories.module';
 import { GroupModule } from './groups/groups.module';
 import { SubCategoryModule } from './sub-categories/sub-category.module';
 import { PermissionsGuard } from './shared/guard/permissions.guard';
+import { GroupMemberModule } from './group-members/group-members.module';
+import { EventAttendeeModule } from './event-attendee/event-attendee.module';
 import { HealthModule } from './health/health.module';
 import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import { makeCounterProvider } from '@willsoto/nestjs-prometheus';
@@ -99,6 +101,8 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     CategoryModule,
     GroupModule,
     SubCategoryModule,
+    GroupMemberModule,
+    EventAttendeeModule,
     HealthModule,
   ],
   providers: [

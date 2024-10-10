@@ -8,7 +8,7 @@ import {
   IsString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { GroupStatus } from '../../core/constants/constant';
+import { Status } from '../../core/constants/constant';
 
 export class CreateGroupDto {
   @ApiProperty({
@@ -42,11 +42,11 @@ export class CreateGroupDto {
 
   @ApiPropertyOptional({
     description: 'The status of the group',
-    enum: GroupStatus,
+    enum: Status,
   })
   @IsOptional()
-  @IsEnum(GroupStatus)
-  status?: GroupStatus;
+  @IsEnum(Status)
+  status?: Status;
 
   @ApiPropertyOptional({
     description: 'The list of category IDs associated with this group',

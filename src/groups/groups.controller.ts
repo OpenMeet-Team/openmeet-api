@@ -7,12 +7,15 @@ import {
   Patch,
   Delete,
   NotFoundException,
+  Query,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { GroupEntity } from './infrastructure/persistence/relational/entities/group.entity';
 import { GroupService } from './groups.service';
+import { QuerGrouptDto } from './dto/group-query.dto';
+import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('Groups')
 @Controller('groups')
@@ -25,10 +28,11 @@ export class GroupController {
     return this.groupService.create(createGroupDto);
   }
 
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Get all groups' })
-  async findAll(): Promise<GroupEntity[]> {
-    return this.groupService.findAll();
+  async findAll(@Query() query: QuerGrouptDto): Promise<GroupEntity[]> {
+    return this.groupService.findAll(query);
   }
 
   @Get(':id')

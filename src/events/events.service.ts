@@ -6,6 +6,7 @@ import { EventEntity } from './infrastructure/persistence/relational/entities/ev
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { CategoryService } from '../categories/categories.service';
+import { QueryEventDto } from './dto/query-events.dto';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -45,11 +46,26 @@ export class EventService {
     return this.eventRepository.save(event);
   }
 
-  async findAll(): Promise<EventEntity[]> {
+  async findAll(query: QueryEventDto): Promise<any> {
     await this.getTenantSpecificEventRepository();
-    return this.eventRepository.find({
-      relations: ['user'],
-    });
+    const { page, limit } = query;
+  const eventQuery = this.eventRepository.createQueryBuilder('event')
+    .leftJoinAndSelect('event.user', 'user')
+    .where('event.status = :status', { status: 'published' });
+
+  const total = await eventQuery.getCount();
+
+  const results = await eventQuery
+    .skip((page - 1) * limit)
+    .take(limit)
+    .getMany();
+
+  return {
+    data: results,
+    total,
+    page,
+    totalPages: Math.ceil(total / limit),
+  };
   }
 
   async findOne(id: number): Promise<EventEntity> {

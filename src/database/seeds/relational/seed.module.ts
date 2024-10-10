@@ -12,6 +12,7 @@ import appConfig from '../../../config/app.config';
 import { CategorySeedModule } from './category/category-seed.module';
 import { PermissionSeedModule } from './permission/permission-seed.module';
 import { UserPermissionSeedModule } from './user-permission/user-permission-seed.module';
+import { GroupRoleSeedModule } from './group-role/group-role.module';
 // import { InterestSeedModule } from './interest/interest-seed.module';
 
 @Module({
@@ -22,6 +23,7 @@ import { UserPermissionSeedModule } from './user-permission/user-permission-seed
     CategorySeedModule,
     PermissionSeedModule,
     UserPermissionSeedModule,
+    GroupRoleSeedModule,
     ConfigModule.forRoot({
       isGlobal: true,
       load: [databaseConfig, appConfig],

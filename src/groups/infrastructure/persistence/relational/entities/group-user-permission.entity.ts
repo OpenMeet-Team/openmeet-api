@@ -3,7 +3,7 @@ import { UserEntity } from '../../../../../users/infrastructure/persistence/rela
 import { GroupEntity } from './group.entity';
 import { GroupPermissionEntity } from '../../../../../group-permission/infrastructure/persistence/relational/entities/group-permission.entity';
 
-@Entity({ name: 'group_user_permissions' })
+@Entity({ name: 'groupUserPermissions' })
 export class GroupUserPermissionEntity {
   @PrimaryGeneratedColumn()
   id: number;

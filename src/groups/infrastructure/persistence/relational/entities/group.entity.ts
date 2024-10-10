@@ -9,13 +9,13 @@ import {
 } from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { CategoryEntity } from '../../../../../categories/infrastructure/persistence/relational/entities/categories.entity';
-import { GroupStatus } from '../../../../../core/constants/constant';
 import { EventEntity } from '../../../../../events/infrastructure/persistence/relational/entities/events.entity';
 import { GroupMemberEntity } from '../../../../../group-members/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupUserPermissionEntity } from './group-user-permission.entity';
 import slugify from 'slugify';
+import { Status } from '../../../../../core/constants/constant';
 
-@Entity({ name: 'Group' })
+@Entity({ name: 'group' })
 export class GroupEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
@@ -35,9 +35,9 @@ export class GroupEntity extends EntityRelationalHelper {
   @Column({
     nullable: true,
     type: 'enum',
-    enum: GroupStatus,
+    enum: Status,
   })
-  status: GroupStatus;
+  status: Status;
 
   @OneToMany(() => EventEntity, (event) => event.group)
   events: EventEntity[];

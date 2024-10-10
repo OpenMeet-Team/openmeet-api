@@ -8,6 +8,8 @@ import { UpdateGroupDto } from './dto/update-group.dto';
 import { CategoryService } from '../categories/categories.service';
 import { GroupMemberEntity } from '../group-members/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupUserPermissionEntity } from './infrastructure/persistence/relational/entities/group-user-permission.entity';
+import { QuerGrouptDto } from './dto/group-query.dto';
+import { Status } from '../core/constants/constant';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -87,11 +89,27 @@ export class GroupService {
   }
 
   // Find all groups with relations
-  async findAll(): Promise<GroupEntity[]> {
+  async findAll(query: QuerGrouptDto): Promise<any> {
     await this.getTenantSpecificGroupRepository();
-    return this.groupRepository.find({
-      relations: ['categories'],
-    });
+    const { page, limit } = query;
+    const groupQuery = this.groupRepository
+      .createQueryBuilder('group')
+      .leftJoinAndSelect('group.categories', 'categories')
+      .where('group.status = :status', { status: Status.Published });
+
+    const total = await groupQuery.getCount();
+
+    const results = await groupQuery
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
+
+    return {
+      data: results,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async findOne(id: number): Promise<GroupEntity> {

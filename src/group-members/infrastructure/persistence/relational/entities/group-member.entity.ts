@@ -1,10 +1,4 @@
-import {
-  Column,
-  Entity,
-  JoinColumn,
-  ManyToOne,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { GroupEntity } from '../../../../../groups/infrastructure/persistence/relational/entities/group.entity';
 import { UserEntity } from '../../../../../users/infrastructure/persistence/relational/entities/user.entity';
@@ -14,9 +8,6 @@ import { GroupRoleEntity } from '../../../../../group-role/infrastructure/persis
 export class GroupMemberEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
-
-  @Column({ type: 'varchar' })
-  name: string;
 
   @ManyToOne(() => UserEntity, (user) => user.groupUsers)
   user: UserEntity;

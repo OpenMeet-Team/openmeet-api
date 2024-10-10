@@ -3,7 +3,8 @@ export enum SubCategoryType {
   GROUP = 'GROUP',
 }
 
-export enum GroupStatus {
-  PUBLIC = 'PUBLIC',
-  PRIVATE = 'PRIVATE',
+export enum Status {
+  Draft = 'draft',
+  Pending = 'pending',
+  Published = 'published',
 }
