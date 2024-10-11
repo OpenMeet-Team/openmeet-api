@@ -24,7 +24,7 @@ export class GroupService {
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly categoryService: CategoryService,
-    private readonly groupMemberService: GroupMemberService
+    private readonly groupMemberService: GroupMemberService,
   ) {}
 
   async getTenantSpecificGroupRepository() {
@@ -92,36 +92,39 @@ export class GroupService {
     const savedGroup = await this.groupRepository.save(group);
     const groupMemberDto = {
       userId,
-      groupId: savedGroup.id,  
+      groupId: savedGroup.id,
     };
-    console.log("🚀 ~ GroupService ~ create ~ groupMemberDto:", groupMemberDto);
+    console.log('🚀 ~ GroupService ~ create ~ groupMemberDto:', groupMemberDto);
     await this.groupMemberService.createGroupMember(groupMemberDto);
-  
-    return savedGroup; 
+
+    return savedGroup;
   }
 
   // Find all groups with relations
   async findAll(pagination: PaginationDto, query: QueryGroupDto): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     const { page, limit } = pagination;
-    const {search,userId} = query
+    const { search, userId } = query;
     const groupQuery = this.groupRepository
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.categories', 'categories')
       .leftJoinAndSelect('group.groupMembers', 'groupMembers')
       .leftJoinAndSelect('groupMembers.user', 'user')
       .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
-      .where('group.status = :status', { status: Status.Published })
-      .andWhere('user.id = :userId', {userId})
+      .where('group.status = :status', { status: Status.Published });
 
-      if (search) {
-        groupQuery.andWhere(
-          '(group.name LIKE :search OR group.description LIKE :search)',
-          { search: `%${search}%` },
-        );
-      }
+    if (userId) {
+      groupQuery.andWhere('user.id = :userId', { userId });
+    }
 
-      return paginate(groupQuery, { page, limit });
+    if (search) {
+      groupQuery.andWhere(
+        '(group.name LIKE :search OR group.description LIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    return paginate(groupQuery, { page, limit });
   }
 
   async findOne(id: number): Promise<GroupEntity> {

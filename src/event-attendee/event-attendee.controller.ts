@@ -23,7 +23,7 @@ export class EventAttendeeController {
     return await this.eventAttendeeService.attendEvent(createEventAttendeeDto, userId);
   }
 
-  @Get()
+  @Get('me')
   @ApiOperation({ summary: 'Get all event attendee' })
   async findAll(@Query() pagination: PaginationDto, @Query() query: QueryEventAttendeeDto, @AuthUser() user: User,): Promise<any> {
     const userId = user?.id;
@@ -31,7 +31,7 @@ export class EventAttendeeController {
     return this.eventAttendeeService.findAll(pagination, query);
   }
 
-  @Delete('leave/:userId/:eventId')
+  @Delete('cancel/:userId/:eventId')
   async leaveEvent(
     @Param('userId') userId: number,
     @Param('eventId') eventId: number,

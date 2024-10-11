@@ -43,13 +43,27 @@ export class EventController {
     return this.eventService.create(createEventDto, userId);
   }
 
-  // @Public()
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Get all events' })
-  async findAll(@Query() pagination: PaginationDto, @Query() query: QueryEventDto, @AuthUser() user: User,): Promise<EventEntity[]> {
+  async findme(
+    @Query() pagination: PaginationDto,
+    @Query() query: QueryEventDto,
+  ): Promise<EventEntity[]> {
+    return this.eventService.findAll(pagination, query);
+  }
+
+  // @Public()
+  @Get('me')
+  @ApiOperation({ summary: 'Get all events' })
+  async findAll(
+    @Query() pagination: PaginationDto,
+    @Query() query: QueryEventDto,
+    @AuthUser() user: User,
+  ): Promise<EventEntity[]> {
     const userId = user?.id;
-    console.log("🚀 ~ EventController ~ findAll ~ userId:", userId)
-    query.userId = userId
+    console.log('🚀 ~ EventController ~ findAll ~ userId:', userId);
+    query.userId = userId;
     return this.eventService.findAll(pagination, query);
   }
 

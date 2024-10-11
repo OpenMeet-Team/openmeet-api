@@ -33,21 +33,37 @@ export class GroupController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new group' })
-  async create(@Body() createGroupDto: CreateGroupDto, @Req() req: Request,): Promise<GroupEntity> {
+  async create(
+    @Body() createGroupDto: CreateGroupDto,
+    @Req() req: Request,
+  ): Promise<GroupEntity> {
     const user = req.user;
     let userId;
-    if(user){
-     userId = user.id;
+    if (user) {
+      userId = user.id;
     }
     return this.groupService.create(createGroupDto, userId);
   }
 
-  // @Public()
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Get all groups' })
-  async findAll(@Query() pagination: PaginationDto,@Query() query: QueryGroupDto, @AuthUser() user: User): Promise<GroupEntity[]> {
+  async findAll(
+    @Query() pagination: PaginationDto,
+    @Query() query: QueryGroupDto,
+  ): Promise<GroupEntity[]> {
+    return this.groupService.findAll(pagination, query);
+  }
+
+  @Get('me')
+  @ApiOperation({ summary: 'Get my groups' })
+  async findMyGroups(
+    @Query() pagination: PaginationDto,
+    @Query() query: QueryGroupDto,
+    @AuthUser() user: User,
+  ): Promise<GroupEntity[]> {
     const userId = user.id;
-    query.userId = userId
+    query.userId = userId;
     return this.groupService.findAll(pagination, query);
   }
 
