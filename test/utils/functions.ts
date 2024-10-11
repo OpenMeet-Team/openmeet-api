@@ -8,7 +8,7 @@ async function getAuthToken(
   const server = request.agent(app).set('tenant-id', '1');
   const response = await server
     .post('/api/v1/auth/email/login')
-    .send({ tenant_id: 1, email, password });
+    .send({ email, password });
   return response.body.token;
 }
 

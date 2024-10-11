@@ -1,58 +1,44 @@
-import { Controller, Get, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Req,
+  Get,
+  Injectable,
+  Scope,
+  UseGuards,
+} from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
-import { Req } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { EventService } from '../event/event.service';
-import { GroupService } from '../group/group.service';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JWTAuthGuard } from '../core/guards/auth.guard';
+import { AuthGuard } from '@nestjs/passport';
+import { ApiOkResponse } from '@nestjs/swagger';
 
+@ApiBearerAuth()
+@UseGuards(JWTAuthGuard)
 @Controller('dashboard')
 @ApiTags('User Dashboard')
+@UseGuards(AuthGuard('jwt'))
+@Injectable({ scope: Scope.REQUEST, durable: true })
 export class DashboardController {
-  constructor(
-    private readonly dashboardService: DashboardService,
-    private readonly eventService: EventService,
-    private readonly groupService: GroupService,
-  ) {
+  constructor(private readonly dashboardService: DashboardService) {
     this.dashboardService = dashboardService;
-    this.eventService = eventService;
-    this.groupService = groupService;
   }
 
   @ApiOperation({
     summary:
       'Get all events the authenticated user has created or is attending',
   })
-  @Get('events')
-  async getMyEvents(@Req() req) {
-    const userEvents: any[] = await this.dashboardService.getMyEvents(
-      req.user.id,
-    );
-
-    return userEvents;
+  @ApiOkResponse({ description: 'List of user events' })
+  @Get('my-events')
+  async myEvents(@Req() req) {
+    return await this.dashboardService.getMyEvents(req.user.id);
   }
 
-  @Get('created-events')
-  async getCreatedEvents(@Req() req) {
-    try {
-      if (!req.user || !req.user.id) {
-        throw new Error('User not authenticated or user ID not found');
-      }
-      const events = await this.eventService.getEventsByCreator(req.user.id);
-      return events;
-    } catch (error) {
-      console.error('Error in getCreatedEvents:', error);
-      throw new HttpException(
-        {
-          status: HttpStatus.INTERNAL_SERVER_ERROR,
-          error: 'There was a problem retrieving created events',
-        },
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
-
-  @Get('attending-events')
-  async getAttendingEvents(@Req() req) {
-    return await this.eventService.getEventsByAttendee(req.user.id);
+  @ApiOperation({
+    summary: 'Get all groups the authenticated user is a member of',
+  })
+  @ApiOkResponse({ description: 'List of user groups' })
+  @Get('my-groups')
+  async myGroups(@Req() req) {
+    return await this.dashboardService.getMyGroups(req.user.id);
   }
 }
