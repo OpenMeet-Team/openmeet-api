@@ -17,13 +17,13 @@ export class CreateEventAttendeeDto {
   @IsNumber()
   eventId: number;
 
-  @ApiProperty({
-    description: 'User',
-  })
-  @IsNotEmpty()
-  @Type(() => Number)
-  @IsNumber()
-  userId: number;
+  // @ApiProperty({
+  //   description: 'User',
+  // })
+  // @IsNotEmpty()
+  // @Type(() => Number)
+  // @IsNumber()
+  // userId: number;
 
   @ApiProperty({ description: 'RSVP status of the attendee', example: 'going' })
   @IsString()

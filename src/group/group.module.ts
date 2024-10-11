@@ -8,6 +8,7 @@ import { CategoryService } from '../category/category.service';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupUserPermissionEntity } from './infrastructure/persistence/relational/entities/group-user-permission.entity';
 import { UsersModule } from '../user/user.module';
+import { GroupMemberModule } from '../group-member/group-member.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { UsersModule } from '../user/user.module';
       GroupUserPermissionEntity,
     ]),
     UsersModule,
+    GroupMemberModule,
   ],
   controllers: [GroupController],
   providers: [GroupService, TenantConnectionService, CategoryService],

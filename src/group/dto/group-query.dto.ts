@@ -1,17 +1,17 @@
-import { IsNumber, IsOptional } from 'class-validator';
+import { IsOptional, IsString, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
-export class QuerGrouptDto {
+export class QueryGroupDto {
   @ApiPropertyOptional()
   @IsOptional()
-  @IsNumber()
-  @Type(() => Number)
-  page: number;
+  @IsString()
+  @Type(() => String)
+  search: string;
 
-  @ApiPropertyOptional()
+  // @ApiPropertyOptional()
   @IsOptional()
-  @IsNumber()
+  @IsString()
   @Type(() => Number)
-  limit: number;
+  userId: number;
 }

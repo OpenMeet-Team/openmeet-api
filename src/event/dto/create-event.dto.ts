@@ -6,9 +6,11 @@ import {
   IsOptional,
   IsBoolean,
   IsString,
+  IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Status } from '../../core/constants/constant';
 
 export class CreateEventDto {
   @ApiProperty({
@@ -97,6 +99,14 @@ export class CreateEventDto {
   @IsNumber()
   @Type(() => Number)
   lon: number;
+
+  @ApiPropertyOptional({
+    description: 'The status of the group',
+    enum: Status,
+  })
+  @IsOptional()
+  @IsEnum(Status)
+  status?: Status;
 
   @ApiProperty({
     description: 'Flag indicating if the event is public',

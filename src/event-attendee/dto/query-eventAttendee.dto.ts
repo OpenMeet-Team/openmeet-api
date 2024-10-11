@@ -2,7 +2,7 @@ import { IsOptional, IsString, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
-export class QueryEventDto {
+export class QueryEventAttendeeDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -17,7 +17,6 @@ export class QueryEventDto {
 
   @ApiPropertyOptional({
     description: 'Filter events from this date.',
-    example: '2024-10-11',
     type: String,
   })
   @IsOptional()
@@ -27,7 +26,6 @@ export class QueryEventDto {
 
   @ApiPropertyOptional({
     description: 'Filter events to this date.',
-    example: '2024-10-15',
     type: String,
   })
   @IsOptional()

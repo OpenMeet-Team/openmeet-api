@@ -8,8 +8,11 @@ import { UpdateGroupDto } from './dto/update-group.dto';
 import { CategoryService } from '../category/category.service';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupUserPermissionEntity } from './infrastructure/persistence/relational/entities/group-user-permission.entity';
-import { QuerGrouptDto } from './dto/group-query.dto';
 import { Status } from '../core/constants/constant';
+import { GroupMemberService } from '../group-member/group-member.service';
+import { PaginationDto } from '../utils/dto/pagination.dto';
+import { paginate } from '../utils/generic-pagination';
+import { QueryGroupDto } from './dto/group-query.dto';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -21,6 +24,7 @@ export class GroupService {
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly categoryService: CategoryService,
+    private readonly groupMemberService: GroupMemberService,
   ) {}
 
   async getTenantSpecificGroupRepository() {
@@ -60,7 +64,7 @@ export class GroupService {
     });
   }
 
-  async create(createGroupDto: CreateGroupDto): Promise<any> {
+  async create(createGroupDto: CreateGroupDto, userId: number): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     let categoryEntities: any[] = [];
     const categoryIds = createGroupDto.categories;
@@ -85,31 +89,42 @@ export class GroupService {
     };
 
     const group = this.groupRepository.create(mappedGroupDto);
-    return this.groupRepository.save(group);
+    const savedGroup = await this.groupRepository.save(group);
+    const groupMemberDto = {
+      userId,
+      groupId: savedGroup.id,
+    };
+    console.log('🚀 ~ GroupService ~ create ~ groupMemberDto:', groupMemberDto);
+    await this.groupMemberService.createGroupMember(groupMemberDto);
+
+    return savedGroup;
   }
 
   // Find all groups with relations
-  async findAll(query: QuerGrouptDto): Promise<any> {
+  async findAll(pagination: PaginationDto, query: QueryGroupDto): Promise<any> {
     await this.getTenantSpecificGroupRepository();
-    const { page, limit } = query;
+    const { page, limit } = pagination;
+    const { search, userId } = query;
     const groupQuery = this.groupRepository
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.categories', 'categories')
+      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
+      .leftJoinAndSelect('groupMembers.user', 'user')
+      .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
       .where('group.status = :status', { status: Status.Published });
 
-    const total = await groupQuery.getCount();
+    if (userId) {
+      groupQuery.andWhere('user.id = :userId', { userId });
+    }
 
-    const results = await groupQuery
-      .skip((page - 1) * limit)
-      .take(limit)
-      .getMany();
+    if (search) {
+      groupQuery.andWhere(
+        '(group.name LIKE :search OR group.description LIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
 
-    return {
-      data: results,
-      total,
-      page,
-      totalPages: Math.ceil(total / limit),
-    };
+    return paginate(groupQuery, { page, limit });
   }
 
   async findOne(id: number): Promise<GroupEntity> {

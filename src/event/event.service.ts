@@ -7,6 +7,9 @@ import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { CategoryService } from '../category/category.service';
 import { QueryEventDto } from './dto/query-events.dto';
+import { PaginationDto } from '../utils/dto/pagination.dto';
+import { paginate } from '../utils/generic-pagination';
+import { Status } from '../core/constants/constant';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -46,27 +49,41 @@ export class EventService {
     return this.eventRepository.save(event);
   }
 
-  async findAll(query: QueryEventDto): Promise<any> {
+  async findAll(pagination: PaginationDto, query: QueryEventDto): Promise<any> {
     await this.getTenantSpecificEventRepository();
-    const { page, limit } = query;
+
+    const { page, limit } = pagination;
+    const { search, userId, fromDate, toDate } = query;
+    console.log('🚀 ~ EventService ~ findAll ~ userId:', userId);
+
     const eventQuery = this.eventRepository
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.user', 'user')
-      .where('event.status = :status', { status: 'published' });
+      .where('event.status = :status', { status: Status.Published });
 
-    const total = await eventQuery.getCount();
+    if (userId) {
+      eventQuery.andWhere('event.user = :userId', { userId });
+    }
 
-    const results = await eventQuery
-      .skip((page - 1) * limit)
-      .take(limit)
-      .getMany();
+    if (search) {
+      eventQuery.andWhere(
+        '(event.name LIKE :search OR event.description LIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
 
-    return {
-      data: results,
-      total,
-      page,
-      totalPages: Math.ceil(total / limit),
-    };
+    if (fromDate && toDate) {
+      eventQuery.andWhere('event.createdAt BETWEEN :fromDate AND :toDate', {
+        fromDate,
+        toDate,
+      });
+    } else if (fromDate) {
+      eventQuery.andWhere('event.createdAt >= :fromDate', { fromDate });
+    } else if (toDate) {
+      eventQuery.andWhere('event.createdAt <= :toDate', { toDate: new Date() });
+    }
+
+    return paginate(eventQuery, { page, limit });
   }
 
   async findOne(id: number): Promise<EventEntity> {
