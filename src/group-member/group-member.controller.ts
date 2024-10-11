@@ -1,7 +1,7 @@
-import { Controller, Post, Body, Param, Delete } from '@nestjs/common';
+import { Controller, Post, Body, Param, Delete, Patch } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { GroupMemberService } from './group-member.service';
-import { CreateGroupMemberDto } from './dto/create-groupMember.dto';
+import { CreateGroupMemberDto, UpdateGroupMemberRoleDto } from './dto/create-groupMember.dto';
 import { GroupMemberEntity } from './infrastructure/persistence/relational/entities/group-member.entity';
 
 @ApiTags('Group Members')
@@ -15,6 +15,14 @@ export class GroupMemberController {
     @Body() createDto: CreateGroupMemberDto,
   ): Promise<GroupMemberEntity> {
     return this.groupMemberService.joinGroup(createDto);
+  }
+
+  @Patch('update-role')
+  @ApiOperation({})
+  async updateRole(
+    @Body() updateDto: UpdateGroupMemberRoleDto,
+  ): Promise<GroupMemberEntity> {
+    return this.groupMemberService.joinGroup(updateDto);
   }
 
   @Delete('leave/:userId/:groupId')

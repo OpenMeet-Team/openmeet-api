@@ -8,3 +8,9 @@ export enum Status {
   Pending = 'pending',
   Published = 'published',
 }
+
+export enum GroupRole {
+  Owner = 'owner',
+  Moderator = 'moderator',
+  Member = 'member',
+}

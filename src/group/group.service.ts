@@ -10,6 +10,7 @@ import { GroupMemberEntity } from '../group-member/infrastructure/persistence/re
 import { GroupUserPermissionEntity } from './infrastructure/persistence/relational/entities/group-user-permission.entity';
 import { QuerGrouptDto } from './dto/group-query.dto';
 import { Status } from '../core/constants/constant';
+import { GroupMemberService } from '../group-member/group-member.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -21,6 +22,7 @@ export class GroupService {
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly categoryService: CategoryService,
+    private readonly groupMemberService: GroupMemberService
   ) {}
 
   async getTenantSpecificGroupRepository() {
@@ -60,7 +62,7 @@ export class GroupService {
     });
   }
 
-  async create(createGroupDto: CreateGroupDto): Promise<any> {
+  async create(createGroupDto: CreateGroupDto, userId: number): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     let categoryEntities: any[] = [];
     const categoryIds = createGroupDto.categories;
@@ -85,7 +87,15 @@ export class GroupService {
     };
 
     const group = this.groupRepository.create(mappedGroupDto);
-    return this.groupRepository.save(group);
+    const savedGroup = await this.groupRepository.save(group);
+    const groupMemberDto = {
+      userId,
+      groupId: savedGroup.id,  
+    };
+    console.log("🚀 ~ GroupService ~ create ~ groupMemberDto:", groupMemberDto);
+    await this.groupMemberService.createGroupMember(groupMemberDto);
+  
+    return savedGroup; 
   }
 
   // Find all groups with relations
