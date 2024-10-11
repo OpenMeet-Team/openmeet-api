@@ -22,6 +22,8 @@ import { JWTAuthGuard } from '../core/guards/auth.guard';
 // import { Permissions } from '../shared/guard/permissions.decorator';
 import { QueryEventDto } from './dto/query-events.dto';
 import { Public } from '../auth/decorators/public.decorator';
+import { AuthUser } from '../core/decorators/auth-user.decorator';
+import { User } from '../user/domain/user';
 
 @ApiTags('Events')
 @Controller('events')
@@ -35,8 +37,8 @@ export class EventController {
   async create(
     @Body() createEventDto: CreateEventDto,
     @Req() req: Request,
+    @AuthUser() user: User,
   ): Promise<EventEntity> {
-    const user = req.user;
     const userId = user?.id;
     return this.eventService.create(createEventDto, userId);
   }
