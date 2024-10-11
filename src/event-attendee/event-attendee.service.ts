@@ -1,3 +1,4 @@
+import { PaginationDto } from './../utils/dto/pagination.dto';
 import { Inject, Injectable, NotFoundException, Scope } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -6,6 +7,8 @@ import { TenantConnectionService } from '../tenant/tenant.service';
 import { EventAttendeesEntity } from './infrastructure/persistence/relational/entities/event-attendee.entity';
 import { CreateEventAttendeeDto } from './dto/create-eventAttendee.dto';
 import { DeepPartial } from 'typeorm';
+import { QueryEventAttendeeDto } from './dto/query-eventAttendee.dto';
+import { paginate } from '../utils/generic-pagination';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventAttendeeService {
@@ -26,14 +29,13 @@ export class EventAttendeeService {
 
   async attendEvent(
     createEventAttendeeDto: CreateEventAttendeeDto,
+    userId: number
   ): Promise<EventAttendeesEntity> {
     await this.getTenantSpecificEventRepository();
 
-    // Use primitive number type instead of Number object
     const event = { id: createEventAttendeeDto.eventId };
-    const user = { id: createEventAttendeeDto.userId };
+    const user = { id: userId };
 
-    // Create a mapped DTO with the correct types
     const mappedDto: DeepPartial<EventAttendeesEntity> = {
       rsvpStatus: createEventAttendeeDto.rsvpStatus,
       isHost: createEventAttendeeDto.isHost,
@@ -49,6 +51,37 @@ export class EventAttendeeService {
       throw new Error('Failed to save attendee: ' + error.message);
     }
   }
+
+  async findAll(pagination: PaginationDto, query: QueryEventAttendeeDto):Promise<any>{
+    await this.getTenantSpecificEventRepository();
+  
+    const { page, limit } = pagination;
+    const { search, userId, fromDate, toDate } = query;
+
+    const eventAttendeeQuery = this.eventAttendeesRepository
+      .createQueryBuilder('eventAttendee')
+      .leftJoinAndSelect('eventAttendee.user', 'user')
+      .where('eventAttendee.user = :userId', { userId });
+
+      if (search) {
+        eventAttendeeQuery.andWhere(
+          '(eventAttendee.rsvpStatus LIKE :search OR eventAttendee.eventId LIKE :search)',
+          { search: `%${search}%` },
+        );
+      }
+    
+      if (fromDate && toDate) {
+        eventAttendeeQuery.andWhere('eventAttendee.createdAt BETWEEN :fromDate AND :toDate', {
+          fromDate,
+          toDate,
+        });
+      } else if (fromDate) {
+        eventAttendeeQuery.andWhere('eventAttendee.createdAt >= :fromDate', { fromDate });
+      } else if (toDate) {
+        eventAttendeeQuery.andWhere('eventAttendee.createdAt <= :toDate', { toDate: new Date() });
+      }
+      return paginate(eventAttendeeQuery, { page, limit });
+  } 
 
   async leaveEvent(
     userId: number,

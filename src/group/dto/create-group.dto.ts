@@ -4,6 +4,7 @@ import {
   IsBoolean,
   IsEnum,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
 } from 'class-validator';
@@ -39,6 +40,29 @@ export class CreateGroupDto {
   @IsOptional()
   @IsBoolean()
   approved?: boolean;
+
+  @ApiProperty({
+    description: 'The location of the group',
+  })
+  @IsOptional()
+  @IsString()
+  location: string;
+
+  @ApiProperty({
+    description: 'The latitude of the group location',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  lat: number;
+
+  @ApiProperty({
+    description: 'The longitude of the group location',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  lon: number;
 
   @ApiPropertyOptional({
     description: 'The status of the group',

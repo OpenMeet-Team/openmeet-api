@@ -8,9 +8,11 @@ import { UpdateGroupDto } from './dto/update-group.dto';
 import { CategoryService } from '../category/category.service';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupUserPermissionEntity } from './infrastructure/persistence/relational/entities/group-user-permission.entity';
-import { QuerGrouptDto } from './dto/group-query.dto';
 import { Status } from '../core/constants/constant';
 import { GroupMemberService } from '../group-member/group-member.service';
+import { PaginationDto } from '../utils/dto/pagination.dto';
+import { paginate } from '../utils/generic-pagination';
+import { QueryGroupDto } from './dto/group-query.dto';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -99,27 +101,27 @@ export class GroupService {
   }
 
   // Find all groups with relations
-  async findAll(query: QuerGrouptDto): Promise<any> {
+  async findAll(pagination: PaginationDto, query: QueryGroupDto): Promise<any> {
     await this.getTenantSpecificGroupRepository();
-    const { page, limit } = query;
+    const { page, limit } = pagination;
+    const {search,userId} = query
     const groupQuery = this.groupRepository
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.categories', 'categories')
-      .where('group.status = :status', { status: Status.Published });
+      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
+      .leftJoinAndSelect('groupMembers.user', 'user')
+      .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
+      .where('group.status = :status', { status: Status.Published })
+      .andWhere('user.id = :userId', {userId})
 
-    const total = await groupQuery.getCount();
+      if (search) {
+        groupQuery.andWhere(
+          '(group.name LIKE :search OR group.description LIKE :search)',
+          { search: `%${search}%` },
+        );
+      }
 
-    const results = await groupQuery
-      .skip((page - 1) * limit)
-      .take(limit)
-      .getMany();
-
-    return {
-      data: results,
-      total,
-      page,
-      totalPages: Math.ceil(total / limit),
-    };
+      return paginate(groupQuery, { page, limit });
   }
 
   async findOne(id: number): Promise<GroupEntity> {

@@ -16,10 +16,13 @@ import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { GroupEntity } from './infrastructure/persistence/relational/entities/group.entity';
 import { GroupService } from './group.service';
-import { QuerGrouptDto } from './dto/group-query.dto';
 import { Public } from '../auth/decorators/public.decorator';
 import { JWTAuthGuard } from '../core/guards/auth.guard';
 import { Request } from 'express';
+import { PaginationDto } from '../utils/dto/pagination.dto';
+import { AuthUser } from '../core/decorators/auth-user.decorator';
+import { User } from '../user/domain/user';
+import { QueryGroupDto } from './dto/group-query.dto';
 
 @ApiTags('Groups')
 @Controller('groups')
@@ -39,11 +42,13 @@ export class GroupController {
     return this.groupService.create(createGroupDto, userId);
   }
 
-  @Public()
+  // @Public()
   @Get()
   @ApiOperation({ summary: 'Get all groups' })
-  async findAll(@Query() query: QuerGrouptDto): Promise<GroupEntity[]> {
-    return this.groupService.findAll(query);
+  async findAll(@Query() pagination: PaginationDto,@Query() query: QueryGroupDto, @AuthUser() user: User): Promise<GroupEntity[]> {
+    const userId = user.id;
+    query.userId = userId
+    return this.groupService.findAll(pagination, query);
   }
 
   @Get(':id')

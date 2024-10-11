@@ -24,6 +24,7 @@ import { QueryEventDto } from './dto/query-events.dto';
 import { Public } from '../auth/decorators/public.decorator';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
+import { PaginationDto } from '../utils/dto/pagination.dto';
 
 @ApiTags('Events')
 @Controller('events')
@@ -36,20 +37,20 @@ export class EventController {
   @ApiOperation({ summary: 'Create a new event' })
   async create(
     @Body() createEventDto: CreateEventDto,
-    @Req() req: Request,
     @AuthUser() user: User,
   ): Promise<EventEntity> {
     const userId = user?.id;
     return this.eventService.create(createEventDto, userId);
   }
 
-  @Public()
+  // @Public()
   @Get()
-  // @UseGuards(PermissionsGuard)
-  // @Permissions('view_example')
   @ApiOperation({ summary: 'Get all events' })
-  async findAll(@Query() query: QueryEventDto): Promise<EventEntity[]> {
-    return this.eventService.findAll(query);
+  async findAll(@Query() pagination: PaginationDto, @Query() query: QueryEventDto, @AuthUser() user: User,): Promise<EventEntity[]> {
+    const userId = user?.id;
+    console.log("🚀 ~ EventController ~ findAll ~ userId:", userId)
+    query.userId = userId
+    return this.eventService.findAll(pagination, query);
   }
 
   @Get(':id')

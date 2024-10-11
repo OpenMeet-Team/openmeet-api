@@ -42,16 +42,19 @@ export class GroupMemberService {
     return await this.groupMemberRepository.save(groupMember);
   }
 
-  async joinGroup(createDto: CreateGroupMemberDto) {
+  async findGroupByUserId(userId: number):Promise<any>{
+    
+  }
+
+  async joinGroup(userId: number, groupId: number) {
     await this.getTenantSpecificEventRepository();
-    const group = { id: createDto.groupId };
-    const user = { id: createDto.userId };
+    const group = { id: groupId };
+    const user = { id: userId };
 
     // by default member role
     const groupRole = await this.groupRoleService.findOne(GroupRole.Member)
     // const groupRole = { id: createDto.groupRoleId };
     const mappedDto = {
-      ...createDto,
       user,
       group,
       groupRole,
