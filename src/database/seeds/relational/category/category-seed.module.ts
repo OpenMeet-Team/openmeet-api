@@ -3,8 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { TenantModule } from '../../../../tenant/tenant.module';
 import { CategorySeedService } from './category-seed.service';
-import { CategoryEntity } from '../../../../categories/infrastructure/persistence/relational/entities/categories.entity';
-import { SubCategoryEntity } from '../../../../sub-categories/infrastructure/persistence/relational/entities/sub-categories.entity';
+import { CategoryEntity } from '../../../../category/infrastructure/persistence/relational/entities/categories.entity';
+import { SubCategoryEntity } from '../../../../sub-category/infrastructure/persistence/relational/entities/sub-category.entity';
 
 @Module({
   imports: [

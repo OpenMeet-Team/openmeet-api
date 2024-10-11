@@ -8,7 +8,6 @@ import { CreateEventAttendeeDto } from './dto/create-eventAttendee.dto';
 export class EventAttendeeController {
   constructor(private readonly eventAttendeeService: EventAttendeeService) {}
 
-  
   @Post('attend')
   async attendEvent(@Body() createEventAttendeeDto: CreateEventAttendeeDto) {
     return await this.eventAttendeeService.attendEvent(createEventAttendeeDto);
@@ -20,6 +19,5 @@ export class EventAttendeeController {
     @Param('eventId') eventId: number,
   ) {
     await this.eventAttendeeService.leaveEvent(userId, eventId);
-    
   }
 }

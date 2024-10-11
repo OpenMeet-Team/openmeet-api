@@ -8,12 +8,12 @@ import {
   Column,
   UpdateDateColumn,
 } from 'typeorm';
-import { UserEntity } from '../../../../../users/infrastructure/persistence/relational/entities/user.entity';
+import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
 
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 
 @Entity({
-  name: 'session',
+  name: 'sessions',
 })
 export class SessionEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()

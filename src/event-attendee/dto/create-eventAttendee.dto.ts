@@ -1,22 +1,28 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsNotEmpty, IsNumber, IsString, IsUUID } from 'class-validator';
+import {
+  IsBoolean,
+  IsNotEmpty,
+  IsNumber,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 
 export class CreateEventAttendeeDto {
-    @ApiProperty({
-        description: 'event iD',
-      })
-      @IsNotEmpty()
-      @Type(() => Number)
-      @IsNumber()
-    eventId: number;
+  @ApiProperty({
+    description: 'event iD',
+  })
+  @IsNotEmpty()
+  @Type(() => Number)
+  @IsNumber()
+  eventId: number;
 
-    @ApiProperty({
-        description: 'User',
-      })
-      @IsNotEmpty()
-      @Type(() => Number)
-      @IsNumber()
+  @ApiProperty({
+    description: 'User',
+  })
+  @IsNotEmpty()
+  @Type(() => Number)
+  @IsNumber()
   userId: number;
 
   @ApiProperty({ description: 'RSVP status of the attendee', example: 'going' })

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
-import { PermissionEntity } from '../../../../permissions/infrastructure/persistence/relational/entities/permission.entity';
+import { PermissionEntity } from '../../../../permission/infrastructure/persistence/relational/entities/permission.entity';
 
 @Injectable()
 export class PermissionSeedService {
