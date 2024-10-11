@@ -60,7 +60,10 @@ export class EventService {
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.user', 'user')
       .where('event.status = :status', { status: Status.Published })
-      .andWhere('event.user = :userId', { userId });
+
+    if (userId) {
+      eventQuery.andWhere('event.user = :userId', { userId })
+    }  
   
     if (search) {
       eventQuery.andWhere(

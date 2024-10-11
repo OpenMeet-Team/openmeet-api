@@ -112,7 +112,11 @@ export class GroupService {
       .leftJoinAndSelect('groupMembers.user', 'user')
       .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
       .where('group.status = :status', { status: Status.Published })
-      .andWhere('user.id = :userId', {userId})
+      
+
+      if (userId) {
+        groupQuery.andWhere('user.id = :userId', {userId});
+      }
 
       if (search) {
         groupQuery.andWhere(
