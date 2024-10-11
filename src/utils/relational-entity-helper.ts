@@ -1,13 +1,21 @@
-import { instanceToPlain } from 'class-transformer';
+import { Expose, instanceToPlain } from 'class-transformer';
 import {
   AfterLoad,
   BaseEntity,
+  BeforeInsert,
+  Column,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
 
+import { ulid } from 'ulid';
+
 export class EntityRelationalHelper extends BaseEntity {
   __entity?: string;
+
+  @Column({ type: String, nullable: true })
+  @Expose()
+  shortId: string;
 
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
@@ -18,6 +26,11 @@ export class EntityRelationalHelper extends BaseEntity {
   @AfterLoad()
   setEntityName() {
     this.__entity = this.constructor.name;
+  }
+
+  @BeforeInsert()
+  generateShortId() {
+    this.shortId = ulid();
   }
 
   toJSON() {

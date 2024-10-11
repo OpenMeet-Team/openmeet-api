@@ -39,6 +39,15 @@ export class GroupEntity extends EntityRelationalHelper {
   })
   status: Status;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  location: string;
+
+  @Column({ type: 'double precision', nullable: true })
+  lat: number;
+
+  @Column({ type: 'double precision', nullable: true })
+  lon: number;
+
   @OneToMany(() => EventEntity, (event) => event.group)
   events: EventEntity[];
 
