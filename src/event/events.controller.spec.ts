@@ -11,6 +11,8 @@ import { Request } from 'express';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { AuthService } from '../auth/auth.service';
 import { Reflector } from '@nestjs/core';
+import { PaginationOptions } from '../utils/generic-pagination';
+import { QueryEventDto } from '../event/dto/query-events.dto';
 
 // Mock services
 const mockGroupService = {};
@@ -148,9 +150,9 @@ describe('EventController', () => {
       jest
         .spyOn(eventService, 'create')
         .mockRejectedValue(new Error('Database error'));
-      await expect(
-        controller.create(createEventDto, mockUser),
-      ).rejects.toThrow('Database error');
+      await expect(controller.create(createEventDto, mockUser)).rejects.toThrow(
+        'Database error',
+      );
     });
   });
 
@@ -160,7 +162,21 @@ describe('EventController', () => {
       jest
         .spyOn(eventService, 'findAll')
         .mockResolvedValue(events as EventEntity[]);
-      const result = await controller.findAll();
+      const pagination: PaginationOptions = {
+        page: 1,
+        limit: 10,
+      };
+      const queryEventDto: QueryEventDto = {
+        search: '',
+        userId: mockUser.id,
+        fromDate: new Date('2023-01-01').toISOString(),
+        toDate: new Date().toISOString(),
+      };
+      const result = await controller.findAll(
+        pagination,
+        queryEventDto,
+        mockUser,
+      );
       expect(result).toEqual(events);
       expect(eventService.findAll).toHaveBeenCalled();
     });

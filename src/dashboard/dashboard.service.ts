@@ -1,12 +1,12 @@
 import { Inject, Injectable, Scope } from '@nestjs/common';
-import { EventService } from '../events/events.service';
-import { GroupService } from '../groups/groups.service';
+import { EventService } from '../event/event.service';
+import { GroupService } from '../group/group.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
-import { EventEntity } from '../events/infrastructure/persistence/relational/entities/events.entity';
+import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { Repository } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
-import { GroupEntity } from '../groups/infrastructure/persistence/relational/entities/group.entity';
-import { CategoryService } from '../categories/categories.service';
+import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
+import { CategoryService } from '../category/category.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class DashboardService {

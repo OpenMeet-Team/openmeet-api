@@ -2,8 +2,8 @@ import { Controller, Get, HttpException, HttpStatus } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { Req } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { EventService } from '../events/events.service';
-import { GroupService } from '../groups/groups.service';
+import { EventService } from '../event/event.service';
+import { GroupService } from '../group/group.service';
 
 @Controller('dashboard')
 @ApiTags('User Dashboard')
@@ -53,6 +53,6 @@ export class DashboardController {
 
   @Get('attending-events')
   async getAttendingEvents(@Req() req) {
-    return this.eventService.getEventsByAttendee(req.user.id);
+    return await this.eventService.getEventsByAttendee(req.user.id);
   }
 }

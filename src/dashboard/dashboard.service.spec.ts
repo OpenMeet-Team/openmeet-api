@@ -1,9 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DashboardService } from './dashboard.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
-import { EventService } from '../events/events.service';
-import { GroupService } from '../groups/groups.service';
-import { CategoryService } from '../categories/categories.service';
+import { EventService } from '../event/event.service';
+import { GroupService } from '../group/group.service';
+import { CategoryService } from '../category/category.service';
 
 describe('DashboardService', () => {
   let service: DashboardService;
