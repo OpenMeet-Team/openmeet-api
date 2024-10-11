@@ -1,27 +1,43 @@
-import { Controller, Post, Body, Param, Delete } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Controller, Post, Body, Param, Delete, Patch, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { GroupMemberService } from './group-member.service';
-import { CreateGroupMemberDto } from './dto/create-groupMember.dto';
+import { CreateGroupMemberDto, UpdateGroupMemberRoleDto } from './dto/create-groupMember.dto';
 import { GroupMemberEntity } from './infrastructure/persistence/relational/entities/group-member.entity';
+import { JWTAuthGuard } from '../core/guards/auth.guard';
+import { AuthUser } from '../core/decorators/auth-user.decorator';
+import { User } from '../user/domain/user';
 
 @ApiTags('Group Members')
 @Controller('group-members')
+@ApiBearerAuth()
+@UseGuards(JWTAuthGuard)
 export class GroupMemberController {
   constructor(private readonly groupMemberService: GroupMemberService) {}
 
-  @Post('join')
+  @Post('join/:groupId')
   @ApiOperation({ summary: 'JOining a new group' })
   async create(
-    @Body() createDto: CreateGroupMemberDto,
+    @AuthUser() user: User,
+    @Param('groupId') groupId: number,
   ): Promise<GroupMemberEntity> {
-    return this.groupMemberService.joinGroup(createDto);
+    const userId = user.id
+    return this.groupMemberService.joinGroup(userId, groupId);
   }
 
-  @Delete('leave/:userId/:groupId')
+  @Patch('update-role')
+  @ApiOperation({})
+  async updateRole(
+    @Body() updateDto: UpdateGroupMemberRoleDto,
+  ): Promise<GroupMemberEntity> {
+    return this.groupMemberService.updateRole(updateDto);
+  }
+
+  @Delete('leave/:groupId')
   async leaveGroup(
-    @Param('userId') userId: number,
+    @AuthUser() user: User,
     @Param('groupId') groupId: number,
   ) {
+    const userId = user.id
     return this.groupMemberService.leaveGroup(userId, groupId);
   }
 }

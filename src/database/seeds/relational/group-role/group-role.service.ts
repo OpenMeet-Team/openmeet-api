@@ -24,13 +24,13 @@ export class GroupRoleSeedService {
     );
 
     // Seed group roles and their permissions
-    await this.createGroupRoleIfNotExists('Member', ['READ_GROUP']);
-    await this.createGroupRoleIfNotExists('Moderator', [
+    await this.createGroupRoleIfNotExists('member', ['READ_GROUP']);
+    await this.createGroupRoleIfNotExists('moderator', [
       'READ_GROUP',
       'UPDATE_GROUP',
       'DELETE_GROUP',
     ]);
-    await this.createGroupRoleIfNotExists('Owner', [
+    await this.createGroupRoleIfNotExists('owner', [
       'READ_GROUP',
       'UPDATE_GROUP',
       'DELETE_GROUP',

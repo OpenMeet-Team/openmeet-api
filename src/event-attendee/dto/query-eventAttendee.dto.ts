@@ -2,7 +2,7 @@ import { IsOptional, IsString, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
-export class QueryEventDto {
+export class QueryEventAttendeeDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
