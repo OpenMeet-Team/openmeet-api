@@ -26,7 +26,7 @@ import { EntityRelationalHelper } from '../../../../../utils/relational-entity-h
 // in your project and return an ORM entity directly in response.
 import { Exclude, Expose } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
-import { EventEntity } from '../../../../../event/infrastructure/persistence/relational/entities/events.entity';
+import { EventEntity } from '../../../../../event/infrastructure/persistence/relational/entities/event.entity';
 import { EventAttendeesEntity } from '../../../../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { SubCategoryEntity } from '../../../../../sub-category/infrastructure/persistence/relational/entities/sub-category.entity';
 import { UserPermissionEntity } from './user-permission.entity';

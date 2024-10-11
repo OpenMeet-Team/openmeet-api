@@ -16,7 +16,7 @@ import { Request } from 'express';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventService } from './event.service';
-import { EventEntity } from './infrastructure/persistence/relational/entities/events.entity';
+import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { JWTAuthGuard } from '../core/guards/auth.guard';
 // import { PermissionsGuard } from '../shared/guard/permissions.guard';
 // import { Permissions } from '../shared/guard/permissions.decorator';

@@ -1,6 +1,6 @@
 import { Entity, PrimaryColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
-import { EventEntity } from '../../../../../event/infrastructure/persistence/relational/entities/events.entity';
+import { EventEntity } from '../../../../../event/infrastructure/persistence/relational/entities/event.entity';
 
 @Entity({ name: 'eventAttendees' })
 export class EventAttendeesEntity {

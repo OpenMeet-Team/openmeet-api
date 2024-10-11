@@ -3,7 +3,7 @@ import { EventController } from './event.controller';
 import { EventService } from './event.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
-import { EventEntity } from './infrastructure/persistence/relational/entities/events.entity';
+import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { UserService } from '../user/user.service';
 import { GroupService } from '../group/group.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';

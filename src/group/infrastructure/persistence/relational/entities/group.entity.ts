@@ -9,7 +9,7 @@ import {
 } from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { CategoryEntity } from '../../../../../category/infrastructure/persistence/relational/entities/categories.entity';
-import { EventEntity } from '../../../../../event/infrastructure/persistence/relational/entities/events.entity';
+import { EventEntity } from '../../../../../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupMemberEntity } from '../../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupUserPermissionEntity } from './group-user-permission.entity';
 import slugify from 'slugify';

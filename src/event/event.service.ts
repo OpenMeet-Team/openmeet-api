@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, Inject, Scope } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
-import { EventEntity } from './infrastructure/persistence/relational/entities/events.entity';
+import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { CategoryService } from '../category/category.service';
