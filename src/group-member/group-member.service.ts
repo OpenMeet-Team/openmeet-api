@@ -2,7 +2,10 @@ import { Inject, Injectable, NotFoundException, Scope } from '@nestjs/common';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { GroupMemberEntity } from './infrastructure/persistence/relational/entities/group-member.entity';
 import { Repository } from 'typeorm';
-import { CreateGroupMemberDto, UpdateGroupMemberRoleDto } from './dto/create-groupMember.dto';
+import {
+  CreateGroupMemberDto,
+  UpdateGroupMemberRoleDto,
+} from './dto/create-groupMember.dto';
 import { REQUEST } from '@nestjs/core';
 import { GroupRoleService } from '../group-role/group-role.service';
 import { GroupRole } from '../core/constants/constant';
@@ -29,8 +32,11 @@ export class GroupMemberService {
     const user = { id: createDto.userId };
 
     // by default member role
-    const groupRole = await this.groupRoleService.findOne(GroupRole.Owner)
-    console.log("🚀 ~ GroupMemberService ~ createGroupMember ~ groupRole:", groupRole)
+    const groupRole = await this.groupRoleService.findOne(GroupRole.Owner);
+    console.log(
+      '🚀 ~ GroupMemberService ~ createGroupMember ~ groupRole:',
+      groupRole,
+    );
     // const groupRole = { id: createDto.groupRoleId };
     const mappedDto = {
       ...createDto,
@@ -42,9 +48,7 @@ export class GroupMemberService {
     return await this.groupMemberRepository.save(groupMember);
   }
 
-  async findGroupByUserId(userId: number):Promise<any>{
-    
-  }
+  async findGroupByUserId(userId: number): Promise<any> {}
 
   async joinGroup(userId: number, groupId: number) {
     await this.getTenantSpecificEventRepository();
@@ -52,7 +56,7 @@ export class GroupMemberService {
     const user = { id: userId };
 
     // by default member role
-    const groupRole = await this.groupRoleService.findOne(GroupRole.Member)
+    const groupRole = await this.groupRoleService.findOne(GroupRole.Member);
     // const groupRole = { id: createDto.groupRoleId };
     const mappedDto = {
       user,
@@ -63,23 +67,25 @@ export class GroupMemberService {
     return await this.groupMemberRepository.save(groupMember);
   }
 
-  async updateRole(updateDto: UpdateGroupMemberRoleDto):Promise<any>{
-    await this.getTenantSpecificEventRepository()
-    const {userId, groupId, name} = updateDto
+  async updateRole(updateDto: UpdateGroupMemberRoleDto): Promise<any> {
+    await this.getTenantSpecificEventRepository();
+    const { userId, groupId, name } = updateDto;
     const groupMember = await this.groupMemberRepository.findOne({
       where: { user: { id: userId }, group: { id: groupId } },
       relations: ['user', 'group'],
-    }); 
+    });
     if (!groupMember) {
-      throw new NotFoundException(`Group member with user ID ${userId} and group ID ${groupId} not found`);
+      throw new NotFoundException(
+        `Group member with user ID ${userId} and group ID ${groupId} not found`,
+      );
     }
-    const groupRole = await this.groupRoleService.findOne(name)
+    const groupRole = await this.groupRoleService.findOne(name);
     if (!groupRole) {
       throw new NotFoundException(`Group role with name ${name} not found`);
     }
     groupMember.groupRole = groupRole;
-    
-    await this.groupMemberRepository.save(groupMember)
+
+    await this.groupMemberRepository.save(groupMember);
   }
 
   async leaveGroup(userId: number, groupId: number): Promise<any> {

@@ -18,20 +18,20 @@ export class QueryEventDto {
   @ApiPropertyOptional({
     description: 'Filter events from this date.',
     example: '2024-10-11',
-    type: String, 
+    type: String,
   })
   @IsOptional()
   @IsDateString()
   @Type(() => String)
-  fromDate: string; 
+  fromDate: string;
 
   @ApiPropertyOptional({
     description: 'Filter events to this date.',
     example: '2024-10-15',
-    type: String, 
+    type: String,
   })
   @IsOptional()
   @IsDateString()
   @Type(() => String)
-  toDate: string; 
+  toDate: string;
 }

@@ -18,7 +18,7 @@ import { GroupMemberModule } from '../group-member/group-member.module';
       GroupUserPermissionEntity,
     ]),
     UsersModule,
-    GroupMemberModule
+    GroupMemberModule,
   ],
   controllers: [GroupController],
   providers: [GroupService, TenantConnectionService, CategoryService],

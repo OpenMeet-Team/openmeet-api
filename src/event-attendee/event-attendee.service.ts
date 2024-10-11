@@ -29,7 +29,7 @@ export class EventAttendeeService {
 
   async attendEvent(
     createEventAttendeeDto: CreateEventAttendeeDto,
-    userId: number
+    userId: number,
   ): Promise<EventAttendeesEntity> {
     await this.getTenantSpecificEventRepository();
 
@@ -52,9 +52,12 @@ export class EventAttendeeService {
     }
   }
 
-  async findAll(pagination: PaginationDto, query: QueryEventAttendeeDto):Promise<any>{
+  async findAll(
+    pagination: PaginationDto,
+    query: QueryEventAttendeeDto,
+  ): Promise<any> {
     await this.getTenantSpecificEventRepository();
-  
+
     const { page, limit } = pagination;
     const { search, userId, fromDate, toDate } = query;
 
@@ -63,25 +66,32 @@ export class EventAttendeeService {
       .leftJoinAndSelect('eventAttendee.user', 'user')
       .where('eventAttendee.user = :userId', { userId });
 
-      if (search) {
-        eventAttendeeQuery.andWhere(
-          '(eventAttendee.rsvpStatus LIKE :search OR eventAttendee.eventId LIKE :search)',
-          { search: `%${search}%` },
-        );
-      }
-    
-      if (fromDate && toDate) {
-        eventAttendeeQuery.andWhere('eventAttendee.createdAt BETWEEN :fromDate AND :toDate', {
+    if (search) {
+      eventAttendeeQuery.andWhere(
+        '(eventAttendee.rsvpStatus LIKE :search OR eventAttendee.eventId LIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    if (fromDate && toDate) {
+      eventAttendeeQuery.andWhere(
+        'eventAttendee.createdAt BETWEEN :fromDate AND :toDate',
+        {
           fromDate,
           toDate,
-        });
-      } else if (fromDate) {
-        eventAttendeeQuery.andWhere('eventAttendee.createdAt >= :fromDate', { fromDate });
-      } else if (toDate) {
-        eventAttendeeQuery.andWhere('eventAttendee.createdAt <= :toDate', { toDate: new Date() });
-      }
-      return paginate(eventAttendeeQuery, { page, limit });
-  } 
+        },
+      );
+    } else if (fromDate) {
+      eventAttendeeQuery.andWhere('eventAttendee.createdAt >= :fromDate', {
+        fromDate,
+      });
+    } else if (toDate) {
+      eventAttendeeQuery.andWhere('eventAttendee.createdAt <= :toDate', {
+        toDate: new Date(),
+      });
+    }
+    return paginate(eventAttendeeQuery, { page, limit });
+  }
 
   async leaveEvent(
     userId: number,

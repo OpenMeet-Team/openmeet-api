@@ -12,7 +12,6 @@ import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Status } from '../../core/constants/constant';
 
-
 export class CreateEventDto {
   @ApiProperty({
     description: 'The name of the event',

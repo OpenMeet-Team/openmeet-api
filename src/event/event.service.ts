@@ -51,27 +51,27 @@ export class EventService {
 
   async findAll(pagination: PaginationDto, query: QueryEventDto): Promise<any> {
     await this.getTenantSpecificEventRepository();
-  
+
     const { page, limit } = pagination;
     const { search, userId, fromDate, toDate } = query;
-    console.log("🚀 ~ EventService ~ findAll ~ userId:", userId)
-  
+    console.log('🚀 ~ EventService ~ findAll ~ userId:', userId);
+
     const eventQuery = this.eventRepository
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.user', 'user')
-      .where('event.status = :status', { status: Status.Published })
+      .where('event.status = :status', { status: Status.Published });
 
     if (userId) {
-      eventQuery.andWhere('event.user = :userId', { userId })
-    }  
-  
+      eventQuery.andWhere('event.user = :userId', { userId });
+    }
+
     if (search) {
       eventQuery.andWhere(
         '(event.name LIKE :search OR event.description LIKE :search)',
         { search: `%${search}%` },
       );
     }
-  
+
     if (fromDate && toDate) {
       eventQuery.andWhere('event.createdAt BETWEEN :fromDate AND :toDate', {
         fromDate,
@@ -82,10 +82,9 @@ export class EventService {
     } else if (toDate) {
       eventQuery.andWhere('event.createdAt <= :toDate', { toDate: new Date() });
     }
-  
+
     return paginate(eventQuery, { page, limit });
   }
-  
 
   async findOne(id: number): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();

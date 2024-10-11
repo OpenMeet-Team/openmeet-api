@@ -8,7 +8,10 @@ import { GroupEntity } from '../group/infrastructure/persistence/relational/enti
 import { GroupRoleModule } from '../group-role/group-role.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([GroupEntity, GroupMemberEntity]), GroupRoleModule],
+  imports: [
+    TypeOrmModule.forFeature([GroupEntity, GroupMemberEntity]),
+    GroupRoleModule,
+  ],
   controllers: [GroupMemberController],
   providers: [GroupMemberService, TenantConnectionService],
   exports: [GroupMemberService],

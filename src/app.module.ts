@@ -105,7 +105,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     GroupMemberModule,
     EventAttendeeModule,
     HealthModule,
-    GroupRoleModule
+    GroupRoleModule,
   ],
   providers: [
     TenantConnectionService,

@@ -1,4 +1,13 @@
-import { Controller, Post, Delete, Body, Param, Get, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Delete,
+  Body,
+  Param,
+  Get,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { EventAttendeeService } from './event-attendee.service';
 import { CreateEventAttendeeDto } from './dto/create-eventAttendee.dto';
@@ -17,17 +26,27 @@ export class EventAttendeeController {
 
   @Post('attend')
   @ApiOperation({ summary: 'Attending aa event' })
-  async attendEvent(@AuthUser() user: User, @Body() createEventAttendeeDto: CreateEventAttendeeDto) {
-    const userId = user.id
-    console.log("🚀 ~ EventAttendeeController ~ attendEvent ~ userId:", userId)
-    return await this.eventAttendeeService.attendEvent(createEventAttendeeDto, userId);
+  async attendEvent(
+    @AuthUser() user: User,
+    @Body() createEventAttendeeDto: CreateEventAttendeeDto,
+  ) {
+    const userId = user.id;
+    console.log('🚀 ~ EventAttendeeController ~ attendEvent ~ userId:', userId);
+    return await this.eventAttendeeService.attendEvent(
+      createEventAttendeeDto,
+      userId,
+    );
   }
 
   @Get('me')
   @ApiOperation({ summary: 'Get all event attendee' })
-  async findAll(@Query() pagination: PaginationDto, @Query() query: QueryEventAttendeeDto, @AuthUser() user: User,): Promise<any> {
+  async findAll(
+    @Query() pagination: PaginationDto,
+    @Query() query: QueryEventAttendeeDto,
+    @AuthUser() user: User,
+  ): Promise<any> {
     const userId = user?.id;
-    query.userId = userId
+    query.userId = userId;
     return this.eventAttendeeService.findAll(pagination, query);
   }
 

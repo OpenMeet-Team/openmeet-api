@@ -18,14 +18,14 @@ export async function paginate<T extends ObjectLiteral>(
 ): Promise<PaginationResult<T>> {
   const total = await query.getCount(); // Get total items count
   const results = await query
-    .skip((page - 1) * limit)  // Skip rows for the current page
-    .take(limit)  // Take only 'limit' rows
-    .getMany();  // Fetch results
+    .skip((page - 1) * limit) // Skip rows for the current page
+    .take(limit) // Take only 'limit' rows
+    .getMany(); // Fetch results
 
   return {
     data: results,
     total,
     page,
-    totalPages: Math.ceil(total / limit),  // Calculate total pages
+    totalPages: Math.ceil(total / limit), // Calculate total pages
   };
 }

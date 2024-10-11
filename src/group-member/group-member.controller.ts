@@ -1,7 +1,18 @@
-import { Controller, Post, Body, Param, Delete, Patch, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Param,
+  Delete,
+  Patch,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { GroupMemberService } from './group-member.service';
-import { CreateGroupMemberDto, UpdateGroupMemberRoleDto } from './dto/create-groupMember.dto';
+import {
+  CreateGroupMemberDto,
+  UpdateGroupMemberRoleDto,
+} from './dto/create-groupMember.dto';
 import { GroupMemberEntity } from './infrastructure/persistence/relational/entities/group-member.entity';
 import { JWTAuthGuard } from '../core/guards/auth.guard';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
@@ -20,7 +31,7 @@ export class GroupMemberController {
     @AuthUser() user: User,
     @Param('groupId') groupId: number,
   ): Promise<GroupMemberEntity> {
-    const userId = user.id
+    const userId = user.id;
     return this.groupMemberService.joinGroup(userId, groupId);
   }
 
@@ -33,11 +44,8 @@ export class GroupMemberController {
   }
 
   @Delete('leave/:groupId')
-  async leaveGroup(
-    @AuthUser() user: User,
-    @Param('groupId') groupId: number,
-  ) {
-    const userId = user.id
+  async leaveGroup(@AuthUser() user: User, @Param('groupId') groupId: number) {
+    const userId = user.id;
     return this.groupMemberService.leaveGroup(userId, groupId);
   }
 }

@@ -6,11 +6,7 @@ import { GroupRoleController } from './group-role.controller';
 import { GroupRoleService } from './group-role.service';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([
-      GroupRoleEntity
-    ]),
-  ],
+  imports: [TypeOrmModule.forFeature([GroupRoleEntity])],
   controllers: [GroupRoleController],
   providers: [GroupRoleService, TenantConnectionService],
   exports: [GroupRoleService],

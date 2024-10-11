@@ -17,19 +17,19 @@ export class QueryEventAttendeeDto {
 
   @ApiPropertyOptional({
     description: 'Filter events from this date.',
-    type: String, 
+    type: String,
   })
   @IsOptional()
   @IsDateString()
   @Type(() => String)
-  fromDate: string; 
+  fromDate: string;
 
   @ApiPropertyOptional({
     description: 'Filter events to this date.',
-    type: String, 
+    type: String,
   })
   @IsOptional()
   @IsDateString()
   @Type(() => String)
-  toDate: string; 
+  toDate: string;
 }

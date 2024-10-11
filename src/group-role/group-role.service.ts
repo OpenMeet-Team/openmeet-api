@@ -27,7 +27,7 @@ export class GroupRoleService {
   }
 
   async findOne(name: string): Promise<any> {
-    await this.getTenantSpecificEventRepository()
+    await this.getTenantSpecificEventRepository();
     return await this.groupRoleRepository.findOne({
       where: { name },
       relations: ['groupPermissions'],
