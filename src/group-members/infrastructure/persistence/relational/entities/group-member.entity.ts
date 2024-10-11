@@ -4,7 +4,7 @@ import { GroupEntity } from '../../../../../groups/infrastructure/persistence/re
 import { UserEntity } from '../../../../../users/infrastructure/persistence/relational/entities/user.entity';
 import { GroupRoleEntity } from '../../../../../group-role/infrastructure/persistence/relational/entities/group-role.entity';
 
-@Entity({ name: 'groupMember' })
+@Entity({ name: 'groupMembers' })
 export class GroupMemberEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;

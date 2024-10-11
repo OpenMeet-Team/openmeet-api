@@ -11,7 +11,7 @@ import { CategoryEntity } from '../../../../../categories/infrastructure/persist
 import { SubCategoryType } from '../../../../../core/constants/constant';
 import { UserEntity } from '../../../../../users/infrastructure/persistence/relational/entities/user.entity';
 
-@Entity({ name: 'subCategory' })
+@Entity({ name: 'subcategories' })
 export class SubCategoryEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;

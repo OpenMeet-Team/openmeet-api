@@ -34,7 +34,7 @@ import { GroupUserPermissionEntity } from '../../../../../groups/infrastructure/
 import { GroupMemberEntity } from '../../../../../group-members/infrastructure/persistence/relational/entities/group-member.entity';
 
 @Entity({
-  name: 'user',
+  name: 'users',
 })
 export class UserEntity extends EntityRelationalHelper {
   @ApiProperty({

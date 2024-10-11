@@ -5,13 +5,8 @@ import { EventAttendeesEntity } from './infrastructure/persistence/relational/en
 import { EventAttendeeController } from './event-attendee.controller';
 import { EventAttendeeService } from './event-attendee.service';
 
-
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([
-      EventAttendeesEntity
-    ]),
-  ],
+  imports: [TypeOrmModule.forFeature([EventAttendeesEntity])],
   controllers: [EventAttendeeController],
   providers: [EventAttendeeService, TenantConnectionService],
   exports: [EventAttendeeService],

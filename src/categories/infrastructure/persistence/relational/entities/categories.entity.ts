@@ -13,7 +13,7 @@ import { EventEntity } from '../../../../../events/infrastructure/persistence/re
 import { SubCategoryEntity } from '../../../../../sub-categories/infrastructure/persistence/relational/entities/sub-categories.entity';
 import { GroupEntity } from '../../../../../groups/infrastructure/persistence/relational/entities/group.entity';
 
-@Entity({ name: 'category' })
+@Entity({ name: 'categories' })
 export class CategoryEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;

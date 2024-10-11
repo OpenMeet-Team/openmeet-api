@@ -18,11 +18,15 @@ export class EventAttendeeService {
 
   private async getTenantSpecificEventRepository() {
     const tenantId = this.request.tenantId;
-    const dataSource = await this.tenantConnectionService.getTenantConnection(tenantId);
-    this.eventAttendeesRepository = dataSource.getRepository(EventAttendeesEntity);
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    this.eventAttendeesRepository =
+      dataSource.getRepository(EventAttendeesEntity);
   }
 
-  async attendEvent(createEventAttendeeDto: CreateEventAttendeeDto): Promise<EventAttendeesEntity> {
+  async attendEvent(
+    createEventAttendeeDto: CreateEventAttendeeDto,
+  ): Promise<EventAttendeesEntity> {
     await this.getTenantSpecificEventRepository();
 
     // Use primitive number type instead of Number object
@@ -34,7 +38,7 @@ export class EventAttendeeService {
       rsvpStatus: createEventAttendeeDto.rsvpStatus,
       isHost: createEventAttendeeDto.isHost,
       event, // Attach the event object
-      user,  // Attach the user object
+      user, // Attach the user object
     };
 
     try {
@@ -46,7 +50,10 @@ export class EventAttendeeService {
     }
   }
 
-  async leaveEvent(userId: number, eventId: number): Promise<{ message: string }> {
+  async leaveEvent(
+    userId: number,
+    eventId: number,
+  ): Promise<{ message: string }> {
     await this.getTenantSpecificEventRepository();
 
     const attendee = await this.eventAttendeesRepository.findOne({

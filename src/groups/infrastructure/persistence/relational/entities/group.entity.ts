@@ -15,7 +15,7 @@ import { GroupUserPermissionEntity } from './group-user-permission.entity';
 import slugify from 'slugify';
 import { Status } from '../../../../../core/constants/constant';
 
-@Entity({ name: 'group' })
+@Entity({ name: 'groups' })
 export class GroupEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;

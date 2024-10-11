@@ -12,7 +12,7 @@ import { FileConfig, FileDriver } from '../../../../config/file-config.type';
 import fileConfig from '../../../../config/file.config';
 import { ApiProperty } from '@nestjs/swagger';
 
-@Entity({ name: 'file' })
+@Entity({ name: 'files' })
 export class FileEntity extends EntityRelationalHelper {
   @ApiProperty({
     type: String,

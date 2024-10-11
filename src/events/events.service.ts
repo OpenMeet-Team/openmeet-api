@@ -49,23 +49,24 @@ export class EventService {
   async findAll(query: QueryEventDto): Promise<any> {
     await this.getTenantSpecificEventRepository();
     const { page, limit } = query;
-  const eventQuery = this.eventRepository.createQueryBuilder('event')
-    .leftJoinAndSelect('event.user', 'user')
-    .where('event.status = :status', { status: 'published' });
+    const eventQuery = this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.user', 'user')
+      .where('event.status = :status', { status: 'published' });
 
-  const total = await eventQuery.getCount();
+    const total = await eventQuery.getCount();
 
-  const results = await eventQuery
-    .skip((page - 1) * limit)
-    .take(limit)
-    .getMany();
+    const results = await eventQuery
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getMany();
 
-  return {
-    data: results,
-    total,
-    page,
-    totalPages: Math.ceil(total / limit),
-  };
+    return {
+      data: results,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async findOne(id: number): Promise<EventEntity> {

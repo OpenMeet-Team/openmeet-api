@@ -7,12 +7,7 @@ import { GroupMemberService } from './group-members.service';
 import { GroupEntity } from '../groups/infrastructure/persistence/relational/entities/group.entity';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([
-      GroupEntity,
-      GroupMemberEntity,
-    ]),
-  ],
+  imports: [TypeOrmModule.forFeature([GroupEntity, GroupMemberEntity])],
   controllers: [GroupMemberController],
   providers: [GroupMemberService, TenantConnectionService],
   exports: [GroupMemberService],

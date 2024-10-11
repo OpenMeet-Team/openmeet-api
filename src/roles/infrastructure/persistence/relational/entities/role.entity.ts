@@ -12,7 +12,7 @@ import { PermissionEntity } from '../../../../../permissions/infrastructure/pers
 import { UserEntity } from '../../../../../users/infrastructure/persistence/relational/entities/user.entity';
 
 @Entity({
-  name: 'role',
+  name: 'roles',
 })
 export class RoleEntity extends EntityRelationalHelper {
   @ApiProperty({

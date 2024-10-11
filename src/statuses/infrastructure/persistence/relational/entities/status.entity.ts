@@ -4,7 +4,7 @@ import { EntityRelationalHelper } from '../../../../../utils/relational-entity-h
 import { ApiProperty } from '@nestjs/swagger';
 
 @Entity({
-  name: 'status',
+  name: 'statuses',
 })
 export class StatusEntity extends EntityRelationalHelper {
   @ApiProperty({

@@ -1,5 +1,10 @@
 import { instanceToPlain } from 'class-transformer';
-import { AfterLoad, BaseEntity, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  AfterLoad,
+  BaseEntity,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 export class EntityRelationalHelper extends BaseEntity {
   __entity?: string;

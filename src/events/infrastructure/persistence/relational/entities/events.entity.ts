@@ -15,7 +15,7 @@ import { GroupEntity } from '../../../../../groups/infrastructure/persistence/re
 import { Expose } from 'class-transformer';
 import { Status } from '../../../../../core/constants/constant';
 
-@Entity({ name: 'event' })
+@Entity({ name: 'events' })
 export class EventEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
