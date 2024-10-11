@@ -1,7 +1,7 @@
 import { Inject, Injectable, Scope } from '@nestjs/common';
 
 import { Session } from './domain/session';
-import { User } from '../users/domain/user';
+import { User } from '../user/domain/user';
 import { NullableType } from '../utils/types/nullable.type';
 import { Not, Repository } from 'typeorm';
 import { TenantConnectionService } from '../tenant/tenant.service';

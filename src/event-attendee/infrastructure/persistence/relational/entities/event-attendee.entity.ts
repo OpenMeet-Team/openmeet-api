@@ -1,13 +1,6 @@
-import {
-  Entity,
-  PrimaryColumn,
-  Column,
-  ManyToOne,
-  JoinColumn,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
-import { UserEntity } from '../../../../../users/infrastructure/persistence/relational/entities/user.entity';
-import { EventEntity } from '../../../../../events/infrastructure/persistence/relational/entities/events.entity';
+import { Entity, PrimaryColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
+import { EventEntity } from '../../../../../event/infrastructure/persistence/relational/entities/events.entity';
 
 @Entity({ name: 'eventAttendees' })
 export class EventAttendeesEntity {

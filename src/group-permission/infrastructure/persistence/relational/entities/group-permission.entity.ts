@@ -7,7 +7,7 @@ import {
 } from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { GroupRoleEntity } from '../../../../../group-role/infrastructure/persistence/relational/entities/group-role.entity';
-import { GroupUserPermissionEntity } from '../../../../../groups/infrastructure/persistence/relational/entities/group-user-permission.entity';
+import { GroupUserPermissionEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group-user-permission.entity';
 
 @Entity({ name: 'groupPermissions' })
 export class GroupPermissionEntity extends EntityRelationalHelper {

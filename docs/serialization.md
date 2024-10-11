@@ -48,8 +48,8 @@ export class User extends EntityRelationalHelper {
      path: 'users',
      version: '1',
    })
-   export class UsersController {
-     constructor(private readonly usersService: UsersService) {}
+   export class UserController {
+     constructor(private readonly userService: UserService) {}
 
      // Some code here...
 
@@ -59,7 +59,7 @@ export class User extends EntityRelationalHelper {
      @Get(':id')
      @HttpCode(HttpStatus.OK)
      findOne(@Param('id') id: string) {
-       return this.usersService.findOne({ id: +id });
+       return this.userService.findOne({ id: +id });
      }
 
      // Some code here...

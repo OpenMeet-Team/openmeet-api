@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
-import { CategoryEntity } from '../../../../categories/infrastructure/persistence/relational/entities/categories.entity';
-import { SubCategoryEntity } from '../../../../sub-categories/infrastructure/persistence/relational/entities/sub-categories.entity';
+import { CategoryEntity } from '../../../../category/infrastructure/persistence/relational/entities/categories.entity';
+import { SubCategoryEntity } from '../../../../sub-category/infrastructure/persistence/relational/entities/sub-category.entity';
 import { SubCategoryType } from '../../../../core/constants/constant';
 
 @Injectable()

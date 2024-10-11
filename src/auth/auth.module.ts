@@ -8,8 +8,8 @@ import { AnonymousStrategy } from './strategies/anonymous.strategy';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 import { MailModule } from '../mail/mail.module';
 import { SessionModule } from '../session/session.module';
-import { UsersModule } from '../users/users.module';
-import { GroupModule } from '../groups/groups.module';
+import { UsersModule } from '../user/user.module';
+import { GroupModule } from '../group/group.module';
 
 @Module({
   imports: [

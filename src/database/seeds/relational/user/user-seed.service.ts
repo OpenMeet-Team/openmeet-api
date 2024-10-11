@@ -2,9 +2,9 @@ import { Injectable } from '@nestjs/common';
 
 import { Repository } from 'typeorm';
 import bcrypt from 'bcryptjs';
-import { RoleEnum } from '../../../../roles/roles.enum';
-import { StatusEnum } from '../../../../statuses/statuses.enum';
-import { UserEntity } from '../../../../users/infrastructure/persistence/relational/entities/user.entity';
+import { RoleEnum } from '../../../../role/role.enum';
+import { StatusEnum } from '../../../../status/status.enum';
+import { UserEntity } from '../../../../user/infrastructure/persistence/relational/entities/user.entity';
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
 
 @Injectable()

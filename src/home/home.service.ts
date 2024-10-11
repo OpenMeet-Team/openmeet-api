@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AllConfigType } from '../config/config.type';
-import { UsersService } from '../users/users.service';
-import { GroupService } from '../groups/groups.service';
+import { UserService } from '../user/user.service';
+import { GroupService } from '../group/group.service';
 
 @Injectable()
 export class HomeService {
   constructor(
     private configService: ConfigService<AllConfigType>,
-    private userService: UsersService,
+    private userService: UserService,
     private groupService: GroupService,
   ) {}
 

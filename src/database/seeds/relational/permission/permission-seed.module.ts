@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TenantModule } from '../../../../tenant/tenant.module';
-import { PermissionEntity } from '../../../../permissions/infrastructure/persistence/relational/entities/permission.entity';
+import { PermissionEntity } from '../../../../permission/infrastructure/persistence/relational/entities/permission.entity';
 import { PermissionSeedService } from './permission-seed.service';
 
 @Module({

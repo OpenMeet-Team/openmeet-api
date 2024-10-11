@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Repository } from 'typeorm';
-import { RoleEntity } from '../../../../roles/infrastructure/persistence/relational/entities/role.entity';
+import { RoleEntity } from '../../../../role/infrastructure/persistence/relational/entities/role.entity';
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
-import { RoleEnum } from '../../../../roles/roles.enum'; // Assuming you have RoleEnum for role types.
-import { PermissionEntity } from '../../../../permissions/infrastructure/persistence/relational/entities/permission.entity';
+import { RoleEnum } from '../../../../role/role.enum'; // Assuming you have RoleEnum for role types.
+import { PermissionEntity } from '../../../../permission/infrastructure/persistence/relational/entities/permission.entity';
 
 @Injectable()
 export class RoleSeedService {
