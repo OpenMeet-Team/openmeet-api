@@ -14,9 +14,7 @@ describe('DashboardService', () => {
         DashboardService,
         {
           provide: TenantConnectionService,
-          useValue: {
-            // Add mock methods here if needed
-          },
+          useValue: {},
         },
         {
           provide: EventService,

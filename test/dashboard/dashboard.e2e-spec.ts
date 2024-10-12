@@ -1,6 +1,9 @@
 import { APP_URL, ADMIN_EMAIL, ADMIN_PASSWORD } from '../utils/constants';
 import request from 'supertest';
 import { getAuthToken } from '../utils/functions';
+import { CreateEventDto } from '../../src/event/dto/create-event.dto';
+import { EventEntity } from '../../src/event/infrastructure/persistence/relational/entities/event.entity';
+import { Status } from '../../src/core/constants/constant';
 
 async function createGroup(
   app: string,
@@ -9,7 +12,8 @@ async function createGroup(
 ): Promise<any> {
   const server = request(app);
   const response = await server
-    .post('/groups')
+    .post('/api/groups')
+    .set('tenant-id', '1')
     .set('Authorization', `Bearer ${authToken}`)
     .send(groupData);
   return response.body;
@@ -22,7 +26,8 @@ async function createEvent(
 ): Promise<any> {
   const server = request(app);
   const response = await server
-    .post('/events')
+    .post('/api/events')
+    .set('tenant-id', '1')
     .set('Authorization', `Bearer ${authToken}`)
     .send(eventData);
   return response.body;
@@ -43,7 +48,7 @@ async function createGroupsAndEvents(
 
   const group = await createGroup(app, authToken, groupData);
 
-  const eventData = {
+  const eventData: CreateEventDto = {
     name: 'Test Event',
     description: 'An event created for testing purposes',
     type: 'public',
@@ -51,21 +56,37 @@ async function createGroupsAndEvents(
     endDate: new Date(new Date().getTime() + 24 * 60 * 60 * 1000), // One day after the start date
     maxAttendees: 100,
     location: 'Virtual',
-    status: 'scheduled',
-    groupId: group.id,
+    locationOnline: 'https://example.com/meeting',
+    categories: [1],
+    is_public: true,
+    image: 'https://example.com/event-image.jpg',
+    lat: 0,
+    lon: 0,
+    status: Status.Published,
+    group: group.id,
   };
+
   const event = await createEvent(app, authToken, eventData);
 
-  return { group, event };
+  console.log('event', event);
+  return { groupData, eventData };
 }
 
 describe('Dashboard', () => {
   const app = APP_URL;
   let authToken: string;
+  let preparedGroup: any;
+  let preparedEvent: any;
 
   beforeAll(async () => {
     authToken = await getAuthToken(app, ADMIN_EMAIL, ADMIN_PASSWORD);
-    await createGroupsAndEvents(app, ADMIN_EMAIL, ADMIN_PASSWORD);
+    const { groupData, eventData } = await createGroupsAndEvents(
+      app,
+      ADMIN_EMAIL,
+      ADMIN_PASSWORD,
+    );
+    preparedGroup = groupData;
+    preparedEvent = eventData;
   });
 
   describe('my-events', () => {
@@ -91,6 +112,15 @@ describe('Dashboard', () => {
         expect(response.status).toBe(200);
         expect(response.body).toBeDefined();
         console.log('response.body', response.body);
+        expect(response.body).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              name: preparedEvent.name,
+              description: preparedEvent.description,
+              type: preparedEvent.type,
+            }),
+          ]),
+        );
       });
     });
   });
@@ -115,6 +145,16 @@ describe('Dashboard', () => {
         const req = server.get('/api/dashboard/my-groups');
         const response = await req;
         expect(response.status).toBe(200);
+        expect(response.body).toBeDefined();
+        expect(response.body).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              name: preparedGroup.name,
+              description: preparedGroup.description,
+              status: preparedGroup.status,
+            }),
+          ]),
+        );
       });
     });
   });

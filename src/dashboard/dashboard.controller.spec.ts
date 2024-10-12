@@ -3,22 +3,44 @@ import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
 import { EventService } from '../event/event.service';
 import { GroupService } from '../group/group.service';
-import { TenantConnectionService } from '../tenant/tenant.service';
-import { CategoryService } from '../category/category.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
+import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
+import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 
 describe('DashboardController', () => {
   let controller: DashboardController;
-  let eventService: EventService;
+  let dashboardService: DashboardService;
+
+  const mockUser: UserEntity = {
+    id: 1,
+    email: 'test@example.com',
+    firstName: 'John',
+    lastName: 'Doe',
+  } as UserEntity;
+
+  const mockEvent: Partial<EventEntity> = {
+    id: 1,
+    name: 'Test Event',
+    description: 'Test Description',
+    attendeesCount: 5,
+  };
+
+  const mockGroup: Partial<GroupEntity> = {
+    id: 1,
+    name: 'Test Group',
+    description: 'Test Group Description',
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [DashboardController],
       providers: [
-        DashboardService,
         {
-          provide: TenantConnectionService,
-          useValue: {},
+          provide: DashboardService,
+          useValue: {
+            getMyEvents: jest.fn(),
+            getMyGroups: jest.fn(),
+          },
         },
         {
           provide: EventService,
@@ -33,99 +55,58 @@ describe('DashboardController', () => {
             getGroupsByMember: jest.fn(),
           },
         },
-        {
-          provide: CategoryService,
-          useValue: {},
-        },
       ],
     }).compile();
 
     controller = module.get<DashboardController>(DashboardController);
-    eventService = module.get<EventService>(EventService);
-  });
-
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
+    dashboardService = module.get<DashboardService>(DashboardService);
   });
 
   describe('myEvents', () => {
-    it('should have an endpoint at my-events', () => {
-      expect(controller['myEvents']).toBeDefined();
-    });
-
-    it('should call eventService.getEventsByCreator', async () => {
-      await controller['myEvents']({ user: { id: 1 } });
-      expect(eventService.getEventsByCreator).toHaveBeenCalledWith(1);
-      expect(eventService.getEventsByAttendee).toHaveBeenCalledWith(1);
-    });
-
-    it('should return events created by the user', async () => {
-      const mockEvents: Partial<EventEntity>[] = [
-        {
-          id: 1,
-          name: 'Event 1',
-          attendeesCount: 2,
-          image: 'image1.jpg',
-          type: 'online',
-          locationOnline: 'true',
-          description: 'Description 1',
-        },
-        {
-          id: 2,
-          name: 'Event 2',
-          attendeesCount: 1,
-          image: 'image2.jpg',
-          type: 'in-person',
-          locationOnline: 'false',
-          description: 'Description 2',
-        },
-      ];
+    it('should return events for the user', async () => {
+      const mockEvents = [mockEvent];
       jest
-        .spyOn(eventService, 'getEventsByCreator')
-        .mockResolvedValue(mockEvents as unknown as EventEntity[]);
+        .spyOn(dashboardService, 'getMyEvents')
+        .mockResolvedValue(mockEvents as EventEntity[]);
 
-      const result = await controller.myEvents('userId');
+      const result = await controller.myEvents({ user: mockUser });
 
-      expect(eventService.getEventsByCreator).toHaveBeenCalledWith('userId');
       expect(result).toEqual(mockEvents);
+      expect(dashboardService.getMyEvents).toHaveBeenCalledWith(mockUser.id);
     });
 
-    it('should return events attended by the user', async () => {
-      const mockEvents: Partial<EventEntity>[] = [
-        {
-          id: 3,
-          name: 'Event 3',
-          attendeesCount: 3,
-          image: 'image3.jpg',
-          type: 'hybrid',
-          locationOnline: 'true',
-          description: 'Description 3',
-        },
-        {
-          id: 4,
-          name: 'Event 4',
-          attendeesCount: 2,
-          image: 'image4.jpg',
-          type: 'online',
-          locationOnline: 'true',
-          description: 'Description 4',
-        },
-      ];
-
+    it('should handle errors when fetching events', async () => {
       jest
-        .spyOn(eventService, 'getEventsByAttendee')
-        .mockResolvedValue(mockEvents as unknown as EventEntity[]);
+        .spyOn(dashboardService, 'getMyEvents')
+        .mockRejectedValue(new Error('Failed to fetch events'));
 
-      const result = await controller.myEvents('userId');
-
-      expect(eventService.getEventsByAttendee).toHaveBeenCalledWith('userId');
-      expect(result).toEqual(expect.arrayContaining(mockEvents));
+      await expect(controller.myEvents({ user: mockUser })).rejects.toThrow(
+        'Failed to fetch events',
+      );
     });
   });
 
   describe('myGroups', () => {
-    it('should have an endpoint at my-groups', () => {
-      expect(controller['myGroups']).toBeDefined();
+    it('should return groups for the user', async () => {
+      const mockGroups = [mockGroup];
+      jest
+        .spyOn(dashboardService, 'getMyGroups')
+        .mockResolvedValue(mockGroups as GroupEntity[]);
+
+      const result = await controller.myGroups({ user: mockUser });
+
+      expect(result).toEqual(mockGroups);
+      expect(dashboardService.getMyGroups).toHaveBeenCalledWith(mockUser.id);
+    });
+
+    it('should handle errors when fetching groups', async () => {
+      jest
+        .spyOn(dashboardService, 'getMyGroups')
+        .mockRejectedValue(new Error('Failed to fetch groups'));
+
+      await expect(controller.myGroups({ user: mockUser })).rejects.toThrow(
+        'Failed to fetch groups',
+      );
     });
   });
 });
