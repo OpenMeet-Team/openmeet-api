@@ -18,7 +18,7 @@ export class TenantConnectionService implements OnModuleInit {
 
   async getTenantConnection(tenantId: string): Promise<DataSource> {
     // Create a DataSource and initialize the connection
-    const dataSource = AppDataSource(tenantId);
+    const dataSource = AppDataSource();
     await dataSource.initialize();
 
     if (!tenantId) {

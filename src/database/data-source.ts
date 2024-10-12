@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { DataSource, DataSourceOptions } from 'typeorm';
 
-export const AppDataSource = (tenantId = '') => {
+export const AppDataSource = () => {
   // const schemaName = tenantId ? `tenant_${tenantId}` : '';
   const schemaName = 'public';
   return new DataSource({
