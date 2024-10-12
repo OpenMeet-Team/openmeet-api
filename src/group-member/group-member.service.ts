@@ -48,7 +48,7 @@ export class GroupMemberService {
     return await this.groupMemberRepository.save(groupMember);
   }
 
-  async findGroupByUserId(userId: number): Promise<any> {}
+  async findGroupByUserId(): Promise<any> {}
 
   async joinGroup(userId: number, groupId: number) {
     await this.getTenantSpecificEventRepository();

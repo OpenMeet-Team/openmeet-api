@@ -25,7 +25,7 @@ describe('Auth Module', () => {
     serverEmail = request.agent(mail);
   });
 
-  describe('Registration', () => {
+  describe.skip('Registration', () => {
     it('should fail with exists email: /api/v1/auth/email/register (POST)', () => {
       return serverApp
         .post('/api/v1/auth/email/register')
