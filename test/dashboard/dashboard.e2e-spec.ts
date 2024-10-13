@@ -1,73 +1,17 @@
-import { APP_URL, TESTER_EMAIL, TESTER_PASSWORD } from '../utils/constants';
+import {
+  APP_URL,
+  TESTER_EMAIL,
+  TESTER_PASSWORD,
+  TESTING_TENANT_ID,
+  TESTER_ID,
+} from '../utils/constants';
 import request from 'supertest';
 import { getAuthToken } from '../utils/functions';
-import { CreateEventDto } from '../../src/event/dto/create-event.dto';
-import { Status } from '../../src/core/constants/constant';
-
-async function createGroup(
-  app: string,
-  authToken: string,
-  groupData: any,
-): Promise<any> {
-  const server = request(app);
-  const response = await server
-    .post('/api/groups')
-    .set('tenant-id', '1')
-    .set('Authorization', `Bearer ${authToken}`)
-    .send(groupData);
-  return response.body;
-}
-
-async function createEvent(
-  app: string,
-  authToken: string,
-  eventData: any,
-): Promise<any> {
-  const server = request(app);
-  const response = await server
-    .post('/api/events')
-    .set('tenant-id', '1')
-    .set('Authorization', `Bearer ${authToken}`)
-    .send(eventData);
-  return response.body;
-}
-
-async function createGroupsAndEvents(
-  app: string,
-  email: string,
-  password: string,
-) {
-  const authToken = await getAuthToken(app, email, password);
-
-  const groupData = {
-    name: 'Test Group',
-    description: 'A group created for testing purposes',
-    status: 'published',
-    members: [1, 2],
-  };
-  const group = await createGroup(app, authToken, groupData);
-
-  const eventData: CreateEventDto = {
-    name: 'Test Event',
-    description: 'An event created for testing purposes',
-    type: 'public',
-    startDate: new Date(),
-    endDate: new Date(new Date().getTime() + 24 * 60 * 60 * 1000), // One day after the start date
-    maxAttendees: 100,
-    location: 'Virtual',
-    locationOnline: 'https://example.com/meeting',
-    categories: [1],
-    is_public: true,
-    image: 'https://example.com/event-image.jpg',
-    lat: 0,
-    lon: 0,
-    status: Status.Published,
-    group: group.id,
-  };
-
-  const event = await createEvent(app, authToken, eventData);
-  return { group, event };
-}
+import {
+  createGroupsAndEvents,
+  deleteGroup,
+  deleteEvent,
+} from '../utils/functions';
 
 describe('Dashboard', () => {
   const app = APP_URL;
@@ -85,11 +29,15 @@ describe('Dashboard', () => {
     preparedGroup = group;
     preparedEvent = event;
   });
+  afterAll(async () => {
+    await deleteGroup(app, authToken, preparedGroup.id);
+    await deleteEvent(app, authToken, preparedEvent.id);
+  });
 
   describe('my-events', () => {
     describe('when unauthenticated', () => {
       it('should fail with 401', async () => {
-        const server = request.agent(app).set('tenant-id', '1');
+        const server = request.agent(app).set('tenant-id', TESTING_TENANT_ID);
         const req = server.get('/api/dashboard/my-events');
         const response = await req;
         expect(response.status).toBe(401);
@@ -103,7 +51,7 @@ describe('Dashboard', () => {
 
         const server = request
           .agent(app)
-          .set('tenant-id', '1')
+          .set('tenant-id', TESTING_TENANT_ID)
           .set('Authorization', `Bearer ${authToken}`);
 
         const req = server.get('/api/dashboard/my-events');
@@ -112,12 +60,12 @@ describe('Dashboard', () => {
         expect(response.status).toBe(200);
         expect(response.body).toBeDefined();
 
-        const userIdToCheck = 2;
         const hasUserCreatedEvent = response.body.some(
-          (event) => event.user.id === userIdToCheck,
+          (event) => event.user.id === TESTER_ID,
         );
         expect(hasUserCreatedEvent).toBe(true);
 
+        // Check if the response contains the prepared event
         expect(response.body).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
@@ -126,17 +74,12 @@ describe('Dashboard', () => {
           ]),
         );
 
-        const expectedAttendeeId = 2; // Replace with the actual expected attendee ID
-
         // Check if every event in the response has the expected attendee, or was created by the user
         const hasNoEventsWithoutExpectedAttendee = response.body.every(
           (event) =>
-            event.attendees.some(
-              (attendee) => attendee.id === expectedAttendeeId,
-            ) || event.user.id === expectedAttendeeId,
+            event.attendees.some((attendee) => attendee.id === TESTER_ID) ||
+            event.user.id === TESTER_ID,
         );
-
-        // Assert that there are no events without the expected attendee
         expect(hasNoEventsWithoutExpectedAttendee).toBe(true);
       });
     });
@@ -145,7 +88,7 @@ describe('Dashboard', () => {
   describe('my-groups', () => {
     describe('when unauthenticated', () => {
       it('should fail with 401', async () => {
-        const server = request.agent(app).set('tenant-id', '1');
+        const server = request.agent(app).set('tenant-id', TESTING_TENANT_ID);
         const req = server.get('/api/dashboard/my-groups');
         const response = await req;
         expect(response.status).toBe(401);
@@ -153,14 +96,13 @@ describe('Dashboard', () => {
     });
 
     describe('when authenticated', () => {
-      // TODO: Fix this test, always empty...
       it('should get all groups that I am a member of, and no more', async () => {
         expect(preparedGroup).toBeDefined();
         expect(preparedGroup.id).toBeDefined();
 
         const server = request
           .agent(app)
-          .set('tenant-id', '1')
+          .set('tenant-id', TESTING_TENANT_ID)
           .set('Authorization', `Bearer ${authToken}`);
 
         const req = server.get('/api/dashboard/my-groups');
@@ -173,11 +115,9 @@ describe('Dashboard', () => {
         );
         expect(hasGroupWithExpectedMember).toBe(true);
 
-        console.log('response.body', JSON.stringify(response.body, null, 2));
         const hasNoGroupsWithoutExpectedMember = response.body.every((group) =>
           group.groupMembers.some((member) => member.user.id === 2),
         );
-
         expect(hasNoGroupsWithoutExpectedMember).toBe(true);
       });
     });
