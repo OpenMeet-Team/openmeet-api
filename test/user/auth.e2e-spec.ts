@@ -25,7 +25,7 @@ describe('Auth Module', () => {
     serverEmail = request.agent(mail);
   });
 
-  describe.skip('Registration', () => {
+  describe('Registration', () => {
     it('should fail with exists email: /api/v1/auth/email/register (POST)', () => {
       return serverApp
         .post('/api/v1/auth/email/register')
@@ -66,10 +66,9 @@ describe('Auth Module', () => {
       });
     });
 
-    describe('Confirm email', () => {
-      it.skip('should successfully: /api/v1/auth/email/confirm (POST)', async () => {
+    describe.skip('Confirm email', () => {
+      it('should successfully: /api/v1/auth/email/confirm (POST)', async () => {
         const response = await serverEmail.get('/email');
-        console.log('Email response:', response.body);
 
         const hash = response.body
           .find(
@@ -79,8 +78,6 @@ describe('Auth Module', () => {
               /.*confirm\-email\?hash\=(\S+).*/g.test(letter.text),
           )
           ?.text.replace(/.*confirm\-email\?hash\=(\S+).*/g, '$1');
-        console.log('Hash:', hash);
-
         return serverApp
           .set('Authorization', `Bearer ${authToken}`)
           .post('/api/v1/auth/email/confirm')
@@ -90,7 +87,7 @@ describe('Auth Module', () => {
           .expect(204);
       });
 
-      it.skip('should fail for already confirmed email: /api/v1/auth/email/confirm (POST)', async () => {
+      it('should fail for already confirmed email: /api/v1/auth/email/confirm (POST)', async () => {
         const hash = await request(mail)
           .get('/email')
           .then(({ body }) =>
@@ -115,20 +112,24 @@ describe('Auth Module', () => {
   });
 
   describe('Login', () => {
-    it.skip('should successfully for user with confirmed email: /api/v1/auth/email/login (POST)', () => {
-      return serverApp
+    it('should successfully for user with confirmed email: /api/v1/auth/email/login (POST)', async () => {
+      const req = serverApp
         .post('/api/v1/auth/email/login')
-        .send({ email: newUserEmail, password: newUserPassword })
-        .expect(200)
-        .expect(({ body }) => {
-          expect(body.token).toBeDefined();
-          expect(body.refreshToken).toBeDefined();
-          expect(body.tokenExpires).toBeDefined();
-          expect(body.user.email).toBeDefined();
-          expect(body.user.hash).not.toBeDefined();
-          expect(body.user.password).not.toBeDefined();
-          expect(body.user.previousPassword).not.toBeDefined();
-        });
+        .set('tenant-id', '1');
+
+      const response = await req.send({
+        email: newUserEmail,
+        password: newUserPassword,
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.token).toBeDefined();
+      expect(response.body.refreshToken).toBeDefined();
+      expect(response.body.tokenExpires).toBeDefined();
+      expect(response.body.user.email).toBeDefined();
+      expect(response.body.user.hash).not.toBeDefined();
+      expect(response.body.user.password).not.toBeDefined();
+      expect(response.body.user.previousPassword).not.toBeDefined();
     });
   });
 
@@ -138,16 +139,14 @@ describe('Auth Module', () => {
       newUserApiToken = await getAuthToken(app, newUserEmail, newUserPassword);
     });
 
-    it.skip('should retrieve your own profile: /api/v1/auth/me (GET)', async () => {
+    it('should retrieve your own profile: /api/v1/auth/me (GET)', async () => {
       const server = request
         .agent(app)
         .set('Authorization', `Bearer ${newUserApiToken}`)
         .set('tenant-id', '1');
 
       const req = server.get('/api/v1/auth/me');
-      // console.log('req', req);
       const response = await req.send();
-      // console.log('response.body', response.body);
 
       expect(response.status).toBe(200);
       expect(response.body.provider).toBeDefined();
@@ -157,13 +156,12 @@ describe('Auth Module', () => {
       expect(response.body.previousPassword).not.toBeDefined();
     });
 
-    it.skip('should get new refresh token: /api/v1/auth/refresh (POST)', async () => {
+    it('should get new refresh token: /api/v1/auth/refresh (POST)', async () => {
       // Get initial refresh token
       const loginResponse = await serverApp
         .post('/api/v1/auth/email/login')
         .send({ email: newUserEmail, password: newUserPassword })
         .expect(200);
-      // console.log('loginResponse.body', loginResponse.body);
 
       let refreshToken = loginResponse.body.refreshToken;
       expect(refreshToken).toBeDefined();
@@ -175,7 +173,6 @@ describe('Auth Module', () => {
         .set('tenant-id', '1')
         .post('/api/v1/auth/refresh');
 
-      // console.log('req', req);
       const refreshResponse = await req.send().expect(200);
 
       refreshToken = refreshResponse.body.refreshToken;
@@ -188,14 +185,13 @@ describe('Auth Module', () => {
         .set('tenant-id', '1')
         .post('/api/v1/auth/refresh');
 
-      // console.log('req2', req2);
       const refreshResponse2 = await req2.send().expect(200);
 
       refreshToken = refreshResponse2.body.refreshToken;
       expect(refreshToken).toBeDefined();
     });
 
-    it.skip('should fail on the second attempt to refresh token with the same token: /api/v1/auth/refresh (POST)', async () => {
+    it('should fail on the second attempt to refresh token with the same token: /api/v1/auth/refresh (POST)', async () => {
       const newUserRefreshToken = await request(app)
         .post('/api/v1/auth/email/login')
         .send({ email: newUserEmail, password: newUserPassword })
