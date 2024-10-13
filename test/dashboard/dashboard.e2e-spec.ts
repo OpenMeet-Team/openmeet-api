@@ -97,7 +97,7 @@ describe('Dashboard', () => {
     });
 
     describe('when authenticated', () => {
-      it('should get created events', async () => {
+      it('should get all events that I am a participant of, or that I created, and no more', async () => {
         expect(preparedEvent).toBeDefined();
         expect(preparedEvent.id).toBeDefined();
 
@@ -125,6 +125,19 @@ describe('Dashboard', () => {
             }),
           ]),
         );
+
+        const expectedAttendeeId = 2; // Replace with the actual expected attendee ID
+
+        // Check if every event in the response has the expected attendee, or was created by the user
+        const hasNoEventsWithoutExpectedAttendee = response.body.every(
+          (event) =>
+            event.attendees.some(
+              (attendee) => attendee.id === expectedAttendeeId,
+            ) || event.user.id === expectedAttendeeId,
+        );
+
+        // Assert that there are no events without the expected attendee
+        expect(hasNoEventsWithoutExpectedAttendee).toBe(true);
       });
     });
   });
@@ -141,7 +154,7 @@ describe('Dashboard', () => {
 
     describe('when authenticated', () => {
       // TODO: Fix this test, always empty...
-      it('should get groups', async () => {
+      it('should get all groups that I am a member of, and no more', async () => {
         expect(preparedGroup).toBeDefined();
         expect(preparedGroup.id).toBeDefined();
 
@@ -159,6 +172,13 @@ describe('Dashboard', () => {
           (group) => group.id === preparedGroup.id,
         );
         expect(hasGroupWithExpectedMember).toBe(true);
+
+        console.log('response.body', JSON.stringify(response.body, null, 2));
+        const hasNoGroupsWithoutExpectedMember = response.body.every((group) =>
+          group.groupMembers.some((member) => member.user.id === 2),
+        );
+
+        expect(hasNoGroupsWithoutExpectedMember).toBe(true);
       });
     });
   });
