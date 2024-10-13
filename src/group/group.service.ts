@@ -29,10 +29,6 @@ export class GroupService {
 
   async getTenantSpecificGroupRepository() {
     const tenantId = this.request.tenantId;
-    console.log(
-      '🚀 ~ GroupService ~ getTenantSpecificGroupRepository ~ tenantId:',
-      tenantId,
-    );
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
     this.groupRepository = dataSource.getRepository(GroupEntity);
@@ -77,7 +73,6 @@ export class GroupService {
       },
       relations: ['groupMembers', 'groupMembers.user'],
     });
-    console.log('Groups by creator:', groups);
     return groups;
   }
 
@@ -89,7 +84,6 @@ export class GroupService {
       },
       relations: ['groupMembers', 'groupMembers.user'],
     });
-    console.log('Groups by member:', groups);
     return groups;
   }
 
@@ -123,7 +117,6 @@ export class GroupService {
       userId,
       groupId: savedGroup.id,
     };
-    console.log('🚀 ~ GroupService ~ create ~ groupMemberDto:', groupMemberDto);
     await this.groupMemberService.createGroupMember(groupMemberDto);
 
     return savedGroup;
