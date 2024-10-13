@@ -73,7 +73,7 @@ describe('EventController (e2e)', () => {
 
     return response.body;
   }
-  async function getMyEvents(token, userId) {
+  async function getMyEvents(token) {
     const response = await request(APP_URL)
       .get(`/api/dashboard/my-events`)
       .set('Authorization', `Bearer ${token}`)
@@ -135,7 +135,7 @@ describe('EventController (e2e)', () => {
     expect(foundEvent.name).toBe('Updated Test Event');
 
     // getEventsByCreator
-    const myEvents = await getMyEvents(token, '2');
+    const myEvents = await getMyEvents(token);
     // expect one of the results to be the updated event
     expect(myEvents.some((event) => event.id === updatedEvent.id)).toBe(true);
     // expect the other result to be the original event
