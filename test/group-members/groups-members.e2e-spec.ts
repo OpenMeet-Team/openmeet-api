@@ -70,6 +70,4 @@ describe('GroupMembersController (e2e)', () => {
       expect(isMemberPresent).toBe(true);
     }
   });
-
-  // ... any additional tests ...
 });

@@ -33,10 +33,6 @@ export class GroupMemberService {
 
     // by default member role
     const groupRole = await this.groupRoleService.findOne(GroupRole.Owner);
-    console.log(
-      '🚀 ~ GroupMemberService ~ createGroupMember ~ groupRole:',
-      groupRole,
-    );
     // const groupRole = { id: createDto.groupRoleId };
     const mappedDto = {
       ...createDto,
@@ -105,13 +101,11 @@ export class GroupMemberService {
 
   async getGroupMembers(groupId: number): Promise<GroupMemberEntity[]> {
     await this.getTenantSpecificEventRepository();
-    console.log('groupId', groupId);
 
     const groupMembers = await this.groupMemberRepository.find({
       where: { group: { id: groupId } },
       relations: ['user', 'groupRole', 'group'],
     });
-    console.log('Group Members:', groupMembers);
     return groupMembers;
   }
 }

@@ -3,7 +3,7 @@ import {
   TESTER_EMAIL,
   TESTER_PASSWORD,
   TESTING_TENANT_ID,
-  TESTER_ID,
+  TESTER_USER_ID,
 } from '../utils/constants';
 import request from 'supertest';
 import { getAuthToken } from '../utils/functions';
@@ -61,7 +61,7 @@ describe('Dashboard', () => {
         expect(response.body).toBeDefined();
 
         const hasUserCreatedEvent = response.body.some(
-          (event) => event.user.id === TESTER_ID,
+          (event) => event.user.id === TESTER_USER_ID,
         );
         expect(hasUserCreatedEvent).toBe(true);
 
@@ -77,8 +77,9 @@ describe('Dashboard', () => {
         // Check if every event in the response has the expected attendee, or was created by the user
         const hasNoEventsWithoutExpectedAttendee = response.body.every(
           (event) =>
-            event.attendees.some((attendee) => attendee.id === TESTER_ID) ||
-            event.user.id === TESTER_ID,
+            event.attendees.some(
+              (attendee) => attendee.id === TESTER_USER_ID,
+            ) || event.user.id === TESTER_USER_ID,
         );
         expect(hasNoEventsWithoutExpectedAttendee).toBe(true);
       });

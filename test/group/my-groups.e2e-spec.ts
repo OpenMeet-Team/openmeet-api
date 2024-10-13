@@ -1,5 +1,11 @@
 import request from 'supertest';
-import { APP_URL, TESTER_EMAIL, TESTER_PASSWORD } from '../utils/constants';
+import {
+  APP_URL,
+  TESTER_EMAIL,
+  TESTER_PASSWORD,
+  TESTER_USER_ID,
+  ADMIN_USER_ID,
+} from '../utils/constants';
 import { getAuthToken } from '../utils/functions';
 
 describe('GroupController (e2e)', () => {
@@ -28,7 +34,6 @@ describe('GroupController (e2e)', () => {
   }
 
   describe('Group Operations', () => {
-    // TODO: failing in delete with foreign key constraint
     it('should successfully create a group, update it, find it, and delete it', async () => {
       // Create a group
       const newGroup = {
@@ -90,16 +95,15 @@ describe('GroupController (e2e)', () => {
       // add myself to the group
       const addMemberResponse = await serverApp
         .post(`/api/group-members/join/${testGroup.id}`)
-        .send({ userId: 1 });
+        .send({ userId: TESTER_USER_ID });
       expect(addMemberResponse.status).toBe(201);
 
       testGroup = addMemberResponse.body;
-      //    get group members
 
       // add someone else to the group
       const addMemberResponse2 = await serverApp
         .post(`/api/group-members/join/${testGroup2.id}`)
-        .send({ userId: 2 });
+        .send({ userId: ADMIN_USER_ID });
       expect(addMemberResponse2.status).toBe(201);
       testGroup2 = addMemberResponse2.body;
 
@@ -117,7 +121,7 @@ describe('GroupController (e2e)', () => {
 
       // get other user's groups, this probably shouldn't work for normal users
       const getOtherUserGroupsResponse = await serverApp.get(
-        '/api/dashboard/my-groups?userId=2',
+        `/api/dashboard/my-groups?userId=${TESTER_USER_ID}`,
       );
       expect(getOtherUserGroupsResponse.status).toBe(200);
       expect(getOtherUserGroupsResponse.body).toBeDefined();
