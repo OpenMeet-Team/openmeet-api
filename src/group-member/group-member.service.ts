@@ -102,4 +102,16 @@ export class GroupMemberService {
     await this.groupMemberRepository.remove(groupMember);
     return { message: 'User has left the group successfully' };
   }
+
+  async getGroupMembers(groupId: number): Promise<GroupMemberEntity[]> {
+    await this.getTenantSpecificEventRepository();
+    console.log('groupId', groupId);
+
+    const groupMembers = await this.groupMemberRepository.find({
+      where: { group: { id: groupId } },
+      relations: ['user', 'groupRole', 'group'],
+    });
+    console.log('Group Members:', groupMembers);
+    return groupMembers;
+  }
 }

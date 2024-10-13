@@ -71,20 +71,26 @@ export class GroupService {
   async getGroupsByCreator(userId: string): Promise<GroupEntity[]> {
     await this.getTenantSpecificGroupRepository();
     // find where groupMembers user id == userid
-    return this.groupRepository.find({
+    const groups = await this.groupRepository.find({
       where: {
         groupMembers: { user: { id: Number(userId) } },
       },
+      relations: ['groupMembers', 'groupMembers.user'],
     });
+    console.log('Groups by creator:', groups);
+    return groups;
   }
 
   async getGroupsByMember(userId: string): Promise<GroupEntity[]> {
     await this.getTenantSpecificGroupRepository();
-    return this.groupRepository.find({
+    const groups = await this.groupRepository.find({
       where: {
         groupMembers: { user: { id: Number(userId) } },
       },
+      relations: ['groupMembers', 'groupMembers.user'],
     });
+    console.log('Groups by member:', groups);
+    return groups;
   }
 
   async create(createGroupDto: CreateGroupDto, userId: number): Promise<any> {
