@@ -16,14 +16,12 @@ describe('GroupController (e2e)', () => {
   });
 
   describe('Group Operations', () => {
-    // TODO: failing in delete with
-    //  update or delete on table "groups" violates foreign key constraint "FK_08cacea15f2aef324f78fddebff" on table "groupMembers"
-    it.skip('should successfully create a group, update it, find it, and delete it', async () => {
+    // TODO: failing in delete with foreign key constraint
+    it('should successfully create a group, update it, find it, and delete it', async () => {
       // Create a group
       const newGroup = {
         name: 'Test Group',
         description: 'This is a test group',
-        // ... other required group details
       };
 
       const createResponse = await serverApp.post('/api/groups').send(newGroup);
@@ -33,11 +31,9 @@ describe('GroupController (e2e)', () => {
       expect(createResponse.body.name).toBe(newGroup.name);
       testGroup = createResponse.body;
 
-      // Update the group
       const updatedGroupData = {
         name: 'Updated Test Group',
         description: 'Updated description',
-        // ... other updated group details
       };
       const updateResponse = await serverApp
         .patch(`/api/groups/${testGroup.id}`)
@@ -54,7 +50,6 @@ describe('GroupController (e2e)', () => {
       const deleteResponse = await serverApp.delete(
         `/api/groups/${testGroup.id}`,
       );
-      console.log(deleteResponse.body);
       expect(deleteResponse.status).toBe(200);
     });
   });

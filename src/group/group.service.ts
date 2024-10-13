@@ -200,6 +200,10 @@ export class GroupService {
   async remove(id: number): Promise<void> {
     await this.getTenantSpecificGroupRepository();
     const group = await this.findOne(id);
+
+    // First, delete all group members associated with the group
+    await this.groupMembersRepository.delete({ group: { id } });
+
     await this.groupRepository.remove(group);
   }
 }
