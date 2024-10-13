@@ -22,6 +22,7 @@ export class EventService {
   ) {}
 
   async getTenantSpecificEventRepository() {
+    console.log('this.request', this.request);
     const tenantId = this.request.tenantId;
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
