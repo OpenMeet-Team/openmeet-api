@@ -30,7 +30,6 @@ export class DashboardService {
   }
 
   async getMyEvents(userId: string): Promise<EventEntity[]> {
-    await this.getTenantSpecificRepositories();
     try {
       const createdEvents = await this.eventService.getEventsByCreator(userId);
       const attendingEvents =
@@ -50,7 +49,6 @@ export class DashboardService {
   }
 
   async getMyGroups(userId: string): Promise<GroupEntity[]> {
-    await this.getTenantSpecificRepositories();
     try {
       const groupsByMember = await this.groupService.getGroupsByMember(userId);
 
@@ -61,7 +59,6 @@ export class DashboardService {
       const uniqueGroups = Array.from(
         new Map(groups.map((group) => [group.id, group])).values(),
       );
-      console.log('uniqueGroups', JSON.stringify(uniqueGroups, null, 2));
       return uniqueGroups as GroupEntity[];
     } catch (error) {
       console.error('Failed to fetch user groups:', error);
