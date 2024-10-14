@@ -1,12 +1,12 @@
 import request from 'supertest';
-import { APP_URL } from '../utils/constants';
+import { APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 
 describe('User role', () => {
   const app = APP_URL;
   let serverApp;
 
   beforeAll(() => {
-    serverApp = request.agent(app).set('tenant-id', '1');
+    serverApp = request.agent(app).set('tenant-id', TESTING_TENANT_ID);
   });
 
   it('should refresh tokens for users with and without roles', async () => {
@@ -59,7 +59,7 @@ describe('User role', () => {
     const refreshWithRole = await request(app)
       .post('/api/v1/auth/refresh')
       .set('Authorization', `Bearer ${refreshTokenWithRole}`)
-      .set('tenant-id', '1')
+      .set('tenant-id', TESTING_TENANT_ID)
       .send();
     console.log('Refresh with role:', refreshWithRole.body);
 
@@ -68,7 +68,7 @@ describe('User role', () => {
     const refreshWithoutRole = await request(app)
       .post('/api/v1/auth/refresh')
       .set('Authorization', `Bearer ${refreshTokenWithoutRole}`)
-      .set('tenant-id', '1')
+      .set('tenant-id', TESTING_TENANT_ID)
       .send();
     console.log('Refresh without role:', refreshWithoutRole.body);
 
@@ -81,16 +81,25 @@ describe('User role', () => {
     expect(refreshWithoutRole.body.refreshToken).toBeDefined();
 
     // Verify that the new tokens work by fetching the user profile
-    await request(app)
+    const responseWithRole = await request(app)
       .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${refreshWithRole.body.token}`)
-      .set('tenant-id', '1')
+      .set('tenant-id', TESTING_TENANT_ID)
       .expect(200);
+    console.log('Response with role:', responseWithRole.body);
 
-    await request(app)
+    const responseWithoutRole = await request(app)
       .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${refreshWithoutRole.body.token}`)
-      .set('tenant-id', '1')
+      .set('tenant-id', TESTING_TENANT_ID)
       .expect(200);
+    console.log('Response without role:', responseWithoutRole.body);
+
+    expect(responseWithRole.body.role).toEqual(
+      expect.objectContaining({ name: 'User' }),
+    );
+    expect(responseWithoutRole.body.role).toEqual(
+      expect.objectContaining({ name: 'User' }),
+    );
   });
 });
