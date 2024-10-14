@@ -174,9 +174,6 @@ describe('Auth Module', () => {
         .post('/api/v1/auth/refresh');
 
       const refreshResponse = await req.send();
-
-      console.log('Refresh response:', refreshResponse.body);
-
       expect(refreshResponse.status).toBe(200);
 
       refreshToken = refreshResponse.body.refreshToken;
