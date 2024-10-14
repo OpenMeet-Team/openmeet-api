@@ -30,7 +30,6 @@ export class DashboardService {
   }
 
   async getMyEvents(userId: string): Promise<EventEntity[]> {
-    await this.getTenantSpecificRepositories();
     try {
       const createdEvents = await this.eventService.getEventsByCreator(userId);
       const attendingEvents =
@@ -50,9 +49,17 @@ export class DashboardService {
   }
 
   async getMyGroups(userId: string): Promise<GroupEntity[]> {
-    await this.getTenantSpecificRepositories();
     try {
-      return await this.groupService.getGroupsByMember(userId);
+      const groupsByMember = await this.groupService.getGroupsByMember(userId);
+
+      const groupsByCreator =
+        await this.groupService.getGroupsByCreator(userId);
+
+      const groups = [...groupsByMember, ...groupsByCreator];
+      const uniqueGroups = Array.from(
+        new Map(groups.map((group) => [group.id, group])).values(),
+      );
+      return uniqueGroups as GroupEntity[];
     } catch (error) {
       console.error('Failed to fetch user groups:', error);
       throw new NotFoundException('Failed to fetch user groups');

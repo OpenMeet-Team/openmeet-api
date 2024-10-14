@@ -33,10 +33,6 @@ export class GroupMemberService {
 
     // by default member role
     const groupRole = await this.groupRoleService.findOne(GroupRole.Owner);
-    console.log(
-      '🚀 ~ GroupMemberService ~ createGroupMember ~ groupRole:',
-      groupRole,
-    );
     // const groupRole = { id: createDto.groupRoleId };
     const mappedDto = {
       ...createDto,
@@ -101,5 +97,15 @@ export class GroupMemberService {
 
     await this.groupMemberRepository.remove(groupMember);
     return { message: 'User has left the group successfully' };
+  }
+
+  async getGroupMembers(groupId: number): Promise<GroupMemberEntity[]> {
+    await this.getTenantSpecificEventRepository();
+
+    const groupMembers = await this.groupMemberRepository.find({
+      where: { group: { id: groupId } },
+      relations: ['user', 'groupRole', 'group'],
+    });
+    return groupMembers;
   }
 }
