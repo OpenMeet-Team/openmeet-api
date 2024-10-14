@@ -23,6 +23,7 @@ import { Repository } from 'typeorm';
 import { UserEntity } from './infrastructure/persistence/relational/entities/user.entity';
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { UserPermissionEntity } from './infrastructure/persistence/relational/entities/user-permission.entity';
+import { RoleEntity } from '../role/infrastructure/persistence/relational/entities/role.entity';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UserService {
@@ -78,7 +79,7 @@ export class UserService {
       provider: AuthProvidersEnum.email,
       subCategory: subCategoriesEntities,
       ...createProfileDto,
-    };
+    } as Partial<UserEntity>;
 
     if (clonedPayload.password) {
       const salt = await bcrypt.genSalt();
@@ -111,10 +112,36 @@ export class UserService {
           },
         });
       }
-      clonedPayload.photo = fileObject;
+      clonedPayload.photo = fileObject as any;
     }
 
-    // if (clonedPayload.role?.id) {
+    if (clonedPayload.role?.id) {
+      const roleRepository =
+        this.usersRepository.manager.getRepository(RoleEntity);
+      const role = await roleRepository.findOne({
+        where: { id: clonedPayload.role.id },
+      });
+      if (!role) {
+        throw new UnprocessableEntityException({
+          status: HttpStatus.UNPROCESSABLE_ENTITY,
+          errors: {
+            role: 'roleNotExists',
+          },
+        });
+      }
+      clonedPayload.role = role as any;
+    } else {
+      const roleRepository =
+        this.usersRepository.manager.getRepository(RoleEntity);
+      const defaultRole = await roleRepository.findOne({
+        where: { name: 'User' },
+      });
+      if (!defaultRole) {
+        throw new Error('Default role not found');
+      }
+      clonedPayload.role = defaultRole;
+    }
+
     //   const roleObject = Object.values(RoleEnum)
     //     .map(String)
     //     .includes(String(clonedPayload.role.id));

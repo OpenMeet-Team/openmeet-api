@@ -16,4 +16,6 @@ export class Role {
     example: 'admin',
   })
   name?: string;
+
+  static readonly DEFAULT_ROLE = 'user';
 }

@@ -13,6 +13,7 @@ import {
   OneToMany,
   ManyToMany,
   JoinTable,
+  BeforeInsert,
 } from 'typeorm';
 import { RoleEntity } from '../../../../../role/infrastructure/persistence/relational/entities/role.entity';
 import { StatusEntity } from '../../../../../status/infrastructure/persistence/relational/entities/status.entity';
@@ -32,6 +33,7 @@ import { SubCategoryEntity } from '../../../../../sub-category/infrastructure/pe
 import { UserPermissionEntity } from './user-permission.entity';
 import { GroupUserPermissionEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group-user-permission.entity';
 import { GroupMemberEntity } from '../../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
+import { Role } from '../../../../../role/domain/role';
 
 @Entity({
   name: 'users',
@@ -127,7 +129,9 @@ export class UserEntity extends EntityRelationalHelper {
   @DeleteDateColumn()
   deletedAt: Date;
 
-  @ManyToOne(() => RoleEntity, (role) => role.users)
+  @ManyToOne(() => RoleEntity, (role) => role.users, {
+    eager: true,
+  })
   @JoinColumn({ name: 'roleId' })
   role: RoleEntity;
 
@@ -152,4 +156,18 @@ export class UserEntity extends EntityRelationalHelper {
   @ManyToMany(() => SubCategoryEntity, (SC) => SC.users)
   @JoinTable({ name: 'userInterests' })
   subCategory: SubCategoryEntity[];
+
+  @BeforeInsert()
+  async setDefaultRole() {
+    if (!this.role) {
+      const defaultRole = await RoleEntity.findOne({
+        where: { name: Role.DEFAULT_ROLE },
+      });
+      if (defaultRole) {
+        this.role = defaultRole;
+      } else {
+        throw new Error('Default role not found');
+      }
+    }
+  }
 }

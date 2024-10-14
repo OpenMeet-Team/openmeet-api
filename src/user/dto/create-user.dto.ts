@@ -11,6 +11,7 @@ import {
 import { FileDto } from '../../file/dto/file.dto';
 import { StatusDto } from '../../status/dto/status.dto';
 import { lowerCaseTransformer } from '../../utils/transformers/lower-case.transformer';
+import { RoleDto } from '../../role/dto/role.dto';
 
 export class CreateUserDto {
   @ApiProperty({ example: 'test1@example.com', type: String })
@@ -39,10 +40,10 @@ export class CreateUserDto {
   @IsOptional()
   photo?: FileDto | null;
 
-  // @ApiPropertyOptional({ type: RoleDto })
-  // @IsOptional()
-  // @Type(() => RoleDto)
-  // role?: RoleDto | null;
+  @ApiPropertyOptional({ type: RoleDto })
+  @IsOptional()
+  @Type(() => RoleDto)
+  role?: RoleDto | null;
 
   @ApiPropertyOptional({ type: StatusDto })
   @IsOptional()
