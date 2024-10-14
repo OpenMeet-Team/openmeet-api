@@ -115,7 +115,7 @@ describe('Auth Module', () => {
   });
 
   describe('Login', () => {
-    it.skip('should successfully for user with confirmed email: /api/v1/auth/email/login (POST)', () => {
+    it('should successfully for user with confirmed email: /api/v1/auth/email/login (POST)', () => {
       return serverApp
         .post('/api/v1/auth/email/login')
         .send({ email: newUserEmail, password: newUserPassword })
@@ -138,7 +138,7 @@ describe('Auth Module', () => {
       newUserApiToken = await getAuthToken(app, newUserEmail, newUserPassword);
     });
 
-    it.skip('should retrieve your own profile: /api/v1/auth/me (GET)', async () => {
+    it('should retrieve your own profile: /api/v1/auth/me (GET)', async () => {
       const server = request
         .agent(app)
         .set('Authorization', `Bearer ${newUserApiToken}`)
@@ -157,7 +157,7 @@ describe('Auth Module', () => {
       expect(response.body.previousPassword).not.toBeDefined();
     });
 
-    it.skip('should get new refresh token: /api/v1/auth/refresh (POST)', async () => {
+    it('should get new refresh token: /api/v1/auth/refresh (POST)', async () => {
       // Get initial refresh token
       const loginResponse = await serverApp
         .post('/api/v1/auth/email/login')
