@@ -129,9 +129,7 @@ export class UserEntity extends EntityRelationalHelper {
   @DeleteDateColumn()
   deletedAt: Date;
 
-  @ManyToOne(() => RoleEntity, (role) => role.users, {
-    eager: true,
-  })
+  @ManyToOne(() => RoleEntity, (role) => role.users)
   @JoinColumn({ name: 'roleId' })
   role: RoleEntity;
 
