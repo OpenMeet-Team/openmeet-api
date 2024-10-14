@@ -76,7 +76,7 @@ export class EventEntity extends EntityRelationalHelper {
 
   @Expose()
   get attendeesCount(): number {
-    // return this.attendees.length;
-    return 123; // TODO fix
+    console.log('this.attendees: ', this.attendees);
+    return this.attendees.length;
   }
 }

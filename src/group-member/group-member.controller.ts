@@ -9,10 +9,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { GroupMemberService } from './group-member.service';
-import {
-  CreateGroupMemberDto,
-  UpdateGroupMemberRoleDto,
-} from './dto/create-groupMember.dto';
+import { UpdateGroupMemberRoleDto } from './dto/create-groupMember.dto';
 import { GroupMemberEntity } from './infrastructure/persistence/relational/entities/group-member.entity';
 import { JWTAuthGuard } from '../core/guards/auth.guard';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
