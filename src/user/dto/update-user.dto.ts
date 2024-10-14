@@ -1,4 +1,4 @@
-import { PartialType, ApiPropertyOptional } from '@nestjs/swagger';
+import { PartialType, ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 import { CreateUserDto } from './create-user.dto';
 
 import { Transform, Type } from 'class-transformer';
@@ -36,10 +36,17 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   @IsOptional()
   photo?: FileDto | null;
 
-  @ApiPropertyOptional({ type: () => RoleDto })
+  // @ApiPropertyOptional({ type: () => RoleDto })
+  // @IsOptional()
+  // @Type(() => RoleDto)
+  // role?: RoleDto | null;
+
+  @ApiProperty({
+    description: 'The role associated with this user, represented by its ID',
+    type: Number,
+  })
   @IsOptional()
-  @Type(() => RoleDto)
-  role?: RoleDto | null;
+  role: number;
 
   @ApiPropertyOptional({ type: () => StatusDto })
   @IsOptional()

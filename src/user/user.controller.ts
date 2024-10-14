@@ -100,25 +100,25 @@ export class UserController {
     return this.userService.findById(id);
   }
 
-  @ApiOkResponse({
-    type: User,
-  })
-  @SerializeOptions({
-    groups: ['admin'],
-  })
-  @Patch(':id')
-  @HttpCode(HttpStatus.OK)
-  @ApiParam({
-    name: 'id',
-    type: String,
-    required: true,
-  })
-  update(
-    @Param('id') id: User['id'],
-    @Body() updateProfileDto: UpdateUserDto,
-  ): Promise<User | null> {
-    return this.userService.update(id, updateProfileDto);
-  }
+  // @ApiOkResponse({
+  //   type: User,
+  // })
+  // @SerializeOptions({
+  //   groups: ['admin'],
+  // })
+  // @Patch(':id')
+  // @HttpCode(HttpStatus.OK)
+  // @ApiParam({
+  //   name: 'id',
+  //   type: String,
+  //   required: true,
+  // })
+  // update(
+  //   @Param('id') id: User['id'],
+  //   @Body() updateProfileDto: UpdateUserDto,
+  // ): Promise<User | null> {
+  //   return this.userService.update(id, updateProfileDto);
+  // }
 
   @Delete(':id')
   @ApiParam({

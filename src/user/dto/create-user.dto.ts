@@ -25,6 +25,8 @@ export class CreateUserDto {
 
   provider?: string;
 
+  // role?: number;
+
   socialId?: string | null;
 
   @ApiProperty({ example: 'John', type: String })
@@ -60,10 +62,10 @@ export class CreateUserDto {
   @Type(() => Number)
   subCategories?: number[];
 
-  // @ApiPropertyOptional({
-  //   description: 'The category associated with the group',
-  // })
-  // @IsOptional()
-  // @Type(() => Number)
-  // role: number;
+  @ApiProperty({
+    description: 'The role associated with this user, represented by its ID',
+    type: Number,
+  })
+  @IsNotEmpty()
+  role: number;
 }
