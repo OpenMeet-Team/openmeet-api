@@ -23,6 +23,7 @@ import { Repository } from 'typeorm';
 import { UserEntity } from './infrastructure/persistence/relational/entities/user.entity';
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { UserPermissionEntity } from './infrastructure/persistence/relational/entities/user-permission.entity';
+import { RoleService } from '../role/role.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UserService {
@@ -34,6 +35,7 @@ export class UserService {
     private readonly filesService: FilesService,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly subCategoryService: SubCategoryService,
+    private readonly roleService: RoleService,
   ) {}
 
   async getTenantSpecificRepository() {
@@ -74,12 +76,17 @@ export class UserService {
       );
     }
 
-    const clonedPayload = {
-      provider: AuthProvidersEnum.email,
-      subCategory: subCategoriesEntities,
-      ...createProfileDto,
-    };
+    const role = await this.roleService.findByName(RoleEnum.user);
+    if (!role) {
+      throw new Error(`Role not found: ${RoleEnum.user}`);
+    }
 
+    const clonedPayload = {
+      ...createProfileDto,
+      provider: AuthProvidersEnum.email,
+      role, 
+      subCategory: subCategoriesEntities,
+    };
     if (clonedPayload.password) {
       const salt = await bcrypt.genSalt();
       clonedPayload.password = await bcrypt.hash(clonedPayload.password, salt);
@@ -179,6 +186,7 @@ export class UserService {
 
     return this.usersRepository.findOne({
       where: { id: Number(id) },
+      relations: ['role'],
     });
   }
 
@@ -252,18 +260,26 @@ export class UserService {
     }
 
     if (clonedPayload.role?.id) {
-      const roleObject = Object.values(RoleEnum)
-        .map(String)
-        .includes(String(clonedPayload.role.id));
-      if (!roleObject) {
-        throw new UnprocessableEntityException({
-          status: HttpStatus.UNPROCESSABLE_ENTITY,
-          errors: {
-            role: 'roleNotExists',
-          },
-        });
+      const role = await this.roleService.findByName(RoleEnum.user);
+      if (!role) {
+        throw new Error(`Role not found: ${RoleEnum.user}`);
       }
+      clonedPayload.role = role;
     }
+
+    // if (clonedPayload.role?.id) {
+    //   const roleObject = Object.values(RoleEnum)
+    //     .map(String)
+    //     .includes(String(clonedPayload.role.id));
+    //   if (!roleObject) {
+    //     throw new UnprocessableEntityException({
+    //       status: HttpStatus.UNPROCESSABLE_ENTITY,
+    //       errors: {
+    //         role: 'roleNotExists',
+    //       },
+    //     });
+    //   }
+    // }
 
     if (clonedPayload.status?.id) {
       const statusObject = Object.values(StatusEnum)
