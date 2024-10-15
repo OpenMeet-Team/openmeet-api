@@ -84,9 +84,9 @@ export class EventEntity extends EntityRelationalHelper {
   @ManyToMany(() => CategoryEntity, (category) => category.events)
   categories: CategoryEntity[];
 
-  // @Expose()
-  // get attendeesCount(): number {
-  //   console.log('this.attendees: ', this.attendees);
-  //   return this.attendees.length;
-  // }
+  @Expose()
+  get attendeesCount(): number {
+    console.log('this.attendees: ', this.attendees);
+    return this.attendees ? this.attendees.length : 0; 
+  }
 }

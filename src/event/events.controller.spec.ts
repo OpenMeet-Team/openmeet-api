@@ -48,6 +48,7 @@ const mockGroup = {
 
 const createEventDto: CreateEventDto = {
   name: 'Test Event',
+  slug: 'Test Event',
   description: 'Test Description',
   startDate: new Date(),
   endDate: new Date(),
