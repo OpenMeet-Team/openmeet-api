@@ -109,6 +109,7 @@ export class GroupService {
     const mappedGroupDto = {
       ...createGroupDto,
       categories: categoryEntities,
+      createdBy: { id: userId },
     };
 
     const group = this.groupRepository.create(mappedGroupDto);
@@ -126,7 +127,8 @@ export class GroupService {
   async findAll(pagination: PaginationDto, query: QueryGroupDto): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     const { page, limit } = pagination;
-    const { search, userId } = query;
+    const { search, userId, location, categories } = query;
+    console.log('🚀 ~ GroupService ~ findAll ~ categories:', categories);
     const groupQuery = this.groupRepository
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.categories', 'categories')
@@ -139,6 +141,25 @@ export class GroupService {
       groupQuery.andWhere('user.id = :userId', { userId });
     }
 
+    if (categories && categories.length > 0) {
+      const likeConditions = categories
+        .map((_, index) => `categories.name LIKE :category${index}`)
+        .join(' OR ');
+
+      const likeParameters = categories.reduce((acc, category, index) => {
+        acc[`category${index}`] = `%${category}%`;
+        return acc;
+      }, {});
+
+      groupQuery.andWhere(`(${likeConditions})`, likeParameters);
+    }
+
+    if (location) {
+      groupQuery.andWhere('group.location LIKE :location', {
+        location: `%${location}%`,
+      });
+    }
+
     if (search) {
       groupQuery.andWhere(
         '(group.name LIKE :search OR group.description LIKE :search)',
@@ -149,16 +170,19 @@ export class GroupService {
     return paginate(groupQuery, { page, limit });
   }
 
-  async findOne(id: number): Promise<GroupEntity> {
+  async findOne(id: number): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     const group = await this.groupRepository.findOne({
       where: { id },
-      relations: ['categories'],
+      relations: ['events', 'groupMembers', 'createdBy'],
     });
 
     if (!group) {
-      throw new NotFoundException(`Group with ID ${id} not found`);
+      throw new Error('Group not found');
     }
+
+    group.events = group.events.slice(0, 5);
+    group.groupMembers = group.groupMembers.slice(0, 5);
 
     return group;
   }
@@ -189,6 +213,7 @@ export class GroupService {
 
     const mappedGroupDto = {
       ...updateGroupDto,
+      slug: updateGroupDto.name,
       categories: categoryEntities,
     };
 

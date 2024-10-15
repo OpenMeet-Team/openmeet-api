@@ -60,6 +60,7 @@ export async function createGroupsAndEvents(
 
   const eventData: CreateEventDto = {
     name: 'Test Event',
+    slug: 'test-event',
     description: 'An event created for testing purposes',
     type: 'public',
     startDate: new Date(),
@@ -68,7 +69,6 @@ export async function createGroupsAndEvents(
     location: 'Virtual',
     locationOnline: 'https://example.com/meeting',
     categories: [1],
-    is_public: true,
     image: 'https://example.com/event-image.jpg',
     lat: 0,
     lon: 0,

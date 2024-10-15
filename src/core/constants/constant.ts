@@ -14,3 +14,9 @@ export enum GroupRole {
   Moderator = 'moderator',
   Member = 'member',
 }
+
+export enum Visibility {
+  Public = 'public',
+  Authenticated = 'authenticated',
+  Private = 'private',
+}

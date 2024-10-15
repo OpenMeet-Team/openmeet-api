@@ -4,6 +4,7 @@ import {
   Entity,
   JoinTable,
   ManyToMany,
+  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
@@ -13,7 +14,8 @@ import { EventEntity } from '../../../../../event/infrastructure/persistence/rel
 import { GroupMemberEntity } from '../../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupUserPermissionEntity } from './group-user-permission.entity';
 import slugify from 'slugify';
-import { Status } from '../../../../../core/constants/constant';
+import { Status, Visibility } from '../../../../../core/constants/constant';
+import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
 
 @Entity({ name: 'groups' })
 export class GroupEntity extends EntityRelationalHelper {
@@ -29,15 +31,19 @@ export class GroupEntity extends EntityRelationalHelper {
   @Column({ type: 'text' })
   description: string;
 
-  @Column({ type: 'boolean', default: false })
-  approved: boolean;
-
   @Column({
     nullable: true,
     type: 'enum',
     enum: Status,
   })
   status: Status;
+
+  @Column({
+    nullable: true,
+    type: 'enum',
+    enum: Visibility,
+  })
+  visibility: Visibility;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   location: string;
@@ -53,6 +59,9 @@ export class GroupEntity extends EntityRelationalHelper {
 
   @OneToMany(() => GroupMemberEntity, (gm) => gm.group)
   groupMembers: GroupMemberEntity[];
+
+  @ManyToOne(() => UserEntity, (group) => group.groups)
+  createdBy: UserEntity;
 
   @OneToMany(
     () => GroupUserPermissionEntity,

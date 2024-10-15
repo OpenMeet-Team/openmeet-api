@@ -93,15 +93,20 @@ describe('EventController (e2e)', () => {
     // Create an event using the REST API
     testEvent = await createEvent(token, {
       name: 'Test Event',
+      slug: 'test-event',
+      image: 'test-image-url',
       description: 'Test Description',
-      startDate: new Date(),
-      endDate: new Date(Date.now() + 3600000), // 1 hour later
-      type: 'IN_PERSON',
+      startDate: new Date().toISOString(),
+      endDate: new Date(new Date().getTime() + 3600000).toISOString(), // 1 hour later
+      type: 'hybrid',
       location: 'Test Location',
-      attendees: [2],
-      categories: [],
-      userId: 2,
+      locationOnline: 'https://test-event.com',
       maxAttendees: 10,
+      categories: [],
+      lat: 0.0,
+      lon: 0.0,
+      status: 'draft',
+      group: null,
     });
 
     expect(testEvent.name).toBe('Test Event');
@@ -109,15 +114,20 @@ describe('EventController (e2e)', () => {
 
     const testEvent2 = await createEvent(token, {
       name: 'Test Event 2',
+      slug: 'test-event-2',
+      image: 'test-image-url',
       description: 'Test Description',
-      startDate: new Date(),
-      endDate: new Date(Date.now() + 3600000), // 1 hour later
-      type: 'IN_PERSON',
+      startDate: new Date().toISOString(),
+      endDate: new Date(new Date().getTime() + 3600000).toISOString(), // 1 hour later
+      type: 'hybrid',
       location: 'Test Location',
-      attendees: [2],
-      categories: [],
-      userId: 1,
+      locationOnline: 'https://test-event.com',
       maxAttendees: 10,
+      categories: [],
+      lat: 0.0,
+      lon: 0.0,
+      status: 'draft',
+      group: null,
     });
 
     expect(testEvent2.name).toBe('Test Event 2');
