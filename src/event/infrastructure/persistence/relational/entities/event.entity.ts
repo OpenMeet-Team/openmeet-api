@@ -89,4 +89,5 @@ export class EventEntity extends EntityRelationalHelper {
   //   console.log('this.attendees: ', this.attendees);
   //   return this.attendees.length;
   // }
+
 }

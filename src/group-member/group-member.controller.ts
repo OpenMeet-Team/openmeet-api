@@ -5,6 +5,7 @@ import {
   Param,
   Delete,
   Patch,
+  Get,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -23,7 +24,7 @@ export class GroupMemberController {
   constructor(private readonly groupMemberService: GroupMemberService) {}
 
   @Post('join/:groupId')
-  @ApiOperation({ summary: 'JOining a new group' })
+  @ApiOperation({ summary: 'Joining a new group' })
   async create(
     @AuthUser() user: User,
     @Param('groupId') groupId: number,
@@ -44,5 +45,10 @@ export class GroupMemberController {
   async leaveGroup(@AuthUser() user: User, @Param('groupId') groupId: number) {
     const userId = user.id;
     return this.groupMemberService.leaveGroup(userId, groupId);
+  }
+
+  @Get(':groupId')
+  async getGroupMembers(@Param('groupId') groupId: number) {
+    return this.groupMemberService.getGroupMembers(groupId);
   }
 }

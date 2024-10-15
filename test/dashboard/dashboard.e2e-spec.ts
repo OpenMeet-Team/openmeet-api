@@ -1,74 +1,17 @@
-import { APP_URL, ADMIN_EMAIL, ADMIN_PASSWORD } from '../utils/constants';
+import {
+  APP_URL,
+  TESTER_EMAIL,
+  TESTER_PASSWORD,
+  TESTING_TENANT_ID,
+  TESTER_USER_ID,
+} from '../utils/constants';
 import request from 'supertest';
 import { getAuthToken } from '../utils/functions';
-import { CreateEventDto } from '../../src/event/dto/create-event.dto';
-import { Status } from '../../src/core/constants/constant';
-
-async function createGroup(
-  app: string,
-  authToken: string,
-  groupData: any,
-): Promise<any> {
-  const server = request(app);
-  const response = await server
-    .post('/api/groups')
-    .set('tenant-id', '1')
-    .set('Authorization', `Bearer ${authToken}`)
-    .send(groupData);
-  return response.body;
-}
-
-async function createEvent(
-  app: string,
-  authToken: string,
-  eventData: any,
-): Promise<any> {
-  const server = request(app);
-  const response = await server
-    .post('/api/events')
-    .set('tenant-id', '1')
-    .set('Authorization', `Bearer ${authToken}`)
-    .send(eventData);
-  return response.body;
-}
-
-async function createGroupsAndEvents(
-  app: string,
-  email: string,
-  password: string,
-) {
-  const authToken = await getAuthToken(app, email, password);
-
-  const groupData = {
-    name: 'Test Group',
-    description: 'A group created for testing purposes',
-    status: 'active',
-  };
-
-  const group = await createGroup(app, authToken, groupData);
-
-  const eventData: CreateEventDto = {
-    name: 'Test Event',
-    description: 'An event created for testing purposes',
-    type: 'public',
-    startDate: new Date(),
-    endDate: new Date(new Date().getTime() + 24 * 60 * 60 * 1000), // One day after the start date
-    maxAttendees: 100,
-    location: 'Virtual',
-    locationOnline: 'https://example.com/meeting',
-    categories: [1],
-    is_public: true,
-    image: 'https://example.com/event-image.jpg',
-    lat: 0,
-    lon: 0,
-    status: Status.Published,
-    group: group.id,
-  };
-
-  await createEvent(app, authToken, eventData);
-
-  return { groupData, eventData };
-}
+import {
+  createGroupsAndEvents,
+  deleteGroup,
+  deleteEvent,
+} from '../utils/functions';
 
 describe('Dashboard', () => {
   const app = APP_URL;
@@ -77,20 +20,24 @@ describe('Dashboard', () => {
   let preparedEvent: any;
 
   beforeAll(async () => {
-    authToken = await getAuthToken(app, ADMIN_EMAIL, ADMIN_PASSWORD);
-    const { groupData, eventData } = await createGroupsAndEvents(
+    authToken = await getAuthToken(app, TESTER_EMAIL, TESTER_PASSWORD);
+    const { group, event } = await createGroupsAndEvents(
       app,
-      ADMIN_EMAIL,
-      ADMIN_PASSWORD,
+      TESTER_EMAIL,
+      TESTER_PASSWORD,
     );
-    preparedGroup = groupData;
-    preparedEvent = eventData;
+    preparedGroup = group;
+    preparedEvent = event;
+  });
+  afterAll(async () => {
+    await deleteGroup(app, authToken, preparedGroup.id);
+    await deleteEvent(app, authToken, preparedEvent.id);
   });
 
   describe('my-events', () => {
     describe('when unauthenticated', () => {
       it('should fail with 401', async () => {
-        const server = request.agent(app).set('tenant-id', '1');
+        const server = request.agent(app).set('tenant-id', TESTING_TENANT_ID);
         const req = server.get('/api/dashboard/my-events');
         const response = await req;
         expect(response.status).toBe(401);
@@ -98,10 +45,13 @@ describe('Dashboard', () => {
     });
 
     describe('when authenticated', () => {
-      it('should get created events', async () => {
+      it('should get all events that I am a participant of, or that I created, and no more', async () => {
+        expect(preparedEvent).toBeDefined();
+        expect(preparedEvent.id).toBeDefined();
+
         const server = request
           .agent(app)
-          .set('tenant-id', '1')
+          .set('tenant-id', TESTING_TENANT_ID)
           .set('Authorization', `Bearer ${authToken}`);
 
         const req = server.get('/api/dashboard/my-events');
@@ -109,15 +59,29 @@ describe('Dashboard', () => {
 
         expect(response.status).toBe(200);
         expect(response.body).toBeDefined();
+
+        const hasUserCreatedEvent = response.body.some(
+          (event) => event.user.id === TESTER_USER_ID,
+        );
+        expect(hasUserCreatedEvent).toBe(true);
+
+        // Check if the response contains the prepared event
         expect(response.body).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
-              name: preparedEvent.name,
-              description: preparedEvent.description,
-              type: preparedEvent.type,
+              id: preparedEvent.id,
             }),
           ]),
         );
+
+        // Check if every event in the response has the expected attendee, or was created by the user
+        const hasNoEventsWithoutExpectedAttendee = response.body.every(
+          (event) =>
+            event.attendees.some(
+              (attendee) => attendee.id === TESTER_USER_ID,
+            ) || event.user.id === TESTER_USER_ID,
+        );
+        expect(hasNoEventsWithoutExpectedAttendee).toBe(true);
       });
     });
   });
@@ -125,7 +89,7 @@ describe('Dashboard', () => {
   describe('my-groups', () => {
     describe('when unauthenticated', () => {
       it('should fail with 401', async () => {
-        const server = request.agent(app).set('tenant-id', '1');
+        const server = request.agent(app).set('tenant-id', TESTING_TENANT_ID);
         const req = server.get('/api/dashboard/my-groups');
         const response = await req;
         expect(response.status).toBe(401);
@@ -133,26 +97,29 @@ describe('Dashboard', () => {
     });
 
     describe('when authenticated', () => {
-      // TODO: Fix this test, always empty...
-      it.skip('should get groups', async () => {
+      it('should get all groups that I am a member of, and no more', async () => {
+        expect(preparedGroup).toBeDefined();
+        expect(preparedGroup.id).toBeDefined();
+
         const server = request
           .agent(app)
-          .set('tenant-id', '1')
+          .set('tenant-id', TESTING_TENANT_ID)
           .set('Authorization', `Bearer ${authToken}`);
 
         const req = server.get('/api/dashboard/my-groups');
         const response = await req;
         expect(response.status).toBe(200);
         expect(response.body).toBeDefined();
-        expect(response.body).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({
-              name: preparedGroup.name,
-              description: preparedGroup.description,
-              status: preparedGroup.status,
-            }),
-          ]),
+
+        const hasGroupWithExpectedMember = response.body.some(
+          (group) => group.id === preparedGroup.id,
         );
+        expect(hasGroupWithExpectedMember).toBe(true);
+
+        const hasNoGroupsWithoutExpectedMember = response.body.every((group) =>
+          group.groupMembers.some((member) => member.user.id === 2),
+        );
+        expect(hasNoGroupsWithoutExpectedMember).toBe(true);
       });
     });
   });
