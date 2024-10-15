@@ -61,7 +61,6 @@ describe('User role', () => {
       .set('Authorization', `Bearer ${refreshTokenWithRole}`)
       .set('tenant-id', TESTING_TENANT_ID)
       .send();
-    console.log('Refresh with role:', refreshWithRole.body);
 
     expect(refreshWithRole.status).toBe(200);
 
@@ -70,7 +69,6 @@ describe('User role', () => {
       .set('Authorization', `Bearer ${refreshTokenWithoutRole}`)
       .set('tenant-id', TESTING_TENANT_ID)
       .send();
-    console.log('Refresh without role:', refreshWithoutRole.body);
 
     expect(refreshWithoutRole.status).toBe(200);
 
@@ -84,16 +82,15 @@ describe('User role', () => {
     const responseWithRole = await request(app)
       .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${refreshWithRole.body.token}`)
-      .set('tenant-id', TESTING_TENANT_ID)
-      .expect(200);
-    console.log('Response with role:', responseWithRole.body);
+      .set('tenant-id', TESTING_TENANT_ID);
+
+    expect(responseWithRole.status).toBe(200);
 
     const responseWithoutRole = await request(app)
       .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${refreshWithoutRole.body.token}`)
       .set('tenant-id', TESTING_TENANT_ID)
       .expect(200);
-    console.log('Response without role:', responseWithoutRole.body);
 
     expect(responseWithRole.body.role).toEqual(
       expect.objectContaining({ name: 'User' }),

@@ -5,6 +5,7 @@ import {
   TESTER_PASSWORD,
   MAIL_HOST,
   MAIL_PORT,
+  TESTING_TENANT_ID,
 } from '../utils/constants';
 import { getAuthToken } from '../utils/functions';
 describe('Auth Module', () => {
@@ -21,7 +22,7 @@ describe('Auth Module', () => {
 
   beforeAll(async () => {
     authToken = await getAuthToken(app, TESTER_EMAIL, TESTER_PASSWORD);
-    serverApp = request.agent(app).set('tenant-id', '1');
+    serverApp = request.agent(app).set('tenant-id', TESTING_TENANT_ID);
     serverEmail = request.agent(mail);
   });
 
