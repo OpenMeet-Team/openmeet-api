@@ -2,7 +2,6 @@ import { Visibility } from './../../core/constants/constant';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
-  IsBoolean,
   IsEnum,
   IsNotEmpty,
   IsNumber,
@@ -25,7 +24,7 @@ export class CreateGroupDto {
   })
   @IsString()
   @IsOptional()
-  slug: string;
+  slug?: string;
 
   @ApiProperty({
     description: 'The description of the group',

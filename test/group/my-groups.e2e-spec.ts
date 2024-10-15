@@ -38,6 +38,7 @@ describe('GroupController (e2e)', () => {
       // Create a group
       const newGroup = {
         name: 'Test Group',
+        slug: 'test-group',
         description: 'This is a test group',
       };
 

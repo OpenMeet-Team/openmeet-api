@@ -4,7 +4,6 @@ import {
   IsNotEmpty,
   IsNumber,
   IsOptional,
-  IsBoolean,
   IsString,
   IsEnum,
 } from 'class-validator';
@@ -25,7 +24,7 @@ export class CreateEventDto {
   })
   @IsString()
   @IsOptional()
-  slug: string;
+  slug?: string;
 
   @ApiPropertyOptional({
     description: 'URL of the event image',
@@ -114,14 +113,6 @@ export class CreateEventDto {
   @IsOptional()
   @IsEnum(Status)
   status?: Status;
-
-  @ApiProperty({
-    description: 'Flag indicating if the event is public',
-    example: true,
-  })
-  @IsOptional()
-  @IsBoolean()
-  is_public: boolean;
 
   @ApiProperty({
     description: 'The ID of the user organizing the event',
