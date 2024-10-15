@@ -90,12 +90,15 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
     const event = await this.eventRepository.findOne({
       where: { id },
-      relations: ['user'],
+      relations: ['user', 'attendees', 'group', 'categories'],
     });
 
     if (!event) {
       throw new NotFoundException(`Event with ID ${id} not found`);
     }
+
+    event.attendees = event.attendees.slice(0, 5);
+    event.categories = event.categories.slice(0, 5);
 
     return event;
   }
@@ -112,6 +115,7 @@ export class EventService {
 
     const mappedDto: any = {
       ...updateEventDto,
+      slug: updateEventDto.name,
       user,
       group,
     };

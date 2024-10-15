@@ -13,7 +13,7 @@ import { EventAttendeesEntity } from '../../../../../event-attendee/infrastructu
 import { CategoryEntity } from '../../../../../category/infrastructure/persistence/relational/entities/categories.entity';
 import { GroupEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group.entity';
 import { Expose } from 'class-transformer';
-import { Status } from '../../../../../core/constants/constant';
+import { Status, Visibility } from '../../../../../core/constants/constant';
 
 @Entity({ name: 'events' })
 export class EventEntity extends EntityRelationalHelper {
@@ -22,6 +22,9 @@ export class EventEntity extends EntityRelationalHelper {
 
   @Column({ type: 'varchar', length: 255 })
   name: string;
+
+  @Column({ type: 'varchar', length: 255 })
+  slug: string;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   image: string;
@@ -60,6 +63,13 @@ export class EventEntity extends EntityRelationalHelper {
   })
   status: Status;
 
+  @Column({
+    nullable: true,
+    type: 'enum',
+    enum: Visibility,
+  })
+  visibility: Visibility;
+
   @ManyToOne(() => UserEntity, (user) => user.events)
   @JoinColumn({ name: 'userId' })
   user: UserEntity;
@@ -74,9 +84,9 @@ export class EventEntity extends EntityRelationalHelper {
   @ManyToMany(() => CategoryEntity, (category) => category.events)
   categories: CategoryEntity[];
 
-  @Expose()
-  get attendeesCount(): number {
-    console.log('this.attendees: ', this.attendees);
-    return this.attendees.length;
-  }
+  // @Expose()
+  // get attendeesCount(): number {
+  //   console.log('this.attendees: ', this.attendees);
+  //   return this.attendees.length;
+  // }
 }

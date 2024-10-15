@@ -84,7 +84,7 @@ export class UserService {
     const clonedPayload = {
       ...createProfileDto,
       provider: AuthProvidersEnum.email,
-      role, 
+      role,
       subCategory: subCategoriesEntities,
     };
     if (clonedPayload.password) {
