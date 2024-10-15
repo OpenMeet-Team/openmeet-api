@@ -1,6 +1,6 @@
 import { SelectQueryBuilder, ObjectLiteral } from 'typeorm';
 
-interface PaginationOptions {
+export interface PaginationOptions {
   page: number;
   limit: number;
 }

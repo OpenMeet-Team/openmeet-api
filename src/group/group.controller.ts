@@ -67,9 +67,20 @@ export class GroupController {
     return this.groupService.findAll(pagination, query);
   }
 
+  @Get('me/:id')
+  @ApiOperation({ summary: 'Get group by ID Authenticated' })
+  async findOne(@Param('id') id: number): Promise<GroupEntity> {
+    const group = await this.groupService.findOne(+id);
+    if (!group) {
+      throw new NotFoundException(`Group with ID ${id} not found`);
+    }
+    return group;
+  }
+
+  @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get group by ID' })
-  async findOne(@Param('id') id: number): Promise<GroupEntity> {
+  async findOneProtected(@Param('id') id: number): Promise<GroupEntity> {
     const group = await this.groupService.findOne(+id);
     if (!group) {
       throw new NotFoundException(`Group with ID ${id} not found`);

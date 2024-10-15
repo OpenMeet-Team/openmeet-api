@@ -30,6 +30,8 @@ import { StatusEnum } from '../status/status.enum';
 import { User } from '../user/domain/user';
 import { GroupService } from '../group/group.service';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
+import { RoleService } from '../role/role.service';
+import { RoleEnum } from '../role/role.enum';
 
 @Injectable()
 export class AuthService {
@@ -39,6 +41,7 @@ export class AuthService {
     private groupService: GroupService,
     private sessionService: SessionService,
     private mailService: MailService,
+    private readonly roleService: RoleService,
     private configService: ConfigService<AllConfigType>,
   ) {}
 
@@ -145,13 +148,18 @@ export class AuthService {
         id: StatusEnum.active,
       };
 
+      const role = await this.roleService.findByName(RoleEnum.user);
+      if (!role) {
+        throw new Error(`Role not found: ${RoleEnum.user}`);
+      }
+
       user = await this.userService.create({
         email: socialEmail ?? null,
         firstName: socialData.firstName ?? null,
         lastName: socialData.lastName ?? null,
         socialId: socialData.id,
         provider: authProvider,
-        // role,
+        role: role.id,
         status,
       });
 
@@ -197,13 +205,14 @@ export class AuthService {
   }
 
   async register(dto: AuthRegisterLoginDto): Promise<any> {
+    const role = await this.roleService.findByName(RoleEnum.user);
+    if (!role) {
+      throw new Error(`Role not found: ${RoleEnum.user}`);
+    }
     const user = await this.userService.create({
       ...dto,
       email: dto.email,
-
-      // role: {
-      //   id: RoleEnum.user,
-      // },
+      role: role.id,
       status: {
         id: StatusEnum.active,
       },

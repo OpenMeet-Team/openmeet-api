@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException, Scope } from '@nestjs/common';
+import { Inject, Injectable, Scope } from '@nestjs/common';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { Repository } from 'typeorm';
 import { REQUEST } from '@nestjs/core';

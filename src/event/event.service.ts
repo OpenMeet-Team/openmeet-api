@@ -19,7 +19,16 @@ export class EventService {
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly categoryService: CategoryService,
-  ) {}
+  ) {
+    void this.initializeRepository();
+  }
+
+  private async initializeRepository() {
+    const tenantId = this.request.tenantId;
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    this.eventRepository = dataSource.getRepository(EventEntity);
+  }
 
   async getTenantSpecificEventRepository() {
     const tenantId = this.request.tenantId;
@@ -90,12 +99,15 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
     const event = await this.eventRepository.findOne({
       where: { id },
-      relations: ['user'],
+      relations: ['user', 'attendees', 'group', 'categories'],
     });
 
     if (!event) {
       throw new NotFoundException(`Event with ID ${id} not found`);
     }
+
+    event.attendees = event.attendees.slice(0, 5);
+    event.categories = event.categories.slice(0, 5);
 
     return event;
   }
@@ -112,6 +124,7 @@ export class EventService {
 
     const mappedDto: any = {
       ...updateEventDto,
+      slug: updateEventDto.name,
       user,
       group,
     };
@@ -130,5 +143,24 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
     const event = await this.findOne(id);
     await this.eventRepository.remove(event);
+  }
+  async getEventsByCreator(userId: string) {
+    await this.getTenantSpecificEventRepository();
+    const events = await this.eventRepository.find({
+      where: { user: { id: parseInt(userId, 10) } },
+      relations: ['user', 'attendees'],
+    });
+    return events.map((event) => ({
+      ...event,
+      attendeesCount: event.attendees ? event.attendees.length : 0,
+    }));
+  }
+
+  async getEventsByAttendee(userId: string) {
+    await this.getTenantSpecificEventRepository();
+    return this.eventRepository.find({
+      where: { attendees: { userId } },
+      relations: ['user'],
+    });
   }
 }

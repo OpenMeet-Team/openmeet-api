@@ -67,6 +67,7 @@ export class EventController {
     return this.eventService.findAll(pagination, query);
   }
 
+  @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get event by ID' })
   async findOne(@Param('id') id: number): Promise<EventEntity> {
