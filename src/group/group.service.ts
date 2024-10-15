@@ -67,20 +67,24 @@ export class GroupService {
   async getGroupsByCreator(userId: string): Promise<GroupEntity[]> {
     await this.getTenantSpecificGroupRepository();
     // find where groupMembers user id == userid
-    return this.groupRepository.find({
+    const groups = await this.groupRepository.find({
       where: {
         groupMembers: { user: { id: Number(userId) } },
       },
+      relations: ['groupMembers', 'groupMembers.user'],
     });
+    return groups;
   }
 
   async getGroupsByMember(userId: string): Promise<GroupEntity[]> {
     await this.getTenantSpecificGroupRepository();
-    return this.groupRepository.find({
+    const groups = await this.groupRepository.find({
       where: {
         groupMembers: { user: { id: Number(userId) } },
       },
+      relations: ['groupMembers', 'groupMembers.user'],
     });
+    return groups;
   }
 
   async create(createGroupDto: CreateGroupDto, userId: number): Promise<any> {
@@ -114,7 +118,6 @@ export class GroupService {
       userId,
       groupId: savedGroup.id,
     };
-    console.log('🚀 ~ GroupService ~ create ~ groupMemberDto:', groupMemberDto);
     await this.groupMemberService.createGroupMember(groupMemberDto);
 
     return savedGroup;
@@ -221,6 +224,10 @@ export class GroupService {
   async remove(id: number): Promise<void> {
     await this.getTenantSpecificGroupRepository();
     const group = await this.findOne(id);
+
+    // First, delete all group members associated with the group
+    await this.groupMembersRepository.delete({ group: { id } });
+
     await this.groupRepository.remove(group);
   }
 }

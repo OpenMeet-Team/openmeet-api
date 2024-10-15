@@ -19,7 +19,16 @@ export class EventService {
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly categoryService: CategoryService,
-  ) {}
+  ) {
+    void this.initializeRepository();
+  }
+
+  private async initializeRepository() {
+    const tenantId = this.request.tenantId;
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    this.eventRepository = dataSource.getRepository(EventEntity);
+  }
 
   async getTenantSpecificEventRepository() {
     const tenantId = this.request.tenantId;
