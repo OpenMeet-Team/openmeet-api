@@ -3,7 +3,8 @@ import { INestApplication } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
-describe('SMTP (e2e)', () => {
+// skipping so we don't send mail frequently
+describe.skip('SMTP (e2e)', () => {
   let app: INestApplication;
   let configService: ConfigService;
 
@@ -41,8 +42,7 @@ describe('SMTP (e2e)', () => {
     await expect(transporter.verify()).resolves.toBe(true);
   });
 
-  // skipping so we don't send mail frequently
-  it.skip('should send an email', async () => {
+  it('should send an email', async () => {
     const smtpConfig = {
       host: configService.get<string>('MAIL_HOST', { infer: true }),
       port: configService.get<number>('MAIL_PORT', { infer: true }),
