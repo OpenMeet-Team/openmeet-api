@@ -156,4 +156,13 @@ export class UserEntity extends EntityRelationalHelper {
   @ManyToMany(() => SubCategoryEntity, (SC) => SC.users)
   @JoinTable({ name: 'userInterests' })
   subCategory: SubCategoryEntity[];
+
+  @Expose({ groups: ['me', 'admin'] })
+  @ApiProperty({
+    type: String,
+    example: 'John Doe',
+  })
+  get name(): string {
+    return `${this.firstName || ''} ${this.lastName || ''}`.trim();
+  }
 }
