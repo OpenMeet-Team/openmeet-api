@@ -57,4 +57,12 @@ export class EventAttendeeController {
   ) {
     await this.eventAttendeeService.leaveEvent(userId, eventId);
   }
+
+  @Get(':eventId')
+  getEventAttendees(
+    @Param('eventId') eventId: number,
+    @Query() pagination: PaginationDto,
+  ) {
+    return this.eventAttendeeService.getEventAttendees(eventId, pagination);
+  }
 }

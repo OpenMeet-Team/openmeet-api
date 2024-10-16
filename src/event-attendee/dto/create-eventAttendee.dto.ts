@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsNumber, IsOptional } from 'class-validator';
 
 export class CreateEventAttendeeDto {
   @ApiProperty({
@@ -20,11 +20,12 @@ export class CreateEventAttendeeDto {
   // userId: number;
 
   @ApiProperty({ description: 'RSVP status of the attendee', example: 'going' })
-  @IsString()
+  @IsOptional()
   @IsNotEmpty()
   rsvpStatus: string;
 
   @ApiProperty({ description: 'Is the user a host?', example: false })
   @IsBoolean()
+  @IsOptional()
   isHost: boolean;
 }
