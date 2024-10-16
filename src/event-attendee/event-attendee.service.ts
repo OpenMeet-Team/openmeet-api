@@ -114,4 +114,16 @@ export class EventAttendeeService {
 
     return { message: 'User has successfully left the event' };
   }
+
+  async getEventAttendees(eventId: number, pagination: PaginationDto): Promise<any> {
+    await this.getTenantSpecificEventRepository();
+    
+    const {limit, page} = pagination
+    const eventAttendee = await this.eventAttendeesRepository.createQueryBuilder('eventAttendee')
+        .leftJoinAndSelect('eventAttendee.user', 'user')
+        .leftJoinAndSelect('eventAttendee.event', 'event')
+        .where('event.id = :eventId', { eventId })
+
+        return paginate(eventAttendee, { page, limit });
+}
 }

@@ -7,6 +7,7 @@ import {
   Patch,
   Get,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { GroupMemberService } from './group-member.service';
@@ -15,6 +16,7 @@ import { GroupMemberEntity } from './infrastructure/persistence/relational/entit
 import { JWTAuthGuard } from '../core/guards/auth.guard';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
+import { PaginationDto } from '../utils/dto/pagination.dto';
 
 @ApiTags('Group Members')
 @Controller('group-members')
@@ -48,7 +50,7 @@ export class GroupMemberController {
   }
 
   @Get(':groupId')
-  async getGroupMembers(@Param('groupId') groupId: number) {
-    return this.groupMemberService.getGroupMembers(groupId);
+  async getGroupMembers(@Param('groupId') groupId: number, @Query() pagination: PaginationDto) {
+    return this.groupMemberService.getGroupMembers(groupId, pagination);
   }
 }
