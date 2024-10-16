@@ -101,17 +101,20 @@ export class GroupMemberService {
     return { message: 'User has left the group successfully' };
   }
 
-  async getGroupMembers(groupId: number, pagination: PaginationDto): Promise<any> {
+  async getGroupMembers(
+    groupId: number,
+    pagination: PaginationDto,
+  ): Promise<any> {
     await this.getTenantSpecificEventRepository();
-    
-    const {limit, page} = pagination
-    const groupMembers = await this.groupMemberRepository.createQueryBuilder('groupMember')
-        .leftJoinAndSelect('groupMember.user', 'user')
-        .leftJoinAndSelect('groupMember.groupRole', 'groupRole')
-        .leftJoinAndSelect('groupMember.group', 'group')
-        .where('group.id = :groupId', { groupId })
 
-        return paginate(groupMembers, { page, limit });
-}
+    const { limit, page } = pagination;
+    const groupMembers = await this.groupMemberRepository
+      .createQueryBuilder('groupMember')
+      .leftJoinAndSelect('groupMember.user', 'user')
+      .leftJoinAndSelect('groupMember.groupRole', 'groupRole')
+      .leftJoinAndSelect('groupMember.group', 'group')
+      .where('group.id = :groupId', { groupId });
 
+    return paginate(groupMembers, { page, limit });
+  }
 }

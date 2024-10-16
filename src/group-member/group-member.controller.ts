@@ -50,7 +50,10 @@ export class GroupMemberController {
   }
 
   @Get(':groupId')
-  async getGroupMembers(@Param('groupId') groupId: number, @Query() pagination: PaginationDto) {
+  async getGroupMembers(
+    @Param('groupId') groupId: number,
+    @Query() pagination: PaginationDto,
+  ) {
     return this.groupMemberService.getGroupMembers(groupId, pagination);
   }
 }

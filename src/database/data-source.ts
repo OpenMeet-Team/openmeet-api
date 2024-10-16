@@ -2,8 +2,7 @@ import 'reflect-metadata';
 import { DataSource, DataSourceOptions } from 'typeorm';
 
 export const AppDataSource = (tenantId = '') => {
-  // const schemaName = tenantId ? `tenant_${tenantId}` : '';
-  const schemaName = 'public';
+  const schemaName = tenantId ? `tenant_${tenantId}` : '';
   return new DataSource({
     name: schemaName,
     type: process.env.DATABASE_TYPE,
