@@ -57,13 +57,13 @@ describe('GroupMembersController (e2e)', () => {
 
     expect(getGroupMembersResponse.status).toBe(200);
 
-    const isMemberPresent = getGroupMembersResponse.body.some(
+    const isMemberPresent = getGroupMembersResponse.body.data.some(
       (member) => member.user.id === expectedMemberId,
     );
     expect(isMemberPresent).toBe(true);
 
     if (getGroupMembersResponse.status === 200) {
-      const groupMembers = getGroupMembersResponse.body;
+      const groupMembers = getGroupMembersResponse.body.data;
       const isMemberPresent = groupMembers.some(
         (member) => member.user.id === expectedMemberId,
       );

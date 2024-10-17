@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { APP_URL, TESTER_EMAIL, TESTER_PASSWORD } from '../utils/constants';
+import { APP_URL, TESTER_PASSWORD } from '../utils/constants';
 import { ADMIN_EMAIL } from '../../src/test/utils/constants';
 
 describe('EventAttendeeController (e2e)', () => {
@@ -26,26 +26,25 @@ describe('EventAttendeeController (e2e)', () => {
       .set('tenant-id', '1')
       .send({
         name: 'Test Event',
-        slug: 'test-event',  
-        image: 'test-image.jpg',  
+        slug: 'test-event',
+        image: 'test-image.jpg',
         description: 'A test event',
-        startDate: '2024-12-31T00:00:00Z', 
-        endDate: '2024-12-31T23:59:59Z',  
-        type: 'public',  
+        startDate: '2024-12-31T00:00:00Z',
+        endDate: '2024-12-31T23:59:59Z',
+        type: 'public',
         location: 'Test Location',
-        locationOnline: 'https://test-online-location.com',  
-        maxAttendees: 100,  
-        categories: [1],  
-        lat: 40.7128,  
-        lon: -74.0060,  
-        status: 'draft',  
-        group: 1  
+        locationOnline: 'https://test-online-location.com',
+        maxAttendees: 100,
+        categories: [1],
+        lat: 40.7128,
+        lon: -74.006,
+        status: 'draft',
+        // group: 1,
       });
-  
+
     expect(eventResponse.status).toBe(201);
     return eventResponse.body;
   }
-  
 
   async function attendEvent(token, eventId) {
     const attendResponse = await request(APP_URL)
@@ -62,9 +61,7 @@ describe('EventAttendeeController (e2e)', () => {
 
   beforeEach(async () => {
     token = await loginAsTester();
-    console.log("🚀 ~ beforeEach ~ token:", token)
     testEvent = await createEvent(token);
-    console.log("🚀 ~ beforeEach ~ testEvent:", testEvent)
     await attendEvent(token, testEvent.id);
   });
 
@@ -83,9 +80,6 @@ describe('EventAttendeeController (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .set('tenant-id', '1');
 
-      console.log("🚀 ~ it ~ getMyEventsResponse:", getMyEventsResponse)
-
-
     expect(getMyEventsResponse.status).toBe(200);
     // expect(getMyEventsResponse.body).toHaveLength(1);
     // expect(getMyEventsResponse.body[0].event.id).toBe(testEvent.id);
@@ -98,7 +92,7 @@ describe('EventAttendeeController (e2e)', () => {
       .set('tenant-id', '1');
 
     expect(getEventAttendeesResponse.status).toBe(200);
-    const isTesterAttending = getEventAttendeesResponse.body.some(
+    const isTesterAttending = getEventAttendeesResponse.body.data.some(
       (attendee) => attendee.user.id === 1, // assuming the tester has user ID 1
     );
     expect(isTesterAttending).toBe(true);
@@ -118,7 +112,7 @@ describe('EventAttendeeController (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .set('tenant-id', '1');
 
-    const isTesterStillAttending = getEventAttendeesResponse.body.some(
+    const isTesterStillAttending = getEventAttendeesResponse.body.data.some(
       (attendee) => attendee.user.id === 1,
     );
     expect(isTesterStillAttending).toBe(false);

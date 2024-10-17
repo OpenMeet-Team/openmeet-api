@@ -4,13 +4,13 @@ import { EventEntity } from '../../../../../event/infrastructure/persistence/rel
 
 @Entity({ name: 'eventAttendees' })
 export class EventAttendeesEntity {
-  @PrimaryColumn({ type: 'uuid' })
+  @PrimaryColumn({ type: 'int' })
   eventId: string;
 
-  @PrimaryColumn({ type: 'uuid' })
+  @PrimaryColumn({ type: 'int' })
   userId: string;
 
-  @Column({ type: 'text' })
+  @Column({ type: 'text', nullable: true })
   rsvpStatus: string;
 
   @Column({ type: 'boolean', default: false })

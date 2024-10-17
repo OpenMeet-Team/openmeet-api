@@ -59,7 +59,10 @@ export class EventAttendeeController {
   }
 
   @Get(':eventId')
-  async getEventAttendees(@Param('eventId') eventId: number, @Query() pagination: PaginationDto) {
+  getEventAttendees(
+    @Param('eventId') eventId: number,
+    @Query() pagination: PaginationDto,
+  ) {
     return this.eventAttendeeService.getEventAttendees(eventId, pagination);
   }
 }
