@@ -62,12 +62,16 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
 
     const { page, limit } = pagination;
-    const { search, userId, fromDate, toDate } = query;
+    const { search, userId, fromDate, toDate, categories, location, type } =
+      query;
     console.log('🚀 ~ EventService ~ findAll ~ userId:', userId);
 
     const eventQuery = this.eventRepository
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.user', 'user')
+      .leftJoinAndSelect('event.categories', 'categories')
+      .leftJoinAndSelect('event.group', 'group')
+      .leftJoinAndSelect('event.attendees', 'attendees')
       .where('event.status = :status', { status: Status.Published });
 
     if (userId) {
@@ -76,9 +80,25 @@ export class EventService {
 
     if (search) {
       eventQuery.andWhere(
-        '(event.name LIKE :search OR event.description LIKE :search)',
+        `(event.name LIKE :search OR 
+          event.description LIKE :search OR 
+          event.location LIKE :search OR 
+          CAST(event.lat AS TEXT) LIKE :search OR 
+          CAST(event.lon AS TEXT) LIKE :search)`,
         { search: `%${search}%` },
       );
+    }
+
+    if (location) {
+      eventQuery.andWhere('event.location LIKE :location', {
+        location: `%${location}%`,
+      });
+    }
+
+    if (type) {
+      eventQuery.andWhere('event.type LIKE :type', {
+        type: `%${type}%`,
+      });
     }
 
     if (fromDate && toDate) {
@@ -90,6 +110,19 @@ export class EventService {
       eventQuery.andWhere('event.createdAt >= :fromDate', { fromDate });
     } else if (toDate) {
       eventQuery.andWhere('event.createdAt <= :toDate', { toDate: new Date() });
+    }
+
+    if (categories && categories.length > 0) {
+      const likeConditions = categories
+        .map((_, index) => `categories.name LIKE :category${index}`)
+        .join(' OR ');
+
+      const likeParameters = categories.reduce((acc, category, index) => {
+        acc[`category${index}`] = `%${category}%`;
+        return acc;
+      }, {});
+
+      eventQuery.andWhere(`(${likeConditions})`, likeParameters);
     }
 
     return paginate(eventQuery, { page, limit });
@@ -144,10 +177,10 @@ export class EventService {
     const event = await this.findOne(id);
     await this.eventRepository.remove(event);
   }
-  async getEventsByCreator(userId: string) {
+  async getEventsByCreator(userId: number) {
     await this.getTenantSpecificEventRepository();
     const events = await this.eventRepository.find({
-      where: { user: { id: parseInt(userId, 10) } },
+      where: { user: { id: userId } },
       relations: ['user', 'attendees'],
     });
     return events.map((event) => ({
@@ -156,7 +189,7 @@ export class EventService {
     }));
   }
 
-  async getEventsByAttendee(userId: string) {
+  async getEventsByAttendee(userId: number) {
     await this.getTenantSpecificEventRepository();
     return this.eventRepository.find({
       where: { attendees: { userId } },

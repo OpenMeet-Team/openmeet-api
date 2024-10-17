@@ -9,7 +9,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Status } from '../../core/constants/constant';
+import { Status, Visibility } from '../../core/constants/constant';
 
 export class CreateEventDto {
   @ApiProperty({
@@ -107,12 +107,20 @@ export class CreateEventDto {
   lon: number;
 
   @ApiPropertyOptional({
-    description: 'The status of the group',
+    description: 'The status of the event',
     enum: Status,
   })
   @IsOptional()
   @IsEnum(Status)
   status?: Status;
+
+  @ApiPropertyOptional({
+    description: 'The visibility of the event',
+    enum: Visibility,
+  })
+  @IsOptional()
+  @IsEnum(Visibility)
+  visibility?: Visibility;
 
   @ApiProperty({
     description: 'The ID of the user organizing the event',

@@ -115,6 +115,7 @@ export class GroupService {
     const group = this.groupRepository.create(mappedGroupDto);
     const savedGroup = await this.groupRepository.save(group);
     const groupMemberDto = {
+      requiredApproval: false,
       userId,
       groupId: savedGroup.id,
     };
@@ -162,7 +163,12 @@ export class GroupService {
 
     if (search) {
       groupQuery.andWhere(
-        '(group.name LIKE :search OR group.description LIKE :search)',
+        `(group.name LIKE :search OR 
+          group.description LIKE :search OR 
+          group.location LIKE :search OR 
+          group.type LIKE :search OR 
+          CAST(group.lat AS TEXT) LIKE :search OR 
+          CAST(group.lon AS TEXT) LIKE :search)`,
         { search: `%${search}%` },
       );
     }
@@ -174,7 +180,7 @@ export class GroupService {
     await this.getTenantSpecificGroupRepository();
     const group = await this.groupRepository.findOne({
       where: { id },
-      relations: ['events', 'groupMembers', 'createdBy'],
+      relations: ['events', 'groupMembers', 'groupMembers.user', 'createdBy'],
     });
 
     if (!group) {
@@ -185,6 +191,18 @@ export class GroupService {
     group.groupMembers = group.groupMembers.slice(0, 5);
 
     return group;
+  }
+
+  async findGroupEvent(id: number): Promise<any> {
+    await this.getTenantSpecificGroupRepository();
+    const groupQuery = this.groupRepository
+      .createQueryBuilder('group')
+      .leftJoinAndSelect('group.events', 'events')
+      .where('group.id = :id', { id })
+      .andWhere('events.status = :status', { status: Status.Published })
+      .getOne();
+
+    return groupQuery;
   }
 
   async update(

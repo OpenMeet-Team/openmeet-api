@@ -16,6 +16,7 @@ import { GroupUserPermissionEntity } from './group-user-permission.entity';
 import slugify from 'slugify';
 import { Status, Visibility } from '../../../../../core/constants/constant';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
+import { Expose } from 'class-transformer';
 
 @Entity({ name: 'groups' })
 export class GroupEntity extends EntityRelationalHelper {
@@ -88,5 +89,11 @@ export class GroupEntity extends EntityRelationalHelper {
     if (!this.slug) {
       this.slug = slugify(this.name, { lower: true });
     }
+  }
+
+  @Expose()
+  get membersCount(): number {
+    console.log('this.attendees: ', this.groupMembers);
+    return this.groupMembers ? this.groupMembers.length : 0;
   }
 }

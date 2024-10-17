@@ -1,15 +1,21 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsNotEmpty, IsNumber } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsBoolean,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { GroupRole } from '../../core/constants/constant';
 
 export class CreateGroupMemberDto {
-  // @ApiProperty({
-  //   description: 'Name of the group member',
-  // })
-  // @IsNotEmpty()
-  // @IsString()
-  // name: string;
+  @ApiPropertyOptional({
+    description: 'Approval of the group member',
+  })
+  @IsOptional()
+  @IsBoolean()
+  requiredApproval: boolean;
 
   @ApiProperty({
     description: 'ID of the user associated with the group member',
