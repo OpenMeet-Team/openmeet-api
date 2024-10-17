@@ -1,6 +1,16 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsNotEmpty, IsNumber, IsOptional } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+} from 'class-validator';
+import {
+  EventAttendeeRole,
+  EventAttendeeStatus,
+} from '../../core/constants/constant';
 
 export class CreateEventAttendeeDto {
   @ApiProperty({
@@ -28,4 +38,20 @@ export class CreateEventAttendeeDto {
   @IsBoolean()
   @IsOptional()
   isHost: boolean;
+
+  @ApiPropertyOptional({
+    description: 'The status of the Event Attendee',
+    enum: EventAttendeeStatus,
+  })
+  @IsOptional()
+  @IsEnum(EventAttendeeStatus)
+  status?: EventAttendeeStatus;
+
+  @ApiPropertyOptional({
+    description: 'The role of the Event Attendee',
+    enum: EventAttendeeRole,
+  })
+  @IsOptional()
+  @IsEnum(EventAttendeeRole)
+  role?: EventAttendeeRole;
 }

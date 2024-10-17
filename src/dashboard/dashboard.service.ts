@@ -29,7 +29,7 @@ export class DashboardService {
     this.groupRepository = dataSource.getRepository(GroupEntity);
   }
 
-  async getMyEvents(userId: string): Promise<EventEntity[]> {
+  async getMyEvents(userId: number): Promise<EventEntity[]> {
     try {
       const createdEvents = await this.eventService.getEventsByCreator(userId);
       const attendingEvents =

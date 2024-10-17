@@ -60,7 +60,7 @@ const createEventDto: CreateEventDto = {
   categories: [mockCategory.id],
   lat: 0,
   lon: 0,
-  is_public: true,
+  // is_public: true,
 };
 
 const mockEvent: Partial<EventEntity> = {
@@ -111,17 +111,13 @@ describe('EventController', () => {
   describe('Event Service Methods', () => {
     it('should get events by creator', async () => {
       mockEventService.getEventsByCreator.mockResolvedValue([mockEvent]);
-      const events = await eventService.getEventsByCreator(
-        mockUser.id.toString(),
-      );
+      const events = await eventService.getEventsByCreator(mockUser.id);
       expect(events).toEqual([mockEvent]);
     });
 
     it('should get events by attendee', async () => {
       mockEventService.getEventsByAttendee.mockResolvedValue([mockEvent]);
-      const events = await eventService.getEventsByAttendee(
-        mockUser.id.toString(),
-      );
+      const events = await eventService.getEventsByAttendee(mockUser.id);
       expect(events).toEqual([mockEvent]);
     });
 
@@ -172,6 +168,9 @@ describe('EventController', () => {
         userId: mockUser.id,
         fromDate: new Date('2023-01-01').toISOString(),
         toDate: new Date().toISOString(),
+        location: 'New York',
+        type: 'conference',
+        categories: ['Technology'],
       };
       const result = await controller.findAll(
         pagination,
@@ -234,17 +233,13 @@ describe('EventController', () => {
   describe('Event Service Methods', () => {
     it('should get events by creator', async () => {
       mockEventService.getEventsByCreator.mockResolvedValue([mockEvent]);
-      const events = await eventService.getEventsByCreator(
-        mockUser.id.toString(),
-      );
+      const events = await eventService.getEventsByCreator(mockUser.id);
       expect(events).toEqual([mockEvent]);
     });
 
     it('should get events by attendee', async () => {
       mockEventService.getEventsByAttendee.mockResolvedValue([mockEvent]);
-      const events = await eventService.getEventsByAttendee(
-        mockUser.id.toString(),
-      );
+      const events = await eventService.getEventsByAttendee(mockUser.id);
       expect(events).toEqual([mockEvent]);
     });
 
