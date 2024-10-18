@@ -36,8 +36,6 @@ export class EventAttendeeService {
     const user = { id: userId };
 
     const mappedDto: DeepPartial<EventAttendeesEntity> = {
-      rsvpStatus: createEventAttendeeDto.rsvpStatus,
-      isHost: createEventAttendeeDto.isHost,
       status: createEventAttendeeDto.status,
       role: createEventAttendeeDto.role,
       event, // Attach the event object

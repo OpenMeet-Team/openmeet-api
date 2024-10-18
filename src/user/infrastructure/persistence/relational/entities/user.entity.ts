@@ -157,7 +157,7 @@ export class UserEntity extends EntityRelationalHelper {
   @JoinTable({ name: 'userInterests' })
   subCategory: SubCategoryEntity[];
 
-  @Expose({ groups: ['me', 'admin'] })
+  @Expose()
   @ApiProperty({
     type: String,
     example: 'John Doe',

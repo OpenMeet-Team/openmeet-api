@@ -19,12 +19,12 @@ export class CreateGroupDto {
   @IsString()
   name: string;
 
-  @ApiProperty({
-    description: 'The slug of the group',
-  })
-  @IsString()
-  @IsOptional()
-  slug?: string;
+  // @ApiProperty({
+  //   description: 'The slug of the group',
+  // })
+  // @IsString()
+  // @IsOptional()
+  // slug?: string;
 
   @ApiProperty({
     description: 'The description of the group',

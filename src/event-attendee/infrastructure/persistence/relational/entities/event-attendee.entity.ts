@@ -5,7 +5,6 @@ import {
   EventAttendeeRole,
   EventAttendeeStatus,
 } from '../../../../../core/constants/constant';
-import { name } from 'aws-sdk/clients/importexport';
 
 @Entity({ name: 'eventAttendees' })
 export class EventAttendeesEntity {
@@ -14,12 +13,6 @@ export class EventAttendeesEntity {
 
   @PrimaryColumn()
   userId: number;
-
-  @Column({ type: 'text', nullable: true })
-  rsvpStatus: string;
-
-  @Column({ type: 'boolean', default: false })
-  isHost: boolean;
 
   @Column({
     nullable: true,

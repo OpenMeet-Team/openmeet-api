@@ -92,7 +92,7 @@ export class GroupEntity extends EntityRelationalHelper {
   }
 
   @Expose()
-  get membersCount(): number {
+  get groupMembersCount(): number {
     console.log('this.attendees: ', this.groupMembers);
     return this.groupMembers ? this.groupMembers.length : 0;
   }

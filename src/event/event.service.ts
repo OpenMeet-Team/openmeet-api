@@ -10,6 +10,7 @@ import { QueryEventDto } from './dto/query-events.dto';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { paginate } from '../utils/generic-pagination';
 import { Status } from '../core/constants/constant';
+import slugify from 'slugify';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -48,9 +49,15 @@ export class EventService {
       createEventDto.categories,
     );
 
+    const slugifiedName = slugify(createEventDto.name, {
+      strict: true,
+      lower: true,
+    });
+
     const mappedDto = {
       ...createEventDto,
       user,
+      slug: slugifiedName,
       group,
       categories,
     };
@@ -132,7 +139,13 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
     const event = await this.eventRepository.findOne({
       where: { id },
-      relations: ['user', 'attendees', 'group', 'categories'],
+      relations: [
+        'user',
+        'attendees',
+        'group',
+        'group.groupMembers',
+        'categories',
+      ],
     });
 
     if (!event) {
@@ -145,6 +158,23 @@ export class EventService {
     return event;
   }
 
+  async findRandom(): Promise<EventEntity[]> {
+    await this.getTenantSpecificEventRepository();
+
+    const events = await this.eventRepository.find();
+
+    if (!events || events.length === 0) {
+      throw new NotFoundException(`Events not found`);
+    }
+
+    const shuffledEvents = events.sort(() => 0.5 - Math.random());
+
+    const randomEvents = shuffledEvents.slice(0, 5);
+
+    return randomEvents;
+}
+
+
   async update(
     id: number,
     updateEventDto: UpdateEventDto,
@@ -155,9 +185,18 @@ export class EventService {
     const group = updateEventDto.group ? { id: updateEventDto.group } : null;
     const user = { id: userId };
 
+    let slugifiedName = '';
+
+    if (updateEventDto.name) {
+      slugifiedName = slugify(updateEventDto.name, {
+        strict: true,
+        lower: true,
+      });
+    }
+
     const mappedDto: any = {
       ...updateEventDto,
-      slug: updateEventDto.name,
+      slug: slugifiedName,
       user,
       group,
     };

@@ -13,6 +13,8 @@ import { GroupMemberService } from '../group-member/group-member.service';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { paginate } from '../utils/generic-pagination';
 import { QueryGroupDto } from './dto/group-query.dto';
+import slugify from 'slugify';
+import { EventService } from '../event/event.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -25,6 +27,7 @@ export class GroupService {
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly categoryService: CategoryService,
     private readonly groupMemberService: GroupMemberService,
+    private readonly eventService: EventService,
   ) {}
 
   async getTenantSpecificGroupRepository() {
@@ -106,8 +109,14 @@ export class GroupService {
       );
     }
 
+    const slugifiedName = slugify(createGroupDto.name, {
+      strict: true,
+      lower: true,
+    });
+
     const mappedGroupDto = {
       ...createGroupDto,
+      slug: slugifiedName,
       categories: categoryEntities,
       createdBy: { id: userId },
     };
@@ -180,7 +189,13 @@ export class GroupService {
     await this.getTenantSpecificGroupRepository();
     const group = await this.groupRepository.findOne({
       where: { id },
-      relations: ['events', 'groupMembers', 'groupMembers.user', 'createdBy'],
+      relations: [
+        'events',
+        'groupMembers',
+        'groupMembers.user',
+        'createdBy',
+        'categories',
+      ],
     });
 
     if (!group) {
@@ -191,6 +206,26 @@ export class GroupService {
     group.groupMembers = group.groupMembers.slice(0, 5);
 
     return group;
+  }
+
+
+  async findRandomEvents(id: number): Promise<any> {
+    await this.getTenantSpecificGroupRepository();
+    const group = await this.groupRepository.findOne({
+      where: { id }
+    });
+
+    if (!group) {
+      throw new Error('Group not found');
+    }
+
+    const events = this.eventService.findRandom();
+    const groupWithEvents = {
+      ...group, 
+      recommendedEvents: events 
+    };
+
+    return groupWithEvents;
   }
 
   async findGroupEvent(id: number): Promise<any> {
@@ -229,9 +264,18 @@ export class GroupService {
       );
     }
 
+    let slugifiedName = '';
+
+    if (updateGroupDto.name) {
+      slugifiedName = slugify(updateGroupDto.name, {
+        strict: true,
+        lower: true,
+      });
+    }
+
     const mappedGroupDto = {
       ...updateGroupDto,
-      slug: updateGroupDto.name,
+      slug: slugifiedName,
       categories: categoryEntities,
     };
 
