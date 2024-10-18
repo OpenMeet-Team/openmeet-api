@@ -29,6 +29,20 @@ export class EventAttendeesEntity {
   })
   role: EventAttendeeRole;
 
+  @Column({
+    nullable: true,
+    type: 'enum',
+    enum: EventAttendeeStatus,
+  })
+  status: EventAttendeeStatus;
+
+  @Column({
+    nullable: true,
+    type: 'enum',
+    enum: EventAttendeeRole,
+  })
+  role: EventAttendeeRole;
+
   @ManyToOne(() => EventEntity, (event) => event.attendees, {
     onDelete: 'CASCADE',
   })
