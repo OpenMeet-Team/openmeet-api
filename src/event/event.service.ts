@@ -158,6 +158,23 @@ export class EventService {
     return event;
   }
 
+  async findRandom(): Promise<EventEntity[]> {
+    await this.getTenantSpecificEventRepository();
+
+    const events = await this.eventRepository.find();
+
+    if (!events || events.length === 0) {
+      throw new NotFoundException(`Events not found`);
+    }
+
+    const shuffledEvents = events.sort(() => 0.5 - Math.random());
+
+    const randomEvents = shuffledEvents.slice(0, 5);
+
+    return randomEvents;
+}
+
+
   async update(
     id: number,
     updateEventDto: UpdateEventDto,

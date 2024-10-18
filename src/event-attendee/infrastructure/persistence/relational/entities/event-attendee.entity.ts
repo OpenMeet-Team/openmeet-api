@@ -5,7 +5,6 @@ import {
   EventAttendeeRole,
   EventAttendeeStatus,
 } from '../../../../../core/constants/constant';
-import { name } from 'aws-sdk/clients/importexport';
 
 @Entity({ name: 'eventAttendees' })
 export class EventAttendeesEntity {
@@ -14,20 +13,6 @@ export class EventAttendeesEntity {
 
   @PrimaryColumn()
   userId: number;
-
-  @Column({
-    nullable: true,
-    type: 'enum',
-    enum: EventAttendeeStatus,
-  })
-  status: EventAttendeeStatus;
-
-  @Column({
-    nullable: true,
-    type: 'enum',
-    enum: EventAttendeeRole,
-  })
-  role: EventAttendeeRole;
 
   @Column({
     nullable: true,

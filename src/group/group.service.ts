@@ -14,6 +14,7 @@ import { PaginationDto } from '../utils/dto/pagination.dto';
 import { paginate } from '../utils/generic-pagination';
 import { QueryGroupDto } from './dto/group-query.dto';
 import slugify from 'slugify';
+import { EventService } from '../event/event.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -26,6 +27,7 @@ export class GroupService {
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly categoryService: CategoryService,
     private readonly groupMemberService: GroupMemberService,
+    private readonly eventService: EventService,
   ) {}
 
   async getTenantSpecificGroupRepository() {
@@ -204,6 +206,26 @@ export class GroupService {
     group.groupMembers = group.groupMembers.slice(0, 5);
 
     return group;
+  }
+
+
+  async findRandomEvents(id: number): Promise<any> {
+    await this.getTenantSpecificGroupRepository();
+    const group = await this.groupRepository.findOne({
+      where: { id }
+    });
+
+    if (!group) {
+      throw new Error('Group not found');
+    }
+
+    const events = this.eventService.findRandom();
+    const groupWithEvents = {
+      ...group, 
+      recommendedEvents: events 
+    };
+
+    return groupWithEvents;
   }
 
   async findGroupEvent(id: number): Promise<any> {
