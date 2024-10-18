@@ -112,6 +112,7 @@ export class GroupMemberService {
       .createQueryBuilder('groupMember')
       .leftJoinAndSelect('groupMember.user', 'user')
       .leftJoinAndSelect('groupMember.groupRole', 'groupRole')
+      .leftJoinAndSelect('groupRole.groupPermissions', 'groupPermissions')
       .leftJoinAndSelect('groupMember.group', 'group')
       .where('group.id = :groupId', { groupId });
 

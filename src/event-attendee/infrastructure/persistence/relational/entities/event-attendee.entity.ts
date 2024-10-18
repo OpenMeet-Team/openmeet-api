@@ -15,12 +15,6 @@ export class EventAttendeesEntity {
   @PrimaryColumn()
   userId: number;
 
-  @Column({ type: 'text', nullable: true })
-  rsvpStatus: string;
-
-  @Column({ type: 'boolean', default: false })
-  isHost: boolean;
-
   @Column({
     nullable: true,
     type: 'enum',

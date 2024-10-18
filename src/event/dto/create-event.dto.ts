@@ -19,12 +19,12 @@ export class CreateEventDto {
   @IsString()
   name: string;
 
-  @ApiProperty({
-    description: 'The slug of the group',
-  })
-  @IsString()
-  @IsOptional()
-  slug?: string;
+  // @ApiProperty({
+  //   description: 'The slug of the group',
+  // })
+  // @IsString()
+  // @IsOptional()
+  // slug?: string;
 
   @ApiPropertyOptional({
     description: 'URL of the event image',

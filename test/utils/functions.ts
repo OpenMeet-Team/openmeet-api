@@ -60,7 +60,6 @@ export async function createGroupsAndEvents(
 
   const eventData: CreateEventDto = {
     name: 'Test Event',
-    slug: 'test-event',
     description: 'An event created for testing purposes',
     type: 'public',
     startDate: new Date(),

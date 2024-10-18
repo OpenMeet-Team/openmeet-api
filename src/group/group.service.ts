@@ -13,6 +13,7 @@ import { GroupMemberService } from '../group-member/group-member.service';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { paginate } from '../utils/generic-pagination';
 import { QueryGroupDto } from './dto/group-query.dto';
+import slugify from 'slugify';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -106,8 +107,14 @@ export class GroupService {
       );
     }
 
+    const slugifiedName = slugify(createGroupDto.name, {
+      strict: true,
+      lower: true,
+    });
+
     const mappedGroupDto = {
       ...createGroupDto,
+      slug: slugifiedName,
       categories: categoryEntities,
       createdBy: { id: userId },
     };
@@ -180,7 +187,13 @@ export class GroupService {
     await this.getTenantSpecificGroupRepository();
     const group = await this.groupRepository.findOne({
       where: { id },
-      relations: ['events', 'groupMembers', 'groupMembers.user', 'createdBy'],
+      relations: [
+        'events',
+        'groupMembers',
+        'groupMembers.user',
+        'createdBy',
+        'categories',
+      ],
     });
 
     if (!group) {
@@ -229,9 +242,18 @@ export class GroupService {
       );
     }
 
+    let slugifiedName = '';
+
+    if (updateGroupDto.name) {
+      slugifiedName = slugify(updateGroupDto.name, {
+        strict: true,
+        lower: true,
+      });
+    }
+
     const mappedGroupDto = {
       ...updateGroupDto,
-      slug: updateGroupDto.name,
+      slug: slugifiedName,
       categories: categoryEntities,
     };
 
