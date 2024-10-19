@@ -15,6 +15,7 @@ import { paginate } from '../utils/generic-pagination';
 import { QueryGroupDto } from './dto/group-query.dto';
 import slugify from 'slugify';
 import { EventService } from '../event/event.service';
+import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -88,6 +89,51 @@ export class GroupService {
       relations: ['groupMembers', 'groupMembers.user'],
     });
     return groups;
+  }
+
+  // Get recommended events for a group, suppliment with random events if not enough
+  async getRecommendedEvents(
+    groupId: string,
+    minEvents: number = 3,
+    maxEvents: number = 5,
+  ): Promise<EventEntity[]> {
+    await this.getTenantSpecificGroupRepository();
+
+    const group = await this.groupRepository.findOne({
+      where: { id: Number(groupId) },
+      relations: ['categories'],
+    });
+
+    if (!group) {
+      throw new NotFoundException(`Group with ID ${groupId} not found`);
+    }
+
+    const categoryIds = group.categories.map((c) => c.id);
+
+    let recommendedEvents =
+      await this.eventService.findRecommendedEventsForGroup(
+        Number(groupId),
+        categoryIds,
+        minEvents,
+        maxEvents,
+      );
+
+    if (recommendedEvents.length < maxEvents) {
+      const additionalEvents = await this.eventService.findRandomEventsForGroup(
+        Number(groupId),
+        recommendedEvents.map((e) => e.id),
+        minEvents,
+        maxEvents - recommendedEvents.length,
+      );
+      recommendedEvents = [...recommendedEvents, ...additionalEvents];
+    }
+    //  deduplicate events
+    const uniqueEvents = recommendedEvents.filter(
+      (event, index, self) =>
+        index === self.findIndex((t) => t.id === event.id),
+    );
+
+    return uniqueEvents.slice(0, maxEvents);
   }
 
   async create(createGroupDto: CreateGroupDto, userId: number): Promise<any> {

@@ -11,7 +11,7 @@ import { PaginationDto } from '../utils/dto/pagination.dto';
 import { paginate } from '../utils/generic-pagination';
 import { Status } from '../core/constants/constant';
 import slugify from 'slugify';
-
+import { HttpException, HttpStatus } from '@nestjs/common';
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
   private eventRepository: Repository<EventEntity>;
@@ -172,6 +172,70 @@ export class EventService {
     const randomEvents = shuffledEvents.slice(0, 5);
 
     return randomEvents;
+  }
+
+  async findRecommendedEventsForGroup(
+    groupId: number,
+    categoryIds: number[],
+    minEvents: number = 3,
+    maxEvents: number = 5,
+  ): Promise<EventEntity[]> {
+    await this.getTenantSpecificEventRepository();
+
+    try {
+      const recommendedEvents = await this.eventRepository
+        .createQueryBuilder('event')
+        .leftJoinAndSelect('event.categories', 'category')
+        .where('event.status = :status', { status: Status.Published })
+        .andWhere('event.groupId != :groupId', { groupId })
+        .andWhere('category.id IN (:...categoryIds)', { categoryIds })
+        .orderBy('RANDOM()')
+        .take(maxEvents)
+        .getMany();
+      if (recommendedEvents.length < minEvents) {
+        throw new NotFoundException(
+          `Not enough events found for group ${groupId}, looking for ${minEvents} events but found ${recommendedEvents.length}`,
+        );
+      }
+      return recommendedEvents;
+    } catch (error) {
+      console.log('error in eventService findRecommendedEventsForGroup', error);
+      return [];
+    }
+  }
+
+  async findRandomEventsForGroup(
+    groupId: number,
+    excludeEventIds: number[] = [],
+    minEvents: number = 3,
+    maxEvents: number = 5,
+  ): Promise<EventEntity[]> {
+    let events: EventEntity[] = [];
+
+    if (maxEvents < minEvents || minEvents < 0 || maxEvents < 0) {
+      return [];
+    }
+
+    await this.getTenantSpecificEventRepository();
+    try {
+      events = await this.eventRepository
+        .createQueryBuilder('event')
+        .where('event.status = :status', { status: Status.Published })
+        .andWhere('event.groupId != :groupId', { groupId })
+        .andWhere('event.id NOT IN (:...excludeEventIds)', { excludeEventIds })
+        .orderBy('RANDOM()')
+        .take(maxEvents)
+        .getMany();
+    } catch (error) {
+      console.log('error in eventService findRandomEventsForGroup', error);
+      return [];
+    }
+    if (!events || events.length < minEvents) {
+      throw new NotFoundException(
+        `Not enough events found for group ${groupId}, looking for ${minEvents} events but found ${events.length}`,
+      );
+    }
+    return events;
   }
 
   async update(

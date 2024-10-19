@@ -23,6 +23,8 @@ import { PaginationDto } from '../utils/dto/pagination.dto';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
 import { QueryGroupDto } from './dto/group-query.dto';
+import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
+import { HttpException, HttpStatus } from '@nestjs/common';
 
 @ApiTags('Groups')
 @Controller('groups')
@@ -121,5 +123,35 @@ export class GroupController {
   @ApiOperation({ summary: 'Delete a group by ID' })
   async remove(@Param('id') id: number): Promise<void> {
     return this.groupService.remove(+id);
+  }
+
+  @Get(':id/recommended-events')
+  @ApiOperation({ summary: 'Get some recommended events for a specific group' })
+  async getRecommendedEvents(
+    @Param('id') id: string,
+    @Query('minEvents') minEvents: number = 3,
+    @Query('maxEvents') maxEvents: number = 5,
+  ): Promise<EventEntity[]> {
+    try {
+      const recommendedEvents = await this.groupService.getRecommendedEvents(
+        id,
+        minEvents,
+        maxEvents,
+      );
+
+      if (recommendedEvents.length < minEvents) {
+        throw new HttpException(
+          'Not enough recommended events found',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      return recommendedEvents.slice(
+        0,
+        Math.min(maxEvents, recommendedEvents.length),
+      );
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.NOT_FOUND);
+    }
   }
 }
