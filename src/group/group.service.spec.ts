@@ -96,7 +96,7 @@ describe('GroupService', () => {
     it('should throw NotFoundException if group is not found', async () => {
       jest.spyOn(service['groupRepository'], 'findOne').mockResolvedValue(null);
 
-      await expect(service.getRecommendedEvents('1')).rejects.toThrow(
+      await expect(service.getRecommendedEvents(1)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -121,7 +121,7 @@ describe('GroupService', () => {
         .mockResolvedValue(mockEvents as any);
 
       const result = await service.getRecommendedEvents(
-        '1',
+        1,
         minEvents,
         maxEvents,
       );
@@ -154,7 +154,7 @@ describe('GroupService', () => {
         .mockResolvedValue(mockRandomEvents as any);
 
       const result = await service.getRecommendedEvents(
-        '1',
+        1,
         minEvents,
         maxEvents,
       );
@@ -192,7 +192,7 @@ describe('GroupService', () => {
         .mockResolvedValue(mockRandomEvents as any);
 
       const result = await service.getRecommendedEvents(
-        '1',
+        1,
         minEvents,
         maxEvents,
       );

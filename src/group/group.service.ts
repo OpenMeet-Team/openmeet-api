@@ -93,7 +93,7 @@ export class GroupService {
 
   // Get recommended events for a group, suppliment with random events if not enough
   async getRecommendedEvents(
-    groupId: string,
+    groupId: number,
     minEvents: number = 3,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {

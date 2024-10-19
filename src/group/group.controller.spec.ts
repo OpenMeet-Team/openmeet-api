@@ -39,7 +39,7 @@ describe('GroupController', () => {
         .mockResolvedValue(mockEvents as EventEntity[]);
 
       const result = await controller.getRecommendedEvents(
-        '1',
+        1,
         minEvents,
         maxEvents,
       );
@@ -51,12 +51,12 @@ describe('GroupController', () => {
     it('should return empty array when limits are not valid', async () => {
       jest.spyOn(groupService, 'getRecommendedEvents').mockResolvedValue([]);
 
-      const result = await controller.getRecommendedEvents('1', -1, 5);
+      const result = await controller.getRecommendedEvents(1, -1, 5);
       expect(result).toEqual([]);
     });
 
     it('should throw NotFoundException when group is not found', async () => {
-      const eventId = '99999999';
+      const eventId = 99999999;
       jest
         .spyOn(groupService, 'getRecommendedEvents')
         .mockRejectedValue(new Error('Not Found'));

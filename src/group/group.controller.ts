@@ -89,13 +89,14 @@ export class GroupController {
     return group;
   }
 
-  @Get(':id/recomemded-events')
+  @Get(':id/recommended-events')
   @ApiOperation({ summary: 'Get group recomemded event by ID Authenticated' })
-  async findRecommendedEvent(@Param('id') id: number): Promise<GroupEntity> {
-    const group = await this.groupService.findRandomEvents(+id);
-    if (!group) {
+  async findRecommendedEvent(@Param('id') id: number): Promise<EventEntity[]> {
+    if (!id) {
       throw new NotFoundException(`Group with ID ${id} not found`);
     }
+    const group: EventEntity[] =
+      await this.groupService.getRecommendedEvents(+id);
     return group;
   }
 
@@ -128,13 +129,13 @@ export class GroupController {
   @Get(':id/recommended-events')
   @ApiOperation({ summary: 'Get some recommended events for a specific group' })
   async getRecommendedEvents(
-    @Param('id') id: string,
+    @Param('id') id: number,
     @Query('minEvents') minEvents: number = 3,
     @Query('maxEvents') maxEvents: number = 5,
   ): Promise<EventEntity[]> {
     try {
       const recommendedEvents = await this.groupService.getRecommendedEvents(
-        id,
+        +id,
         minEvents,
         maxEvents,
       );
