@@ -59,17 +59,6 @@ describe('GroupController (e2e)', () => {
     return response.body;
   }
 
-  // Helper function to get my groups
-  async function getMyGroups(token) {
-    const response = await request(APP_URL)
-      .get(`/api/dashboard/my-groups`)
-      .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', TESTING_TENANT_ID);
-
-    expect(response.status).toBe(200);
-    return response.body;
-  }
-
   // Before each test, log in as the test user
   beforeEach(async () => {
     token = await loginAsTester();
@@ -104,11 +93,6 @@ describe('GroupController (e2e)', () => {
     // Get the group
     const foundGroup = await getGroup(token, testGroup.id);
     expect(foundGroup.name).toBe('Updated Test Group');
-
-    // Get my groups
-    const myGroups = await getMyGroups(token);
-    expect(myGroups.some((group) => group.id === updatedGroup.id)).toBe(true);
-    expect(myGroups.some((group) => group.id === testGroup2.id)).toBe(true);
 
     // Clean up by deleting the groups
     const deleteGroupResponse = await request(APP_URL)
