@@ -30,7 +30,7 @@ describe('GroupService', () => {
         GroupService,
         {
           provide: REQUEST,
-          useValue: { tenantId: 'test-tenant-id' },
+          useValue: { tenantId: TESTING_TENANT_ID },
         },
         {
           provide: TenantConnectionService,

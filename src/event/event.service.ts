@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, Inject, Scope } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  Inject,
+  Scope,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
@@ -11,7 +17,7 @@ import { PaginationDto } from '../utils/dto/pagination.dto';
 import { paginate } from '../utils/generic-pagination';
 import { Status } from '../core/constants/constant';
 import slugify from 'slugify';
-import { HttpException, HttpStatus } from '@nestjs/common';
+
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
   private eventRepository: Repository<EventEntity>;
@@ -71,7 +77,6 @@ export class EventService {
     const { page, limit } = pagination;
     const { search, userId, fromDate, toDate, categories, location, type } =
       query;
-    console.log('🚀 ~ EventService ~ findAll ~ userId:', userId);
 
     const eventQuery = this.eventRepository
       .createQueryBuilder('event')
@@ -180,10 +185,15 @@ export class EventService {
     minEvents: number = 3,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
+    if (maxEvents < minEvents || minEvents < 0 || maxEvents < 0) {
+      return [];
+    }
+
     await this.getTenantSpecificEventRepository();
 
+    let recommendedEvents: EventEntity[] = [];
     try {
-      const recommendedEvents = await this.eventRepository
+      recommendedEvents = await this.eventRepository
         .createQueryBuilder('event')
         .leftJoinAndSelect('event.categories', 'category')
         .where('event.status = :status', { status: Status.Published })
@@ -192,16 +202,18 @@ export class EventService {
         .orderBy('RANDOM()')
         .take(maxEvents)
         .getMany();
-      if (recommendedEvents.length < minEvents) {
-        throw new NotFoundException(
-          `Not enough events found for group ${groupId}, looking for ${minEvents} events but found ${recommendedEvents.length}`,
-        );
-      }
-      return recommendedEvents;
     } catch (error) {
-      console.log('error in eventService findRecommendedEventsForGroup', error);
-      return [];
+      throw new InternalServerErrorException(
+        `Error in eventService findRecommendedEventsForGroup: ${error}`,
+      );
     }
+
+    if (recommendedEvents.length < minEvents) {
+      throw new NotFoundException(
+        `Not enough events found for group ${groupId}, looking for ${minEvents} events but found ${recommendedEvents.length}`,
+      );
+    }
+    return recommendedEvents;
   }
 
   async findRandomEventsForGroup(
@@ -227,8 +239,9 @@ export class EventService {
         .take(maxEvents)
         .getMany();
     } catch (error) {
-      console.log('error in eventService findRandomEventsForGroup', error);
-      return [];
+      throw new InternalServerErrorException(
+        `Error in eventService findRandomEventsForGroup: ${error}`,
+      );
     }
     if (!events || events.length < minEvents) {
       throw new NotFoundException(

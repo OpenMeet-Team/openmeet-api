@@ -9,7 +9,6 @@ import { TESTER_USER_ID, ADMIN_USER_ID } from '../../test/utils/constants';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import { Status } from '../core/constants/constant';
-import { HttpException } from '@nestjs/common';
 
 describe('EventService', () => {
   let service: EventService;
@@ -170,7 +169,7 @@ describe('EventService', () => {
   });
 
   describe('findRecommendedEventsForGroup', () => {
-    it('should return empty array when no recommended events are found', async () => {
+    it('should throw error when not enough recommended events are found', async () => {
       const mockQueryBuilder = {
         leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
@@ -186,7 +185,7 @@ describe('EventService', () => {
 
       await expect(
         service.findRecommendedEventsForGroup(1, [1, 2], 3),
-      ).resolves.toEqual([]);
+      ).rejects.toThrow();
     });
 
     it('should return recommended events for a group', async () => {

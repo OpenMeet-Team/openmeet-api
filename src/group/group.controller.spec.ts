@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GroupController } from './group.controller';
 import { GroupService } from './group.service';
-import { HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
+import { HttpException, HttpStatus } from '@nestjs/common';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 describe('GroupController', () => {
   let controller: GroupController;
