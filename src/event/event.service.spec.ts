@@ -5,7 +5,7 @@ import { TenantConnectionService } from '../tenant/tenant.service';
 import { CategoryService } from '../category/category.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
-import { TESTER_USER_ID } from '../../test/utils/constants';
+import { TESTER_USER_ID, ADMIN_USER_ID } from '../../test/utils/constants';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 
 describe('EventService', () => {
@@ -72,15 +72,15 @@ describe('EventService', () => {
     const mockEventAttendeesEntity0: Partial<EventAttendeesEntity>[] = [];
     const mockEventAttendeesEntity1: Partial<EventAttendeesEntity>[] = [
       {
-        userId: '1',
+        userId: ADMIN_USER_ID,
       },
     ];
     const mockEventAttendeesEntity2: Partial<EventAttendeesEntity>[] = [
       {
-        userId: '1',
+        userId: ADMIN_USER_ID,
       },
       {
-        userId: TESTER_USER_ID.toString(),
+        userId: TESTER_USER_ID,
       },
     ];
     beforeAll(() => {
@@ -114,9 +114,7 @@ describe('EventService', () => {
     });
 
     it('should return events created by the user when empty', async () => {
-      const events = await service.getEventsByCreator(
-        TESTER_USER_ID.toString(),
-      );
+      const events = await service.getEventsByCreator(TESTER_USER_ID);
       expect(events).toEqual([]);
     });
 
@@ -131,9 +129,7 @@ describe('EventService', () => {
           getRepository: jest.fn().mockReturnValue(mockRepository),
         } as any);
 
-      const events = await service.getEventsByCreator(
-        TESTER_USER_ID.toString(),
-      );
+      const events = await service.getEventsByCreator(TESTER_USER_ID);
 
       expect(mockRepository.find).toHaveBeenCalled();
 
@@ -155,9 +151,7 @@ describe('EventService', () => {
 
   describe('getEventsByAttendee', () => {
     it('should return events attended by the user when empty', async () => {
-      const events = await service.getEventsByAttendee(
-        TESTER_USER_ID.toString(),
-      );
+      const events = await service.getEventsByAttendee(TESTER_USER_ID);
       expect(events).toEqual([]);
     });
   });
