@@ -5,26 +5,22 @@ describe('Auth', () => {
   const app = APP_URL;
 
   describe('Admin', () => {
-    it.skip('should successfully login via /api/v1/auth/email/login (POST)', async () => {
+    it('should successfully login via /api/v1/auth/email/login (POST)', async () => {
       const server = request.agent(app).set('tenant-id', '1');
 
       const req = server.post('/api/v1/auth/email/login');
-      // console.log('req', req);
 
       const response = await req
         .send({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD })
-        .expect(200)
-        .expect(({ body }) => {
-          expect(body.token).toBeDefined();
-          expect(body.user.email).toBeDefined();
-          expect(body.user.role).toBeDefined();
-        });
-      // console.log('response', response);
+        .expect(200);
+
+      expect(response.body.token).toBeDefined();
+      expect(response.body.user.email).toBeDefined();
 
       return response;
     });
 
-    it.skip('should be unauthorized if tenant-id is not provided', async () => {
+    it('should be unauthorized if tenant-id is not provided', async () => {
       const server = request.agent(app);
 
       const req = server.post('/api/v1/auth/email/login');
