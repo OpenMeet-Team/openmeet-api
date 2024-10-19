@@ -139,17 +139,7 @@ export class GroupController {
         maxEvents,
       );
 
-      if (recommendedEvents.length < minEvents) {
-        throw new HttpException(
-          'Not enough recommended events found',
-          HttpStatus.NOT_FOUND,
-        );
-      }
-
-      return recommendedEvents.slice(
-        0,
-        Math.min(maxEvents, recommendedEvents.length),
-      );
+      return recommendedEvents;
     } catch (error) {
       throw new HttpException(error.message, HttpStatus.NOT_FOUND);
     }
