@@ -208,11 +208,10 @@ export class GroupService {
     return group;
   }
 
-
   async findRandomEvents(id: number): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     const group = await this.groupRepository.findOne({
-      where: { id }
+      where: { id },
     });
 
     if (!group) {
@@ -221,8 +220,8 @@ export class GroupService {
 
     const events = this.eventService.findRandom();
     const groupWithEvents = {
-      ...group, 
-      recommendedEvents: events 
+      ...group,
+      recommendedEvents: events,
     };
 
     return groupWithEvents;
