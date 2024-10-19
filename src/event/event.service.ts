@@ -172,8 +172,7 @@ export class EventService {
     const randomEvents = shuffledEvents.slice(0, 5);
 
     return randomEvents;
-}
-
+  }
 
   async update(
     id: number,

@@ -24,7 +24,12 @@ import { EventService } from '../event/event.service';
     GroupMemberModule,
   ],
   controllers: [GroupController],
-  providers: [GroupService, TenantConnectionService, CategoryService, EventService],
+  providers: [
+    GroupService,
+    TenantConnectionService,
+    CategoryService,
+    EventService,
+  ],
   exports: [GroupService],
 })
 export class GroupModule {}
