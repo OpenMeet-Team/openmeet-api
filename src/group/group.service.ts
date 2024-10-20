@@ -16,7 +16,6 @@ import { QueryGroupDto } from './dto/group-query.dto';
 import slugify from 'slugify';
 import { EventService } from '../event/event.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
-import e from 'express';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {

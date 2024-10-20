@@ -231,7 +231,6 @@ export class EventService {
     if (maxEvents < minEvents || minEvents < 0 || maxEvents < 0) {
       return [];
     }
-
     await this.getTenantSpecificEventRepository();
 
     try {
