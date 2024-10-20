@@ -16,6 +16,7 @@ import { QueryGroupDto } from './dto/group-query.dto';
 import slugify from 'slugify';
 import { EventService } from '../event/event.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
+import e from 'express';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -110,30 +111,55 @@ export class GroupService {
 
     const categoryIds = group.categories.map((c) => c.id);
 
-    let recommendedEvents =
-      await this.eventService.findRecommendedEventsForGroup(
-        Number(groupId),
-        categoryIds,
-        minEvents,
-        maxEvents,
-      );
-
-    if (recommendedEvents.length < maxEvents) {
-      const additionalEvents = await this.eventService.findRandomEventsForGroup(
-        Number(groupId),
-        recommendedEvents.map((e) => e.id),
-        minEvents,
-        maxEvents - recommendedEvents.length,
-      );
-      recommendedEvents = [...recommendedEvents, ...additionalEvents];
+    let recommendedEvents: EventEntity[] = [];
+    try {
+      recommendedEvents =
+        (await this.eventService.findRecommendedEventsForGroup(
+          groupId,
+          categoryIds,
+          minEvents,
+          maxEvents,
+        )) || ([] as EventEntity[]);
+    } catch (error) {
+      recommendedEvents = [] as EventEntity[];
+      console.error('Error fetching recommended events:', error);
     }
-    //  deduplicate events
+
+    const remainingEventsToFetch = maxEvents - recommendedEvents.length;
+
+    if (remainingEventsToFetch > 0) {
+      let randomEvents: EventEntity[] = [];
+      try {
+        randomEvents = await this.eventService.findRandomEventsForGroup(
+          groupId,
+          recommendedEvents.map((e) => e.id),
+          remainingEventsToFetch,
+          remainingEventsToFetch,
+        );
+      } catch (error) {
+        console.error('Error fetching random events:', error);
+      }
+
+      recommendedEvents = [...recommendedEvents, ...(randomEvents || [])];
+    }
+
+    // Deduplicate events
     const uniqueEvents = recommendedEvents.filter(
       (event, index, self) =>
         index === self.findIndex((t) => t.id === event.id),
     );
 
-    return uniqueEvents.slice(0, maxEvents);
+    if (uniqueEvents.length < minEvents) {
+      throw new NotFoundException(
+        `Not enough events found for group ${groupId}`,
+      );
+    }
+
+    if (uniqueEvents.length > maxEvents) {
+      return uniqueEvents.slice(0, maxEvents);
+    }
+
+    return uniqueEvents;
   }
 
   async create(createGroupDto: CreateGroupDto, userId: number): Promise<any> {

@@ -188,12 +188,10 @@ export class EventService {
     if (maxEvents < minEvents || minEvents < 0 || maxEvents < 0) {
       return [];
     }
-
     await this.getTenantSpecificEventRepository();
 
-    let recommendedEvents: EventEntity[] = [];
     try {
-      recommendedEvents = await this.eventRepository
+      const recommendedEvents = await this.eventRepository
         .createQueryBuilder('event')
         .leftJoinAndSelect('event.categories', 'category')
         .where('event.status = :status', { status: Status.Published })
@@ -202,18 +200,26 @@ export class EventService {
         .orderBy('RANDOM()')
         .take(maxEvents)
         .getMany();
-    } catch (error) {
-      throw new InternalServerErrorException(
-        `Error in eventService findRecommendedEventsForGroup: ${error}`,
-      );
-    }
 
-    if (recommendedEvents.length < minEvents) {
-      throw new NotFoundException(
-        `Not enough events found for group ${groupId}, looking for ${minEvents} events but found ${recommendedEvents.length}`,
+      if (recommendedEvents.length < minEvents) {
+        throw new NotFoundException(
+          `Not enough recommended events found for group ${groupId}. Found ${recommendedEvents.length}, expected at least ${minEvents}.`,
+        );
+      }
+
+      if (recommendedEvents.length > maxEvents) {
+        return recommendedEvents.slice(0, maxEvents);
+      }
+
+      return recommendedEvents;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        `Error finding recommended events for group ${groupId}: ${error.message}`,
       );
     }
-    return recommendedEvents;
   }
 
   async findRandomEventsForGroup(
@@ -222,15 +228,14 @@ export class EventService {
     minEvents: number = 3,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
-    let events: EventEntity[] = [];
-
     if (maxEvents < minEvents || minEvents < 0 || maxEvents < 0) {
       return [];
     }
 
     await this.getTenantSpecificEventRepository();
+
     try {
-      events = await this.eventRepository
+      const randomEvents = await this.eventRepository
         .createQueryBuilder('event')
         .where('event.status = :status', { status: Status.Published })
         .andWhere('event.groupId != :groupId', { groupId })
@@ -238,19 +243,27 @@ export class EventService {
         .orderBy('RANDOM()')
         .take(maxEvents)
         .getMany();
-    } catch (error) {
-      throw new InternalServerErrorException(
-        `Error in eventService findRandomEventsForGroup: ${error}`,
-      );
-    }
-    if (!events || events.length < minEvents) {
-      throw new NotFoundException(
-        `Not enough events found for group ${groupId}, looking for ${minEvents} events but found ${events.length}`,
-      );
-    }
-    return events;
-  }
 
+      if (randomEvents.length < minEvents) {
+        throw new NotFoundException(
+          `Not enough random events found for group ${groupId}. Found ${randomEvents.length}, expected at least ${minEvents}.`,
+        );
+      }
+
+      if (randomEvents.length > maxEvents) {
+        return randomEvents.slice(0, maxEvents);
+      }
+
+      return randomEvents;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        `Error finding random events for group ${groupId}: ${error.message}`,
+      );
+    }
+  }
   async update(
     id: number,
     updateEventDto: UpdateEventDto,

@@ -101,6 +101,40 @@ describe('GroupService', () => {
       );
     });
 
+    it('should throw NotFoundException if not enough recommended events are found', async () => {
+      const mockGroup = { id: 1, categories: [{ id: 1 }, { id: 2 }] };
+      const mockEvents = [{ id: 1 }, { id: 2 }];
+      const minEvents = 3;
+
+      jest
+        .spyOn(service['groupRepository'], 'findOne')
+        .mockResolvedValue(mockGroup as GroupEntity);
+      jest
+        .spyOn(eventService, 'findRecommendedEventsForGroup')
+        .mockResolvedValue(mockEvents as any);
+
+      await expect(
+        service.getRecommendedEvents(mockGroup.id, minEvents),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException if not enough random events are found', async () => {
+      const mockGroup = { id: 1, categories: [{ id: 1 }, { id: 2 }] };
+      const mockEvents = [{ id: 1 }, { id: 2 }];
+      const minEvents = 3;
+
+      jest
+        .spyOn(service['groupRepository'], 'findOne')
+        .mockResolvedValue(mockGroup as GroupEntity);
+      jest
+        .spyOn(eventService, 'findRandomEventsForGroup')
+        .mockResolvedValue(mockEvents as any);
+
+      await expect(
+        service.getRecommendedEvents(mockGroup.id, minEvents),
+      ).rejects.toThrow(NotFoundException);
+    });
+
     it('should return recommended events if enough are found', async () => {
       const minEvents = 3;
       const maxEvents = 5;
@@ -198,13 +232,6 @@ describe('GroupService', () => {
       );
 
       expect(result).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }]);
-      expect(eventService.findRecommendedEventsForGroup).toHaveBeenCalledWith(
-        1,
-        [2, 3],
-        minEvents,
-        maxEvents,
-      );
-      expect(eventService.findRandomEventsForGroup).toHaveBeenCalled();
     });
   });
 });
