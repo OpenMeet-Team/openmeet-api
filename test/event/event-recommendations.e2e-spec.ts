@@ -51,7 +51,6 @@ describe('EventController Recommendations (e2e)', () => {
       categories: [category1.id],
       type: 'in person',
       maxAttendees: 100,
-
     });
 
     await createEvent(APP_URL, token, {

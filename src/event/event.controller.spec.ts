@@ -13,7 +13,7 @@ import { AuthService } from '../auth/auth.service';
 import { Reflector } from '@nestjs/core';
 import { PaginationOptions } from '../utils/generic-pagination';
 import { QueryEventDto } from './dto/query-events.dto';
-import { HttpException, HttpStatus } from '@nestjs/common';
+import { HttpStatus } from '@nestjs/common';
 
 // Mock services
 const mockGroupService = {};
@@ -25,7 +25,7 @@ const mockEventService = {
   remove: jest.fn(),
   getEventsByCreator: jest.fn(),
   getEventsByAttendee: jest.fn(),
-  getRecommendedEvents: jest.fn(),
+  getRecommendedEventsByEventId: jest.fn(),
 };
 
 const mockUser = {
@@ -270,7 +270,7 @@ describe('EventController', () => {
       const minEvents = 3;
       const maxEvents = 5;
       jest
-        .spyOn(eventService, 'getRecommendedEvents')
+        .spyOn(eventService, 'getRecommendedEventsByEventId')
         .mockResolvedValue(mockEvents as EventEntity[]);
 
       const result = await controller.getRecommendedEvents(
@@ -286,7 +286,7 @@ describe('EventController', () => {
     it('should throw NotFoundException when event is not found', async () => {
       const eventId = 99999999;
       jest
-        .spyOn(eventService, 'getRecommendedEvents')
+        .spyOn(eventService, 'getRecommendedEventsByEventId')
         .mockRejectedValue(new Error('Not Found'));
 
       await expect(

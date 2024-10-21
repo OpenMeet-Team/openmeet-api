@@ -107,15 +107,16 @@ export class EventController {
   })
   async getRecommendedEvents(
     @Param('id') id: number,
-    @Query('minEvents') minEvents: number = 3,
+    @Query('minEvents') minEvents: number = 0,
     @Query('maxEvents') maxEvents: number = 5,
   ): Promise<EventEntity[]> {
     try {
-      const recommendedEvents = await this.eventService.getRecommendedEvents(
-        +id,
-        minEvents,
-        maxEvents,
-      );
+      const recommendedEvents =
+        await this.eventService.getRecommendedEventsByEventId(
+          +id,
+          minEvents,
+          maxEvents,
+        );
 
       return recommendedEvents;
     } catch (error) {
