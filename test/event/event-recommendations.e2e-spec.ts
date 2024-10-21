@@ -5,6 +5,7 @@ import {
   loginAsTester,
   createEvent,
   getRecommendedEvents,
+  createCategory,
 } from '../utils/functions';
 
 describe('EventController Recommendations (e2e)', () => {
@@ -15,14 +16,27 @@ describe('EventController Recommendations (e2e)', () => {
     token = await loginAsTester();
   });
 
-  // failing, 500 in createEvent
-  it.skip('should return recommended events', async () => {
+  it('should return recommended events', async () => {
+    // Create categories
+    const category1 = await createCategory(APP_URL, token, {
+      name: 'Category 1',
+      slug: 'category-1',
+    });
+    const category2 = await createCategory(APP_URL, token, {
+      name: 'Category 2',
+      slug: 'category-2',
+    });
+    const categoryUnrelated = await createCategory(APP_URL, token, {
+      name: 'Category Unrelated',
+      slug: 'category-unrelated',
+    });
+
     // Create a main event
     testEvent = await createEvent(APP_URL, token, {
       name: 'Main Event',
       description: 'Main event description',
       status: Status.Published,
-      categories: ['Category 1', 'Category 2'],
+      categories: [category1.id, category2.id],
       startDate: new Date().toISOString(),
       maxAttendees: 100,
       type: 'in person',
@@ -34,25 +48,30 @@ describe('EventController Recommendations (e2e)', () => {
       description: 'Recommended event 1 description',
       status: Status.Published,
       startDate: new Date().toISOString(),
-      categories: ['Category 1'],
+      categories: [category1.id],
       type: 'in person',
+      maxAttendees: 100,
+
     });
 
     await createEvent(APP_URL, token, {
       name: 'Recommended Event 2',
       description: 'Recommended event 2 description',
       status: Status.Published,
-      categories: ['Category 2'],
+      startDate: new Date().toISOString(),
+      categories: [category2.id],
       type: 'hybrid',
+      maxAttendees: 100,
     });
 
     await createEvent(APP_URL, token, {
       name: 'Unrelated Event',
       description: 'Unrelated event description',
       status: Status.Published,
-      categories: ['Category Unrelated'],
+      categories: [categoryUnrelated.id],
       startDate: new Date().toISOString(),
       type: 'in person',
+      maxAttendees: 100,
     });
 
     // Get recommended events

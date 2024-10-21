@@ -99,6 +99,16 @@ async function loginAsTester() {
   expect(loginResponse.status).toBe(200);
   return loginResponse.body.token;
 }
+async function createCategory(app, token, categoryData) {
+  const response = await request(app)
+    .post('/api/categories')
+    .set('Authorization', `Bearer ${token}`)
+    .set('tenant-id', TESTING_TENANT_ID)
+    .send(categoryData);
+  console.log('createCategory response.body', response.body);
+  expect(response.status).toBe(201);
+  return response.body;
+}
 
 async function createEvent(app, token, eventData) {
   const response = await request(app)
@@ -117,6 +127,7 @@ async function getRecommendedEvents(app, token, eventId) {
     .set('Authorization', `Bearer ${token}`)
     .set('tenant-id', TESTING_TENANT_ID);
 
+  console.log('getRecommendedEvents response.body', response.body);
   expect(response.status).toBe(200);
   return response.body;
 }
@@ -125,7 +136,7 @@ async function updateEvent(app, token, eventId, eventData) {
   const response = await request(app)
     .patch(`/api/events/${eventId}`)
     .set('Authorization', `Bearer ${token}`)
-    .set('tenant-id', '1')
+    .set('tenant-id', TESTING_TENANT_ID)
     .send(eventData);
 
   expect(response.status).toBe(200);
@@ -137,7 +148,7 @@ async function getEvent(app, token, eventId) {
   const response = await request(app)
     .get(`/api/events/${eventId}`)
     .set('Authorization', `Bearer ${token}`)
-    .set('tenant-id', '1');
+    .set('tenant-id', TESTING_TENANT_ID);
 
   expect(response.status).toBe(200);
 
@@ -147,7 +158,7 @@ async function getMyEvents(app, token) {
   const response = await request(app)
     .get(`/api/dashboard/my-events`)
     .set('Authorization', `Bearer ${token}`)
-    .set('tenant-id', '1');
+    .set('tenant-id', TESTING_TENANT_ID);
 
   expect(response.status).toBe(200);
   return response.body;
@@ -164,4 +175,5 @@ export {
   updateEvent,
   getEvent,
   getMyEvents,
+  createCategory,
 };
