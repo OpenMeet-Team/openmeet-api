@@ -13,6 +13,7 @@ import { AuthService } from '../auth/auth.service';
 import { Reflector } from '@nestjs/core';
 import { PaginationOptions } from '../utils/generic-pagination';
 import { QueryEventDto } from './dto/query-events.dto';
+import { HttpException, HttpStatus } from '@nestjs/common';
 
 // Mock services
 const mockGroupService = {};
@@ -24,6 +25,7 @@ const mockEventService = {
   remove: jest.fn(),
   getEventsByCreator: jest.fn(),
   getEventsByAttendee: jest.fn(),
+  getRecommendedEvents: jest.fn(),
 };
 
 const mockUser = {
@@ -254,6 +256,44 @@ describe('EventController', () => {
       const result = await controller.remove(mockEvent.id as number);
       expect(result).toBeUndefined();
       expect(eventService.remove).toHaveBeenCalledWith(mockEvent.id);
+    });
+  });
+
+  describe('getRecommendedEvents', () => {
+    it('should return 3-5 recommended events', async () => {
+      const mockEvents = [
+        { id: 1, name: 'Event 1' },
+        { id: 2, name: 'Event 2' },
+        { id: 3, name: 'Event 3' },
+        { id: 4, name: 'Event 4' },
+      ];
+      const minEvents = 3;
+      const maxEvents = 5;
+      jest
+        .spyOn(eventService, 'getRecommendedEvents')
+        .mockResolvedValue(mockEvents as EventEntity[]);
+
+      const result = await controller.getRecommendedEvents(
+        1,
+        minEvents,
+        maxEvents,
+      );
+
+      expect(result.length).toBeGreaterThanOrEqual(minEvents);
+      expect(result.length).toBeLessThanOrEqual(maxEvents);
+    });
+
+    it('should throw NotFoundException when event is not found', async () => {
+      const eventId = 99999999;
+      jest
+        .spyOn(eventService, 'getRecommendedEvents')
+        .mockRejectedValue(new Error('Not Found'));
+
+      await expect(
+        controller.getRecommendedEvents(eventId),
+      ).rejects.toMatchObject({
+        status: HttpStatus.NOT_FOUND,
+      });
     });
   });
 });
