@@ -23,6 +23,8 @@ import { PaginationDto } from '../utils/dto/pagination.dto';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
 import { QueryGroupDto } from './dto/group-query.dto';
+import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
+import { HttpException, HttpStatus } from '@nestjs/common';
 
 @ApiTags('Groups')
 @Controller('groups')
@@ -87,16 +89,6 @@ export class GroupController {
     return group;
   }
 
-  @Get(':id/recomemded-events')
-  @ApiOperation({ summary: 'Get group recomemded event by ID Authenticated' })
-  async findRecommendedEvent(@Param('id') id: number): Promise<GroupEntity> {
-    const group = await this.groupService.findRandomEvents(+id);
-    if (!group) {
-      throw new NotFoundException(`Group with ID ${id} not found`);
-    }
-    return group;
-  }
-
   @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get group by ID' })
@@ -121,5 +113,25 @@ export class GroupController {
   @ApiOperation({ summary: 'Delete a group by ID' })
   async remove(@Param('id') id: number): Promise<void> {
     return this.groupService.remove(+id);
+  }
+
+  @Get(':id/recommended-events')
+  @ApiOperation({ summary: 'Get some recommended events for a specific group' })
+  async getRecommendedEvents(
+    @Param('id') id: number,
+    @Query('minEvents') minEvents: number = 3,
+    @Query('maxEvents') maxEvents: number = 5,
+  ): Promise<EventEntity[]> {
+    try {
+      const recommendedEvents = await this.groupService.getRecommendedEvents(
+        +id,
+        minEvents,
+        maxEvents,
+      );
+
+      return recommendedEvents;
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.NOT_FOUND);
+    }
   }
 }

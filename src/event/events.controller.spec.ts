@@ -59,7 +59,6 @@ const createEventDto: CreateEventDto = {
   categories: [mockCategory.id],
   lat: 0,
   lon: 0,
-  // is_public: true,
 };
 
 const mockEvent: Partial<EventEntity> = {

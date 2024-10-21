@@ -7,27 +7,37 @@ import { UserEntity } from '../user/infrastructure/persistence/relational/entiti
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { TESTER_USER_ID, ADMIN_USER_ID } from '../../test/utils/constants';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
+import { TESTING_TENANT_ID } from '../../test/utils/constants';
 
 describe('EventService', () => {
   let service: EventService;
 
   beforeEach(async () => {
+    const mockRepository = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn(),
+      save: jest.fn(),
+      createQueryBuilder: jest.fn().mockReturnThis(),
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getMany: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventService,
         {
           provide: REQUEST,
-          useValue: { tenantId: 'test-tenant-id' },
+          useValue: { tenantId: TESTING_TENANT_ID },
         },
         {
           provide: TenantConnectionService,
           useValue: {
             getTenantConnection: jest.fn().mockResolvedValue({
-              getRepository: jest.fn().mockReturnValue({
-                find: jest.fn().mockResolvedValue([]),
-                findOne: jest.fn(),
-                save: jest.fn(),
-              }),
+              getRepository: jest.fn().mockReturnValue(mockRepository),
             }),
           },
         },
@@ -41,6 +51,7 @@ describe('EventService', () => {
     }).compile();
 
     service = await module.resolve<EventService>(EventService);
+    await service.getTenantSpecificEventRepository();
   });
 
   it('should be defined', () => {
@@ -153,6 +164,125 @@ describe('EventService', () => {
     it('should return events attended by the user when empty', async () => {
       const events = await service.getEventsByAttendee(TESTER_USER_ID);
       expect(events).toEqual([]);
+    });
+  });
+
+  describe('findRecommendedEventsForGroup', () => {
+    it('should throw error when not enough recommended events are found', async () => {
+      const mockEvents = [];
+      const minEvents = 3;
+
+      const mockQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockEvents),
+      };
+
+      jest
+        .spyOn(service['eventRepository'], 'createQueryBuilder')
+        .mockReturnValue(mockQueryBuilder as any);
+
+      await expect(
+        service.findRecommendedEventsForGroup(1, [1, 2], minEvents),
+      ).rejects.toThrow();
+    });
+
+    it('should return recommended events for a group', async () => {
+      const minEvents = 3;
+      const maxEvents = 5;
+      const mockEvents = [
+        { id: 1, name: 'Event 1' },
+        { id: 2, name: 'Event 2' },
+        { id: 3, name: 'Event 3' },
+      ];
+
+      const mockQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockEvents),
+      };
+
+      jest
+        .spyOn(service['eventRepository'], 'createQueryBuilder')
+        .mockReturnValue(mockQueryBuilder as any);
+
+      const result = await service.findRecommendedEventsForGroup(
+        1,
+        [1, 2],
+        minEvents,
+        maxEvents,
+      );
+
+      expect(result).toBeDefined();
+      expect(result).toEqual(mockEvents);
+    });
+  });
+
+  describe('findRandomEventsForGroup', () => {
+    it('should throw an error if not enough events are found', async () => {
+      const mockEvents = [
+        { id: 1, name: 'Event 1' },
+        { id: 2, name: 'Event 2' },
+      ];
+      const minEvents = 5;
+      const maxEvents = 10;
+
+      const mockQueryBuilder = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockEvents),
+      };
+
+      jest
+        .spyOn(service['eventRepository'], 'createQueryBuilder')
+        .mockReturnValue(mockQueryBuilder as any);
+
+      await expect(
+        service.findRandomEventsForGroup(1, [1, 2, 3], minEvents, maxEvents),
+      ).rejects.toThrow();
+    });
+
+    it('should return random events for a group', async () => {
+      const minEvents = 2;
+      const maxEvents = 5;
+      const mockEvents = [
+        { id: 4, name: 'Event 4' },
+        { id: 5, name: 'Event 5' },
+        { id: 6, name: 'Event 6' },
+        { id: 7, name: 'Event 7' },
+        { id: 8, name: 'Event 8' },
+        { id: 9, name: 'Event 9' },
+      ];
+
+      const mockQueryBuilder = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockEvents),
+      };
+
+      jest
+        .spyOn(service['eventRepository'], 'createQueryBuilder')
+        .mockReturnValue(mockQueryBuilder as any);
+
+      const result = await service.findRandomEventsForGroup(
+        1,
+        [1, 2, 3],
+        minEvents,
+        maxEvents,
+      );
+
+      expect(result).toEqual(mockEvents.slice(0, maxEvents));
+      expect(result).toHaveLength(maxEvents);
     });
   });
 });
