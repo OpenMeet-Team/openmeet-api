@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { APP_URL, TESTING_TENANT_ID } from '../utils/constants';
-import { Status, SubCategoryType } from '../../src/core/constants/constant';
+import { Status } from '../../src/core/constants/constant';
 import {
   loginAsTester,
   createEvent,

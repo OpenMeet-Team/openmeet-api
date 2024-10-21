@@ -17,6 +17,7 @@ import { PaginationDto } from '../utils/dto/pagination.dto';
 import { paginate } from '../utils/generic-pagination';
 import { Status } from '../core/constants/constant';
 import slugify from 'slugify';
+import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -51,9 +52,16 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
     const user = { id: userId };
     const group = createEventDto.group ? { id: createEventDto.group } : null;
-    const categories = await this.categoryService.findByIds(
-      createEventDto.categories,
-    );
+
+    let categories: CategoryEntity[] = [];
+    try {
+      categories = await this.categoryService.findByIds(
+        createEventDto.categories,
+      );
+    } catch (error) {
+      console.error('Error finding categories:', error);
+      throw new NotFoundException(`Error finding categories: ${error.message}`);
+    }
 
     const slugifiedName = slugify(createEventDto.name, {
       strict: true,
