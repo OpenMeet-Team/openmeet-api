@@ -31,7 +31,7 @@ async function createGroup(
     .set('tenant-id', TESTING_TENANT_ID)
     .set('Authorization', `Bearer ${authToken}`)
     .send(groupData);
-  console.log('createGroup response.body', response.body);
+  // console.log('createGroup response.body', response.body);
   return response.body;
 }
 
@@ -105,7 +105,7 @@ async function createCategory(app, token, categoryData) {
     .set('Authorization', `Bearer ${token}`)
     .set('tenant-id', TESTING_TENANT_ID)
     .send(categoryData);
-  console.log('createCategory response.body', response.body);
+  // console.log('createCategory response.body', response.body);
   expect(response.status).toBe(201);
   return response.body;
 }
@@ -116,7 +116,7 @@ async function createEvent(app, token, eventData) {
     .set('Authorization', `Bearer ${token}`)
     .set('tenant-id', TESTING_TENANT_ID)
     .send(eventData);
-  console.log('response.body', response.body);
+  // console.log('response.body', response.body);
   expect(response.status).toBe(201);
   return response.body;
 }

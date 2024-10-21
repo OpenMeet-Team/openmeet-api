@@ -201,9 +201,9 @@ export class EventService {
     return randomEvents;
   }
 
-  async getRecommendedEvents(
+  async getRecommendedEventsByEventId(
     eventId: number,
-    minEvents: number = 3,
+    minEvents: number = 0,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
@@ -224,30 +224,27 @@ export class EventService {
       recommendedEvents = await this.findRecommendedEventsForEvent(
         eventId,
         categoryIds,
-        minEvents,
+        0,
         maxEvents,
       );
     } catch (error) {
-      recommendedEvents = [];
       console.error('Error fetching recommended events:', error);
     }
 
     const remainingEventsToFetch = maxEvents - recommendedEvents.length;
 
     if (remainingEventsToFetch > 0) {
-      let randomEvents: EventEntity[] = [];
       try {
-        randomEvents = await this.findRandomEventsForEvent(
+        const randomEvents = await this.findRandomEventsForEvent(
           eventId,
           recommendedEvents.map((e) => e.id),
-          remainingEventsToFetch,
+          0,
           remainingEventsToFetch,
         );
+        recommendedEvents = [...recommendedEvents, ...randomEvents];
       } catch (error) {
         console.error('Error fetching random events:', error);
       }
-
-      recommendedEvents = [...recommendedEvents, ...(randomEvents || [])];
     }
 
     // Deduplicate events
@@ -258,27 +255,19 @@ export class EventService {
 
     if (uniqueEvents.length < minEvents) {
       throw new NotFoundException(
-        `Not enough events found for event ${eventId}`,
+        `Not enough events found for event ${eventId}. Found ${uniqueEvents.length}, expected at least ${minEvents}.`,
       );
     }
 
-    if (uniqueEvents.length > maxEvents) {
-      return uniqueEvents.slice(0, maxEvents);
-    }
-
-    return uniqueEvents;
+    return uniqueEvents.slice(0, maxEvents);
   }
 
   async findRecommendedEventsForEvent(
     eventId: number,
     categoryIds: number[],
-    minEvents: number = 3,
+    minEvents: number = 0,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
-    if (maxEvents < minEvents || minEvents < 0 || maxEvents < 0) {
-      return [];
-    }
-
     try {
       const recommendedEvents = await this.eventRepository
         .createQueryBuilder('event')
@@ -290,37 +279,32 @@ export class EventService {
         .take(maxEvents)
         .getMany();
 
+      console.log(
+        `Found ${recommendedEvents.length} recommended events for event ${eventId}`,
+      );
+
       if (recommendedEvents.length < minEvents) {
         throw new NotFoundException(
           `Not enough recommended events found for event ${eventId}. Found ${recommendedEvents.length}, expected at least ${minEvents}.`,
         );
       }
 
-      if (recommendedEvents.length > maxEvents) {
-        return recommendedEvents.slice(0, maxEvents);
-      }
-
       return recommendedEvents;
     } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new InternalServerErrorException(
-        `Error finding recommended events for event ${eventId}: ${error.message}`,
+      console.error(
+        `Error finding recommended events for event ${eventId}:`,
+        error,
       );
+      throw error;
     }
   }
 
   async findRandomEventsForEvent(
     eventId: number,
     excludeEventIds: number[] = [],
-    minEvents: number = 3,
+    minEvents: number = 0,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
-    if (maxEvents < minEvents || minEvents < 0 || maxEvents < 0) {
-      return [];
-    }
-
     try {
       const randomEvents = await this.eventRepository
         .createQueryBuilder('event')
@@ -331,27 +315,22 @@ export class EventService {
         .take(maxEvents)
         .getMany();
 
+      console.log(
+        `Found ${randomEvents.length} random events for event ${eventId}`,
+      );
+
       if (randomEvents.length < minEvents) {
         throw new NotFoundException(
           `Not enough random events found for event ${eventId}. Found ${randomEvents.length}, expected at least ${minEvents}.`,
         );
       }
 
-      if (randomEvents.length > maxEvents) {
-        return randomEvents.slice(0, maxEvents);
-      }
-
       return randomEvents;
     } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new InternalServerErrorException(
-        `Error finding random events for event ${eventId}: ${error.message}`,
-      );
+      console.error(`Error finding random events for event ${eventId}:`, error);
+      throw error;
     }
   }
-
   async findRecommendedEventsForGroup(
     groupId: number,
     categoryIds: number[],
@@ -436,6 +415,7 @@ export class EventService {
       );
     }
   }
+
   async update(
     id: number,
     updateEventDto: UpdateEventDto,
