@@ -12,7 +12,7 @@ import { GroupEntity } from '../group/infrastructure/persistence/relational/enti
 import { AuthService } from '../auth/auth.service';
 import { Reflector } from '@nestjs/core';
 import { PaginationOptions } from '../utils/generic-pagination';
-import { QueryEventDto } from '../event/dto/query-events.dto';
+import { QueryEventDto } from './dto/query-events.dto';
 
 // Mock services
 const mockGroupService = {};
