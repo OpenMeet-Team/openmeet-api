@@ -9,6 +9,8 @@ import { TESTER_USER_ID, ADMIN_USER_ID } from '../../test/utils/constants';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
+import { CreateEventDto } from './dto/create-event.dto';
+import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
 
 describe('EventService', () => {
   let service: EventService;
@@ -16,8 +18,17 @@ describe('EventService', () => {
   beforeEach(async () => {
     const mockRepository = {
       find: jest.fn().mockResolvedValue([]),
+      create: jest.fn().mockImplementation((dto) => ({
+        id: 1,
+        ...dto,
+        categories: dto.categories.map((id) => ({ id })),
+        group: { id: dto.group },
+        user: { id: TESTER_USER_ID },
+      })),
       findOne: jest.fn(),
-      save: jest.fn(),
+      save: jest
+        .fn()
+        .mockImplementation((entity) => Promise.resolve({ id: 1, ...entity })),
       createQueryBuilder: jest.fn().mockReturnThis(),
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -47,6 +58,7 @@ describe('EventService', () => {
           provide: CategoryService,
           useValue: {
             findOne: jest.fn(),
+            findByIds: jest.fn(),
           },
         },
       ],
@@ -58,6 +70,32 @@ describe('EventService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('create', () => {
+    it('should create an event', async () => {
+      const createEventDto: CreateEventDto = {
+        name: 'Test Event',
+        description: 'Test Event Description',
+        startDate: new Date(),
+        type: 'in person',
+        location: 'Test Location',
+        locationOnline: 'Test Location Online',
+        maxAttendees: 100,
+        categories: [1, 2],
+        lat: 1,
+        lon: 1,
+        group: 1,
+      };
+      jest
+        .spyOn(service['categoryService'], 'findByIds')
+        .mockResolvedValue([
+          { id: 1, name: 'Category 1' } as unknown as CategoryEntity,
+          { id: 2, name: 'Category 2' } as unknown as CategoryEntity,
+        ]);
+      const event = await service.create(createEventDto, TESTER_USER_ID);
+      expect(event).toBeDefined();
+    });
   });
 
   describe('getTenantSpecificEventRepository', () => {
