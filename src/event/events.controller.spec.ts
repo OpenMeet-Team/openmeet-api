@@ -48,7 +48,6 @@ const mockGroup = {
 
 const createEventDto: CreateEventDto = {
   name: 'Test Event',
-  slug: 'Test Event',
   description: 'Test Description',
   startDate: new Date(),
   endDate: new Date(),
@@ -60,7 +59,6 @@ const createEventDto: CreateEventDto = {
   categories: [mockCategory.id],
   lat: 0,
   lon: 0,
-  // is_public: true,
 };
 
 const mockEvent: Partial<EventEntity> = {

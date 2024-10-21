@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, Inject, Scope } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  Inject,
+  Scope,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
@@ -71,7 +77,6 @@ export class EventService {
     const { page, limit } = pagination;
     const { search, userId, fromDate, toDate, categories, location, type } =
       query;
-    console.log('🚀 ~ EventService ~ findAll ~ userId:', userId);
 
     const eventQuery = this.eventRepository
       .createQueryBuilder('event')
@@ -172,9 +177,92 @@ export class EventService {
     const randomEvents = shuffledEvents.slice(0, 5);
 
     return randomEvents;
-}
+  }
 
+  async findRecommendedEventsForGroup(
+    groupId: number,
+    categoryIds: number[],
+    minEvents: number = 3,
+    maxEvents: number = 5,
+  ): Promise<EventEntity[]> {
+    if (maxEvents < minEvents || minEvents < 0 || maxEvents < 0) {
+      return [];
+    }
+    await this.getTenantSpecificEventRepository();
 
+    try {
+      const recommendedEvents = await this.eventRepository
+        .createQueryBuilder('event')
+        .leftJoinAndSelect('event.categories', 'category')
+        .where('event.status = :status', { status: Status.Published })
+        .andWhere('event.groupId != :groupId', { groupId })
+        .andWhere('category.id IN (:...categoryIds)', { categoryIds })
+        .orderBy('RANDOM()')
+        .take(maxEvents)
+        .getMany();
+
+      if (recommendedEvents.length < minEvents) {
+        throw new NotFoundException(
+          `Not enough recommended events found for group ${groupId}. Found ${recommendedEvents.length}, expected at least ${minEvents}.`,
+        );
+      }
+
+      if (recommendedEvents.length > maxEvents) {
+        return recommendedEvents.slice(0, maxEvents);
+      }
+
+      return recommendedEvents;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        `Error finding recommended events for group ${groupId}: ${error.message}`,
+      );
+    }
+  }
+
+  async findRandomEventsForGroup(
+    groupId: number,
+    excludeEventIds: number[] = [],
+    minEvents: number = 3,
+    maxEvents: number = 5,
+  ): Promise<EventEntity[]> {
+    if (maxEvents < minEvents || minEvents < 0 || maxEvents < 0) {
+      return [];
+    }
+    await this.getTenantSpecificEventRepository();
+
+    try {
+      const randomEvents = await this.eventRepository
+        .createQueryBuilder('event')
+        .where('event.status = :status', { status: Status.Published })
+        .andWhere('event.groupId != :groupId', { groupId })
+        .andWhere('event.id NOT IN (:...excludeEventIds)', { excludeEventIds })
+        .orderBy('RANDOM()')
+        .take(maxEvents)
+        .getMany();
+
+      if (randomEvents.length < minEvents) {
+        throw new NotFoundException(
+          `Not enough random events found for group ${groupId}. Found ${randomEvents.length}, expected at least ${minEvents}.`,
+        );
+      }
+
+      if (randomEvents.length > maxEvents) {
+        return randomEvents.slice(0, maxEvents);
+      }
+
+      return randomEvents;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        `Error finding random events for group ${groupId}: ${error.message}`,
+      );
+    }
+  }
   async update(
     id: number,
     updateEventDto: UpdateEventDto,

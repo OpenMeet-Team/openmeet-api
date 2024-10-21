@@ -9,8 +9,6 @@ import { GroupMemberEntity } from '../group-member/infrastructure/persistence/re
 import { GroupUserPermissionEntity } from './infrastructure/persistence/relational/entities/group-user-permission.entity';
 import { UsersModule } from '../user/user.module';
 import { GroupMemberModule } from '../group-member/group-member.module';
-import { EventsModule } from '../event/event.module';
-import { AuthModule } from '../auth/auth.module';
 import { EventService } from '../event/event.service';
 
 @Module({
@@ -24,7 +22,12 @@ import { EventService } from '../event/event.service';
     GroupMemberModule,
   ],
   controllers: [GroupController],
-  providers: [GroupService, TenantConnectionService, CategoryService, EventService],
+  providers: [
+    GroupService,
+    TenantConnectionService,
+    CategoryService,
+    EventService,
+  ],
   exports: [GroupService],
 })
 export class GroupModule {}
