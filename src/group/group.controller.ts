@@ -89,17 +89,6 @@ export class GroupController {
     return group;
   }
 
-  @Get(':id/recommended-events')
-  @ApiOperation({ summary: 'Get group recomemded event by ID Authenticated' })
-  async findRecommendedEvent(@Param('id') id: number): Promise<EventEntity[]> {
-    if (!id) {
-      throw new NotFoundException(`Group with ID ${id} not found`);
-    }
-    const group: EventEntity[] =
-      await this.groupService.getRecommendedEvents(+id);
-    return group;
-  }
-
   @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get group by ID' })
