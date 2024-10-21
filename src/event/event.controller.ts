@@ -11,7 +11,12 @@ import {
   Req,
   Query,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { Request } from 'express';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
@@ -25,7 +30,7 @@ import { Public } from '../auth/decorators/public.decorator';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
 import { PaginationDto } from '../utils/dto/pagination.dto';
-
+import { HttpException, HttpStatus } from '@nestjs/common';
 @ApiTags('Events')
 @Controller('events')
 @ApiBearerAuth()
@@ -92,5 +97,29 @@ export class EventController {
   @Delete(':id')
   async remove(@Param('id') id: number): Promise<void> {
     return this.eventService.remove(id);
+  }
+
+  @Get(':id/recommended-events')
+  @ApiQuery({ name: 'maxEvents', type: Number, required: false })
+  @ApiQuery({ name: 'minEvents', type: Number, required: false })
+  @ApiOperation({
+    summary: 'Get recommended events based on an existing event',
+  })
+  async getRecommendedEvents(
+    @Param('id') id: number,
+    @Query('minEvents') minEvents: number = 3,
+    @Query('maxEvents') maxEvents: number = 5,
+  ): Promise<EventEntity[]> {
+    try {
+      const recommendedEvents = await this.eventService.getRecommendedEvents(
+        +id,
+        minEvents,
+        maxEvents,
+      );
+
+      return recommendedEvents;
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.NOT_FOUND);
+    }
   }
 }
