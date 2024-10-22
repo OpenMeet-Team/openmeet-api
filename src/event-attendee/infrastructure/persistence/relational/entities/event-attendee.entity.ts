@@ -1,20 +1,32 @@
 import { Entity, PrimaryColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
-import { UserEntity } from '../../../../../users/infrastructure/persistence/relational/entities/user.entity';
-import { EventEntity } from '../../../../../events/infrastructure/persistence/relational/entities/events.entity';
+import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
+import { EventEntity } from '../../../../../event/infrastructure/persistence/relational/entities/event.entity';
+import {
+  EventAttendeeRole,
+  EventAttendeeStatus,
+} from '../../../../../core/constants/constant';
 
 @Entity({ name: 'eventAttendees' })
 export class EventAttendeesEntity {
-  @PrimaryColumn({ type: 'uuid' })
+  @PrimaryColumn({ type: 'int' })
   eventId: string;
 
-  @PrimaryColumn({ type: 'uuid' })
-  userId: string;
+  @PrimaryColumn()
+  userId: number;
 
-  @Column({ type: 'text' })
-  rsvpStatus: string;
+  @Column({
+    nullable: true,
+    type: 'enum',
+    enum: EventAttendeeStatus,
+  })
+  status: EventAttendeeStatus;
 
-  @Column({ type: 'boolean', default: false })
-  isHost: boolean;
+  @Column({
+    nullable: true,
+    type: 'enum',
+    enum: EventAttendeeRole,
+  })
+  role: EventAttendeeRole;
 
   @ManyToOne(() => EventEntity, (event) => event.attendees, {
     onDelete: 'CASCADE',

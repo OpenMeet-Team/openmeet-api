@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
-import { UserPermissionEntity } from '../../../../users/infrastructure/persistence/relational/entities/user-permission.entity';
-import { UserEntity } from '../../../../users/infrastructure/persistence/relational/entities/user.entity';
-import { PermissionEntity } from '../../../../permissions/infrastructure/persistence/relational/entities/permission.entity';
+import { UserPermissionEntity } from '../../../../user/infrastructure/persistence/relational/entities/user-permission.entity';
+import { UserEntity } from '../../../../user/infrastructure/persistence/relational/entities/user.entity';
+import { PermissionEntity } from '../../../../permission/infrastructure/persistence/relational/entities/permission.entity';
 
 @Injectable()
 export class UserPermissionSeedService {

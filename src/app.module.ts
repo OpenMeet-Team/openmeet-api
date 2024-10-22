@@ -1,12 +1,12 @@
 import { Module, Scope } from '@nestjs/common';
-import { UsersModule } from './users/users.module';
-import { FilesModule } from './files/files.module';
+import { UsersModule } from './user/user.module';
+import { FilesModule } from './file/file.module';
 import { AuthModule } from './auth/auth.module';
 import databaseConfig from './database/config/database.config';
 import authConfig from './auth/config/auth.config';
 import appConfig from './config/app.config';
 import mailConfig from './mail/config/mail.config';
-import fileConfig from './files/config/file.config';
+import fileConfig from './file/config/file.config';
 import facebookConfig from './auth-facebook/config/facebook.config';
 import googleConfig from './auth-google/config/google.config';
 import path from 'path';
@@ -25,13 +25,22 @@ import { SessionModule } from './session/session.module';
 import { MailerModule } from './mailer/mailer.module';
 import { TenantConnectionService } from './tenant/tenant.service';
 import { TenantModule } from './tenant/tenant.module';
-import { EventsModule } from './events/events.module';
+import { EventsModule } from './event/event.module';
 import { APP_GUARD } from '@nestjs/core';
 import { TenantGuard } from './tenant/tenant.guard';
-import { CategoryModule } from './categories/categories.module';
-import { GroupModule } from './groups/groups.module';
-import { SubCategoryModule } from './sub-categories/sub-category.module';
+import { CategoryModule } from './category/category.module';
+import { GroupModule } from './group/group.module';
+import { SubCategoryModule } from './sub-category/sub-category.module';
 import { PermissionsGuard } from './shared/guard/permissions.guard';
+import { GroupMemberModule } from './group-member/group-member.module';
+import { EventAttendeeModule } from './event-attendee/event-attendee.module';
+import { HealthModule } from './health/health.module';
+import { PrometheusModule } from '@willsoto/nestjs-prometheus';
+import { makeCounterProvider } from '@willsoto/nestjs-prometheus';
+import { RequestCounterInterceptor } from './interceptors/request-counter.interceptor';
+import { GroupRoleModule } from './group-role/group-role.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { RoleModule } from './role/role.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -79,6 +88,8 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
     }),
+
+    PrometheusModule.register(),
     UsersModule,
     FilesModule,
     AuthModule,
@@ -93,6 +104,12 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     CategoryModule,
     GroupModule,
     SubCategoryModule,
+    GroupMemberModule,
+    EventAttendeeModule,
+    HealthModule,
+    GroupRoleModule,
+    DashboardModule,
+    RoleModule,
   ],
   providers: [
     TenantConnectionService,
@@ -106,6 +123,11 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       scope: Scope.REQUEST,
       durable: true,
     },
+    RequestCounterInterceptor,
+    makeCounterProvider({
+      name: 'http_requests_total',
+      help: 'Total number of HTTP requests',
+    }),
   ],
 })
 export class AppModule {

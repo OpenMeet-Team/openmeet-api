@@ -20,30 +20,33 @@ import { LoginResponseDto } from './dto/login-response.dto';
 import { ConfigService } from '@nestjs/config';
 import { JwtRefreshPayloadType } from './strategies/types/jwt-refresh-payload.type';
 import { JwtPayloadType } from './strategies/types/jwt-payload.type';
-import { UsersService } from '../users/users.service';
+import { UserService } from '../user/user.service';
 import { AllConfigType } from '../config/config.type';
 import { MailService } from '../mail/mail.service';
 // import { RoleEnum } from '../roles/roles.enum';
 import { Session } from '../session/domain/session';
 import { SessionService } from '../session/session.service';
-import { StatusEnum } from '../statuses/statuses.enum';
-import { User } from '../users/domain/user';
-import { GroupService } from '../groups/groups.service';
-import { GroupMemberEntity } from '../group-members/infrastructure/persistence/relational/entities/group-member.entity';
+import { StatusEnum } from '../status/status.enum';
+import { User } from '../user/domain/user';
+import { GroupService } from '../group/group.service';
+import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
+import { RoleService } from '../role/role.service';
+import { RoleEnum } from '../role/role.enum';
 
 @Injectable()
 export class AuthService {
   constructor(
     private jwtService: JwtService,
-    private usersService: UsersService,
+    private userService: UserService,
     private groupService: GroupService,
     private sessionService: SessionService,
     private mailService: MailService,
+    private readonly roleService: RoleService,
     private configService: ConfigService<AllConfigType>,
   ) {}
 
   async validateLogin(loginDto: AuthEmailLoginDto): Promise<LoginResponseDto> {
-    const user = await this.usersService.findByEmail(loginDto.email);
+    const user = await this.userService.findByEmail(loginDto.email);
 
     if (!user) {
       throw new UnprocessableEntityException({
@@ -120,11 +123,11 @@ export class AuthService {
     let userByEmail: NullableType<User> = null;
 
     if (socialEmail) {
-      userByEmail = await this.usersService.findByEmail(socialEmail);
+      userByEmail = await this.userService.findByEmail(socialEmail);
     }
 
     if (socialData.id) {
-      user = await this.usersService.findBySocialIdAndProvider({
+      user = await this.userService.findBySocialIdAndProvider({
         socialId: socialData.id,
         provider: authProvider,
       });
@@ -134,7 +137,7 @@ export class AuthService {
       if (socialEmail && !userByEmail) {
         user.email = socialEmail;
       }
-      await this.usersService.update(user.id, user);
+      await this.userService.update(user.id, user);
     } else if (userByEmail) {
       user = userByEmail;
     } else if (socialData.id) {
@@ -145,17 +148,22 @@ export class AuthService {
         id: StatusEnum.active,
       };
 
-      user = await this.usersService.create({
+      const role = await this.roleService.findByName(RoleEnum.user);
+      if (!role) {
+        throw new Error(`Role not found: ${RoleEnum.user}`);
+      }
+
+      user = await this.userService.create({
         email: socialEmail ?? null,
         firstName: socialData.firstName ?? null,
         lastName: socialData.lastName ?? null,
         socialId: socialData.id,
         provider: authProvider,
-        // role,
+        role: role.id,
         status,
       });
 
-      user = await this.usersService.findById(user.id);
+      user = await this.userService.findById(user.id);
     }
 
     if (!user) {
@@ -197,13 +205,14 @@ export class AuthService {
   }
 
   async register(dto: AuthRegisterLoginDto): Promise<any> {
-    const user = await this.usersService.create({
+    const role = await this.roleService.findByName(RoleEnum.user);
+    if (!role) {
+      throw new Error(`Role not found: ${RoleEnum.user}`);
+    }
+    const user = await this.userService.create({
       ...dto,
       email: dto.email,
-
-      // role: {
-      //   id: RoleEnum.user,
-      // },
+      role: role.id,
       status: {
         id: StatusEnum.active,
       },
@@ -240,7 +249,7 @@ export class AuthService {
       hash,
     });
 
-    const createdUser = await this.usersService.findById(user.id);
+    const createdUser = await this.userService.findById(user.id);
 
     return {
       refreshToken,
@@ -279,7 +288,7 @@ export class AuthService {
       });
     }
 
-    const user = await this.usersService.findById(userId);
+    const user = await this.userService.findById(userId);
 
     if (
       !user ||
@@ -295,7 +304,7 @@ export class AuthService {
       id: StatusEnum.active,
     };
 
-    await this.usersService.update(user.id, user);
+    await this.userService.update(user.id, user);
   }
 
   async confirmNewEmail(hash: string): Promise<void> {
@@ -323,7 +332,7 @@ export class AuthService {
       });
     }
 
-    const user = await this.usersService.findById(userId);
+    const user = await this.userService.findById(userId);
 
     if (!user) {
       throw new NotFoundException({
@@ -337,11 +346,11 @@ export class AuthService {
       id: StatusEnum.active,
     };
 
-    await this.usersService.update(user.id, user);
+    await this.userService.update(user.id, user);
   }
 
   async forgotPassword(email: string): Promise<void> {
-    const user = await this.usersService.findByEmail(email);
+    const user = await this.userService.findByEmail(email);
 
     if (!user) {
       throw new UnprocessableEntityException({
@@ -401,7 +410,7 @@ export class AuthService {
       });
     }
 
-    const user = await this.usersService.findById(userId);
+    const user = await this.userService.findById(userId);
 
     if (!user) {
       throw new UnprocessableEntityException({
@@ -418,18 +427,18 @@ export class AuthService {
       userId: user.id,
     });
 
-    await this.usersService.update(user.id, user);
+    await this.userService.update(user.id, user);
   }
 
   async me(userJwtPayload: JwtPayloadType): Promise<NullableType<User>> {
-    return this.usersService.findById(userJwtPayload.id);
+    return this.userService.findById(userJwtPayload.id);
   }
 
   async update(
     userJwtPayload: JwtPayloadType,
     userDto: AuthUpdateDto,
   ): Promise<NullableType<User>> {
-    const currentUser = await this.usersService.findById(userJwtPayload.id);
+    const currentUser = await this.userService.findById(userJwtPayload.id);
 
     if (!currentUser) {
       throw new UnprocessableEntityException({
@@ -480,7 +489,7 @@ export class AuthService {
     }
 
     if (userDto.email && userDto.email !== currentUser.email) {
-      const userByEmail = await this.usersService.findByEmail(userDto.email);
+      const userByEmail = await this.userService.findByEmail(userDto.email);
 
       if (userByEmail && userByEmail.id !== currentUser.id) {
         throw new UnprocessableEntityException({
@@ -517,9 +526,9 @@ export class AuthService {
     delete userDto.email;
     delete userDto.oldPassword;
 
-    await this.usersService.update(userJwtPayload.id, userDto);
+    await this.userService.update(userJwtPayload.id, userDto);
 
-    return this.usersService.findById(userJwtPayload.id);
+    return this.userService.findById(userJwtPayload.id);
   }
 
   async refreshToken(
@@ -540,7 +549,7 @@ export class AuthService {
       .update(randomStringGenerator())
       .digest('hex');
 
-    const user = await this.usersService.findById(session.user.id);
+    const user = await this.userService.findById(session.user.id);
 
     if (!user?.role) {
       throw new UnauthorizedException();
@@ -567,7 +576,7 @@ export class AuthService {
   }
 
   async softDelete(user: User): Promise<void> {
-    await this.usersService.remove(user.id);
+    await this.userService.remove(user.id);
   }
 
   async logout(data: Pick<JwtRefreshPayloadType, 'sessionId'>) {
@@ -622,7 +631,7 @@ export class AuthService {
   }
 
   getUserPermissions(userId: number) {
-    return this.usersService.getUserPermissions(userId);
+    return this.userService.getUserPermissions(userId);
   }
 
   async getGroupMembers(

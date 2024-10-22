@@ -8,7 +8,7 @@ import { SessionRepository } from '../../session.repository';
 import { Session } from '../../../../domain/session';
 
 import { SessionMapper } from '../mappers/session.mapper';
-import { User } from '../../../../../users/domain/user';
+import { User } from '../../../../../user/domain/user';
 
 @Injectable()
 export class SessionRelationalRepository implements SessionRepository {

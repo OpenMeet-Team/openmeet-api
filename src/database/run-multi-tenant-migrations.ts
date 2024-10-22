@@ -2,7 +2,7 @@ import { AppDataSource } from './data-source'; // adjust the path to your AppDat
 import { QueryRunner } from 'typeorm';
 
 async function runMigrationsForAllTenants() {
-  const tenants = ['1'];
+  const tenants = ['', '1'];
 
   for (const tenantId of tenants) {
     const dataSource = AppDataSource(tenantId);
