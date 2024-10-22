@@ -163,9 +163,6 @@ export class BaseTables1728637873969 implements MigrationInterface {
     );
 
     await queryRunner.query(
-      `ALTER TABLE "${schema}"."users" DROP CONSTRAINT "FK_f856a4818b32c69dbc8811f3d2c"`,
-    );
-    await queryRunner.query(
       `ALTER TABLE "${schema}"."users" ADD CONSTRAINT "FK_f856a4818b32c69dbc8811f3d2c" FOREIGN KEY ("photoId") REFERENCES "${schema}"."files"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
     );
     await queryRunner.query(
