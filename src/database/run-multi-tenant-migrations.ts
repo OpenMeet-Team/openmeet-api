@@ -6,7 +6,7 @@ async function runMigrationsForAllTenants() {
 
   for (const tenantId of tenants) {
     const dataSource = AppDataSource(tenantId);
-    const schemaName = tenantId ? `tenant_${tenantId}` : '';
+    const schemaName = tenantId ? `tenant_${tenantId}` : 'public';
     try {
       await dataSource.initialize();
 

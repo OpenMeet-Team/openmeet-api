@@ -128,7 +128,7 @@ export class UserEntity extends EntityRelationalHelper {
   @DeleteDateColumn()
   deletedAt: Date;
 
-  @Column({ type: 'text', nullable: true }) 
+  @Column({ type: 'text', nullable: true })
   bio?: string;
 
   @ManyToOne(() => RoleEntity, (role) => role.users)

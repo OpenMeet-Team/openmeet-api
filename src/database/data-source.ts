@@ -35,7 +35,7 @@ export const AppDataSource = (tenantId = '') => {
       max: process.env.DATABASE_MAX_CONNECTIONS
         ? parseInt(process.env.DATABASE_MAX_CONNECTIONS, 10)
         : 100,
-      idleTimeoutMillis: 30000,  
+      idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 2000,
       ssl:
         process.env.DATABASE_SSL_ENABLED === 'true'
