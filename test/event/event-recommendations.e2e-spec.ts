@@ -12,22 +12,26 @@ import {
 describe('EventController Recommendations (e2e)', () => {
   let token;
   let testEvent;
+  let testEvent2;
+  let testEvent3;
+  let testEvent4;
+  let category1;
+  let category2;
+  let categoryUnrelated;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     token = await loginAsTester();
-  });
 
-  it('should return recommended events', async () => {
     // Create categories
-    const category1 = await createCategory(APP_URL, token, {
+    category1 = await createCategory(APP_URL, token, {
       name: 'Category 1',
       slug: 'category-1',
     });
-    const category2 = await createCategory(APP_URL, token, {
+    category2 = await createCategory(APP_URL, token, {
       name: 'Category 2',
       slug: 'category-2',
     });
-    const categoryUnrelated = await createCategory(APP_URL, token, {
+    categoryUnrelated = await createCategory(APP_URL, token, {
       name: 'Category Unrelated',
       slug: 'category-unrelated',
     });
@@ -44,7 +48,7 @@ describe('EventController Recommendations (e2e)', () => {
     });
 
     // Create some potential recommended events
-    await createEvent(APP_URL, token, {
+    testEvent2 = await createEvent(APP_URL, token, {
       name: 'Recommended Event 1',
       description: 'Recommended event 1 description',
       status: Status.Published,
@@ -54,7 +58,7 @@ describe('EventController Recommendations (e2e)', () => {
       maxAttendees: 100,
     });
 
-    await createEvent(APP_URL, token, {
+    testEvent3 = await createEvent(APP_URL, token, {
       name: 'Recommended Event 2',
       description: 'Recommended event 2 description',
       status: Status.Published,
@@ -64,7 +68,7 @@ describe('EventController Recommendations (e2e)', () => {
       maxAttendees: 100,
     });
 
-    await createEvent(APP_URL, token, {
+    testEvent4 = await createEvent(APP_URL, token, {
       name: 'Unrelated Event',
       description: 'Unrelated event description',
       status: Status.Published,
@@ -73,21 +77,61 @@ describe('EventController Recommendations (e2e)', () => {
       type: 'in person',
       maxAttendees: 100,
     });
-
     // get all events and check that there are at least the number we created
     const allEvents = await getAllEvents(APP_URL, token);
     expect(allEvents.data).toBeInstanceOf(Array);
     expect(allEvents.data.length).toBeGreaterThanOrEqual(4);
+  });
 
-    // Get recommended events
+  afterAll(async () => {
+    //  delete test events
+    for (const event of [testEvent, testEvent2, testEvent3, testEvent4]) {
+      await request(APP_URL)
+        .delete(`/api/events/${event.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .set('tenant-id', TESTING_TENANT_ID);
+    }
+
+    // delete categories
+    for (const category of [category1, category2, categoryUnrelated]) {
+      await request(APP_URL)
+        .delete(`/api/categories/${category.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .set('tenant-id', TESTING_TENANT_ID);
+    }
+  });
+
+  it('should show events that are public when unauthenticated', async () => {
+    const minEvents = 0;
+    const maxEvents = 2;
     const recommendedEvents = await getRecommendedEvents(
       APP_URL,
       token,
       testEvent.id,
+      minEvents,
+      maxEvents,
+      true,
+    );
+    expect(recommendedEvents.length).toBeGreaterThanOrEqual(minEvents);
+    expect(recommendedEvents.length).toBeLessThanOrEqual(maxEvents);
+
+    console.log('recommendedEvents', recommendedEvents);
+  });
+
+  it('should return recommended events when authenticated', async () => {
+    const minEvents = 0;
+    const maxEvents = 2;
+    const recommendedEvents = await getRecommendedEvents(
+      APP_URL,
+      token,
+      testEvent.id,
+      minEvents,
+      maxEvents,
+      false,
     );
     expect(recommendedEvents).toBeInstanceOf(Array);
-    expect(recommendedEvents.length).toBeGreaterThanOrEqual(2);
-    expect(recommendedEvents.length).toBeLessThanOrEqual(5);
+    expect(recommendedEvents.length).toBeGreaterThanOrEqual(minEvents);
+    expect(recommendedEvents.length).toBeLessThanOrEqual(maxEvents);
 
     // Check that the recommended events have the correct categories
     recommendedEvents.forEach((event) => {
@@ -120,14 +164,5 @@ describe('EventController Recommendations (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .set('tenant-id', TESTING_TENANT_ID)
       .expect(404);
-  });
-
-  afterEach(async () => {
-    if (testEvent && testEvent.id) {
-      await request(APP_URL)
-        .delete(`/api/events/${testEvent.id}`)
-        .set('Authorization', `Bearer ${token}`)
-        .set('tenant-id', TESTING_TENANT_ID);
-    }
   });
 });

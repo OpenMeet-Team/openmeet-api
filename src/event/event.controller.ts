@@ -99,6 +99,7 @@ export class EventController {
     return this.eventService.remove(id);
   }
 
+  @Public()
   @Get(':id/recommended-events')
   @ApiQuery({ name: 'maxEvents', type: Number, required: false })
   @ApiQuery({ name: 'minEvents', type: Number, required: false })

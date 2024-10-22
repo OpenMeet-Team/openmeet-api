@@ -116,7 +116,7 @@ async function createEvent(app, token, eventData) {
     .set('Authorization', `Bearer ${token}`)
     .set('tenant-id', TESTING_TENANT_ID)
     .send(eventData);
-  // console.log('response.body', response.body);
+  console.log('createEvent response.body', response.body);
   expect(response.status).toBe(201);
   return response.body;
 }
@@ -127,15 +127,25 @@ async function getRecommendedEvents(
   eventId,
   minEvents = 0,
   maxEvents = 5,
+  isAuthenticated = false,
 ) {
-  const response = await request(app)
-    .get(
-      `/api/events/${eventId}/recommended-events?minEvents=${minEvents}&maxEvents=${maxEvents}`,
-    )
-    .set('Authorization', `Bearer ${token}`)
-    .set('tenant-id', TESTING_TENANT_ID);
+  const getRecommendedEventsUrl = `/api/events/${eventId}/recommended-events?minEvents=${minEvents}&maxEvents=${maxEvents}`;
 
-  // console.log('getRecommendedEvents response.body', response.body);
+  let response;
+
+  const event = await getEvent(app, token, eventId);
+  expect(event.id).toBe(eventId);
+
+  if (isAuthenticated) {
+    response = await request(app)
+      .get(getRecommendedEventsUrl)
+      .set('tenant-id', TESTING_TENANT_ID);
+  } else {
+    response = await request(app)
+      .get(getRecommendedEventsUrl)
+      .set('Authorization', `Bearer ${token}`)
+      .set('tenant-id', TESTING_TENANT_ID);
+  }
   expect(response.status).toBe(200);
   return response.body;
 }
@@ -164,11 +174,12 @@ async function getAllEvents(app, token) {
 }
 
 async function getEvent(app, token, eventId) {
+  console.log('getEvent', eventId);
   const response = await request(app)
     .get(`/api/events/${eventId}`)
     .set('Authorization', `Bearer ${token}`)
     .set('tenant-id', TESTING_TENANT_ID);
-
+  console.log('getEvent response', response.body);
   expect(response.status).toBe(200);
 
   return response.body;

@@ -392,7 +392,6 @@ describe('EventService', () => {
       );
       expect(service.findRandomEventsForEvent).toHaveBeenCalledWith(
         eventId,
-        [2, 3],
         0,
         maxEvents - mockRecommendedEvents.length,
       );
