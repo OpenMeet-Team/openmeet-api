@@ -223,7 +223,6 @@ export class EventService {
       try {
         const randomEvents = await this.findRandomEventsForEvent(
           eventId,
-          recommendedEvents.map((e) => e.id),
           0,
           remainingEventsToFetch,
         );
@@ -254,56 +253,41 @@ export class EventService {
     minEvents: number = 0,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
-    try {
-      const recommendedEvents = await this.eventRepository
-        .createQueryBuilder('event')
-        .leftJoinAndSelect('event.categories', 'category')
-        .where('event.status = :status', { status: Status.Published })
-        .andWhere('event.id != :eventId', { eventId })
-        .andWhere('category.id IN (:...categoryIds)', { categoryIds })
-        .orderBy('RANDOM()')
-        .take(maxEvents)
-        .getMany();
+    const queryBuilder = this.eventRepository
+      .createQueryBuilder('event')
+      .select('event.id')
+      .addSelect('RANDOM()', 'random')
+      .distinct(true)
+      .innerJoin('event.categories', 'category')
+      .where('event.status = :status', { status: Status.Published })
+      .andWhere('event.id != :eventId', { eventId })
+      .andWhere('category.id IN (:...categoryIds)', { categoryIds })
+      .orderBy('random')
+      .limit(maxEvents);
+    const ids = await queryBuilder.getRawMany();
 
-      console.log(
-        `Found ${recommendedEvents.length} recommended events for event ${eventId}`,
-      );
-
-      if (recommendedEvents.length < minEvents) {
-        throw new NotFoundException(
-          `Not enough recommended events found for event ${eventId}. Found ${recommendedEvents.length}, expected at least ${minEvents}.`,
-        );
-      }
-
-      return recommendedEvents;
-    } catch (error) {
-      console.error(
-        `Error finding recommended events for event ${eventId}:`,
-        error,
-      );
-      throw error;
+    if (ids.length < minEvents) {
+      return [];
     }
+
+    return this.eventRepository.findByIds(ids.map((row) => row.event_id));
   }
 
   async findRandomEventsForEvent(
     eventId: number,
-    excludeEventIds: number[] = [],
     minEvents: number = 0,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
     try {
       const randomEvents = await this.eventRepository
         .createQueryBuilder('event')
+        .select('event.id')
+        .addSelect('RANDOM()', 'random')
         .where('event.status = :status', { status: Status.Published })
         .andWhere('event.id != :eventId', { eventId })
-        .andWhere('event.id NOT IN (:...excludeEventIds)', { excludeEventIds })
-        .orderBy('RANDOM()')
-        .take(maxEvents)
+        .orderBy('random')
+        .limit(maxEvents)
         .getMany();
-
-      console.log(
-        `Found ${randomEvents.length} random events for event ${eventId}`,
-      );
 
       if (randomEvents.length < minEvents) {
         throw new NotFoundException(
@@ -317,10 +301,11 @@ export class EventService {
       throw error;
     }
   }
+
   async findRecommendedEventsForGroup(
     groupId: number,
     categoryIds: number[],
-    minEvents: number = 3,
+    minEvents: number = 0,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
     if (maxEvents < minEvents || minEvents < 0 || maxEvents < 0) {

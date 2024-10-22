@@ -121,13 +121,21 @@ async function createEvent(app, token, eventData) {
   return response.body;
 }
 
-async function getRecommendedEvents(app, token, eventId) {
+async function getRecommendedEvents(
+  app,
+  token,
+  eventId,
+  minEvents = 0,
+  maxEvents = 5,
+) {
   const response = await request(app)
-    .get(`/api/events/${eventId}/recommended-events`)
+    .get(
+      `/api/events/${eventId}/recommended-events?minEvents=${minEvents}&maxEvents=${maxEvents}`,
+    )
     .set('Authorization', `Bearer ${token}`)
     .set('tenant-id', TESTING_TENANT_ID);
 
-  console.log('getRecommendedEvents response.body', response.body);
+  // console.log('getRecommendedEvents response.body', response.body);
   expect(response.status).toBe(200);
   return response.body;
 }
@@ -138,6 +146,17 @@ async function updateEvent(app, token, eventId, eventData) {
     .set('Authorization', `Bearer ${token}`)
     .set('tenant-id', TESTING_TENANT_ID)
     .send(eventData);
+
+  expect(response.status).toBe(200);
+
+  return response.body;
+}
+
+async function getAllEvents(app, token) {
+  const response = await request(app)
+    .get(`/api/events`)
+    .set('Authorization', `Bearer ${token}`)
+    .set('tenant-id', TESTING_TENANT_ID);
 
   expect(response.status).toBe(200);
 
@@ -176,4 +195,5 @@ export {
   getEvent,
   getMyEvents,
   createCategory,
+  getAllEvents,
 };
