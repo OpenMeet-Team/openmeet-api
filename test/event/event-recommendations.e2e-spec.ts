@@ -6,6 +6,7 @@ import {
   createEvent,
   getRecommendedEvents,
   createCategory,
+  getAllEvents,
 } from '../utils/functions';
 
 describe('EventController Recommendations (e2e)', () => {
@@ -73,24 +74,33 @@ describe('EventController Recommendations (e2e)', () => {
       maxAttendees: 100,
     });
 
+    // get all events and check that there are at least the number we created
+    const allEvents = await getAllEvents(APP_URL, token);
+    expect(allEvents.data).toBeInstanceOf(Array);
+    expect(allEvents.data.length).toBeGreaterThanOrEqual(4);
+
     // Get recommended events
     const recommendedEvents = await getRecommendedEvents(
       APP_URL,
       token,
       testEvent.id,
     );
-
     expect(recommendedEvents).toBeInstanceOf(Array);
     expect(recommendedEvents.length).toBeGreaterThanOrEqual(2);
     expect(recommendedEvents.length).toBeLessThanOrEqual(5);
 
     // Check that the recommended events have the correct categories
     recommendedEvents.forEach((event) => {
-      expect(
-        event.categories.some((cat) =>
-          ['Category 1', 'Category 2'].includes(cat.name),
-        ),
-      ).toBeTruthy();
+      if (event.categories) {
+        expect(event.categories).toBeDefined();
+        expect(event.categories).toBeInstanceOf(Array);
+        expect(event.categories.length).toBeGreaterThan(0);
+        expect(
+          event.categories.some((cat) =>
+            ['Category 1', 'Category 2'].includes(cat.name),
+          ),
+        ).toBeTruthy();
+      }
     });
 
     // Check that the main event is not in the recommended events

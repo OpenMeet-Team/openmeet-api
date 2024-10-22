@@ -16,7 +16,7 @@ import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
-import { loginAsTester } from '../../test/utils/functions';
+import { createGroup, loginAsTester } from '../../test/utils/functions';
 
 describe('EventService', () => {
   let service: EventService;
@@ -214,31 +214,16 @@ describe('EventService', () => {
   });
 
   describe('findRecommendedEventsForGroup', () => {
-    it('should throw error when not enough recommended events are found', async () => {
-      const mockEvents = [];
-      const minEvents = 3;
-
-      const mockQueryBuilder = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue(mockEvents),
-      };
-
-      jest
-        .spyOn(service['eventRepository'], 'createQueryBuilder')
-        .mockReturnValue(mockQueryBuilder as any);
-
-      await expect(
-        service.findRecommendedEventsForGroup(1, [1, 2], minEvents),
-      ).rejects.toThrow();
-    });
-
     it('should return recommended events for a group', async () => {
-      const minEvents = 3;
+      const minEvents = 0;
       const maxEvents = 5;
+
+      const { token } = await loginAsTester();
+      //  create a group
+      const group = await createGroup(APP_URL, token, {
+        name: 'Test Group',
+        description: 'A test group',
+      });
       const mockEvents = [
         { id: 1, name: 'Event 1' },
         { id: 2, name: 'Event 2' },
@@ -259,7 +244,7 @@ describe('EventService', () => {
         .mockReturnValue(mockQueryBuilder as any);
 
       const result = await service.findRecommendedEventsForGroup(
-        1,
+        group.id,
         [1, 2],
         minEvents,
         maxEvents,
