@@ -119,6 +119,7 @@ export class GroupController {
     return this.groupService.remove(+id);
   }
 
+  @Public()
   @Get(':id/recommended-events')
   @ApiOperation({ summary: 'Get some recommended events for a specific group' })
   async getRecommendedEvents(
