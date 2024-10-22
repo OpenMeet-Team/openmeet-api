@@ -15,7 +15,14 @@ export class FileType {
     example: 'cbcfa8b8-3a25-4adb-a9c6-e325f0d0f3ae',
   })
   @Allow()
-  id: string;
+  uuid: string;
+
+  @ApiProperty({
+    type: Number,
+    example: 1,
+  })
+  @Allow()
+  id: number;
 
   @ApiProperty({
     type: String,

@@ -93,6 +93,7 @@ export class GroupController {
     return group;
   }
 
+  @Public()
   @Get(':id/recomemded-events')
   @ApiOperation({ summary: 'Get group recomemded event by ID Authenticated' })
   async findRecommendedEvent(@Param('id') id: number): Promise<GroupEntity> {
