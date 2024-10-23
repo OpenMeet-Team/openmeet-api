@@ -79,9 +79,9 @@ describe('Dashboard', () => {
         // Check if every event in the response has the expected attendee, or was created by the user
         const hasNoEventsWithoutExpectedAttendee = response.body.every(
           (event) =>
-            (event.attendees?.some(
+            event.attendees.some(
               (attendee) => attendee.id === TESTER_USER_ID,
-            )) || event.user.id === TESTER_USER_ID,
+            ) || event.user.id === TESTER_USER_ID,
         );
         expect(hasNoEventsWithoutExpectedAttendee).toBe(true);
       });

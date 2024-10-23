@@ -8,7 +8,6 @@ import { EventAttendeesEntity } from '../event-attendee/infrastructure/persisten
 import { TESTER_USER_ID, ADMIN_USER_ID } from '../../test/utils/constants';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { TESTING_TENANT_ID } from '../../test/utils/constants';
-import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 
 describe('EventService', () => {
   let service: EventService;
@@ -30,7 +29,6 @@ describe('EventService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventService,
-        EventAttendeeService,
         {
           provide: REQUEST,
           useValue: { tenantId: TESTING_TENANT_ID },
