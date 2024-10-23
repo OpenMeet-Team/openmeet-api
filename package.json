@@ -7,7 +7,7 @@
   "license": "MIT",
   "scripts": {
     "typeorm": "env-cmd ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js",
-    "migration:reset": "npm run schema:drop && npm run migration:run && npm run migration:run:tenants && npm run seed:run:relational",
+    "migration:reset": "npm run schema:reset && npm run migration:run && npm run migration:run:tenants && npm run seed:run:relational",
     "migration:run:tenants": "env-cmd ts-node -r tsconfig-paths/register ./src/database/run-multi-tenant-migrations.ts",
     "migration:generate": "npm run typeorm -- --dataSource=src/database/data-source.ts migration:generate",
     "migration:create": "npm run typeorm -- migration:create",
@@ -16,6 +16,7 @@
     "migration:run:prod": "ts-node -r tsconfig-paths/register  ./dist/database/run-multi-tenant-migrations.js",
     "seed:run:prod": "ts-node -r tsconfig-paths/register ./dist/database/seeds/relational/run-seed.js",
     "schema:drop": "npm run typeorm -- --dataSource=src/database/data-source.ts schema:drop",
+    "schema:reset": "env-cmd ts-node -r tsconfig-paths/register ./src/database/run-schema-reset.ts",
     "seed:create:relational": "hygen seeds create-relational",
     "generate:resource:relational": "hygen generate relational-resource",
     "postgenerate:resource:relational": "npm run lint -- --fix",

@@ -17,21 +17,26 @@ export class TenantConnectionService implements OnModuleInit {
   }
 
   async getTenantConnection(tenantId: string): Promise<DataSource> {
-    // Create a DataSource and initialize the connection
-    const dataSource = AppDataSource(tenantId);
-    await dataSource.initialize();
+    const connection = this.connections.get(tenantId);
 
-    if (!tenantId) {
-      return dataSource;
+     if (connection) {
+       return connection;
     }
+
+ 
+  
+    // Create a DataSource and initialize the connection
+    const dataSource = AppDataSource();
+    await dataSource.initialize();
+  
     const schemaName = `tenant_${tenantId}`;
-
-    // Create the schema if it does not exist
+    
+    // Create schema if it does not exist
     await dataSource.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
-
+  
     // Cache the connection for reuse
     this.connections.set(tenantId, dataSource);
-
+  
     return dataSource;
   }
 }

@@ -6,6 +6,7 @@ import { EventEntity } from './infrastructure/persistence/relational/entities/ev
 import { TenantModule } from '../tenant/tenant.module';
 import { CategoryModule } from '../category/category.module';
 import { AuthModule } from '../auth/auth.module';
+import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { AuthModule } from '../auth/auth.module';
     TenantModule,
     CategoryModule,
     AuthModule,
+    EventAttendeeModule,
   ],
   controllers: [EventController],
   providers: [EventService],

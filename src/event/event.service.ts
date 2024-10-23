@@ -15,8 +15,13 @@ import { CategoryService } from '../category/category.service';
 import { QueryEventDto } from './dto/query-events.dto';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { paginate } from '../utils/generic-pagination';
-import { Status } from '../core/constants/constant';
+import {
+  EventAttendeeRole,
+  EventAttendeeStatus,
+  Status,
+} from '../core/constants/constant';
 import slugify from 'slugify';
+import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -26,6 +31,7 @@ export class EventService {
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly categoryService: CategoryService,
+    private readonly eventAttendeeService: EventAttendeeService,
   ) {
     void this.initializeRepository();
   }
@@ -46,7 +52,7 @@ export class EventService {
 
   async create(
     createEventDto: CreateEventDto,
-    userId: number | undefined,
+    userId: number,
   ): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
     const user = { id: userId };
@@ -68,7 +74,15 @@ export class EventService {
       categories,
     };
     const event = this.eventRepository.create(mappedDto);
-    return this.eventRepository.save(event);
+    const createdEvent = await this.eventRepository.save(event);
+
+    const eventAttendeeDto = {
+      eventId: createdEvent.id,
+      role: EventAttendeeRole.Host,
+      status: EventAttendeeStatus.Confirmed,
+    };
+    await this.eventAttendeeService.attendEvent(eventAttendeeDto, userId);
+    return createdEvent;
   }
 
   async findAll(pagination: PaginationDto, query: QueryEventDto): Promise<any> {
