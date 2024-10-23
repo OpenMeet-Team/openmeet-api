@@ -202,7 +202,6 @@ describe('GroupService', () => {
       );
       expect(eventService.findRandomEventsForGroup).toHaveBeenCalledWith(
         1,
-        [1, 2],
         minEvents,
         maxEvents - mockRecommendedEvents.length,
       );
