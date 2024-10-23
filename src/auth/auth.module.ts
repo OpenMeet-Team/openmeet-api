@@ -10,6 +10,7 @@ import { MailModule } from '../mail/mail.module';
 import { SessionModule } from '../session/session.module';
 import { UsersModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
+import { RoleModule } from '../role/role.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { GroupModule } from '../group/group.module';
     SessionModule,
     PassportModule,
     MailModule,
+    RoleModule,
     JwtModule.register({}),
   ],
   controllers: [AuthController],

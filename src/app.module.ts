@@ -39,6 +39,8 @@ import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import { makeCounterProvider } from '@willsoto/nestjs-prometheus';
 import { RequestCounterInterceptor } from './interceptors/request-counter.interceptor';
 import { GroupRoleModule } from './group-role/group-role.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { RoleModule } from './role/role.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -106,6 +108,8 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     EventAttendeeModule,
     HealthModule,
     GroupRoleModule,
+    DashboardModule,
+    RoleModule,
   ],
   providers: [
     TenantConnectionService,

@@ -16,6 +16,7 @@ export class CategoryService {
   ) {}
 
   async getTenantSpecificCategoryRepository() {
+    console.log('this.request', this.request);
     const tenantId = this.request.tenantId;
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);

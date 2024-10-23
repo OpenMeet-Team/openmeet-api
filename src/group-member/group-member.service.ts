@@ -9,6 +9,8 @@ import {
 import { REQUEST } from '@nestjs/core';
 import { GroupRoleService } from '../group-role/group-role.service';
 import { GroupRole } from '../core/constants/constant';
+import { PaginationDto } from '../utils/dto/pagination.dto';
+import { paginate } from '../utils/generic-pagination';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupMemberService {
@@ -33,10 +35,6 @@ export class GroupMemberService {
 
     // by default member role
     const groupRole = await this.groupRoleService.findOne(GroupRole.Owner);
-    console.log(
-      '🚀 ~ GroupMemberService ~ createGroupMember ~ groupRole:',
-      groupRole,
-    );
     // const groupRole = { id: createDto.groupRoleId };
     const mappedDto = {
       ...createDto,
@@ -48,7 +46,7 @@ export class GroupMemberService {
     return await this.groupMemberRepository.save(groupMember);
   }
 
-  // async findGroupByUserId(userId: number): Promise<any> {}
+  async findGroupByUserId(): Promise<any> {}
 
   async joinGroup(userId: number, groupId: number) {
     await this.getTenantSpecificEventRepository();
@@ -101,5 +99,23 @@ export class GroupMemberService {
 
     await this.groupMemberRepository.remove(groupMember);
     return { message: 'User has left the group successfully' };
+  }
+
+  async getGroupMembers(
+    groupId: number,
+    pagination: PaginationDto,
+  ): Promise<any> {
+    await this.getTenantSpecificEventRepository();
+
+    const { limit, page } = pagination;
+    const groupMembers = await this.groupMemberRepository
+      .createQueryBuilder('groupMember')
+      .leftJoinAndSelect('groupMember.user', 'user')
+      .leftJoinAndSelect('groupMember.groupRole', 'groupRole')
+      .leftJoinAndSelect('groupRole.groupPermissions', 'groupPermissions')
+      .leftJoinAndSelect('groupMember.group', 'group')
+      .where('group.id = :groupId', { groupId });
+
+    return paginate(groupMembers, { page, limit });
   }
 }

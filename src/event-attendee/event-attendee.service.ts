@@ -36,8 +36,8 @@ export class EventAttendeeService {
     const user = { id: userId };
 
     const mappedDto: DeepPartial<EventAttendeesEntity> = {
-      rsvpStatus: createEventAttendeeDto.rsvpStatus,
-      isHost: createEventAttendeeDto.isHost,
+      status: createEventAttendeeDto.status,
+      role: createEventAttendeeDto.role,
       event, // Attach the event object
       user, // Attach the user object
     };
@@ -113,5 +113,21 @@ export class EventAttendeeService {
     }
 
     return { message: 'User has successfully left the event' };
+  }
+
+  async getEventAttendees(
+    eventId: number,
+    pagination: PaginationDto,
+  ): Promise<any> {
+    await this.getTenantSpecificEventRepository();
+
+    const { limit, page } = pagination;
+    const eventAttendee = await this.eventAttendeesRepository
+      .createQueryBuilder('eventAttendee')
+      .leftJoinAndSelect('eventAttendee.user', 'user')
+      .leftJoinAndSelect('eventAttendee.event', 'event')
+      .where('event.id = :eventId', { eventId });
+
+    return paginate(eventAttendee, { page, limit });
   }
 }

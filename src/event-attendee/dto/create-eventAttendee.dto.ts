@@ -1,6 +1,11 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsNotEmpty, IsNumber, IsString } from 'class-validator';
+
+import { IsEnum, IsNotEmpty, IsNumber, IsOptional } from 'class-validator';
+import {
+  EventAttendeeRole,
+  EventAttendeeStatus,
+} from '../../core/constants/constant';
 
 export class CreateEventAttendeeDto {
   @ApiProperty({
@@ -19,12 +24,29 @@ export class CreateEventAttendeeDto {
   // @IsNumber()
   // userId: number;
 
-  @ApiProperty({ description: 'RSVP status of the attendee', example: 'going' })
-  @IsString()
-  @IsNotEmpty()
-  rsvpStatus: string;
+  // @ApiProperty({ description: 'RSVP status of the attendee', example: 'going' })
+  // @IsOptional()
+  // @IsNotEmpty()
+  // rsvpStatus: string;
 
-  @ApiProperty({ description: 'Is the user a host?', example: false })
-  @IsBoolean()
-  isHost: boolean;
+  // @ApiProperty({ description: 'Is the user a host?', example: false })
+  // @IsBoolean()
+  // @IsOptional()
+  // isHost: boolean;
+
+  @ApiPropertyOptional({
+    description: 'The status of the Event Attendee',
+    enum: EventAttendeeStatus,
+  })
+  @IsOptional()
+  @IsEnum(EventAttendeeStatus)
+  status?: EventAttendeeStatus;
+
+  @ApiPropertyOptional({
+    description: 'The role of the Event Attendee',
+    enum: EventAttendeeRole,
+  })
+  @IsOptional()
+  @IsEnum(EventAttendeeRole)
+  role?: EventAttendeeRole;
 }

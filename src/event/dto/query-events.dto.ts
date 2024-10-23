@@ -1,5 +1,5 @@
-import { IsOptional, IsString, IsDateString } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString, IsDateString, IsArray } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class QueryEventDto {
@@ -34,4 +34,27 @@ export class QueryEventDto {
   @IsDateString()
   @Type(() => String)
   toDate: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Type(() => String)
+  location: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Type(() => String)
+  type: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @Transform(({ value }) =>
+    typeof value === 'string'
+      ? value.split(',').map((item) => item.trim())
+      : value,
+  )
+  categories: string[];
 }

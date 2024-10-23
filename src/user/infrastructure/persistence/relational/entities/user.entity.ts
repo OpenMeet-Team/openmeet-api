@@ -32,6 +32,7 @@ import { SubCategoryEntity } from '../../../../../sub-category/infrastructure/pe
 import { UserPermissionEntity } from './user-permission.entity';
 import { GroupUserPermissionEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group-user-permission.entity';
 import { GroupMemberEntity } from '../../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
+import { GroupEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group.entity';
 
 @Entity({
   name: 'users',
@@ -137,6 +138,9 @@ export class UserEntity extends EntityRelationalHelper {
   @OneToMany(() => GroupMemberEntity, (groupUser) => groupUser.user)
   groupUsers: GroupMemberEntity[];
 
+  @OneToMany(() => GroupEntity, (group) => group.createdBy)
+  groups: GroupEntity[];
+
   @OneToMany(() => UserPermissionEntity, (up) => up.user)
   userPermissions: UserPermissionEntity[];
 
@@ -152,4 +156,13 @@ export class UserEntity extends EntityRelationalHelper {
   @ManyToMany(() => SubCategoryEntity, (SC) => SC.users)
   @JoinTable({ name: 'userInterests' })
   subCategory: SubCategoryEntity[];
+
+  @Expose()
+  @ApiProperty({
+    type: String,
+    example: 'John Doe',
+  })
+  get name(): string {
+    return `${this.firstName || ''} ${this.lastName || ''}`.trim();
+  }
 }

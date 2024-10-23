@@ -4,13 +4,12 @@ import {
   IsNotEmpty,
   IsNumber,
   IsOptional,
-  IsBoolean,
   IsString,
   IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Status } from '../../core/constants/constant';
+import { Status, Visibility } from '../../core/constants/constant';
 
 export class CreateEventDto {
   @ApiProperty({
@@ -19,6 +18,13 @@ export class CreateEventDto {
   @IsNotEmpty()
   @IsString()
   name: string;
+
+  // @ApiProperty({
+  //   description: 'The slug of the group',
+  // })
+  // @IsString()
+  // @IsOptional()
+  // slug?: string;
 
   @ApiPropertyOptional({
     description: 'URL of the event image',
@@ -101,20 +107,20 @@ export class CreateEventDto {
   lon: number;
 
   @ApiPropertyOptional({
-    description: 'The status of the group',
+    description: 'The status of the event',
     enum: Status,
   })
   @IsOptional()
   @IsEnum(Status)
   status?: Status;
 
-  @ApiProperty({
-    description: 'Flag indicating if the event is public',
-    example: true,
+  @ApiPropertyOptional({
+    description: 'The visibility of the event',
+    enum: Visibility,
   })
   @IsOptional()
-  @IsBoolean()
-  is_public: boolean;
+  @IsEnum(Visibility)
+  visibility?: Visibility;
 
   @ApiProperty({
     description: 'The ID of the user organizing the event',
