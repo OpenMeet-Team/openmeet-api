@@ -27,6 +27,8 @@ describe('EventService', () => {
   let service: EventService;
   let eventAttendeeService: EventAttendeeService;
   beforeEach(async () => {
+    const mockQueryBuilder = {
+      leftJoin: jest.fn().mockReturnThis(),
     const mockEventRepository = {
       create: jest.fn().mockImplementation((dto) => ({
         id: 1,
@@ -45,7 +47,14 @@ describe('EventService', () => {
       find: jest.fn(),
       createQueryBuilder: jest.fn().mockReturnThis(),
       leftJoinAndSelect: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([]),
+      getRawMany: jest.fn().mockResolvedValue([{ event_id: 1 }]),
       getMany: jest.fn(),
     };
 
@@ -93,11 +102,11 @@ describe('EventService', () => {
           provide: TenantConnectionService,
           useValue: {
             getTenantConnection: jest.fn().mockResolvedValue({
-              getRepository: jest.fn().mockImplementation((entity) => {
-                if (entity === EventAttendeesEntity) {
-                  return mockEventAttendeeRepository;
-                }
-                return mockEventRepository;
+              getRepository: jest.fn().mockReturnValue({
+                createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+                find: jest.fn().mockResolvedValue([]),
+                findOne: jest.fn(),
+                save: jest.fn(),
               }),
             }),
           },
@@ -122,6 +131,14 @@ describe('EventService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+
+  describe('findRandomEventsForGroup', () => {
+    it('should return random events for a group', async () => {
+      const result = await service.findRandomEventsForGroup(1);
+      expect(Array.isArray(result)).toBe(true);
+    })
   });
 
   describe('create', () => {
@@ -285,6 +302,29 @@ describe('EventService', () => {
         attendeesCount: 2,
       });
     });
+  });
+
+  describe('getEventsByAttendee', () => {
+    it('should return events attended by the user when empty', async () => {
+      const events = await service.getEventsByAttendee(TESTER_USER_ID);
+      expect(events).toEqual([]);
+    });
+  });
+
+  describe.skip('findRecommendedEventsForGroup', () => {
+    it('should throw error when not enough recommended events are found', async () => {
+      const mockEvents = [];
+      const minEvents = 3;
+
+      const mockQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockEvents),
+      };
+    })
   });
 
   describe('findRecommendedEventsForGroup', () => {
@@ -452,6 +492,44 @@ describe('EventService', () => {
         // we found all 5 recommended events, and didn't need to fetch any random events
         expect(service.findRandomEventsForEvent).toHaveBeenCalledTimes(0);
       });
+
+
+      await expect(
+        service.findRandomEventsForGroup(1, minEvents, maxEvents),
+      ).rejects.toThrow();
+    });
+
+    it('should return random events for a group', async () => {
+      // mock a single event
+      const mockEvents = [{ id: 1, name: 'Event 1' }];
+
+      const mockQueryBuilder = {
+        leftJoin: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([{ id: 1, name: 'Test Event' }]),
+        getRawMany: jest.fn().mockResolvedValue([{ event_id: 1 }]),
+      };
+
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockReturnValue({
+            createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+          }),
+        } as any);
+
+      await service.getTenantSpecificEventRepository();
+
+      const randomEvents = await service.findRandomEventsForGroup(1, 1, 1);
+      expect(Array.isArray(randomEvents)).toBe(true);
+      expect(randomEvents.length).toBeGreaterThan(0);
+      expect(randomEvents[0].id).toBe(1);
+    });
 
       it('should fetch additional random events if not enough recommended events are found', async () => {
         const eventId = 1;
