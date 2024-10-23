@@ -182,7 +182,7 @@ export class EventService {
   async findRecommendedEventsForGroup(
     groupId: number,
     categoryIds: number[],
-    minEvents: number = 3,
+    minEvents: number = 0,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
     if (maxEvents < minEvents || minEvents < 0 || maxEvents < 0) {
@@ -193,13 +193,16 @@ export class EventService {
     try {
       const recommendedEvents = await this.eventRepository
         .createQueryBuilder('event')
-        .leftJoinAndSelect('event.categories', 'category')
+        .leftJoinAndSelect('event.group', 'group')
+        .leftJoinAndSelect('event.categories', 'categories')
+        .leftJoinAndSelect('event.attendees', 'attendees')
         .where('event.status = :status', { status: Status.Published })
         .andWhere('event.groupId != :groupId', { groupId })
-        .andWhere('category.id IN (:...categoryIds)', { categoryIds })
+        .andWhere('categories.id IN (:...categoryIds)', { categoryIds })
         .orderBy('RANDOM()')
-        .take(maxEvents)
+        .limit(maxEvents)
         .getMany();
+      console.log('🚀 ~ recommendedEvents:', recommendedEvents);
 
       if (recommendedEvents.length < minEvents) {
         throw new NotFoundException(
@@ -207,11 +210,7 @@ export class EventService {
         );
       }
 
-      if (recommendedEvents.length > maxEvents) {
-        return recommendedEvents.slice(0, maxEvents);
-      }
-
-      return recommendedEvents;
+      return recommendedEvents.slice(0, maxEvents);
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -224,8 +223,7 @@ export class EventService {
 
   async findRandomEventsForGroup(
     groupId: number,
-    excludeEventIds: number[] = [],
-    minEvents: number = 3,
+    minEvents: number = 0,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
     if (maxEvents < minEvents || minEvents < 0 || maxEvents < 0) {
@@ -236,11 +234,13 @@ export class EventService {
     try {
       const randomEvents = await this.eventRepository
         .createQueryBuilder('event')
+        .leftJoinAndSelect('event.group', 'group')
+        .leftJoinAndSelect('event.categories', 'categories')
+        .leftJoinAndSelect('event.attendees', 'attendees')
         .where('event.status = :status', { status: Status.Published })
         .andWhere('event.groupId != :groupId', { groupId })
-        .andWhere('event.id NOT IN (:...excludeEventIds)', { excludeEventIds })
-        .orderBy('RANDOM()')
-        .take(maxEvents)
+        .orderBy('RANDOM()') // PostgreSQL's RANDOM() function
+        .take(maxEvents) // Limit the results
         .getMany();
 
       if (randomEvents.length < minEvents) {
@@ -249,11 +249,7 @@ export class EventService {
         );
       }
 
-      if (randomEvents.length > maxEvents) {
-        return randomEvents.slice(0, maxEvents);
-      }
-
-      return randomEvents;
+      return randomEvents.slice(0, maxEvents);
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -263,6 +259,7 @@ export class EventService {
       );
     }
   }
+
   async update(
     id: number,
     updateEventDto: UpdateEventDto,

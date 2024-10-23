@@ -120,9 +120,11 @@ export class GroupController {
   @ApiOperation({ summary: 'Get some recommended events for a specific group' })
   async getRecommendedEvents(
     @Param('id') id: number,
-    @Query('minEvents') minEvents: number = 3,
+    @Query('minEvents') minEvents: number = 0,
     @Query('maxEvents') maxEvents: number = 5,
   ): Promise<EventEntity[]> {
+    minEvents = minEvents || 0;
+    maxEvents = maxEvents || 5;
     try {
       const recommendedEvents = await this.groupService.getRecommendedEvents(
         +id,
