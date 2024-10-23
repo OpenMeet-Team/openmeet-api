@@ -318,7 +318,7 @@ export class EventService {
 
   async findRecommendedEventsForGroup(
     groupId: number,
-    categoryIds: number[],
+    categories: number[],
     minEvents: number = 0,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
@@ -327,6 +327,7 @@ export class EventService {
     }
     await this.getTenantSpecificEventRepository();
 
+    console.log('🚀 ~ categories:', categories);
     try {
       const recommendedEvents = await this.eventRepository
         .createQueryBuilder('event')
@@ -334,11 +335,12 @@ export class EventService {
         .leftJoinAndSelect('event.categories', 'categories')
         .leftJoinAndSelect('event.attendees', 'attendees')
         .where('event.status = :status', { status: Status.Published })
-        .andWhere('event.groupId != :groupId', { groupId })
-        .andWhere('categories.id IN (:...categoryIds)', { categoryIds })
+        .andWhere('(group.id != :groupId OR group.id IS NULL)', { groupId })
+        .andWhere('categories.id IN (:...categories)', { categories })
         .orderBy('RANDOM()')
         .limit(maxEvents)
         .getMany();
+
       console.log('🚀 ~ recommendedEvents:', recommendedEvents);
 
       if (recommendedEvents.length < minEvents) {
@@ -369,24 +371,36 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
 
     try {
-      const randomEvents = await this.eventRepository
+      const randomEventIds = await this.eventRepository
+        .createQueryBuilder('event')
+        .leftJoin('event.group', 'group')
+        .select('event.id')
+        .where('event.status = :status', { status: Status.Published })
+        .andWhere('(group.id != :groupId OR group.id IS NULL)', { groupId })
+        .orderBy('RANDOM()')
+        .limit(maxEvents)
+        .getRawMany();
+
+      console.log('🚀 ~ randomEventIds found:', randomEventIds);
+
+      if (randomEventIds.length < minEvents) {
+        throw new NotFoundException(
+          `Not enough random events found for group ${groupId}. Found ${randomEventIds.length}, expected at least ${minEvents}.`,
+        );
+      }
+
+      // Then fetch full event details for these IDs
+      const events = await this.eventRepository
         .createQueryBuilder('event')
         .leftJoinAndSelect('event.group', 'group')
         .leftJoinAndSelect('event.categories', 'categories')
         .leftJoinAndSelect('event.attendees', 'attendees')
-        .where('event.status = :status', { status: Status.Published })
-        .andWhere('event.groupId != :groupId', { groupId })
-        .orderBy('RANDOM()') // PostgreSQL's RANDOM() function
-        .take(maxEvents) // Limit the results
+        .where('event.id IN (:...ids)', {
+          ids: randomEventIds.map((e) => e.event_id),
+        })
         .getMany();
 
-      if (randomEvents.length < minEvents) {
-        throw new NotFoundException(
-          `Not enough random events found for group ${groupId}. Found ${randomEvents.length}, expected at least ${minEvents}.`,
-        );
-      }
-
-      return randomEvents.slice(0, maxEvents);
+      return events;
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
