@@ -50,6 +50,7 @@ describe('GroupController (e2e)', () => {
       const updateResponse = await serverApp
         .patch(`/api/groups/${testGroup.id}`)
         .send(updatedGroupData);
+
       expect(updateResponse.status).toBe(200);
       expect(updateResponse.body.name).toBe(updatedGroupData.name);
 

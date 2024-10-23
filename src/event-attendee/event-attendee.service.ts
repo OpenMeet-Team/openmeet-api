@@ -1,4 +1,4 @@
-import { PaginationDto } from './../utils/dto/pagination.dto';
+import { PaginationDto } from '../utils/dto/pagination.dto';
 import { Inject, Injectable, NotFoundException, Scope } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
