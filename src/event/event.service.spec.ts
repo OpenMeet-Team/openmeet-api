@@ -6,22 +6,16 @@ import { CategoryService } from '../category/category.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { NotFoundException } from '@nestjs/common';
-import {
-  TESTER_USER_ID,
-  ADMIN_USER_ID,
-  APP_URL,
-} from '../../test/utils/constants';
+import { TESTER_USER_ID, ADMIN_USER_ID } from '../../test/utils/constants';
 import {
   EventAttendeeRole,
   EventAttendeeStatus,
-  Status,
 } from '../../src/core/constants/constant';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
-import { createGroup, loginAsTester } from '../../test/utils/functions';
 
 describe('EventService', () => {
   let service: EventService;
