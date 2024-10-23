@@ -7,6 +7,7 @@ import { TenantModule } from '../tenant/tenant.module';
 import { CategoryModule } from '../category/category.module';
 import { AuthModule } from '../auth/auth.module';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
+import { ChannelCreatedListener } from './channel-created.listener';
 
 @Module({
   imports: [
@@ -17,7 +18,7 @@ import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
     EventAttendeeModule,
   ],
   controllers: [EventController],
-  providers: [EventService],
+  providers: [EventService, ChannelCreatedListener],
   exports: [EventService],
 })
 export class EventsModule {}
