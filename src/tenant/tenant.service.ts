@@ -35,10 +35,10 @@ export class TenantConnectionService implements OnModuleInit {
 
     // Create schema if it does not exist
     await dataSource.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
-
+  
     // Cache the connection for reuse
     this.connections.set(tenantId, dataSource);
-
+  
     return dataSource;
   }
 }
