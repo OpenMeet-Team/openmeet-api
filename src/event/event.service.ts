@@ -318,7 +318,7 @@ export class EventService {
 
   async findRecommendedEventsForGroup(
     groupId: number,
-    categoryIds: number[],
+    categories: number[],
     minEvents: number = 0,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
@@ -327,16 +327,21 @@ export class EventService {
     }
     await this.getTenantSpecificEventRepository();
 
+    console.log('🚀 ~ categories:', categories);
     try {
       const recommendedEvents = await this.eventRepository
         .createQueryBuilder('event')
-        .leftJoinAndSelect('event.categories', 'category')
+        .leftJoinAndSelect('event.group', 'group')
+        .leftJoinAndSelect('event.categories', 'categories')
+        .leftJoinAndSelect('event.attendees', 'attendees')
         .where('event.status = :status', { status: Status.Published })
-        .andWhere('event.groupId != :groupId', { groupId })
-        .andWhere('category.id IN (:...categoryIds)', { categoryIds })
+        .andWhere('(group.id != :groupId OR group.id IS NULL)', { groupId })
+        .andWhere('categories.id IN (:...categories)', { categories })
         .orderBy('RANDOM()')
-        .take(maxEvents)
+        .limit(maxEvents)
         .getMany();
+
+      console.log('🚀 ~ recommendedEvents:', recommendedEvents);
 
       if (recommendedEvents.length < minEvents) {
         throw new NotFoundException(
@@ -344,11 +349,7 @@ export class EventService {
         );
       }
 
-      if (recommendedEvents.length > maxEvents) {
-        return recommendedEvents.slice(0, maxEvents);
-      }
-
-      return recommendedEvents;
+      return recommendedEvents.slice(0, maxEvents);
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -361,8 +362,7 @@ export class EventService {
 
   async findRandomEventsForGroup(
     groupId: number,
-    excludeEventIds: number[] = [],
-    minEvents: number = 3,
+    minEvents: number = 0,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
     if (maxEvents < minEvents || minEvents < 0 || maxEvents < 0) {
@@ -371,26 +371,36 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
 
     try {
-      const randomEvents = await this.eventRepository
+      const randomEventIds = await this.eventRepository
         .createQueryBuilder('event')
+        .leftJoin('event.group', 'group')
+        .select('event.id')
         .where('event.status = :status', { status: Status.Published })
-        .andWhere('event.groupId != :groupId', { groupId })
-        .andWhere('event.id NOT IN (:...excludeEventIds)', { excludeEventIds })
+        .andWhere('(group.id != :groupId OR group.id IS NULL)', { groupId })
         .orderBy('RANDOM()')
-        .take(maxEvents)
-        .getMany();
+        .limit(maxEvents)
+        .getRawMany();
 
-      if (randomEvents.length < minEvents) {
+      console.log('🚀 ~ randomEventIds found:', randomEventIds);
+
+      if (randomEventIds.length < minEvents) {
         throw new NotFoundException(
-          `Not enough random events found for group ${groupId}. Found ${randomEvents.length}, expected at least ${minEvents}.`,
+          `Not enough random events found for group ${groupId}. Found ${randomEventIds.length}, expected at least ${minEvents}.`,
         );
       }
 
-      if (randomEvents.length > maxEvents) {
-        return randomEvents.slice(0, maxEvents);
-      }
+      // Then fetch full event details for these IDs
+      const events = await this.eventRepository
+        .createQueryBuilder('event')
+        .leftJoinAndSelect('event.group', 'group')
+        .leftJoinAndSelect('event.categories', 'categories')
+        .leftJoinAndSelect('event.attendees', 'attendees')
+        .where('event.id IN (:...ids)', {
+          ids: randomEventIds.map((e) => e.event_id),
+        })
+        .getMany();
 
-      return randomEvents;
+      return events;
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -444,10 +454,11 @@ export class EventService {
   }
   async getEventsByCreator(userId: number) {
     await this.getTenantSpecificEventRepository();
-    const events = await this.eventRepository.find({
-      where: { user: { id: userId } },
-      relations: ['user', 'attendees'],
-    }) || [];
+    const events =
+      (await this.eventRepository.find({
+        where: { user: { id: userId } },
+        relations: ['user', 'attendees'],
+      })) || [];
     return events.map((event) => ({
       ...event,
       attendeesCount: event.attendees ? event.attendees.length : 0,
