@@ -107,7 +107,6 @@ export class GroupService {
     if (!group) {
       throw new NotFoundException(`Group with ID ${groupId} not found`);
     }
-    console.log('Tom: Found group categories:', group.categories);
 
     const categoryIds = group.categories.map((c) => c.id);
 
@@ -157,10 +156,6 @@ export class GroupService {
     if (uniqueEvents.length > maxEvents) {
       return uniqueEvents.slice(0, maxEvents);
     }
-    console.log(
-      '🚀 ~ GroupService ~ getRecommendedEvents ~ uniqueEvents:',
-      uniqueEvents,
-    );
 
     return uniqueEvents;
   }
@@ -213,7 +208,6 @@ export class GroupService {
     await this.getTenantSpecificGroupRepository();
     const { page, limit } = pagination;
     const { search, userId, location, categories } = query;
-    console.log('🚀 ~ GroupService ~ findAll ~ categories:', categories);
     const groupQuery = this.groupRepository
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.categories', 'categories')
