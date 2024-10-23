@@ -22,6 +22,7 @@ import {
 } from '../core/constants/constant';
 import slugify from 'slugify';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -32,6 +33,7 @@ export class EventService {
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly categoryService: CategoryService,
     private readonly eventAttendeeService: EventAttendeeService,
+    private eventEmitter: EventEmitter2,
   ) {
     void this.initializeRepository();
   }
@@ -82,6 +84,12 @@ export class EventService {
       status: EventAttendeeStatus.Confirmed,
     };
     await this.eventAttendeeService.attendEvent(eventAttendeeDto, userId);
+
+    const params = {
+      name: `${createdEvent.shortId}_${createdEvent.slug}`,
+      userId,
+    };
+    this.eventEmitter.emit('channel.created', params);
     return createdEvent;
   }
 

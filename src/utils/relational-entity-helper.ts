@@ -30,7 +30,7 @@ export class EntityRelationalHelper extends BaseEntity {
 
   @BeforeInsert()
   generateShortId() {
-    this.shortId = ulid();
+    this.shortId = ulid().toLowerCase();
   }
 
   toJSON() {

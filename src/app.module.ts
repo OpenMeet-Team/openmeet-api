@@ -41,6 +41,8 @@ import { RequestCounterInterceptor } from './interceptors/request-counter.interc
 import { GroupRoleModule } from './group-role/group-role.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { RoleModule } from './role/role.module';
+import { EventEmitter } from 'stream';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -88,7 +90,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
     }),
-
+    EventEmitterModule.forRoot(),
     PrometheusModule.register(),
     UsersModule,
     FilesModule,

@@ -8,6 +8,7 @@ import { TenantModule } from '../tenant/tenant.module';
 import { RelationalUserPersistenceModule } from './infrastructure/persistence/relational/relational-persistence.module';
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { RoleModule } from '../role/role.module';
+import { UserCreatedListener } from './user-created.listener';
 
 const infrastructurePersistenceModule = RelationalUserPersistenceModule;
 
@@ -19,7 +20,7 @@ const infrastructurePersistenceModule = RelationalUserPersistenceModule;
     RoleModule,
   ],
   controllers: [UserController],
-  providers: [UserService, SubCategoryService],
+  providers: [UserService, SubCategoryService, UserCreatedListener],
   exports: [UserService, infrastructurePersistenceModule],
 })
 export class UsersModule {}
