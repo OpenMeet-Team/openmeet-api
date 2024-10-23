@@ -15,8 +15,14 @@ import { CategoryService } from '../category/category.service';
 import { QueryEventDto } from './dto/query-events.dto';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { paginate } from '../utils/generic-pagination';
-import { Status } from '../core/constants/constant';
+import {
+  EventAttendeeRole,
+  EventAttendeeStatus,
+  Status,
+} from '../core/constants/constant';
 import slugify from 'slugify';
+import { EventAttendeeService } from '../event-attendee/event-attendee.service';
+import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -26,6 +32,7 @@ export class EventService {
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly categoryService: CategoryService,
+    private readonly eventAttendeeService: EventAttendeeService,
   ) {
     void this.initializeRepository();
   }
@@ -46,14 +53,21 @@ export class EventService {
 
   async create(
     createEventDto: CreateEventDto,
-    userId: number | undefined,
+    userId: number,
   ): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
     const user = { id: userId };
     const group = createEventDto.group ? { id: createEventDto.group } : null;
-    const categories = await this.categoryService.findByIds(
-      createEventDto.categories,
-    );
+
+    let categories: CategoryEntity[] = [];
+    try {
+      categories = await this.categoryService.findByIds(
+        createEventDto.categories,
+      );
+    } catch (error) {
+      console.error('Error finding categories:', error);
+      throw new NotFoundException(`Error finding categories: ${error.message}`);
+    }
 
     const slugifiedName = slugify(createEventDto.name, {
       strict: true,
@@ -68,7 +82,15 @@ export class EventService {
       categories,
     };
     const event = this.eventRepository.create(mappedDto);
-    return this.eventRepository.save(event);
+    const createdEvent = await this.eventRepository.save(event);
+
+    const eventAttendeeDto = {
+      eventId: createdEvent.id,
+      role: EventAttendeeRole.Host,
+      status: EventAttendeeStatus.Confirmed,
+    };
+    await this.eventAttendeeService.attendEvent(eventAttendeeDto, userId);
+    return createdEvent;
   }
 
   async findAll(pagination: PaginationDto, query: QueryEventDto): Promise<any> {
@@ -177,6 +199,121 @@ export class EventService {
     const randomEvents = shuffledEvents.slice(0, 5);
 
     return randomEvents;
+  }
+
+  async getRecommendedEventsByEventId(
+    eventId: number,
+    minEvents: number = 0,
+    maxEvents: number = 5,
+  ): Promise<EventEntity[]> {
+    await this.getTenantSpecificEventRepository();
+
+    const event = await this.eventRepository.findOne({
+      where: { id: Number(eventId) },
+      relations: ['categories'],
+    });
+
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    const categoryIds = event.categories.map((c) => c.id);
+
+    let recommendedEvents: EventEntity[] = [];
+    try {
+      recommendedEvents = await this.findRecommendedEventsForEvent(
+        eventId,
+        categoryIds,
+        0,
+        maxEvents,
+      );
+    } catch (error) {
+      console.error('Error fetching recommended events:', error);
+    }
+
+    const remainingEventsToFetch = maxEvents - recommendedEvents.length;
+
+    if (remainingEventsToFetch > 0) {
+      try {
+        const randomEvents = await this.findRandomEventsForEvent(
+          eventId,
+          0,
+          remainingEventsToFetch,
+        );
+        recommendedEvents = [...recommendedEvents, ...randomEvents];
+      } catch (error) {
+        console.error('Error fetching random events:', error);
+      }
+    }
+
+    // Deduplicate events
+    const uniqueEvents = recommendedEvents.filter(
+      (event, index, self) =>
+        index === self.findIndex((t) => t.id === event.id),
+    );
+
+    if (uniqueEvents.length < minEvents) {
+      throw new NotFoundException(
+        `Not enough events found for event ${eventId}. Found ${uniqueEvents.length}, expected at least ${minEvents}.`,
+      );
+    }
+
+    return uniqueEvents.slice(0, maxEvents);
+  }
+
+  async findRecommendedEventsForEvent(
+    eventId: number,
+    categoryIds: number[],
+    minEvents: number = 0,
+    maxEvents: number = 5,
+  ): Promise<EventEntity[]> {
+    const queryBuilder = this.eventRepository
+      .createQueryBuilder('event')
+      .select('event.id')
+      .addSelect('RANDOM()', 'random')
+      .distinct(true)
+      .innerJoin('event.categories', 'category')
+      .where('event.status = :status', { status: Status.Published })
+      .andWhere('event.id != :eventId', { eventId })
+      .andWhere('category.id IN (:...categoryIds)', { categoryIds })
+      .orderBy('random')
+      .limit(maxEvents);
+    const ids = await queryBuilder.getRawMany();
+
+    if (ids.length < minEvents) {
+      return [];
+    }
+
+    return this.eventRepository.findByIds(ids.map((row) => row.event_id));
+  }
+
+  async findRandomEventsForEvent(
+    eventId: number,
+    minEvents: number = 0,
+    maxEvents: number = 5,
+  ): Promise<EventEntity[]> {
+    try {
+      const randomEvents = await this.eventRepository
+        .createQueryBuilder('event')
+        .select('event.id')
+        .addSelect('RANDOM()', 'random')
+        .where('event.status = :status', { status: Status.Published })
+        .andWhere('event.id != :eventId', { eventId })
+        .orderBy('random')
+        .limit(maxEvents)
+        .getMany();
+
+      if (randomEvents.length < minEvents) {
+        throw new NotFoundException(
+          `Not enough random events found for event ${eventId}. Found ${randomEvents.length}, expected at least ${minEvents}.`,
+        );
+      }
+
+      return randomEvents;
+    } catch (error) {
+      console.error(`Error finding random events for event ${eventId}:`, error);
+      throw error;
+    }
   }
 
   async findRecommendedEventsForGroup(
@@ -314,7 +451,7 @@ export class EventService {
     const events = await this.eventRepository.find({
       where: { user: { id: userId } },
       relations: ['user', 'attendees'],
-    });
+    }) || [];
     return events.map((event) => ({
       ...event,
       attendeesCount: event.attendees ? event.attendees.length : 0,

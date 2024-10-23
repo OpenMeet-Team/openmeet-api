@@ -1,5 +1,10 @@
 import request from 'supertest';
-import { TESTING_TENANT_ID } from './constants';
+import {
+  APP_URL,
+  TESTER_EMAIL,
+  TESTER_PASSWORD,
+  TESTING_TENANT_ID,
+} from './constants';
 import { CreateEventDto } from '../../src/event/dto/create-event.dto';
 import { Status } from '../../src/core/constants/constant';
 
@@ -23,23 +28,10 @@ async function createGroup(
   const server = request(app);
   const response = await server
     .post('/api/groups')
-    .set('tenant-id', '1')
+    .set('tenant-id', TESTING_TENANT_ID)
     .set('Authorization', `Bearer ${authToken}`)
     .send(groupData);
-  return response.body;
-}
-
-async function createEvent(
-  app: string,
-  authToken: string,
-  eventData: any,
-): Promise<any> {
-  const server = request(app);
-  const response = await server
-    .post('/api/events')
-    .set('tenant-id', '1')
-    .set('Authorization', `Bearer ${authToken}`)
-    .send(eventData);
+  // console.log('createGroup response.body', response.body);
   return response.body;
 }
 
@@ -95,4 +87,124 @@ async function deleteEvent(app: string, authToken: string, eventId: number) {
     .set('Authorization', `Bearer ${authToken}`);
 }
 
-export { getAuthToken, createGroup, createEvent, deleteGroup, deleteEvent };
+async function loginAsTester() {
+  const loginResponse = await request(APP_URL)
+    .post('/api/v1/auth/email/login')
+    .set('tenant-id', TESTING_TENANT_ID)
+    .send({
+      email: TESTER_EMAIL,
+      password: TESTER_PASSWORD,
+    });
+
+  expect(loginResponse.status).toBe(200);
+  return loginResponse.body.token;
+}
+async function createCategory(app, token, categoryData) {
+  const response = await request(app)
+    .post('/api/categories')
+    .set('Authorization', `Bearer ${token}`)
+    .set('tenant-id', TESTING_TENANT_ID)
+    .send(categoryData);
+  // console.log('createCategory response.body', response.body);
+  expect(response.status).toBe(201);
+  return response.body;
+}
+
+async function createEvent(app, token, eventData) {
+  const response = await request(app)
+    .post('/api/events')
+    .set('Authorization', `Bearer ${token}`)
+    .set('tenant-id', TESTING_TENANT_ID)
+    .send(eventData);
+  console.log('createEvent response.body', response.body);
+  expect(response.status).toBe(201);
+  return response.body;
+}
+
+async function getRecommendedEvents(
+  app,
+  token,
+  eventId,
+  minEvents = 0,
+  maxEvents = 5,
+  isAuthenticated = false,
+) {
+  const getRecommendedEventsUrl = `/api/events/${eventId}/recommended-events?minEvents=${minEvents}&maxEvents=${maxEvents}`;
+
+  let response;
+
+  const event = await getEvent(app, token, eventId);
+  expect(event.id).toBe(eventId);
+
+  if (isAuthenticated) {
+    response = await request(app)
+      .get(getRecommendedEventsUrl)
+      .set('tenant-id', TESTING_TENANT_ID);
+  } else {
+    response = await request(app)
+      .get(getRecommendedEventsUrl)
+      .set('Authorization', `Bearer ${token}`)
+      .set('tenant-id', TESTING_TENANT_ID);
+  }
+  expect(response.status).toBe(200);
+  return response.body;
+}
+
+async function updateEvent(app, token, eventId, eventData) {
+  const response = await request(app)
+    .patch(`/api/events/${eventId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .set('tenant-id', TESTING_TENANT_ID)
+    .send(eventData);
+
+  expect(response.status).toBe(200);
+
+  return response.body;
+}
+
+async function getAllEvents(app, token) {
+  const response = await request(app)
+    .get(`/api/events`)
+    .set('Authorization', `Bearer ${token}`)
+    .set('tenant-id', TESTING_TENANT_ID);
+
+  expect(response.status).toBe(200);
+
+  return response.body;
+}
+
+async function getEvent(app, token, eventId) {
+  console.log('getEvent', eventId);
+  const response = await request(app)
+    .get(`/api/events/${eventId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .set('tenant-id', TESTING_TENANT_ID);
+  console.log('getEvent response', response.body);
+  expect(response.status).toBe(200);
+
+  return response.body;
+}
+async function getMyEvents(app, token) {
+  const response = await request(app)
+    .get(`/api/dashboard/my-events`)
+    .set('Authorization', `Bearer ${token}`)
+    .set('tenant-id', TESTING_TENANT_ID);
+
+  expect(response.status).toBe(200);
+  return response.body;
+}
+
+export {
+  getAuthToken,
+  createGroup,
+  createEvent,
+  deleteGroup,
+  deleteEvent,
+  loginAsTester,
+  getRecommendedEvents,
+  updateEvent,
+  getEvent,
+  getMyEvents,
+  createCategory,
+  getAllEvents,
+};

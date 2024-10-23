@@ -254,6 +254,38 @@ export class GroupService {
     return paginate(groupQuery, { page, limit });
   }
 
+  async findQuery(id: number, userId: number): Promise<any> {
+    await this.getTenantSpecificGroupRepository();
+
+    const groupQuery = this.groupRepository
+      .createQueryBuilder('group')
+      .leftJoinAndSelect('group.events', 'events')
+      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
+      .leftJoinAndSelect('groupMembers.user', 'user')
+      .leftJoinAndSelect('group.createdBy', 'createdBy')
+      .leftJoinAndSelect('group.categories', 'categories')
+      .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
+      .leftJoinAndSelect('groupRole.groupPermissions', 'groupPermissions')
+      .where('group.id = :id', { id });
+
+    const group = await groupQuery.getOne();
+
+    if (!group) {
+      throw new Error('Group not found');
+    }
+
+    // Slice the events and groupMembers lists to return only the first 5 entries
+    group.events = group.events.slice(0, 5);
+    group.groupMembers = group.groupMembers.slice(0, 5);
+
+    return {
+      ...group,
+      groupMember: group.groupMembers.find(
+        (member) => member.user.id === userId,
+      ),
+    };
+  }
+
   async findOne(id: number): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     const group = await this.groupRepository.findOne({

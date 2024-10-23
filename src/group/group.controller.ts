@@ -71,8 +71,12 @@ export class GroupController {
 
   @Get('me/:id')
   @ApiOperation({ summary: 'Get group by ID Authenticated' })
-  async findOne(@Param('id') id: number): Promise<GroupEntity> {
-    const group = await this.groupService.findOne(+id);
+  async findOne(
+    @Param('id') id: number,
+    @AuthUser() user: User,
+  ): Promise<GroupEntity> {
+    const userId = user.id;
+    const group = await this.groupService.findQuery(+id, userId);
     if (!group) {
       throw new NotFoundException(`Group with ID ${id} not found`);
     }
@@ -83,6 +87,16 @@ export class GroupController {
   @ApiOperation({ summary: 'Get group event by ID Authenticated' })
   async findGroupEvent(@Param('id') id: number): Promise<GroupEntity> {
     const group = await this.groupService.findGroupEvent(+id);
+    if (!group) {
+      throw new NotFoundException(`Group with ID ${id} not found`);
+    }
+    return group;
+  }
+
+  @Get(':id/recomemded-events')
+  @ApiOperation({ summary: 'Get group recomemded event by ID Authenticated' })
+  async findRecommendedEvent(@Param('id') id: number): Promise<GroupEntity> {
+    const group = await this.groupService.findRandomEvents(+id);
     if (!group) {
       throw new NotFoundException(`Group with ID ${id} not found`);
     }
