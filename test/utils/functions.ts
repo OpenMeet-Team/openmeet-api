@@ -116,7 +116,7 @@ async function createEvent(app, token, eventData) {
     .set('Authorization', `Bearer ${token}`)
     .set('tenant-id', TESTING_TENANT_ID)
     .send(eventData);
-  console.log('createEvent response.body', response.body);
+  // console.log('createEvent response.body', response.body);
   expect(response.status).toBe(201);
   return response.body;
 }
@@ -174,12 +174,11 @@ async function getAllEvents(app, token) {
 }
 
 async function getEvent(app, token, eventId) {
-  console.log('getEvent', eventId);
   const response = await request(app)
     .get(`/api/events/${eventId}`)
     .set('Authorization', `Bearer ${token}`)
     .set('tenant-id', TESTING_TENANT_ID);
-  console.log('getEvent response', response.body);
+  // console.log('getEvent response', response.body);
   expect(response.status).toBe(200);
 
   return response.body;
