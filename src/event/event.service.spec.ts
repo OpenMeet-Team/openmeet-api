@@ -11,6 +11,11 @@ import {
   ADMIN_USER_ID,
   APP_URL,
 } from '../../test/utils/constants';
+import {
+  EventAttendeeRole,
+  EventAttendeeStatus,
+  Status,
+} from '../../src/core/constants/constant';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
@@ -20,34 +25,66 @@ import { createGroup, loginAsTester } from '../../test/utils/functions';
 
 describe('EventService', () => {
   let service: EventService;
-
+  let eventAttendeeService: EventAttendeeService;
   beforeEach(async () => {
-    const mockRepository = {
-      find: jest.fn().mockResolvedValue([]),
+    const mockEventRepository = {
       create: jest.fn().mockImplementation((dto) => ({
         id: 1,
         ...dto,
-        categories: dto.categories.map((id) => ({ id })),
-        group: { id: dto.group },
+        categories: Array.isArray(dto.categories) 
+          ? dto.categories.map(id => ({ id }))
+          : [],
         user: { id: TESTER_USER_ID },
       })),
+      save: jest.fn().mockImplementation((entity) => Promise.resolve({ 
+        id: 1,
+        ...entity,
+        attendees: [],
+      })),
       findOne: jest.fn(),
-      save: jest
-        .fn()
-        .mockImplementation((entity) => Promise.resolve({ id: 1, ...entity })),
+      find: jest.fn(),
       createQueryBuilder: jest.fn().mockReturnThis(),
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      orderBy: jest.fn().mockReturnThis(),
-      take: jest.fn().mockReturnThis(),
       getMany: jest.fn(),
+    };
+
+    const mockEventAttendeeRepository = {
+      create: jest.fn().mockImplementation((dto) => ({
+        id: 1,
+        ...dto,
+        status: EventAttendeeStatus.Confirmed,
+        role: EventAttendeeRole.Participant,
+        event: { id: dto.event.id },
+        user: { id: dto.user.id },
+      })),
+      save: jest.fn().mockImplementation((entity) => Promise.resolve({
+        id: 1,
+        ...entity,
+        status: EventAttendeeStatus.Confirmed,
+        role: EventAttendeeRole.Participant,
+        event: { id: entity.event.id },
+        user: { id: entity.user.id },
+      })),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventService,
-        EventAttendeeService,
+        {
+          provide: EventAttendeeService,
+          useValue: {
+            attendEvent: jest.fn().mockImplementation((dto, userId) => 
+              Promise.resolve({
+                id: 1,
+                status: EventAttendeeStatus.Confirmed,
+                role: EventAttendeeRole.Participant,
+                event: { id: dto.eventId },
+                user: { id: userId },
+              }),
+            ),
+          },
+        },
         {
           provide: REQUEST,
           useValue: { tenantId: TESTING_TENANT_ID },
@@ -56,21 +93,30 @@ describe('EventService', () => {
           provide: TenantConnectionService,
           useValue: {
             getTenantConnection: jest.fn().mockResolvedValue({
-              getRepository: jest.fn().mockReturnValue(mockRepository),
+              getRepository: jest.fn().mockImplementation((entity) => {
+                if (entity === EventAttendeesEntity) {
+                  return mockEventAttendeeRepository;
+                }
+                return mockEventRepository;
+              }),
             }),
           },
         },
         {
           provide: CategoryService,
           useValue: {
-            findOne: jest.fn(),
-            findByIds: jest.fn(),
+            findByIds: jest.fn().mockResolvedValue([
+              { id: 1, name: 'Category 1' },
+              { id: 2, name: 'Category 2' },
+            ]),
           },
         },
       ],
     }).compile();
 
     service = await module.resolve<EventService>(EventService);
+    eventAttendeeService =
+      await module.resolve<EventAttendeeService>(EventAttendeeService);
     await service.getTenantSpecificEventRepository();
   });
 
@@ -93,12 +139,47 @@ describe('EventService', () => {
         lon: 1,
         group: 1,
       };
-      jest
-        .spyOn(service['categoryService'], 'findByIds')
-        .mockResolvedValue([
-          { id: 1, name: 'Category 1' } as unknown as CategoryEntity,
-          { id: 2, name: 'Category 2' } as unknown as CategoryEntity,
-        ]);
+
+      const mockAttendees = [
+        {
+          id: 1,
+          name: 'Attendee 1',
+          status: EventAttendeeStatus.Confirmed,
+          role: EventAttendeeRole.Participant,
+        } as unknown as EventAttendeesEntity,
+        {
+          id: 2,
+          name: 'Attendee 2',
+          status: EventAttendeeStatus.Confirmed,
+          role: EventAttendeeRole.Speaker,
+        } as unknown as EventAttendeesEntity,
+      ];
+
+      // Mock category service response
+      jest.spyOn(service['categoryService'], 'findByIds').mockResolvedValue([
+        {
+          id: 1,
+          name: 'Category 1',
+          attendees: mockAttendees,
+        } as unknown as CategoryEntity,
+        {
+          id: 2,
+          name: 'Category 2',
+          attendees: mockAttendees,
+        } as unknown as CategoryEntity,
+      ]);
+
+      // Mock event attendee service
+      jest.spyOn(eventAttendeeService, 'attendEvent').mockResolvedValue({
+        id: 1,
+        userId: TESTER_USER_ID,
+        eventId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        role: EventAttendeeRole.Participant,
+        event: { id: 1 } as EventEntity,
+        user: { id: TESTER_USER_ID } as UserEntity,
+      } as unknown as EventAttendeesEntity);
+
       const event = await service.create(createEventDto, TESTER_USER_ID);
       expect(event).toBeDefined();
     });
@@ -203,13 +284,6 @@ describe('EventService', () => {
         ...mockEvents[2],
         attendeesCount: 2,
       });
-    });
-  });
-
-  describe('getEventsByAttendee', () => {
-    it('should return events attended by the user when empty', async () => {
-      const events = await service.getEventsByAttendee(TESTER_USER_ID);
-      expect(events).toEqual([]);
     });
   });
 

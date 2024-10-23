@@ -447,7 +447,7 @@ export class EventService {
     const events = await this.eventRepository.find({
       where: { user: { id: userId } },
       relations: ['user', 'attendees'],
-    });
+    }) || [];
     return events.map((event) => ({
       ...event,
       attendeesCount: event.attendees ? event.attendees.length : 0,
