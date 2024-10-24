@@ -75,7 +75,7 @@ export class CategoryService {
     await this.categoryRepository.remove(category);
   }
 
-  async getHomeFeaturedCategories(): Promise<CategoryEntity[]> {
+  async getHomePageFeaturedCategories(): Promise<CategoryEntity[]> {
     await this.getTenantSpecificCategoryRepository();
 
     return this.categoryRepository

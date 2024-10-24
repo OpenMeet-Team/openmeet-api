@@ -398,7 +398,7 @@ export class GroupService {
     await this.groupRepository.remove(group);
   }
 
-  async getHomeFeaturedGroups(): Promise<GroupEntity[]> {
+  async getHomePageFeaturedGroups(): Promise<GroupEntity[]> {
     await this.getTenantSpecificGroupRepository();
 
     return this.groupRepository

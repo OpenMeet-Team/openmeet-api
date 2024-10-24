@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AllConfigType } from '../config/config.type';
-import { UserService } from '../user/user.service';
 import { GroupService } from '../group/group.service';
 import { EventService } from '../event/event.service';
 import { CategoryService } from '../category/category.service';
@@ -12,7 +11,6 @@ import { SubCategoryService } from '../sub-category/sub-category.service';
 export class HomeService {
   constructor(
     private configService: ConfigService<AllConfigType>,
-    private userService: UserService,
     private groupService: GroupService,
     private eventService: EventService,
     private categoryService: CategoryService,
@@ -26,10 +24,10 @@ export class HomeService {
   async getGuestHomeState() {
     const [featuredGroups, upcomingEvents, categories, interests] =
       await Promise.all([
-        this.groupService.getHomeFeaturedGroups(),
-        this.eventService.getHomeFeaturedEvents(),
-        this.categoryService.getHomeFeaturedCategories(),
-        this.subCategoryService.getHomeFeaturedSubCategories(),
+        this.groupService.getHomePageFeaturedGroups(),
+        this.eventService.getHomePageFeaturedEvents(),
+        this.categoryService.getHomePageFeaturedCategories(),
+        this.subCategoryService.getHomePageFeaturedSubCategories(),
       ]);
 
     return {

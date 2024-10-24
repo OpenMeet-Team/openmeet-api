@@ -1,86 +1,44 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { CategoryEntity } from '../../src/category/infrastructure/persistence/relational/entities/categories.entity';
-import { EventEntity } from '../../src/event/infrastructure/persistence/relational/entities/event.entity';
-import { GroupEntity } from '../../src/group/infrastructure/persistence/relational/entities/group.entity';
-import { HomeController } from '../../src/home/home.controller';
-import { HomeService } from '../../src/home/home.service';
-import { SubCategoryEntity } from '../../src/sub-category/infrastructure/persistence/relational/entities/sub-category.entity';
+import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { APP_URL, TESTER_EMAIL, TESTER_PASSWORD } from '../utils/constants';
-import { getAuthToken } from '../utils/functions';
+import { AppModule } from '../../src/app.module'; // Adjust the path as necessary
 
-describe('HomeController', () => {
-  let controller: HomeController;
-  let homeService: HomeService;
-
-  const mockHomeService = {
-    getGuestHomeState: jest.fn(),
-    getUserHomeState: jest.fn(),
-  };
+describe('HomeController (e2e)', () => {
+  let app: INestApplication;
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [HomeController],
-      providers: [
-        {
-          provide: HomeService,
-          useValue: mockHomeService,
-        },
-      ],
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
     }).compile();
 
-    controller = module.get<HomeController>(HomeController);
-    homeService = module.get<HomeService>(HomeService);
+    app = moduleFixture.createNestApplication();
+    await app.init();
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
+  it('should return app info', () => {
+    return request(app.getHttpServer())
+      .get('/')
+      .expect(200)
+      .expect('Expected response from appInfo');
   });
 
-  describe('getGuestHomeState', () => {
-    it('should return guest home state', async () => {
-      const mockGuestHomeState = {
-        groups: [] as GroupEntity[],
-        events: [] as EventEntity[],
-        categories: [] as CategoryEntity[],
-        interests: [] as SubCategoryEntity[],
-      };
-
-      mockHomeService.getGuestHomeState.mockResolvedValue(mockGuestHomeState);
-
-      const result = await controller.getGuestHomeState();
-
-      expect(result).toEqual(mockGuestHomeState);
-      expect(homeService.getGuestHomeState).toHaveBeenCalled();
-    });
+  it('should return guest home state', () => {
+    return request(app.getHttpServer())
+      .get('/home/guest')
+      .expect(200)
+      .expect('Expected response from getGuestHomeState');
   });
 
-  describe('getUserHomeState', () => {
-    it('should return user home state', async () => {
-      const authToken = await getAuthToken(
-        APP_URL,
-        TESTER_EMAIL,
-        TESTER_PASSWORD,
-      );
+  it('should return user home state', () => {
+    const mockJwtToken = 'your.jwt.token.here';
+    return request(app.getHttpServer())
+      .get('/home/user')
+      .set('Authorization', `Bearer ${mockJwtToken}`)
+      .expect(200)
+      .expect('Expected response from getUserHomeState');
+  });
 
-      return await request
-        .agent(APP_URL)
-        .set('tenant-id', '1')
-        .set('Authorization', `Bearer ${authToken}`)
-        .get(`/api/home/user`)
-        .expect(200)
-        .expect((res) => {
-          expect(res.body).toEqual(
-            expect.objectContaining({
-              organizedGroups: expect.any(Array),
-              nextHostedEvent: expect.any(Object),
-              recentEventDrafts: expect.any(Array),
-              upcomingEvents: expect.any(Array),
-              memberGroups: expect.any(Array),
-              interests: expect.any(Array),
-            }),
-          );
-        });
-    });
+  afterEach(async () => {
+    await app.close();
   });
 });
