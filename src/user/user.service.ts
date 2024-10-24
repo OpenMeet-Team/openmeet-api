@@ -24,6 +24,7 @@ import { UserEntity } from './infrastructure/persistence/relational/entities/use
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { UserPermissionEntity } from './infrastructure/persistence/relational/entities/user-permission.entity';
 import { RoleService } from '../role/role.service';
+import { SubCategoryEntity } from 'src/sub-category/infrastructure/persistence/relational/entities/sub-category.entity';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UserService {

@@ -80,4 +80,22 @@ export class SubCategoryService {
     const subCategory = await this.findOne(id);
     await this.subCategoryRepository.remove(subCategory);
   }
+
+  async getHomeFeaturedSubCategories(): Promise<SubCategoryEntity[]> {
+    await this.getTenantSpecificSubCategoryRepository();
+    return this.subCategoryRepository
+      .createQueryBuilder('subCategory')
+      .orderBy('RANDOM()')
+      .take(5)
+      .getMany();
+  }
+
+  async getHomePageUserInterests(userId: number): Promise<SubCategoryEntity[]> {
+    await this.getTenantSpecificSubCategoryRepository();
+
+    return this.subCategoryRepository.find({
+      where: { users: { id: userId } },
+      relations: ['users'],
+    }); // TODO: check if this is correct. Should return list of user interests
+  }
 }
