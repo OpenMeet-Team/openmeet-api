@@ -403,6 +403,8 @@ export class GroupService {
 
     return this.groupRepository
       .createQueryBuilder('group')
+      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
+      .leftJoinAndSelect('group.categories', 'categories')
       .where({ visibility: Visibility.Public, status: Status.Published })
       .orderBy('RANDOM()')
       .limit(5)
