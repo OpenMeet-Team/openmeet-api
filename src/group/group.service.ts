@@ -213,7 +213,6 @@ export class GroupService {
     await this.getTenantSpecificGroupRepository();
     const { page, limit } = pagination;
     const { search, userId, location, categories } = query;
-    console.log('🚀 ~ GroupService ~ findAll ~ categories:', categories);
     const groupQuery = this.groupRepository
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.categories', 'categories')

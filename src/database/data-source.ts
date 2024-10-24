@@ -3,8 +3,8 @@ import { DataSource, DataSourceOptions } from 'typeorm';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const AppDataSource = (tenantId = '') => {
-  // const schemaName = tenantId ? `tenant_${tenantId}` : '';
-  const schemaName = 'public';
+  const schemaName = tenantId ? `tenant_${tenantId}` : '';
+  // const schemaName = 'public';
   return new DataSource({
     name: schemaName,
     type: process.env.DATABASE_TYPE,

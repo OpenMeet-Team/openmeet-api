@@ -327,7 +327,6 @@ export class EventService {
     }
     await this.getTenantSpecificEventRepository();
 
-    console.log('🚀 ~ categories:', categories);
     try {
       const recommendedEvents = await this.eventRepository
         .createQueryBuilder('event')
@@ -380,8 +379,6 @@ export class EventService {
         .orderBy('RANDOM()')
         .limit(maxEvents)
         .getRawMany();
-
-      console.log('🚀 ~ randomEventIds found:', randomEventIds);
 
       if (randomEventIds.length < minEvents) {
         throw new NotFoundException(
