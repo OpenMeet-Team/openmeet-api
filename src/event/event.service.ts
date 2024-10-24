@@ -326,6 +326,7 @@ export class EventService {
       return [];
     }
     await this.getTenantSpecificEventRepository();
+
     try {
       const recommendedEvents = await this.eventRepository
         .createQueryBuilder('event')
@@ -338,6 +339,8 @@ export class EventService {
         .orderBy('RANDOM()')
         .limit(maxEvents)
         .getMany();
+
+      console.log('🚀 ~ recommendedEvents:', recommendedEvents);
 
       if (recommendedEvents.length < minEvents) {
         throw new NotFoundException(
@@ -448,10 +451,11 @@ export class EventService {
   }
   async getEventsByCreator(userId: number) {
     await this.getTenantSpecificEventRepository();
-    const events = await this.eventRepository.find({
-      where: { user: { id: userId } },
-      relations: ['user', 'attendees'],
-    }) || [];
+    const events =
+      (await this.eventRepository.find({
+        where: { user: { id: userId } },
+        relations: ['user', 'attendees'],
+      })) || [];
     return events.map((event) => ({
       ...event,
       attendeesCount: event.attendees ? event.attendees.length : 0,

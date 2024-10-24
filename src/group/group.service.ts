@@ -107,6 +107,7 @@ export class GroupService {
     if (!group) {
       throw new NotFoundException(`Group with ID ${groupId} not found`);
     }
+    console.log('Tom: Found group categories:', group.categories);
 
     const categoryIds = group.categories.map((c) => c.id);
 
@@ -156,6 +157,10 @@ export class GroupService {
     if (uniqueEvents.length > maxEvents) {
       return uniqueEvents.slice(0, maxEvents);
     }
+    console.log(
+      '🚀 ~ GroupService ~ getRecommendedEvents ~ uniqueEvents:',
+      uniqueEvents,
+    );
 
     return uniqueEvents;
   }
