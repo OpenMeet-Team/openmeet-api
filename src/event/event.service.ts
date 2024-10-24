@@ -19,6 +19,7 @@ import {
   EventAttendeeRole,
   EventAttendeeStatus,
   Status,
+  Visibility,
 } from '../core/constants/constant';
 import slugify from 'slugify';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
@@ -468,5 +469,36 @@ export class EventService {
       where: { attendees: { userId } },
       relations: ['user'],
     });
+  }
+
+  async getHomeFeaturedEvents(): Promise<EventEntity[]> {
+    await this.getTenantSpecificEventRepository();
+
+    return this.eventRepository
+      .createQueryBuilder('event')
+      .where({ visibility: Visibility.Public, status: Status.Published })
+      .orderBy('RANDOM()')
+      .limit(5)
+      .getMany(); // TODO: later provide featured flag or configuration object
+  }
+
+  async getHomePageUserUpcomingEvents(userId: number) {
+    await this.getTenantSpecificEventRepository();
+    return this.eventRepository.find({
+      where: { user: { id: userId }, status: Status.Published },
+      relations: ['user', 'attendees'],
+    }); // TODO: check if this is correct. Should return list of user upcoming events (Home Page)
+  }
+
+  async getHomePageUserRecentEventDrafts(userId: number) {
+    await this.getTenantSpecificEventRepository();
+    return this.eventRepository.find({
+      where: { user: { id: userId }, status: Status.Draft },
+    }); // TODO: check if this is correct. Should return list of user recent event drafts (Home Page)
+  }
+
+  async getHomePageUserNextHostedEvent(userId: number) {
+    await this.getTenantSpecificEventRepository();
+    return this.eventRepository.findOne({ where: { user: { id: userId } } });
   }
 }

@@ -74,4 +74,14 @@ export class CategoryService {
     const category = await this.findOne(id);
     await this.categoryRepository.remove(category);
   }
+
+  async getHomeFeaturedCategories(): Promise<CategoryEntity[]> {
+    await this.getTenantSpecificCategoryRepository();
+
+    return this.categoryRepository
+      .createQueryBuilder('category')
+      .orderBy('RANDOM()')
+      .take(5)
+      .getMany();
+  }
 }

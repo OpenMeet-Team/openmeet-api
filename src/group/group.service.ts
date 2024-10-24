@@ -8,7 +8,7 @@ import { UpdateGroupDto } from './dto/update-group.dto';
 import { CategoryService } from '../category/category.service';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupUserPermissionEntity } from './infrastructure/persistence/relational/entities/group-user-permission.entity';
-import { Status } from '../core/constants/constant';
+import { Status, Visibility } from '../core/constants/constant';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { paginate } from '../utils/generic-pagination';
@@ -396,5 +396,50 @@ export class GroupService {
     await this.groupMembersRepository.delete({ group: { id } });
 
     await this.groupRepository.remove(group);
+  }
+
+  async getHomeFeaturedGroups(): Promise<GroupEntity[]> {
+    await this.getTenantSpecificGroupRepository();
+
+    return this.groupRepository
+      .createQueryBuilder('group')
+      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
+      .leftJoinAndSelect('group.categories', 'categories')
+      .where({ visibility: Visibility.Public, status: Status.Published })
+      .orderBy('RANDOM()')
+      .limit(5)
+      .getMany(); // TODO: later provide featured flag or configuration object
+  }
+
+  async getHomePageUserCreatedGroups(
+    userId: number,
+    take: number = 0,
+  ): Promise<GroupEntity[]> {
+    await this.getTenantSpecificGroupRepository();
+    return this.groupRepository.find({
+      where: { createdBy: { id: userId } },
+      take,
+      relations: ['createdBy', 'groupMembers'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async getHomePageUserParticipatedGroups(
+    userId: number,
+    // take: number = 0,
+  ): Promise<GroupEntity[]> {
+    await this.getTenantSpecificGroupRepository();
+
+    const { entities } = await this.groupRepository
+      .createQueryBuilder('group')
+      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
+      .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
+      .innerJoin('group.groupMembers', 'member', 'member.userId = :userId', {
+        userId,
+      })
+      .where('groupRole.name != :ownerRole', { ownerRole: 'owner' })
+      .getRawAndEntities();
+
+    return entities;
   }
 }
