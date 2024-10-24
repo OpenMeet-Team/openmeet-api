@@ -44,9 +44,8 @@ describe('Dashboard', () => {
       });
     });
 
-    /* FIXME: skipped for a while */
     describe('when authenticated', () => {
-      it.skip('should get all events that I am a participant of, or that I created, and no more', async () => {
+      it('should get all events that I am a participant of, or that I created, and no more', async () => {
         expect(preparedEvent).toBeDefined();
         expect(preparedEvent.id).toBeDefined();
 
@@ -75,11 +74,9 @@ describe('Dashboard', () => {
           ]),
         );
 
-        console.log(' >>>>> ', response.body)
         // Check if every event in the response has the expected attendee, or was created by the user
         const hasNoEventsWithoutExpectedAttendee = response.body.every(
           (event) =>
-            event.attendees.some(
             event.attendees?.some(
               (attendee) => attendee.id === TESTER_USER_ID,
             ) || event.user.id === TESTER_USER_ID,

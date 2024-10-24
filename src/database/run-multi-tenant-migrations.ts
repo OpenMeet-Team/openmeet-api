@@ -5,7 +5,6 @@ async function runMigrationsForAllTenants() {
   const tenants = ['', '1'];
 
   for (const tenantId of tenants) {
-
     const dataSource = AppDataSource(tenantId);
     const schemaName = tenantId ? `tenant_${tenantId}` : 'public';
 
