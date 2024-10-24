@@ -340,6 +340,8 @@ export class EventService {
         .limit(maxEvents)
         .getMany();
 
+      console.log('🚀 ~ recommendedEvents:', recommendedEvents);
+
       if (recommendedEvents.length < minEvents) {
         throw new NotFoundException(
           `Not enough recommended events found for group ${groupId}. Found ${recommendedEvents.length}, expected at least ${minEvents}.`,
@@ -449,10 +451,11 @@ export class EventService {
   }
   async getEventsByCreator(userId: number) {
     await this.getTenantSpecificEventRepository();
-    const events = await this.eventRepository.find({
-      where: { user: { id: userId } },
-      relations: ['user', 'attendees'],
-    }) || [];
+    const events =
+      (await this.eventRepository.find({
+        where: { user: { id: userId } },
+        relations: ['user', 'attendees'],
+      })) || [];
     return events.map((event) => ({
       ...event,
       attendeesCount: event.attendees ? event.attendees.length : 0,
