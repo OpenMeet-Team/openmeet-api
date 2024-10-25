@@ -1,2 +1,2 @@
 npm run lint
-npm run test -- --passWithNoTests
+npm run test:e2e -- --passWithNoTests
