@@ -77,7 +77,6 @@ server {
 }
 ```
 
-
 ```
 sudo ln -s /etc/nginx/sites-available/couchdb /etc/nginx/sites-enabled/
 sudo nginx -t

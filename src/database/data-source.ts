@@ -3,8 +3,8 @@ import { DataSource, DataSourceOptions } from 'typeorm';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const AppDataSource = (tenantId = '') => {
-  // const schemaName = tenantId ? `tenant_${tenantId}` : '';
-  const schemaName = 'public';
+  const schemaName = tenantId ? `tenant_${tenantId}` : '';
+  // const schemaName = 'public';
   return new DataSource({
     name: schemaName,
     type: process.env.DATABASE_TYPE,
@@ -36,7 +36,7 @@ export const AppDataSource = (tenantId = '') => {
         ? parseInt(process.env.DATABASE_MAX_CONNECTIONS, 10)
         : 100,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 30000,
+      connectionTimeoutMillis: 2000,
       ssl:
         process.env.DATABASE_SSL_ENABLED === 'true'
           ? {
