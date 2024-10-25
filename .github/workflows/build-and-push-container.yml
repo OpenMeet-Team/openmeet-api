@@ -32,6 +32,7 @@ jobs:
           ECR_REPOSITORY: openmeet-ecr/openmeet-api
           IMAGE_TAG: ${{ github.sha }}
         run: |
+          echo "Building image with tag: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
@@ -51,5 +52,7 @@ jobs:
         run: |
           aws eks get-token --cluster-name openmeet-dev
           aws eks update-kubeconfig --name openmeet-dev --region ${{ vars.AWS_REGION }}
+          echo "Updating ${{ vars.DEPLOYMENT_NAMESPACE }} deployment/openmeet-api with image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
           kubectl set image --namespace ${{ vars.DEPLOYMENT_NAMESPACE }} deployment/openmeet-api openmeet-api=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           kubectl rollout status --namespace ${{ vars.DEPLOYMENT_NAMESPACE }} deployment/openmeet-api
