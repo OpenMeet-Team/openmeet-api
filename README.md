@@ -15,29 +15,62 @@ OpenMeet is built with extensibility in mind, making it easy for developers to c
 - **Feature Development**: Add new features through our modular architecture
 - **Customization**: Adapt the platform for different community types and needs
 - **API Integration**: Connect with external tools via our comprehensive API
-- **Testing**: 
-  - Run unit tests: `npm run test`
-  - Run e2e tests: `npm run test:e2e`
-  - View coverage: `npm run test:coverage`
 
-All contributions should include appropriate test coverage. Check our testing guide for more details.
+#### Running api service locally
+
+### Local Development
+
+```bash
+# Copy example config
+cp env-example-relational .env
+
+# Start dependencies
+docker-compose -f docker-compose-dev.yml up --build
+
+# Load environment variables
+export $( grep -v "#" ".env" | xargs)
+
+# Start development server
+npm run start:dev
+```
+
+### Testing
+
+#### Run unit tests
+
+``` bash
+npm install
+npm run test
+```
+
+#### Run e2e tests
+
+This requires a running database and a local api service, and create a file `.env` which should should be set similar to the example in env-relational-example.
+
+``` bash
+npm install
+# setup database for testing
+docker-compose -f docker-compose-dev.yml up --build
+# start api service
+npm run start:dev &
+
+# prepare environment variables your environment, see env-relational-example
+npm run test:e2e
+```
+
+#### View coverage
+
+All contributions should include appropriate test coverage.
 
 ## Operating the Codebase as a System
 
-Deploy and manage your own OpenMeet instance with these key features:
-
-- **Quick Setup**: Simple deployment using Docker or cloud services
-- **Community Management**: Create and manage multiple communities with custom settings
-- **Event Tools**: Organize virtual and in-person events effortlessly
-- **Privacy First**: Built-in privacy controls and data sovereignty
-- **Analytics**: Track engagement and community health metrics
-
-For detailed setup instructions, see our [Deployment Guide](#deployment-guide).
+Deploy and manage your own OpenMeet instance.
 
 ### Deployment Guide
+
+#### In Production
 
 API is deployed via kubernetes deployment using kustomize from repo [openmeet-infrastructure](https://github.com/OpenMeet-Team/openmeet-infrastructure/tree/main/k8s/api).
 
 API is deployed behind an ALB and ingress.
-
 
