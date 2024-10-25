@@ -15,11 +15,10 @@ import { ApiProperty } from '@nestjs/swagger';
 @Entity({ name: 'files' })
 export class FileEntity extends EntityRelationalHelper {
   @ApiProperty({
-    type: String,
-    example: 'cbcfa8b8-3a25-4adb-a9c6-e325f0d0f3ae',
+    type: Number,
   })
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryGeneratedColumn()
+  id: number;
 
   @ApiProperty({
     type: String,
