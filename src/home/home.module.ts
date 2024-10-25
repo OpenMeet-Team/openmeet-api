@@ -4,9 +4,9 @@ import { HomeController } from './home.controller';
 import { ConfigModule } from '@nestjs/config';
 import { UsersModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
-import { EventsModule } from 'src/event/event.module';
-import { CategoryModule } from 'src/category/category.module';
-import { SubCategoryModule } from 'src/sub-category/sub-category.module';
+import { EventsModule } from './../event/event.module';
+import { CategoryModule } from './../category/category.module';
+import { SubCategoryModule } from './../sub-category/sub-category.module';
 
 @Module({
   imports: [

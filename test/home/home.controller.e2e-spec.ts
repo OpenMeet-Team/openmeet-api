@@ -1,44 +1,44 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { AppModule } from '../../src/app.module'; // Adjust the path as necessary
+import { loginAsTester } from './../utils/functions';
+import { APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 
 describe('HomeController (e2e)', () => {
-  let app: INestApplication;
+  const server = request.agent(APP_URL).set('tenant-id', TESTING_TENANT_ID);
 
-  beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    await app.init();
+  it('should return 401 error if no tenant-id is provided', () => {
+    const server = request.agent(APP_URL);
+    return server.get('/api/home/guest').expect(401);
   });
 
   it('should return app info', () => {
-    return request(app.getHttpServer())
-      .get('/')
-      .expect(200)
-      .expect('Expected response from appInfo');
+    return server.get('/api').expect(200).expect({ name: 'OpenMeet API' });
   });
 
   it('should return guest home state', () => {
-    return request(app.getHttpServer())
-      .get('/home/guest')
+    return server
+      .get('/api/home/guest')
       .expect(200)
-      .expect('Expected response from getGuestHomeState');
+      .expect((res) => {
+        expect(res.body.interests).toBeInstanceOf(Array);
+        expect(res.body.categories).toBeInstanceOf(Array);
+        expect(res.body.groups).toBeInstanceOf(Array);
+        expect(res.body.events).toBeInstanceOf(Array);
+      });
   });
 
-  it('should return user home state', () => {
-    const mockJwtToken = 'your.jwt.token.here';
-    return request(app.getHttpServer())
-      .get('/home/user')
+  it('should return user home state', async () => {
+    const mockJwtToken = await loginAsTester();
+    return server
+      .get('/api/home/user')
       .set('Authorization', `Bearer ${mockJwtToken}`)
       .expect(200)
-      .expect('Expected response from getUserHomeState');
-  });
-
-  afterEach(async () => {
-    await app.close();
+      .expect((res) => {
+        expect(res.body.organizedGroups).toBeInstanceOf(Array);
+        expect(res.body.nextHostedEvent).toBeInstanceOf(Object);
+        expect(res.body.recentEventDrafts).toBeInstanceOf(Array);
+        expect(res.body.upcomingEvents).toBeInstanceOf(Array);
+        expect(res.body.memberGroups).toBeInstanceOf(Array);
+        expect(res.body.interests).toBeInstanceOf(Array);
+      });
   });
 });
