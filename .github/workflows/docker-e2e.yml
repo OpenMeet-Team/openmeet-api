@@ -7,13 +7,31 @@ on:
     branches: [main]
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: node:18.16.1
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Run tests
+        run: |
+          export $(cat env-example-relational | grep -v '^#' | xargs)
+          npm run test
+
+
+
   build:
     runs-on: ubuntu-latest
+    needs: test
 
     steps:
       - uses: actions/checkout@v4
 
-      # <database-relational-block>
       - name: Run e2e tests for NestJS with TypeORM
         id: relational
         run: docker compose -f docker-compose.relational.ci.yaml --env-file env-example-relational -p ci-relational up --build --exit-code-from api
@@ -21,9 +39,6 @@ jobs:
       - name: Copy prod.log from container to host
         if: ${{ failure() && steps.relational.conclusion == 'failure' }}
         run: docker cp ci-relational-api-1:/usr/src/app/prod.log .
-      # </database-relational-block>
-
-      
 
       - name: Upload prod.log to artifacts for debugging
         if: failure()
