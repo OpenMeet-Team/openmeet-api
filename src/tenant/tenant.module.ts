@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-import { TenantConnectionService } from './tenant.service'; // Ensure this path is correct
+import { TenantConnectionService } from './tenant.service';
 
 @Module({
-  providers: [TenantConnectionService], // Provide TenantConnectionService
-  exports: [TenantConnectionService], // Export TenantConnectionService
+  providers: [TenantConnectionService],
+  exports: [TenantConnectionService],
 })
-export class TenantModule {} // Fix the module name here
+export class TenantModule {}

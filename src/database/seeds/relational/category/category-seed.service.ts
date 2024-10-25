@@ -281,8 +281,6 @@ export class CategorySeedService {
         .where('category.name = :name', { name: categoryData.category })
         .getOne();
 
-      console.log('Found category:', existingCategory);
-
       if (!existingCategory) {
         console.log('Creating new category:', categoryData.category);
         const newCategory = this.categoryRepository.create({

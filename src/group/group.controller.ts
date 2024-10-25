@@ -9,7 +9,6 @@ import {
   NotFoundException,
   Query,
   UseGuards,
-  Req,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CreateGroupDto } from './dto/create-group.dto';
@@ -18,7 +17,6 @@ import { GroupEntity } from './infrastructure/persistence/relational/entities/gr
 import { GroupService } from './group.service';
 import { Public } from '../auth/decorators/public.decorator';
 import { JWTAuthGuard } from '../core/guards/auth.guard';
-import { Request } from 'express';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
@@ -37,14 +35,9 @@ export class GroupController {
   @ApiOperation({ summary: 'Create a new group' })
   async create(
     @Body() createGroupDto: CreateGroupDto,
-    @Req() req: Request,
+    @AuthUser() user: User,
   ): Promise<GroupEntity> {
-    const user = req.user;
-    let userId;
-    if (user) {
-      userId = user.id;
-    }
-    return this.groupService.create(createGroupDto, userId);
+    return this.groupService.create(createGroupDto, user.id);
   }
 
   @Public()

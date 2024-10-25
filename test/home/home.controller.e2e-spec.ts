@@ -1,86 +1,44 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { CategoryEntity } from '../../src/category/infrastructure/persistence/relational/entities/categories.entity';
-import { EventEntity } from '../../src/event/infrastructure/persistence/relational/entities/event.entity';
-import { GroupEntity } from '../../src/group/infrastructure/persistence/relational/entities/group.entity';
-import { HomeController } from '../../src/home/home.controller';
-import { HomeService } from '../../src/home/home.service';
-import { SubCategoryEntity } from '../../src/sub-category/infrastructure/persistence/relational/entities/sub-category.entity';
 import request from 'supertest';
-import { APP_URL, TESTER_EMAIL, TESTER_PASSWORD } from '../utils/constants';
-import { getAuthToken } from '../utils/functions';
+import { loginAsTester } from './../utils/functions';
+import { APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 
-describe('HomeController', () => {
-  let controller: HomeController;
-  let homeService: HomeService;
+describe('HomeController (e2e)', () => {
+  const server = request.agent(APP_URL).set('tenant-id', TESTING_TENANT_ID);
 
-  const mockHomeService = {
-    getGuestHomeState: jest.fn(),
-    getUserHomeState: jest.fn(),
-  };
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [HomeController],
-      providers: [
-        {
-          provide: HomeService,
-          useValue: mockHomeService,
-        },
-      ],
-    }).compile();
-
-    controller = module.get<HomeController>(HomeController);
-    homeService = module.get<HomeService>(HomeService);
+  it('should return 401 error if no tenant-id is provided', () => {
+    const server = request.agent(APP_URL);
+    return server.get('/api/home/guest').expect(401);
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
+  it('should return app info', () => {
+    return server.get('/api').expect(200);
   });
 
-  describe('getGuestHomeState', () => {
-    it('should return guest home state', async () => {
-      const mockGuestHomeState = {
-        groups: [] as GroupEntity[],
-        events: [] as EventEntity[],
-        categories: [] as CategoryEntity[],
-        interests: [] as SubCategoryEntity[],
-      };
-
-      mockHomeService.getGuestHomeState.mockResolvedValue(mockGuestHomeState);
-
-      const result = await controller.getGuestHomeState();
-
-      expect(result).toEqual(mockGuestHomeState);
-      expect(homeService.getGuestHomeState).toHaveBeenCalled();
-    });
+  it('should return guest home state', () => {
+    return server
+      .get('/api/home/guest')
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.interests).toBeInstanceOf(Array);
+        expect(res.body.categories).toBeInstanceOf(Array);
+        expect(res.body.groups).toBeInstanceOf(Array);
+        expect(res.body.events).toBeInstanceOf(Array);
+      });
   });
 
-  describe('getUserHomeState', () => {
-    it('should return user home state', async () => {
-      const authToken = await getAuthToken(
-        APP_URL,
-        TESTER_EMAIL,
-        TESTER_PASSWORD,
-      );
-
-      return await request
-        .agent(APP_URL)
-        .set('tenant-id', '1')
-        .set('Authorization', `Bearer ${authToken}`)
-        .get(`/api/home/user`)
-        .expect(200)
-        .expect((res) => {
-          expect(res.body).toEqual(
-            expect.objectContaining({
-              organizedGroups: expect.any(Array),
-              nextHostedEvent: expect.any(Object),
-              recentEventDrafts: expect.any(Array),
-              upcomingEvents: expect.any(Array),
-              memberGroups: expect.any(Array),
-              interests: expect.any(Array),
-            }),
-          );
-        });
-    });
+  it('should return user home state', async () => {
+    const mockJwtToken = await loginAsTester();
+    return server
+      .get('/api/home/user')
+      .set('Authorization', `Bearer ${mockJwtToken}`)
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.organizedGroups).toBeInstanceOf(Array);
+        expect(res.body.nextHostedEvent).toBeInstanceOf(Object);
+        expect(res.body.recentEventDrafts).toBeInstanceOf(Array);
+        expect(res.body.upcomingEvents).toBeInstanceOf(Array);
+        expect(res.body.memberGroups).toBeInstanceOf(Array);
+        expect(res.body.interests).toBeInstanceOf(Array);
+      });
   });
 });

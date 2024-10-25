@@ -81,7 +81,7 @@ export class SubCategoryService {
     await this.subCategoryRepository.remove(subCategory);
   }
 
-  async getHomeFeaturedSubCategories(): Promise<SubCategoryEntity[]> {
+  async getHomePageFeaturedSubCategories(): Promise<SubCategoryEntity[]> {
     await this.getTenantSpecificSubCategoryRepository();
     return this.subCategoryRepository
       .createQueryBuilder('subCategory')

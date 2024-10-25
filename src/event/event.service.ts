@@ -471,7 +471,7 @@ export class EventService {
     });
   }
 
-  async getHomeFeaturedEvents(): Promise<EventEntity[]> {
+  async getHomePageFeaturedEvents(): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
 
     return this.eventRepository
