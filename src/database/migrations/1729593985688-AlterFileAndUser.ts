@@ -12,13 +12,6 @@ export class AlterFileAndUser1729593985688 implements MigrationInterface {
       `ALTER TABLE "${schema}"."files" ADD "entityType" "${schema}"."files_entitytype_enum"`,
     );
     await queryRunner.query(`ALTER TABLE "${schema}"."users" ADD "bio" text`);
-
-    await queryRunner.query(
-      `ALTER TABLE "${schema}"."users" DROP COLUMN "photoId"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "${schema}"."users" ADD "photoId" integer`,
-    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

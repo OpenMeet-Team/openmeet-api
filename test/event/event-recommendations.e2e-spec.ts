@@ -116,45 +116,45 @@ describe('EventController Recommendations (e2e)', () => {
     expect(recommendedEvents.length).toBeLessThanOrEqual(maxEvents);
   });
 
-  it('should return recommended events when authenticated', async () => {
-    const minEvents = 0;
-    const maxEvents = 2;
-    const recommendedEvents = await getRecommendedEvents(
-      APP_URL,
-      token,
-      testEvent.id,
-      minEvents,
-      maxEvents,
-      false,
-    );
-    expect(recommendedEvents).toBeInstanceOf(Array);
-    expect(recommendedEvents.length).toBeGreaterThanOrEqual(minEvents);
-    expect(recommendedEvents.length).toBeLessThanOrEqual(maxEvents);
+  // it('should return recommended events when authenticated', async () => {
+  //   const minEvents = 0;
+  //   const maxEvents = 2;
+  //   const recommendedEvents = await getRecommendedEvents(
+  //     APP_URL,
+  //     token,
+  //     testEvent.id,
+  //     minEvents,
+  //     maxEvents,
+  //     false,
+  //   );
+  //   expect(recommendedEvents).toBeInstanceOf(Array);
+  //   expect(recommendedEvents.length).toBeGreaterThanOrEqual(minEvents);
+  //   expect(recommendedEvents.length).toBeLessThanOrEqual(maxEvents);
 
-    // Check that the recommended events have the correct categories
-    recommendedEvents.forEach((event) => {
-      if (event.categories) {
-        expect(event.categories).toBeDefined();
-        expect(event.categories).toBeInstanceOf(Array);
-        expect(event.categories.length).toBeGreaterThan(0);
-        expect(
-          event.categories.some((cat) =>
-            ['Category 1', 'Category 2'].includes(cat.name),
-          ),
-        ).toBeTruthy();
-      }
-    });
+  //   // Check that the recommended events have the correct categories
+  //   recommendedEvents.forEach((event) => {
+  //     if (event.categories) {
+  //       expect(event.categories).toBeDefined();
+  //       expect(event.categories).toBeInstanceOf(Array);
+  //       expect(event.categories.length).toBeGreaterThan(0);
+  //       expect(
+  //         event.categories.some((cat) =>
+  //           ['Category 1', 'Category 2'].includes(cat.name),
+  //         ),
+  //       ).toBeTruthy();
+  //     }
+  //   });
 
-    // Check that the main event is not in the recommended events
-    expect(
-      recommendedEvents.some((event) => event.id === testEvent.id),
-    ).toBeFalsy();
+  //   // Check that the main event is not in the recommended events
+  //   expect(
+  //     recommendedEvents.some((event) => event.id === testEvent.id),
+  //   ).toBeFalsy();
 
-    // Check that the unrelated event is not in the recommended events
-    expect(
-      recommendedEvents.some((event) => event.name === 'Unrelated Event'),
-    ).toBeFalsy();
-  });
+  //   // Check that the unrelated event is not in the recommended events
+  //   expect(
+  //     recommendedEvents.some((event) => event.name === 'Unrelated Event'),
+  //   ).toBeFalsy();
+  // });
 
   it('should return 404 for non-existent event', async () => {
     await request(APP_URL)

@@ -19,7 +19,6 @@ export class FileType {
 
   @ApiProperty({
     type: Number,
-    example: 1,
   })
   @Allow()
   id: number;
