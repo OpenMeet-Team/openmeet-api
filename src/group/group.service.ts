@@ -8,7 +8,7 @@ import { UpdateGroupDto } from './dto/update-group.dto';
 import { CategoryService } from '../category/category.service';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupUserPermissionEntity } from './infrastructure/persistence/relational/entities/group-user-permission.entity';
-import { Status } from '../core/constants/constant';
+import { Status, Visibility } from '../core/constants/constant';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { paginate } from '../utils/generic-pagination';
@@ -107,6 +107,7 @@ export class GroupService {
     if (!group) {
       throw new NotFoundException(`Group with ID ${groupId} not found`);
     }
+    console.log('Tom: Found group categories:', group.categories);
 
     const categoryIds = group.categories.map((c) => c.id);
 
@@ -131,7 +132,6 @@ export class GroupService {
       try {
         randomEvents = await this.eventService.findRandomEventsForGroup(
           groupId,
-          recommendedEvents.map((e) => e.id),
           remainingEventsToFetch,
           remainingEventsToFetch,
         );
@@ -157,6 +157,10 @@ export class GroupService {
     if (uniqueEvents.length > maxEvents) {
       return uniqueEvents.slice(0, maxEvents);
     }
+    console.log(
+      '🚀 ~ GroupService ~ getRecommendedEvents ~ uniqueEvents:',
+      uniqueEvents,
+    );
 
     return uniqueEvents;
   }
@@ -209,7 +213,6 @@ export class GroupService {
     await this.getTenantSpecificGroupRepository();
     const { page, limit } = pagination;
     const { search, userId, location, categories } = query;
-    console.log('🚀 ~ GroupService ~ findAll ~ categories:', categories);
     const groupQuery = this.groupRepository
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.categories', 'categories')
@@ -254,6 +257,38 @@ export class GroupService {
     }
 
     return paginate(groupQuery, { page, limit });
+  }
+
+  async findQuery(id: number, userId: number): Promise<any> {
+    await this.getTenantSpecificGroupRepository();
+
+    const groupQuery = this.groupRepository
+      .createQueryBuilder('group')
+      .leftJoinAndSelect('group.events', 'events')
+      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
+      .leftJoinAndSelect('groupMembers.user', 'user')
+      .leftJoinAndSelect('group.createdBy', 'createdBy')
+      .leftJoinAndSelect('group.categories', 'categories')
+      .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
+      .leftJoinAndSelect('groupRole.groupPermissions', 'groupPermissions')
+      .where('group.id = :id', { id });
+
+    const group = await groupQuery.getOne();
+
+    if (!group) {
+      throw new Error('Group not found');
+    }
+
+    // Slice the events and groupMembers lists to return only the first 5 entries
+    group.events = group.events.slice(0, 5);
+    group.groupMembers = group.groupMembers.slice(0, 5);
+
+    return {
+      ...group,
+      groupMember: group.groupMembers.find(
+        (member) => member.user.id === userId,
+      ),
+    };
   }
 
   async findOne(id: number): Promise<any> {
@@ -361,5 +396,50 @@ export class GroupService {
     await this.groupMembersRepository.delete({ group: { id } });
 
     await this.groupRepository.remove(group);
+  }
+
+  async getHomeFeaturedGroups(): Promise<GroupEntity[]> {
+    await this.getTenantSpecificGroupRepository();
+
+    return this.groupRepository
+      .createQueryBuilder('group')
+      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
+      .leftJoinAndSelect('group.categories', 'categories')
+      .where({ visibility: Visibility.Public, status: Status.Published })
+      .orderBy('RANDOM()')
+      .limit(5)
+      .getMany(); // TODO: later provide featured flag or configuration object
+  }
+
+  async getHomePageUserCreatedGroups(
+    userId: number,
+    take: number = 0,
+  ): Promise<GroupEntity[]> {
+    await this.getTenantSpecificGroupRepository();
+    return this.groupRepository.find({
+      where: { createdBy: { id: userId } },
+      take,
+      relations: ['createdBy', 'groupMembers'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async getHomePageUserParticipatedGroups(
+    userId: number,
+    // take: number = 0,
+  ): Promise<GroupEntity[]> {
+    await this.getTenantSpecificGroupRepository();
+
+    const { entities } = await this.groupRepository
+      .createQueryBuilder('group')
+      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
+      .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
+      .innerJoin('group.groupMembers', 'member', 'member.userId = :userId', {
+        userId,
+      })
+      .where('groupRole.name != :ownerRole', { ownerRole: 'owner' })
+      .getRawAndEntities();
+
+    return entities;
   }
 }

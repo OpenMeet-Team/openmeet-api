@@ -7,6 +7,7 @@ async function runMigrationsForAllTenants() {
     const schemaName = tenantId ? `tenant_${tenantId}` : 'public';
     try {
       await dataSource.initialize();
+
       console.log(`Applying migrations to schema: ${schemaName}`);
       if (schemaName) {
         await dataSource.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);

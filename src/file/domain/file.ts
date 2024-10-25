@@ -10,6 +10,13 @@ import { AppConfig } from '../../config/app-config.type';
 import appConfig from '../../config/app.config';
 
 export class FileType {
+  // @ApiProperty({
+  //   type: String,
+  //   example: 'cbcfa8b8-3a25-4adb-a9c6-e325f0d0f3ae',
+  // })
+  // @Allow()
+  // uuid: string;
+
   @ApiProperty({
     type: Number,
   })

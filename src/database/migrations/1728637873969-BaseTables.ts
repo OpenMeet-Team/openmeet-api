@@ -6,6 +6,8 @@ export class BaseTables1728637873969 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const schema = queryRunner.connection.options.name || 'public'; // Default schema
 
+    await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+
     await queryRunner.query(
       `CREATE TABLE "${schema}"."userPermissions" ("id" SERIAL NOT NULL, "granted" boolean NOT NULL DEFAULT false, "userId" integer, "permissionId" integer, CONSTRAINT "PK_5cbba686fa42e45a2914c590261" PRIMARY KEY ("id"))`,
     );
@@ -159,6 +161,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "${schema}"."events" ADD CONSTRAINT "FK_73672459b90f4b48f43d72681cc" FOREIGN KEY ("groupId") REFERENCES "${schema}"."groups"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
     );
+
     await queryRunner.query(
       `ALTER TABLE "${schema}"."users" ADD CONSTRAINT "FK_f856a4818b32c69dbc8811f3d2c" FOREIGN KEY ("photoId") REFERENCES "${schema}"."files"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
     );

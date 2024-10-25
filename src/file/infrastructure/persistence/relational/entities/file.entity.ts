@@ -11,6 +11,7 @@ import { EntityRelationalHelper } from '../../../../../utils/relational-entity-h
 import { FileConfig, FileDriver } from '../../../../config/file-config.type';
 import fileConfig from '../../../../config/file.config';
 import { ApiProperty } from '@nestjs/swagger';
+// import { EntityType } from '../../../../../core/constants/constant';
 
 @Entity({ name: 'files' })
 export class FileEntity extends EntityRelationalHelper {
