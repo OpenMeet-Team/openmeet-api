@@ -4,22 +4,21 @@ import { groupSeedData } from './group-seed.seed';
 import { GroupEntity } from 'src/group/infrastructure/persistence/relational/entities/group.entity';
 import { UserEntity } from 'src/user/infrastructure/persistence/relational/entities/user.entity';
 import { CategoryEntity } from 'src/category/infrastructure/persistence/relational/entities/categories.entity';
-import { GroupService } from 'src/group/group.service';
-import { TenantConnectionService } from 'src/tenant/tenant.service';
+import { GroupService } from '../../../../group/group.service';
+import { TenantConnectionService } from '../../../../tenant/tenant.service';
 
 @Injectable()
 export class GroupSeedService {
   private groupRepository: Repository<GroupEntity>;
   private userRepository: Repository<UserEntity>;
   private categoryRepository: Repository<CategoryEntity>;
+  private groupService: GroupService;
 
   constructor(
-    private groupService: GroupService,
     private readonly tenantConnectionService: TenantConnectionService,
   ) {}
 
   async run(tenantId: string) {
-    console.log('🚀 ~ GroupSeedService ~ run ~ tenantId:', tenantId);
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
 
@@ -27,7 +26,7 @@ export class GroupSeedService {
     this.userRepository = dataSource.getRepository(UserEntity);
     this.categoryRepository = dataSource.getRepository(CategoryEntity);
 
-    await this.seedGroups();
+    // await this.seedGroups();
   }
 
   private async seedGroups() {
