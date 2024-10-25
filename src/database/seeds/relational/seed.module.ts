@@ -15,6 +15,8 @@ import { UserPermissionSeedModule } from './user-permission/user-permission-seed
 import { GroupRoleSeedModule } from './group-role/group-role.module';
 // import { InterestSeedModule } from './interest/interest-seed.module';
 
+import { GroupSeedModule } from './group/group-seed.module';
+
 @Module({
   imports: [
     RoleSeedModule,
@@ -24,6 +26,7 @@ import { GroupRoleSeedModule } from './group-role/group-role.module';
     PermissionSeedModule,
     UserPermissionSeedModule,
     GroupRoleSeedModule,
+    GroupSeedModule,
     ConfigModule.forRoot({
       isGlobal: true,
       load: [databaseConfig, appConfig],
