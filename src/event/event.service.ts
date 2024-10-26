@@ -381,12 +381,6 @@ export class EventService {
         .limit(maxEvents)
         .getRawMany();
 
-      if (randomEventIds.length < minEvents) {
-        throw new NotFoundException(
-          `Not enough random events found for group ${groupId}. Found ${randomEventIds.length}, expected at least ${minEvents}.`,
-        );
-      }
-
       // Then fetch full event details for these IDs
       const events = await this.eventRepository
         .createQueryBuilder('event')

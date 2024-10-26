@@ -3,6 +3,8 @@ import { GroupController } from './group.controller';
 import { GroupService } from './group.service';
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
+import { mockGroup, mockUser } from '../../test/mocks';
+
 describe('GroupController', () => {
   let controller: GroupController;
   let groupService: GroupService;
@@ -15,6 +17,7 @@ describe('GroupController', () => {
           provide: GroupService,
           useValue: {
             getRecommendedEvents: jest.fn(),
+            findOneWithDetails: jest.fn(),
           },
         },
       ],
@@ -22,6 +25,23 @@ describe('GroupController', () => {
 
     controller = module.get<GroupController>(GroupController);
     groupService = module.get<GroupService>(GroupService);
+  });
+
+  it('should be defined', () => {
+    expect(controller).toBeDefined();
+  });
+
+  describe('findOneWithDetails', () => {
+    it('should return group with details', async () => {
+      jest
+        .spyOn(groupService, 'findOneWithDetails')
+        .mockResolvedValue(mockGroup);
+
+      const result = await controller.findOneProtected(1, mockUser);
+
+      expect(result).toEqual(mockGroup);
+      expect(groupService.findOneWithDetails).toHaveBeenCalled();
+    });
   });
 
   describe('getRecommendedEvents', () => {
