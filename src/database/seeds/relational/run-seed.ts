@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { EventSeedService } from './event/event-seed.service';
 import { GroupSeedService } from './group/group-seed.service';
 import { RoleSeedService } from './role/role-seed.service';
 import { SeedModule } from './seed.module';
@@ -24,6 +25,7 @@ const runSeed = async () => {
     await app.get(UserPermissionSeedService).run(tenantId);
     await app.get(GroupRoleSeedService).run(tenantId);
     await app.get(GroupSeedService).run(tenantId);
+    await app.get(EventSeedService).run(tenantId);
   }
 
   await app.close();

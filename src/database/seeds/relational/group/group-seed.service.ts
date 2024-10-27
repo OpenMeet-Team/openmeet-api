@@ -33,6 +33,8 @@ export class GroupSeedService {
     const allCategories = await this.categoryRepository.find();
     const allUsers = await this.userRepository.find();
 
+    console.log(allUsers, allCategories);
+
     for (const user of allUsers) {
       for (const groupData of groupSeedData) {
         const numberOfCategories = Math.floor(Math.random() * 3) + 1;
