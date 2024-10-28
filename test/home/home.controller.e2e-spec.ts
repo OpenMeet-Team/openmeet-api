@@ -11,7 +11,7 @@ describe('HomeController (e2e)', () => {
   });
 
   it('should return app info', () => {
-    return server.get('/api').expect(200);
+    return server.get('/api/version').expect(200);
   });
 
   it('should return guest home state', () => {
