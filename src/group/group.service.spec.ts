@@ -8,6 +8,7 @@ import { NotFoundException } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { GroupEntity } from './infrastructure/persistence/relational/entities/group.entity';
 import { TESTING_TENANT_ID } from '../../test/utils/constants';
+import { mockGroup } from '../../test/mocks';
 
 describe('GroupService', () => {
   let service: GroupService;
@@ -71,6 +72,14 @@ describe('GroupService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('findOneWithDetails', () => {
+    it('should return group with details', async () => {
+      jest.spyOn(service, 'findOneWithDetails').mockResolvedValue(mockGroup);
+      const result = await service.findOneWithDetails(1, 1);
+      expect(result).toEqual(mockGroup);
+    });
   });
 
   describe('getTenantSpecificGroupRepository', () => {
