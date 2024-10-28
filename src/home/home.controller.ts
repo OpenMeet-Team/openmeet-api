@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Redirect, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { HomeService } from './home.service';
@@ -14,8 +14,17 @@ export class HomeController {
 
   @Public()
   @Get()
-  appInfo() {
-    return this.service.appInfo();
+  @ApiOperation({ summary: 'Redirect to platform or API docs' })
+  @Redirect()
+  rootRedirect() {
+    return this.service.getRootRedirect();
+  }
+
+  @Public()
+  @Get('version')
+  @ApiOperation({ summary: 'Get API information' })
+  getApiInfo() {
+    return this.service.getAppInfo();
   }
 
   @Get('home/guest')

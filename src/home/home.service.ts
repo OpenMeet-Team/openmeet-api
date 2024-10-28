@@ -6,6 +6,7 @@ import { EventService } from '../event/event.service';
 import { CategoryService } from '../category/category.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { SubCategoryService } from '../sub-category/sub-category.service';
+import { getBuildInfo } from '../utils/version';
 
 @Injectable()
 export class HomeService {
@@ -17,8 +18,23 @@ export class HomeService {
     private subCategoryService: SubCategoryService,
   ) {}
 
-  appInfo() {
-    return { name: this.configService.get('app.name', { infer: true }) };
+  getAppInfo() {
+    return getBuildInfo();
+  }
+
+  getRootRedirect() {
+    const environment = this.configService.get('app.nodeEnv', { infer: true });
+    console.log('environment', environment);
+    const isProd = environment === 'production';
+
+    const redirectUrl = isProd
+      ? 'https://platform.openmeet.net'
+      : 'https://platform-dev.openmeet.net';
+
+    return {
+      url: redirectUrl,
+      statusCode: 302,
+    };
   }
 
   async getGuestHomeState() {
