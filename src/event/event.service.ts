@@ -495,4 +495,9 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
     return this.eventRepository.findOne({ where: { user: { id: userId } } });
   }
+
+  async findGroupDetailsEvents(groupId: number) {
+    await this.getTenantSpecificEventRepository();
+    return this.eventRepository.find({ where: { group: { id: groupId } } });
+  }
 }

@@ -308,7 +308,7 @@ export class GroupService {
     return group;
   }
 
-  async findOneWithDetails(id: number, userId: number): Promise<any> {
+  async findGroupDetails(id: number, userId: number): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     const group = await this.groupRepository.findOne({
       where: { id },
@@ -358,16 +358,14 @@ export class GroupService {
     return groupWithEvents;
   }
 
-  async findGroupEvent(id: number): Promise<any> {
+  async findGroupDetailsEvents(id: number): Promise<any> {
     await this.getTenantSpecificGroupRepository();
-    const groupQuery = this.groupRepository
-      .createQueryBuilder('group')
-      .leftJoinAndSelect('group.events', 'events')
-      .where('group.id = :id', { id })
-      .andWhere('events.status = :status', { status: Status.Published })
-      .getOne();
+    return await this.eventService.findGroupDetailsEvents(id);
+  }
 
-    return groupQuery;
+  async findGroupDetailsMembers(id: number): Promise<any> {
+    await this.getTenantSpecificGroupRepository();
+    return await this.groupMemberService.findGroupDetailsMembers(id);
   }
 
   async update(

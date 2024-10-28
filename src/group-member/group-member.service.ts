@@ -129,4 +129,12 @@ export class GroupMemberService {
 
     return paginate(groupMembers, { page, limit });
   }
+
+  async findGroupDetailsMembers(groupId: number): Promise<any> {
+    await this.getTenantSpecificEventRepository();
+    return await this.groupMemberRepository.find({
+      where: { group: { id: groupId } },
+      relations: ['user', 'groupRole'],
+    });
+  }
 }
