@@ -15,6 +15,9 @@ import { UserPermissionSeedModule } from './user-permission/user-permission-seed
 import { GroupRoleSeedModule } from './group-role/group-role.module';
 // import { InterestSeedModule } from './interest/interest-seed.module';
 
+import { GroupSeedModule } from './group/group-seed.module';
+import fileConfig from 'src/file/config/file.config';
+
 @Module({
   imports: [
     RoleSeedModule,
@@ -24,9 +27,10 @@ import { GroupRoleSeedModule } from './group-role/group-role.module';
     PermissionSeedModule,
     UserPermissionSeedModule,
     GroupRoleSeedModule,
+    GroupSeedModule,
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig, appConfig],
+      load: [databaseConfig, appConfig, fileConfig],
       envFilePath: ['.env'],
     }),
     TypeOrmModule.forRootAsync({

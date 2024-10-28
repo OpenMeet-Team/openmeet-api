@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import zulipInit from 'zulip-js';
 import { UserService } from './user.service';
@@ -24,9 +24,10 @@ export class UserCreatedListener {
         user.zulipId = response.user_id;
 
         await this.usersRepository.save(user);
-      } else {
-        console.error('Failed to create user in Zulip or user not found');
       }
-    } catch (error) {}
+    } catch (error) {
+      console.error('Failed to create user:', error);
+      throw new NotFoundException('Failed to create user');
+    }
   }
 }

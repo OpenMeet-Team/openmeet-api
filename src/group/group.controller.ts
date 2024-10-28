@@ -9,7 +9,6 @@ import {
   NotFoundException,
   Query,
   UseGuards,
-  Req,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CreateGroupDto } from './dto/create-group.dto';
@@ -18,7 +17,6 @@ import { GroupEntity } from './infrastructure/persistence/relational/entities/gr
 import { GroupService } from './group.service';
 import { Public } from '../auth/decorators/public.decorator';
 import { JWTAuthGuard } from '../core/guards/auth.guard';
-import { Request } from 'express';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
@@ -37,14 +35,9 @@ export class GroupController {
   @ApiOperation({ summary: 'Create a new group' })
   async create(
     @Body() createGroupDto: CreateGroupDto,
-    @Req() req: Request,
+    @AuthUser() user: User,
   ): Promise<GroupEntity> {
-    const user = req.user;
-    let userId;
-    if (user) {
-      userId = user.id;
-    }
-    return this.groupService.create(createGroupDto, userId);
+    return this.groupService.create(createGroupDto, user.id);
   }
 
   @Public()
@@ -94,17 +87,6 @@ export class GroupController {
   }
 
   @Public()
-  @Get(':id/recomemded-events')
-  @ApiOperation({ summary: 'Get group recomemded event by ID Authenticated' })
-  async findRecommendedEvent(@Param('id') id: number): Promise<GroupEntity> {
-    const group = await this.groupService.findRandomEvents(+id);
-    if (!group) {
-      throw new NotFoundException(`Group with ID ${id} not found`);
-    }
-    return group;
-  }
-
-  @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get group by ID' })
   async findOneProtected(@Param('id') id: number): Promise<GroupEntity> {
@@ -130,13 +112,16 @@ export class GroupController {
     return this.groupService.remove(+id);
   }
 
+  @Public()
   @Get(':id/recommended-events')
   @ApiOperation({ summary: 'Get some recommended events for a specific group' })
   async getRecommendedEvents(
     @Param('id') id: number,
-    @Query('minEvents') minEvents: number = 3,
+    @Query('minEvents') minEvents: number = 0,
     @Query('maxEvents') maxEvents: number = 5,
   ): Promise<EventEntity[]> {
+    minEvents = minEvents || 0;
+    maxEvents = maxEvents || 5;
     try {
       const recommendedEvents = await this.groupService.getRecommendedEvents(
         +id,

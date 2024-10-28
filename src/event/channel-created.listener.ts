@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import zulipInit from 'zulip-js';
 
@@ -28,6 +28,9 @@ export class ChannelCreatedListener {
         };
         console.log(await client.users.me.subscriptions.add(anotherUserParams));
       }
-    } catch (error) {}
+    } catch (error) {
+      console.error('Failed to create channel:', error);
+      throw new NotFoundException('Failed to create channel');
+    }
   }
 }

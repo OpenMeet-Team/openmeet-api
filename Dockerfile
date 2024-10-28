@@ -37,5 +37,5 @@ COPY --from=build /usr/src/app/dist ./dist
 # Expose port
 EXPOSE 3000
 
-CMD npm run migration:run:prod && npm run seed:run:prod && npm run start:prod
-# CMD  npm run start:prod
+# CMD npm run migration:run:prod && npm run seed:run:prod && npm run start:prod
+CMD npm run start:prod
