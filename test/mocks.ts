@@ -1,4 +1,5 @@
 import { EventEntity } from 'src/event/infrastructure/persistence/relational/entities/event.entity';
+import { GroupMemberEntity } from 'src/group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupEntity } from 'src/group/infrastructure/persistence/relational/entities/group.entity';
 import { UserEntity } from 'src/user/infrastructure/persistence/relational/entities/user.entity';
 
@@ -24,6 +25,14 @@ export const mockEvent = {
   id: 1,
   name: 'Test Event',
 } as EventEntity;
+
+export const mockGroupMember = {
+  id: 1,
+  group: mockGroup,
+} as GroupMemberEntity;
+
+export const mockGroupMembers = [mockGroupMember];
+export const mockEvents = [mockEvent];
 
 export const mockEventService = {
   getHomePageUserNextHostedEvent: jest.fn().mockResolvedValue(null),

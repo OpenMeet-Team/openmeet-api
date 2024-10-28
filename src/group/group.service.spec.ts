@@ -74,10 +74,10 @@ describe('GroupService', () => {
     expect(service).toBeDefined();
   });
 
-  describe('findOneWithDetails', () => {
+  describe('findGroupDetails', () => {
     it('should return group with details', async () => {
-      jest.spyOn(service, 'findOneWithDetails').mockResolvedValue(mockGroup);
-      const result = await service.findOneWithDetails(1, 1);
+      jest.spyOn(service, 'findGroupDetails').mockResolvedValue(mockGroup);
+      const result = await service.findGroupDetails(1, 1);
       expect(result).toEqual(mockGroup);
     });
   });
