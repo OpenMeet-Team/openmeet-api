@@ -8,7 +8,6 @@ export const eventSeedData = [
   {
     name: '[Draft][Public][Hybrid][Past] Tech Conference 2024',
     slug: 'tech-conference-2024',
-    image: 'https://example.com/images/tech-conf.jpg',
     type: EventType.Hybrid,
     locationOnline: 'https://zoom.us/j/123456789',
     description:
@@ -25,7 +24,6 @@ export const eventSeedData = [
   {
     name: '[Pending][Authenticated][In-Person][Past] Local Art Exhibition',
     slug: 'local-art-exhibition',
-    image: 'https://example.com/images/art-exhibit.jpg',
     type: EventType.InPerson,
     description:
       'Showcasing works from local artists across various mediums including painting, sculpture, and photography.',
@@ -41,7 +39,6 @@ export const eventSeedData = [
   {
     name: '[Published][Public][Online][Upcoming] Virtual Book Club Meeting',
     slug: 'virtual-book-club-meeting',
-    image: 'https://example.com/images/book-club.jpg',
     type: EventType.Online,
     locationOnline: 'https://meet.google.com/abc-defg-hij',
     description:
@@ -55,7 +52,6 @@ export const eventSeedData = [
   {
     name: '[Draft][Public][In-Person][Past] Charity Marathon',
     slug: 'charity-marathon',
-    image: 'https://example.com/images/marathon.jpg',
     type: EventType.InPerson,
     description:
       "Annual charity run to raise funds for local children's hospital. 5K, 10K, and half-marathon options available.",
@@ -71,7 +67,6 @@ export const eventSeedData = [
   {
     name: '[Pending][Private][Hybrid][Upcoming] Startup Pitch Night',
     slug: 'startup-pitch-night',
-    image: 'https://example.com/images/pitch-night.jpg',
     type: EventType.Hybrid,
     locationOnline: 'https://twitch.tv/startup-pitch',
     description:
@@ -89,7 +84,6 @@ export const eventSeedData = [
   {
     name: '[Published][Public][In-Person][Upcoming] Annual Food Festival',
     slug: 'annual-food-festival',
-    image: 'https://example.com/images/food-fest.jpg',
     type: EventType.InPerson,
     description:
       'A celebration of local and international cuisines. Features food stalls, cooking demonstrations, and eating contests.',
@@ -105,7 +99,6 @@ export const eventSeedData = [
   {
     name: '[Draft][Public][Hybrid][Upcoming] Virtual Reality Gaming Tournament',
     slug: 'vr-gaming-tournament',
-    image: 'https://example.com/images/vr-tournament.jpg',
     type: EventType.Hybrid,
     locationOnline: 'https://twitch.tv/vr-tournament',
     description:
@@ -122,7 +115,6 @@ export const eventSeedData = [
   {
     name: '[Pending][Private][In-Person][Upcoming] Mindfulness and Meditation Retreat',
     slug: 'mindfulness-meditation-retreat',
-    image: 'https://example.com/images/meditation-retreat.jpg',
     type: EventType.InPerson,
     description:
       'A weekend of guided meditation, yoga, and mindfulness practices in a serene natural setting.',
@@ -138,7 +130,6 @@ export const eventSeedData = [
   {
     name: '[Published][Public][Online][Upcoming] Online Photography Workshop',
     slug: 'online-photography-workshop',
-    image: 'https://example.com/images/photo-workshop.jpg',
     type: EventType.Online,
     locationOnline: 'https://zoom.us/j/987654321',
     description:
@@ -152,7 +143,6 @@ export const eventSeedData = [
   {
     name: '[Published][Public][In-Person][Upcoming] Sustainable Living Expo',
     slug: 'sustainable-living-expo',
-    image: 'https://example.com/images/eco-expo.jpg',
     type: EventType.InPerson,
     description:
       'Explore eco-friendly products, attend workshops on sustainable practices, and learn about renewable energy solutions.',

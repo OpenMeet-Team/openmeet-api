@@ -4,15 +4,19 @@ import { groupSeedData } from './group-seed.seed';
 import { GroupEntity } from 'src/group/infrastructure/persistence/relational/entities/group.entity';
 import { UserEntity } from 'src/user/infrastructure/persistence/relational/entities/user.entity';
 import { CategoryEntity } from 'src/category/infrastructure/persistence/relational/entities/categories.entity';
-import { GroupService } from '../../../../group/group.service';
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
+import slugify from 'slugify';
+import { GroupMemberEntity } from 'src/group-member/infrastructure/persistence/relational/entities/group-member.entity';
+import { GroupRole } from 'src/core/constants/constant';
+import { GroupRoleEntity } from 'src/group-role/infrastructure/persistence/relational/entities/group-role.entity';
 
 @Injectable()
 export class GroupSeedService {
   private groupRepository: Repository<GroupEntity>;
   private userRepository: Repository<UserEntity>;
   private categoryRepository: Repository<CategoryEntity>;
-  private groupService: GroupService;
+  private groupMemberRepository: Repository<GroupMemberEntity>;
+  private groupRoleRepository: Repository<GroupRoleEntity>;
 
   constructor(
     private readonly tenantConnectionService: TenantConnectionService,
@@ -25,38 +29,55 @@ export class GroupSeedService {
     this.groupRepository = dataSource.getRepository(GroupEntity);
     this.userRepository = dataSource.getRepository(UserEntity);
     this.categoryRepository = dataSource.getRepository(CategoryEntity);
+    this.groupRoleRepository = dataSource.getRepository(GroupRoleEntity);
+    this.groupMemberRepository = dataSource.getRepository(GroupMemberEntity);
 
-    // await this.seedGroups();
+    const count = await this.groupRepository.count();
+    if (!count) {
+      await this.seedGroups();
+    }
   }
 
   private async seedGroups() {
     const allCategories = await this.categoryRepository.find();
     const allUsers = await this.userRepository.find();
 
-    console.log(allUsers, allCategories);
-
     for (const user of allUsers) {
       for (const groupData of groupSeedData) {
         const numberOfCategories = Math.floor(Math.random() * 3) + 1;
 
-        const group = await this.groupService.create(
-          {
-            name: groupData.name,
-            description: groupData.description,
-            status: groupData.status,
-            visibility: groupData.visibility,
-            location: groupData.location,
-            lat: groupData.lat,
-            lon: groupData.lon,
-            categories: this.getRandomCategories(
-              allCategories,
-              numberOfCategories,
-            ).map((category) => category.id),
-          },
-          user.id,
-        );
+        const group = this.groupRepository.create({
+          name: groupData.name,
+          description: groupData.description,
+          slug: slugify(groupData.name, {
+            strict: true,
+            lower: true,
+          }),
+          status: groupData.status,
+          visibility: groupData.visibility,
+          location: groupData.location,
+          lat: groupData.lat,
+          lon: groupData.lon,
+          categories: this.getRandomCategories(
+            allCategories,
+            numberOfCategories,
+          ).map((category) => category),
+          createdBy: { id: user.id },
+        });
+        const savedGroup = await this.groupRepository.save(group);
 
-        console.log(group);
+        // by default member role
+        const groupRole = await this.groupRoleRepository.findOne({
+          where: { name: GroupRole.Owner },
+        });
+
+        const mappedDto = {
+          user: { id: user.id },
+          group: { id: savedGroup.id },
+          groupRole: { id: groupRole?.id },
+        };
+        const groupMember = this.groupMemberRepository.create(mappedDto);
+        await this.groupMemberRepository.save(groupMember);
       }
     }
   }

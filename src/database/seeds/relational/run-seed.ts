@@ -16,7 +16,7 @@ const tenantIds = ['', '1']; // List of tenant IDs
 const runSeed = async () => {
   const app = await NestFactory.create(SeedModule);
   for (const tenantId of tenantIds) {
-    // run
+    // // run
     await app.get(RoleSeedService).run(tenantId);
     await app.get(StatusSeedService).run(tenantId);
     await app.get(UserSeedService).run(tenantId);

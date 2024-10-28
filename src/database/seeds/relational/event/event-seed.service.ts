@@ -5,8 +5,13 @@ import { eventSeedData } from './event-seed.seed';
 import { CategoryEntity } from 'src/category/infrastructure/persistence/relational/entities/categories.entity';
 import { GroupEntity } from 'src/group/infrastructure/persistence/relational/entities/group.entity';
 import { UserEntity } from 'src/user/infrastructure/persistence/relational/entities/user.entity';
-import { EventService } from 'src/event/event.service';
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
+import slugify from 'slugify';
+import {
+  EventAttendeeRole,
+  EventAttendeeStatus,
+} from 'src/core/constants/constant';
+import { EventAttendeesEntity } from 'src/event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 
 @Injectable()
 export class EventSeedService {
@@ -14,24 +19,26 @@ export class EventSeedService {
   private userRepository: Repository<UserEntity>;
   private categoryRepository: Repository<CategoryEntity>;
   private eventRepository: Repository<EventEntity>;
+  private eventAttendeesRepository: Repository<EventAttendeesEntity>;
 
   constructor(
     private readonly tenantConnectionService: TenantConnectionService,
-    private readonly eventService: EventService,
   ) {}
 
-  run(tenantId: string) {
-    console.log(tenantId, this.tenantConnectionService);
-    // const dataSource =
-    //   await this.tenantConnectionService.getTenantConnection(tenantId);
-    // this.groupRepository = dataSource.getRepository(GroupEntity);
-    // this.userRepository = dataSource.getRepository(UserEntity);
-    // this.categoryRepository = dataSource.getRepository(CategoryEntity);
-    // this.eventRepository = dataSource.getRepository(EventEntity);
-    // const count = await this.eventRepository.count();
-    // if (count === 0) {
-    //   // await this.seedEvents();
-    // }
+  async run(tenantId: string) {
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    this.groupRepository = dataSource.getRepository(GroupEntity);
+    this.userRepository = dataSource.getRepository(UserEntity);
+    this.categoryRepository = dataSource.getRepository(CategoryEntity);
+    this.eventRepository = dataSource.getRepository(EventEntity);
+    this.eventAttendeesRepository =
+      dataSource.getRepository(EventAttendeesEntity);
+
+    const count = await this.eventRepository.count();
+    if (count === 0) {
+      await this.seedEvents();
+    }
   }
 
   private async seedEvents() {
@@ -49,32 +56,37 @@ export class EventSeedService {
         numberOfCategories,
       );
 
-      try {
-        const event = await this.eventService.create(
-          {
-            name: eventData.name,
-            image: eventData.image ?? '',
-            type: eventData.type,
-            locationOnline: eventData.locationOnline ?? '',
-            description: eventData.description,
-            startDate: eventData.startDate,
-            endDate: eventData.endDate,
-            maxAttendees: eventData.maxAttendees,
-            location: eventData.location ?? '',
-            lat: eventData.lat ?? 0,
-            lon: eventData.lon ?? 0,
-            status: eventData.status,
-            visibility: eventData.visibility,
-            group: randomGroup?.id ?? undefined,
-            categories: selectedCategories.map((category) => category.id),
-          },
-          randomUser.id,
-        );
+      const event = await this.eventRepository.create({
+        name: eventData.name,
+        slug: slugify(eventData.name, {
+          strict: true,
+          lower: true,
+        }),
+        type: eventData.type,
+        locationOnline: eventData.locationOnline ?? '',
+        description: eventData.description,
+        startDate: eventData.startDate,
+        endDate: eventData.endDate,
+        maxAttendees: eventData.maxAttendees,
+        location: eventData.location ?? '',
+        lat: eventData.lat ?? 0,
+        lon: eventData.lon ?? 0,
+        status: eventData.status,
+        visibility: eventData.visibility,
+        group: randomGroup?.id ? { id: randomGroup.id } : undefined,
+        user: { id: randomUser.id },
+        categories: selectedCategories.map((category) => category),
+      });
 
-        console.log(`Created event: ${event.name}`);
-      } catch (error) {
-        console.error(`Failed to create event ${eventData.name}:`, error);
-      }
+      const createdEvent = await this.eventRepository.save(event);
+
+      const attendee = this.eventAttendeesRepository.create({
+        status: EventAttendeeStatus.Confirmed,
+        role: EventAttendeeRole.Host,
+        event: { id: createdEvent.id },
+        user: { id: randomUser.id },
+      });
+      await this.eventAttendeesRepository.save(attendee);
     }
   }
 
