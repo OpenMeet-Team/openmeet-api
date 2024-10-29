@@ -42,7 +42,9 @@ export class GroupController {
 
   @Public()
   @Get()
-  @ApiOperation({ summary: 'Get all groups' })
+  @ApiOperation({
+    summary: 'Get all groups, public endpoint with search and pagination',
+  })
   async findAll(
     @Query() pagination: PaginationDto,
     @Query() query: QueryGroupDto,
@@ -76,21 +78,16 @@ export class GroupController {
     return group;
   }
 
-  @Get(':id/event')
-  @ApiOperation({ summary: 'Get group event by ID Authenticated' })
-  async findGroupEvent(@Param('id') id: number): Promise<GroupEntity> {
-    const group = await this.groupService.findGroupEvent(+id);
-    if (!group) {
-      throw new NotFoundException(`Group with ID ${id} not found`);
-    }
-    return group;
-  }
-
   @Public()
   @Get(':id')
-  @ApiOperation({ summary: 'Get group by ID' })
-  async findOneProtected(@Param('id') id: number): Promise<GroupEntity> {
-    const group = await this.groupService.findOne(+id);
+  @ApiOperation({
+    summary: 'Get group by ID and authenticated user, public endpoint',
+  })
+  async findGroupDetails(
+    @Param('id') id: number,
+    @AuthUser() user: User,
+  ): Promise<GroupEntity> {
+    const group = await this.groupService.findGroupDetails(+id, user?.id);
     if (!group) {
       throw new NotFoundException(`Group with ID ${id} not found`);
     }
@@ -110,6 +107,28 @@ export class GroupController {
   @ApiOperation({ summary: 'Delete a group by ID' })
   async remove(@Param('id') id: number): Promise<void> {
     return this.groupService.remove(+id);
+  }
+
+  @Public()
+  @Get(':id/events')
+  @ApiOperation({ summary: 'Get all group events' })
+  async findGroupDetailsEvents(@Param('id') id: number): Promise<GroupEntity> {
+    const group = await this.groupService.findGroupDetailsEvents(+id);
+    if (!group) {
+      throw new NotFoundException(`Group with ID ${id} not found`);
+    }
+    return group;
+  }
+
+  @Public()
+  @Get(':id/members')
+  @ApiOperation({ summary: 'Get all group members' })
+  async findGroupDetailsMembers(@Param('id') id: number): Promise<GroupEntity> {
+    const group = await this.groupService.findGroupDetailsMembers(+id);
+    if (!group) {
+      throw new NotFoundException(`Group with ID ${id} not found`);
+    }
+    return group;
   }
 
   @Public()

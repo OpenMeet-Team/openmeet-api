@@ -28,7 +28,7 @@ export class GroupMemberService {
     this.groupMemberRepository = dataSource.getRepository(GroupMemberEntity);
   }
 
-  async createGroupMember(createDto: CreateGroupMemberDto) {
+  async createGroupOwner(createDto: CreateGroupMemberDto) {
     await this.getTenantSpecificEventRepository();
     const group = { id: createDto.groupId };
     const user = { id: createDto.userId };
@@ -47,6 +47,17 @@ export class GroupMemberService {
   }
 
   async findGroupByUserId(): Promise<any> {}
+
+  async findGroupMemberByUserId(
+    groupId: number,
+    userId: number,
+  ): Promise<GroupMemberEntity | null> {
+    console.log(groupId, userId);
+    return await this.groupMemberRepository.findOne({
+      where: { group: { id: groupId }, user: { id: userId } },
+      relations: ['groupRole'],
+    });
+  }
 
   async joinGroup(userId: number, groupId: number) {
     await this.getTenantSpecificEventRepository();
@@ -117,5 +128,13 @@ export class GroupMemberService {
       .where('group.id = :groupId', { groupId });
 
     return paginate(groupMembers, { page, limit });
+  }
+
+  async findGroupDetailsMembers(groupId: number): Promise<any> {
+    await this.getTenantSpecificEventRepository();
+    return await this.groupMemberRepository.find({
+      where: { group: { id: groupId } },
+      relations: ['user', 'groupRole'],
+    });
   }
 }

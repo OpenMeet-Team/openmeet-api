@@ -31,6 +31,7 @@ import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { HttpException, HttpStatus } from '@nestjs/common';
+import { UserEntity } from 'src/user/infrastructure/persistence/relational/entities/user.entity';
 @ApiTags('Events')
 @Controller('events')
 @ApiBearerAuth()
@@ -98,7 +99,7 @@ export class EventController {
     @Body() updateEventDto: UpdateEventDto,
     @Req() req: Request,
   ): Promise<EventEntity> {
-    const user = req.user;
+    const user = req.user as UserEntity;
     const userId = user?.id;
     return this.eventService.update(+id, updateEventDto, userId);
   }

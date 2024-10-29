@@ -418,12 +418,6 @@ export class EventService {
         .limit(maxEvents)
         .getRawMany();
 
-      if (randomEventIds.length < minEvents) {
-        throw new NotFoundException(
-          `Not enough random events found for group ${groupId}. Found ${randomEventIds.length}, expected at least ${minEvents}.`,
-        );
-      }
-
       // Then fetch full event details for these IDs
       const events = await this.eventRepository
         .createQueryBuilder('event')
@@ -537,5 +531,10 @@ export class EventService {
   async getHomePageUserNextHostedEvent(userId: number) {
     await this.getTenantSpecificEventRepository();
     return this.eventRepository.findOne({ where: { user: { id: userId } } });
+  }
+
+  async findGroupDetailsEvents(groupId: number) {
+    await this.getTenantSpecificEventRepository();
+    return this.eventRepository.find({ where: { group: { id: groupId } } });
   }
 }

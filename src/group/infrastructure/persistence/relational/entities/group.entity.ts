@@ -61,6 +61,8 @@ export class GroupEntity extends EntityRelationalHelper {
   @OneToMany(() => GroupMemberEntity, (gm) => gm.group)
   groupMembers: GroupMemberEntity[];
 
+  groupMember: GroupMemberEntity | null;
+
   @ManyToOne(() => UserEntity, (group) => group.groups)
   createdBy: UserEntity;
 
@@ -93,7 +95,6 @@ export class GroupEntity extends EntityRelationalHelper {
 
   @Expose()
   get groupMembersCount(): number {
-    console.log('this.attendees: ', this.groupMembers);
     return this.groupMembers ? this.groupMembers.length : 0;
   }
 }

@@ -6,12 +6,22 @@ import { TenantModule } from '../../../../tenant/tenant.module';
 import { UserEntity } from 'src/user/infrastructure/persistence/relational/entities/user.entity';
 import { CategoryEntity } from 'src/category/infrastructure/persistence/relational/entities/categories.entity';
 import { GroupModule } from '../../../../group/group.module';
+import { GroupMemberModule } from 'src/group-member/group-member.module';
+import { GroupRoleModule } from 'src/group-role/group-role.module';
+import { GroupRoleEntity } from 'src/group-role/infrastructure/persistence/relational/entities/group-role.entity';
 
 @Module({
   imports: [
     TenantModule,
     GroupModule,
-    TypeOrmModule.forFeature([GroupEntity, UserEntity, CategoryEntity]),
+    GroupRoleModule,
+    GroupMemberModule,
+    TypeOrmModule.forFeature([
+      GroupEntity,
+      UserEntity,
+      CategoryEntity,
+      GroupRoleEntity,
+    ]),
   ],
   providers: [GroupSeedService],
   exports: [GroupSeedService],
