@@ -152,7 +152,5 @@
 // });
 
 describe('GroupController (e2e)', () => {
-  it('should Console', () => {
-    console.log('My Group Console');
-  });
+  it('should Console', () => {});
 });

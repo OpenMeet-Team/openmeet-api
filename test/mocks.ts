@@ -105,3 +105,8 @@ export const mockEventService = {
   findEventDetailsAttendees: jest.fn().mockResolvedValue([]),
   findUserUpcomingEvents: jest.fn().mockResolvedValue([]),
 };
+
+export const mockDashboardService = {
+  getMyEvents: jest.fn(),
+  getMyGroups: jest.fn(),
+};

@@ -75,7 +75,7 @@ export class GroupService {
       where: {
         groupMembers: { user: { id: Number(userId) } },
       },
-      relations: ['groupMembers', 'groupMembers.user'],
+      relations: ['createdBy'],
     });
     return groups;
   }
@@ -86,7 +86,7 @@ export class GroupService {
       where: {
         groupMembers: { user: { id: Number(userId) } },
       },
-      relations: ['groupMembers', 'groupMembers.user'],
+      relations: ['createdBy'],
     });
     return groups;
   }

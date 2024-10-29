@@ -5,31 +5,18 @@ import { EventService } from '../event/event.service';
 import { GroupService } from '../group/group.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
-import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import {
+  mockGroupService,
+  mockGroup,
+  mockEvent,
+  mockUser,
+  mockEventService,
+  mockDashboardService,
+} from '../../test/mocks';
 
 describe('DashboardController', () => {
   let controller: DashboardController;
   let dashboardService: DashboardService;
-
-  const mockUser: UserEntity = {
-    id: 1,
-    email: 'test@example.com',
-    firstName: 'John',
-    lastName: 'Doe',
-  } as UserEntity;
-
-  const mockEvent: Partial<EventEntity> = {
-    id: 1,
-    name: 'Test Event',
-    description: 'Test Description',
-    attendeesCount: 5,
-  };
-
-  const mockGroup: Partial<GroupEntity> = {
-    id: 1,
-    name: 'Test Group',
-    description: 'Test Group Description',
-  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -37,23 +24,15 @@ describe('DashboardController', () => {
       providers: [
         {
           provide: DashboardService,
-          useValue: {
-            getMyEvents: jest.fn(),
-            getMyGroups: jest.fn(),
-          },
+          useValue: mockDashboardService,
         },
         {
           provide: EventService,
-          useValue: {
-            getEventsByCreator: jest.fn(),
-            getEventsByAttendee: jest.fn(),
-          },
+          useValue: mockEventService,
         },
         {
           provide: GroupService,
-          useValue: {
-            getGroupsByMember: jest.fn(),
-          },
+          useValue: mockGroupService,
         },
       ],
     }).compile();

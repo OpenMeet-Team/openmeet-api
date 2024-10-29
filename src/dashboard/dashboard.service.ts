@@ -7,6 +7,8 @@ import { GroupService } from '../group/group.service';
 import { CategoryService } from '../category/category.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
+import { GroupMemberService } from '../group-member/group-member.service';
+import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class DashboardService {
@@ -19,6 +21,8 @@ export class DashboardService {
     private readonly categoryService: CategoryService,
     private readonly eventService: EventService,
     private readonly groupService: GroupService,
+    private readonly groupMemberService: GroupMemberService,
+    private readonly eventAttendeeService: EventAttendeeService,
   ) {}
 
   async getTenantSpecificRepositories() {
@@ -32,6 +36,7 @@ export class DashboardService {
   async getMyEvents(userId: number): Promise<EventEntity[]> {
     try {
       const createdEvents = await this.eventService.getEventsByCreator(userId);
+
       const attendingEvents =
         await this.eventService.getEventsByAttendee(userId);
 
@@ -41,7 +46,15 @@ export class DashboardService {
         new Map(allEvents.map((event) => [event.id, event])).values(),
       );
 
-      return uniqueEvents as EventEntity[];
+      return (await Promise.all(
+        uniqueEvents.map(async (event) => ({
+          ...event,
+          attendee: await this.eventAttendeeService.findEventAttendeeByUserId(
+            event.id,
+            userId,
+          ),
+        })),
+      )) as EventEntity[];
     } catch (error) {
       console.error('Failed to fetch user events:', error);
       throw new NotFoundException('Failed to fetch user events');
@@ -59,7 +72,16 @@ export class DashboardService {
       const uniqueGroups = Array.from(
         new Map(groups.map((group) => [group.id, group])).values(),
       );
-      return uniqueGroups as GroupEntity[];
+
+      return (await Promise.all(
+        uniqueGroups.map(async (group) => ({
+          ...group,
+          groupMember: await this.groupMemberService.findGroupMemberByUserId(
+            group.id,
+            Number(userId),
+          ),
+        })),
+      )) as GroupEntity[];
     } catch (error) {
       console.error('Failed to fetch user groups:', error);
       throw new NotFoundException('Failed to fetch user groups');
