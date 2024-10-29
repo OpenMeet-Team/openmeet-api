@@ -24,6 +24,7 @@ import {
 import slugify from 'slugify';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
+import { GroupMemberService } from '../group-member/group-member.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -34,6 +35,7 @@ export class EventService {
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly categoryService: CategoryService,
     private readonly eventAttendeeService: EventAttendeeService,
+    private readonly groupMemberService: GroupMemberService,
   ) {
     void this.initializeRepository();
   }
@@ -184,6 +186,49 @@ export class EventService {
     event.categories = event.categories.slice(0, 5);
 
     return event;
+  }
+
+  async findEventDetails(id: number, userId: number): Promise<EventEntity> {
+    await this.getTenantSpecificEventRepository();
+    const event = await this.eventRepository.findOne({
+      where: { id },
+      relations: [
+        'user',
+        'attendees',
+        'group',
+        'group.groupMembers',
+        'categories',
+      ],
+    });
+
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${id} not found`);
+    }
+
+    event.attendees = event.attendees.slice(0, 5);
+    event.categories = event.categories.slice(0, 5);
+
+    if (event.group) {
+      event.groupMember = await this.groupMemberService.findGroupMemberByUserId(
+        event.group.id,
+        userId,
+      );
+    }
+
+    if (userId) {
+      event.attendee =
+        await this.eventAttendeeService.findEventAttendeeByUserId(
+          event.id,
+          userId,
+        );
+    }
+
+    return event;
+  }
+
+  async findGroupDetailsAttendees(eventId: number): Promise<any> {
+    await this.getTenantSpecificEventRepository();
+    return this.eventAttendeeService.findEventAttendees(eventId);
   }
 
   async findRandom(): Promise<EventEntity[]> {
@@ -341,8 +386,6 @@ export class EventService {
         .limit(maxEvents)
         .getMany();
 
-      console.log('🚀 ~ recommendedEvents:', recommendedEvents);
-
       if (recommendedEvents.length < minEvents) {
         throw new NotFoundException(
           `Not enough recommended events found for group ${groupId}. Found ${recommendedEvents.length}, expected at least ${minEvents}.`,
@@ -496,8 +539,8 @@ export class EventService {
     return this.eventRepository.findOne({ where: { user: { id: userId } } });
   }
 
-  async findGroupDetailsEvents(groupId: number) {
+  async findEventDetailsAttendees(eventId: number) {
     await this.getTenantSpecificEventRepository();
-    return this.eventRepository.find({ where: { group: { id: groupId } } });
+    return this.eventAttendeeService.findEventAttendees(eventId);
   }
 }

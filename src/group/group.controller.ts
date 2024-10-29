@@ -9,6 +9,7 @@ import {
   NotFoundException,
   Query,
   UseGuards,
+  Optional,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CreateGroupDto } from './dto/create-group.dto';
@@ -85,7 +86,7 @@ export class GroupController {
   })
   async findGroupDetails(
     @Param('id') id: number,
-    @AuthUser() user: User,
+    @Optional() @AuthUser() user?: User,
   ): Promise<GroupEntity> {
     const group = await this.groupService.findGroupDetails(+id, user?.id);
     if (!group) {

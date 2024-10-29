@@ -14,6 +14,7 @@ import { CategoryEntity } from '../../../../../category/infrastructure/persisten
 import { GroupEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group.entity';
 import { Expose } from 'class-transformer';
 import { Status, Visibility } from '../../../../../core/constants/constant';
+import { GroupMemberEntity } from 'src/group-member/infrastructure/persistence/relational/entities/group-member.entity';
 
 @Entity({ name: 'events' })
 export class EventEntity extends EntityRelationalHelper {
@@ -84,9 +85,11 @@ export class EventEntity extends EntityRelationalHelper {
   @ManyToMany(() => CategoryEntity, (category) => category.events)
   categories: CategoryEntity[];
 
+  groupMember: GroupMemberEntity | null;
+  attendee: EventAttendeesEntity | null;
+
   @Expose()
   get attendeesCount(): number {
-    console.log('this.attendees: ', this.attendees);
     return this.attendees ? this.attendees.length : 0;
   }
 }

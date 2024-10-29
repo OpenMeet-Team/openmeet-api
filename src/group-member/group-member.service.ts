@@ -52,7 +52,7 @@ export class GroupMemberService {
     groupId: number,
     userId: number,
   ): Promise<GroupMemberEntity | null> {
-    console.log(groupId, userId);
+    await this.getTenantSpecificEventRepository();
     return await this.groupMemberRepository.findOne({
       where: { group: { id: groupId }, user: { id: userId } },
       relations: ['groupRole'],

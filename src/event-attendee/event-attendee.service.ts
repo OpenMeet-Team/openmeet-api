@@ -130,4 +130,23 @@ export class EventAttendeeService {
 
     return paginate(eventAttendee, { page, limit });
   }
+
+  async findEventAttendeeByUserId(
+    eventId: number,
+    userId: number,
+  ): Promise<EventAttendeesEntity | null> {
+    await this.getTenantSpecificEventRepository();
+    return await this.eventAttendeesRepository.findOne({
+      where: { event: { id: eventId }, user: { id: userId } },
+      relations: ['user'],
+    });
+  }
+
+  async findEventAttendees(eventId: number): Promise<any> {
+    await this.getTenantSpecificEventRepository();
+    return await this.eventAttendeesRepository.find({
+      where: { event: { id: eventId } },
+      relations: ['user'],
+    });
+  }
 }
