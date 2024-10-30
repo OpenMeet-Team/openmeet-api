@@ -8,6 +8,7 @@ import { CategoryModule } from '../category/category.module';
 import { AuthModule } from '../auth/auth.module';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 import { ChannelCreatedListener } from './channel-created.listener';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Module({
   imports: [
@@ -18,7 +19,7 @@ import { ChannelCreatedListener } from './channel-created.listener';
     EventAttendeeModule,
   ],
   controllers: [EventController],
-  providers: [EventService, ChannelCreatedListener],
+  providers: [EventService, ChannelCreatedListener, EventEmitter2],
   exports: [EventService],
 })
 export class EventsModule {}
