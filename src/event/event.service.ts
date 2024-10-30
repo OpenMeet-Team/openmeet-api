@@ -487,6 +487,12 @@ export class EventService {
     const event = await this.findOne(id);
     await this.eventRepository.remove(event);
   }
+
+  async deleteEventsByGroup(groupId: number): Promise<void> {
+    await this.getTenantSpecificEventRepository();
+    await this.eventRepository.delete({ group: { id: groupId } });
+  }
+
   async getEventsByCreator(userId: number) {
     await this.getTenantSpecificEventRepository();
     const events =
