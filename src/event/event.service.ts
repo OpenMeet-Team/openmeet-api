@@ -6,7 +6,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { Repository } from 'typeorm';
-import { CreateEventDto } from './dto/create-event.dto';
+import { CommentDto, CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { REQUEST } from '@nestjs/core';
@@ -102,20 +102,18 @@ export class EventService {
     return createdEvent;
   }
 
-  async postComment(body: any) {
+  async postComment(body: CommentDto) {
     const { eventId, message } = body;
     const event = await this.findOne(eventId);
-    const config = { zuliprc: 'zuliprc-admin' };
+    const config = { zuliprc: 'D:\\DevNexus\\openmeet-api\\zuliprc' };
 
     const client = await zulipInit(config);
 
-    // Generate topic name with timestamp and initial words from the message
-    const timestamp = new Date().toISOString();
+    const timestamp = Date.now();
     const topicName = `${timestamp}-${message.split(' ').slice(0, 5).join('-').toLowerCase()}`;
 
-    // Send the message to the stream
     const params = {
-      to: event.name, // replace with your actual stream name
+      to: `${event.shortId}_${event.slug}`,
       type: 'stream',
       topic: topicName,
       content: message,
@@ -128,6 +126,77 @@ export class EventService {
     } catch (error) {
       console.error('Error sending message to Zulip:', error);
       throw new Error('Failed to create Zulip topic');
+    }
+  }
+
+  async getTopics(eventId: number) {
+    const config = { zuliprc: 'D:\\DevNexus\\openmeet-api\\zuliprc' };
+    const client = await zulipInit(config);
+
+    try {
+      const event = await this.findOne(eventId);
+      const streamName = `${event.shortId}_${event.slug}`;
+      const streamResponse = await client.streams.retrieve();
+
+      const stream = streamResponse.streams.find((s) => s.name === streamName);
+      if (!stream) {
+        throw new Error(`Stream with name "${streamName}" not found.`);
+      }
+
+      const topicsResponse = await client.streams.topics.retrieve({
+        stream_id: stream.stream_id,
+      });
+      const topics = topicsResponse.topics;
+
+      const topicsWithMessages: any = [];
+
+      for (const topic of topics) {
+        const messagesResponse = await client.messages.retrieve({
+          narrow: [
+            { operator: 'stream', operand: streamName },
+            { operator: 'topic', operand: topic.name },
+          ],
+          anchor: 'newest',
+          num_before: 100,
+          num_after: 0,
+        });
+
+        topicsWithMessages.push({
+          topic: topic.name,
+          messages: messagesResponse.messages,
+        });
+      }
+
+      console.log('Topics with messages:', topicsWithMessages);
+      return topicsWithMessages;
+    } catch (error) {
+      console.error('Error fetching topics and messages from Zulip:', error);
+      throw new Error('Failed to fetch topics and messages');
+    }
+  }
+
+  async postCommentinTopic(body: CommentDto, topicName: string) {
+    const { eventId, message } = body;
+    const config = { zuliprc: 'D:\\DevNexus\\openmeet-api\\zuliprc' };
+
+    const client = await zulipInit(config);
+
+    const event = await this.findOne(eventId);
+
+    const params = {
+      to: `${event.shortId}_${event.slug}`,
+      type: 'stream',
+      topic: topicName,
+      content: message,
+    };
+
+    try {
+      const response = await client.messages.send(params);
+      console.log('Message sent successfully to topic:', topicName);
+      return response;
+    } catch (error) {
+      console.error('Error sending message to Zulip:', error);
+      throw new Error('Failed to send message to the topic');
     }
   }
 

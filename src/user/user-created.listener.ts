@@ -11,13 +11,17 @@ export class UserCreatedListener {
   constructor(private readonly userService: UserService) {}
   @OnEvent('user.created')
   async handleUserCreatedEvent(event: any) {
-    const config = { zuliprc: 'zuliprc-admin' };
+    const config = { zuliprc: 'D:\\DevNexus\\openmeet-api\\zuliprc' };
 
     console.log('User created event received:', event);
     try {
       const client = await zulipInit(config);
 
       const response = await client.users.create(event);
+      console.log(
+        '🚀 ~ UserCreatedListener ~ handleUserCreatedEvent ~ response:',
+        response,
+      );
 
       const user = await this.userService.findByEmail(event.email);
       if (response.result === 'success' && user) {

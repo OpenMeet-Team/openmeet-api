@@ -7,7 +7,7 @@ export class ChannelCreatedListener {
   constructor() {}
   @OnEvent('channel.created')
   async handleUserCreatedEvent(params: any) {
-    const config = { zuliprc: 'zuliprc-admin' };
+    const config = { zuliprc: 'D:\\DevNexus\\openmeet-api\\zuliprc' };
 
     console.log('User created event received:', params);
     try {
@@ -18,16 +18,20 @@ export class ChannelCreatedListener {
       };
 
       const response = await client.users.me.subscriptions.add(meParams);
+      console.log(
+        '🚀 ~ ChannelCreatedListener ~ handleUserCreatedEvent ~ response:',
+        response,
+      );
 
-      if (response.result === 'success') {
-        // To subscribe another user to a channel, you may pass in
-        // the `principals` parameter, like so:
-        const anotherUserParams = {
-          subscriptions: JSON.stringify([{ name: params.name }]),
-          principals: JSON.stringify([params.userId]),
-        };
-        console.log(await client.users.me.subscriptions.add(anotherUserParams));
-      }
+      // if (response.result === 'success') {
+      // To subscribe another user to a channel, you may pass in
+      // the `principals` parameter, like so:
+      //   const anotherUserParams = {
+      //     subscriptions: JSON.stringify([{ name: params.name }]),
+      //     principals: JSON.stringify([params.userId]),
+      //   };
+      //   console.log(await client.users.me.subscriptions.add(anotherUserParams));
+      // }
     } catch (error) {
       console.error('Failed to create channel:', error);
       throw new NotFoundException('Failed to create channel');

@@ -18,7 +18,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { Request } from 'express';
-import { CreateEventDto } from './dto/create-event.dto';
+import { CommentDto, CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventService } from './event.service';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
@@ -49,13 +49,32 @@ export class EventController {
     return this.eventService.create(createEventDto, userId);
   }
 
-  @Post('pst/comment')
+  @Public()
+  @Post('post/comment')
   @ApiOperation({ summary: 'Create a new event' })
-  async comment(
-    @Body() eventId: number,
-    @Body() message: string,
+  async comment(@Body() body: CommentDto): Promise<EventEntity> {
+    return this.eventService.postComment(body);
+  }
+
+  @Public()
+  @Post('comment-reply/:topicName')
+  @ApiOperation({ summary: 'Create a new event' })
+  async commentReply(
+    @Body() body: CommentDto,
+    @Param('topicName') topicName: string,
   ): Promise<EventEntity> {
-    return this.eventService.postComment({ message, eventId });
+    return this.eventService.postCommentinTopic(body, topicName);
+  }
+
+  @Public()
+  @Get('get-comments/:eventId')
+  @ApiOperation({ summary: 'Get Topics' })
+  async findTopics(@Param('eventId') eventId: number): Promise<EventEntity> {
+    const event = await this.eventService.getTopics(+eventId);
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+    return event;
   }
 
   @Public()

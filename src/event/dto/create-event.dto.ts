@@ -129,3 +129,15 @@ export class CreateEventDto {
   @Type(() => Number)
   group?: number;
 }
+
+export class CommentDto {
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsString()
+  message: string;
+
+  @ApiProperty()
+  @IsOptional()
+  @IsNumber()
+  eventId: number;
+}
