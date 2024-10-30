@@ -3,9 +3,9 @@ import { loginAsTester } from './../utils/functions';
 import { APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 
 describe('HomeController (e2e)', () => {
-  const server = request.agent(APP_URL).set('tenant-id', TESTING_TENANT_ID);
+  const server = request.agent(APP_URL).set('x-tenant-id', TESTING_TENANT_ID);
 
-  it('should return 401 error if no tenant-id is provided', () => {
+  it('should return 401 error if no x-tenant-id is provided', () => {
     const server = request.agent(APP_URL);
     return server.get('/api/home/guest').expect(401);
   });

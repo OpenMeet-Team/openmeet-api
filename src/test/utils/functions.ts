@@ -5,7 +5,7 @@ async function getAuthToken(
   email: string,
   password: string,
 ): Promise<string> {
-  const server = request.agent(app).set('tenant-id', '1');
+  const server = request.agent(app).set('x-tenant-id', '1');
   const response = await server
     .post('/api/v1/auth/email/login')
     .send({ tenant_id: 1, email, password });

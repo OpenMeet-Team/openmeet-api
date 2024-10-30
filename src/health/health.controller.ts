@@ -29,7 +29,7 @@ export class HealthController {
     const api_url = process.env.LIVENESS_PROBE_API_URL;
     const docs_url = process.env.LIVENESS_PROBE_DOCS_URL;
     // get the tenant_id from the request
-    const tenant_id = req.headers['tenant-id'] as string;
+    const tenant_id = req.headers['x-tenant-id'] as string;
 
     const checks: Array<() => Promise<HealthIndicatorResult>> = [];
 

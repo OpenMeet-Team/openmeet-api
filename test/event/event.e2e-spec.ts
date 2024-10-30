@@ -93,7 +93,7 @@ describe('EventController (e2e)', () => {
     const deleteEventResponse = await request(APP_URL)
       .delete(`/api/events/${testEvent.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', '1');
+      .set('x-tenant-id', '1');
     expect(deleteEventResponse.status).toBe(200);
   });
 
@@ -103,14 +103,14 @@ describe('EventController (e2e)', () => {
       await request(APP_URL)
         .delete(`/api/events/${testEvent.id}`)
         .set('Authorization', `Bearer ${token}`)
-        .set('tenant-id', '1');
+        .set('x-tenant-id', '1');
     }
 
     if (testGroup && testGroup.id) {
       await request(APP_URL)
         .delete(`/api/groups/${testGroup.id}`)
         .set('Authorization', `Bearer ${token}`)
-        .set('tenant-id', '1');
+        .set('x-tenant-id', '1');
     }
   });
 });
