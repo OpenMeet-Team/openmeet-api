@@ -16,6 +16,7 @@ import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 describe('EventService', () => {
   let service: EventService;
@@ -107,6 +108,12 @@ describe('EventService', () => {
               { id: 1, name: 'Category 1' },
               { id: 2, name: 'Category 2' },
             ]),
+          },
+        },
+        {
+          provide: EventEmitter2,
+          useValue: {
+            emit: jest.fn(),
           },
         },
       ],

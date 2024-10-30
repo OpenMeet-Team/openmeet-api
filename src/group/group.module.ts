@@ -11,6 +11,7 @@ import { UsersModule } from '../user/user.module';
 import { GroupMemberModule } from '../group-member/group-member.module';
 import { EventService } from '../event/event.service';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
     TenantConnectionService,
     CategoryService,
     EventService,
+    EventEmitter2,
   ],
   exports: [GroupService],
 })
