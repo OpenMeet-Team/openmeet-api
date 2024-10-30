@@ -9,11 +9,13 @@ import {
   HttpStatus,
   HttpCode,
   SerializeOptions,
+  NotFoundException,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import {
   ApiCreatedResponse,
   ApiOkResponse,
+  ApiOperation,
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
@@ -27,6 +29,7 @@ import { QueryUserDto } from './dto/query-user.dto';
 import { User } from './domain/user';
 import { UserService } from './user.service';
 import { infinityPagination } from '../utils/infinity-pagination';
+import { Public } from 'src/auth/decorators/public.decorator';
 
 // @ApiBearerAuth()
 // @Roles(RoleEnum.admin)
@@ -117,6 +120,18 @@ export class UserController {
   // ): Promise<User | null> {
   //   return this.userService.update(id, updateProfileDto);
   // }
+
+  @Public()
+  @Get(':id/profile')
+  @ApiOperation({ summary: 'Get user profile' })
+  getProfile(@Param('id') id: User['id']): Promise<NullableType<User>> {
+    try {
+      return this.userService.findProfile(id);
+    } catch (err) {
+      console.log(err);
+      throw new NotFoundException('User not found');
+    }
+  }
 
   @Delete(':id')
   @ApiParam({

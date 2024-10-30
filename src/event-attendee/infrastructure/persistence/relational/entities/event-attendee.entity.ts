@@ -9,7 +9,7 @@ import {
 @Entity({ name: 'eventAttendees' })
 export class EventAttendeesEntity {
   @PrimaryColumn({ type: 'int' })
-  eventId: string;
+  eventId: number;
 
   @PrimaryColumn()
   userId: number;

@@ -31,7 +31,6 @@ export class EventAttendeeController {
     @Body() createEventAttendeeDto: CreateEventAttendeeDto,
   ) {
     const userId = user.id;
-    console.log('🚀 ~ EventAttendeeController ~ attendEvent ~ userId:', userId);
     return await this.eventAttendeeService.attendEvent(
       createEventAttendeeDto,
       userId,

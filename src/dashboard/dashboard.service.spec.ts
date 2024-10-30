@@ -5,6 +5,8 @@ import { EventService } from '../event/event.service';
 import { GroupService } from '../group/group.service';
 import { CategoryService } from '../category/category.service';
 import { TESTING_TENANT_ID } from '../../test/utils/constants';
+import { GroupMemberService } from '../group-member/group-member.service';
+import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 
 describe('DashboardService', () => {
   let service: DashboardService;
@@ -33,6 +35,14 @@ describe('DashboardService', () => {
         },
         {
           provide: CategoryService,
+          useValue: {},
+        },
+        {
+          provide: GroupMemberService,
+          useValue: {},
+        },
+        {
+          provide: EventAttendeeService,
           useValue: {},
         },
       ],

@@ -13,7 +13,12 @@ import { EventAttendeesEntity } from '../../../../../event-attendee/infrastructu
 import { CategoryEntity } from '../../../../../category/infrastructure/persistence/relational/entities/categories.entity';
 import { GroupEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group.entity';
 import { Expose } from 'class-transformer';
-import { Status, Visibility } from '../../../../../core/constants/constant';
+import {
+  Status,
+  Visibility,
+  EventType,
+} from '../../../../../core/constants/constant';
+import { GroupMemberEntity } from 'src/group-member/infrastructure/persistence/relational/entities/group-member.entity';
 
 @Entity({ name: 'events' })
 export class EventEntity extends EntityRelationalHelper {
@@ -29,8 +34,11 @@ export class EventEntity extends EntityRelationalHelper {
   @Column({ type: 'varchar', length: 255, nullable: true })
   image: string;
 
-  @Column({ type: 'varchar', length: 255 })
-  type: string;
+  @Column({
+    type: 'enum',
+    enum: EventType,
+  })
+  type: EventType;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   locationOnline: string;
@@ -84,9 +92,11 @@ export class EventEntity extends EntityRelationalHelper {
   @ManyToMany(() => CategoryEntity, (category) => category.events)
   categories: CategoryEntity[];
 
+  groupMember: GroupMemberEntity | null;
+  attendee: EventAttendeesEntity | null;
+
   @Expose()
   get attendeesCount(): number {
-    console.log('this.attendees: ', this.attendees);
     return this.attendees ? this.attendees.length : 0;
   }
 }

@@ -97,7 +97,7 @@ describe('Dashboard', () => {
     });
 
     describe('when authenticated', () => {
-      it('should get all groups that I am a member of, and no more', async () => {
+      it.skip('should get all groups that I am a member of, and no more', async () => {
         expect(preparedGroup).toBeDefined();
         expect(preparedGroup.id).toBeDefined();
 

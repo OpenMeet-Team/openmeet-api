@@ -2,7 +2,7 @@ import { Visibility, Status } from 'src/core/constants/constant';
 
 export const groupSeedData = [
   {
-    name: 'Tech Innovators',
+    name: '[Published][Public] Tech Innovators',
     description: 'A group for technology enthusiasts and innovators',
     status: Status.Published,
     visibility: Visibility.Public,
@@ -11,7 +11,7 @@ export const groupSeedData = [
     lon: -122.4194,
   },
   {
-    name: 'Book Lovers Club',
+    name: '[Pending][Public] Book Lovers Club',
     description: 'Discussing great literature and sharing book recommendations',
     status: Status.Pending,
     visibility: Visibility.Public,
@@ -20,7 +20,7 @@ export const groupSeedData = [
     lon: -74.006,
   },
   {
-    name: 'Fitness Fanatics',
+    name: '[Draft][Public] Fitness Fanatics',
     description: 'For those who love to stay fit and share workout tips',
     status: Status.Draft,
     visibility: Visibility.Public,
@@ -29,7 +29,7 @@ export const groupSeedData = [
     lon: -118.2437,
   },
   {
-    name: 'Culinary Explorers',
+    name: '[Published][Authenticated] Culinary Explorers',
     description: 'Exploring culinary delights and sharing recipes',
     status: Status.Published,
     visibility: Visibility.Authenticated,
@@ -38,7 +38,7 @@ export const groupSeedData = [
     lon: -87.6298,
   },
   {
-    name: 'Outdoor Adventurers',
+    name: '[Pending][Authenticated] Outdoor Adventurers',
     description: 'Planning and sharing outdoor activities and adventures',
     status: Status.Pending,
     visibility: Visibility.Authenticated,
@@ -47,7 +47,7 @@ export const groupSeedData = [
     lon: -104.9903,
   },
   {
-    name: 'Art Appreciation Society',
+    name: '[Draft][Authenticated] Art Appreciation Society',
     description: 'Discussing and appreciating various forms of art',
     status: Status.Draft,
     visibility: Visibility.Authenticated,
@@ -56,7 +56,7 @@ export const groupSeedData = [
     lon: 2.3522,
   },
   {
-    name: 'Entrepreneurs Network',
+    name: '[Published][Private] Entrepreneurs Network',
     description:
       'Connecting and supporting aspiring and established entrepreneurs',
     status: Status.Published,
@@ -66,7 +66,7 @@ export const groupSeedData = [
     lon: -0.1278,
   },
   {
-    name: 'Green Earth Initiative',
+    name: '[Pending][Private] Green Earth Initiative',
     description: 'Promoting environmental awareness and sustainable living',
     status: Status.Pending,
     visibility: Visibility.Private,
@@ -75,7 +75,7 @@ export const groupSeedData = [
     lon: -122.3321,
   },
   {
-    name: 'Photography Enthusiasts',
+    name: '[Draft][Private] Photography Enthusiasts',
     description: 'Sharing photography tips, techniques, and amazing shots',
     status: Status.Draft,
     visibility: Visibility.Private,

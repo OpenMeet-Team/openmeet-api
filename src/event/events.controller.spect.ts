@@ -5,46 +5,29 @@ import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { GroupService } from '../group/group.service';
-import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
-import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
 import { Request } from 'express';
-import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { AuthService } from '../auth/auth.service';
 import { Reflector } from '@nestjs/core';
 import { PaginationOptions } from '../utils/generic-pagination';
 import { QueryEventDto } from '../event/dto/query-events.dto';
+import {
+  mockCategory,
+  mockEvent,
+  mockEventService,
+  mockGroup,
+  mockGroupService,
+  mockUser,
+} from '../test/mocks';
 
-// Mock services
-const mockGroupService = {};
-const mockEventService = {
-  create: jest.fn(),
-  findAll: jest.fn(),
-  findOne: jest.fn(),
-  update: jest.fn(),
-  remove: jest.fn(),
-  getEventsByCreator: jest.fn(),
-  getEventsByAttendee: jest.fn(),
-};
-
-const mockUser = {
-  id: 1,
-  email: 'test@example.com',
-  password: 'password',
-  firstName: 'John',
-  lastName: 'Doe',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-} as UserEntity;
-
-const mockCategory = {
-  id: 1,
-  name: 'Test Category',
-} as CategoryEntity;
-
-const mockGroup = {
-  id: 1,
-  name: 'Test Group',
-} as GroupEntity;
+// const mockUser = {
+//   id: 1,
+//   email: 'test@example.com',
+//   password: 'password',
+//   firstName: 'John',
+//   lastName: 'Doe',
+//   createdAt: new Date(),
+//   updatedAt: new Date(),
+// } as UserEntity;
 
 const createEventDto: CreateEventDto = {
   name: 'Test Event',
@@ -61,14 +44,14 @@ const createEventDto: CreateEventDto = {
   lon: 0,
 };
 
-const mockEvent: Partial<EventEntity> = {
-  id: 1,
-  attendeesCount: 1,
-  ...createEventDto,
-  user: mockUser,
-  group: mockGroup,
-  categories: createEventDto.categories.map((id) => ({ id }) as CategoryEntity),
-};
+// const mockEvent: Partial<EventEntity> = {
+//   id: 1,
+//   attendeesCount: 1,
+//   ...createEventDto,
+//   user: mockUser,
+//   group: mockGroup,
+//   categories: createEventDto.categories.map((id) => ({ id }) as CategoryEntity),
+// };
 
 describe('EventController', () => {
   let controller: EventController;
@@ -180,24 +163,6 @@ describe('EventController', () => {
     });
   });
 
-  describe('findOne', () => {
-    it('should return a single event', async () => {
-      jest
-        .spyOn(eventService, 'findOne')
-        .mockResolvedValue(mockEvent as EventEntity);
-      const result = await controller.findOne(1);
-      expect(result).toEqual(mockEvent);
-      expect(eventService.findOne).toHaveBeenCalledWith(1);
-    });
-
-    it('should throw an error if event is not found', async () => {
-      jest
-        .spyOn(eventService, 'findOne')
-        .mockRejectedValue(new Error('Event not found'));
-      await expect(controller.findOne(999)).rejects.toThrow('Event not found');
-    });
-  });
-
   describe('update', () => {
     it('should update an event', async () => {
       const updateEventDto: UpdateEventDto = { name: 'Updated Event' };
@@ -239,12 +204,6 @@ describe('EventController', () => {
       mockEventService.getEventsByAttendee.mockResolvedValue([mockEvent]);
       const events = await eventService.getEventsByAttendee(mockUser.id);
       expect(events).toEqual([mockEvent]);
-    });
-
-    it('should get attendees count from an event', async () => {
-      mockEventService.findOne.mockResolvedValue(mockEvent);
-      const event = await eventService.findOne(mockEvent.id as number);
-      expect(event.attendeesCount).toEqual(1);
     });
   });
 

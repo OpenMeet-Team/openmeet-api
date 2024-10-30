@@ -26,6 +26,8 @@ import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
 import zulipInit from 'zulip-js';
+import { GroupMemberService } from '../group-member/group-member.service';
+
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
   private eventRepository: Repository<EventEntity>;
@@ -36,6 +38,7 @@ export class EventService {
     private readonly categoryService: CategoryService,
     private readonly eventAttendeeService: EventAttendeeService,
     private eventEmitter: EventEmitter2,
+    private readonly groupMemberService: GroupMemberService,
   ) {
     void this.initializeRepository();
   }
@@ -84,7 +87,7 @@ export class EventService {
       group,
       categories,
     };
-    const event = this.eventRepository.create(mappedDto);
+    const event = this.eventRepository.create(mappedDto as EventEntity);
     const createdEvent = await this.eventRepository.save(event);
 
     const eventAttendeeDto = {
@@ -221,6 +224,49 @@ export class EventService {
     event.categories = event.categories.slice(0, 5);
 
     return event;
+  }
+
+  async findEventDetails(id: number, userId: number): Promise<EventEntity> {
+    await this.getTenantSpecificEventRepository();
+    const event = await this.eventRepository.findOne({
+      where: { id },
+      relations: [
+        'user',
+        'attendees',
+        'group',
+        'group.groupMembers',
+        'categories',
+      ],
+    });
+
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${id} not found`);
+    }
+
+    event.attendees = event.attendees.slice(0, 5);
+    event.categories = event.categories.slice(0, 5);
+
+    if (event.group) {
+      event.groupMember = await this.groupMemberService.findGroupMemberByUserId(
+        event.group.id,
+        userId,
+      );
+    }
+
+    if (userId) {
+      event.attendee =
+        await this.eventAttendeeService.findEventAttendeeByUserId(
+          event.id,
+          userId,
+        );
+    }
+
+    return event;
+  }
+
+  async findGroupDetailsAttendees(eventId: number): Promise<any> {
+    await this.getTenantSpecificEventRepository();
+    return this.eventAttendeeService.findEventAttendees(eventId);
   }
 
   async findRandom(): Promise<EventEntity[]> {
@@ -378,8 +424,6 @@ export class EventService {
         .limit(maxEvents)
         .getMany();
 
-      console.log('🚀 ~ recommendedEvents:', recommendedEvents);
-
       if (recommendedEvents.length < minEvents) {
         throw new NotFoundException(
           `Not enough recommended events found for group ${groupId}. Found ${recommendedEvents.length}, expected at least ${minEvents}.`,
@@ -417,12 +461,6 @@ export class EventService {
         .orderBy('RANDOM()')
         .limit(maxEvents)
         .getRawMany();
-
-      if (randomEventIds.length < minEvents) {
-        throw new NotFoundException(
-          `Not enough random events found for group ${groupId}. Found ${randomEventIds.length}, expected at least ${minEvents}.`,
-        );
-      }
 
       // Then fetch full event details for these IDs
       const events = await this.eventRepository
@@ -487,6 +525,12 @@ export class EventService {
     const event = await this.findOne(id);
     await this.eventRepository.remove(event);
   }
+
+  async deleteEventsByGroup(groupId: number): Promise<void> {
+    await this.getTenantSpecificEventRepository();
+    await this.eventRepository.delete({ group: { id: groupId } });
+  }
+
   async getEventsByCreator(userId: number) {
     await this.getTenantSpecificEventRepository();
     const events =
@@ -502,10 +546,14 @@ export class EventService {
 
   async getEventsByAttendee(userId: number) {
     await this.getTenantSpecificEventRepository();
-    return this.eventRepository.find({
+    const events = await this.eventRepository.find({
       where: { attendees: { userId } },
-      relations: ['user'],
+      relations: ['user', 'attendees'],
     });
+    return events.map((event) => ({
+      ...event,
+      attendeesCount: event.attendees ? event.attendees.length : 0,
+    }));
   }
 
   async getHomePageFeaturedEvents(): Promise<EventEntity[]> {
@@ -537,5 +585,10 @@ export class EventService {
   async getHomePageUserNextHostedEvent(userId: number) {
     await this.getTenantSpecificEventRepository();
     return this.eventRepository.findOne({ where: { user: { id: userId } } });
+  }
+
+  async findEventDetailsAttendees(eventId: number) {
+    await this.getTenantSpecificEventRepository();
+    return this.eventAttendeeService.findEventAttendees(eventId);
   }
 }

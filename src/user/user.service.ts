@@ -190,6 +190,20 @@ export class UserService {
     // });
   }
 
+  async findProfile(id: User['id']): Promise<NullableType<User>> {
+    await this.getTenantSpecificRepository();
+    return this.usersRepository.findOne({
+      where: { id: Number(id) },
+      relations: [
+        'subCategory',
+        'groups',
+        'events',
+        'groupMembers.group',
+        'groupMembers.groupRole',
+      ],
+    });
+  }
+
   async findById(id: User['id']): Promise<NullableType<User>> {
     await this.getTenantSpecificRepository();
 
@@ -303,8 +317,7 @@ export class UserService {
         });
       }
     }
-
-    await this.usersRepository.update(id, {}); // FIXME:
+    await this.usersRepository.save({ id, ...clonedPayload } as UserEntity); // FIXME:
     return await this.findById(id);
   }
 

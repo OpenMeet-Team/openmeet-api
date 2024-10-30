@@ -42,3 +42,9 @@ export enum EntityType {
   Event = 'event',
   Group = 'group',
 }
+
+export enum EventType {
+  InPerson = 'in-person',
+  Online = 'online',
+  Hybrid = 'hybrid',
+}

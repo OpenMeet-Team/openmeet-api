@@ -15,6 +15,7 @@ import { ResolvePromisesInterceptor } from './utils/serializer.interceptor';
 import { AggregateByTenantContextIdStrategy } from './strategy/tanent.strategy';
 import { TenantGuard } from './tenant/tenant.guard';
 import { RequestCounterInterceptor } from './interceptors/request-counter.interceptor';
+import { getBuildInfo } from './utils/version';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { cors: true });
@@ -40,9 +41,23 @@ async function bootstrap() {
     new ClassSerializerInterceptor(app.get(Reflector)),
   );
 
+  const buildInfo = getBuildInfo();
+
   const options = new DocumentBuilder()
     .setTitle('OpenMeet API')
-    .setDescription('API docs')
+    // .setDescription('API docs')
+    .setDescription(
+      `
+      API Documentation
+      
+      Version: ${buildInfo.version}
+      Commit: ${buildInfo.commitHash}
+      Branch: ${buildInfo.branch}
+      Build Date: ${buildInfo.buildDate}
+      Environment: ${buildInfo.environment}
+          `,
+    )
+    .setVersion(`${buildInfo.version}-${buildInfo.commitHash}`)
     .setVersion('1.0')
     .addBearerAuth()
     .addGlobalParameters({
@@ -63,7 +78,7 @@ async function bootstrap() {
   app.setGlobalPrefix(
     configService.getOrThrow('app.apiPrefix', { infer: true }),
     {
-      exclude: ['/health/liveness', '/health/readiness', '/metrics'],
+      exclude: ['/health/liveness', '/health/readiness', '/metrics', '/'],
     },
   );
   app.useGlobalGuards(new TenantGuard(app.get(Reflector)));

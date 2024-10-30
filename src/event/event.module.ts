@@ -9,11 +9,13 @@ import { AuthModule } from '../auth/auth.module';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 import { ChannelCreatedListener } from './channel-created.listener';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { GroupMemberModule } from '../group-member/group-member.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([EventEntity]),
     TenantModule,
+    GroupMemberModule,
     CategoryModule,
     AuthModule,
     EventAttendeeModule,

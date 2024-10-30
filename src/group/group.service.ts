@@ -21,6 +21,7 @@ import { EventEntity } from '../event/infrastructure/persistence/relational/enti
 export class GroupService {
   private groupMembersRepository: Repository<GroupMemberEntity>;
   private groupRepository: Repository<GroupEntity>;
+  private eventRepository: Repository<EventEntity>;
   private readonly groupMemberPermissionsRepository: Repository<GroupUserPermissionEntity>;
 
   constructor(
@@ -75,7 +76,7 @@ export class GroupService {
       where: {
         groupMembers: { user: { id: Number(userId) } },
       },
-      relations: ['groupMembers', 'groupMembers.user'],
+      relations: ['createdBy'],
     });
     return groups;
   }
@@ -86,7 +87,7 @@ export class GroupService {
       where: {
         groupMembers: { user: { id: Number(userId) } },
       },
-      relations: ['groupMembers', 'groupMembers.user'],
+      relations: ['createdBy'],
     });
     return groups;
   }
@@ -107,7 +108,6 @@ export class GroupService {
     if (!group) {
       throw new NotFoundException(`Group with ID ${groupId} not found`);
     }
-    console.log('Tom: Found group categories:', group.categories);
 
     const categoryIds = group.categories.map((c) => c.id);
 
@@ -157,10 +157,6 @@ export class GroupService {
     if (uniqueEvents.length > maxEvents) {
       return uniqueEvents.slice(0, maxEvents);
     }
-    console.log(
-      '🚀 ~ GroupService ~ getRecommendedEvents ~ uniqueEvents:',
-      uniqueEvents,
-    );
 
     return uniqueEvents;
   }
@@ -198,12 +194,10 @@ export class GroupService {
 
     const group = this.groupRepository.create(mappedGroupDto);
     const savedGroup = await this.groupRepository.save(group);
-    const groupMemberDto = {
-      requiredApproval: false,
+    await this.groupMemberService.createGroupOwner({
       userId,
       groupId: savedGroup.id,
-    };
-    await this.groupMemberService.createGroupMember(groupMemberDto);
+    });
 
     return savedGroup;
   }
@@ -299,6 +293,7 @@ export class GroupService {
         'events',
         'groupMembers',
         'groupMembers.user',
+        'groupMembers.groupRole',
         'createdBy',
         'categories',
       ],
@@ -310,6 +305,37 @@ export class GroupService {
 
     group.events = group.events.slice(0, 5);
     group.groupMembers = group.groupMembers.slice(0, 5);
+
+    return group;
+  }
+
+  async findGroupDetails(id: number, userId?: number): Promise<any> {
+    await this.getTenantSpecificGroupRepository();
+    const group = await this.groupRepository.findOne({
+      where: { id },
+      relations: [
+        'events',
+        'groupMembers',
+        'groupMembers.user',
+        'groupMembers.groupRole',
+        'createdBy',
+        'categories',
+      ],
+    });
+
+    if (!group) {
+      throw new Error('Group not found');
+    }
+
+    group.events = group.events.slice(0, 5);
+    group.groupMembers = group.groupMembers.slice(0, 5);
+
+    if (userId) {
+      group.groupMember = await this.groupMemberService.findGroupMemberByUserId(
+        group.id,
+        userId,
+      );
+    }
 
     return group;
   }
@@ -333,16 +359,14 @@ export class GroupService {
     return groupWithEvents;
   }
 
-  async findGroupEvent(id: number): Promise<any> {
+  async findGroupDetailsEvents(id: number): Promise<any> {
     await this.getTenantSpecificGroupRepository();
-    const groupQuery = this.groupRepository
-      .createQueryBuilder('group')
-      .leftJoinAndSelect('group.events', 'events')
-      .where('group.id = :id', { id })
-      .andWhere('events.status = :status', { status: Status.Published })
-      .getOne();
+    return await this.eventService.findGroupDetailsAttendees(id);
+  }
 
-    return groupQuery;
+  async findGroupDetailsMembers(id: number): Promise<any> {
+    await this.getTenantSpecificGroupRepository();
+    return await this.groupMemberService.findGroupDetailsMembers(id);
   }
 
   async update(
@@ -394,6 +418,7 @@ export class GroupService {
 
     // First, delete all group members associated with the group
     await this.groupMembersRepository.delete({ group: { id } });
+    await this.eventService.deleteEventsByGroup(id);
 
     await this.groupRepository.remove(group);
   }
