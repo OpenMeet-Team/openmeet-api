@@ -4,7 +4,6 @@ import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { EventService } from '../event/event.service';
 import { GroupService } from '../group/group.service';
-import { CategoryService } from '../category/category.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { GroupMemberService } from '../group-member/group-member.service';
@@ -18,7 +17,6 @@ export class DashboardService {
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
-    private readonly categoryService: CategoryService,
     private readonly eventService: EventService,
     private readonly groupService: GroupService,
     private readonly groupMemberService: GroupMemberService,
