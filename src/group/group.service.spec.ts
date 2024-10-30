@@ -8,7 +8,7 @@ import { NotFoundException } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { GroupEntity } from './infrastructure/persistence/relational/entities/group.entity';
 import { TESTING_TENANT_ID } from '../../test/utils/constants';
-import { mockGroup } from '../../test/mocks';
+import { mockGroup } from '../test/mocks';
 
 describe('GroupService', () => {
   let service: GroupService;

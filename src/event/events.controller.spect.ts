@@ -17,7 +17,7 @@ import {
   mockGroup,
   mockGroupService,
   mockUser,
-} from '../../test/mocks';
+} from '../test/mocks';
 
 // const mockUser = {
 //   id: 1,

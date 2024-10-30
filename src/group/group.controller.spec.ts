@@ -8,7 +8,7 @@ import {
   mockGroupMembers,
   mockUser,
   mockEvents,
-} from '../../test/mocks';
+} from '../test/mocks';
 
 describe('GroupController', () => {
   let controller: GroupController;

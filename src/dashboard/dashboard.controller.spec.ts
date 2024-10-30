@@ -12,7 +12,7 @@ import {
   mockUser,
   mockEventService,
   mockDashboardService,
-} from '../../test/mocks';
+} from '../test/mocks';
 
 describe('DashboardController', () => {
   let controller: DashboardController;

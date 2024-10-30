@@ -18,7 +18,7 @@ import {
   mockGroup,
   mockGroupService,
   mockUser,
-} from '../../test/mocks';
+} from '../test/mocks';
 
 const createEventDto: CreateEventDto = {
   name: 'Test Event',

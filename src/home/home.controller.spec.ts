@@ -6,7 +6,7 @@ import { GroupEntity } from 'src/group/infrastructure/persistence/relational/ent
 import { EventEntity } from 'src/event/infrastructure/persistence/relational/entities/event.entity';
 import { CategoryEntity } from 'src/category/infrastructure/persistence/relational/entities/categories.entity';
 import { AuthService } from '../auth/auth.service';
-import { mockUser } from '../../test/mocks';
+import { mockUser } from '../test/mocks';
 
 describe('HomeController', () => {
   let controller: HomeController;
