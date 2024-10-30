@@ -308,7 +308,7 @@ export class GroupService {
     return group;
   }
 
-  async findGroupDetails(id: number, userId: number): Promise<any> {
+  async findGroupDetails(id: number, userId?: number): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     const group = await this.groupRepository.findOne({
       where: { id },
@@ -360,7 +360,7 @@ export class GroupService {
 
   async findGroupDetailsEvents(id: number): Promise<any> {
     await this.getTenantSpecificGroupRepository();
-    return await this.eventService.findGroupDetailsEvents(id);
+    return await this.eventService.findGroupDetailsAttendees(id);
   }
 
   async findGroupDetailsMembers(id: number): Promise<any> {

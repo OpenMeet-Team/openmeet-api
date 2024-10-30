@@ -16,6 +16,7 @@ import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
+import { GroupMemberService } from '../group-member/group-member.service';
 
 describe('EventService', () => {
   let service: EventService;
@@ -104,6 +105,15 @@ describe('EventService', () => {
           provide: CategoryService,
           useValue: {
             findByIds: jest.fn().mockResolvedValue([
+              { id: 1, name: 'Category 1' },
+              { id: 2, name: 'Category 2' },
+            ]),
+          },
+        },
+        {
+          provide: GroupMemberService,
+          useValue: {
+            findGroupDetailsMembers: jest.fn().mockResolvedValue([
               { id: 1, name: 'Category 1' },
               { id: 2, name: 'Category 2' },
             ]),

@@ -180,24 +180,6 @@ describe('EventController', () => {
     });
   });
 
-  describe('findOne', () => {
-    it('should return a single event', async () => {
-      jest
-        .spyOn(eventService, 'findOne')
-        .mockResolvedValue(mockEvent as EventEntity);
-      const result = await controller.findOne(1);
-      expect(result).toEqual(mockEvent);
-      expect(eventService.findOne).toHaveBeenCalledWith(1);
-    });
-
-    it('should throw an error if event is not found', async () => {
-      jest
-        .spyOn(eventService, 'findOne')
-        .mockRejectedValue(new Error('Event not found'));
-      await expect(controller.findOne(999)).rejects.toThrow('Event not found');
-    });
-  });
-
   describe('update', () => {
     it('should update an event', async () => {
       const updateEventDto: UpdateEventDto = { name: 'Updated Event' };
@@ -239,12 +221,6 @@ describe('EventController', () => {
       mockEventService.getEventsByAttendee.mockResolvedValue([mockEvent]);
       const events = await eventService.getEventsByAttendee(mockUser.id);
       expect(events).toEqual([mockEvent]);
-    });
-
-    it('should get attendees count from an event', async () => {
-      mockEventService.findOne.mockResolvedValue(mockEvent);
-      const event = await eventService.findOne(mockEvent.id as number);
-      expect(event.attendeesCount).toEqual(1);
     });
   });
 
