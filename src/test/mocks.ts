@@ -2,13 +2,13 @@ import { CategoryEntity } from 'src/category/infrastructure/persistence/relation
 import {
   EventAttendeeStatus,
   EventAttendeeRole,
-} from '../src/core/constants/constant';
-import { EventAttendeesEntity } from '../src/event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
-import { EventEntity } from '../src/event/infrastructure/persistence/relational/entities/event.entity';
-import { GroupMemberEntity } from 'src/group-member/infrastructure/persistence/relational/entities/group-member.entity';
-import { GroupEntity } from 'src/group/infrastructure/persistence/relational/entities/group.entity';
-import { UserEntity } from 'src/user/infrastructure/persistence/relational/entities/user.entity';
-import { SubCategoryEntity } from 'src/sub-category/infrastructure/persistence/relational/entities/sub-category.entity';
+} from '../core/constants/constant';
+import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
+import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
+import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
+import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
+import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { SubCategoryEntity } from '../sub-category/infrastructure/persistence/relational/entities/sub-category.entity';
 
 // Mock for UserEntity
 export const mockUser = {
@@ -104,4 +104,9 @@ export const mockEventService = {
   findEventAttendees: jest.fn().mockResolvedValue([]),
   findEventDetailsAttendees: jest.fn().mockResolvedValue([]),
   findUserUpcomingEvents: jest.fn().mockResolvedValue([]),
+};
+
+export const mockDashboardService = {
+  getMyEvents: jest.fn(),
+  getMyGroups: jest.fn(),
 };

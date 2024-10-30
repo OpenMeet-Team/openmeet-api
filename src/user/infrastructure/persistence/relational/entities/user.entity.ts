@@ -138,8 +138,8 @@ export class UserEntity extends EntityRelationalHelper {
   @OneToMany(() => EventEntity, (event) => event.user)
   events: EventEntity[];
 
-  @OneToMany(() => GroupMemberEntity, (groupUser) => groupUser.user)
-  groupUsers: GroupMemberEntity[];
+  @OneToMany(() => GroupMemberEntity, (groupMember) => groupMember.user)
+  groupMembers: GroupMemberEntity[];
 
   @OneToMany(() => GroupEntity, (group) => group.createdBy)
   groups: GroupEntity[];

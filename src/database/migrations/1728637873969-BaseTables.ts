@@ -190,13 +190,13 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `ALTER TABLE "${schema}"."groupCategories" ADD CONSTRAINT "FK_464b2f0143de9ea9725a24956d2" FOREIGN KEY ("groupsId") REFERENCES "${schema}"."groups"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "${schema}"."groupCategories" ADD CONSTRAINT "FK_733b91e79dc09e35d5551757683" FOREIGN KEY ("categoriesId") REFERENCES "${schema}"."categories"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
+      `ALTER TABLE "${schema}"."groupCategories" ADD CONSTRAINT "FK_733b91e79dc09e35d5551757683" FOREIGN KEY ("categoriesId") REFERENCES "${schema}"."categories"("id") ON DELETE CASCADE ON UPDATE NO ACTION`,
     );
     await queryRunner.query(
       `ALTER TABLE "${schema}"."eventCategories" ADD CONSTRAINT "FK_5f9d73047c3849c5b1495a80113" FOREIGN KEY ("categoriesId") REFERENCES "${schema}"."categories"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "${schema}"."eventCategories" ADD CONSTRAINT "FK_3e703b5162d4195681549dfc3e4" FOREIGN KEY ("eventsId") REFERENCES "${schema}"."events"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
+      `ALTER TABLE "${schema}"."eventCategories" ADD CONSTRAINT "FK_3e703b5162d4195681549dfc3e4" FOREIGN KEY ("eventsId") REFERENCES "${schema}"."events"("id") ON DELETE CASCADE ON UPDATE NO ACTION`,
     );
     await queryRunner.query(
       `ALTER TABLE "${schema}"."userInterests" ADD CONSTRAINT "FK_6e00deadfd5a3570da93150fd6b" FOREIGN KEY ("usersId") REFERENCES "${schema}"."users"("id") ON DELETE CASCADE ON UPDATE CASCADE`,

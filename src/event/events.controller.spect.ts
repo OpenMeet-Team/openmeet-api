@@ -5,46 +5,29 @@ import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { GroupService } from '../group/group.service';
-import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
-import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
 import { Request } from 'express';
-import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { AuthService } from '../auth/auth.service';
 import { Reflector } from '@nestjs/core';
 import { PaginationOptions } from '../utils/generic-pagination';
 import { QueryEventDto } from '../event/dto/query-events.dto';
+import {
+  mockCategory,
+  mockEvent,
+  mockEventService,
+  mockGroup,
+  mockGroupService,
+  mockUser,
+} from '../test/mocks';
 
-// Mock services
-const mockGroupService = {};
-const mockEventService = {
-  create: jest.fn(),
-  findAll: jest.fn(),
-  findOne: jest.fn(),
-  update: jest.fn(),
-  remove: jest.fn(),
-  getEventsByCreator: jest.fn(),
-  getEventsByAttendee: jest.fn(),
-};
-
-const mockUser = {
-  id: 1,
-  email: 'test@example.com',
-  password: 'password',
-  firstName: 'John',
-  lastName: 'Doe',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-} as UserEntity;
-
-const mockCategory = {
-  id: 1,
-  name: 'Test Category',
-} as CategoryEntity;
-
-const mockGroup = {
-  id: 1,
-  name: 'Test Group',
-} as GroupEntity;
+// const mockUser = {
+//   id: 1,
+//   email: 'test@example.com',
+//   password: 'password',
+//   firstName: 'John',
+//   lastName: 'Doe',
+//   createdAt: new Date(),
+//   updatedAt: new Date(),
+// } as UserEntity;
 
 const createEventDto: CreateEventDto = {
   name: 'Test Event',
@@ -61,14 +44,14 @@ const createEventDto: CreateEventDto = {
   lon: 0,
 };
 
-const mockEvent: Partial<EventEntity> = {
-  id: 1,
-  attendeesCount: 1,
-  ...createEventDto,
-  user: mockUser,
-  group: mockGroup,
-  categories: createEventDto.categories.map((id) => ({ id }) as CategoryEntity),
-};
+// const mockEvent: Partial<EventEntity> = {
+//   id: 1,
+//   attendeesCount: 1,
+//   ...createEventDto,
+//   user: mockUser,
+//   group: mockGroup,
+//   categories: createEventDto.categories.map((id) => ({ id }) as CategoryEntity),
+// };
 
 describe('EventController', () => {
   let controller: EventController;

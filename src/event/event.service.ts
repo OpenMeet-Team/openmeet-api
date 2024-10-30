@@ -84,7 +84,7 @@ export class EventService {
       group,
       categories,
     };
-    const event = this.eventRepository.create(mappedDto);
+    const event = this.eventRepository.create(mappedDto as EventEntity);
     const createdEvent = await this.eventRepository.save(event);
 
     const eventAttendeeDto = {
@@ -487,6 +487,12 @@ export class EventService {
     const event = await this.findOne(id);
     await this.eventRepository.remove(event);
   }
+
+  async deleteEventsByGroup(groupId: number): Promise<void> {
+    await this.getTenantSpecificEventRepository();
+    await this.eventRepository.delete({ group: { id: groupId } });
+  }
+
   async getEventsByCreator(userId: number) {
     await this.getTenantSpecificEventRepository();
     const events =
@@ -502,10 +508,14 @@ export class EventService {
 
   async getEventsByAttendee(userId: number) {
     await this.getTenantSpecificEventRepository();
-    return this.eventRepository.find({
+    const events = await this.eventRepository.find({
       where: { attendees: { userId } },
-      relations: ['user'],
+      relations: ['user', 'attendees'],
     });
+    return events.map((event) => ({
+      ...event,
+      attendeesCount: event.attendees ? event.attendees.length : 0,
+    }));
   }
 
   async getHomePageFeaturedEvents(): Promise<EventEntity[]> {

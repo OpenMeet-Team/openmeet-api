@@ -9,7 +9,7 @@ import {
   mockGroupService,
   mockSubCategoryService,
   mockUser,
-} from '../../test/mocks';
+} from '../test/mocks';
 import { CategoryService } from '../category/category.service';
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { ConfigService } from '@nestjs/config';

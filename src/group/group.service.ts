@@ -21,6 +21,7 @@ import { EventEntity } from '../event/infrastructure/persistence/relational/enti
 export class GroupService {
   private groupMembersRepository: Repository<GroupMemberEntity>;
   private groupRepository: Repository<GroupEntity>;
+  private eventRepository: Repository<EventEntity>;
   private readonly groupMemberPermissionsRepository: Repository<GroupUserPermissionEntity>;
 
   constructor(
@@ -75,7 +76,7 @@ export class GroupService {
       where: {
         groupMembers: { user: { id: Number(userId) } },
       },
-      relations: ['groupMembers', 'groupMembers.user'],
+      relations: ['createdBy'],
     });
     return groups;
   }
@@ -86,7 +87,7 @@ export class GroupService {
       where: {
         groupMembers: { user: { id: Number(userId) } },
       },
-      relations: ['groupMembers', 'groupMembers.user'],
+      relations: ['createdBy'],
     });
     return groups;
   }
@@ -417,6 +418,7 @@ export class GroupService {
 
     // First, delete all group members associated with the group
     await this.groupMembersRepository.delete({ group: { id } });
+    await this.eventService.deleteEventsByGroup(id);
 
     await this.groupRepository.remove(group);
   }
