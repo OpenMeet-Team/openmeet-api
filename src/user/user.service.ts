@@ -255,10 +255,16 @@ export class UserService {
       }
     }
 
-    if (clonedPayload.photo?.id) {
+    if (clonedPayload.photo?.id === 0) {
+      if (clonedPayload.photo) {
+        await this.fileService.delete(clonedPayload.photo.id);
+        clonedPayload.photo = null;
+      }
+    } else if (clonedPayload.photo?.id) {
       const fileObject = await this.fileService.findById(
         clonedPayload.photo.id,
       );
+
       if (!fileObject) {
         throw new UnprocessableEntityException({
           status: HttpStatus.UNPROCESSABLE_ENTITY,
@@ -267,6 +273,7 @@ export class UserService {
           },
         });
       }
+
       clonedPayload.photo = fileObject;
     }
 
