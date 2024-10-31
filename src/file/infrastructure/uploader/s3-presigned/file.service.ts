@@ -51,6 +51,11 @@ export class FilesS3PresignedService {
     this.fileRepository = dataSource.getRepository(FileEntity);
   }
 
+  async delete(id: number): Promise<void> {
+    await this.getTenantSpecificGroupRepository();
+    await this.fileRepository.delete(id);
+  }
+
   async create(
     file: FileUploadDto,
   ): Promise<{ file: FileType; uploadSignedUrl: string }> {
@@ -87,8 +92,10 @@ export class FilesS3PresignedService {
       });
     }
 
+    const tenantId = this.request.tenantId;
+
     // Generate a unique key for the file in S3
-    const key = `${randomStringGenerator()}.${file.fileName
+    const key = `${tenantId}/${randomStringGenerator()}.${file.fileName
       .split('.')
       .pop()
       ?.toLowerCase()}`;
@@ -106,11 +113,11 @@ export class FilesS3PresignedService {
     // Generate a presigned URL for the client to upload the file
     const signedUrl = await getSignedUrl(this.s3, command, { expiresIn: 3600 });
 
-    const tenantId = this.request.tenantId;
     // Save the file metadata in the database
     const data = await this.fileRepository.create({
       path: key,
-      fileName: `${tenantId}/${file.fileName}`,
+      // fileName: `${tenantId}/${file.fileName}`,
+      fileName: file.fileName,
       fileSize: file.fileSize,
       mimeType: file.mimeType,
     });
