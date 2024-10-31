@@ -3,7 +3,7 @@ import { Module } from '@nestjs/common';
 import { UserController } from './user.controller';
 
 import { UserService } from './user.service';
-import { FilesModule } from '../file/file.module';
+import { FileModule } from '../file/file.module';
 import { TenantModule } from '../tenant/tenant.module';
 import { RelationalUserPersistenceModule } from './infrastructure/persistence/relational/relational-persistence.module';
 import { SubCategoryService } from '../sub-category/sub-category.service';
@@ -15,7 +15,7 @@ const infrastructurePersistenceModule = RelationalUserPersistenceModule;
 @Module({
   imports: [
     infrastructurePersistenceModule,
-    FilesModule,
+    FileModule,
     TenantModule,
     RoleModule,
   ],
@@ -23,4 +23,4 @@ const infrastructurePersistenceModule = RelationalUserPersistenceModule;
   providers: [UserService, SubCategoryService, FilesS3PresignedService],
   exports: [UserService, infrastructurePersistenceModule],
 })
-export class UsersModule {}
+export class UserModule {}

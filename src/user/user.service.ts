@@ -31,7 +31,6 @@ export class UserService {
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
-    // private readonly filesService: FilesService,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly subCategoryService: SubCategoryService,
     private readonly roleService: RoleService,

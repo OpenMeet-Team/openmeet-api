@@ -9,6 +9,7 @@ import { REQUEST } from '@nestjs/core';
 import { GroupEntity } from './infrastructure/persistence/relational/entities/group.entity';
 import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import { mockGroup } from '../test/mocks';
+import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 
 describe('GroupService', () => {
   let service: GroupService;
@@ -59,6 +60,10 @@ describe('GroupService', () => {
             findRecommendedEventsForGroup: jest.fn(),
             findRandomEventsForGroup: jest.fn(),
           },
+        },
+        {
+          provide: FilesS3PresignedService,
+          useValue: {},
         },
       ],
     }).compile();

@@ -7,6 +7,7 @@ import {
 } from './constants';
 import { CreateEventDto } from '../../src/event/dto/create-event.dto';
 import { Status } from '../../src/core/constants/constant';
+import { FileEntity } from '../../src/file/infrastructure/persistence/relational/entities/file.entity';
 
 async function getAuthToken(
   app: string,
@@ -60,7 +61,7 @@ export async function createGroupsAndEvents(
     location: 'Virtual',
     locationOnline: 'https://example.com/meeting',
     categories: [1],
-    image: 'https://example.com/event-image.jpg',
+    image: { id: 1 } as FileEntity,
     lat: 0,
     lon: 0,
     status: Status.Published,

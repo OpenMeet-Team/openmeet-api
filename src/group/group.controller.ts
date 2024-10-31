@@ -67,12 +67,8 @@ export class GroupController {
 
   @Get('me/:id')
   @ApiOperation({ summary: 'Get group by ID Authenticated' })
-  async findOne(
-    @Param('id') id: number,
-    @AuthUser() user: User,
-  ): Promise<GroupEntity> {
-    const userId = user.id;
-    const group = await this.groupService.findQuery(+id, userId);
+  async findOne(@Param('id') id: number): Promise<GroupEntity> {
+    const group = await this.groupService.editGroup(+id);
     if (!group) {
       throw new NotFoundException(`Group with ID ${id} not found`);
     }

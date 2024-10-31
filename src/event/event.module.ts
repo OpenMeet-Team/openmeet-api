@@ -8,6 +8,8 @@ import { CategoryModule } from '../category/category.module';
 import { AuthModule } from '../auth/auth.module';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 import { GroupMemberModule } from '../group-member/group-member.module';
+import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
+import { FileModule } from '../file/file.module';
 
 @Module({
   imports: [
@@ -17,9 +19,10 @@ import { GroupMemberModule } from '../group-member/group-member.module';
     CategoryModule,
     AuthModule,
     EventAttendeeModule,
+    FileModule,
   ],
   controllers: [EventController],
-  providers: [EventService],
+  providers: [EventService, FilesS3PresignedService],
   exports: [EventService],
 })
-export class EventsModule {}
+export class EventModule {}
