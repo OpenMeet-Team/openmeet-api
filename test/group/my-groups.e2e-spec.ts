@@ -17,7 +17,7 @@
 //     authToken = await getAuthToken(APP_URL, TESTER_EMAIL, TESTER_PASSWORD);
 //     serverApp = request
 //       .agent(APP_URL)
-//       .set('x-tenant-id', '1')
+//       .set('tenant-id', '1')
 //       .set('Authorization', `Bearer ${authToken}`);
 //   });
 

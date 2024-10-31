@@ -8,7 +8,7 @@ describe('GroupMembersController (e2e)', () => {
   async function loginAsTester() {
     const loginResponse = await request(APP_URL)
       .post('/api/v1/auth/email/login')
-      .set('x-tenant-id', '1')
+      .set('tenant-id', '1')
       .send({
         email: TESTER_EMAIL,
         password: TESTER_PASSWORD,
@@ -22,7 +22,7 @@ describe('GroupMembersController (e2e)', () => {
     const groupResponse = await request(APP_URL)
       .post('/api/groups')
       .set('Authorization', `Bearer ${token}`)
-      .set('x-tenant-id', '1')
+      .set('tenant-id', '1')
       .send({
         name: 'Test Group',
         description: 'A test group',
@@ -43,7 +43,7 @@ describe('GroupMembersController (e2e)', () => {
       await request(APP_URL)
         .delete(`/api/groups/${testGroup.id}`)
         .set('Authorization', `Bearer ${token}`)
-        .set('x-tenant-id', '1');
+        .set('tenant-id', '1');
     }
   });
 
@@ -53,7 +53,7 @@ describe('GroupMembersController (e2e)', () => {
     const getGroupMembersResponse = await request(APP_URL)
       .get(`/api/group-members/${groupId}`)
       .set('Authorization', `Bearer ${token}`)
-      .set('x-tenant-id', '1');
+      .set('tenant-id', '1');
 
     expect(getGroupMembersResponse.status).toBe(200);
 

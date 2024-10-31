@@ -11,7 +11,7 @@ import { Request } from 'express';
 describe('HealthController', () => {
   let controller: HealthController;
   let healthCheckService: HealthCheckService;
-  const req = { headers: { 'x-tenant-id': '1' } } as unknown as Request;
+  const req = { headers: { 'tenant-id': '1' } } as unknown as Request;
 
   beforeEach(async () => {
     healthCheckService = {

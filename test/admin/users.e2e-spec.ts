@@ -18,7 +18,7 @@ describe('Users Module', () => {
 
   describe('Update', () => {
     let newUser;
-    const server = request.agent(app).set('x-tenant-id', '1');
+    const server = request.agent(app).set('tenant-id', '1');
 
     const newUserEmail = `user-first.${Date.now()}@example.com`;
     const newUserChangedEmail = `user-first-changed.${Date.now()}@example.com`;
@@ -77,7 +77,7 @@ describe('Users Module', () => {
   describe('Create', () => {
     const newUserByAdminEmail = `user-created-by-admin.${Date.now()}@example.com`;
     const newUserByAdminPassword = `secret`;
-    const server = request.agent(app).set('x-tenant-id', '1');
+    const server = request.agent(app).set('tenant-id', '1');
 
     describe('User with "Admin" role', () => {
       it.skip('should fail to create new user with invalid email: /api/v1/users (POST)', () => {
@@ -129,7 +129,7 @@ describe('Users Module', () => {
   });
 
   describe('Get many', () => {
-    const server = request.agent(app).set('x-tenant-id', '1');
+    const server = request.agent(app).set('tenant-id', '1');
 
     describe('User with "Admin" role', () => {
       it.skip('should get list of users: /api/v1/users (GET)', () => {

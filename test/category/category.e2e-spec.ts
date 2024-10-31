@@ -4,7 +4,7 @@ import request from 'supertest';
 const app = APP_URL;
 
 describe('Get', () => {
-  const server = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
+  const server = request.agent(app).set('tenant-id', TESTING_TENANT_ID);
 
   it('should get all categories: /api/categories (GET)', async () => {
     const req = server;

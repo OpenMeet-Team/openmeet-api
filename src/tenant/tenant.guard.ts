@@ -33,7 +33,7 @@ export class TenantGuard implements CanActivate {
       return true;
     }
     // Check for tenant ID in the headers
-    const tenantId = request.headers['x-tenant-id'];
+    const tenantId = request.headers['tenant-id'];
     if (!tenantId) {
       throw new UnauthorizedException('Tenant ID is required');
     }

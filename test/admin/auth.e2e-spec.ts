@@ -6,7 +6,7 @@ describe('Auth', () => {
 
   describe('Admin', () => {
     it('should successfully login via /api/v1/auth/email/login (POST)', async () => {
-      const server = request.agent(app).set('x-tenant-id', '1');
+      const server = request.agent(app).set('tenant-id', '1');
 
       const req = server.post('/api/v1/auth/email/login');
 
@@ -20,7 +20,7 @@ describe('Auth', () => {
       return response;
     });
 
-    it('should be unauthorized if x-tenant-id is not provided', async () => {
+    it('should be unauthorized if tenant-id is not provided', async () => {
       const server = request.agent(app);
 
       const req = server.post('/api/v1/auth/email/login');

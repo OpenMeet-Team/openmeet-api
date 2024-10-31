@@ -6,7 +6,7 @@ describe('User role', () => {
   let serverApp;
 
   beforeAll(() => {
-    serverApp = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
+    serverApp = request.agent(app).set('tenant-id', TESTING_TENANT_ID);
   });
 
   it('should refresh tokens for users with and without roles', async () => {
@@ -59,7 +59,7 @@ describe('User role', () => {
     const refreshWithRole = await request(app)
       .post('/api/v1/auth/refresh')
       .set('Authorization', `Bearer ${refreshTokenWithRole}`)
-      .set('x-tenant-id', TESTING_TENANT_ID)
+      .set('tenant-id', TESTING_TENANT_ID)
       .send();
 
     expect(refreshWithRole.status).toBe(200);
@@ -67,7 +67,7 @@ describe('User role', () => {
     const refreshWithoutRole = await request(app)
       .post('/api/v1/auth/refresh')
       .set('Authorization', `Bearer ${refreshTokenWithoutRole}`)
-      .set('x-tenant-id', TESTING_TENANT_ID)
+      .set('tenant-id', TESTING_TENANT_ID)
       .send();
 
     expect(refreshWithoutRole.status).toBe(200);
@@ -82,14 +82,14 @@ describe('User role', () => {
     const responseWithRole = await request(app)
       .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${refreshWithRole.body.token}`)
-      .set('x-tenant-id', TESTING_TENANT_ID);
+      .set('tenant-id', TESTING_TENANT_ID);
 
     expect(responseWithRole.status).toBe(200);
 
     const responseWithoutRole = await request(app)
       .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${refreshWithoutRole.body.token}`)
-      .set('x-tenant-id', TESTING_TENANT_ID)
+      .set('tenant-id', TESTING_TENANT_ID)
       .expect(200);
 
     expect(responseWithRole.body.role).toEqual(

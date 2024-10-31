@@ -14,7 +14,7 @@ describe('GroupController (e2e)', () => {
   async function loginAsTester() {
     const loginResponse = await request(APP_URL)
       .post('/api/v1/auth/email/login')
-      .set('x-tenant-id', TESTING_TENANT_ID)
+      .set('tenant-id', TESTING_TENANT_ID)
       .send({
         email: TESTER_EMAIL,
         password: TESTER_PASSWORD,
@@ -29,7 +29,7 @@ describe('GroupController (e2e)', () => {
     const response = await request(APP_URL)
       .post('/api/groups')
       .set('Authorization', `Bearer ${token}`)
-      .set('x-tenant-id', TESTING_TENANT_ID)
+      .set('tenant-id', TESTING_TENANT_ID)
       .send(groupData);
 
     expect(response.status).toBe(201);
@@ -41,7 +41,7 @@ describe('GroupController (e2e)', () => {
     const response = await request(APP_URL)
       .patch(`/api/groups/${groupId}`)
       .set('Authorization', `Bearer ${token}`)
-      .set('x-tenant-id', TESTING_TENANT_ID)
+      .set('tenant-id', TESTING_TENANT_ID)
       .send(groupData);
 
     expect(response.status).toBe(200);
@@ -53,7 +53,7 @@ describe('GroupController (e2e)', () => {
     const response = await request(APP_URL)
       .get(`/api/groups/${groupId}`)
       .set('Authorization', `Bearer ${token}`)
-      .set('x-tenant-id', TESTING_TENANT_ID);
+      .set('tenant-id', TESTING_TENANT_ID);
 
     expect(response.status).toBe(200);
     return response.body;
@@ -98,13 +98,13 @@ describe('GroupController (e2e)', () => {
     const deleteGroupResponse = await request(APP_URL)
       .delete(`/api/groups/${testGroup.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .set('x-tenant-id', TESTING_TENANT_ID);
+      .set('tenant-id', TESTING_TENANT_ID);
     expect(deleteGroupResponse.status).toBe(200);
 
     const deleteGroup2Response = await request(APP_URL)
       .delete(`/api/groups/${testGroup2.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .set('x-tenant-id', TESTING_TENANT_ID);
+      .set('tenant-id', TESTING_TENANT_ID);
     expect(deleteGroup2Response.status).toBe(200);
   });
 
@@ -114,7 +114,7 @@ describe('GroupController (e2e)', () => {
       await request(APP_URL)
         .delete(`/api/groups/${testGroup.id}`)
         .set('Authorization', `Bearer ${token}`)
-        .set('x-tenant-id', TESTING_TENANT_ID);
+        .set('tenant-id', TESTING_TENANT_ID);
     }
   });
 });

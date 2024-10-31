@@ -63,7 +63,7 @@ async function bootstrap() {
     .addGlobalParameters({
       in: 'header',
       required: false,
-      name: 'x-tenant-id',
+      name: 'tenant-id',
       description: 'Tenant ID',
       schema: {
         example: '1',
