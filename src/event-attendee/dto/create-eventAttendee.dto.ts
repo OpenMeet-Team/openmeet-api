@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+
 import { IsEnum, IsNotEmpty, IsNumber, IsOptional } from 'class-validator';
 import {
   EventAttendeeRole,
@@ -22,16 +23,6 @@ export class CreateEventAttendeeDto {
   // @Type(() => Number)
   // @IsNumber()
   // userId: number;
-
-  // @ApiProperty({ description: 'RSVP status of the attendee', example: 'going' })
-  // @IsOptional()
-  // @IsNotEmpty()
-  // rsvpStatus: string;
-
-  // @ApiProperty({ description: 'Is the user a host?', example: false })
-  // @IsBoolean()
-  // @IsOptional()
-  // isHost: boolean;
 
   @ApiPropertyOptional({
     description: 'The status of the Event Attendee',

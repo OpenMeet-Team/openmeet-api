@@ -275,22 +275,17 @@ export class CategorySeedService {
     ];
 
     for (const categoryData of seedData) {
-      console.log('Searching for category:', categoryData.category);
       const existingCategory = await this.categoryRepository
         .createQueryBuilder('category')
         .where('category.name = :name', { name: categoryData.category })
         .getOne();
 
-      console.log('Found category:', existingCategory);
-
       if (!existingCategory) {
-        console.log('Creating new category:', categoryData.category);
         const newCategory = this.categoryRepository.create({
           name: categoryData.category,
           slug: categoryData.category.toLowerCase().replace(/ /g, '-'),
         });
         await this.categoryRepository.save(newCategory);
-        console.log('New category created:', newCategory);
       }
 
       for (const subcategoryData of categoryData.subcategories) {

@@ -127,5 +127,5 @@ export class CreateEventDto {
   })
   @IsOptional()
   @Type(() => Number)
-  group: number;
+  group?: number;
 }

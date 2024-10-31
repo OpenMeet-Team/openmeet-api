@@ -36,3 +36,15 @@ export enum EventAttendeeStatus {
   Cancelled = 'cancelled',
   Rejected = 'rejected',
 }
+
+export enum EntityType {
+  User = 'user',
+  Event = 'event',
+  Group = 'group',
+}
+
+export enum EventType {
+  InPerson = 'in-person',
+  Online = 'online',
+  Hybrid = 'hybrid',
+}

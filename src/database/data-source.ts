@@ -1,10 +1,9 @@
 import 'reflect-metadata';
 import { DataSource, DataSourceOptions } from 'typeorm';
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const AppDataSource = (tenantId = '') => {
-  // const schemaName = tenantId ? `tenant_${tenantId}` : '';
-  const schemaName = 'public';
+  const schemaName = tenantId ? `tenant_${tenantId}` : '';
+  // const schemaName = 'public';
   return new DataSource({
     name: schemaName,
     type: process.env.DATABASE_TYPE,
@@ -20,7 +19,7 @@ export const AppDataSource = (tenantId = '') => {
     synchronize: process.env.DATABASE_SYNCHRONIZE === 'true',
     dropSchema: false,
     keepConnectionAlive: true,
-    logging: process.env.NODE_ENV !== 'production',
+    logging: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : false,
     entities: [__dirname + '/../**/*.entity{.ts,.js}'],
     migrations: [__dirname + '/migrations/**/*{.ts,.js}'],
     cli: {
@@ -35,6 +34,8 @@ export const AppDataSource = (tenantId = '') => {
       max: process.env.DATABASE_MAX_CONNECTIONS
         ? parseInt(process.env.DATABASE_MAX_CONNECTIONS, 10)
         : 100,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 2000,
       ssl:
         process.env.DATABASE_SSL_ENABLED === 'true'
           ? {

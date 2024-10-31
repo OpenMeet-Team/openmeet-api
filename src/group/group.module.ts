@@ -10,6 +10,7 @@ import { GroupUserPermissionEntity } from './infrastructure/persistence/relation
 import { UsersModule } from '../user/user.module';
 import { GroupMemberModule } from '../group-member/group-member.module';
 import { EventService } from '../event/event.service';
+import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { EventService } from '../event/event.service';
     ]),
     UsersModule,
     GroupMemberModule,
+    EventAttendeeModule,
   ],
   controllers: [GroupController],
   providers: [

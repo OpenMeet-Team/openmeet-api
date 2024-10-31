@@ -1,4 +1,6 @@
 import { NestFactory } from '@nestjs/core';
+import { EventSeedService } from './event/event-seed.service';
+import { GroupSeedService } from './group/group-seed.service';
 import { RoleSeedService } from './role/role-seed.service';
 import { SeedModule } from './seed.module';
 import { StatusSeedService } from './status/status-seed.service';
@@ -14,7 +16,7 @@ const tenantIds = ['', '1']; // List of tenant IDs
 const runSeed = async () => {
   const app = await NestFactory.create(SeedModule);
   for (const tenantId of tenantIds) {
-    // run
+    // // run
     await app.get(RoleSeedService).run(tenantId);
     await app.get(StatusSeedService).run(tenantId);
     await app.get(UserSeedService).run(tenantId);
@@ -22,7 +24,10 @@ const runSeed = async () => {
     await app.get(PermissionSeedService).run(tenantId);
     await app.get(UserPermissionSeedService).run(tenantId);
     await app.get(GroupRoleSeedService).run(tenantId);
+    await app.get(GroupSeedService).run(tenantId);
+    await app.get(EventSeedService).run(tenantId);
   }
+
   await app.close();
 };
 

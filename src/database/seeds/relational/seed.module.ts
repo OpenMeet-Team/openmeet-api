@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { TypeOrmConfigService } from '../../typeorm-config.service';
 import { RoleSeedModule } from './role/role-seed.module';
@@ -13,10 +12,14 @@ import { CategorySeedModule } from './category/category-seed.module';
 import { PermissionSeedModule } from './permission/permission-seed.module';
 import { UserPermissionSeedModule } from './user-permission/user-permission-seed.module';
 import { GroupRoleSeedModule } from './group-role/group-role.module';
-// import { InterestSeedModule } from './interest/interest-seed.module';
+import { GroupSeedModule } from './group/group-seed.module';
+import fileConfig from 'src/file/config/file.config';
+import { EventSeedModule } from './event/event-seed.module';
+import authConfig from 'src/auth/config/auth.config';
 
 @Module({
   imports: [
+    EventSeedModule,
     RoleSeedModule,
     StatusSeedModule,
     UserSeedModule,
@@ -24,9 +27,10 @@ import { GroupRoleSeedModule } from './group-role/group-role.module';
     PermissionSeedModule,
     UserPermissionSeedModule,
     GroupRoleSeedModule,
+    GroupSeedModule,
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig, appConfig],
+      load: [databaseConfig, appConfig, fileConfig, authConfig],
       envFilePath: ['.env'],
     }),
     TypeOrmModule.forRootAsync({

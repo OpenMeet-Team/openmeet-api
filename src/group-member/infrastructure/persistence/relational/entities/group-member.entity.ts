@@ -1,10 +1,4 @@
-import {
-  Column,
-  Entity,
-  JoinColumn,
-  ManyToOne,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { GroupEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group.entity';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
@@ -15,13 +9,10 @@ export class GroupMemberEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'boolean', default: false })
-  requiredApproval: boolean;
-
-  @ManyToOne(() => UserEntity, (user) => user.groupUsers)
+  @ManyToOne(() => UserEntity, (user) => user.groupMembers)
   user: UserEntity;
 
-  @ManyToOne(() => GroupRoleEntity, (groupRole) => groupRole.groupUsers)
+  @ManyToOne(() => GroupRoleEntity, (groupRole) => groupRole.groupMembers)
   groupRole: GroupRoleEntity;
 
   @ManyToOne(() => GroupEntity, (group) => group.groupMembers)

@@ -16,7 +16,6 @@ export class CategoryService {
   ) {}
 
   async getTenantSpecificCategoryRepository() {
-    console.log('this.request', this.request);
     const tenantId = this.request.tenantId;
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
@@ -73,5 +72,15 @@ export class CategoryService {
     await this.getTenantSpecificCategoryRepository();
     const category = await this.findOne(id);
     await this.categoryRepository.remove(category);
+  }
+
+  async getHomePageFeaturedCategories(): Promise<CategoryEntity[]> {
+    await this.getTenantSpecificCategoryRepository();
+
+    return this.categoryRepository
+      .createQueryBuilder('category')
+      .orderBy('RANDOM()')
+      .take(5)
+      .getMany();
   }
 }
