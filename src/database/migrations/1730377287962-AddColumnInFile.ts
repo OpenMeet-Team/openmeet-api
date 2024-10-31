@@ -13,9 +13,6 @@ export class AddColumnInFile1730377287962 implements MigrationInterface {
       `DROP TYPE IF EXISTS "${schema}"."files_entitytype_enum"`,
     );
     await queryRunner.query(
-      `ALTER TABLE "${schema}"."groupMembers" DROP COLUMN "requiredApproval"`,
-    );
-    await queryRunner.query(
       `ALTER TABLE "${schema}"."files" ADD "fileName" character varying NOT NULL`,
     );
     await queryRunner.query(
@@ -49,9 +46,6 @@ export class AddColumnInFile1730377287962 implements MigrationInterface {
     );
     await queryRunner.query(
       `ALTER TABLE "${schema}"."files" DROP COLUMN "fileName"`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE "${schema}"."groupMembers" ADD "requiredApproval" boolean NOT NULL DEFAULT false`,
     );
     await queryRunner.query(
       `CREATE TYPE "${schema}"."files_entitytype_enum" AS ENUM('user', 'event', 'group')`,
