@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { RelationalFilePersistenceModule } from './infrastructure/persistence/relational/relational-persistence.module';
-import { FileService } from './file.service';
 import { FilesS3PresignedModule } from './infrastructure/uploader/s3-presigned/file.module';
+import { FileService } from './file.service';
 
 const infrastructurePersistenceModule = RelationalFilePersistenceModule;
 
