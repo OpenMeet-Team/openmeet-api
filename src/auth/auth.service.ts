@@ -214,7 +214,7 @@ export class AuthService {
       email: dto.email,
       role: role.id,
       status: {
-        id: StatusEnum.active,
+        id: StatusEnum.active, // TODO implement tenant config check for tenant.confirmEmail
       },
     });
 
@@ -251,19 +251,26 @@ export class AuthService {
 
     const createdUser = await this.userService.findById(user.id);
 
+    // if (this.configService.get('tenant.confirmEmail', { infer: true })) { // TODO implement tenant config
+    // if tenant config need to confirm user email, was await by default
+    this.mailService
+      .userSignUp({
+        to: dto.email,
+        data: {
+          hash,
+        },
+      })
+      .catch((err) => {
+        console.log(err);
+      });
+    // }
+
     return {
       refreshToken,
       token,
       tokenExpires,
       user: createdUser,
     };
-
-    // await this.mailService.userSignUp({
-    //   to: dto.email,
-    //   data: {
-    //     hash,
-    //   },
-    // });
   }
 
   async confirmEmail(hash: string): Promise<void> {
@@ -289,7 +296,6 @@ export class AuthService {
     }
 
     const user = await this.userService.findById(userId);
-
     if (
       !user ||
       user?.status?.id?.toString() !== StatusEnum.inactive.toString()
@@ -495,7 +501,7 @@ export class AuthService {
         throw new UnprocessableEntityException({
           status: HttpStatus.UNPROCESSABLE_ENTITY,
           errors: {
-            email: 'emailExists',
+            email: 'This email is already in use.',
           },
         });
       }
