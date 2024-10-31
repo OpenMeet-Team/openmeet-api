@@ -38,7 +38,8 @@ export default registerAs<FileConfig>('file', () => {
 
   return {
     driver:
-      (process.env.FILE_DRIVER as FileDriver | undefined) ?? FileDriver.LOCAL,
+      (process.env.FILE_DRIVER as FileDriver | undefined) ??
+      FileDriver.S3_PRESIGNED,
     accessKeyId: process.env.ACCESS_KEY_ID,
     secretAccessKey: process.env.SECRET_ACCESS_KEY,
     awsDefaultS3Bucket: process.env.AWS_DEFAULT_S3_BUCKET,

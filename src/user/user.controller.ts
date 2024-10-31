@@ -10,6 +10,7 @@ import {
   HttpCode,
   SerializeOptions,
   NotFoundException,
+  Patch,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import {
@@ -30,6 +31,7 @@ import { User } from './domain/user';
 import { UserService } from './user.service';
 import { infinityPagination } from '../utils/infinity-pagination';
 import { Public } from 'src/auth/decorators/public.decorator';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 // @ApiBearerAuth()
 // @Roles(RoleEnum.admin)
@@ -101,25 +103,25 @@ export class UserController {
     return this.userService.findById(id);
   }
 
-  // @ApiOkResponse({
-  //   type: User,
-  // })
-  // @SerializeOptions({
-  //   groups: ['admin'],
-  // })
-  // @Patch(':id')
-  // @HttpCode(HttpStatus.OK)
-  // @ApiParam({
-  //   name: 'id',
-  //   type: String,
-  //   required: true,
-  // })
-  // update(
-  //   @Param('id') id: User['id'],
-  //   @Body() updateProfileDto: UpdateUserDto,
-  // ): Promise<User | null> {
-  //   return this.userService.update(id, updateProfileDto);
-  // }
+  @ApiOkResponse({
+    type: User,
+  })
+  @SerializeOptions({
+    groups: ['admin'],
+  })
+  @Patch(':id')
+  @HttpCode(HttpStatus.OK)
+  @ApiParam({
+    name: 'id',
+    type: String,
+    required: true,
+  })
+  update(
+    @Param('id') id: User['id'],
+    @Body() updateProfileDto: UpdateUserDto,
+  ): Promise<User | null> {
+    return this.userService.update(id, updateProfileDto);
+  }
 
   @Public()
   @Get(':id/profile')
