@@ -10,6 +10,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Status } from '../../core/constants/constant';
+import { FileEntity } from '../../file/infrastructure/persistence/relational/entities/file.entity';
 
 export class CreateGroupDto {
   @ApiProperty({
@@ -18,6 +19,13 @@ export class CreateGroupDto {
   @IsNotEmpty()
   @IsString()
   name: string;
+
+  @ApiProperty({
+    description: 'The image of the group',
+    type: () => FileEntity,
+  })
+  @IsOptional()
+  image?: FileEntity;
 
   // @ApiProperty({
   //   description: 'The slug of the group',

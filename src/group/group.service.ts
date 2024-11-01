@@ -1,4 +1,11 @@
-import { Injectable, NotFoundException, Inject, Scope } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  Inject,
+  Scope,
+  UnprocessableEntityException,
+  HttpStatus,
+} from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
@@ -16,6 +23,8 @@ import { QueryGroupDto } from './dto/group-query.dto';
 import slugify from 'slugify';
 import { EventService } from '../event/event.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
+import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
+import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -30,6 +39,7 @@ export class GroupService {
     private readonly categoryService: CategoryService,
     private readonly groupMemberService: GroupMemberService,
     private readonly eventService: EventService,
+    private readonly fileService: FilesS3PresignedService,
   ) {}
 
   async getTenantSpecificGroupRepository() {
@@ -192,6 +202,23 @@ export class GroupService {
       createdBy: { id: userId },
     };
 
+    if (mappedGroupDto.image?.id) {
+      const fileObject = await this.fileService.findById(
+        mappedGroupDto.image.id,
+      );
+
+      if (!fileObject) {
+        throw new UnprocessableEntityException({
+          status: HttpStatus.UNPROCESSABLE_ENTITY,
+          errors: {
+            image: 'imageNotExists',
+          },
+        });
+      }
+
+      mappedGroupDto.image = fileObject as FileEntity;
+    }
+
     const group = this.groupRepository.create(mappedGroupDto);
     const savedGroup = await this.groupRepository.save(group);
     await this.groupMemberService.createGroupOwner({
@@ -253,36 +280,13 @@ export class GroupService {
     return paginate(groupQuery, { page, limit });
   }
 
-  async findQuery(id: number, userId: number): Promise<any> {
+  async editGroup(id: number): Promise<any> {
     await this.getTenantSpecificGroupRepository();
 
-    const groupQuery = this.groupRepository
-      .createQueryBuilder('group')
-      .leftJoinAndSelect('group.events', 'events')
-      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
-      .leftJoinAndSelect('groupMembers.user', 'user')
-      .leftJoinAndSelect('group.createdBy', 'createdBy')
-      .leftJoinAndSelect('group.categories', 'categories')
-      .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
-      .leftJoinAndSelect('groupRole.groupPermissions', 'groupPermissions')
-      .where('group.id = :id', { id });
-
-    const group = await groupQuery.getOne();
-
-    if (!group) {
-      throw new Error('Group not found');
-    }
-
-    // Slice the events and groupMembers lists to return only the first 5 entries
-    group.events = group.events.slice(0, 5);
-    group.groupMembers = group.groupMembers.slice(0, 5);
-
-    return {
-      ...group,
-      groupMember: group.groupMembers.find(
-        (member) => member.user.id === userId,
-      ),
-    };
+    return await this.groupRepository.findOne({
+      where: { id },
+      relations: ['createdBy', 'categories'],
+    });
   }
 
   async findOne(id: number): Promise<any> {
@@ -407,6 +411,23 @@ export class GroupService {
       slug: slugifiedName,
       categories: categoryEntities,
     };
+
+    if (mappedGroupDto.image?.id) {
+      const fileObject = await this.fileService.findById(
+        mappedGroupDto.image.id,
+      );
+
+      if (!fileObject) {
+        throw new UnprocessableEntityException({
+          status: HttpStatus.UNPROCESSABLE_ENTITY,
+          errors: {
+            image: 'imageNotExists',
+          },
+        });
+      }
+
+      mappedGroupDto.image = fileObject as FileEntity;
+    }
 
     const updatedGroup = this.groupRepository.merge(group, mappedGroupDto);
     return this.groupRepository.save(updatedGroup);

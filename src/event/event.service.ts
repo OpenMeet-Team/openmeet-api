@@ -4,6 +4,8 @@ import {
   Inject,
   Scope,
   InternalServerErrorException,
+  UnprocessableEntityException,
+  HttpStatus,
 } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { CreateEventDto } from './dto/create-event.dto';
@@ -25,6 +27,7 @@ import slugify from 'slugify';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
 import { GroupMemberService } from '../group-member/group-member.service';
+import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -36,6 +39,7 @@ export class EventService {
     private readonly categoryService: CategoryService,
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly groupMemberService: GroupMemberService,
+    private readonly fileService: FilesS3PresignedService,
   ) {
     void this.initializeRepository();
   }
@@ -478,6 +482,27 @@ export class EventService {
       );
       mappedDto.categories = categories;
     }
+
+    if (mappedDto.image?.id === 0) {
+      if (mappedDto.image) {
+        await this.fileService.delete(mappedDto.image.id);
+        mappedDto.image = null;
+      }
+    } else if (mappedDto.image?.id) {
+      const fileObject = await this.fileService.findById(mappedDto.image.id);
+
+      if (!fileObject) {
+        throw new UnprocessableEntityException({
+          status: HttpStatus.UNPROCESSABLE_ENTITY,
+          errors: {
+            photo: 'imageNotExists',
+          },
+        });
+      }
+
+      mappedDto.image = fileObject;
+    }
+
     const updatedEvent = this.eventRepository.merge(event, mappedDto);
     return this.eventRepository.save(updatedEvent);
   }

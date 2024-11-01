@@ -27,7 +27,6 @@ describe('EventAttendeeController (e2e)', () => {
       .send({
         name: 'Test Event',
         slug: 'test-event',
-        image: 'test-image.jpg',
         description: 'A test event',
         startDate: '2024-12-31T00:00:00Z',
         endDate: '2024-12-31T23:59:59Z',
