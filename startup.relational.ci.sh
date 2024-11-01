@@ -2,8 +2,9 @@
 set -e
 
 /opt/wait-for-it.sh postgres:5432
-npm run migration:run:prod
-npm run seed:run:prod
+# npm run migration:run:prod
+# npm run seed:run:prod
+npm run migration:reset
 
 npm run start:prod > prod.log 2>&1 &
 /opt/wait-for-it.sh maildev:1080
