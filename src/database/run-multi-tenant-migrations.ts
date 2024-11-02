@@ -1,5 +1,11 @@
 import { AppDataSource } from './data-source'; // adjust the path to your AppDataSource
 import { QueryRunner } from 'typeorm';
+
+interface Tenant {
+  id: string;
+  name: string;
+}
+
 async function runMigrationsForAllTenants() {
   const tenants = ['', '1'];
   for (const tenantId of tenants) {
@@ -35,3 +41,33 @@ runMigrationsForAllTenants()
   .catch((error) => {
     console.error('Error running migrations for tenants:', error);
   });
+
+export function fetchTenants(): Tenant[] {
+  const tenantsJson = process.env.TENANTS;
+  if (!tenantsJson) {
+    throw new Error('TENANTS environment variable is not set');
+  }
+
+  try {
+    const tenants = JSON.parse(tenantsJson);
+
+    if (!Array.isArray(tenants)) {
+      throw new Error('TENANTS must be a JSON array');
+    }
+
+    // Validate tenant structure
+    tenants.forEach((tenant, index) => {
+      if (!tenant.id || !tenant.name) {
+        throw new Error(
+          `Invalid tenant at index ${index}: missing required fields`,
+        );
+      }
+    });
+
+    return tenants;
+  } catch (error) {
+    throw new Error(
+      `Failed to process TENANTS configuration: ${error.message}`,
+    );
+  }
+}
