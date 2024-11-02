@@ -9,14 +9,17 @@ import {
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { GroupPermissionEntity } from '../../../../../group-permission/infrastructure/persistence/relational/entities/group-permission.entity';
 import { GroupMemberEntity } from '../../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
+import { GroupRole } from '../../../../../core/constants/constant';
 
 @Entity({ name: 'groupRoles' })
 export class GroupRoleEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'varchar', length: 255 })
-  name: string;
+  @Column({ type: 'enum', enum: GroupRole })
+  name: GroupRole;
+  // @Column({ type: 'varchar', length: 255 })
+  // name: string; // TODO replace with enum or type
 
   @OneToMany(() => GroupMemberEntity, (groupUser) => groupUser.groupRole)
   groupMembers: GroupMemberEntity[];

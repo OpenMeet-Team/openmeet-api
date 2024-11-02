@@ -1,17 +1,17 @@
 import { Injectable } from '@nestjs/common';
-import { EventEntity } from 'src/event/infrastructure/persistence/relational/entities/event.entity';
+import { EventEntity } from '../../../../event/infrastructure/persistence/relational/entities/event.entity';
 import { Repository } from 'typeorm';
 import { eventSeedData } from './event-seed.seed';
-import { CategoryEntity } from 'src/category/infrastructure/persistence/relational/entities/categories.entity';
-import { GroupEntity } from 'src/group/infrastructure/persistence/relational/entities/group.entity';
-import { UserEntity } from 'src/user/infrastructure/persistence/relational/entities/user.entity';
+import { CategoryEntity } from '../../../../category/infrastructure/persistence/relational/entities/categories.entity';
+import { GroupEntity } from '../../../../group/infrastructure/persistence/relational/entities/group.entity';
+import { UserEntity } from '../../../../user/infrastructure/persistence/relational/entities/user.entity';
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
 import slugify from 'slugify';
 import {
   EventAttendeeRole,
   EventAttendeeStatus,
-} from 'src/core/constants/constant';
-import { EventAttendeesEntity } from 'src/event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
+} from '../../../../core/constants/constant';
+import { EventAttendeesEntity } from '../../../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 
 @Injectable()
 export class EventSeedService {

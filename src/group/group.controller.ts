@@ -6,7 +6,6 @@ import {
   Param,
   Patch,
   Delete,
-  NotFoundException,
   Query,
   UseGuards,
   Optional,
@@ -24,13 +23,21 @@ import { User } from '../user/domain/user';
 import { QueryGroupDto } from './dto/group-query.dto';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { HttpException, HttpStatus } from '@nestjs/common';
+import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
+import { GroupMemberService } from '../group-member/group-member.service';
+import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
+import { EventService } from '../event/event.service';
 
 @ApiTags('Groups')
 @Controller('groups')
 @ApiBearerAuth()
 @UseGuards(JWTAuthGuard)
 export class GroupController {
-  constructor(private readonly groupService: GroupService) {}
+  constructor(
+    private readonly groupService: GroupService,
+    private readonly groupMemberService: GroupMemberService,
+    private readonly eventService: EventService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new group' })
@@ -53,26 +60,10 @@ export class GroupController {
     return this.groupService.findAll(pagination, query);
   }
 
-  @Get('me')
-  @ApiOperation({ summary: 'Get my groups' })
-  async findMyGroups(
-    @Query() pagination: PaginationDto,
-    @Query() query: QueryGroupDto,
-    @AuthUser() user: User,
-  ): Promise<GroupEntity[]> {
-    const userId = user.id;
-    query.userId = userId;
-    return this.groupService.findAll(pagination, query);
-  }
-
   @Get('me/:id')
   @ApiOperation({ summary: 'Get group by ID Authenticated' })
-  async findOne(@Param('id') id: number): Promise<GroupEntity> {
-    const group = await this.groupService.editGroup(+id);
-    if (!group) {
-      throw new NotFoundException(`Group with ID ${id} not found`);
-    }
-    return group;
+  async editGroup(@Param('id') id: number): Promise<GroupEntity> {
+    return await this.groupService.editGroup(+id);
   }
 
   @Public()
@@ -80,20 +71,16 @@ export class GroupController {
   @ApiOperation({
     summary: 'Get group by ID and authenticated user, public endpoint',
   })
-  async findGroupDetails(
+  async showGroup(
     @Param('id') id: number,
     @Optional() @AuthUser() user?: User,
   ): Promise<GroupEntity> {
-    const group = await this.groupService.findGroupDetails(+id, user?.id);
-    if (!group) {
-      throw new NotFoundException(`Group with ID ${id} not found`);
-    }
-    return group;
+    return await this.groupService.showGroup(+id, user?.id);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a group by ID' })
-  async update(
+  async updateGroup(
     @Param('id') id: number,
     @Body() updateGroupDto: UpdateGroupDto,
   ): Promise<GroupEntity> {
@@ -102,30 +89,76 @@ export class GroupController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a group by ID' })
-  async remove(@Param('id') id: number): Promise<void> {
+  async removeGroup(@Param('id') id: number): Promise<any> {
     return this.groupService.remove(+id);
   }
 
   @Public()
   @Get(':id/events')
   @ApiOperation({ summary: 'Get all group events' })
-  async findGroupDetailsEvents(@Param('id') id: number): Promise<GroupEntity> {
-    const group = await this.groupService.findGroupDetailsEvents(+id);
-    if (!group) {
-      throw new NotFoundException(`Group with ID ${id} not found`);
-    }
-    return group;
+  async showGroupEvents(@Param('id') id: number): Promise<EventEntity[]> {
+    return await this.eventService.showGroupEvents(id);
   }
 
   @Public()
   @Get(':id/members')
   @ApiOperation({ summary: 'Get all group members' })
-  async findGroupDetailsMembers(@Param('id') id: number): Promise<GroupEntity> {
-    const group = await this.groupService.findGroupDetailsMembers(+id);
-    if (!group) {
-      throw new NotFoundException(`Group with ID ${id} not found`);
-    }
-    return group;
+  async showGroupMembers(
+    @Param('id') id: number,
+  ): Promise<GroupMemberEntity[]> {
+    return this.groupMemberService.findGroupDetailsMembers(+id);
+  }
+
+  @Post(':id/join')
+  @ApiOperation({ summary: 'Joining a group' })
+  async joinGroup(
+    @AuthUser() user: User,
+    @Param('id') id: number,
+  ): Promise<GroupMemberEntity> {
+    return this.groupMemberService.joinGroup(user.id, +id);
+  }
+
+  @Delete(':id/leave')
+  @ApiOperation({ summary: 'Leave a group' })
+  async leaveGroup(@AuthUser() user: User, @Param('id') id: number) {
+    return this.groupMemberService.leaveGroup(user.id, +id);
+  }
+
+  @Delete(':id/members/:userId')
+  @ApiOperation({ summary: 'Remove a group member' })
+  async removeGroupMember(
+    @Param('id') id: number,
+    @Param('userId') userId: number,
+  ) {
+    return this.groupMemberService.removeGroupMember(id, userId);
+  }
+
+  @Patch(':id/members/:userId')
+  @ApiOperation({ summary: 'Update a group member role' })
+  async updateGroupMemberRole(
+    @Param('id') id: number,
+    @Param('userId') userId: number,
+    @Body() updateDto: UpdateGroupMemberRoleDto,
+  ): Promise<GroupMemberEntity> {
+    return this.groupMemberService.updateGroupMemberRole(id, userId, updateDto);
+  }
+
+  @Post(':id/members/:userId/approve')
+  @ApiOperation({ summary: 'Approve a group member' })
+  async approveMember(
+    @Param('id') id: number,
+    @Param('userId') userId: number,
+  ): Promise<GroupMemberEntity> {
+    return this.groupMemberService.approveMember(id, userId);
+  }
+
+  @Delete(':id/members/:userId/reject')
+  @ApiOperation({ summary: 'Reject a group member' })
+  async rejectMember(
+    @Param('id') id: number,
+    @Param('userId') userId: number,
+  ): Promise<GroupMemberEntity> {
+    return this.groupMemberService.rejectMember(id, userId);
   }
 
   @Public()

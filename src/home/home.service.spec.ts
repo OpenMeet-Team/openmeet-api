@@ -3,16 +3,22 @@ import { HomeService } from './home.service';
 import { GroupService } from '../group/group.service';
 import { EventService } from '../event/event.service';
 import {
+  mockCategory,
   mockCategoryService,
   mockConfigService,
+  mockEvent,
   mockEventService,
+  mockGroup,
   mockGroupService,
+  mockSubCategory,
   mockSubCategoryService,
+  mockTenantConnectionService,
   mockUser,
 } from '../test/mocks';
 import { CategoryService } from '../category/category.service';
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { ConfigService } from '@nestjs/config';
+import { TenantConnectionService } from '../tenant/tenant.service';
 
 describe('HomeService', () => {
   let service: HomeService;
@@ -27,6 +33,10 @@ describe('HomeService', () => {
         { provide: GroupService, useValue: mockGroupService },
         { provide: SubCategoryService, useValue: mockSubCategoryService },
         { provide: ConfigService, useValue: mockConfigService },
+        {
+          provide: TenantConnectionService,
+          useValue: mockTenantConnectionService,
+        },
       ],
     }).compile();
 
@@ -37,12 +47,12 @@ describe('HomeService', () => {
     const result = await service.getUserHomeState(mockUser);
 
     expect(result).toEqual({
-      organizedGroups: expect.any(Array),
-      nextHostedEvent: null,
-      recentEventDrafts: expect.any(Array),
-      upcomingEvents: expect.any(Array),
-      memberGroups: expect.any(Array),
-      interests: expect.any(Array),
+      organizedGroups: [mockGroup],
+      nextHostedEvent: mockEvent,
+      recentEventDrafts: [mockEvent],
+      upcomingEvents: [mockEvent],
+      memberGroups: [mockGroup],
+      interests: [mockSubCategory],
     });
   });
 
@@ -50,10 +60,10 @@ describe('HomeService', () => {
     const result = await service.getGuestHomeState();
 
     expect(result).toEqual({
-      groups: [],
-      events: [],
-      categories: [],
-      interests: [],
+      groups: [mockGroup],
+      events: [mockEvent],
+      categories: [mockCategory],
+      interests: [mockSubCategory],
     });
   });
 });

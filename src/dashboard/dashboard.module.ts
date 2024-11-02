@@ -4,8 +4,8 @@ import { DashboardController } from './dashboard.controller';
 import { EventModule } from '../event/event.module';
 import { TenantModule } from '../tenant/tenant.module';
 import { GroupModule } from '../group/group.module';
-import { GroupMemberModule } from 'src/group-member/group-member.module';
-import { EventAttendeeModule } from 'src/event-attendee/event-attendee.module';
+import { GroupMemberModule } from '../group-member/group-member.module';
+import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 
 @Module({
   imports: [

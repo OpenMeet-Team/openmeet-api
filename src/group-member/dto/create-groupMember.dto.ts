@@ -32,26 +32,10 @@ export class CreateGroupMemberDto {
 
 export class UpdateGroupMemberRoleDto {
   @ApiProperty({
-    description: 'ID of the user associated with the group member',
-  })
-  @IsNotEmpty()
-  @Type(() => Number)
-  @IsNumber()
-  userId: number;
-
-  @ApiProperty({
     description: 'Role of the group member',
     enum: GroupRole,
   })
   @IsNotEmpty()
   @IsEnum(GroupRole)
   name: GroupRole;
-
-  @ApiProperty({
-    description: 'ID of the group to which the member belongs',
-  })
-  @IsNotEmpty()
-  @Type(() => Number)
-  @IsNumber()
-  groupId: number;
 }

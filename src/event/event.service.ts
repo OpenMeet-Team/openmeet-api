@@ -230,7 +230,7 @@ export class EventService {
     return event;
   }
 
-  async findGroupDetailsAttendees(eventId: number): Promise<any> {
+  async showGroupEvents(eventId: number): Promise<any> {
     await this.getTenantSpecificEventRepository();
     return this.eventAttendeeService.findEventAttendees(eventId);
   }
@@ -251,15 +251,12 @@ export class EventService {
     return randomEvents;
   }
 
-  async getRecommendedEventsByEventId(
-    eventId: number,
-    minEvents: number = 0,
-    maxEvents: number = 5,
-  ): Promise<EventEntity[]> {
+  async getRecommendedEventsByEventId(eventId: number): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
+    const maxEvents = 5;
 
     const event = await this.eventRepository.findOne({
-      where: { id: Number(eventId) },
+      where: { id: eventId },
       relations: ['categories'],
     });
 
@@ -267,7 +264,7 @@ export class EventService {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
 
-    const categoryIds = event.categories.map((c) => c.id);
+    const categoryIds = event.categories?.map((c) => c.id);
 
     let recommendedEvents: EventEntity[] = [];
     try {
@@ -301,12 +298,6 @@ export class EventService {
       (event, index, self) =>
         index === self.findIndex((t) => t.id === event.id),
     );
-
-    if (uniqueEvents.length < minEvents) {
-      throw new NotFoundException(
-        `Not enough events found for event ${eventId}. Found ${uniqueEvents.length}, expected at least ${minEvents}.`,
-      );
-    }
 
     return uniqueEvents.slice(0, maxEvents);
   }
