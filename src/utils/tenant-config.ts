@@ -3,6 +3,11 @@ import * as fs from 'fs';
 export interface Tenant {
   id: string;
   name: string;
+  frontendDomain: string;
+  companyDomain: string;
+  confirmEmail: boolean;
+  mailDefaultEmail: string;
+  mailDefaultName: string;
 }
 
 export function fetchTenants(): Tenant[] {
