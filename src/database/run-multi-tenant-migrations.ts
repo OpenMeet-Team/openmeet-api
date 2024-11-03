@@ -7,10 +7,10 @@ interface Tenant {
 }
 
 async function runMigrationsForAllTenants() {
-  const tenants = ['', '1'];
-  for (const tenantId of tenants) {
-    const dataSource = AppDataSource(tenantId);
-    const schemaName = tenantId ? `tenant_${tenantId}` : 'public';
+  const tenants = fetchTenants();
+  for (const tenant of tenants) {
+    const dataSource = AppDataSource(tenant.id);
+    const schemaName = tenant.id ? `tenant_${tenant.id}` : 'public';
     try {
       await dataSource.initialize();
 
@@ -28,7 +28,7 @@ async function runMigrationsForAllTenants() {
       // Optionally reset search_path
       await queryRunner.query(`SET search_path TO public`);
     } catch (error) {
-      console.error(`Error running migrations for tenant: ${tenantId}`, error);
+      console.error(`Error running migrations for tenant: ${tenant.id}`, error);
     } finally {
       await dataSource.destroy();
     }
