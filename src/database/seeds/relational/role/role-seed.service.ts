@@ -15,7 +15,6 @@ export class RoleSeedService {
   ) {}
 
   async run(tenantId: string) {
-    console.log('Running role seed for tenant:', tenantId);
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
 
