@@ -36,6 +36,42 @@ npm run start:dev
 
 ### Testing
 
+#### Env setup
+
+```bash
+# Copy example config
+cp env-example-relational .env
+```
+
+Then set the environment variables in the .env file.
+
+##### Tenants Configuration
+
+Additionally, you may place a file  at `./config/tenants.json` to configure tenants, or use the `TENANTS_B64` environment variable to provide a base64 encoded json string of the same file contents.  Order of precedence is `TENANTS_B64` > `./config/tenants.json`.
+
+`./config/tenants.json` example:
+```json
+[
+  {
+    "id": "",
+    "name": "Public"
+  },
+  {
+    "id": "1",
+    "name": "OpenMeet"
+  },
+  {
+    "id": "2",
+    "name": "Testing"
+  }
+]
+```
+
+`TENANTS_B64` example:
+```bash
+export TENANTS_B64=WwogIHsKICAgICJpZCI6ICIiLAogICAgIm5hbWUiOiAiUHVibGljIgogIH0sCiAgewogICAgImlkIjogIjEiLAogICAgIm5hbWUiOiAiT3Blbk1lZXQiCiAgfSwKICB7CiAgICAiaWQiOiAiMiIsCiAgICAibmFtZSI6ICJUZXN0aW5nIgogIH0KXQo=
+```
+
 #### Run unit tests
 
 ``` bash

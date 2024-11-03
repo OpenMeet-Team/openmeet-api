@@ -11,8 +11,6 @@ import { UserPermissionSeedService } from './user-permission/user-permission-see
 import { GroupRoleSeedService } from './group-role/group-role.service';
 import { fetchTenants, Tenant } from '../../../utils/tenant-config';
 
-// import { InterestSeedService } from './interest/interest-seed.service';
-
 const runSeed = async () => {
   const tenants: Tenant[] = fetchTenants();
   const tenantIds = tenants.map((t) => t.id);
@@ -20,6 +18,7 @@ const runSeed = async () => {
 
   const app = await NestFactory.create(SeedModule);
   for (const tenantId of tenantIds) {
+    console.log('Running seeds for tenant:', tenantId);
     // // run
     await app.get(RoleSeedService).run(tenantId);
     await app.get(StatusSeedService).run(tenantId);

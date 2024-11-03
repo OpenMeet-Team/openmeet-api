@@ -10,11 +10,9 @@ async function runMigrationsForAllTenants() {
     // This means '' must be a tenant id
     console.log('Running migrations for tenant', tenant.id);
     const schemaName = tenant.id ? `tenant_${tenant.id}` : 'public';
-    console.log('Schema name', schemaName);
+    console.log('With schema name', schemaName);
     try {
       await dataSource.initialize();
-
-      console.log(`Applying migrations to schema: ${schemaName}`);
       if (schemaName) {
         await dataSource.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
       }

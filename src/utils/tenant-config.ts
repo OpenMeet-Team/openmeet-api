@@ -7,6 +7,14 @@ export interface Tenant {
 
 export function fetchTenants(): Tenant[] {
   try {
+    // 0. Get base64 encoded json file from env variable
+    const base64EncodedJson = process.env.TENANTS_B64;
+    if (base64EncodedJson?.trim()) {
+      const decodedJson = Buffer.from(base64EncodedJson, 'base64').toString(
+        'utf8',
+      );
+      return JSON.parse(decodedJson);
+    }
     // 1. Try command line --config argument
     const configArg = process.argv.find((arg) =>
       arg.startsWith('--tenant-config='),
@@ -15,25 +23,14 @@ export function fetchTenants(): Tenant[] {
       const configPath = configArg.split('=')[1];
       if (fs.existsSync(configPath)) {
         const fileContents = fs.readFileSync(configPath, 'utf8');
-        return JSON.parse(fileContents);
+        try {
+          return JSON.parse(fileContents);
+        } catch (parseError) {
+          console.error('Failed to parse config file:', parseError);
+        }
+      } else {
+        console.error('Config file does not exist:', configPath);
       }
-    }
-
-    // 2. Try Kubernetes ConfigMap
-    const k8sConfigPath = '/usr/src/app/config/tenants.json';
-    if (fs.existsSync(k8sConfigPath)) {
-      const fileContents = fs.readFileSync(k8sConfigPath, 'utf8');
-      return JSON.parse(fileContents);
-    }
-
-    // 3. Get base64 encoded json file from env variable
-    const base64EncodedJson = process.env.TENANTS_B64;
-    console.log('base64EncodedJson', base64EncodedJson);
-    if (base64EncodedJson) {
-      const decodedJson = Buffer.from(base64EncodedJson, 'base64').toString(
-        'utf8',
-      );
-      return JSON.parse(decodedJson);
     }
 
     throw new Error(
