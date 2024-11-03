@@ -14,8 +14,10 @@ export class TenantConnectionService implements OnModuleInit {
     // console.log('All tenant connections initialized');
   }
   async getTenantConnection(tenantId: string): Promise<DataSource> {
+    console.log('Getting tenant connection', tenantId);
     const connection = this.connections.get(tenantId);
     if (connection) {
+      console.log('Returning existing connection', tenantId);
       return connection;
     }
 
@@ -23,12 +25,14 @@ export class TenantConnectionService implements OnModuleInit {
     const dataSource = AppDataSource();
     await dataSource.initialize();
     if (!tenantId) {
+      console.warn('No tenantId, returning public schema');
       return dataSource;
     }
 
     const schemaName = `tenant_${tenantId}`;
 
     // Create schema if it does not exist
+    console.log('Creating schema if it does not exist', schemaName);
     await dataSource.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
     // Cache the connection for reuse
     this.connections.set(tenantId, dataSource);

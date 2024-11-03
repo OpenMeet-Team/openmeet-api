@@ -1,66 +1,42 @@
-import { fetchTenants } from './run-multi-tenant-migrations';
+import * as fs from 'fs';
+import { fetchTenants } from '../utils/tenant-config';
 
-// Mock TypeORM's DataSource
-jest.mock('typeorm', () => ({
-  DataSource: jest.fn().mockImplementation(() => ({
-    query: jest.fn().mockResolvedValue([]),
-    initialize: jest.fn().mockResolvedValue(undefined),
-    runMigrations: jest.fn().mockResolvedValue([]),
-    destroy: jest.fn().mockResolvedValue(undefined),
-    createQueryRunner: jest.fn().mockReturnValue({
-      query: jest.fn().mockResolvedValue(undefined),
-      release: jest.fn().mockResolvedValue(undefined),
-    }),
-  })),
-}));
+jest.mock('fs');
 
-describe('Tenant Migrations', () => {
-  const originalEnv = process.env.TENANTS;
-
-  beforeAll(() => {
-    // Setup any test database connections or mocks
-  });
-
-  afterAll(async () => {
-    // Clean up any test database connections
-  });
+describe('fetchTenants', () => {
+  const mockConfig = [
+    { id: '1', name: 'OpenMeet' },
+    { id: '2', name: 'Testing' },
+  ];
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    // Reset process.argv
+    process.argv = ['node', 'script.js'];
+    // Reset fs mock
+    (fs.existsSync as jest.Mock).mockReset();
+    (fs.readFileSync as jest.Mock).mockReset();
   });
 
-  afterEach(() => {
-    process.env.TENANTS = originalEnv;
+  it('should load tenants from config file', () => {
+    // Mock command line argument
+    process.argv.push('--tenant-config=./config/tenants.json');
+
+    // Mock fs functions
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify(mockConfig));
+
+    const result = fetchTenants();
+    expect(result).toEqual(mockConfig);
   });
 
-  describe('fetchTenants', () => {
-    const originalEnv = process.env.TENANTS;
+  it('should throw error when config file is missing', () => {
+    process.argv.push('--tenant-config=./config/missing.json');
+    (fs.existsSync as jest.Mock).mockReturnValue(false);
 
-    afterEach(() => {
-      process.env.TENANTS = originalEnv;
-    });
+    expect(() => fetchTenants()).toThrow();
+  });
 
-    it('should parse tenants configuration', () => {
-      // Match the exact format from setup-local-env.sh
-      process.env.TENANTS =
-        '[{"id":"lsdfaopkljdfs","name":"OpenMeet"},{"id":"oiupsdknasfdf","name":"Testing"}]';
-      const result = fetchTenants();
-      expect(result).toEqual([
-        { id: 'lsdfaopkljdfs', name: 'OpenMeet' },
-        { id: 'oiupsdknasfdf', name: 'Testing' },
-      ]);
-    });
-
-    it('should throw error when TENANTS env var is not set', () => {
-      process.env.TENANTS = '';
-      expect(() => fetchTenants()).toThrow(
-        'TENANTS environment variable is not set',
-      );
-    });
-
-    it('should throw error on invalid JSON', () => {
-      process.env.TENANTS = 'invalid json';
-      expect(() => fetchTenants()).toThrow();
-    });
+  it('should throw error when --tenant-config argument is missing', () => {
+    expect(() => fetchTenants()).toThrow();
   });
 });
