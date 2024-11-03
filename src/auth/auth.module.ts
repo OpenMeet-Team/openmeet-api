@@ -8,13 +8,13 @@ import { AnonymousStrategy } from './strategies/anonymous.strategy';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 import { MailModule } from '../mail/mail.module';
 import { SessionModule } from '../session/session.module';
-import { UsersModule } from '../user/user.module';
+import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
 import { RoleModule } from '../role/role.module';
 
 @Module({
   imports: [
-    UsersModule,
+    UserModule,
     GroupModule,
     SessionModule,
     PassportModule,

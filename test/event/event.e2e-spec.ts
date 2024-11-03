@@ -30,7 +30,6 @@ describe('EventController (e2e)', () => {
     testEvent = await createEvent(APP_URL, token, {
       name: 'Test Event',
       slug: 'test-event',
-      image: 'test-image-url',
       description: 'Test Description',
       startDate: new Date().toISOString(),
       endDate: new Date(new Date().getTime() + 3600000).toISOString(), // 1 hour later
@@ -51,7 +50,6 @@ describe('EventController (e2e)', () => {
     const testEvent2 = await createEvent(APP_URL, token, {
       name: 'Test Event 2',
       slug: 'test-event-2',
-      image: 'test-image-url',
       description: 'Test Description',
       startDate: new Date().toISOString(),
       endDate: new Date(new Date().getTime() + 3600000).toISOString(), // 1 hour later

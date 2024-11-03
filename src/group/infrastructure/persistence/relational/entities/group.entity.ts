@@ -2,10 +2,12 @@ import {
   BeforeInsert,
   Column,
   Entity,
+  JoinColumn,
   JoinTable,
   ManyToMany,
   ManyToOne,
   OneToMany,
+  OneToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
@@ -17,6 +19,8 @@ import slugify from 'slugify';
 import { Status, Visibility } from '../../../../../core/constants/constant';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
 import { Expose } from 'class-transformer';
+import { FileEntity } from '../../../../../file/infrastructure/persistence/relational/entities/file.entity';
+import { ApiProperty } from '@nestjs/swagger';
 
 @Entity({ name: 'groups' })
 export class GroupEntity extends EntityRelationalHelper {
@@ -71,6 +75,15 @@ export class GroupEntity extends EntityRelationalHelper {
     (groupUserPermission) => groupUserPermission.group,
   )
   groupUserPermissions: GroupUserPermissionEntity[];
+
+  @ApiProperty({
+    type: () => FileEntity,
+  })
+  @OneToOne(() => FileEntity, {
+    eager: true,
+  })
+  @JoinColumn()
+  image?: FileEntity | null;
 
   @ManyToMany(() => CategoryEntity, (category) => category.groups)
   @JoinTable({

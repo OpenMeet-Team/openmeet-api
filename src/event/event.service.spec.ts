@@ -18,6 +18,7 @@ import { CreateEventDto } from './dto/create-event.dto';
 import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupMemberService } from '../group-member/group-member.service';
+import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 
 describe('EventService', () => {
   let service: EventService;
@@ -126,6 +127,10 @@ describe('EventService', () => {
               { id: 2, name: 'Category 2' },
             ]),
           },
+        },
+        {
+          provide: FilesS3PresignedService,
+          useValue: {},
         },
       ],
     }).compile();

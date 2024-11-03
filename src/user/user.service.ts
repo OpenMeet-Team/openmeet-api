@@ -11,11 +11,9 @@ import { NullableType } from '../utils/types/nullable.type';
 import { FilterUserDto, SortUserDto } from './dto/query-user.dto';
 import bcrypt from 'bcryptjs';
 import { AuthProvidersEnum } from '../auth/auth-providers.enum';
-import { FilesService } from '../file/file.service';
 import { RoleEnum } from '../role/role.enum';
 import { StatusEnum } from '../status/status.enum';
 import { IPaginationOptions } from '../utils/types/pagination-options';
-import { DeepPartial } from '../utils/types/deep-partial.type';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import { User } from './domain/user';
@@ -25,6 +23,7 @@ import { SubCategoryService } from '../sub-category/sub-category.service';
 import { UserPermissionEntity } from './infrastructure/persistence/relational/entities/user-permission.entity';
 import { RoleService } from '../role/role.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UserService {
@@ -33,11 +32,11 @@ export class UserService {
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
-    private readonly filesService: FilesService,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly subCategoryService: SubCategoryService,
     private readonly roleService: RoleService,
     private eventEmitter: EventEmitter2,
+    private readonly fileService: FilesS3PresignedService,
   ) {}
 
   async getTenantSpecificRepository() {
@@ -109,7 +108,7 @@ export class UserService {
     }
 
     if (clonedPayload.photo?.id) {
-      const fileObject = await this.filesService.findById(
+      const fileObject = await this.fileService.findById(
         clonedPayload.photo.id,
       );
       if (!fileObject) {
@@ -238,10 +237,7 @@ export class UserService {
     });
   }
 
-  async update(
-    id: User['id'],
-    payload: DeepPartial<User>,
-  ): Promise<User | null> {
+  async update(id: User['id'], payload: any): Promise<User | null> {
     await this.getTenantSpecificRepository();
 
     const clonedPayload = { ...payload };
@@ -267,10 +263,16 @@ export class UserService {
       }
     }
 
-    if (clonedPayload.photo?.id) {
-      const fileObject = await this.filesService.findById(
+    if (clonedPayload.photo?.id === 0) {
+      if (clonedPayload.photo) {
+        await this.fileService.delete(clonedPayload.photo.id);
+        clonedPayload.photo = null;
+      }
+    } else if (clonedPayload.photo?.id) {
+      const fileObject = await this.fileService.findById(
         clonedPayload.photo.id,
       );
+
       if (!fileObject) {
         throw new UnprocessableEntityException({
           status: HttpStatus.UNPROCESSABLE_ENTITY,
@@ -279,6 +281,7 @@ export class UserService {
           },
         });
       }
+
       clonedPayload.photo = fileObject;
     }
 

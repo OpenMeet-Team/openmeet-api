@@ -1,6 +1,6 @@
 import { Module, Scope } from '@nestjs/common';
-import { UsersModule } from './user/user.module';
-import { FilesModule } from './file/file.module';
+import { UserModule } from './user/user.module';
+import { FileModule } from './file/file.module';
 import { AuthModule } from './auth/auth.module';
 import databaseConfig from './database/config/database.config';
 import authConfig from './auth/config/auth.config';
@@ -25,7 +25,7 @@ import { SessionModule } from './session/session.module';
 import { MailerModule } from './mailer/mailer.module';
 import { TenantConnectionService } from './tenant/tenant.service';
 import { TenantModule } from './tenant/tenant.module';
-import { EventsModule } from './event/event.module';
+import { EventModule } from './event/event.module';
 import { APP_GUARD } from '@nestjs/core';
 import { TenantGuard } from './tenant/tenant.guard';
 import { CategoryModule } from './category/category.module';
@@ -91,8 +91,8 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     }),
     EventEmitterModule.forRoot(),
     PrometheusModule.register(),
-    UsersModule,
-    FilesModule,
+    UserModule,
+    FileModule,
     AuthModule,
     AuthFacebookModule,
     AuthGoogleModule,
@@ -101,7 +101,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     MailerModule,
     HomeModule,
     TenantModule,
-    EventsModule,
+    EventModule,
     CategoryModule,
     GroupModule,
     SubCategoryModule,

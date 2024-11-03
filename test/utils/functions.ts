@@ -60,7 +60,7 @@ export async function createGroupsAndEvents(
     location: 'Virtual',
     locationOnline: 'https://example.com/meeting',
     categories: [1],
-    image: 'https://example.com/event-image.jpg',
+    // image: { id: 1 } as FileEntity,
     lat: 0,
     lon: 0,
     status: Status.Published,

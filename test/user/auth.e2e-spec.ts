@@ -68,7 +68,7 @@ describe('Auth Module', () => {
     });
 
     describe.skip('Confirm email', () => {
-      it('should successfully: /api/v1/auth/email/confirm (POST)', async () => {
+      it.skip('should successfully: /api/v1/auth/email/confirm (POST)', async () => {
         const response = await serverEmail.get('/email');
 
         const hash = response.body

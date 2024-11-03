@@ -13,11 +13,15 @@ import multerS3 from 'multer-s3';
 import { FilesS3PresignedService } from './file.service';
 import { RelationalFilePersistenceModule } from '../../persistence/relational/relational-persistence.module';
 import { AllConfigType } from '../../../../config/config.type';
+import { TenantConnectionService } from '../../../../tenant/tenant.service';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { FileEntity } from '../../persistence/relational/entities/file.entity';
 
 const infrastructurePersistenceModule = RelationalFilePersistenceModule;
 
 @Module({
   imports: [
+    TypeOrmModule.forFeature([FileEntity]),
     infrastructurePersistenceModule,
     MulterModule.registerAsync({
       imports: [ConfigModule],
@@ -74,7 +78,12 @@ const infrastructurePersistenceModule = RelationalFilePersistenceModule;
     }),
   ],
   controllers: [FilesS3PresignedController],
-  providers: [ConfigModule, ConfigService, FilesS3PresignedService],
+  providers: [
+    ConfigModule,
+    ConfigService,
+    FilesS3PresignedService,
+    TenantConnectionService,
+  ],
   exports: [FilesS3PresignedService],
 })
 export class FilesS3PresignedModule {}
