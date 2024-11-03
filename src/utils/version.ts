@@ -11,7 +11,6 @@ export function getBuildInfo(): BuildInfo {
     const gitCommitHash = process.env.GIT_REVISION || '';
     const gitBranch = process.env.GIT_BRANCH || '';
     const packageJsonB64 = process.env.PACKAGE_JSON_B64 || '';
-    console.log('packageJsonB64', packageJsonB64);
 
     const packageJson = JSON.parse(
       Buffer.from(packageJsonB64, 'base64').toString(),
