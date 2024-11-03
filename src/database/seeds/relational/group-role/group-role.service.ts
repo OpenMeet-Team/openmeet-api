@@ -32,18 +32,27 @@ export class GroupRoleSeedService {
       'MANAGE_EVENTS',
       'MANAGE_DISCUSSIONS',
       'MANAGE_REPORTS',
-      // 'MANAGE_TICKETS',
+      'MANAGE_BILLING',
     ]);
     await this.createGroupRoleIfNotExists('admin', [
-      'EDIT_GROUP',
-      'MANAGE_ROLES',
+      'MANAGE_GROUP',
+      'MANAGE_MEMBERS',
+      'MANAGE_EVENTS',
+      'MANAGE_DISCUSSIONS',
+      'MANAGE_REPORTS',
+      'MANAGE_BILLING',
     ]);
     await this.createGroupRoleIfNotExists('guest', []);
-    await this.createGroupRoleIfNotExists('member', ['READ_GROUP']);
+    await this.createGroupRoleIfNotExists('member', [
+      'MESSAGE_DISCUSSION',
+      'MESSAGE_MEMBER',
+      'SEE_MEMBERS',
+      'SEE_EVENTS',
+      'SEE_DISCUSSIONS',
+    ]);
     await this.createGroupRoleIfNotExists('moderator', [
-      'READ_GROUP',
-      'UPDATE_GROUP',
-      'DELETE_GROUP',
+      'MANAGE_MEMBERS',
+      'MANAGE_DISCUSSIONS',
     ]);
   }
 
