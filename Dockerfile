@@ -34,6 +34,18 @@ COPY --from=dependencies /usr/src/app/node_modules ./node_modules
 # Copy build files from build stage
 COPY --from=build /usr/src/app/dist ./dist
 
+ARG GIT_REVISION
+RUN echo "Git revision: $GIT_REVISION"
+ENV GIT_REVISION=$GIT_REVISION
+
+ARG GIT_BRANCH
+RUN echo "Git branch: $GIT_BRANCH"
+ENV GIT_BRANCH=$GIT_BRANCH
+
+ARG PACKAGE_JSON_B64
+RUN echo "Package.json: $PACKAGE_JSON_B64"
+ENV PACKAGE_JSON_B64=$PACKAGE_JSON_B64
+
 # Expose port
 EXPOSE 3000
 
