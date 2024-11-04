@@ -30,7 +30,7 @@ import { QueryUserDto } from './dto/query-user.dto';
 import { User } from './domain/user';
 import { UserService } from './user.service';
 import { infinityPagination } from '../utils/infinity-pagination';
-import { Public } from 'src/auth/decorators/public.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 // @ApiBearerAuth()

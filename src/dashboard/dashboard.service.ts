@@ -59,7 +59,7 @@ export class DashboardService {
     }
   }
 
-  async getMyGroups(userId: string): Promise<GroupEntity[]> {
+  async getMyGroups(userId: number): Promise<GroupEntity[]> {
     try {
       const groupsByMember = await this.groupService.getGroupsByMember(userId);
 

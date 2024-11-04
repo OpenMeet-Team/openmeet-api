@@ -1,4 +1,4 @@
-import { Visibility, Status } from 'src/core/constants/constant';
+import { Visibility, Status } from '../../../../core/constants/constant';
 
 export const groupSeedData = [
   {

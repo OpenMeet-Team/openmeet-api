@@ -8,7 +8,18 @@ import {
   mockGroupMembers,
   mockUser,
   mockEvents,
+  mockGroupService,
+  mockGroupMemberService,
+  mockGroupMember,
+  mockEventService,
+  mockRepository,
 } from '../test/mocks';
+import { GroupMemberService } from '../group-member/group-member.service';
+import { CreateGroupDto } from './dto/create-group.dto';
+import { UpdateGroupDto } from './dto/update-group.dto';
+import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
+import { EventService } from '../event/event.service';
+import { Repository } from 'typeorm';
 
 describe('GroupController', () => {
   let controller: GroupController;
@@ -20,12 +31,19 @@ describe('GroupController', () => {
       providers: [
         {
           provide: GroupService,
-          useValue: {
-            getRecommendedEvents: jest.fn(),
-            findGroupDetails: jest.fn(),
-            findGroupDetailsMembers: jest.fn(),
-            findGroupDetailsEvents: jest.fn(),
-          },
+          useValue: mockGroupService,
+        },
+        {
+          provide: GroupMemberService,
+          useValue: mockGroupMemberService,
+        },
+        {
+          provide: EventService,
+          useValue: mockEventService,
+        },
+        {
+          provide: Repository,
+          useValue: mockRepository,
         },
       ],
     }).compile();
@@ -38,43 +56,107 @@ describe('GroupController', () => {
     expect(controller).toBeDefined();
   });
 
-  describe('findGroupDetails', () => {
-    it('should return group with details', async () => {
-      jest.spyOn(groupService, 'findGroupDetails').mockResolvedValue(mockGroup);
-
-      const result = await controller.findGroupDetails(1, mockUser);
-
+  describe('create', () => {
+    it('should create a group', async () => {
+      const result = await controller.create(
+        { ...mockGroup, image: undefined, categories: [] } as CreateGroupDto,
+        mockUser,
+      );
       expect(result).toEqual(mockGroup);
-      expect(groupService.findGroupDetails).toHaveBeenCalled();
     });
   });
 
-  describe('findGroupDetailsMembers', () => {
-    it('should return group members', async () => {
-      jest
-        .spyOn(groupService, 'findGroupDetailsMembers')
-        .mockResolvedValue(mockGroupMembers);
-
-      const result = await controller.findGroupDetailsMembers(1);
-
-      expect(result).toEqual(mockGroupMembers);
-      expect(groupService.findGroupDetailsMembers).toHaveBeenCalled();
+  describe('editGroup', () => {
+    it('should edit a group', async () => {
+      const result = await controller.editGroup(1);
+      expect(result).toEqual(mockGroup);
     });
   });
 
-  describe('findGroupDetailsEvents', () => {
-    it('should return group events', async () => {
-      jest
-        .spyOn(groupService, 'findGroupDetailsEvents')
-        .mockResolvedValue(mockEvents);
+  describe('showGroup', () => {
+    it('should show a group', async () => {
+      const result = await controller.showGroup(1);
+      expect(result).toEqual(mockGroup);
+    });
+  });
 
-      const result = await controller.findGroupDetailsEvents(1);
+  describe('updateGroup', () => {
+    it('should update a group', async () => {
+      const result = await controller.updateGroup(1, {
+        ...mockGroup,
+        image: undefined,
+        categories: [],
+      } as UpdateGroupDto);
+      expect(result).toEqual(mockGroup);
+    });
+  });
 
+  describe('removeGroup', () => {
+    it('should remove a group', async () => {
+      const result = await controller.removeGroup(mockGroup.id);
+      expect(result).toEqual(mockGroup);
+    });
+  });
+
+  describe('showGroupEvents', () => {
+    it('should show group events', async () => {
+      const result = await controller.showGroupEvents(1);
       expect(result).toEqual(mockEvents);
-      expect(groupService.findGroupDetailsEvents).toHaveBeenCalled();
     });
   });
 
+  describe('showGroupMembers', () => {
+    it('should show group members', async () => {
+      const result = await controller.showGroupMembers(1);
+      expect(result).toEqual(mockGroupMembers);
+    });
+  });
+
+  describe('joinGroup', () => {
+    it('should join a group', async () => {
+      const result = await controller.joinGroup(mockUser, 1);
+      expect(result).toEqual(mockGroupMember);
+    });
+  });
+
+  describe('leaveGroup', () => {
+    it('should leave a group', async () => {
+      const result = await controller.leaveGroup(mockUser, 1);
+      expect(result).toEqual(mockGroupMember);
+    });
+  });
+
+  describe('removeGroupMember', () => {
+    it('should remove a group member', async () => {
+      const result = await controller.removeGroupMember(1, 1);
+      expect(result).toEqual(mockGroupMember);
+    });
+  });
+
+  describe('updateGroupMemberRole', () => {
+    it('should update a group member role', async () => {
+      const result = await controller.updateGroupMemberRole(1, 1, {
+        name: 'admin',
+      } as UpdateGroupMemberRoleDto);
+      expect(result).toEqual(mockGroupMember);
+    });
+  });
+
+  describe('approveMember', () => {
+    it('should approve a group member', async () => {
+      const result = await controller.approveMember(1, 1);
+      expect(result).toEqual(mockGroupMember);
+    });
+  });
+
+  describe('rejectMember', () => {
+    it('should reject a group member', async () => {
+      const result = await controller.rejectMember(1, 1);
+      expect(result).toEqual(mockGroupMember);
+    });
+  });
+
+  // TODO refactor this to use mocks
   describe('getRecommendedEvents', () => {
     it('should return 3-5 recommended events', async () => {
       const mockEvents = [

@@ -30,9 +30,8 @@ import { Public } from '../auth/decorators/public.decorator';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
 import { PaginationDto } from '../utils/dto/pagination.dto';
-import { HttpException, HttpStatus } from '@nestjs/common';
-import { UserEntity } from 'src/user/infrastructure/persistence/relational/entities/user.entity';
-import { EventAttendeesEntity } from 'src/event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
+import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 @ApiTags('Events')
 @Controller('events')
 @ApiBearerAuth()
@@ -124,22 +123,7 @@ export class EventController {
   @ApiOperation({
     summary: 'Get recommended events based on an existing event',
   })
-  async getRecommendedEvents(
-    @Param('id') id: number,
-    @Query('minEvents') minEvents?,
-    @Query('maxEvents') maxEvents?,
-  ): Promise<EventEntity[]> {
-    // default values for min and max
-    const min = minEvents ? parseInt(minEvents.toString(), 10) : 0;
-    const max = maxEvents ? parseInt(maxEvents.toString(), 10) : 5;
-
-    try {
-      const recommendedEvents =
-        await this.eventService.getRecommendedEventsByEventId(+id, min, max);
-
-      return recommendedEvents;
-    } catch (error) {
-      throw new HttpException(error.message, HttpStatus.NOT_FOUND);
-    }
+  async getRecommendedEvents(@Param('id') id: number): Promise<EventEntity[]> {
+    return await this.eventService.getRecommendedEventsByEventId(+id);
   }
 }

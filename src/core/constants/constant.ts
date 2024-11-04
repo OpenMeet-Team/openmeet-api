@@ -11,8 +11,10 @@ export enum Status {
 
 export enum GroupRole {
   Owner = 'owner',
+  Admin = 'admin',
   Moderator = 'moderator',
   Member = 'member',
+  Guest = 'guest',
 }
 
 export enum Visibility {
