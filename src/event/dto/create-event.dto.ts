@@ -10,6 +10,7 @@ import {
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Status, Visibility } from '../../core/constants/constant';
+import { FileEntity } from '../../file/infrastructure/persistence/relational/entities/file.entity';
 
 export class CreateEventDto {
   @ApiProperty({
@@ -19,19 +20,19 @@ export class CreateEventDto {
   @IsString()
   name: string;
 
+  @ApiProperty({
+    description: 'The image of the event',
+    type: () => FileEntity,
+  })
+  @IsOptional()
+  image?: FileEntity;
+
   // @ApiProperty({
   //   description: 'The slug of the group',
   // })
   // @IsString()
   // @IsOptional()
   // slug?: string;
-
-  @ApiPropertyOptional({
-    description: 'URL of the event image',
-  })
-  @IsOptional()
-  @IsString()
-  image?: string;
 
   @ApiProperty({
     description: 'The description of the event',

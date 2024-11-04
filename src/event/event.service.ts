@@ -4,6 +4,8 @@ import {
   Inject,
   Scope,
   InternalServerErrorException,
+  UnprocessableEntityException,
+  HttpStatus,
 } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { CommentDto, CreateEventDto } from './dto/create-event.dto';
@@ -26,6 +28,9 @@ import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
 import zulipInit from 'zulip-js';
+import { GroupMemberService } from '../group-member/group-member.service';
+import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
+
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
   private eventRepository: Repository<EventEntity>;
@@ -36,6 +41,8 @@ export class EventService {
     private readonly categoryService: CategoryService,
     private readonly eventAttendeeService: EventAttendeeService,
     private eventEmitter: EventEmitter2,
+    private readonly groupMemberService: GroupMemberService,
+    private readonly fileService: FilesS3PresignedService,
   ) {
     void this.initializeRepository();
   }
@@ -84,7 +91,7 @@ export class EventService {
       group,
       categories,
     };
-    const event = this.eventRepository.create(mappedDto);
+    const event = this.eventRepository.create(mappedDto as EventEntity);
     const createdEvent = await this.eventRepository.save(event);
 
     const eventAttendeeDto = {
@@ -292,6 +299,49 @@ export class EventService {
     return event;
   }
 
+  async findEventDetails(id: number, userId: number): Promise<EventEntity> {
+    await this.getTenantSpecificEventRepository();
+    const event = await this.eventRepository.findOne({
+      where: { id },
+      relations: [
+        'user',
+        'attendees',
+        'group',
+        'group.groupMembers',
+        'categories',
+      ],
+    });
+
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${id} not found`);
+    }
+
+    event.attendees = event.attendees.slice(0, 5);
+    event.categories = event.categories.slice(0, 5);
+
+    if (event.group) {
+      event.groupMember = await this.groupMemberService.findGroupMemberByUserId(
+        event.group.id,
+        userId,
+      );
+    }
+
+    if (userId) {
+      event.attendee =
+        await this.eventAttendeeService.findEventAttendeeByUserId(
+          event.id,
+          userId,
+        );
+    }
+
+    return event;
+  }
+
+  async findGroupDetailsAttendees(eventId: number): Promise<any> {
+    await this.getTenantSpecificEventRepository();
+    return this.eventAttendeeService.findEventAttendees(eventId);
+  }
+
   async findRandom(): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
 
@@ -447,8 +497,6 @@ export class EventService {
         .limit(maxEvents)
         .getMany();
 
-      console.log('🚀 ~ recommendedEvents:', recommendedEvents);
-
       if (recommendedEvents.length < minEvents) {
         throw new NotFoundException(
           `Not enough recommended events found for group ${groupId}. Found ${recommendedEvents.length}, expected at least ${minEvents}.`,
@@ -541,6 +589,27 @@ export class EventService {
       );
       mappedDto.categories = categories;
     }
+
+    if (mappedDto.image?.id === 0) {
+      if (mappedDto.image) {
+        await this.fileService.delete(mappedDto.image.id);
+        mappedDto.image = null;
+      }
+    } else if (mappedDto.image?.id) {
+      const fileObject = await this.fileService.findById(mappedDto.image.id);
+
+      if (!fileObject) {
+        throw new UnprocessableEntityException({
+          status: HttpStatus.UNPROCESSABLE_ENTITY,
+          errors: {
+            photo: 'imageNotExists',
+          },
+        });
+      }
+
+      mappedDto.image = fileObject;
+    }
+
     const updatedEvent = this.eventRepository.merge(event, mappedDto);
     return this.eventRepository.save(updatedEvent);
   }
@@ -550,6 +619,12 @@ export class EventService {
     const event = await this.findOne(id);
     await this.eventRepository.remove(event);
   }
+
+  async deleteEventsByGroup(groupId: number): Promise<void> {
+    await this.getTenantSpecificEventRepository();
+    await this.eventRepository.delete({ group: { id: groupId } });
+  }
+
   async getEventsByCreator(userId: number) {
     await this.getTenantSpecificEventRepository();
     const events =
@@ -565,10 +640,14 @@ export class EventService {
 
   async getEventsByAttendee(userId: number) {
     await this.getTenantSpecificEventRepository();
-    return this.eventRepository.find({
+    const events = await this.eventRepository.find({
       where: { attendees: { userId } },
-      relations: ['user'],
+      relations: ['user', 'attendees'],
     });
+    return events.map((event) => ({
+      ...event,
+      attendeesCount: event.attendees ? event.attendees.length : 0,
+    }));
   }
 
   async getHomePageFeaturedEvents(): Promise<EventEntity[]> {
@@ -602,8 +681,8 @@ export class EventService {
     return this.eventRepository.findOne({ where: { user: { id: userId } } });
   }
 
-  async findGroupDetailsEvents(groupId: number) {
+  async findEventDetailsAttendees(eventId: number) {
     await this.getTenantSpecificEventRepository();
-    return this.eventRepository.find({ where: { group: { id: groupId } } });
+    return this.eventAttendeeService.findEventAttendees(eventId);
   }
 }

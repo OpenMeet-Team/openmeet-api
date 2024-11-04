@@ -21,10 +21,16 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `CREATE TABLE "${schema}"."statuses" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" integer NOT NULL, "name" character varying NOT NULL, CONSTRAINT "PK_2fd3770acdb67736f1a3e3d5399" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."files" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" integer, "path" character varying NOT NULL, CONSTRAINT "PK_6c16b9093a142e0e7613b04a3d9" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."files" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "path" character varying NOT NULL, "fileName" character varying NOT NULL, "fileSize" integer NOT NULL, "mimeType" character varying NOT NULL, CONSTRAINT "PK_6c16b9093a142e0e7613b04a3d9" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."eventAttendees" ("eventId" integer NOT NULL, "userId" integer NOT NULL, "rsvpStatus" text NOT NULL, "isHost" boolean NOT NULL DEFAULT false, CONSTRAINT "PK_e47b1fedacf94185d9310d135e0" PRIMARY KEY ("eventId", "userId"))`,
+      `CREATE TYPE "${schema}"."eventAttendees_status_enum" AS ENUM('invited', 'confirmed', 'attended', 'cancelled', 'rejected')`,
+    );
+    await queryRunner.query(
+      `CREATE TYPE "${schema}"."eventAttendees_role_enum" AS ENUM('participant', 'host', 'speaker', 'moderator', 'guest')`,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "${schema}"."eventAttendees" ("eventId" integer NOT NULL, "userId" integer NOT NULL, "role" "${schema}"."eventAttendees_role_enum", "status" "${schema}"."eventAttendees_status_enum", CONSTRAINT "PK_e47b1fedacf94185d9310d135e0" PRIMARY KEY ("eventId", "userId"))`,
     );
     await queryRunner.query(
       `CREATE TYPE "${schema}"."subcategories_type_enum" AS ENUM('EVENT', 'GROUP')`,
@@ -39,6 +45,9 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `CREATE TABLE "${schema}"."groupPermissions" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, CONSTRAINT "PK_e501cb9db2ccf705c2ebf31d230" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
+      `CREATE TYPE "${schema}"."groups_visibility_enum" AS ENUM('public', 'authenticated', 'private')`,
+    );
+    await queryRunner.query(
       `CREATE TABLE "${schema}"."groupRoles" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, CONSTRAINT "PK_b31b0a0a1d4bbfa5f1a01509c61" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
@@ -48,7 +57,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `CREATE TYPE "${schema}"."groups_status_enum" AS ENUM('draft', 'pending', 'published')`,
     );
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."groups" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, "slug" character varying(255) NOT NULL, "description" text NOT NULL, "approved" boolean NOT NULL DEFAULT false, "status" "${schema}"."groups_status_enum", CONSTRAINT "PK_659d1483316afb28afd3a90646e" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."groups" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, "slug" character varying(255) NOT NULL, "location" character varying(255), "lat" double precision, "lon" double precision, "description" text NOT NULL, "createdById" integer, "imageId" integer, "status" "${schema}"."groups_status_enum", "visibility" "${schema}"."groups_visibility_enum", CONSTRAINT "PK_659d1483316afb28afd3a90646e" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
       `CREATE TABLE "${schema}"."categories" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, "slug" character varying(255), CONSTRAINT "PK_24dbc6126a28ff948da33e97d3b" PRIMARY KEY ("id"))`,
@@ -57,10 +66,13 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `CREATE TYPE "${schema}"."events_status_enum" AS ENUM('draft', 'pending', 'published')`,
     );
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."events" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, "image" character varying(255), "type" character varying(255) NOT NULL, "locationOnline" character varying(255), "description" text NOT NULL, "startDate" TIMESTAMP NOT NULL, "endDate" TIMESTAMP, "maxAttendees" integer, "location" character varying(255), "lat" double precision, "lon" double precision, "status" "${schema}"."events_status_enum", "userId" integer, "groupId" integer, CONSTRAINT "PK_40731c7151fe4be3116e45ddf73" PRIMARY KEY ("id"))`,
+      `CREATE TYPE "${schema}"."events_visibility_enum" AS ENUM('public', 'authenticated', 'private')`,
     );
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."users" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "email" character varying, "password" character varying, "provider" character varying NOT NULL DEFAULT 'email', "socialId" character varying, "firstName" character varying, "lastName" character varying, "deletedAt" TIMESTAMP, "photoId" integer, "statusId" integer, "roleId" integer, CONSTRAINT "UQ_97672ac88f789774dd47f7c8be3" UNIQUE ("email"), CONSTRAINT "REL_f856a4818b32c69dbc8811f3d2" UNIQUE ("photoId"), CONSTRAINT "PK_a3ffb1c0c8416b9fc6f907b7433" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."events" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, "type" character varying(255) NOT NULL, "imageId" integer, "locationOnline" character varying(255), "slug" character varying(255) NOT NULL, "description" text NOT NULL, "visibility" "${schema}"."events_visibility_enum", "startDate" TIMESTAMP NOT NULL, "endDate" TIMESTAMP, "maxAttendees" integer, "location" character varying(255), "lat" double precision, "lon" double precision, "status" "${schema}"."events_status_enum", "userId" integer, "groupId" integer, CONSTRAINT "PK_40731c7151fe4be3116e45ddf73" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "${schema}"."users" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "email" character varying, "password" character varying, "provider" character varying NOT NULL DEFAULT 'email', "bio" text, "location" character varying(255), "lat" double precision, "lon" double precision, "socialId" character varying, "firstName" character varying, "lastName" character varying, "deletedAt" TIMESTAMP, "photoId" integer, "statusId" integer, "roleId" integer, CONSTRAINT "UQ_97672ac88f789774dd47f7c8be3" UNIQUE ("email"), CONSTRAINT "REL_f856a4818b32c69dbc8811f3d2" UNIQUE ("photoId"), CONSTRAINT "PK_a3ffb1c0c8416b9fc6f907b7433" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
       `CREATE INDEX "IDX_2025eaefc4e1b443c84f6ca9b2" ON "${schema}"."users" ("socialId") `,
@@ -156,12 +168,20 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `ALTER TABLE "${schema}"."groupMembers" ADD CONSTRAINT "FK_08cacea15f2aef324f78fddebff" FOREIGN KEY ("groupId") REFERENCES "${schema}"."groups"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
     );
     await queryRunner.query(
+      `ALTER TABLE "${schema}"."groups" ADD CONSTRAINT "FK_e0522c4be8bab20520896919da0" FOREIGN KEY ("createdById") REFERENCES "${schema}"."users"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "${schema}"."groups" ADD CONSTRAINT "FK_f856a4818b32c69dbc8811f3d4s" FOREIGN KEY ("imageId") REFERENCES "${schema}"."files"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
+    );
+    await queryRunner.query(
       `ALTER TABLE "${schema}"."events" ADD CONSTRAINT "FK_9929fa8516afa13f87b41abb263" FOREIGN KEY ("userId") REFERENCES "${schema}"."users"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
     );
     await queryRunner.query(
       `ALTER TABLE "${schema}"."events" ADD CONSTRAINT "FK_73672459b90f4b48f43d72681cc" FOREIGN KEY ("groupId") REFERENCES "${schema}"."groups"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
     );
-
+    await queryRunner.query(
+      `ALTER TABLE "${schema}"."events" ADD CONSTRAINT "FK_f856a4818b32c69dbc8811f3d4e" FOREIGN KEY ("imageId") REFERENCES "${schema}"."files"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
+    );
     await queryRunner.query(
       `ALTER TABLE "${schema}"."users" ADD CONSTRAINT "FK_f856a4818b32c69dbc8811f3d2c" FOREIGN KEY ("photoId") REFERENCES "${schema}"."files"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
     );
@@ -190,13 +210,13 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `ALTER TABLE "${schema}"."groupCategories" ADD CONSTRAINT "FK_464b2f0143de9ea9725a24956d2" FOREIGN KEY ("groupsId") REFERENCES "${schema}"."groups"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "${schema}"."groupCategories" ADD CONSTRAINT "FK_733b91e79dc09e35d5551757683" FOREIGN KEY ("categoriesId") REFERENCES "${schema}"."categories"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
+      `ALTER TABLE "${schema}"."groupCategories" ADD CONSTRAINT "FK_733b91e79dc09e35d5551757683" FOREIGN KEY ("categoriesId") REFERENCES "${schema}"."categories"("id") ON DELETE CASCADE ON UPDATE NO ACTION`,
     );
     await queryRunner.query(
       `ALTER TABLE "${schema}"."eventCategories" ADD CONSTRAINT "FK_5f9d73047c3849c5b1495a80113" FOREIGN KEY ("categoriesId") REFERENCES "${schema}"."categories"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "${schema}"."eventCategories" ADD CONSTRAINT "FK_3e703b5162d4195681549dfc3e4" FOREIGN KEY ("eventsId") REFERENCES "${schema}"."events"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
+      `ALTER TABLE "${schema}"."eventCategories" ADD CONSTRAINT "FK_3e703b5162d4195681549dfc3e4" FOREIGN KEY ("eventsId") REFERENCES "${schema}"."events"("id") ON DELETE CASCADE ON UPDATE NO ACTION`,
     );
     await queryRunner.query(
       `ALTER TABLE "${schema}"."userInterests" ADD CONSTRAINT "FK_6e00deadfd5a3570da93150fd6b" FOREIGN KEY ("usersId") REFERENCES "${schema}"."users"("id") ON DELETE CASCADE ON UPDATE CASCADE`,

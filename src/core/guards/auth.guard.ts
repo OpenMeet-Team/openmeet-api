@@ -1,22 +1,54 @@
-import { ExecutionContext, Injectable } from '@nestjs/common';
+import {
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { AuthGuard as PassportAuthGaurd } from '@nestjs/passport';
+import { AuthGuard as PassportAuthGuard } from '@nestjs/passport';
 
 @Injectable()
-export class JWTAuthGuard extends PassportAuthGaurd('jwt') {
+export class JWTAuthGuard extends PassportAuthGuard('jwt') {
   constructor(private readonly reflector: Reflector) {
     super();
   }
 
-  canActivate(context: ExecutionContext) {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.get<boolean>(
       'isPublic',
       context.getHandler(),
     );
 
-    if (isPublic) {
-      return true;
+    try {
+      await super.canActivate(context);
+    } catch (error) {
+      if (isPublic) {
+        return true;
+      }
+
+      throw error;
     }
-    return super.canActivate(context);
+
+    return true;
+  }
+
+  handleRequest<TUser = any>(
+    err: any,
+    user: any,
+    info: any,
+    context: ExecutionContext,
+  ): TUser {
+    const request = context.switchToHttp().getRequest();
+    const isPublic = this.reflector.get<boolean>(
+      'isPublic',
+      context.getHandler(),
+    );
+
+    request.user = user || null;
+
+    if (!isPublic && !user) {
+      throw err || new UnauthorizedException();
+    }
+
+    return user;
   }
 }

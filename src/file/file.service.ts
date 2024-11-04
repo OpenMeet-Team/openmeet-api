@@ -5,7 +5,7 @@ import { FileType } from './domain/file';
 import { NullableType } from '../utils/types/nullable.type';
 
 @Injectable()
-export class FilesService {
+export class FileService {
   constructor(private readonly fileRepository: FileRepository) {}
 
   findById(id: FileType['id']): Promise<NullableType<FileType>> {

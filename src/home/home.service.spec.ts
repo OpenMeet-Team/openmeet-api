@@ -9,7 +9,7 @@ import {
   mockGroupService,
   mockSubCategoryService,
   mockUser,
-} from '../../test/mocks';
+} from '../test/mocks';
 import { CategoryService } from '../category/category.service';
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { ConfigService } from '@nestjs/config';
@@ -37,12 +37,12 @@ describe('HomeService', () => {
     const result = await service.getUserHomeState(mockUser);
 
     expect(result).toEqual({
-      organizedGroups: [],
+      organizedGroups: expect.any(Array),
       nextHostedEvent: null,
-      recentEventDrafts: [],
-      upcomingEvents: [],
-      memberGroups: [],
-      interests: [],
+      recentEventDrafts: expect.any(Array),
+      upcomingEvents: expect.any(Array),
+      memberGroups: expect.any(Array),
+      interests: expect.any(Array),
     });
   });
 

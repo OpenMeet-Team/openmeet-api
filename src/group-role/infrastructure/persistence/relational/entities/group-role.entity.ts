@@ -19,7 +19,7 @@ export class GroupRoleEntity extends EntityRelationalHelper {
   name: string;
 
   @OneToMany(() => GroupMemberEntity, (groupUser) => groupUser.groupRole)
-  groupUsers: GroupMemberEntity[];
+  groupMembers: GroupMemberEntity[];
 
   @ManyToMany(
     () => GroupPermissionEntity,

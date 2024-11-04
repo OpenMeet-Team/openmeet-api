@@ -6,6 +6,7 @@ import {
   PrimaryGeneratedColumn,
   OneToMany,
   ManyToMany,
+  OneToOne,
 } from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
@@ -13,7 +14,14 @@ import { EventAttendeesEntity } from '../../../../../event-attendee/infrastructu
 import { CategoryEntity } from '../../../../../category/infrastructure/persistence/relational/entities/categories.entity';
 import { GroupEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group.entity';
 import { Expose } from 'class-transformer';
-import { Status, Visibility } from '../../../../../core/constants/constant';
+import {
+  Status,
+  Visibility,
+  EventType,
+} from '../../../../../core/constants/constant';
+import { GroupMemberEntity } from '../../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
+import { FileEntity } from '../../../../../file/infrastructure/persistence/relational/entities/file.entity';
+import { ApiProperty } from '@nestjs/swagger';
 
 @Entity({ name: 'events' })
 export class EventEntity extends EntityRelationalHelper {
@@ -26,11 +34,20 @@ export class EventEntity extends EntityRelationalHelper {
   @Column({ type: 'varchar', length: 255 })
   slug: string;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
-  image: string;
+  @ApiProperty({
+    type: () => FileEntity,
+  })
+  @OneToOne(() => FileEntity, {
+    eager: true,
+  })
+  @JoinColumn()
+  image?: FileEntity;
 
-  @Column({ type: 'varchar', length: 255 })
-  type: string;
+  @Column({
+    type: 'enum',
+    enum: EventType,
+  })
+  type: EventType;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   locationOnline: string;
@@ -84,9 +101,11 @@ export class EventEntity extends EntityRelationalHelper {
   @ManyToMany(() => CategoryEntity, (category) => category.events)
   categories: CategoryEntity[];
 
+  groupMember: GroupMemberEntity | null;
+  attendee: EventAttendeesEntity | null;
+
   @Expose()
   get attendeesCount(): number {
-    console.log('this.attendees: ', this.attendees);
     return this.attendees ? this.attendees.length : 0;
   }
 }

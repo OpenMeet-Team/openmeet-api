@@ -8,17 +8,23 @@ import { CategoryModule } from '../category/category.module';
 import { AuthModule } from '../auth/auth.module';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 import { ChannelCreatedListener } from './channel-created.listener';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { GroupMemberModule } from '../group-member/group-member.module';
+import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
+import { FileModule } from '../file/file.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([EventEntity]),
     TenantModule,
+    GroupMemberModule,
     CategoryModule,
     AuthModule,
     EventAttendeeModule,
+    FileModule,
   ],
   controllers: [EventController],
-  providers: [EventService, ChannelCreatedListener],
+  providers: [EventService, FilesS3PresignedService, ChannelCreatedListener, EventEmitter2],
   exports: [EventService],
 })
-export class EventsModule {}
+export class EventModule {}

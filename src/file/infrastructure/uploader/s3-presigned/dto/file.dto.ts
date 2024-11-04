@@ -9,4 +9,8 @@ export class FileUploadDto {
   @ApiProperty({ example: 138723 })
   @IsNumber()
   fileSize: number;
+
+  @ApiProperty({ example: 'image/jpeg' })
+  @IsString()
+  mimeType: string;
 }
