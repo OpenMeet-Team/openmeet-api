@@ -21,6 +21,7 @@ import {
   Status,
   Visibility,
 } from '../core/constants/constant';
+import { GroupRole, Status, Visibility } from '../core/constants/constant';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { paginate } from '../utils/generic-pagination';

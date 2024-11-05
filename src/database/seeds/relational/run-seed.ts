@@ -9,13 +9,16 @@ import { CategorySeedService } from './category/category-seed.service';
 import { PermissionSeedService } from './permission/permission-seed.service';
 import { UserPermissionSeedService } from './user-permission/user-permission-seed.service';
 import { GroupRoleSeedService } from './group-role/group-role.service';
-// import { InterestSeedService } from './interest/interest-seed.service';
-
-const tenantIds = ['', '1']; // List of tenant IDs
+import { fetchTenants, Tenant } from '../../../utils/tenant-config';
 
 const runSeed = async () => {
+  const tenants: Tenant[] = fetchTenants();
+  const tenantIds = tenants.map((t) => t.id);
+  console.log('Running seeds for tenants:', tenantIds);
+
   const app = await NestFactory.create(SeedModule);
   for (const tenantId of tenantIds) {
+    console.log('Running seeds for tenant:', tenantId);
     // // run
     await app.get(RoleSeedService).run(tenantId);
     await app.get(StatusSeedService).run(tenantId);

@@ -26,6 +26,7 @@ import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-pres
 import { mockUser } from '../test/mocks';
 import { DeleteResult, Repository } from 'typeorm';
 import { CategoryEntity } from 'src/category/infrastructure/persistence/relational/entities/categories.entity';
+import { Repository } from 'typeorm';
 
 describe('GroupService', () => {
   let service: GroupService;
@@ -154,6 +155,69 @@ describe('GroupService', () => {
         },
         mockUser.id,
       );
+      
+  describe.skip('getGroupMembers', () => {
+    it('should return group members', async () => {
+      const result = await service.getGroupMembers(mockUser.id, mockGroup.id);
+      expect(result).toEqual([mockGroupMember]);
+    });
+  });
+
+  describe.skip('getGroupMemberPermissions', () => {
+    it('should return group member permissions', async () => {
+      const result = await service.getGroupMemberPermissions(
+        mockUser.id,
+        mockGroup.id,
+      );
+      expect(result).toEqual([mockGroupMember]);
+    });
+  });
+
+  describe.skip('showGroup', () => {
+    it('should return group with details', async () => {
+      const result = await service.showGroup(mockGroup.id, mockUser.id);
+      expect(result).toEqual(mockGroup);
+    });
+  });
+
+  describe.skip('getGroupsByCreator', () => {
+    it('should return groups by creator', async () => {
+      const result = await service.getGroupsByCreator(mockUser.id);
+      expect(result).toEqual([mockGroup]);
+    });
+  });
+
+  describe.skip('getGroupsByMember', () => {
+    it('should return groups by member', async () => {
+      const result = await service.getGroupsByMember(mockUser.id);
+      expect(result).toEqual([mockGroup]);
+    });
+  });
+
+  describe.skip('create', () => {
+    it('should create a group', async () => {
+      const result = await service.create(
+        {
+          ...mockGroup,
+          categories: [mockCategory.id],
+          image: mockFile,
+        },
+        mockUser.id,
+      );
+      expect(result).toEqual(mockGroup);
+    });
+  });
+
+  describe.skip('findAll', () => {
+    it('should return all groups', async () => {
+      const result = await service.findAll(mockPagination, mockGroupsQuery);
+      expect(result).toEqual([mockGroup]);
+    });
+  });
+
+  describe.skip('editGroup', () => {
+    it('should edit a group', async () => {
+      const result = await service.editGroup(mockGroup.id);
       expect(result).toEqual(mockGroup);
     });
   });
@@ -183,6 +247,21 @@ describe('GroupService', () => {
         .spyOn(service['groupRepository'], 'findOne')
         .mockResolvedValue(mockGroup as GroupEntity);
       const result = await service.editGroup(mockGroup.id);
+
+  describe.skip('findOne', () => {
+    it('should return a group', async () => {
+      const result = await service.findOne(mockGroup.id);
+      expect(result).toEqual(mockGroup);
+    });
+  });
+
+  describe.skip('update', () => {
+    it('should update a group', async () => {
+      const result = await service.update(mockGroup.id, {
+        ...mockGroup,
+        categories: [mockCategory.id],
+        image: mockFile,
+      });
       expect(result).toEqual(mockGroup);
     });
   });
@@ -252,9 +331,21 @@ describe('GroupService', () => {
         .spyOn(service['groupRepository'], 'find')
         .mockResolvedValue([mockGroup]);
       const result = await service.getHomePageFeaturedGroups();
+      
+  describe.skip('remove', () => {
+    it('should remove a group', async () => {
+      const result = await service.remove(mockGroup.id);
+      expect(result).toEqual(undefined);
+    });
+  });
+
+  describe.skip('getHomePageFeaturedGroups', () => {
+    it('should return featured groups', async () => {
+      const result = await service.getHomePageFeaturedGroups();
       expect(result).toEqual([mockGroup]);
     });
   });
+
 
   describe('getHomePageUserCreatedGroups', () => {
     it('should return user created groups', async () => {
@@ -262,6 +353,13 @@ describe('GroupService', () => {
         .spyOn(service['groupRepository'], 'find')
         .mockResolvedValue([mockGroup]);
       const result = await service.getHomePageUserCreatedGroups(mockUser.id);
+
+      
+  describe.skip('getHomePageUserParticipatedGroups', () => {
+    it('should return user participated groups', async () => {
+      const result = await service.getHomePageUserParticipatedGroups(
+        mockUser.id,
+      );
       expect(result).toEqual([mockGroup]);
     });
   });
@@ -295,7 +393,13 @@ describe('GroupService', () => {
     });
   });
 
-  // TODO refactor this to use mocks
+  describe.skip('getTenantSpecificGroupRepository', () => {
+    it('should get the tenant specific group repository', async () => {
+      await service.getTenantSpecificGroupRepository();
+      expect(service['groupRepository']).toBeDefined();
+    });
+  });
+        // TODO refactor this to use mocks
   describe('getRecommendedEvents', () => {
     it('should return recommended events if enough are found', async () => {
       const minEvents = 3;

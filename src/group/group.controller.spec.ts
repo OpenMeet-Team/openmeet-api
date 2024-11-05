@@ -91,6 +91,13 @@ describe('GroupController', () => {
     });
   });
 
+  describe('showGroupEvents', () => {
+    it('should show group events', async () => {
+      const result = await controller.showGroupEvents(1);
+      expect(result).toEqual(mockEvents);
+    });
+  });
+
   describe('removeGroup', () => {
     it('should remove a group', async () => {
       const result = await controller.removeGroup(mockGroup.id);
