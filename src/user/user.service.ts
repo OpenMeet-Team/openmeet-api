@@ -22,6 +22,7 @@ import { UserEntity } from './infrastructure/persistence/relational/entities/use
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { UserPermissionEntity } from './infrastructure/persistence/relational/entities/user-permission.entity';
 import { RoleService } from '../role/role.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
@@ -34,6 +35,7 @@ export class UserService {
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly subCategoryService: SubCategoryService,
     private readonly roleService: RoleService,
+    private eventEmitter: EventEmitter2,
     private readonly fileService: FilesS3PresignedService,
   ) {}
 
@@ -151,6 +153,13 @@ export class UserService {
     const userCreated = await this.usersRepository.save(
       this.usersRepository.create(clonedPayload),
     );
+    const tenantId = this.request.tenantId;
+    const params = {
+      email: `${tenantId}_${clonedPayload.email}`,
+      password: createProfileDto.password,
+      full_name: `${clonedPayload.firstName} ${clonedPayload.lastName}`,
+    };
+    this.eventEmitter.emit('user.created', params);
 
     return userCreated;
   }
@@ -203,7 +212,7 @@ export class UserService {
     });
   }
 
-  async findByEmail(email: User['email']): Promise<NullableType<User>> {
+  async findByEmail(email: User['email']): Promise<NullableType<UserEntity>> {
     if (!email) return null;
 
     await this.getTenantSpecificRepository();

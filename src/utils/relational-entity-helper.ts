@@ -13,7 +13,14 @@ import { ulid } from 'ulid';
 export class EntityRelationalHelper extends BaseEntity {
   __entity?: string;
 
-  @Column({ type: String, nullable: true })
+  @Column({
+    type: String,
+    nullable: true,
+    transformer: {
+      to: (value: string) => value.toLowerCase(),
+      from: (value: string) => value,
+    },
+  })
   @Expose()
   shortId: string;
 
@@ -30,7 +37,7 @@ export class EntityRelationalHelper extends BaseEntity {
 
   @BeforeInsert()
   generateShortId() {
-    this.shortId = ulid();
+    this.shortId = ulid().toLowerCase();
   }
 
   toJSON() {

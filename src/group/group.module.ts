@@ -11,8 +11,10 @@ import { UserModule } from '../user/user.module';
 import { GroupMemberModule } from '../group-member/group-member.module';
 import { EventService } from '../event/event.service';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
+import { ZulipService } from '../zulip/zulip.service';
 
 @Module({
   imports: [
@@ -32,7 +34,9 @@ import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-pres
     TenantConnectionService,
     CategoryService,
     EventService,
+    EventEmitter2,
     FilesS3PresignedService,
+    ZulipService,
   ],
   exports: [GroupService],
 })
