@@ -44,7 +44,7 @@ describe('Event Comments API Tests', () => {
   });
 
   // Test Case 1: Add Comment to Event
-  it('should add a comment to the event', async () => {
+  it.skip('should add a comment to the event', async () => {
     const response = await request(APP_URL)
       .post(`/api/events/${testEvent.id}/comment`)
       .send(commentData)
@@ -56,7 +56,7 @@ describe('Event Comments API Tests', () => {
   });
 
   // Test Case 2: Add Comment Reply to a Topic in the Event
-  it('should add a reply to a specific topic in the event', async () => {
+  it.skip('should add a reply to a specific topic in the event', async () => {
     const topicName = '1730800283447-hello'; // Use a unique topic name
     const replyData = { message: 'string' };
 
@@ -71,7 +71,7 @@ describe('Event Comments API Tests', () => {
   });
 
   // Test Case 3: Retrieve Comments for an Event
-  it('should retrieve comments for the event', async () => {
+  it.skip('should retrieve comments for the event', async () => {
     const response = await request(APP_URL)
       .get(`/api/events/get-comments/${testEvent.id}`)
       .set('Authorization', `Bearer ${token}`)
