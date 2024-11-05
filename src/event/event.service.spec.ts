@@ -19,6 +19,7 @@ import { CategoryEntity } from '../category/infrastructure/persistence/relationa
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
+import { ZulipService } from '../zulip/zulip.service';
 
 describe('EventService', () => {
   let service: EventService;
@@ -130,6 +131,13 @@ describe('EventService', () => {
         {
           provide: FilesS3PresignedService,
           useValue: {},
+        },
+        {
+          provide: ZulipService,
+          useValue: {
+            createTopic: jest.fn().mockResolvedValue({}),
+            sendMessage: jest.fn().mockResolvedValue({}),
+          },
         },
       ],
     }).compile();
