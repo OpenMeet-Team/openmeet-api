@@ -10,6 +10,7 @@ import { GroupEntity } from '../group/infrastructure/persistence/relational/enti
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { SubCategoryEntity } from '../sub-category/infrastructure/persistence/relational/entities/sub-category.entity';
 import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
+import { GroupUserPermissionEntity } from '../group/infrastructure/persistence/relational/entities/group-user-permission.entity';
 
 export const mockCategory = {
   id: 1,
@@ -60,6 +61,12 @@ export const mockEventAttendee = {
   eventId: 1,
   userId: 1,
 } as EventAttendeesEntity;
+
+export const mockGroupUserPermission = {
+  id: 1,
+  user: mockUser,
+  group: mockGroup,
+} as GroupUserPermissionEntity;
 
 export const mockEventAttendees = [mockEventAttendee];
 
@@ -117,6 +124,7 @@ export const mockGroupService = {
   showGroup: jest.fn().mockResolvedValue(mockGroup),
   editGroup: jest.fn().mockResolvedValue(mockGroup),
   findAll: jest.fn().mockResolvedValue(mockGroups),
+  getGroupsWhereUserCanCreateEvents: jest.fn().mockResolvedValue(mockGroups),
 };
 
 export const mockCategoryService = {
@@ -159,6 +167,7 @@ export const mockEventService = {
   findRecommendedEventsForGroup: jest.fn().mockResolvedValue(mockEvents),
   findRandomEventsForGroup: jest.fn().mockResolvedValue(mockEvents),
   showGroupEvents: jest.fn().mockResolvedValue(mockEvents),
+  deleteEventsByGroup: jest.fn().mockResolvedValue(undefined),
 };
 
 export const mockFilesS3PresignedService = {
@@ -188,6 +197,7 @@ export const mockRepository = {
   getRawAndEntities: jest.fn(),
   skip: jest.fn().mockReturnThis(),
   take: jest.fn().mockReturnThis(),
+  remove: jest.fn(),
 };
 
 export const mockDashboardService = {

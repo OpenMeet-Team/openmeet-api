@@ -8,14 +8,15 @@ import {
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { GroupRoleEntity } from '../../../../../group-role/infrastructure/persistence/relational/entities/group-role.entity';
 import { GroupUserPermissionEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group-user-permission.entity';
+import { GroupPermission } from '../../../../../core/constants/constant';
 
 @Entity({ name: 'groupPermissions' })
 export class GroupPermissionEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'varchar', length: 255 })
-  name: string;
+  @Column({ type: 'enum', enum: GroupPermission })
+  name: GroupPermission;
 
   @OneToMany(
     () => GroupUserPermissionEntity,

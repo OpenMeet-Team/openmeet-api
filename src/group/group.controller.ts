@@ -60,6 +60,14 @@ export class GroupController {
     return this.groupService.findAll(pagination, query);
   }
 
+  @Get('me')
+  @ApiOperation({ summary: 'Get groups where user can create events' })
+  async showGroupsWhereUserCanCreateEvents(
+    @AuthUser() user: User,
+  ): Promise<GroupEntity[]> {
+    return await this.groupService.getGroupsWhereUserCanCreateEvents(user.id);
+  }
+
   @Get('me/:id')
   @ApiOperation({ summary: 'Get group by ID Authenticated' })
   async editGroup(@Param('id') id: number): Promise<GroupEntity> {

@@ -156,6 +156,17 @@ describe('GroupController', () => {
     });
   });
 
+  describe('showGroupsWhereUserCanCreateEvents', () => {
+    it('should return groups where user can create events', async () => {
+      const result =
+        await controller.showGroupsWhereUserCanCreateEvents(mockUser);
+      expect(
+        groupService.getGroupsWhereUserCanCreateEvents,
+      ).toHaveBeenCalledWith(mockUser.id);
+      expect(result).toEqual([mockGroup]);
+    });
+  });
+
   // TODO refactor this to use mocks
   describe('getRecommendedEvents', () => {
     it('should return 3-5 recommended events', async () => {

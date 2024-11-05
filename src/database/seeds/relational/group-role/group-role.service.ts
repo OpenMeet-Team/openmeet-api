@@ -3,7 +3,10 @@ import { Repository } from 'typeorm';
 import { TenantConnectionService } from '../../../../tenant/tenant.service'; // For tenant-specific DB handling
 import { GroupRoleEntity } from '../../../../group-role/infrastructure/persistence/relational/entities/group-role.entity';
 import { GroupPermissionEntity } from '../../../../group-permission/infrastructure/persistence/relational/entities/group-permission.entity';
-import { GroupRole } from '../../../../core/constants/constant';
+import {
+  GroupPermission,
+  GroupRole,
+} from '../../../../core/constants/constant';
 
 @Injectable()
 export class GroupRoleSeedService {
@@ -33,6 +36,7 @@ export class GroupRoleSeedService {
       'MANAGE_DISCUSSIONS',
       'MANAGE_REPORTS',
       'MANAGE_BILLING',
+      'CREATE_EVENT',
     ]);
     await this.createGroupRoleIfNotExists('admin', [
       'MANAGE_GROUP',
@@ -41,6 +45,7 @@ export class GroupRoleSeedService {
       'MANAGE_DISCUSSIONS',
       'MANAGE_REPORTS',
       'MANAGE_BILLING',
+      'CREATE_EVENT',
     ]);
     await this.createGroupRoleIfNotExists('guest', []);
     await this.createGroupRoleIfNotExists('member', [
@@ -84,7 +89,7 @@ export class GroupRoleSeedService {
     names: string[],
   ): Promise<GroupPermissionEntity[]> {
     return this.groupPermissionRepository.find({
-      where: names.map((name) => ({ name })),
+      where: names.map((name) => ({ name: name as GroupPermission })),
     });
   }
 }
