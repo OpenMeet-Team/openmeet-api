@@ -3,6 +3,8 @@ import {
   Get,
   Param,
   Post,
+  Req,
+  Request,
   Response,
   UploadedFile,
   UseGuards,
@@ -50,8 +52,10 @@ export class FilesLocalController {
   @UseInterceptors(FileInterceptor('file'))
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
+    @Req() req: any,
   ): Promise<FileResponseDto> {
-    return this.filesService.create(file);
+    const userId = req.user.id;
+    return this.filesService.create(file, userId);
   }
 
   @Get(':path')

@@ -4,7 +4,7 @@ import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 // UsageAggregate table is used to store pre-calculated totals of usage for faster querying and reporting.
 // Instead of having to sum up all individual UsageRecord entries each time, we maintain running totals in the aggregate table.
 
-@Entity()
+@Entity('usage_aggregates')
 export class UsageAggregate {
   @PrimaryGeneratedColumn('uuid')
   id: string;

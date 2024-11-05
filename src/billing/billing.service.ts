@@ -16,7 +16,7 @@ export class BillingService {
   async getUserSubscription(userId: string): Promise<UserSubscription | null> {
     return this.userSubscriptionRepo.findOne({
       where: { userId },
-      relations: ['plan', 'plan.limits'],
+      relations: ['plan', 'plan.limits', 'plan.limits.resourceType'],
     });
   }
 
@@ -27,16 +27,28 @@ export class BillingService {
   ): Promise<boolean> {
     const subscription = await this.getUserSubscription(userId);
     if (!subscription) {
+      console.log('No subscription found for user:', userId);
       return false;
     }
-    //  check if the user is within limits for the resource type
+
     const usage = await this.usageService.getUsage(userId, resourceType);
     const limit = subscription.plan.limits.find(
       (limit) => limit.resourceType.code === resourceType,
     )?.maxQuantity;
 
+    console.log('Current usage:', usage);
+    console.log('Limit:', limit);
+    console.log(
+      'Resource limits:',
+      subscription.plan.limits.map((l) => ({
+        code: l.resourceType.code,
+        maxQuantity: l.maxQuantity,
+      })),
+    );
+
     // if the limit is not set, the user is within limits
     if (!limit) {
+      console.log('No limit set for resource type:', resourceType);
       return true;
     }
 

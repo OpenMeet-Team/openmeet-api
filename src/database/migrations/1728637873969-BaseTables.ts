@@ -4,6 +4,10 @@ export class BaseTables1728637873969 implements MigrationInterface {
   name = 'BaseTables1728637873969';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    console.log(
+      'Creating base tables for schema:',
+      queryRunner.connection.options.name,
+    );
     const schema = queryRunner.connection.options.name || 'public'; // Default schema
 
     await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
@@ -224,10 +228,176 @@ export class BaseTables1728637873969 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "${schema}"."userInterests" ADD CONSTRAINT "FK_bb202c7e077ec68377af96ca423" FOREIGN KEY ("subcategoriesId") REFERENCES "${schema}"."subcategories"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`,
     );
+
+    // Create subscription plan and limits tables
+    await queryRunner.query(
+      `CREATE TABLE "${schema}"."subscription_plans" (
+            "id" SERIAL NOT NULL,
+            "name" character varying NOT NULL,
+            "code" character varying NOT NULL,
+            "price" decimal(10,2) NOT NULL,
+            "billingPeriod" character varying NOT NULL,
+            "stripePriceId" character varying NOT NULL,
+            "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
+            "updatedAt" TIMESTAMP NOT NULL DEFAULT now(),
+            CONSTRAINT "PK_subscription_plans" PRIMARY KEY ("id")
+          )`,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "${schema}"."resource_types" (
+            "id" SERIAL NOT NULL,
+            "code" character varying NOT NULL,
+            "name" character varying NOT NULL,
+            "unit" character varying NOT NULL,
+            "description" text,
+            "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
+            "updatedAt" TIMESTAMP NOT NULL DEFAULT now(),
+            CONSTRAINT "PK_resource_types" PRIMARY KEY ("id"),
+            CONSTRAINT "UQ_resource_type_code" UNIQUE ("code")
+          )`,
+    );
+
+    await queryRunner.query(`
+      CREATE TABLE "${schema}"."plan_limits" (
+        "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        "planId" INTEGER NOT NULL,
+        "resourceTypeId" INTEGER NOT NULL,
+        "maxQuantity" NUMERIC NOT NULL,
+        CONSTRAINT "FK_plan_limits_plan" FOREIGN KEY ("planId") 
+          REFERENCES "${schema}"."subscription_plans"("id"),
+        CONSTRAINT "FK_plan_limits_resource_type" FOREIGN KEY ("resourceTypeId") 
+          REFERENCES "${schema}"."resource_types"("id")
+      );
+    `);
+
+    // Create user subscriptions table
+    await queryRunner.query(
+      `CREATE TABLE "${schema}"."user_subscriptions" (
+            "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            "userId" INTEGER NOT NULL,
+            "planId" integer NOT NULL,
+            "status" TEXT NOT NULL,
+            "currentPeriodStart" TIMESTAMP NOT NULL,
+            "currentPeriodEnd" TIMESTAMP NOT NULL,
+            "stripeSubscriptionId" TEXT,
+            "stripeCustomerId" TEXT,
+            "metadata" JSONB,
+            "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
+            "updatedAt" TIMESTAMP NOT NULL DEFAULT now(),
+            CONSTRAINT "FK_user_subscriptions_user" FOREIGN KEY ("userId") 
+              REFERENCES "${schema}"."users"("id") ON DELETE CASCADE,
+            CONSTRAINT "FK_user_subscriptions_plan" FOREIGN KEY ("planId") 
+              REFERENCES "${schema}"."subscription_plans"("id") ON DELETE NO ACTION
+          )`,
+    );
+
+    // Create usage tracking tables
+    await queryRunner.query(
+      `CREATE TABLE "${schema}"."usage_records" (
+            "id" SERIAL NOT NULL,
+            "userId" integer NOT NULL,
+            "resourceType" character varying NOT NULL,
+            "quantity" integer NOT NULL,
+            "metadata" jsonb,
+            "timestamp" TIMESTAMP NOT NULL,
+            "usageDate" TIMESTAMP NOT NULL,
+            "billingPeriod" character varying NOT NULL,
+            "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
+            "updatedAt" TIMESTAMP NOT NULL DEFAULT now(),
+            CONSTRAINT "PK_usage_records" PRIMARY KEY ("id"),
+            CONSTRAINT "FK_usage_records_user" FOREIGN KEY ("userId") 
+              REFERENCES "${schema}"."users"("id") ON DELETE CASCADE
+          )`,
+    );
+
+    await queryRunner.query(
+      `CREATE TABLE "${schema}"."usage_aggregates" (
+            "id" SERIAL NOT NULL,
+            "userId" integer NOT NULL,
+            "resourceType" character varying NOT NULL,
+            "billingPeriod" character varying NOT NULL,
+            "totalQuantity" integer NOT NULL,
+            "lastUpdated" TIMESTAMP NOT NULL,
+            "aggregateKey" character varying NOT NULL,
+            "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
+            "updatedAt" TIMESTAMP NOT NULL DEFAULT now(),
+            CONSTRAINT "PK_usage_aggregates" PRIMARY KEY ("id"),
+            CONSTRAINT "UQ_aggregate_key" UNIQUE ("aggregateKey"),
+            CONSTRAINT "FK_usage_aggregates_user" FOREIGN KEY ("userId") 
+              REFERENCES "${schema}"."users"("id") ON DELETE CASCADE
+          )`,
+    );
+
+    // Create indexes
+    await queryRunner.query(
+      `CREATE INDEX "IDX_usage_records_user_resource" ON "${schema}"."usage_records" ("userId", "resourceType")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_usage_records_billing_period" ON "${schema}"."usage_records" ("billingPeriod")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_usage_aggregates_user_resource" ON "${schema}"."usage_aggregates" ("userId", "resourceType")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_user_subscriptions_user" ON "${schema}"."user_subscriptions" ("userId")`,
+    );
+
+    // Add foreign key constraints to usage_records
+    await queryRunner.query(
+      `ALTER TABLE "${schema}"."usage_records" 
+       ADD CONSTRAINT "FK_usage_records_type" 
+       FOREIGN KEY ("resourceType") 
+       REFERENCES "${schema}"."resource_types"("code") 
+       ON DELETE RESTRICT`,
+    );
+
+    // Add foreign key constraints to usage_aggregates
+    await queryRunner.query(
+      `ALTER TABLE "${schema}"."usage_aggregates" 
+       ADD CONSTRAINT "FK_usage_aggregates_type" 
+       FOREIGN KEY ("resourceType") 
+       REFERENCES "${schema}"."resource_types"("code") 
+       ON DELETE RESTRICT`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    console.log(
+      'Dropping base tables for schema:',
+      queryRunner.connection.options.name,
+    );
     const schema = queryRunner.connection.options.name || 'public'; // Default schema
+
+    await queryRunner.query(
+      `ALTER TABLE "${schema}"."usage_aggregates" 
+       DROP CONSTRAINT "FK_usage_aggregates_type"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "${schema}"."usage_records" 
+       DROP CONSTRAINT "FK_usage_records_type"`,
+    );
+
+    // Drop billing and usage indexes
+    await queryRunner.query(
+      `DROP INDEX "${schema}"."IDX_user_subscriptions_user"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "${schema}"."IDX_usage_aggregates_user_resource"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "${schema}"."IDX_usage_records_billing_period"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "${schema}"."IDX_usage_records_user_resource"`,
+    );
+
+    // Drop billing and usage tables
+    await queryRunner.query(`DROP TABLE "${schema}"."usage_aggregates"`);
+    await queryRunner.query(`DROP TABLE "${schema}"."usage_records"`);
+    await queryRunner.query(`DROP TABLE "${schema}"."user_subscriptions"`);
+    await queryRunner.query(`DROP TABLE "${schema}"."plan_limits"`);
+    await queryRunner.query(`DROP TABLE "${schema}"."resource_types"`);
+    await queryRunner.query(`DROP TABLE "${schema}"."subscription_plans"`);
 
     await queryRunner.query(
       `ALTER TABLE "${schema}"."userInterests" DROP CONSTRAINT "FK_bb202c7e077ec68377af96ca423"`,

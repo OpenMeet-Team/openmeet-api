@@ -4,7 +4,7 @@ import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 import { SubscriptionPlan } from './subscription-plan.entity';
 
-@Entity()
+@Entity('user_subscriptions')
 export class UserSubscription {
   @PrimaryGeneratedColumn('uuid')
   id: string;

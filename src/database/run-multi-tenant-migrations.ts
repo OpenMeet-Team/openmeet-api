@@ -4,6 +4,7 @@ import { fetchTenants } from '../utils/tenant-config';
 
 async function runMigrationsForAllTenants() {
   const tenants = fetchTenants();
+  console.log('tenants', tenants);
   for (const tenant of tenants) {
     const dataSource = AppDataSource(tenant.id);
     // If tenantId is not provided, we are running migrations for the public schema

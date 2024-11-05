@@ -14,7 +14,7 @@ import { PlanLimit } from '../../billing/entities/plan-limit.entity';
 // Basic plan: 10GB storage
 // Premium plan: 100GB storage
 
-@Entity()
+@Entity('resource_types')
 export class ResourceType {
   @PrimaryGeneratedColumn('uuid')
   id: string;

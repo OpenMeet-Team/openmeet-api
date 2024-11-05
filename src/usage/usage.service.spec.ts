@@ -54,7 +54,6 @@ describe('UsageService', () => {
 
     service = await module.resolve<UsageService>(UsageService);
     await service.ensureInitialized();
-
   });
 
   describe('trackUsage', () => {

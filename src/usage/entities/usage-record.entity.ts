@@ -8,7 +8,7 @@ import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 // User '123' makes 1 api_calls on '2024-03-01'
 // User '456' uses 20s of api_time on '2024-03-01'
 
-@Entity()
+@Entity('usage_records')
 export class UsageRecord {
   @PrimaryGeneratedColumn('uuid')
   id: string;

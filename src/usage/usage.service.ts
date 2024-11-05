@@ -1,7 +1,6 @@
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { Repository } from 'typeorm';
 
-import { ResourceType } from './entities/resource-type.entity';
 import { UsageRecord } from './entities/usage-record.entity';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { UsageAggregate } from './entities/usage-aggregate.entity';
@@ -11,8 +10,6 @@ import { REQUEST } from '@nestjs/core';
 export class UsageService {
   private usageRecordRepository: Repository<UsageRecord>;
   private usageAggregateRepository: Repository<UsageAggregate>;
-  private resourceTypeRepository: Repository<ResourceType>;
-
   private initialized = false;
 
   constructor(
@@ -33,7 +30,6 @@ export class UsageService {
 
     this.usageRecordRepository = dataSource.getRepository(UsageRecord);
     this.usageAggregateRepository = dataSource.getRepository(UsageAggregate);
-    this.resourceTypeRepository = dataSource.getRepository(ResourceType);
   }
 
   // trackUsage is used to record usage of a resource by a user

@@ -1,27 +1,23 @@
 import { ManyToOne } from 'typeorm';
 
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, JoinColumn, PrimaryGeneratedColumn } from 'typeorm';
 
 import { ResourceType } from '../../usage/entities/resource-type.entity';
 import { SubscriptionPlan } from './subscription-plan.entity';
 
-@Entity()
+@Entity('plan_limits')
 export class PlanLimit {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => SubscriptionPlan)
-  plan: SubscriptionPlan;
-
-  @ManyToOne(() => ResourceType)
-  resourceType: ResourceType;
-
   @Column('numeric')
   maxQuantity: number;
 
-  @Column('boolean', { default: false })
-  isOveragePossible: boolean;
+  @ManyToOne(() => SubscriptionPlan, { nullable: false })
+  @JoinColumn({ name: 'planId' })
+  plan: SubscriptionPlan;
 
-  @Column('numeric', { nullable: true })
-  overageRate: number; // Cost per unit over limit
+  @ManyToOne(() => ResourceType, { nullable: false })
+  @JoinColumn({ name: 'resourceTypeId' })
+  resourceType: ResourceType;
 }
