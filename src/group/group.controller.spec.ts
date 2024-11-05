@@ -91,6 +91,13 @@ describe('GroupController', () => {
     });
   });
 
+  describe('showGroupEvents', () => {
+    it('should show group events', async () => {
+      const result = await controller.showGroupEvents(1);
+      expect(result).toEqual(mockEvents);
+    });
+  });
+
   describe('removeGroup', () => {
     it('should remove a group', async () => {
       const result = await controller.removeGroup(mockGroup.id);
@@ -153,6 +160,17 @@ describe('GroupController', () => {
     it('should reject a group member', async () => {
       const result = await controller.rejectMember(1, 1);
       expect(result).toEqual(mockGroupMember);
+    });
+  });
+
+  describe('showGroupsWhereUserCanCreateEvents', () => {
+    it('should return groups where user can create events', async () => {
+      const result =
+        await controller.showGroupsWhereUserCanCreateEvents(mockUser);
+      expect(
+        groupService.getGroupsWhereUserCanCreateEvents,
+      ).toHaveBeenCalledWith(mockUser.id);
+      expect(result).toEqual([mockGroup]);
     });
   });
 

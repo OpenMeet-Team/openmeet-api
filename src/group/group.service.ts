@@ -15,6 +15,12 @@ import { UpdateGroupDto } from './dto/update-group.dto';
 import { CategoryService } from '../category/category.service';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupUserPermissionEntity } from './infrastructure/persistence/relational/entities/group-user-permission.entity';
+import {
+  GroupPermission,
+  GroupRole,
+  Status,
+  Visibility,
+} from '../core/constants/constant';
 import { GroupRole, Status, Visibility } from '../core/constants/constant';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { PaginationDto } from '../utils/dto/pagination.dto';
@@ -47,6 +53,22 @@ export class GroupService {
       await this.tenantConnectionService.getTenantConnection(tenantId);
     this.groupRepository = dataSource.getRepository(GroupEntity);
     this.groupMembersRepository = dataSource.getRepository(GroupMemberEntity);
+  }
+
+  async getGroupsWhereUserCanCreateEvents(
+    userId: number,
+  ): Promise<GroupEntity[]> {
+    await this.getTenantSpecificGroupRepository();
+    return this.groupRepository.find({
+      where: {
+        groupMembers: {
+          user: { id: userId },
+          groupRole: {
+            groupPermissions: { name: GroupPermission.CreateEvent },
+          },
+        },
+      },
+    });
   }
 
   async getGroupMembers(
@@ -306,8 +328,8 @@ export class GroupService {
       throw new NotFoundException('Group not found');
     }
 
-    group.events = group.events.slice(0, 5);
-    group.groupMembers = group.groupMembers.slice(0, 5);
+    group.events = group.events?.slice(0, 5);
+    group.groupMembers = group.groupMembers?.slice(0, 5);
 
     return group;
   }
@@ -330,8 +352,8 @@ export class GroupService {
       throw new NotFoundException('Group not found');
     }
 
-    group.events = group.events.slice(0, 5);
-    group.groupMembers = group.groupMembers.slice(0, 5);
+    group.events = group.events?.slice(0, 5);
+    group.groupMembers = group.groupMembers?.slice(0, 5);
 
     if (userId) {
       group.groupMember = await this.groupMemberService.findGroupMemberByUserId(
