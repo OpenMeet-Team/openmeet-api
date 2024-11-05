@@ -137,8 +137,8 @@ export class CommentDto {
   @IsString()
   message: string;
 
-  @ApiProperty()
-  @IsOptional()
-  @IsNumber()
-  eventId: number;
+  // @ApiProperty()
+  // @IsOptional()
+  // @IsNumber()
+  // eventId: number;
 }

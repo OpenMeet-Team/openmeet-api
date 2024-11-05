@@ -113,11 +113,10 @@ describe('EventService', () => {
           },
         },
         {
-
           provide: EventEmitter2,
           useValue: {
             emit: jest.fn(),
-          }
+          },
         },
         {
           provide: GroupMemberService,

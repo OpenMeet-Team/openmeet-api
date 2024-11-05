@@ -42,6 +42,7 @@ import { GroupRoleModule } from './group-role/group-role.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { RoleModule } from './role/role.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ZulipModule } from './zulip/zulip.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -111,6 +112,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     GroupRoleModule,
     DashboardModule,
     RoleModule,
+    ZulipModule,
   ],
   providers: [
     TenantConnectionService,

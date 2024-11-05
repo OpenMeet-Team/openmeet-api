@@ -1,23 +1,18 @@
+import { ZulipService } from './../zulip/zulip.service';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import zulipInit from 'zulip-js';
 
 @Injectable()
 export class ChannelCreatedListener {
-  constructor() {}
+  constructor(private readonly zulipService: ZulipService) {}
   @OnEvent('channel.created')
   async handleUserCreatedEvent(params: any) {
-    const config = { zuliprc: 'D:\\DevNexus\\openmeet-api\\zuliprc' };
-
-    console.log('User created event received:', params);
+    console.log(
+      '🚀 ~ ChannelCreatedListener ~ handleUserCreatedEvent ~ params:',
+      params,
+    );
     try {
-      const client = await zulipInit(config);
-
-      const meParams = {
-        subscriptions: JSON.stringify([{ name: params.name }]),
-      };
-
-      const response = await client.users.me.subscriptions.add(meParams);
+      const response = await this.zulipService.CreateZulipChannel(params);
       console.log(
         '🚀 ~ ChannelCreatedListener ~ handleUserCreatedEvent ~ response:',
         response,

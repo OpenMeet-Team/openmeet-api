@@ -51,20 +51,24 @@ export class EventController {
   }
 
   @Public()
-  @Post('post/comment')
+  @Post(':eventId/comment')
   @ApiOperation({ summary: 'Create a new event' })
-  async comment(@Body() body: CommentDto): Promise<EventEntity> {
-    return this.eventService.postComment(body);
+  async comment(
+    @Body() body: CommentDto,
+    @Param('eventId') eventId: number,
+  ): Promise<EventEntity> {
+    return this.eventService.postComment(body, eventId);
   }
 
   @Public()
-  @Post('comment-reply/:topicName')
+  @Post('comment-reply/:eventId/:topicName')
   @ApiOperation({ summary: 'Create a new event' })
   async commentReply(
     @Body() body: CommentDto,
     @Param('topicName') topicName: string,
+    @Param('eventId') eventId: number,
   ): Promise<EventEntity> {
-    return this.eventService.postCommentinTopic(body, topicName);
+    return this.eventService.postCommentinTopic(body, topicName, eventId);
   }
 
   @Public()

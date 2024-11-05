@@ -1,27 +1,21 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import zulipInit from 'zulip-js';
 import { UserService } from './user.service';
 import { Repository } from 'typeorm';
 import { UserEntity } from './infrastructure/persistence/relational/entities/user.entity';
+import { ZulipService } from '../zulip/zulip.service';
 
 @Injectable()
 export class UserCreatedListener {
   private usersRepository: Repository<UserEntity>;
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly zulipService: ZulipService,
+  ) {}
   @OnEvent('user.created')
   async handleUserCreatedEvent(event: any) {
-    const config = { zuliprc: 'D:\\DevNexus\\openmeet-api\\zuliprc' };
-
-    console.log('User created event received:', event);
     try {
-      const client = await zulipInit(config);
-
-      const response = await client.users.create(event);
-      console.log(
-        '🚀 ~ UserCreatedListener ~ handleUserCreatedEvent ~ response:',
-        response,
-      );
+      const response = await this.zulipService.CreateZulipUser(event);
 
       const user = await this.userService.findByEmail(event.email);
       if (response.result === 'success' && user) {

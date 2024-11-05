@@ -27,10 +27,9 @@ import slugify from 'slugify';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
-import zulipInit from 'zulip-js';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
-
+import { ZulipService } from '../zulip/zulip.service';
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
   private eventRepository: Repository<EventEntity>;
@@ -43,6 +42,7 @@ export class EventService {
     private eventEmitter: EventEmitter2,
     private readonly groupMemberService: GroupMemberService,
     private readonly fileService: FilesS3PresignedService,
+    private readonly zulipService: ZulipService,
   ) {
     void this.initializeRepository();
   }
@@ -109,12 +109,9 @@ export class EventService {
     return createdEvent;
   }
 
-  async postComment(body: CommentDto) {
-    const { eventId, message } = body;
+  async postComment(body: CommentDto, eventId: number) {
+    const { message } = body;
     const event = await this.findOne(eventId);
-    const config = { zuliprc: 'D:\\DevNexus\\openmeet-api\\zuliprc' };
-
-    const client = await zulipInit(config);
 
     const timestamp = Date.now();
     const topicName = `${timestamp}-${message.split(' ').slice(0, 5).join('-').toLowerCase()}`;
@@ -127,7 +124,7 @@ export class EventService {
     };
 
     try {
-      const response = await client.messages.send(params);
+      const response = await this.zulipService.PostZulipComment(params);
       console.log('Message sent successfully:', response);
       return response;
     } catch (error) {
@@ -137,56 +134,25 @@ export class EventService {
   }
 
   async getTopics(eventId: number) {
-    const config = { zuliprc: 'D:\\DevNexus\\openmeet-api\\zuliprc' };
-    const client = await zulipInit(config);
-
     try {
       const event = await this.findOne(eventId);
       const streamName = `${event.shortId}_${event.slug}`;
-      const streamResponse = await client.streams.retrieve();
 
-      const stream = streamResponse.streams.find((s) => s.name === streamName);
-      if (!stream) {
-        throw new Error(`Stream with name "${streamName}" not found.`);
-      }
+      const response = this.zulipService.GetZulipTopics(streamName);
 
-      const topicsResponse = await client.streams.topics.retrieve({
-        stream_id: stream.stream_id,
-      });
-      const topics = topicsResponse.topics;
-
-      const topicsWithMessages: any = [];
-
-      for (const topic of topics) {
-        const messagesResponse = await client.messages.retrieve({
-          narrow: [
-            { operator: 'stream', operand: streamName },
-            { operator: 'topic', operand: topic.name },
-          ],
-          anchor: 'newest',
-          num_before: 100,
-          num_after: 0,
-        });
-
-        topicsWithMessages.push({
-          topic: topic.name,
-          messages: messagesResponse.messages,
-        });
-      }
-
-      console.log('Topics with messages:', topicsWithMessages);
-      return topicsWithMessages;
+      return response;
     } catch (error) {
       console.error('Error fetching topics and messages from Zulip:', error);
       throw new Error('Failed to fetch topics and messages');
     }
   }
 
-  async postCommentinTopic(body: CommentDto, topicName: string) {
-    const { eventId, message } = body;
-    const config = { zuliprc: 'D:\\DevNexus\\openmeet-api\\zuliprc' };
-
-    const client = await zulipInit(config);
+  async postCommentinTopic(
+    body: CommentDto,
+    topicName: string,
+    eventId: number,
+  ) {
+    const { message } = body;
 
     const event = await this.findOne(eventId);
 
@@ -198,7 +164,7 @@ export class EventService {
     };
 
     try {
-      const response = await client.messages.send(params);
+      const response = await this.zulipService.PostZulipComment(params);
       console.log('Message sent successfully to topic:', topicName);
       return response;
     } catch (error) {

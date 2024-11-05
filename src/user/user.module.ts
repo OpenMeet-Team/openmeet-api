@@ -11,6 +11,7 @@ import { RoleModule } from '../role/role.module';
 import { UserCreatedListener } from './user-created.listener';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
+import { ZulipService } from '../zulip/zulip.service';
 
 const infrastructurePersistenceModule = RelationalUserPersistenceModule;
 
@@ -28,6 +29,7 @@ const infrastructurePersistenceModule = RelationalUserPersistenceModule;
     UserCreatedListener,
     EventEmitter2,
     FilesS3PresignedService,
+    ZulipService,
   ],
   exports: [UserService, infrastructurePersistenceModule],
 })
