@@ -26,7 +26,6 @@ import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-pres
 import { mockUser } from '../test/mocks';
 import { DeleteResult, Repository } from 'typeorm';
 import { CategoryEntity } from 'src/category/infrastructure/persistence/relational/entities/categories.entity';
-import { Repository } from 'typeorm';
 
 describe('GroupService', () => {
   let service: GroupService;
@@ -155,7 +154,10 @@ describe('GroupService', () => {
         },
         mockUser.id,
       );
-      
+      expect(result).toEqual(mockGroup);
+    });
+  });
+
   describe.skip('getGroupMembers', () => {
     it('should return group members', async () => {
       const result = await service.getGroupMembers(mockUser.id, mockGroup.id);
@@ -247,6 +249,9 @@ describe('GroupService', () => {
         .spyOn(service['groupRepository'], 'findOne')
         .mockResolvedValue(mockGroup as GroupEntity);
       const result = await service.editGroup(mockGroup.id);
+      expect(result).toEqual(mockGroup);
+    });
+  });
 
   describe.skip('findOne', () => {
     it('should return a group', async () => {
@@ -331,7 +336,10 @@ describe('GroupService', () => {
         .spyOn(service['groupRepository'], 'find')
         .mockResolvedValue([mockGroup]);
       const result = await service.getHomePageFeaturedGroups();
-      
+      expect(result).toEqual([mockGroup]);
+    });
+  });
+
   describe.skip('remove', () => {
     it('should remove a group', async () => {
       const result = await service.remove(mockGroup.id);
@@ -346,15 +354,16 @@ describe('GroupService', () => {
     });
   });
 
-
   describe('getHomePageUserCreatedGroups', () => {
     it('should return user created groups', async () => {
       jest
         .spyOn(service['groupRepository'], 'find')
         .mockResolvedValue([mockGroup]);
       const result = await service.getHomePageUserCreatedGroups(mockUser.id);
+      expect(result).toEqual([mockGroup]);
+    });
+  });
 
-      
   describe.skip('getHomePageUserParticipatedGroups', () => {
     it('should return user participated groups', async () => {
       const result = await service.getHomePageUserParticipatedGroups(
@@ -399,7 +408,7 @@ describe('GroupService', () => {
       expect(service['groupRepository']).toBeDefined();
     });
   });
-        // TODO refactor this to use mocks
+
   describe('getRecommendedEvents', () => {
     it('should return recommended events if enough are found', async () => {
       const minEvents = 3;
