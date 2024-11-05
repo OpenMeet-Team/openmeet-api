@@ -1,12 +1,12 @@
 import {
   Controller,
   Post,
-  Delete,
   Body,
   Param,
   Get,
   Query,
   UseGuards,
+  Patch,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { EventAttendeeService } from './event-attendee.service';
@@ -16,6 +16,7 @@ import { QueryEventAttendeeDto } from './dto/query-eventAttendee.dto';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
 import { JWTAuthGuard } from '../core/guards/auth.guard';
+import { UpdateEventAttendeeDto } from './dto/update-eventAttendee.dto';
 
 @ApiTags('Event Attendees')
 @Controller('event-attendees')
@@ -37,6 +38,18 @@ export class EventAttendeeController {
     );
   }
 
+  @Patch(':id')
+  @ApiOperation({ summary: 'Attending aa event' })
+  async updateEvent(
+    @Param('id') eventId: number,
+    @Body() updateEventAttendeeDto: UpdateEventAttendeeDto,
+  ) {
+    return await this.eventAttendeeService.updateEventAttendee(
+      eventId,
+      updateEventAttendeeDto,
+    );
+  }
+
   @Get('me')
   @ApiOperation({ summary: 'Get all event attendee' })
   async findAll(
@@ -49,13 +62,13 @@ export class EventAttendeeController {
     return this.eventAttendeeService.findAll(pagination, query);
   }
 
-  @Delete('cancel/:userId/:eventId')
-  async leaveEvent(
-    @Param('userId') userId: number,
-    @Param('eventId') eventId: number,
-  ) {
-    await this.eventAttendeeService.leaveEvent(userId, eventId);
-  }
+  // @Delete('cancel/:userId/:eventId')
+  // async leaveEvent(
+  //   @Param('userId') userId: number,
+  //   @Param('eventId') eventId: number,
+  // ) {
+  //   await this.eventAttendeeService.leaveEvent(userId, eventId);
+  // }
 
   @Get(':eventId')
   getEventAttendees(

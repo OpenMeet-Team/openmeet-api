@@ -97,23 +97,23 @@ describe('EventAttendeeController (e2e)', () => {
     expect(isTesterAttending).toBe(true);
   });
 
-  it('should allow the user to cancel attendance', async () => {
-    const cancelAttendanceResponse = await request(APP_URL)
-      .delete(`/api/event-attendees/cancel/1/${testEvent.id}`) // assuming tester has user ID 1
-      .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', '1');
+  // it('should allow the user to cancel attendance', async () => {
+  //   const cancelAttendanceResponse = await request(APP_URL)
+  //     .delete(`/api/event-attendees/cancel/1/${testEvent.id}`) // assuming tester has user ID 1
+  //     .set('Authorization', `Bearer ${token}`)
+  //     .set('tenant-id', '1');
 
-    expect(cancelAttendanceResponse.status).toBe(200);
+  //   expect(cancelAttendanceResponse.status).toBe(200);
 
-    // Verify user is no longer attending the event
-    const getEventAttendeesResponse = await request(APP_URL)
-      .get(`/api/event-attendees/${testEvent.id}`)
-      .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', '1');
+  //   // Verify user is no longer attending the event
+  //   const getEventAttendeesResponse = await request(APP_URL)
+  //     .get(`/api/event-attendees/${testEvent.id}`)
+  //     .set('Authorization', `Bearer ${token}`)
+  //     .set('tenant-id', '1');
 
-    const isTesterStillAttending = getEventAttendeesResponse.body.data.some(
-      (attendee) => attendee.user.id === 1,
-    );
-    expect(isTesterStillAttending).toBe(false);
-  });
+  //   const isTesterStillAttending = getEventAttendeesResponse.body.data.some(
+  //     (attendee) => attendee.user.id === 1,
+  //   );
+  //   expect(isTesterStillAttending).toBe(false);
+  // });
 });
