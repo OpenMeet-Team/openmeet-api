@@ -41,6 +41,8 @@ import { RequestCounterInterceptor } from './interceptors/request-counter.interc
 import { GroupRoleModule } from './group-role/group-role.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { RoleModule } from './role/role.module';
+import { UsageModule } from './usage/usage.module';
+import { BillingModule } from './billing/billing.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -110,6 +112,8 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     GroupRoleModule,
     DashboardModule,
     RoleModule,
+    UsageModule,
+    BillingModule,
   ],
   providers: [
     TenantConnectionService,
