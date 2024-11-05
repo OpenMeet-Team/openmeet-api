@@ -1,16 +1,11 @@
-import {
-  Controller,
-  Req,
-  Get,
-  Injectable,
-  Scope,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Injectable, Scope, UseGuards } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JWTAuthGuard } from '../core/guards/auth.guard';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiOkResponse } from '@nestjs/swagger';
+import { AuthUser } from '../core/decorators/auth-user.decorator';
+import { User } from '../user/domain/user';
 
 @ApiBearerAuth()
 @UseGuards(JWTAuthGuard)
@@ -29,8 +24,8 @@ export class DashboardController {
   })
   @ApiOkResponse({ description: 'List of user events' })
   @Get('my-events')
-  async myEvents(@Req() req) {
-    return await this.dashboardService.getMyEvents(req.user.id);
+  async myEvents(@AuthUser() user: User) {
+    return await this.dashboardService.getMyEvents(user.id);
   }
 
   @ApiOperation({
@@ -38,7 +33,7 @@ export class DashboardController {
   })
   @ApiOkResponse({ description: 'List of user groups' })
   @Get('my-groups')
-  async myGroups(@Req() req) {
-    return await this.dashboardService.getMyGroups(req.user.id);
+  async myGroups(@AuthUser() user: User) {
+    return await this.dashboardService.getMyGroups(user.id);
   }
 }

@@ -11,8 +11,25 @@ export enum Status {
 
 export enum GroupRole {
   Owner = 'owner',
+  Admin = 'admin',
   Moderator = 'moderator',
   Member = 'member',
+  Guest = 'guest',
+}
+
+export enum GroupPermission {
+  ManageGroup = 'MANAGE_GROUP',
+  ManageMembers = 'MANAGE_MEMBERS',
+  ManageEvents = 'MANAGE_EVENTS',
+  ManageDiscussions = 'MANAGE_DISCUSSIONS',
+  ManageReports = 'MANAGE_REPORTS',
+  ManageBilling = 'MANAGE_BILLING',
+  CreateEvent = 'CREATE_EVENT',
+  MessageDiscussion = 'MESSAGE_DISCUSSION',
+  MessageMember = 'MESSAGE_MEMBER',
+  SeeMembers = 'SEE_MEMBERS',
+  SeeEvents = 'SEE_EVENTS',
+  SeeDiscussions = 'SEE_DISCUSSIONS',
 }
 
 export enum Visibility {

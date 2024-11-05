@@ -3,6 +3,10 @@ import { Repository } from 'typeorm';
 import { TenantConnectionService } from '../../../../tenant/tenant.service'; // For tenant-specific DB handling
 import { GroupRoleEntity } from '../../../../group-role/infrastructure/persistence/relational/entities/group-role.entity';
 import { GroupPermissionEntity } from '../../../../group-permission/infrastructure/persistence/relational/entities/group-permission.entity';
+import {
+  GroupPermission,
+  GroupRole,
+} from '../../../../core/constants/constant';
 
 @Injectable()
 export class GroupRoleSeedService {
@@ -24,17 +28,37 @@ export class GroupRoleSeedService {
     );
 
     // Seed group roles and their permissions
-    await this.createGroupRoleIfNotExists('member', ['READ_GROUP']);
-    await this.createGroupRoleIfNotExists('moderator', [
-      'READ_GROUP',
-      'UPDATE_GROUP',
-      'DELETE_GROUP',
-    ]);
     await this.createGroupRoleIfNotExists('owner', [
-      'READ_GROUP',
-      'UPDATE_GROUP',
+      'MANAGE_GROUP',
       'DELETE_GROUP',
-      'MANAGE_ROLES',
+      'MANAGE_MEMBERS',
+      'MANAGE_EVENTS',
+      'MANAGE_DISCUSSIONS',
+      'MANAGE_REPORTS',
+      'MANAGE_BILLING',
+      'CREATE_EVENT',
+    ]);
+    await this.createGroupRoleIfNotExists('admin', [
+      'MANAGE_GROUP',
+      'MANAGE_MEMBERS',
+      'MANAGE_EVENTS',
+      'MANAGE_DISCUSSIONS',
+      'MANAGE_REPORTS',
+      'MANAGE_BILLING',
+
+      'CREATE_EVENT',
+    ]);
+    await this.createGroupRoleIfNotExists('guest', []);
+    await this.createGroupRoleIfNotExists('member', [
+      'MESSAGE_DISCUSSION',
+      'MESSAGE_MEMBER',
+      'SEE_MEMBERS',
+      'SEE_EVENTS',
+      'SEE_DISCUSSIONS',
+    ]);
+    await this.createGroupRoleIfNotExists('moderator', [
+      'MANAGE_MEMBERS',
+      'MANAGE_DISCUSSIONS',
     ]);
   }
 
@@ -44,12 +68,12 @@ export class GroupRoleSeedService {
     permissionNames: string[],
   ) {
     const count = await this.groupRoleRepository.count({
-      where: { name: roleName },
+      where: { name: roleName as GroupRole },
     });
 
     if (!count) {
       const groupRole = this.groupRoleRepository.create({
-        name: roleName,
+        name: roleName as GroupRole,
       });
 
       // Assign permissions to the group role
@@ -66,7 +90,7 @@ export class GroupRoleSeedService {
     names: string[],
   ): Promise<GroupPermissionEntity[]> {
     return this.groupPermissionRepository.find({
-      where: names.map((name) => ({ name })),
+      where: names.map((name) => ({ name: name as GroupPermission })),
     });
   }
 }

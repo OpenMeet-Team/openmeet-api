@@ -2,9 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { HomeService } from './home.service';
 import { SubCategoryEntity } from '../sub-category/infrastructure/persistence/relational/entities/sub-category.entity';
 import { HomeController } from './home.controller';
-import { GroupEntity } from 'src/group/infrastructure/persistence/relational/entities/group.entity';
-import { EventEntity } from 'src/event/infrastructure/persistence/relational/entities/event.entity';
-import { CategoryEntity } from 'src/category/infrastructure/persistence/relational/entities/categories.entity';
+import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
+import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
+import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
 import { AuthService } from '../auth/auth.service';
 import { mockUser } from '../test/mocks';
 

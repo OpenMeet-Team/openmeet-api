@@ -108,6 +108,31 @@ describe('GroupController (e2e)', () => {
     expect(deleteGroup2Response.status).toBe(200);
   });
 
+  it.skip('should retrieve group members', async () => {
+    const expectedMemberId = 2;
+    const groupId = testGroup.id;
+    const getGroupMembersResponse = await request(APP_URL)
+      .get(`/api/groups/${groupId}/members`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('tenant-id', TESTING_TENANT_ID);
+
+    expect(getGroupMembersResponse.status).toBe(200);
+
+    const isMemberPresent = getGroupMembersResponse.body.data?.some(
+      (member) => member.user.id === expectedMemberId,
+    );
+    expect(isMemberPresent).toBe(true);
+
+    if (getGroupMembersResponse.status === 200) {
+      const groupMembers = getGroupMembersResponse.body.data;
+      const isMemberPresent = groupMembers.some(
+        (member) => member.user.id === expectedMemberId,
+      );
+      console.log(isMemberPresent);
+      expect(isMemberPresent).toBe(true);
+    }
+  });
+
   // After each test, clean up any remaining test groups
   afterEach(async () => {
     if (testGroup && testGroup.id) {

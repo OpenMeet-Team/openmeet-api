@@ -13,9 +13,9 @@ import { PermissionSeedModule } from './permission/permission-seed.module';
 import { UserPermissionSeedModule } from './user-permission/user-permission-seed.module';
 import { GroupRoleSeedModule } from './group-role/group-role.module';
 import { GroupSeedModule } from './group/group-seed.module';
-import fileConfig from 'src/file/config/file.config';
+import fileConfig from '../../../file/config/file.config';
 import { EventSeedModule } from './event/event-seed.module';
-import authConfig from 'src/auth/config/auth.config';
+import authConfig from '../../../auth/config/auth.config';
 
 @Module({
   imports: [

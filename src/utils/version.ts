@@ -1,7 +1,3 @@
-import { execSync } from 'child_process';
-import fs from 'fs';
-import path from 'path';
-
 export interface BuildInfo {
   version: string;
   commitHash: string;
@@ -12,14 +8,12 @@ export interface BuildInfo {
 
 export function getBuildInfo(): BuildInfo {
   try {
-    const gitCommitHash = execSync('git rev-parse --short HEAD')
-      .toString()
-      .trim();
-    const gitBranch = execSync('git rev-parse --abbrev-ref HEAD')
-      .toString()
-      .trim();
+    const gitCommitHash = process.env.GIT_REVISION || '';
+    const gitBranch = process.env.GIT_BRANCH || '';
+    const packageJsonB64 = process.env.PACKAGE_JSON_B64 || '';
+
     const packageJson = JSON.parse(
-      fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'),
+      Buffer.from(packageJsonB64, 'base64').toString(),
     );
 
     return {

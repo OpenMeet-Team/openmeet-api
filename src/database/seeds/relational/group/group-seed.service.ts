@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { groupSeedData } from './group-seed.seed';
-import { GroupEntity } from 'src/group/infrastructure/persistence/relational/entities/group.entity';
-import { UserEntity } from 'src/user/infrastructure/persistence/relational/entities/user.entity';
-import { CategoryEntity } from 'src/category/infrastructure/persistence/relational/entities/categories.entity';
+import { GroupEntity } from '../../../../group/infrastructure/persistence/relational/entities/group.entity';
+import { UserEntity } from '../../../../user/infrastructure/persistence/relational/entities/user.entity';
+import { CategoryEntity } from '../../../../category/infrastructure/persistence/relational/entities/categories.entity';
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
 import slugify from 'slugify';
-import { GroupMemberEntity } from 'src/group-member/infrastructure/persistence/relational/entities/group-member.entity';
-import { GroupRole } from 'src/core/constants/constant';
-import { GroupRoleEntity } from 'src/group-role/infrastructure/persistence/relational/entities/group-role.entity';
+import { GroupMemberEntity } from '../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
+import { GroupRole } from '../../../../core/constants/constant';
+import { GroupRoleEntity } from '../../../../group-role/infrastructure/persistence/relational/entities/group-role.entity';
 
 @Injectable()
 export class GroupSeedService {

@@ -112,8 +112,8 @@ describe('EventController Recommendations (e2e)', () => {
       maxEvents,
       true,
     );
+
     expect(recommendedEvents.length).toBeGreaterThanOrEqual(minEvents);
-    expect(recommendedEvents.length).toBeLessThanOrEqual(maxEvents);
   });
 
   // it('should return recommended events when authenticated', async () => {

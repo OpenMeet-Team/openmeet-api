@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
 import { GroupRoleEntity } from './infrastructure/persistence/relational/entities/group-role.entity';
 import { CreateGroupRoleDto } from './dto/create-groupRole.dto';
+import { GroupRole } from '../core/constants/constant';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupRoleService {
@@ -29,7 +30,7 @@ export class GroupRoleService {
   async findOne(name: string): Promise<any> {
     await this.getTenantSpecificEventRepository();
     return await this.groupRoleRepository.findOne({
-      where: { name },
+      where: { name: name as GroupRole },
       relations: ['groupPermissions'],
     });
   }
