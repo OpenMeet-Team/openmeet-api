@@ -7,7 +7,7 @@ export class TenantConnectionService implements OnModuleInit {
   async onModuleInit() {}
   async getTenantConnection(tenantId: string): Promise<DataSource> {
     const connection = this.connections.get(tenantId);
-    if (connection) {
+    if (connection && connection.isInitialized) {
       return connection;
     }
 

@@ -15,8 +15,10 @@ import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
+import { ZulipService } from '../zulip/zulip.service';
 import {
   mockCategoryService,
   mockEvent,
@@ -57,6 +59,12 @@ describe('EventService', () => {
           useValue: mockCategoryService,
         },
         {
+          provide: EventEmitter2,
+          useValue: {
+            emit: jest.fn(),
+          },
+        },
+        {
           provide: GroupMemberService,
           useValue: {
             findGroupDetailsMembers: mockGroupMembers,
@@ -73,6 +81,13 @@ describe('EventService', () => {
         {
           provide: getRepositoryToken(EventEntity),
           useValue: mockRepository,
+        },
+        {
+          provide: ZulipService,
+          useValue: {
+            createTopic: jest.fn().mockResolvedValue({}),
+            sendMessage: jest.fn().mockResolvedValue({}),
+          },
         },
       ],
     }).compile();
