@@ -28,8 +28,6 @@ export class UserSeedService {
       },
     });
 
-    console.log(tenantId, 'countAdmin:', countAdmin);
-
     if (!countAdmin) {
       const salt = await bcrypt.genSalt();
       const password = await bcrypt.hash('secret', salt);
