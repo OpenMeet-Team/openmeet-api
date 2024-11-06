@@ -44,8 +44,6 @@ export class GroupRoleSeedService {
       'MANAGE_EVENTS',
       'MANAGE_DISCUSSIONS',
       'MANAGE_REPORTS',
-      'MANAGE_BILLING',
-
       'CREATE_EVENT',
     ]);
     await this.createGroupRoleIfNotExists('guest', []);

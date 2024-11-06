@@ -12,15 +12,6 @@ export class CreateGroupMemberDto {
   @IsNumber()
   userId: number;
 
-  // @ApiProperty({
-  //   description: 'ID of the group role assigned to the member',
-  // })
-  // @IsNotEmpty()
-  // @Type(() => Number)
-  // @IsNumber()
-  // @IsOptional()
-  // groupRoleId: number = 1;
-
   @ApiProperty({
     description: 'ID of the group to which the member belongs',
   })

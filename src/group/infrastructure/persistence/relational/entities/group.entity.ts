@@ -50,6 +50,9 @@ export class GroupEntity extends EntityRelationalHelper {
   })
   visibility: Visibility;
 
+  @Column({ type: 'boolean', default: false })
+  requireApproval: boolean;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   location: string;
 

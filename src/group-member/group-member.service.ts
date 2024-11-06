@@ -49,23 +49,8 @@ export class GroupMemberService {
     await this.getTenantSpecificEventRepository();
     return await this.groupMemberRepository.findOne({
       where: { group: { id: groupId }, user: { id: userId } },
-      relations: ['groupRole', 'groupRole.groupPermissions'],
+      relations: ['groupRole', 'groupRole.groupPermissions', 'user'],
     });
-  }
-
-  async joinGroup(userId: number, groupId: number) {
-    await this.getTenantSpecificEventRepository();
-    const group = { id: groupId };
-    const user = { id: userId };
-
-    const groupRole = await this.groupRoleService.findOne(GroupRole.Member);
-    const mappedDto = {
-      user,
-      group,
-      groupRole,
-    };
-    const groupMember = this.groupMemberRepository.create(mappedDto);
-    return await this.groupMemberRepository.save(groupMember);
   }
 
   async updateGroupMemberRole(
@@ -124,10 +109,11 @@ export class GroupMemberService {
     return await this.groupMemberRepository.remove(groupMember);
   }
 
-  async findGroupDetailsMembers(groupId: number): Promise<any> {
+  async findGroupDetailsMembers(groupId: number, limit: number): Promise<any> {
     await this.getTenantSpecificEventRepository();
     return await this.groupMemberRepository.find({
       where: { group: { id: groupId } },
+      take: limit,
       relations: ['user', 'groupRole'],
     });
   }
@@ -157,5 +143,21 @@ export class GroupMemberService {
       throw new NotFoundException('Group member not found');
     }
     return await this.groupMemberRepository.remove(groupMember);
+  }
+
+  async createGroupMember(createDto: CreateGroupMemberDto, groupRole?: string) {
+    await this.getTenantSpecificEventRepository();
+    const group = { id: createDto.groupId };
+    const user = { id: createDto.userId };
+    const role = await this.groupRoleService.findOne(
+      groupRole || GroupRole.Guest,
+    );
+    const mappedDto = {
+      user,
+      group,
+      groupRole: role,
+    };
+    const groupMember = this.groupMemberRepository.create(mappedDto);
+    return await this.groupMemberRepository.save(groupMember);
   }
 }

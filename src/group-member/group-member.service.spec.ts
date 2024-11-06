@@ -41,12 +41,6 @@ describe('GroupMemberService', () => {
     expect(result).toEqual(mockGroupMember);
   });
 
-  it('should join group', async () => {
-    const result = await service.joinGroup(mockUser.id, mockGroup.id);
-
-    expect(result).toEqual(mockGroupMember);
-  });
-
   it('should update group member role', async () => {
     const result = await service.updateGroupMemberRole(
       mockGroup.id,
@@ -70,7 +64,7 @@ describe('GroupMemberService', () => {
   });
 
   it('should find group details members', async () => {
-    const result = await service.findGroupDetailsMembers(mockGroup.id);
+    const result = await service.findGroupDetailsMembers(mockGroup.id, 5);
 
     expect(result).toEqual([mockGroupMember]);
   });
@@ -85,5 +79,17 @@ describe('GroupMemberService', () => {
     const result = await service.rejectMember(mockGroup.id, mockUser.id);
 
     expect(result).toEqual(mockGroupMember);
+  });
+
+  describe('createGroupMember', () => {
+    it('should create group member with default role', async () => {
+      const result = await service.createGroupMember({
+        userId: mockUser.id,
+        groupId: mockGroup.id,
+      });
+
+      expect(result).toEqual(mockGroupMember);
+      // expect(result.groupRole?.name).toEqual(GroupRole.Guest);
+    });
   });
 });

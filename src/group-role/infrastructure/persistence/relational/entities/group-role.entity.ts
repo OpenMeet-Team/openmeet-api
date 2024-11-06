@@ -18,8 +18,6 @@ export class GroupRoleEntity extends EntityRelationalHelper {
 
   @Column({ type: 'enum', enum: GroupRole })
   name: GroupRole;
-  // @Column({ type: 'varchar', length: 255 })
-  // name: string; // TODO replace with enum or type
 
   @OneToMany(() => GroupMemberEntity, (groupUser) => groupUser.groupRole)
   groupMembers: GroupMemberEntity[];
