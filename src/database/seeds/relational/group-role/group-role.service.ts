@@ -78,7 +78,6 @@ export class GroupRoleSeedService {
       const permissions =
         await this.getGroupPermissionsByNames(permissionNames);
       groupRole.groupPermissions = permissions;
-
       await this.groupRoleRepository.save(groupRole);
     }
   }

@@ -34,4 +34,17 @@ export class TenantConnectionService implements OnModuleInit {
       this.connections.delete(tenantId);
     }
   }
+
+  async removeTenantSchema(tenantId: string): Promise<void> {
+    const connection = this.connections.get(tenantId);
+    if (connection) {
+      const schemaName = `tenant_${tenantId}`;
+      await connection.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      // Remove the connection from the map
+      await connection.destroy();
+      this.connections.delete(tenantId);
+    } else {
+      throw new Error(`Connection for tenant ${tenantId} does not exist.`);
+    }
+  }
 }
