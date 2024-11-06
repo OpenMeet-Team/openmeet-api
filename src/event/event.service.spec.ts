@@ -259,4 +259,12 @@ describe('EventService', () => {
       expect(result).toEqual(mockEvents);
     });
   });
+
+  describe('findEventsForGroup', () => {
+    it('should return events for a group', async () => {
+      jest.spyOn(eventRepository, 'find').mockResolvedValue(mockEvents);
+      const result = await service.findEventsForGroup(mockGroup.id, 3);
+      expect(result).toEqual(mockEvents);
+    });
+  });
 });

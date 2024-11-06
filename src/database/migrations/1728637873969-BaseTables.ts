@@ -57,7 +57,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `CREATE TYPE "${schema}"."groups_status_enum" AS ENUM('draft', 'pending', 'published')`,
     );
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."groups" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, "slug" character varying(255) NOT NULL, "location" character varying(255), "lat" double precision, "lon" double precision, "description" text NOT NULL, "createdById" integer, "imageId" integer, "status" "${schema}"."groups_status_enum", "visibility" "${schema}"."groups_visibility_enum", CONSTRAINT "PK_659d1483316afb28afd3a90646e" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."groups" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, "slug" character varying(255) NOT NULL, "location" character varying(255), "lat" double precision, "lon" double precision, "description" text NOT NULL, "requireApproval" boolean NOT NULL DEFAULT false, "createdById" integer, "imageId" integer, "status" "${schema}"."groups_status_enum", "visibility" "${schema}"."groups_visibility_enum", CONSTRAINT "PK_659d1483316afb28afd3a90646e" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
       `CREATE TABLE "${schema}"."categories" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, "slug" character varying(255), CONSTRAINT "PK_24dbc6126a28ff948da33e97d3b" PRIMARY KEY ("id"))`,

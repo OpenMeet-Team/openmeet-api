@@ -44,8 +44,6 @@ export class GroupRoleSeedService {
       'MANAGE_EVENTS',
       'MANAGE_DISCUSSIONS',
       'MANAGE_REPORTS',
-      'MANAGE_BILLING',
-
       'CREATE_EVENT',
     ]);
     await this.createGroupRoleIfNotExists('guest', []);
@@ -80,7 +78,6 @@ export class GroupRoleSeedService {
       const permissions =
         await this.getGroupPermissionsByNames(permissionNames);
       groupRole.groupPermissions = permissions;
-
       await this.groupRoleRepository.save(groupRole);
     }
   }
