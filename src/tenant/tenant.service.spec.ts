@@ -35,10 +35,11 @@ describe('TenantConnectionService', () => {
     await service.closeDatabaseConnection('1');
   });
 
-  it('should create a schema if it does not exist', async () => {
+  it('should create a schema if it does not exist and remove it', async () => {
     const tenantId = randomUUID();
     const connection = await service.getTenantConnection(tenantId);
     expect(connection.driver.schema).toEqual(`tenant_${tenantId}`);
-    await service.closeDatabaseConnection(tenantId);
+    await service.removeTenantSchema(tenantId);
+    expect(service['connections'].has(tenantId)).toBeFalsy();
   });
 });
