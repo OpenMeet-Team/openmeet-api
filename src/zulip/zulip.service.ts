@@ -23,6 +23,21 @@ export class ZulipService {
     return await client.messages.send(params);
   }
 
+  async EditZulipMessage(messageId: number, content: string) {
+    const client = await initializeZulipClient();
+    return await client.messages.update({
+      message_id: messageId,
+      content: content,
+    });
+  }
+
+  async DeleteZulipMessage(messageId: number) {
+    const client = await initializeZulipClient();
+    return await client.messages.delete({
+      message_id: messageId,
+    });
+  }
+
   async GetZulipTopics(streamName: string) {
     const client = await initializeZulipClient();
     const streamResponse = await client.streams.retrieve();
