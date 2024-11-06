@@ -14,7 +14,6 @@ import { fetchTenants, Tenant } from '../../../utils/tenant-config';
 const runSeed = async () => {
   const tenants: Tenant[] = fetchTenants();
   const tenantIds = tenants.map((t) => t.id);
-  console.log('Running seeds for tenants:', tenantIds);
 
   const app = await NestFactory.create(SeedModule);
   for (const tenantId of tenantIds) {
