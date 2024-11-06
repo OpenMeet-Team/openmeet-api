@@ -133,6 +133,33 @@ export class EventService {
     }
   }
 
+  async updateComment(body: CommentDto, messageId: number) {
+    const { message } = body;
+
+    try {
+      const response = await this.zulipService.EditZulipMessage(
+        messageId,
+        message,
+      );
+      console.log('Message sent successfully:', response);
+      return response;
+    } catch (error) {
+      console.error('Error sending message to Zulip:', error);
+      throw new Error('Failed to create Zulip topic');
+    }
+  }
+
+  async deleteComment(messageId: number) {
+    try {
+      const response = await this.zulipService.DeleteZulipMessage(messageId);
+      console.log('Message sent successfully:', response);
+      return response;
+    } catch (error) {
+      console.error('Error sending message to Zulip:', error);
+      throw new Error('Failed to create Zulip topic');
+    }
+  }
+
   async getTopics(eventId: number) {
     try {
       const event = await this.findOne(eventId);

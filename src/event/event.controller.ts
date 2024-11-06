@@ -51,7 +51,7 @@ export class EventController {
 
   @Public()
   @Post(':eventId/comment')
-  @ApiOperation({ summary: 'Create a new event' })
+  @ApiOperation({ summary: 'Create a new comment' })
   async comment(
     @Body() body: CommentDto,
     @Param('eventId') eventId: number,
@@ -60,8 +60,23 @@ export class EventController {
   }
 
   @Public()
+  @Post('comment-edit/:messageId')
+  @ApiOperation({ summary: 'Update a comment' })
+  async updaetComment(
+    @Body() body: CommentDto,
+    @Param('messageId') messageId: number,
+  ): Promise<EventEntity> {
+    return this.eventService.updateComment(body, messageId);
+  }
+
+  @Delete('delete-comment/:messageId')
+  async deleteComment(@Param('messageId') messageId: number): Promise<void> {
+    return this.eventService.deleteComment(messageId);
+  }
+
+  @Public()
   @Post('comment-reply/:eventId/:topicName')
-  @ApiOperation({ summary: 'Create a new event' })
+  @ApiOperation({ summary: 'reply to comment' })
   async commentReply(
     @Body() body: CommentDto,
     @Param('topicName') topicName: string,
