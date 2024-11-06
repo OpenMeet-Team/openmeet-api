@@ -12,10 +12,9 @@ export class TenantConnectionService implements OnModuleInit {
     }
 
     // Create a DataSource and initialize the connection
-    const dataSource = AppDataSource();
+    const dataSource = AppDataSource(tenantId);
     await dataSource.initialize();
     if (!tenantId) {
-      console.warn('No tenantId, returning public schema');
       return dataSource;
     }
 
@@ -26,5 +25,13 @@ export class TenantConnectionService implements OnModuleInit {
     // Cache the connection for reuse
     this.connections.set(tenantId, dataSource);
     return dataSource;
+  }
+
+  async closeDatabaseConnection(tenantId: string) {
+    const connection = this.connections.get(tenantId);
+    if (connection) {
+      await connection.destroy();
+      this.connections.delete(tenantId);
+    }
   }
 }

@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { DataSource, DataSourceOptions } from 'typeorm';
 
-export const AppDataSource = (tenantId = '') => {
+export const AppDataSource = (tenantId: string) => {
   const schemaName = tenantId ? `tenant_${tenantId}` : '';
   // const schemaName = 'public';
   return new DataSource({
@@ -51,5 +51,5 @@ export const AppDataSource = (tenantId = '') => {
 };
 
 // Export a single DataSource instance for the default tenant
-const DefaultDataSource = AppDataSource();
+const DefaultDataSource = AppDataSource('');
 export default DefaultDataSource;

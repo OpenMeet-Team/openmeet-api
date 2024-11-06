@@ -6,7 +6,7 @@ async function deleteAllSchemas() {
 
   try {
     // Initialize connection with public schema
-    dataSource = AppDataSource();
+    dataSource = AppDataSource('');
     await dataSource.initialize();
     console.log('Database connection initialized');
 

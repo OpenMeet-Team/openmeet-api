@@ -13,6 +13,7 @@ import { EventService } from '../event/event.service';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
+import { GroupRoleService } from '../group-role/group-role.service';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-pres
     CategoryService,
     EventService,
     FilesS3PresignedService,
+    GroupRoleService,
   ],
   exports: [GroupService],
 })

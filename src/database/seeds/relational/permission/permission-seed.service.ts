@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
 import { PermissionEntity } from '../../../../permission/infrastructure/persistence/relational/entities/permission.entity';
+import { GroupPermission } from 'src/core/constants/constant';
 
 @Injectable()
 export class PermissionSeedService {
@@ -26,6 +27,11 @@ export class PermissionSeedService {
       { name: 'DELETE_EVENTS' },
       { name: 'MANAGE_USERS' },
     ];
+
+    // loop over GroupPermission and create permissions
+    for (const permission of Object.values(GroupPermission)) {
+      await this.createPermissionIfNotExists(permission);
+    }
 
     // Seed each permission if it doesn't already exist
     for (const permission of permissions) {

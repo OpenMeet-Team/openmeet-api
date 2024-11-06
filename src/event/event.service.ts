@@ -569,4 +569,12 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
     return this.eventAttendeeService.findEventAttendees(eventId);
   }
+
+  async findEventsForGroup(groupId: number, limit: number) {
+    await this.getTenantSpecificEventRepository();
+    return this.eventRepository.find({
+      where: { group: { id: groupId } },
+      take: limit,
+    });
+  }
 }
