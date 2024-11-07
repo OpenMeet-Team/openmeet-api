@@ -16,7 +16,7 @@ import { FileEntity } from '../file/infrastructure/persistence/relational/entiti
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { GroupRoleService } from '../group-role/group-role.service';
 import { ZulipService } from '../zulip/zulip.service';
-
+import { MailModule } from '../mail/mail.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -26,6 +26,7 @@ import { ZulipService } from '../zulip/zulip.service';
       FileEntity,
     ]),
     UserModule,
+    MailModule,
     GroupMemberModule,
     EventAttendeeModule,
   ],

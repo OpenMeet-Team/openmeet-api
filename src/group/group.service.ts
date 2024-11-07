@@ -32,6 +32,7 @@ import { EventEntity } from '../event/infrastructure/persistence/relational/enti
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
 import { GroupRoleService } from '../group-role/group-role.service';
+import { MailService } from '../mail/mail.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -47,6 +48,7 @@ export class GroupService {
     private readonly eventService: EventService,
     private readonly fileService: FilesS3PresignedService,
     private readonly groupRoleService: GroupRoleService,
+    private readonly mailService: MailService,
   ) {}
 
   async getTenantSpecificGroupRepository() {
@@ -502,6 +504,7 @@ export class GroupService {
 
     const groupEntity = await this.groupRepository.findOne({
       where: { id: groupId },
+      relations: ['createdBy'],
     });
 
     if (
@@ -512,6 +515,16 @@ export class GroupService {
         { userId, groupId },
         GroupRole.Guest,
       );
+
+      if (groupEntity.createdBy.email) {
+        await this.mailService.groupMemberJoined({
+          to: groupEntity.createdBy.email,
+          data: {
+            group: groupEntity,
+            user: groupEntity.createdBy,
+          },
+        });
+      }
     } else {
       await this.groupMemberService.createGroupMember(
         { userId, groupId },

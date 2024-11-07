@@ -4,6 +4,7 @@ export interface Tenant {
   id: string;
   name: string;
   frontendDomain: string;
+  logoUrl: string;
   companyDomain: string;
   confirmEmail: boolean;
   mailDefaultEmail: string;
@@ -44,4 +45,12 @@ export function fetchTenants(): Tenant[] {
   } catch (error) {
     throw new Error(`Failed to load tenants configuration: ${error.message}`);
   }
+}
+
+export function getTenantConfig(tenantId: string): Tenant {
+  const tenant = fetchTenants().find((t) => t.id === tenantId);
+  if (!tenant) {
+    throw new Error(`Tenant ${tenantId} not found`);
+  }
+  return tenant;
 }
