@@ -39,7 +39,7 @@ describe('Event Comments API Tests', () => {
       await request(APP_URL)
         .delete(`/api/events/${testEvent.id}`)
         .set('Authorization', `Bearer ${token}`)
-        .set('tenant-id', '1');
+        .set('x-tenant-id', '1');
     }
   });
 
@@ -49,7 +49,7 @@ describe('Event Comments API Tests', () => {
       .post(`/api/events/${testEvent.id}/comment`)
       .send(commentData)
       .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', '1');
+      .set('x-tenant-id', '1');
 
     expect(response.status).toBe(201);
     // expect(response.body.result).toBe('success');
@@ -64,7 +64,7 @@ describe('Event Comments API Tests', () => {
       .post(`/api/events/comment-reply/${testEvent.id}/${topicName}`)
       .send(replyData)
       .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', '1');
+      .set('x-tenant-id', '1');
 
     expect(response.status).toBe(201);
     // expect(response.body.result).toBe('success');
@@ -75,7 +75,7 @@ describe('Event Comments API Tests', () => {
     const response = await request(APP_URL)
       .get(`/api/events/get-comments/${testEvent.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', '1');
+      .set('x-tenant-id', '1');
 
     expect(response.status).toBe(200);
     expect(Array.isArray(response.body)).toBe(true);

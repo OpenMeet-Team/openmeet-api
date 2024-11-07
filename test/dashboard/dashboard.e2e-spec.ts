@@ -37,7 +37,7 @@ describe('Dashboard', () => {
   describe('my-events', () => {
     describe('when unauthenticated', () => {
       it('should fail with 401', async () => {
-        const server = request.agent(app).set('tenant-id', TESTING_TENANT_ID);
+        const server = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
         const req = server.get('/api/dashboard/my-events');
         const response = await req;
         expect(response.status).toBe(401);
@@ -51,7 +51,7 @@ describe('Dashboard', () => {
 
         const server = request
           .agent(app)
-          .set('tenant-id', TESTING_TENANT_ID)
+          .set('x-tenant-id', TESTING_TENANT_ID)
           .set('Authorization', `Bearer ${authToken}`);
 
         const req = server.get('/api/dashboard/my-events');
@@ -89,7 +89,7 @@ describe('Dashboard', () => {
   describe('my-groups', () => {
     describe('when unauthenticated', () => {
       it('should fail with 401', async () => {
-        const server = request.agent(app).set('tenant-id', TESTING_TENANT_ID);
+        const server = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
         const req = server.get('/api/dashboard/my-groups');
         const response = await req;
         expect(response.status).toBe(401);
@@ -103,7 +103,7 @@ describe('Dashboard', () => {
 
         const server = request
           .agent(app)
-          .set('tenant-id', TESTING_TENANT_ID)
+          .set('x-tenant-id', TESTING_TENANT_ID)
           .set('Authorization', `Bearer ${authToken}`);
 
         const req = server.get('/api/dashboard/my-groups');
