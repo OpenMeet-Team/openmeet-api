@@ -20,7 +20,7 @@ describe('GroupRecommendations (e2e)', () => {
   async function loginAsTester() {
     const loginResponse = await request(APP_URL)
       .post('/api/v1/auth/email/login')
-      .set('tenant-id', TESTING_TENANT_ID)
+      .set('x-tenant-id', TESTING_TENANT_ID)
       .send({
         email: TESTER_EMAIL,
         password: TESTER_PASSWORD,
@@ -35,7 +35,7 @@ describe('GroupRecommendations (e2e)', () => {
     const response = await request(APP_URL)
       .post('/api/groups')
       .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', TESTING_TENANT_ID)
+      .set('x-tenant-id', TESTING_TENANT_ID)
       .send(groupData);
 
     expect(response.status).toBe(201);
@@ -47,7 +47,7 @@ describe('GroupRecommendations (e2e)', () => {
     const response = await request(APP_URL)
       .post('/api/categories')
       .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', TESTING_TENANT_ID)
+      .set('x-tenant-id', TESTING_TENANT_ID)
       .send(categoryData);
     // console.log('🚀 ~ createCategory ~ response.body:', response.body);
     expect(response.status).toBe(201);
@@ -59,7 +59,7 @@ describe('GroupRecommendations (e2e)', () => {
     const response = await request(APP_URL)
       .post('/api/events')
       .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', TESTING_TENANT_ID)
+      .set('x-tenant-id', TESTING_TENANT_ID)
       .send(eventData);
 
     // console.log('🚀 ~ createEvent ~ response.body:', response.body);
@@ -162,15 +162,15 @@ describe('GroupRecommendations (e2e)', () => {
     //  group should exist
     const groupResponse = await request(APP_URL)
       .get(`/api/groups/${testGroup.id}`)
-      .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', TESTING_TENANT_ID);
-
+      .set('Authorization', `Bearer ${token}`
+      .set('x-tenant-id', TESTING_TENANT_ID);
+           
     expect(groupResponse.status).toBe(200);
 
     const response = await request(APP_URL)
       .get(`/api/groups/${testGroup.id}/recommended-events`)
       .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', TESTING_TENANT_ID);
+      .set('x-tenant-id', TESTING_TENANT_ID);
 
     expect(response.status).toBe(200);
     expect(Array.isArray(response.body)).toBe(true);
@@ -199,7 +199,7 @@ describe('GroupRecommendations (e2e)', () => {
       await request(APP_URL)
         .delete(`/api/events/${event.id}`)
         .set('Authorization', `Bearer ${token}`)
-        .set('tenant-id', TESTING_TENANT_ID);
+        .set('x-tenant-id', TESTING_TENANT_ID);
     }
 
     // Clean up group
@@ -207,7 +207,7 @@ describe('GroupRecommendations (e2e)', () => {
       await request(APP_URL)
         .delete(`/api/groups/${testGroup.id}`)
         .set('Authorization', `Bearer ${token}`)
-        .set('tenant-id', TESTING_TENANT_ID);
+        .set('x-tenant-id', TESTING_TENANT_ID);
     }
 
     // Clean up categories
@@ -215,7 +215,7 @@ describe('GroupRecommendations (e2e)', () => {
       await request(APP_URL)
         .delete(`/api/categories/${category.id}`)
         .set('Authorization', `Bearer ${token}`)
-        .set('tenant-id', TESTING_TENANT_ID);
+        .set('x-tenant-id', TESTING_TENANT_ID);
     }
   });
 });
