@@ -9,7 +9,7 @@ describe('EventAttendeeController (e2e)', () => {
   async function loginAsTester() {
     const loginResponse = await request(APP_URL)
       .post('/api/v1/auth/email/login')
-      .set('tenant-id', '1')
+      .set('x-tenant-id', '1')
       .send({
         email: ADMIN_EMAIL,
         password: TESTER_PASSWORD,
@@ -23,7 +23,7 @@ describe('EventAttendeeController (e2e)', () => {
     const eventResponse = await request(APP_URL)
       .post('/api/events')
       .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', '1')
+      .set('x-tenant-id', '1')
       .send({
         name: 'Test Event',
         slug: 'test-event',
@@ -49,7 +49,7 @@ describe('EventAttendeeController (e2e)', () => {
     const attendResponse = await request(APP_URL)
       .post('/api/event-attendees/attend')
       .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', '1')
+      .set('x-tenant-id', '1')
       .send({
         eventId,
       });
@@ -69,7 +69,7 @@ describe('EventAttendeeController (e2e)', () => {
       await request(APP_URL)
         .delete(`/api/events/${testEvent.id}`)
         .set('Authorization', `Bearer ${token}`)
-        .set('tenant-id', '1');
+        .set('x-tenant-id', '1');
     }
   });
 
@@ -77,7 +77,7 @@ describe('EventAttendeeController (e2e)', () => {
     const getMyEventsResponse = await request(APP_URL)
       .get('/api/event-attendees/me')
       .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', '1');
+      .set('x-tenant-id', '1');
 
     expect(getMyEventsResponse.status).toBe(200);
     // expect(getMyEventsResponse.body).toHaveLength(1);
@@ -88,7 +88,7 @@ describe('EventAttendeeController (e2e)', () => {
     const getEventAttendeesResponse = await request(APP_URL)
       .get(`/api/event-attendees/${testEvent.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', '1');
+      .set('x-tenant-id', '1');
 
     expect(getEventAttendeesResponse.status).toBe(200);
     const isTesterAttending = getEventAttendeesResponse.body.data.some(
@@ -101,7 +101,7 @@ describe('EventAttendeeController (e2e)', () => {
     const cancelAttendanceResponse = await request(APP_URL)
       .delete(`/api/event-attendees/cancel/1/${testEvent.id}`) // assuming tester has user ID 1
       .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', '1');
+      .set('x-tenant-id', '1');
 
     expect(cancelAttendanceResponse.status).toBe(200);
 
@@ -109,7 +109,7 @@ describe('EventAttendeeController (e2e)', () => {
     const getEventAttendeesResponse = await request(APP_URL)
       .get(`/api/event-attendees/${testEvent.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', '1');
+      .set('x-tenant-id', '1');
 
     const isTesterStillAttending = getEventAttendeesResponse.body.data.some(
       (attendee) => attendee.user.id === 1,
