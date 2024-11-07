@@ -20,8 +20,8 @@ describe('Users Module', () => {
     let newUser;
     const server = request.agent(app).set('x-tenant-id', '1');
 
-    const newUserEmail = `user-first.${Date.now()}@example.com`;
-    const newUserChangedEmail = `user-first-changed.${Date.now()}@example.com`;
+    const newUserEmail = `user-first.${Date.now()}@openmeet.net`;
+    const newUserChangedEmail = `user-first-changed.${Date.now()}@openmeet.net`;
     const newUserPassword = `secret`;
     const newUserChangedPassword = `new-secret`;
 
@@ -75,7 +75,7 @@ describe('Users Module', () => {
   });
 
   describe('Create', () => {
-    const newUserByAdminEmail = `user-created-by-admin.${Date.now()}@example.com`;
+    const newUserByAdminEmail = `user-created-by-admin.${Date.now()}@openmeet.net`;
     const newUserByAdminPassword = `secret`;
     const server = request.agent(app).set('x-tenant-id', '1');
 
