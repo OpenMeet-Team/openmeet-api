@@ -516,15 +516,16 @@ export class GroupService {
         GroupRole.Guest,
       );
 
-      if (groupEntity.createdBy.email) {
-        await this.mailService.groupMemberJoined({
-          to: groupEntity.createdBy.email,
-          data: {
-            group: groupEntity,
-            user: groupEntity.createdBy,
-          },
-        });
-      }
+      // TODO: uncomment this when we have a mail service
+      // if (groupEntity.createdBy.email) {
+      //   await this.mailService.groupMemberJoined({
+      //     to: groupEntity.createdBy.email,
+      //     data: {
+      //       group: groupEntity,
+      //       user: groupEntity.createdBy,
+      //     },
+      //   });
+      // }
     } else {
       await this.groupMemberService.createGroupMember(
         { userId, groupId },
