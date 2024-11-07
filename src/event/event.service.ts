@@ -351,6 +351,16 @@ export class EventService {
     return randomEvents;
   }
 
+  async showRandomEvents(limit: number): Promise<EventEntity[]> {
+    await this.getTenantSpecificEventRepository();
+    return this.eventRepository.find({
+      where: { status: Status.Published },
+      relations: ['attendees'],
+      order: { createdAt: 'DESC' },
+      take: limit,
+    });
+  }
+
   async getRecommendedEventsByEventId(eventId: number): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
     const maxEvents = 5;

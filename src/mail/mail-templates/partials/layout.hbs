@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>{{title}}</title>
+ <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+    body {
+      font-family: 'Inter', Arial, sans-serif;
+      background-color: #FFFFFF;
+      color: #1E1A43;
+      margin: 0;
+      padding: 0;
+    }
+    a {
+      color: #7B71DA;
+      text-decoration: underline;
+    }
+    /* Ensure table-based layout is responsive */
+    table {
+      border-collapse: collapse;
+    }
+  </style>
+</head>
+
+<body>
+  {{> header}} <!-- Includes header partial -->
+  {{{body}}} <!-- Main content goes here -->
+  {{> footer}} <!-- Includes footer partial -->
+</body>
+</html>

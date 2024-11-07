@@ -121,6 +121,10 @@ export const mockGroupRoleService = {
   findOne: jest.fn().mockResolvedValue(mockGroupRole),
 };
 
+export const mockMailService = {
+  groupMemberJoined: jest.fn().mockResolvedValue(undefined),
+};
+
 export const mockGroupService = {
   getHomePageFeaturedGroups: jest.fn().mockResolvedValue(mockGroups),
   getHomePageUserCreatedGroups: jest.fn().mockResolvedValue(mockGroups),

@@ -267,4 +267,12 @@ describe('EventService', () => {
       expect(result).toEqual(mockEvents);
     });
   });
+
+  describe('showRandomEvents', () => {
+    it('should return random published events', async () => {
+      jest.spyOn(eventRepository, 'find').mockResolvedValue(mockEvents);
+      const result = await service.showRandomEvents(3);
+      expect(result).toEqual(mockEvents);
+    });
+  });
 });

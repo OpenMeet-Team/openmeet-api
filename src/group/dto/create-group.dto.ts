@@ -1,7 +1,8 @@
-import { Visibility } from './../../core/constants/constant';
+import { GroupStatus, GroupVisibility } from './../../core/constants/constant';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
+  IsBoolean,
   IsEnum,
   IsNotEmpty,
   IsNumber,
@@ -9,7 +10,6 @@ import {
   IsString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { Status } from '../../core/constants/constant';
 import { FileEntity } from '../../file/infrastructure/persistence/relational/entities/file.entity';
 
 export class CreateGroupDto {
@@ -65,20 +65,28 @@ export class CreateGroupDto {
   lon: number;
 
   @ApiPropertyOptional({
+    description: 'Whether the group requires approval for new members',
+    type: Boolean,
+  })
+  @IsBoolean()
+  @IsOptional()
+  requireApproval: boolean;
+
+  @ApiPropertyOptional({
     description: 'The status of the group',
-    enum: Status,
+    enum: GroupStatus,
   })
   @IsOptional()
-  @IsEnum(Status)
-  status?: Status;
+  @IsEnum(GroupStatus)
+  status?: GroupStatus;
 
   @ApiPropertyOptional({
     description: 'The visibility of the group',
-    enum: Visibility,
+    enum: GroupVisibility,
   })
   @IsOptional()
-  @IsEnum(Visibility)
-  visibility?: Visibility;
+  @IsEnum(GroupVisibility)
+  visibility?: GroupVisibility;
 
   @ApiPropertyOptional({
     description: 'The list of category IDs associated with this group',
