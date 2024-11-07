@@ -30,10 +30,11 @@ export class EventAttendeeService {
   async attendEvent(
     createEventAttendeeDto: CreateEventAttendeeDto,
     userId: number,
+    eventId: number,
   ): Promise<EventAttendeesEntity> {
     await this.getTenantSpecificEventRepository();
 
-    const event = { id: createEventAttendeeDto.eventId };
+    const event = { id: eventId };
     const user = { id: userId };
 
     const mappedDto: DeepPartial<EventAttendeesEntity> = {

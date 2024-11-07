@@ -47,12 +47,9 @@ describe('EventAttendeeController (e2e)', () => {
 
   async function attendEvent(token, eventId) {
     const attendResponse = await request(APP_URL)
-      .post('/api/event-attendees/attend')
+      .post(`/api/events/${eventId}/attend`)
       .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', '1')
-      .send({
-        eventId,
-      });
+      .set('tenant-id', '1');
 
     expect(attendResponse.status).toBe(201);
     return attendResponse.body;
@@ -75,7 +72,7 @@ describe('EventAttendeeController (e2e)', () => {
 
   it('should retrieve the events the user is attending', async () => {
     const getMyEventsResponse = await request(APP_URL)
-      .get('/api/event-attendees/me')
+      .get('/api/events/event-attendee/me')
       .set('Authorization', `Bearer ${token}`)
       .set('tenant-id', '1');
 
@@ -86,7 +83,7 @@ describe('EventAttendeeController (e2e)', () => {
 
   it('should retrieve attendees of an event', async () => {
     const getEventAttendeesResponse = await request(APP_URL)
-      .get(`/api/event-attendees/${testEvent.id}`)
+      .get(`/api/events/event-attendee/${testEvent.id}`)
       .set('Authorization', `Bearer ${token}`)
       .set('tenant-id', '1');
 

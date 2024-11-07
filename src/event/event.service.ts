@@ -92,11 +92,14 @@ export class EventService {
     const createdEvent = await this.eventRepository.save(event);
 
     const eventAttendeeDto = {
-      eventId: createdEvent.id,
       role: EventAttendeeRole.Host,
       status: EventAttendeeStatus.Confirmed,
     };
-    await this.eventAttendeeService.attendEvent(eventAttendeeDto, userId);
+    await this.eventAttendeeService.attendEvent(
+      eventAttendeeDto,
+      userId,
+      createdEvent.id,
+    );
     return createdEvent;
   }
 
