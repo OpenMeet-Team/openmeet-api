@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { GroupPermissionSeedService } from './group-permission/group-permission-seed.service';
 import { EventSeedService } from './event/event-seed.service';
 import { GroupSeedService } from './group/group-seed.service';
 import { RoleSeedService } from './role/role-seed.service';
@@ -14,7 +15,6 @@ import { fetchTenants, Tenant } from '../../../utils/tenant-config';
 const runSeed = async () => {
   const tenants: Tenant[] = fetchTenants();
   const tenantIds = tenants.map((t) => t.id);
-  console.log('Running seeds for tenants:', tenantIds);
 
   const app = await NestFactory.create(SeedModule);
   for (const tenantId of tenantIds) {
@@ -26,6 +26,7 @@ const runSeed = async () => {
     await app.get(CategorySeedService).run(tenantId);
     await app.get(PermissionSeedService).run(tenantId);
     await app.get(UserPermissionSeedService).run(tenantId);
+    await app.get(GroupPermissionSeedService).run(tenantId);
     await app.get(GroupRoleSeedService).run(tenantId);
     await app.get(GroupSeedService).run(tenantId);
     await app.get(EventSeedService).run(tenantId);

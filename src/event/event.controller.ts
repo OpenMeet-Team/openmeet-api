@@ -18,7 +18,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { Request } from 'express';
-import { CreateEventDto } from './dto/create-event.dto';
+import { CommentDto, CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventService } from './event.service';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
@@ -104,7 +104,50 @@ export class EventController {
     return this.eventAttendeeService.getEventAttendees(eventId, pagination);
   }
 
+  @Post(':eventId/comment')
+  @ApiOperation({ summary: 'Create a new comment' })
+  async comment(
+    @Body() body: CommentDto,
+    @Param('eventId') eventId: number,
+  ): Promise<EventEntity> {
+    return this.eventService.postComment(body, eventId);
+  }
+
+  @Post('comment-edit/:messageId')
+  @ApiOperation({ summary: 'Update a comment' })
+  async updaetComment(
+    @Body() body: CommentDto,
+    @Param('messageId') messageId: number,
+  ): Promise<EventEntity> {
+    return await this.eventService.updateComment(body, messageId);
+  }
+
+  @Delete('delete-comment/:messageId')
+  async deleteComment(@Param('messageId') messageId: number): Promise<void> {
+    return await this.eventService.deleteComment(messageId);
+  }
+
+  @Post('comment-reply/:eventId/:topicName')
+  @ApiOperation({ summary: 'reply to comment' })
+  async commentReply(
+    @Body() body: CommentDto,
+    @Param('topicName') topicName: string,
+    @Param('eventId') eventId: number,
+  ): Promise<EventEntity> {
+    return await this.eventService.postCommentinTopic(body, topicName, eventId);
+  }
+
   @Public()
+  @Get('get-comments/:eventId')
+  @ApiOperation({ summary: 'Get Topics' })
+  async findTopics(@Param('eventId') eventId: number): Promise<EventEntity> {
+    const event = await this.eventService.getTopics(+eventId);
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+    return event;
+  }
+
   @Get()
   @ApiOperation({ summary: 'Get all events' })
   async findme(

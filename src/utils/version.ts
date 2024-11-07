@@ -15,6 +15,7 @@ export function getBuildInfo(): BuildInfo {
     const packageJson = JSON.parse(
       Buffer.from(packageJsonB64, 'base64').toString(),
     );
+    console.log(packageJson);
 
     return {
       version: packageJson.version,

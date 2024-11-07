@@ -8,7 +8,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Repository } from 'typeorm';
-import { CreateEventDto } from './dto/create-event.dto';
+import { CommentDto, CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { REQUEST } from '@nestjs/core';
@@ -25,10 +25,11 @@ import {
 } from '../core/constants/constant';
 import slugify from 'slugify';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
-
+import { ZulipService } from '../zulip/zulip.service';
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
   private eventRepository: Repository<EventEntity>;
@@ -38,8 +39,10 @@ export class EventService {
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly categoryService: CategoryService,
     private readonly eventAttendeeService: EventAttendeeService,
+    private eventEmitter: EventEmitter2,
     private readonly groupMemberService: GroupMemberService,
     private readonly fileService: FilesS3PresignedService,
+    private readonly zulipService: ZulipService,
   ) {
     void this.initializeRepository();
   }
@@ -101,6 +104,97 @@ export class EventService {
       createdEvent.id,
     );
     return createdEvent;
+  }
+
+  async postComment(body: CommentDto, eventId: number) {
+    const { message } = body;
+    const event = await this.findOne(eventId);
+
+    const timestamp = Date.now();
+    const topicName = `${timestamp}-${message.split(' ').slice(0, 5).join('-').toLowerCase()}`;
+
+    const params = {
+      to: `${event.shortId}_${event.slug}`,
+      type: 'stream',
+      topic: topicName,
+      content: message,
+    };
+
+    try {
+      const response = await this.zulipService.PostZulipComment(params);
+      console.log('Message sent successfully:', response);
+      return response;
+    } catch (error) {
+      console.error('Error sending message to Zulip:', error);
+      throw new Error('Failed to create Zulip topic');
+    }
+  }
+
+  async updateComment(body: CommentDto, messageId: number) {
+    const { message } = body;
+
+    try {
+      const response = await this.zulipService.EditZulipMessage(
+        messageId,
+        message,
+      );
+      console.log('Message sent successfully:', response);
+      return response;
+    } catch (error) {
+      console.error('Error sending message to Zulip:', error);
+      throw new Error('Failed to create Zulip topic');
+    }
+  }
+
+  async deleteComment(messageId: number) {
+    try {
+      const response = await this.zulipService.DeleteZulipMessage(messageId);
+      console.log('Message sent successfully:', response);
+      return response;
+    } catch (error) {
+      console.error('Error sending message to Zulip:', error);
+      throw new Error('Failed to create Zulip topic');
+    }
+  }
+
+  async getTopics(eventId: number) {
+    try {
+      const event = await this.findOne(eventId);
+      const streamName = `${event.shortId}_${event.slug}`;
+
+      const response = this.zulipService.GetZulipTopics(streamName);
+
+      return response;
+    } catch (error) {
+      console.error('Error fetching topics and messages from Zulip:', error);
+      throw new Error('Failed to fetch topics and messages');
+    }
+  }
+
+  async postCommentinTopic(
+    body: CommentDto,
+    topicName: string,
+    eventId: number,
+  ) {
+    const { message } = body;
+
+    const event = await this.findOne(eventId);
+
+    const params = {
+      to: `${event.shortId}_${event.slug}`,
+      type: 'stream',
+      topic: topicName,
+      content: message,
+    };
+
+    try {
+      const response = await this.zulipService.PostZulipComment(params);
+      console.log('Message sent successfully to topic:', topicName);
+      return response;
+    } catch (error) {
+      console.error('Error sending message to Zulip:', error);
+      throw new Error('Failed to send message to the topic');
+    }
   }
 
   async findAll(pagination: PaginationDto, query: QueryEventDto): Promise<any> {
@@ -571,5 +665,13 @@ export class EventService {
   async findEventDetailsAttendees(eventId: number) {
     await this.getTenantSpecificEventRepository();
     return this.eventAttendeeService.findEventAttendees(eventId);
+  }
+
+  async findEventsForGroup(groupId: number, limit: number) {
+    await this.getTenantSpecificEventRepository();
+    return this.eventRepository.find({
+      where: { group: { id: groupId } },
+      take: limit,
+    });
   }
 }

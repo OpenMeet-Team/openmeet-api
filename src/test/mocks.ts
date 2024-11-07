@@ -2,6 +2,7 @@ import { CategoryEntity } from '../category/infrastructure/persistence/relationa
 import {
   EventAttendeeStatus,
   EventAttendeeRole,
+  GroupRole,
 } from '../core/constants/constant';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
@@ -11,6 +12,7 @@ import { UserEntity } from '../user/infrastructure/persistence/relational/entiti
 import { SubCategoryEntity } from '../sub-category/infrastructure/persistence/relational/entities/sub-category.entity';
 import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
 import { GroupUserPermissionEntity } from '../group/infrastructure/persistence/relational/entities/group-user-permission.entity';
+import { GroupRoleEntity } from 'src/group-role/infrastructure/persistence/relational/entities/group-role.entity';
 
 export const mockCategory = {
   id: 1,
@@ -81,6 +83,11 @@ export const mockSubCategory = {
   title: 'Test Sub Category',
 } as SubCategoryEntity;
 
+export const mockGroupRole = {
+  id: 1,
+  name: GroupRole.Guest,
+} as GroupRoleEntity;
+
 export const mockSubCategories = [mockSubCategory];
 
 export const mockGroupMembers = [mockGroupMember];
@@ -107,6 +114,11 @@ export const mockGroupMemberService = {
   leaveGroup: jest.fn().mockResolvedValue(mockGroupMember),
   findGroupDetailsMembers: jest.fn().mockResolvedValue(mockGroupMembers),
   updateGroupMemberRole: jest.fn().mockResolvedValue(mockGroupMember),
+  createGroupMember: jest.fn().mockResolvedValue(mockGroupMember),
+};
+
+export const mockGroupRoleService = {
+  findOne: jest.fn().mockResolvedValue(mockGroupRole),
 };
 
 export const mockGroupService = {
@@ -125,6 +137,10 @@ export const mockGroupService = {
   editGroup: jest.fn().mockResolvedValue(mockGroup),
   findAll: jest.fn().mockResolvedValue(mockGroups),
   getGroupsWhereUserCanCreateEvents: jest.fn().mockResolvedValue(mockGroups),
+  joinGroup: jest.fn().mockResolvedValue(mockGroupMember),
+  leaveGroup: jest.fn().mockResolvedValue(mockGroupMember),
+  showGroupMembers: jest.fn().mockResolvedValue(mockGroupMembers),
+  showGroupEvents: jest.fn().mockResolvedValue(mockEvents),
 };
 
 export const mockCategoryService = {
@@ -168,6 +184,7 @@ export const mockEventService = {
   findRandomEventsForGroup: jest.fn().mockResolvedValue(mockEvents),
   showGroupEvents: jest.fn().mockResolvedValue(mockEvents),
   deleteEventsByGroup: jest.fn().mockResolvedValue(undefined),
+  findEventsForGroup: jest.fn().mockResolvedValue(mockEvents),
 };
 
 export const mockFilesS3PresignedService = {

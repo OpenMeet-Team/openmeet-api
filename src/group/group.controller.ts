@@ -105,7 +105,7 @@ export class GroupController {
   @Get(':id/events')
   @ApiOperation({ summary: 'Get all group events' })
   async showGroupEvents(@Param('id') id: number): Promise<EventEntity[]> {
-    return await this.eventService.showGroupEvents(id);
+    return await this.groupService.showGroupEvents(id);
   }
 
   @Public()
@@ -114,7 +114,7 @@ export class GroupController {
   async showGroupMembers(
     @Param('id') id: number,
   ): Promise<GroupMemberEntity[]> {
-    return this.groupMemberService.findGroupDetailsMembers(+id);
+    return this.groupService.showGroupMembers(+id);
   }
 
   @Post(':id/join')
@@ -122,8 +122,8 @@ export class GroupController {
   async joinGroup(
     @AuthUser() user: User,
     @Param('id') id: number,
-  ): Promise<GroupMemberEntity> {
-    return this.groupMemberService.joinGroup(user.id, +id);
+  ): Promise<GroupMemberEntity | null> {
+    return this.groupService.joinGroup(user.id, +id);
   }
 
   @Delete(':id/leave')
