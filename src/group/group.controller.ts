@@ -22,7 +22,6 @@ import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
 import { QueryGroupDto } from './dto/group-query.dto';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
-import { HttpException, HttpStatus } from '@nestjs/common';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
@@ -117,6 +116,15 @@ export class GroupController {
     return this.groupService.showGroupMembers(+id);
   }
 
+  // @Public()
+  // @Get(':id/discussions')
+  // @ApiOperation({ summary: 'Get all group discussions' })
+  // async showGroupDiscussions(
+  //   @Param('id') id: number,
+  // ): Promise<DiscussionEntity[]> {
+  //   return this.groupService.showGroupDiscussions(+id);
+  // }
+
   @Post(':id/join')
   @ApiOperation({ summary: 'Joining a group' })
   async joinGroup(
@@ -179,16 +187,10 @@ export class GroupController {
   ): Promise<EventEntity[]> {
     minEvents = minEvents || 0;
     maxEvents = maxEvents || 5;
-    try {
-      const recommendedEvents = await this.groupService.getRecommendedEvents(
-        +id,
-        minEvents,
-        maxEvents,
-      );
-
-      return recommendedEvents;
-    } catch (error) {
-      throw new HttpException(error.message, HttpStatus.NOT_FOUND);
-    }
+    return await this.groupService.getRecommendedEvents(
+      +id,
+      minEvents,
+      maxEvents,
+    );
   }
 }

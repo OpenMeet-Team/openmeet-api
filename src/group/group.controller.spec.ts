@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GroupController } from './group.controller';
 import { GroupService } from './group.service';
-import { HttpException, HttpStatus } from '@nestjs/common';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import {
   mockGroup,
@@ -204,22 +203,6 @@ describe('GroupController', () => {
 
       const result = await controller.getRecommendedEvents(1, -1, 5);
       expect(result).toEqual([]);
-    });
-
-    it('should throw NotFoundException when group is not found', async () => {
-      const eventId = 99999999;
-      jest
-        .spyOn(groupService, 'getRecommendedEvents')
-        .mockRejectedValue(new Error('Not Found'));
-
-      await expect(controller.getRecommendedEvents(eventId)).rejects.toThrow(
-        HttpException,
-      );
-      await expect(
-        controller.getRecommendedEvents(eventId),
-      ).rejects.toMatchObject({
-        status: HttpStatus.NOT_FOUND,
-      });
     });
   });
 });

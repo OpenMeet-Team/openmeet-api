@@ -58,6 +58,7 @@ export class GroupSeedService {
           location: groupData.location,
           lat: groupData.lat,
           lon: groupData.lon,
+          requireApproval: groupData.requireApproval,
           categories: this.getRandomCategories(
             allCategories,
             numberOfCategories,

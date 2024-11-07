@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { I18nContext } from 'nestjs-i18n';
 import { MailData } from './interfaces/mail-data.interface';
@@ -7,13 +7,45 @@ import { MaybeType } from '../utils/types/maybe.type';
 import { MailerService } from '../mailer/mailer.service';
 import path from 'path';
 import { AllConfigType } from '../config/config.type';
+import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
+import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { getTenantConfig } from '../utils/tenant-config';
+import { REQUEST } from '@nestjs/core';
+import fs from 'fs';
+import handlebars from 'handlebars';
 
 @Injectable()
 export class MailService {
+  private partials: { [key: string]: string } = {};
+
   constructor(
+    @Inject(REQUEST) private readonly request: any,
     private readonly mailerService: MailerService,
     private readonly configService: ConfigService<AllConfigType>,
-  ) {}
+  ) {
+    this.registerPartials();
+  }
+
+  private registerPartials() {
+    // Load and register partial templates
+    const partialsDir = path.join(
+      this.configService.getOrThrow('app.workingDirectory', { infer: true }),
+      'src',
+      'mail',
+      'mail-templates',
+      'partials',
+    );
+
+    fs.readdirSync(partialsDir).forEach((file) => {
+      const partialName = file.replace('.hbs', '');
+      const partialContent = fs.readFileSync(
+        path.join(partialsDir, file),
+        'utf8',
+      );
+      handlebars.registerPartial(partialName, partialContent);
+      this.partials[partialName] = partialContent;
+    });
+  }
 
   async userSignUp(mailData: MailData<{ hash: string }>): Promise<void> {
     const i18n = I18nContext.current();
@@ -163,6 +195,42 @@ export class MailService {
         text1,
         text2,
         text3,
+      },
+    });
+  }
+
+  async groupMemberJoined(
+    mailData: MailData<{ group: GroupEntity; user: UserEntity }>,
+  ): Promise<void> {
+    const tenantConfig = getTenantConfig(this.request.tenantId);
+    const url = tenantConfig.frontendDomain + '/auth/confirm-email';
+
+    await this.mailerService.sendMail({
+      to: mailData.to,
+      title: 'New member has joined your group',
+      subject: 'New member has joined your group',
+      text: `${url.toString()} New member has joined your group`,
+      templatePath: path.join(
+        this.configService.getOrThrow('app.workingDirectory', {
+          infer: true,
+        }),
+        'src',
+        'mail',
+        'mail-templates',
+        'partials',
+        'layout.hbs',
+      ),
+      context: {
+        title: 'Title. New member has joined your group',
+        subject: 'Subject. New member has joined your group',
+        body: `Group member ${mailData.data.user.name} joined ${mailData.data.group.name}.`,
+        memberName: mailData.data.user.name,
+        groupName: mailData.data.group.name,
+        tenantFrontendDomain: tenantConfig.frontendDomain,
+        tenantLogoUrl: tenantConfig.logoUrl,
+        tenantName: tenantConfig.name,
+        tenantCompanyDomain: tenantConfig.companyDomain,
+        tenantEmail: tenantConfig.mailDefaultEmail,
       },
     });
   }

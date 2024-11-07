@@ -20,6 +20,7 @@ import {
   mockGroupRoleService,
   mockGroupsQuery,
   mockGroupUserPermission,
+  mockMailService,
   mockPagination,
   mockRepository,
   mockTenantConnectionService,
@@ -30,6 +31,7 @@ import { DeleteResult, Repository } from 'typeorm';
 import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupRoleService } from '../group-role/group-role.service';
+import { MailService } from '../mail/mail.service';
 
 describe('GroupService', () => {
   let service: GroupService;
@@ -70,6 +72,10 @@ describe('GroupService', () => {
         {
           provide: GroupRoleService,
           useValue: mockGroupRoleService,
+        },
+        {
+          provide: MailService,
+          useValue: mockMailService,
         },
       ],
     }).compile();

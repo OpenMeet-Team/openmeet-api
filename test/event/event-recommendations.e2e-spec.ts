@@ -89,7 +89,7 @@ describe('EventController Recommendations (e2e)', () => {
       await request(APP_URL)
         .delete(`/api/events/${event.id}`)
         .set('Authorization', `Bearer ${token}`)
-        .set('tenant-id', TESTING_TENANT_ID);
+        .set('x-tenant-id', TESTING_TENANT_ID);
     }
 
     // delete categories
@@ -97,7 +97,7 @@ describe('EventController Recommendations (e2e)', () => {
       await request(APP_URL)
         .delete(`/api/categories/${category.id}`)
         .set('Authorization', `Bearer ${token}`)
-        .set('tenant-id', TESTING_TENANT_ID);
+        .set('x-tenant-id', TESTING_TENANT_ID);
     }
   });
 
@@ -160,7 +160,7 @@ describe('EventController Recommendations (e2e)', () => {
     await request(APP_URL)
       .get('/api/events/99999/recommended-events')
       .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', TESTING_TENANT_ID)
+      .set('x-tenant-id', TESTING_TENANT_ID)
       .expect(404);
   });
 });

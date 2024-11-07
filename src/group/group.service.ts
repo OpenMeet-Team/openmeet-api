@@ -18,6 +18,7 @@ import { GroupUserPermissionEntity } from './infrastructure/persistence/relation
 import {
   GroupPermission,
   GroupRole,
+  GroupVisibility,
   Status,
   Visibility,
 } from '../core/constants/constant';
@@ -31,6 +32,7 @@ import { EventEntity } from '../event/infrastructure/persistence/relational/enti
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
 import { GroupRoleService } from '../group-role/group-role.service';
+import { MailService } from '../mail/mail.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -46,6 +48,7 @@ export class GroupService {
     private readonly eventService: EventService,
     private readonly fileService: FilesS3PresignedService,
     private readonly groupRoleService: GroupRoleService,
+    private readonly mailService: MailService,
   ) {}
 
   async getTenantSpecificGroupRepository() {
@@ -133,64 +136,64 @@ export class GroupService {
     await this.getTenantSpecificGroupRepository();
 
     const group = await this.groupRepository.findOne({
-      where: { id: Number(groupId) },
+      where: { id: groupId as number },
       relations: ['categories'],
     });
 
     if (!group) {
-      throw new NotFoundException(`Group with ID ${groupId} not found`);
-    }
+      return await this.eventService.showRandomEvents(4);
+    } else {
+      const categoryIds = group.categories.map((c) => c.id);
 
-    const categoryIds = group.categories.map((c) => c.id);
-
-    let recommendedEvents: EventEntity[] = [];
-    try {
-      recommendedEvents =
-        (await this.eventService.findRecommendedEventsForGroup(
-          groupId,
-          categoryIds,
-          minEvents,
-          maxEvents,
-        )) || ([] as EventEntity[]);
-    } catch (error) {
-      recommendedEvents = [] as EventEntity[];
-      console.error('Error fetching recommended events:', error);
-    }
-
-    const remainingEventsToFetch = maxEvents - recommendedEvents.length;
-
-    if (remainingEventsToFetch > 0) {
-      let randomEvents: EventEntity[] = [];
+      let recommendedEvents: EventEntity[] = [];
       try {
-        randomEvents = await this.eventService.findRandomEventsForGroup(
-          groupId,
-          remainingEventsToFetch,
-          remainingEventsToFetch,
-        );
+        recommendedEvents =
+          (await this.eventService.findRecommendedEventsForGroup(
+            groupId,
+            categoryIds,
+            minEvents,
+            maxEvents,
+          )) || ([] as EventEntity[]);
       } catch (error) {
-        console.error('Error fetching random events:', error);
+        recommendedEvents = [] as EventEntity[];
+        console.error('Error fetching recommended events:', error);
       }
 
-      recommendedEvents = [...recommendedEvents, ...(randomEvents || [])];
-    }
+      const remainingEventsToFetch = maxEvents - recommendedEvents.length;
 
-    // Deduplicate events
-    const uniqueEvents = recommendedEvents.filter(
-      (event, index, self) =>
-        index === self.findIndex((t) => t.id === event.id),
-    );
+      if (remainingEventsToFetch > 0) {
+        let randomEvents: EventEntity[] = [];
+        try {
+          randomEvents = await this.eventService.findRandomEventsForGroup(
+            groupId,
+            remainingEventsToFetch,
+            remainingEventsToFetch,
+          );
+        } catch (error) {
+          console.error('Error fetching random events:', error);
+        }
 
-    if (uniqueEvents.length < minEvents) {
-      throw new NotFoundException(
-        `Not enough events found for group ${groupId}`,
+        recommendedEvents = [...recommendedEvents, ...(randomEvents || [])];
+      }
+
+      // Deduplicate events
+      const uniqueEvents = recommendedEvents.filter(
+        (event, index, self) =>
+          index === self.findIndex((t) => t.id === event.id),
       );
-    }
 
-    if (uniqueEvents.length > maxEvents) {
-      return uniqueEvents.slice(0, maxEvents);
-    }
+      if (uniqueEvents.length < minEvents) {
+        throw new NotFoundException(
+          `Not enough events found for group ${groupId}`,
+        );
+      }
 
-    return uniqueEvents;
+      if (uniqueEvents.length > maxEvents) {
+        return uniqueEvents.slice(0, maxEvents);
+      }
+
+      return uniqueEvents;
+    }
   }
 
   async create(createGroupDto: CreateGroupDto, userId: number): Promise<any> {
@@ -501,13 +504,28 @@ export class GroupService {
 
     const groupEntity = await this.groupRepository.findOne({
       where: { id: groupId },
+      relations: ['createdBy'],
     });
 
-    if (groupEntity?.requireApproval) {
+    if (
+      groupEntity?.requireApproval ||
+      groupEntity?.visibility === GroupVisibility.Private
+    ) {
       await this.groupMemberService.createGroupMember(
         { userId, groupId },
         GroupRole.Guest,
       );
+
+      // TODO: uncomment this when we have a mail service
+      // if (groupEntity.createdBy.email) {
+      //   await this.mailService.groupMemberJoined({
+      //     to: groupEntity.createdBy.email,
+      //     data: {
+      //       group: groupEntity,
+      //       user: groupEntity.createdBy,
+      //     },
+      //   });
+      // }
     } else {
       await this.groupMemberService.createGroupMember(
         { userId, groupId },

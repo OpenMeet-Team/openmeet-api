@@ -16,7 +16,10 @@ import { EventEntity } from '../../../../../event/infrastructure/persistence/rel
 import { GroupMemberEntity } from '../../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupUserPermissionEntity } from './group-user-permission.entity';
 import slugify from 'slugify';
-import { Status, Visibility } from '../../../../../core/constants/constant';
+import {
+  GroupVisibility,
+  GroupStatus,
+} from '../../../../../core/constants/constant';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
 import { Expose } from 'class-transformer';
 import { FileEntity } from '../../../../../file/infrastructure/persistence/relational/entities/file.entity';
@@ -39,18 +42,18 @@ export class GroupEntity extends EntityRelationalHelper {
   @Column({
     nullable: true,
     type: 'enum',
-    enum: Status,
+    enum: GroupStatus,
   })
-  status: Status;
+  status: GroupStatus;
 
   @Column({
     nullable: true,
     type: 'enum',
-    enum: Visibility,
+    enum: GroupVisibility,
   })
-  visibility: Visibility;
+  visibility: GroupVisibility;
 
-  @Column({ type: 'boolean', default: false })
+  @Column({ type: 'boolean', default: true })
   requireApproval: boolean;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
