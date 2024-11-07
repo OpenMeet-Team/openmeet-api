@@ -162,7 +162,7 @@ describe('GroupRecommendations (e2e)', () => {
     //  group should exist
     const groupResponse = await request(APP_URL)
       .get(`/api/groups/${testGroup.id}`)
-      .set('Authorization', `Bearer ${token}`
+      .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
 
     expect(groupResponse.status).toBe(200);
