@@ -95,17 +95,14 @@ export class EventService {
     const createdEvent = await this.eventRepository.save(event);
 
     const eventAttendeeDto = {
-      eventId: createdEvent.id,
       role: EventAttendeeRole.Host,
       status: EventAttendeeStatus.Confirmed,
     };
-    await this.eventAttendeeService.attendEvent(eventAttendeeDto, userId);
-
-    const params = {
-      name: `${createdEvent.shortId}_${createdEvent.slug}`,
+    await this.eventAttendeeService.attendEvent(
+      eventAttendeeDto,
       userId,
-    };
-    this.eventEmitter.emit('channel.created', params);
+      createdEvent.id,
+    );
     return createdEvent;
   }
 

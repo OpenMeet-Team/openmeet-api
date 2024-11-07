@@ -1,20 +1,18 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEnum, IsOptional } from 'class-validator';
 import {
   EventAttendeeRole,
   EventAttendeeStatus,
 } from '../../core/constants/constant';
 
 export class CreateEventAttendeeDto {
-  @ApiProperty({
-    description: 'event iD',
-  })
-  @IsNotEmpty()
-  @Type(() => Number)
-  @IsNumber()
-  eventId: number;
+  // @ApiProperty({
+  //   description: 'event iD',
+  // })
+  // @IsNotEmpty()
+  // @Type(() => Number)
+  // @IsNumber()
+  // eventId: number;
 
   // @ApiProperty({
   //   description: 'User',

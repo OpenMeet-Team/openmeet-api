@@ -14,12 +14,14 @@ import { HttpStatus } from '@nestjs/common';
 import {
   mockCategory,
   mockEvent,
+  mockEventAttendeeService,
   mockEventService,
   mockGroup,
   mockGroupService,
   mockUser,
 } from '../test/mocks';
 import { mockEvents } from '../test/mocks';
+import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 
 const createEventDto: CreateEventDto = {
   name: 'Test Event',
@@ -73,6 +75,10 @@ describe('EventController', () => {
         {
           provide: GroupService,
           useValue: mockGroupService,
+        },
+        {
+          provide: EventAttendeeService,
+          useValue: mockEventAttendeeService,
         },
       ],
     }).compile();
