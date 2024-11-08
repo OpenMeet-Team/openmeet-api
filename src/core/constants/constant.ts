@@ -3,10 +3,11 @@ export enum SubCategoryType {
   GROUP = 'GROUP',
 }
 
-export enum Status {
+export enum EventStatus {
   Draft = 'draft',
   Pending = 'pending',
   Published = 'published',
+  Cancelled = 'cancelled',
 }
 
 export enum GroupRole {
@@ -33,7 +34,58 @@ export enum GroupPermission {
   SeeGroup = 'SEE_GROUP',
 }
 
-export enum Visibility {
+export enum UserPermission {
+  // Admin Permissions
+  CreateEvent = 'CREATE_EVENTS',
+  ManageEvent = 'MANAGE_EVENTS',
+  DeleteEvent = 'DELETE_EVENTS',
+  CreateGroup = 'CREATE_GROUPS',
+  ManageGroup = 'MANAGE_GROUPS',
+  DeleteGroup = 'DELETE_GROUPS',
+  ManageCategories = 'MANAGE_CATEGORIES',
+  CreateCategories = 'CREATE_CATEGORIES',
+  DeleteCategories = 'DELETE_CATEGORIES',
+  ManageSettings = 'MANAGE_SETTINGS',
+  CreateIssues = 'CREATE_ISSUES',
+  ManageIssues = 'MANAGE_ISSUES',
+  DeleteIssues = 'DELETE_ISSUES',
+  CreateUsers = 'CREATE_USERS',
+  ManageUsers = 'MANAGE_USERS',
+  DeleteUsers = 'DELETE_USERS',
+  CreateReports = 'CREATE_REPORTS',
+  ManageReports = 'MANAGE_REPORTS',
+  DeleteReports = 'DELETE_REPORTS',
+  CreateDiscussions = 'CREATE_DISCUSSIONS',
+  ManageDiscussions = 'MANAGE_DISCUSSIONS',
+  DeleteDiscussions = 'DELETE_DISCUSSIONS',
+  CreateAttendees = 'CREATE_ATTENDEES',
+  ManageAttendees = 'MANAGE_ATTENDEES',
+  DeleteAttendees = 'DELETE_ATTENDEES',
+  // User Permissions
+  ViewGroups = 'VIEW_GROUPS',
+  ViewEvents = 'VIEW_EVENTS',
+  AttendEvents = 'ATTEND_EVENTS',
+  JoinGroups = 'JOIN_GROUPS',
+  MessageMembers = 'MESSAGE_MEMBERS',
+  MessageAttendees = 'MESSAGE_ATTENDEES',
+  MessageUsers = 'MESSAGE_USERS',
+}
+
+export enum EventPermission {
+  // participant permissions
+  ViewEvent = 'VIEW_EVENT',
+  AttendEvent = 'ATTEND_EVENT',
+  MessageAttendees = 'MESSAGE_ATTENDEES',
+  CreateDiscussion = 'CREATE_DISCUSSION',
+
+  // Host permissions
+  ManageEvent = 'MANAGE_EVENT',
+  ApproveAttendees = 'APPROVE_ATTENDEES',
+  ManageAttendees = 'MANAGE_ATTENDEES',
+  ManageDiscussions = 'MANAGE_DISCUSSIONS',
+}
+
+export enum EventVisibility {
   Public = 'public',
   Authenticated = 'authenticated',
   Private = 'private',
@@ -65,6 +117,8 @@ export enum EventAttendeeStatus {
   Attended = 'attended',
   Cancelled = 'cancelled',
   Rejected = 'rejected',
+  Maybe = 'maybe',
+  Pending = 'pending',
 }
 
 export enum EntityType {

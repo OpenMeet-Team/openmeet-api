@@ -6,22 +6,6 @@ import {
 } from '../../core/constants/constant';
 
 export class CreateEventAttendeeDto {
-  // @ApiProperty({
-  //   description: 'event iD',
-  // })
-  // @IsNotEmpty()
-  // @Type(() => Number)
-  // @IsNumber()
-  // eventId: number;
-
-  // @ApiProperty({
-  //   description: 'User',
-  // })
-  // @IsNotEmpty()
-  // @Type(() => Number)
-  // @IsNumber()
-  // userId: number;
-
   @ApiPropertyOptional({
     description: 'The status of the Event Attendee',
     enum: EventAttendeeStatus,

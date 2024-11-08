@@ -14,6 +14,7 @@ import { HttpStatus } from '@nestjs/common';
 import {
   mockCategory,
   mockEvent,
+  mockEventAttendee,
   mockEventAttendeeService,
   mockEventService,
   mockGroup,
@@ -22,6 +23,8 @@ import {
 } from '../test/mocks';
 import { mockEvents } from '../test/mocks';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
+import { EventAttendeeRole } from '../core/constants/constant';
+import { EventAttendeeStatus } from '../core/constants/constant';
 
 const createEventDto: CreateEventDto = {
   name: 'Test Event',
@@ -91,27 +94,14 @@ describe('EventController', () => {
     expect(controller).toBeDefined();
   });
 
-  describe('findEventDetails', () => {
+  describe('showEvent', () => {
     it('should return event with details', async () => {
-      jest.spyOn(eventService, 'findEventDetails').mockResolvedValue(mockEvent);
+      jest.spyOn(eventService, 'showEvent').mockResolvedValue(mockEvent);
 
-      const result = await controller.findEventDetails(1, mockUser);
+      const result = await controller.showEvent(1, mockUser);
 
       expect(result).toEqual(mockEvent);
-      expect(eventService.findEventDetails).toHaveBeenCalled();
-    });
-  });
-
-  describe('findEventAttendees', () => {
-    it('should return event attendees', async () => {
-      jest
-        .spyOn(eventService, 'findEventDetailsAttendees')
-        .mockResolvedValue([]);
-
-      const result = await controller.findEventDetailsAttendees(1);
-
-      expect(result).toEqual([]);
-      expect(eventService.findEventDetailsAttendees).toHaveBeenCalled();
+      expect(eventService.showEvent).toHaveBeenCalled();
     });
   });
 
@@ -245,6 +235,59 @@ describe('EventController', () => {
       ).rejects.toMatchObject({
         status: HttpStatus.NOT_FOUND,
       });
+    });
+  });
+
+  describe('editEvent', () => {
+    it('should return an event', async () => {
+      jest.spyOn(eventService, 'editEvent').mockResolvedValue(mockEvent);
+      const result = await controller.editEvent(mockEvent.id as number);
+      expect(result).toEqual(mockEvent);
+    });
+  });
+
+  describe('attendEvent', () => {
+    it('should attend an event', async () => {
+      jest
+        .spyOn(eventService, 'attendEvent')
+        .mockResolvedValue(mockEventAttendee);
+      const result = await controller.attendEvent(
+        mockUser,
+        mockEventAttendee,
+        mockEvent.id as number,
+      );
+      expect(result).toEqual(mockEventAttendee);
+    });
+  });
+
+  describe('cancelAttendingEvent', () => {
+    it('should cancel attending an event', async () => {
+      jest
+        .spyOn(eventService, 'cancelAttendingEvent')
+        .mockResolvedValue(mockEventAttendee);
+      const result = await controller.cancelAttendingEvent(
+        mockEvent.id as number,
+        mockUser,
+      );
+      expect(result).toEqual(mockEventAttendee);
+    });
+  });
+
+  describe('getEventAttendees', () => {
+    it('should return event attendees', async () => {
+      jest.spyOn(eventService, 'getEventAttendees').mockResolvedValue([]);
+      const result = await controller.findAllAttendees(
+        mockEvent.id as number,
+        { page: 1, limit: 10 },
+        {
+          userId: mockUser.id,
+          search: '',
+          role: EventAttendeeRole.Participant,
+          status: EventAttendeeStatus.Confirmed,
+        },
+        mockUser,
+      );
+      expect(result).toEqual([]);
     });
   });
 });

@@ -9,6 +9,7 @@ import { DeepPartial } from 'typeorm';
 import { QueryEventAttendeeDto } from './dto/query-eventAttendee.dto';
 import { paginate } from '../utils/generic-pagination';
 import { UpdateEventAttendeeDto } from './dto/update-eventAttendee.dto';
+import { EventAttendeeStatus } from '../core/constants/constant';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventAttendeeService {
@@ -60,7 +61,7 @@ export class EventAttendeeService {
     await this.getTenantSpecificEventRepository();
 
     const { page, limit } = pagination;
-    const { search, userId, fromDate, toDate } = query;
+    const { search, userId, role, status } = query;
 
     const eventAttendeeQuery = this.eventAttendeesRepository
       .createQueryBuilder('eventAttendee')
@@ -74,23 +75,14 @@ export class EventAttendeeService {
       );
     }
 
-    if (fromDate && toDate) {
-      eventAttendeeQuery.andWhere(
-        'eventAttendee.createdAt BETWEEN :fromDate AND :toDate',
-        {
-          fromDate,
-          toDate,
-        },
-      );
-    } else if (fromDate) {
-      eventAttendeeQuery.andWhere('eventAttendee.createdAt >= :fromDate', {
-        fromDate,
-      });
-    } else if (toDate) {
-      eventAttendeeQuery.andWhere('eventAttendee.createdAt <= :toDate', {
-        toDate: new Date(),
-      });
+    if (role) {
+      eventAttendeeQuery.andWhere('eventAttendee.role = :role', { role });
     }
+
+    if (status) {
+      eventAttendeeQuery.andWhere('eventAttendee.status = :status', { status });
+    }
+
     return paginate(eventAttendeeQuery, { page, limit });
   }
 
@@ -145,17 +137,18 @@ export class EventAttendeeService {
   }
 
   async updateEventAttendee(
-    attendeeId: number,
+    eventId: number,
+    userId: number,
     body: UpdateEventAttendeeDto,
   ): Promise<any> {
     await this.getTenantSpecificEventRepository();
 
     const attendee = await this.eventAttendeesRepository.findOne({
-      where: { userId: attendeeId },
+      where: { user: { id: userId }, event: { id: eventId } },
     });
 
     if (!attendee) {
-      throw new NotFoundException(`Attendee with ID ${attendeeId} not found`);
+      throw new NotFoundException(`Attendee with ID ${userId} not found`);
     }
 
     const updatedAttendee = { ...attendee, ...body };
@@ -170,5 +163,17 @@ export class EventAttendeeService {
       where: { event: { id: eventId } },
       relations: ['user'],
     });
+  }
+
+  async cancelAttendingEvent(id: number, userId: number) {
+    await this.getTenantSpecificEventRepository();
+    const attendee = await this.eventAttendeesRepository.findOne({
+      where: { user: { id: userId }, event: { id } },
+    });
+    if (!attendee) {
+      throw new NotFoundException(`Attendee with ID ${userId} not found`);
+    }
+    attendee.status = EventAttendeeStatus.Cancelled;
+    return this.eventAttendeesRepository.save(attendee);
   }
 }

@@ -20,8 +20,8 @@ import { paginate } from '../utils/generic-pagination';
 import {
   EventAttendeeRole,
   EventAttendeeStatus,
-  Status,
-  Visibility,
+  EventStatus,
+  EventVisibility,
 } from '../core/constants/constant';
 import slugify from 'slugify';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
@@ -30,6 +30,7 @@ import { CategoryEntity } from '../category/infrastructure/persistence/relationa
 import { GroupMemberService } from '../group-member/group-member.service';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { ZulipService } from '../zulip/zulip.service';
+import { CreateEventAttendeeDto } from 'src/event-attendee/dto/create-eventAttendee.dto';
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
   private eventRepository: Repository<EventEntity>;
@@ -210,7 +211,7 @@ export class EventService {
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.group', 'group')
       .leftJoinAndSelect('event.attendees', 'attendees')
-      .where('event.status = :status', { status: Status.Published });
+      .where('event.status = :status', { status: EventStatus.Published });
 
     if (userId) {
       eventQuery.andWhere('event.user = :userId', { userId });
@@ -289,7 +290,7 @@ export class EventService {
     return event;
   }
 
-  async findEventDetails(id: number, userId: number): Promise<EventEntity> {
+  async showEvent(id: number, userId: number): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
     const event = await this.eventRepository.findOne({
       where: { id },
@@ -327,11 +328,6 @@ export class EventService {
     return event;
   }
 
-  async showGroupEvents(eventId: number): Promise<any> {
-    await this.getTenantSpecificEventRepository();
-    return this.eventAttendeeService.findEventAttendees(eventId);
-  }
-
   async findRandom(): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
 
@@ -351,7 +347,7 @@ export class EventService {
   async showRandomEvents(limit: number): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
     return this.eventRepository.find({
-      where: { status: Status.Published },
+      where: { status: EventStatus.Published },
       relations: ['attendees'],
       order: { createdAt: 'DESC' },
       take: limit,
@@ -421,7 +417,7 @@ export class EventService {
       .addSelect('RANDOM()', 'random')
       .distinct(true)
       .innerJoin('event.categories', 'category')
-      .where('event.status = :status', { status: Status.Published })
+      .where('event.status = :status', { status: EventStatus.Published })
       .andWhere('event.id != :eventId', { eventId })
       .andWhere('category.id IN (:...categoryIds)', { categoryIds })
       .orderBy('random')
@@ -445,7 +441,7 @@ export class EventService {
         .createQueryBuilder('event')
         .select('event.id')
         .addSelect('RANDOM()', 'random')
-        .where('event.status = :status', { status: Status.Published })
+        .where('event.status = :status', { status: EventStatus.Published })
         .andWhere('event.id != :eventId', { eventId })
         .orderBy('random')
         .limit(maxEvents)
@@ -481,7 +477,7 @@ export class EventService {
         .leftJoinAndSelect('event.group', 'group')
         .leftJoinAndSelect('event.categories', 'categories')
         .leftJoinAndSelect('event.attendees', 'attendees')
-        .where('event.status = :status', { status: Status.Published })
+        .where('event.status = :status', { status: EventStatus.Published })
         .andWhere('(group.id != :groupId OR group.id IS NULL)', { groupId })
         .andWhere('categories.id IN (:...categories)', { categories })
         .orderBy('RANDOM()')
@@ -520,7 +516,7 @@ export class EventService {
         .createQueryBuilder('event')
         .leftJoin('event.group', 'group')
         .select('event.id')
-        .where('event.status = :status', { status: Status.Published })
+        .where('event.status = :status', { status: EventStatus.Published })
         .andWhere('(group.id != :groupId OR group.id IS NULL)', { groupId })
         .orderBy('RANDOM()')
         .limit(maxEvents)
@@ -646,7 +642,10 @@ export class EventService {
 
     return this.eventRepository
       .createQueryBuilder('event')
-      .where({ visibility: Visibility.Public, status: Status.Published })
+      .where({
+        visibility: EventVisibility.Public,
+        status: EventStatus.Published,
+      })
       .orderBy('RANDOM()')
       .limit(5)
       .getMany(); // TODO: later provide featured flag or configuration object
@@ -655,7 +654,7 @@ export class EventService {
   async getHomePageUserUpcomingEvents(userId: number) {
     await this.getTenantSpecificEventRepository();
     return this.eventRepository.find({
-      where: { user: { id: userId }, status: Status.Published },
+      where: { user: { id: userId }, status: EventStatus.Published },
       relations: ['user', 'attendees'],
     }); // TODO: check if this is correct. Should return list of user upcoming events (Home Page)
   }
@@ -663,7 +662,7 @@ export class EventService {
   async getHomePageUserRecentEventDrafts(userId: number) {
     await this.getTenantSpecificEventRepository();
     return this.eventRepository.find({
-      where: { user: { id: userId }, status: Status.Draft },
+      where: { user: { id: userId }, status: EventStatus.Draft },
     }); // TODO: check if this is correct. Should return list of user recent event drafts (Home Page)
   }
 
@@ -683,5 +682,54 @@ export class EventService {
       where: { group: { id: groupId } },
       take: limit,
     });
+  }
+
+  async editEvent(id: number) {
+    await this.getTenantSpecificEventRepository();
+    return this.eventRepository.findOne({
+      where: { id },
+      relations: ['group', 'categories'],
+    });
+  }
+
+  async cancelAttendingEvent(id: number, userId: number) {
+    await this.getTenantSpecificEventRepository();
+    return this.eventAttendeeService.cancelAttendingEvent(id, userId);
+  }
+
+  async attendEvent(
+    createEventAttendeeDto: CreateEventAttendeeDto,
+    userId: number,
+    id: number,
+  ) {
+    await this.getTenantSpecificEventRepository();
+
+    // const event = await this.findOne(id);
+
+    // TODO check if attendee requires validation
+    if (false) {
+      // Create a pending attendee
+      return this.eventAttendeeService.attendEvent(
+        {
+          ...createEventAttendeeDto,
+          status: EventAttendeeStatus.Pending,
+        },
+        userId,
+        id,
+      );
+    }
+    return this.eventAttendeeService.attendEvent(
+      {
+        ...createEventAttendeeDto,
+        status: EventAttendeeStatus.Confirmed,
+      },
+      userId,
+      id,
+    );
+  }
+
+  async getEventAttendees(eventId: number, pagination: PaginationDto) {
+    await this.getTenantSpecificEventRepository();
+    return this.eventAttendeeService.getEventAttendees(eventId, pagination);
   }
 }

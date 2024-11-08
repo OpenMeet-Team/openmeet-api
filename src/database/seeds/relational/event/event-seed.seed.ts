@@ -1,7 +1,7 @@
 import {
-  Status,
-  Visibility,
+  EventStatus,
   EventType,
+  EventVisibility,
 } from '../../../../core/constants/constant';
 
 export const eventSeedData = [
@@ -18,8 +18,8 @@ export const eventSeedData = [
     location: 'Convention Center, Tech City',
     lat: 37.7749,
     lon: -122.4194,
-    status: Status.Draft,
-    visibility: Visibility.Public,
+    status: EventStatus.Draft,
+    visibility: EventVisibility.Public,
   },
   {
     name: '[Pending][Authenticated][In-Person][Past] Local Art Exhibition',
@@ -33,8 +33,8 @@ export const eventSeedData = [
     location: 'City Art Gallery',
     lat: 40.7128,
     lon: -74.006,
-    status: Status.Pending,
-    visibility: Visibility.Authenticated,
+    status: EventStatus.Pending,
+    visibility: EventVisibility.Authenticated,
   },
   {
     name: '[Published][Public][Online][Upcoming] Virtual Book Club Meeting',
@@ -46,8 +46,8 @@ export const eventSeedData = [
     startDate: new Date('2024-06-20T19:00:00'),
     endDate: new Date('2024-06-20T21:00:00'),
     maxAttendees: 50,
-    status: Status.Published,
-    visibility: Visibility.Private,
+    status: EventStatus.Published,
+    visibility: EventVisibility.Private,
   },
   {
     name: '[Draft][Public][In-Person][Past] Charity Marathon',
@@ -61,8 +61,8 @@ export const eventSeedData = [
     location: 'City Park',
     lat: 51.5074,
     lon: -0.1278,
-    status: Status.Draft,
-    visibility: Visibility.Public,
+    status: EventStatus.Draft,
+    visibility: EventVisibility.Public,
   },
   {
     name: '[Pending][Private][Hybrid][Upcoming] Startup Pitch Night',
@@ -77,8 +77,8 @@ export const eventSeedData = [
     location: 'Innovation Hub',
     lat: 37.3382,
     lon: -121.8863,
-    status: Status.Pending,
-    visibility: Visibility.Private,
+    status: EventStatus.Pending,
+    visibility: EventVisibility.Private,
   },
 
   {
@@ -93,8 +93,8 @@ export const eventSeedData = [
     location: 'City Square',
     lat: 48.8566,
     lon: 2.3522,
-    status: Status.Published,
-    visibility: Visibility.Public,
+    status: EventStatus.Published,
+    visibility: EventVisibility.Public,
   },
   {
     name: '[Draft][Public][Hybrid][Upcoming] Virtual Reality Gaming Tournament',
@@ -109,8 +109,8 @@ export const eventSeedData = [
     location: 'Tech Arena',
     lat: 37.4419,
     lon: -122.143,
-    status: Status.Draft,
-    visibility: Visibility.Public,
+    status: EventStatus.Draft,
+    visibility: EventVisibility.Public,
   },
   {
     name: '[Pending][Private][In-Person][Upcoming] Mindfulness and Meditation Retreat',
@@ -124,8 +124,8 @@ export const eventSeedData = [
     location: 'Tranquil Gardens Retreat Center',
     lat: 34.0522,
     lon: -118.2437,
-    status: Status.Pending,
-    visibility: Visibility.Private,
+    status: EventStatus.Pending,
+    visibility: EventVisibility.Private,
   },
   {
     name: '[Published][Public][Online][Upcoming] Online Photography Workshop',
@@ -137,8 +137,8 @@ export const eventSeedData = [
     startDate: new Date('2024-11-05T18:00:00'),
     endDate: new Date('2024-11-05T21:00:00'),
     maxAttendees: 100,
-    status: Status.Published,
-    visibility: Visibility.Public,
+    status: EventStatus.Published,
+    visibility: EventVisibility.Public,
   },
   {
     name: '[Published][Public][In-Person][Upcoming] Sustainable Living Expo',
@@ -152,7 +152,7 @@ export const eventSeedData = [
     location: 'Green Living Convention Center',
     lat: 52.3676,
     lon: 4.9041,
-    status: Status.Published,
-    visibility: Visibility.Public,
+    status: EventStatus.Published,
+    visibility: EventVisibility.Public,
   },
 ];

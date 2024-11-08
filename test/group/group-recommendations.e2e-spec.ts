@@ -7,7 +7,7 @@ import {
 } from '../utils/constants';
 import { EventEntity } from '../../src/event/infrastructure/persistence/relational/entities/event.entity';
 import { CategoryEntity } from '../../src/category/infrastructure/persistence/relational/entities/categories.entity';
-import { Status } from '../../src/core/constants/constant';
+import { EventStatus } from '../../src/core/constants/constant';
 
 describe('GroupRecommendations (e2e)', () => {
   let token;
@@ -102,7 +102,7 @@ describe('GroupRecommendations (e2e)', () => {
       description: 'Test Description',
       startDate: new Date(Date.now() + 86400000).toISOString(), // Tomorrow
       endDate: new Date(Date.now() + 172800000).toISOString(), // Day after tomorrow
-      status: Status.Published,
+      status: EventStatus.Published,
       maxAttendees: 100,
       type: 'in-person',
       group: testGroup.id,

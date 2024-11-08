@@ -6,7 +6,7 @@ import {
   TESTING_TENANT_ID,
 } from './constants';
 import { CreateEventDto } from '../../src/event/dto/create-event.dto';
-import { Status } from '../../src/core/constants/constant';
+import { EventStatus } from '../../src/core/constants/constant';
 
 async function getAuthToken(
   app: string,
@@ -63,7 +63,7 @@ export async function createGroupsAndEvents(
     // image: { id: 1 } as FileEntity,
     lat: 0,
     lon: 0,
-    status: Status.Published,
+    status: EventStatus.Published,
     group: group.id,
   };
 
