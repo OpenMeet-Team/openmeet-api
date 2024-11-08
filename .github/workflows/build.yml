@@ -50,9 +50,6 @@ jobs:
   build-push:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    outputs:
-      registry: ${{ steps.login-ecr.outputs.registry }}
-      image-tag: ${{ github.sha }}
 
     steps:
       - uses: actions/checkout@v4
@@ -108,10 +105,18 @@ jobs:
 
       - name: Update kubeconfig and deploy to EKS
         env:
-          ECR_REGISTRY: ${{ needs.build-push.outputs.registry }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: openmeet-ecr/openmeet-api
-          IMAGE_TAG: ${{ needs.build-push.outputs.image-tag }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
+          if [ -z "$ECR_REGISTRY" ]; then
+            echo "ECR_REGISTRY is not set"
+            exit 1
+          fi
+          if [ -z "$IMAGE_TAG" ]; then
+            echo "IMAGE_TAG is not set"
+            exit 1
+          fi 
           aws eks update-kubeconfig --name openmeet-dev --region ${{ vars.AWS_REGION }}
           echo "Updating ${{ vars.DEPLOYMENT_NAMESPACE }} deployment/openmeet-api with image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
