@@ -12,7 +12,7 @@ describe('User role', () => {
   it('should refresh tokens for users with and without roles', async () => {
     // Create a user with a role
     const userWithRole = {
-      email: `user.with.role.${Date.now()}@example.com`,
+      email: `user.with.role.${Date.now()}@openmeet.net`,
       password: 'password123',
       firstName: 'User',
       lastName: 'WithRole',
@@ -21,7 +21,7 @@ describe('User role', () => {
 
     // Create a user without a role
     const userWithoutRole = {
-      email: `user.without.role.${Date.now()}@example.com`,
+      email: `user.without.role.${Date.now()}@openmeet.net`,
       password: 'password123',
       firstName: 'User',
       lastName: 'WithoutRole',

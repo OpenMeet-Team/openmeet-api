@@ -1,16 +1,55 @@
-name: Test, Build, Push to Registry, Deploy to Dev
+name: Openmeet Api
 
 on:
-  workflow_run:
-    workflows: ["NestJS API CI"]
-    types: [completed]
+  push:
+    branches: [main]
+  pull_request:
     branches: [main]
 
 jobs:
-
-  build-push-deploy:
+  test:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: github.event_name == 'pull_request'
+    container:
+      image: node:18.16.1
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Dependencies
+        run: npm ci
+        
+      - name: Run Unit Tests
+        run: |
+          export $(cat env-example-relational | grep -v '^#' | xargs)
+          npm run test
+
+  e2e-test:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run e2e tests
+        id: relational
+        run: docker compose -f docker-compose.relational.ci.yaml --env-file env-example-relational -p ci-relational up --build --exit-code-from api
+
+      - name: Copy prod.log from container to host
+        if: ${{ failure() && steps.relational.conclusion == 'failure' }}
+        run: docker cp ci-relational-api-1:/usr/src/app/prod.log .
+
+      - name: Upload prod.log to artifacts for debugging
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-logs
+          path: prod.log
+
+  build-push:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - uses: actions/checkout@v4
@@ -33,7 +72,6 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
           GIT_REVISION: ${{ github.sha }}
           GIT_BRANCH: ${{ github.ref_name }}
-
         run: |
           echo "Building image with tag: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           PACKAGE_JSON_B64=$(cat package.json | base64 -w 0)
@@ -42,6 +80,23 @@ jobs:
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
 
       - name: Install kubectl
         uses: azure/setup-kubectl@v3
@@ -54,7 +109,14 @@ jobs:
           ECR_REPOSITORY: openmeet-ecr/openmeet-api
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          aws eks get-token --cluster-name openmeet-dev
+          if [ -z "$ECR_REGISTRY" ]; then
+            echo "ECR_REGISTRY is not set"
+            exit 1
+          fi
+          if [ -z "$IMAGE_TAG" ]; then
+            echo "IMAGE_TAG is not set"
+            exit 1
+          fi 
           aws eks update-kubeconfig --name openmeet-dev --region ${{ vars.AWS_REGION }}
           echo "Updating ${{ vars.DEPLOYMENT_NAMESPACE }} deployment/openmeet-api with image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 

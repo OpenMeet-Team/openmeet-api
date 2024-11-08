@@ -6,7 +6,7 @@ import { UserEntity } from 'src/user/infrastructure/persistence/relational/entit
 // Mock for UserEntity
 export const mockUser = {
   id: 1,
-  email: 'test@example.com',
+  email: 'test@openmeet.net',
   password: 'password',
   firstName: 'John',
   lastName: 'Doe',

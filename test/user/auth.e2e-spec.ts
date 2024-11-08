@@ -13,7 +13,7 @@ describe('Auth Module', () => {
   const mail = `http://${MAIL_HOST}:${MAIL_PORT}`;
   const newUserFirstName = `Tester${Date.now()}`;
   const newUserLastName = `E2E`;
-  const newUserEmail = `User.${Date.now()}@example.com`;
+  const newUserEmail = `User.${Date.now()}@openmeet.net`;
   const newUserPassword = `secret`;
 
   let authToken: string;
@@ -267,7 +267,7 @@ describe('Auth Module', () => {
     it.skip('should update profile email successfully: /api/v1/auth/me (PATCH)', async () => {
       const newUserFirstName = `Tester${Date.now()}`;
       const newUserLastName = `E2E`;
-      const newUserEmail = `user.${Date.now()}@example.com`;
+      const newUserEmail = `user.${Date.now()}@openmeet.net`;
       const newUserPassword = `secret`;
       const newUserNewEmail = `new.${newUserEmail}`;
 

@@ -46,7 +46,7 @@ export class UserEntity extends EntityRelationalHelper {
 
   @ApiProperty({
     type: String,
-    example: 'john.doe@example.com',
+    example: 'john.doe@openmeet.net',
   })
   // For "string | null" we need to use String type.
   // More info: https://github.com/typeorm/typeorm/issues/2567
