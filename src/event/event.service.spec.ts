@@ -28,6 +28,7 @@ import {
   mockTenantConnectionService,
   mockFilesS3PresignedService,
   mockRepository,
+  mockEventAttendee,
 } from '../test/mocks';
 import { mockEvents } from '../test/mocks';
 import { Repository } from 'typeorm';
@@ -273,6 +274,39 @@ describe('EventService', () => {
       jest.spyOn(eventRepository, 'find').mockResolvedValue(mockEvents);
       const result = await service.showRandomEvents(3);
       expect(result).toEqual(mockEvents);
+    });
+  });
+
+  describe('editEvent', () => {
+    it('should return an event', async () => {
+      jest.spyOn(service, 'editEvent').mockResolvedValue(mockEvent);
+      const result = await service.editEvent(mockEvent.id as number);
+      expect(result).toEqual(mockEvent);
+    });
+  });
+
+  describe('attendEvent', () => {
+    it('should attend an event', async () => {
+      jest.spyOn(service, 'attendEvent').mockResolvedValue(mockEventAttendee);
+      const result = await service.attendEvent(
+        mockEventAttendee,
+        TESTER_USER_ID,
+        mockEvent.id as number,
+      );
+      expect(result).toEqual(mockEventAttendee);
+    });
+  });
+
+  describe('cancelAttendingEvent', () => {
+    it('should cancel attending an event', async () => {
+      jest
+        .spyOn(service, 'cancelAttendingEvent')
+        .mockResolvedValue(mockEventAttendee);
+      const result = await service.cancelAttendingEvent(
+        mockEvent.id as number,
+        TESTER_USER_ID,
+      );
+      expect(result).toEqual(mockEventAttendee);
     });
   });
 });
