@@ -1,10 +1,4 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  ManyToOne,
-  JoinColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { UserEntity } from './user.entity';
 import { PermissionEntity } from '../../../../../permission/infrastructure/persistence/relational/entities/permission.entity';
 
@@ -24,7 +18,4 @@ export class UserPermissionEntity {
   )
   @JoinColumn({ name: 'permissionId' })
   permission: PermissionEntity;
-
-  @Column({ type: 'boolean', default: false })
-  granted: boolean;
 }

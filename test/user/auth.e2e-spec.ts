@@ -1,16 +1,16 @@
 import request from 'supertest';
 import {
-  APP_URL,
-  TESTER_EMAIL,
-  TESTER_PASSWORD,
-  MAIL_HOST,
-  MAIL_PORT,
+  TESTING_APP_URL,
+  TESTING_USER_EMAIL,
+  TESTING_USER_PASSWORD,
+  TESTING_MAIL_HOST,
+  TESTING_MAIL_PORT,
   TESTING_TENANT_ID,
 } from '../utils/constants';
 import { getAuthToken } from '../utils/functions';
 describe('Auth Module', () => {
-  const app = APP_URL;
-  const mail = `http://${MAIL_HOST}:${MAIL_PORT}`;
+  const app = TESTING_APP_URL;
+  const mail = `http://${TESTING_MAIL_HOST}:${TESTING_MAIL_PORT}`;
   const newUserFirstName = `Tester${Date.now()}`;
   const newUserLastName = `E2E`;
   const newUserEmail = `User.${Date.now()}@openmeet.net`;
@@ -21,7 +21,11 @@ describe('Auth Module', () => {
   let serverEmail;
 
   beforeAll(async () => {
-    authToken = await getAuthToken(app, TESTER_EMAIL, TESTER_PASSWORD);
+    authToken = await getAuthToken(
+      app,
+      TESTING_USER_EMAIL,
+      TESTING_USER_PASSWORD,
+    );
     serverApp = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
     serverEmail = request.agent(mail);
   });
@@ -31,8 +35,8 @@ describe('Auth Module', () => {
       return serverApp
         .post('/api/v1/auth/email/register')
         .send({
-          email: TESTER_EMAIL,
-          password: TESTER_PASSWORD,
+          email: TESTING_USER_EMAIL,
+          password: TESTING_USER_PASSWORD,
           firstName: 'Tester',
           lastName: 'E2E',
         })

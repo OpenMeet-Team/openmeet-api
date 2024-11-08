@@ -6,11 +6,12 @@ import { RoleEnum } from '../../../../role/role.enum';
 import { StatusEnum } from '../../../../status/status.enum';
 import { UserEntity } from '../../../../user/infrastructure/persistence/relational/entities/user.entity';
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
+import { RoleEntity } from 'src/role/infrastructure/persistence/relational/entities/role.entity';
 
 @Injectable()
 export class UserSeedService {
   private repository: Repository<UserEntity>;
-
+  private roleRepository: Repository<RoleEntity>;
   constructor(
     private readonly tenantConnectionService: TenantConnectionService,
   ) {}
@@ -19,67 +20,43 @@ export class UserSeedService {
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
     this.repository = dataSource.getRepository(UserEntity);
+    this.roleRepository = dataSource.getRepository(RoleEntity);
 
-    const countAdmin = await this.repository.count({
-      where: {
-        role: {
-          id: RoleEnum.admin,
-        },
-      },
-    });
-
-    console.log(tenantId, 'countAdmin:', countAdmin);
-
-    if (!countAdmin) {
-      const salt = await bcrypt.genSalt();
-      const password = await bcrypt.hash('secret', salt);
-
-      await this.repository.save(
-        this.repository.create({
-          firstName: 'Super',
-          lastName: 'Admin',
-          email: 'admin@openmeet.net',
-          password,
+    for (const roleName of [RoleEnum.User, RoleEnum.Editor, RoleEnum.Admin]) {
+      const count = await this.repository.count({
+        where: {
           role: {
-            id: RoleEnum.admin,
-            name: 'Admin',
+            name: roleName,
           },
-          status: {
-            id: StatusEnum.active,
-            name: 'Active',
-          },
-        }),
-      );
-    }
-
-    const countUser = await this.repository.count({
-      where: {
-        role: {
-          id: RoleEnum.user,
         },
-      },
-    });
+      });
 
-    if (!countUser) {
-      const salt = await bcrypt.genSalt();
-      const password = await bcrypt.hash('secret', salt);
+      if (!count) {
+        const role = await this.roleRepository.findOne({
+          where: {
+            name: roleName,
+          },
+        });
 
-      await this.repository.save(
-        this.repository.create({
-          firstName: 'John',
-          lastName: 'Doe',
-          email: 'john.doe@openmeet.net',
-          password,
-          role: {
-            id: RoleEnum.user,
-            name: 'Admin',
-          },
-          status: {
-            id: StatusEnum.active,
-            name: 'Active',
-          },
-        }),
-      );
+        const salt = await bcrypt.genSalt();
+        const password = await bcrypt.hash('secret', salt);
+
+        await this.repository.save(
+          this.repository.create({
+            firstName: roleName,
+            lastName: roleName,
+            email: `${tenantId}.${roleName.toLowerCase()}@openmeet.net`,
+            password,
+            role: {
+              id: role?.id,
+            },
+            status: {
+              id: StatusEnum.active,
+              name: 'Active',
+            },
+          }),
+        );
+      }
     }
   }
 }

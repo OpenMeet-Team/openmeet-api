@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { APP_URL } from '../utils/constants';
+import { TESTING_APP_URL } from '../utils/constants';
 import { loginAsTester, createEvent } from '../utils/functions';
 
 describe('Event Comments API Tests', () => {
@@ -15,7 +15,7 @@ describe('Event Comments API Tests', () => {
     token = await loginAsTester();
 
     // Create an event to add comments to
-    testEvent = await createEvent(APP_URL, token, {
+    testEvent = await createEvent(TESTING_APP_URL, token, {
       name: 'Comment Test Event',
       slug: 'comment-test-event',
       description: 'Testing event comments',
@@ -36,7 +36,7 @@ describe('Event Comments API Tests', () => {
   afterAll(async () => {
     // Clean up by deleting the event after tests
     if (testEvent && testEvent.id) {
-      await request(APP_URL)
+      await request(TESTING_APP_URL)
         .delete(`/api/events/${testEvent.id}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', '1');
@@ -45,7 +45,7 @@ describe('Event Comments API Tests', () => {
 
   // Test Case 1: Add Comment to Event
   it.skip('should add a comment to the event', async () => {
-    const response = await request(APP_URL)
+    const response = await request(TESTING_APP_URL)
       .post(`/api/events/${testEvent.id}/comment`)
       .send(commentData)
       .set('Authorization', `Bearer ${token}`)
@@ -60,7 +60,7 @@ describe('Event Comments API Tests', () => {
     const topicName = '1730800283447-hello'; // Use a unique topic name
     const replyData = { message: 'string' };
 
-    const response = await request(APP_URL)
+    const response = await request(TESTING_APP_URL)
       .post(`/api/events/comment-reply/${testEvent.id}/${topicName}`)
       .send(replyData)
       .set('Authorization', `Bearer ${token}`)
@@ -72,7 +72,7 @@ describe('Event Comments API Tests', () => {
 
   // Test Case 3: Retrieve Comments for an Event
   it.skip('should retrieve comments for the event', async () => {
-    const response = await request(APP_URL)
+    const response = await request(TESTING_APP_URL)
       .get(`/api/events/get-comments/${testEvent.id}`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', '1');

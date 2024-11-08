@@ -57,7 +57,7 @@ export class PermissionsGuard implements CanActivate {
     // Map of permission name to granted status
     const userPermissionsMap = new Map<string, boolean>();
     userPermissions.forEach((up) => {
-      userPermissionsMap.set(up.permission.name, up.granted);
+      userPermissionsMap.set(up.permission.name, true);
     });
 
     // Apply user-specific permissions

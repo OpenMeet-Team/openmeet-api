@@ -5,7 +5,7 @@ import { TenantConnectionService } from '../tenant/tenant.service';
 import { CategoryService } from '../category/category.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
-import { TESTER_USER_ID } from '../../test/utils/constants';
+import { TESTING_USER_ID } from '../../test/utils/constants';
 import {
   EventAttendeeRole,
   EventAttendeeStatus,
@@ -155,15 +155,15 @@ describe('EventService', () => {
       // Mock event attendee service
       jest.spyOn(eventAttendeeService, 'attendEvent').mockResolvedValue({
         id: 1,
-        userId: TESTER_USER_ID,
+        userId: TESTING_USER_ID,
         eventId: 1,
         status: EventAttendeeStatus.Confirmed,
         role: EventAttendeeRole.Participant,
         event: { id: 1 } as EventEntity,
-        user: { id: TESTER_USER_ID } as UserEntity,
+        user: { id: TESTING_USER_ID } as UserEntity,
       } as unknown as EventAttendeesEntity);
 
-      const event = await service.create(createEventDto, TESTER_USER_ID);
+      const event = await service.create(createEventDto, TESTING_USER_ID);
       expect(event).toBeDefined();
     });
   });
@@ -179,7 +179,7 @@ describe('EventService', () => {
     let mockEvents: Partial<EventEntity>[];
 
     it.skip('should return events created by the user when empty', async () => {
-      const events = await service.getEventsByCreator(TESTER_USER_ID);
+      const events = await service.getEventsByCreator(TESTING_USER_ID);
       expect(events).toEqual([]);
     });
 
@@ -194,7 +194,7 @@ describe('EventService', () => {
           getRepository: jest.fn().mockReturnValue(mockRepository),
         } as any);
 
-      const events = await service.getEventsByCreator(TESTER_USER_ID);
+      const events = await service.getEventsByCreator(TESTING_USER_ID);
 
       expect(mockRepository.find).toHaveBeenCalled();
 
@@ -290,7 +290,7 @@ describe('EventService', () => {
       jest.spyOn(service, 'attendEvent').mockResolvedValue(mockEventAttendee);
       const result = await service.attendEvent(
         mockEventAttendee,
-        TESTER_USER_ID,
+        TESTING_USER_ID,
         mockEvent.id as number,
       );
       expect(result).toEqual(mockEventAttendee);
@@ -304,7 +304,7 @@ describe('EventService', () => {
         .mockResolvedValue(mockEventAttendee);
       const result = await service.cancelAttendingEvent(
         mockEvent.id as number,
-        TESTER_USER_ID,
+        TESTING_USER_ID,
       );
       expect(result).toEqual(mockEventAttendee);
     });

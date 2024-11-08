@@ -4,29 +4,27 @@ import {
   JoinTable,
   ManyToMany,
   OneToMany,
-  PrimaryColumn,
+  PrimaryGeneratedColumn,
 } from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { ApiProperty } from '@nestjs/swagger';
 import { PermissionEntity } from '../../../../../permission/infrastructure/persistence/relational/entities/permission.entity';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
+import { RoleEnum } from '../../../../role.enum';
 
 @Entity({
   name: 'roles',
 })
 export class RoleEntity extends EntityRelationalHelper {
-  @ApiProperty({
-    type: Number,
-  })
-  @PrimaryColumn()
+  @PrimaryGeneratedColumn()
   id: number;
 
   @ApiProperty({
     type: String,
-    example: 'admin',
+    example: RoleEnum.Admin,
   })
   @Column()
-  name?: string;
+  name?: RoleEnum;
 
   @OneToMany(() => UserEntity, (user) => user.role)
   users: UserEntity[];

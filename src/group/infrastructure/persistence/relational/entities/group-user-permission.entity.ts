@@ -1,4 +1,4 @@
-import { Entity, Column, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import { Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
 import { GroupEntity } from './group.entity';
 import { GroupPermissionEntity } from '../../../../../group-permission/infrastructure/persistence/relational/entities/group-permission.entity';
@@ -19,7 +19,4 @@ export class GroupUserPermissionEntity {
     (groupPermission) => groupPermission.groupUserPermissions,
   )
   groupPermission: GroupPermissionEntity;
-
-  @Column({ type: 'boolean', default: true })
-  granted: boolean;
 }

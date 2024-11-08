@@ -1,8 +1,9 @@
 import request from 'supertest';
-import { APP_URL, TESTING_TENANT_ID } from '../utils/constants';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
+import { RoleEnum } from '../../src/role/role.enum';
 
 describe('User role', () => {
-  const app = APP_URL;
+  const app = TESTING_APP_URL;
   let serverApp;
 
   beforeAll(() => {
@@ -93,10 +94,10 @@ describe('User role', () => {
       .expect(200);
 
     expect(responseWithRole.body.role).toEqual(
-      expect.objectContaining({ name: 'User' }),
+      expect.objectContaining({ name: RoleEnum.User }),
     );
     expect(responseWithoutRole.body.role).toEqual(
-      expect.objectContaining({ name: 'User' }),
+      expect.objectContaining({ name: RoleEnum.User }),
     );
   });
 });

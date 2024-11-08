@@ -4,6 +4,7 @@ import { RoleEntity } from '../../../../role/infrastructure/persistence/relation
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
 import { RoleEnum } from '../../../../role/role.enum'; // Assuming you have RoleEnum for role types.
 import { PermissionEntity } from '../../../../permission/infrastructure/persistence/relational/entities/permission.entity';
+import { UserPermission } from 'src/core/constants/constant';
 
 @Injectable()
 export class RoleSeedService {
@@ -23,25 +24,31 @@ export class RoleSeedService {
     this.permissionRepository = dataSource.getRepository(PermissionEntity);
 
     // Seed roles and their permissions
-    await this.createRoleIfNotExists(RoleEnum.user, 'User', ['READ']);
-    await this.createRoleIfNotExists(RoleEnum.admin, 'Admin', [
-      'READ',
-      'WRITE',
-      'DELETE',
+    await this.createRoleIfNotExists(RoleEnum.User, [
+      UserPermission.CreateEvents,
+      UserPermission.CreateGroups,
+      UserPermission.CreateIssues,
+      UserPermission.ViewGroups,
+      UserPermission.ViewEvents,
+      UserPermission.AttendEvents,
+      UserPermission.JoinGroups,
+      UserPermission.MessageMembers,
+      UserPermission.MessageAttendees,
+      UserPermission.MessageUsers,
     ]);
+    await this.createRoleIfNotExists(RoleEnum.Admin, []); // All permissions
+    await this.createRoleIfNotExists(RoleEnum.Editor, []); // All permissions but not manage settings
   }
 
   // Helper method to create roles with assigned permissions
   private async createRoleIfNotExists(
-    roleId: number,
-    roleName: string,
-    permissionNames: string[],
+    roleName: RoleEnum,
+    permissionNames: UserPermission[],
   ) {
-    const count = await this.repository.count({ where: { id: roleId } });
+    const count = await this.repository.count({ where: { name: roleName } });
 
     if (!count) {
       const role = this.repository.create({
-        id: roleId,
         name: roleName,
       });
 
@@ -55,7 +62,7 @@ export class RoleSeedService {
 
   // Fetch permissions by their names
   private async getPermissionsByNames(
-    names: string[],
+    names: UserPermission[],
   ): Promise<PermissionEntity[]> {
     return this.permissionRepository.find({
       where: names.map((name) => ({ name })),

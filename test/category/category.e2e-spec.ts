@@ -1,7 +1,7 @@
-import { APP_URL, TESTING_TENANT_ID } from '../utils/constants';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import request from 'supertest';
 
-const app = APP_URL;
+const app = TESTING_APP_URL;
 
 describe('Get', () => {
   const server = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);

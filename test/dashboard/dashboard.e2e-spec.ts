@@ -1,9 +1,9 @@
 import {
-  APP_URL,
-  TESTER_EMAIL,
-  TESTER_PASSWORD,
+  TESTING_APP_URL,
+  TESTING_USER_EMAIL,
+  TESTING_USER_PASSWORD,
   TESTING_TENANT_ID,
-  TESTER_USER_ID,
+  TESTING_USER_ID,
 } from '../utils/constants';
 import request from 'supertest';
 import { getAuthToken } from '../utils/functions';
@@ -14,17 +14,21 @@ import {
 } from '../utils/functions';
 
 describe('Dashboard', () => {
-  const app = APP_URL;
+  const app = TESTING_APP_URL;
   let authToken: string;
   let preparedGroup: any;
   let preparedEvent: any;
 
   beforeAll(async () => {
-    authToken = await getAuthToken(app, TESTER_EMAIL, TESTER_PASSWORD);
+    authToken = await getAuthToken(
+      app,
+      TESTING_USER_EMAIL,
+      TESTING_USER_PASSWORD,
+    );
     const { group, event } = await createGroupsAndEvents(
       app,
-      TESTER_EMAIL,
-      TESTER_PASSWORD,
+      TESTING_USER_EMAIL,
+      TESTING_USER_PASSWORD,
     );
     preparedGroup = group;
     preparedEvent = event;
@@ -61,7 +65,7 @@ describe('Dashboard', () => {
         expect(response.body).toBeDefined();
 
         const hasUserCreatedEvent = response.body.some(
-          (event) => event.user.id === TESTER_USER_ID,
+          (event) => event.user.id === TESTING_USER_ID,
         );
         expect(hasUserCreatedEvent).toBe(true);
 
@@ -78,8 +82,8 @@ describe('Dashboard', () => {
         const hasNoEventsWithoutExpectedAttendee = response.body.every(
           (event) =>
             event.attendees?.some(
-              (attendee) => attendee.id === TESTER_USER_ID,
-            ) || event.user.id === TESTER_USER_ID,
+              (attendee) => attendee.id === TESTING_USER_ID,
+            ) || event.user.id === TESTING_USER_ID,
         );
         expect(hasNoEventsWithoutExpectedAttendee).toBe(true);
       });

@@ -1,12 +1,12 @@
 import request from 'supertest';
 import {
-  APP_URL,
-  TESTER_EMAIL,
-  TESTER_PASSWORD,
+  TESTING_APP_URL,
+  TESTING_USER_EMAIL,
+  TESTING_USER_PASSWORD,
   TESTING_TENANT_ID,
 } from './constants';
 import { CreateEventDto } from '../../src/event/dto/create-event.dto';
-import { EventStatus } from '../../src/core/constants/constant';
+import { EventStatus, GroupStatus } from '../../src/core/constants/constant';
 
 async function getAuthToken(
   app: string,
@@ -45,7 +45,7 @@ export async function createGroupsAndEvents(
   const groupData = {
     name: 'Test Group',
     description: 'A group created for testing purposes',
-    status: 'published',
+    status: GroupStatus.Published,
     members: [1, 2],
   };
   const group = await createGroup(app, authToken, groupData);
@@ -88,12 +88,12 @@ async function deleteEvent(app: string, authToken: string, eventId: number) {
 }
 
 async function loginAsTester() {
-  const loginResponse = await request(APP_URL)
+  const loginResponse = await request(TESTING_APP_URL)
     .post('/api/v1/auth/email/login')
     .set('x-tenant-id', TESTING_TENANT_ID)
     .send({
-      email: TESTER_EMAIL,
-      password: TESTER_PASSWORD,
+      email: TESTING_USER_EMAIL,
+      password: TESTING_USER_PASSWORD,
     });
 
   expect(loginResponse.status).toBe(200);
