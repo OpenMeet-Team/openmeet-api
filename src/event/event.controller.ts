@@ -49,7 +49,6 @@ export class EventController {
     return this.eventService.create(createEventDto, userId);
   }
 
-  @Public()
   @Post(':eventId/comment')
   @ApiOperation({ summary: 'Create a new comment' })
   async comment(
@@ -59,22 +58,20 @@ export class EventController {
     return this.eventService.postComment(body, eventId);
   }
 
-  @Public()
   @Post('comment-edit/:messageId')
   @ApiOperation({ summary: 'Update a comment' })
   async updaetComment(
     @Body() body: CommentDto,
     @Param('messageId') messageId: number,
   ): Promise<EventEntity> {
-    return this.eventService.updateComment(body, messageId);
+    return await this.eventService.updateComment(body, messageId);
   }
 
   @Delete('delete-comment/:messageId')
   async deleteComment(@Param('messageId') messageId: number): Promise<void> {
-    return this.eventService.deleteComment(messageId);
+    return await this.eventService.deleteComment(messageId);
   }
 
-  @Public()
   @Post('comment-reply/:eventId/:topicName')
   @ApiOperation({ summary: 'reply to comment' })
   async commentReply(
@@ -82,7 +79,7 @@ export class EventController {
     @Param('topicName') topicName: string,
     @Param('eventId') eventId: number,
   ): Promise<EventEntity> {
-    return this.eventService.postCommentinTopic(body, topicName, eventId);
+    return await this.eventService.postCommentinTopic(body, topicName, eventId);
   }
 
   @Public()
@@ -96,7 +93,6 @@ export class EventController {
     return event;
   }
 
-  @Public()
   @Get()
   @ApiOperation({ summary: 'Get all events' })
   async findme(

@@ -30,6 +30,7 @@ import { EventService } from '../event/event.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
+import { GroupRoleService } from '../group-role/group-role.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -44,6 +45,7 @@ export class GroupService {
     private readonly groupMemberService: GroupMemberService,
     private readonly eventService: EventService,
     private readonly fileService: FilesS3PresignedService,
+    private readonly groupRoleService: GroupRoleService,
   ) {}
 
   async getTenantSpecificGroupRepository() {
@@ -337,22 +339,19 @@ export class GroupService {
     await this.getTenantSpecificGroupRepository();
     const group = await this.groupRepository.findOne({
       where: { id },
-      relations: [
-        'events',
-        'groupMembers',
-        'groupMembers.user',
-        'groupMembers.groupRole',
-        'createdBy',
-        'categories',
-      ],
+      relations: ['createdBy', 'categories'],
     });
 
     if (!group) {
       throw new NotFoundException('Group not found');
     }
 
-    group.events = group.events?.slice(0, 5);
-    group.groupMembers = group.groupMembers?.slice(0, 5);
+    group.events = await this.eventService.findEventsForGroup(id, 5);
+
+    group.groupMembers = await this.groupMemberService.findGroupDetailsMembers(
+      id,
+      5,
+    );
 
     if (userId) {
       group.groupMember = await this.groupMemberService.findGroupMemberByUserId(
@@ -486,7 +485,7 @@ export class GroupService {
   ): Promise<GroupEntity[]> {
     await this.getTenantSpecificGroupRepository();
 
-    const { entities } = await this.groupRepository
+    return await this.groupRepository
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.groupMembers', 'groupMembers')
       .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
@@ -494,8 +493,41 @@ export class GroupService {
         userId,
       })
       .where('groupRole.name != :ownerRole', { ownerRole: GroupRole.Owner })
-      .getRawAndEntities();
+      .getMany();
+  }
 
-    return entities;
+  async joinGroup(userId: number, groupId: number) {
+    await this.getTenantSpecificGroupRepository();
+
+    const groupEntity = await this.groupRepository.findOne({
+      where: { id: groupId },
+    });
+
+    if (groupEntity?.requireApproval) {
+      await this.groupMemberService.createGroupMember(
+        { userId, groupId },
+        GroupRole.Guest,
+      );
+    } else {
+      await this.groupMemberService.createGroupMember(
+        { userId, groupId },
+        GroupRole.Member,
+      );
+    }
+
+    return await this.groupMemberService.findGroupMemberByUserId(
+      groupId,
+      userId,
+    );
+  }
+
+  async showGroupMembers(groupId: number): Promise<GroupMemberEntity[]> {
+    await this.getTenantSpecificGroupRepository();
+    return await this.groupMemberService.findGroupDetailsMembers(groupId, 0);
+  }
+
+  async showGroupEvents(groupId: number): Promise<EventEntity[]> {
+    await this.getTenantSpecificGroupRepository();
+    return await this.eventService.findEventsForGroup(groupId, 0);
   }
 }

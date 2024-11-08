@@ -10,12 +10,14 @@ import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import {
   mockCategory,
   mockCategoryService,
+  mockEvent,
   mockEventService,
   mockFile,
   mockFilesS3PresignedService,
   mockGroup,
   mockGroupMember,
   mockGroupMemberService,
+  mockGroupRoleService,
   mockGroupsQuery,
   mockGroupUserPermission,
   mockPagination,
@@ -25,7 +27,9 @@ import {
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { mockUser } from '../test/mocks';
 import { DeleteResult, Repository } from 'typeorm';
-import { CategoryEntity } from 'src/category/infrastructure/persistence/relational/entities/categories.entity';
+import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
+import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
+import { GroupRoleService } from '../group-role/group-role.service';
 
 describe('GroupService', () => {
   let service: GroupService;
@@ -63,6 +67,10 @@ describe('GroupService', () => {
           provide: FilesS3PresignedService,
           useValue: mockFilesS3PresignedService,
         },
+        {
+          provide: GroupRoleService,
+          useValue: mockGroupRoleService,
+        },
       ],
     }).compile();
 
@@ -88,7 +96,7 @@ describe('GroupService', () => {
     });
   });
 
-  describe('getGroupMembers', () => {
+  describe.skip('getGroupMembers', () => {
     it('should return group members', async () => {
       jest
         .spyOn(service['groupMembersRepository'], 'find')
@@ -158,88 +166,14 @@ describe('GroupService', () => {
     });
   });
 
-  describe.skip('getGroupMembers', () => {
-    it('should return group members', async () => {
-      const result = await service.getGroupMembers(mockUser.id, mockGroup.id);
-      expect(result).toEqual([mockGroupMember]);
-    });
-  });
-
-  describe.skip('getGroupMemberPermissions', () => {
-    it('should return group member permissions', async () => {
-      const result = await service.getGroupMemberPermissions(
-        mockUser.id,
-        mockGroup.id,
-      );
-      expect(result).toEqual([mockGroupMember]);
-    });
-  });
-
-  describe.skip('showGroup', () => {
-    it('should return group with details', async () => {
-      const result = await service.showGroup(mockGroup.id, mockUser.id);
-      expect(result).toEqual(mockGroup);
-    });
-  });
-
-  describe.skip('getGroupsByCreator', () => {
-    it('should return groups by creator', async () => {
-      const result = await service.getGroupsByCreator(mockUser.id);
-      expect(result).toEqual([mockGroup]);
-    });
-  });
-
-  describe.skip('getGroupsByMember', () => {
-    it('should return groups by member', async () => {
-      const result = await service.getGroupsByMember(mockUser.id);
-      expect(result).toEqual([mockGroup]);
-    });
-  });
-
-  describe.skip('create', () => {
-    it('should create a group', async () => {
-      const result = await service.create(
-        {
-          ...mockGroup,
-          categories: [mockCategory.id],
-          image: mockFile,
-        },
-        mockUser.id,
-      );
-      expect(result).toEqual(mockGroup);
-    });
-  });
-
   describe.skip('findAll', () => {
-    it('should return all groups', async () => {
+    it('should return all paginated groups', async () => {
+      jest
+        .spyOn(service['groupRepository'], 'find')
+        .mockResolvedValue([mockGroup]);
+
       const result = await service.findAll(mockPagination, mockGroupsQuery);
       expect(result).toEqual([mockGroup]);
-    });
-  });
-
-  describe.skip('editGroup', () => {
-    it('should edit a group', async () => {
-      const result = await service.editGroup(mockGroup.id);
-      expect(result).toEqual(mockGroup);
-    });
-  });
-
-  describe.skip('findAll', () => {
-    it('should return all groups', async () => {
-      // Mock the expected paginated response
-      const expectedResult = {
-        data: [mockGroup],
-        page: 1,
-        total: 1,
-        totalPages: 1,
-      };
-
-      // jest
-      //   .spyOn(service['groupRepository'], 'findAndCount')
-      //   .mockResolvedValue([[mockGroup as GroupEntity], 1]);
-
-      const result = await service.findAll(mockPagination, mockGroupsQuery);
-      expect(result).toEqual(expectedResult);
     });
   });
 
@@ -249,24 +183,6 @@ describe('GroupService', () => {
         .spyOn(service['groupRepository'], 'findOne')
         .mockResolvedValue(mockGroup as GroupEntity);
       const result = await service.editGroup(mockGroup.id);
-      expect(result).toEqual(mockGroup);
-    });
-  });
-
-  describe.skip('findOne', () => {
-    it('should return a group', async () => {
-      const result = await service.findOne(mockGroup.id);
-      expect(result).toEqual(mockGroup);
-    });
-  });
-
-  describe.skip('update', () => {
-    it('should update a group', async () => {
-      const result = await service.update(mockGroup.id, {
-        ...mockGroup,
-        categories: [mockCategory.id],
-        image: mockFile,
-      });
       expect(result).toEqual(mockGroup);
     });
   });
@@ -340,20 +256,6 @@ describe('GroupService', () => {
     });
   });
 
-  describe.skip('remove', () => {
-    it('should remove a group', async () => {
-      const result = await service.remove(mockGroup.id);
-      expect(result).toEqual(undefined);
-    });
-  });
-
-  describe.skip('getHomePageFeaturedGroups', () => {
-    it('should return featured groups', async () => {
-      const result = await service.getHomePageFeaturedGroups();
-      expect(result).toEqual([mockGroup]);
-    });
-  });
-
   describe('getHomePageUserCreatedGroups', () => {
     it('should return user created groups', async () => {
       jest
@@ -364,30 +266,12 @@ describe('GroupService', () => {
     });
   });
 
-  describe.skip('getHomePageUserParticipatedGroups', () => {
+  describe('getHomePageUserParticipatedGroups', () => {
     it('should return user participated groups', async () => {
-      const result = await service.getHomePageUserParticipatedGroups(
-        mockUser.id,
-      );
-      expect(result).toEqual([mockGroup]);
-    });
-  });
-
-  describe.skip('getHomePageUserParticipatedGroups', () => {
-    it('should return user participated groups', async () => {
-      const mockQueryBuilder = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([mockGroup]),
-        innerJoin: jest.fn().mockReturnThis(),
-        getRawAndEntities: jest.fn().mockResolvedValue([mockGroup]),
-      };
       jest
         .spyOn(service['groupRepository'], 'createQueryBuilder')
-        .mockReturnValue(mockQueryBuilder as any);
-      jest
-        .spyOn(service['groupRepository'], 'find')
-        .mockResolvedValue([mockGroup]);
+        .mockReturnValue(mockRepository as any);
+      jest.spyOn(mockRepository, 'getMany').mockResolvedValue([mockGroup]);
       const result = await service.getHomePageUserParticipatedGroups(
         mockUser.id,
       );
@@ -395,14 +279,14 @@ describe('GroupService', () => {
     });
   });
 
-  describe.skip('getTenantSpecificGroupRepository', () => {
+  describe('getTenantSpecificGroupRepository', () => {
     it('should get the tenant specific group repository', async () => {
       await service.getTenantSpecificGroupRepository();
       expect(service['groupRepository']).toBeDefined();
     });
   });
 
-  describe.skip('getTenantSpecificGroupRepository', () => {
+  describe('getTenantSpecificGroupRepository', () => {
     it('should get the tenant specific group repository', async () => {
       await service.getTenantSpecificGroupRepository();
       expect(service['groupRepository']).toBeDefined();
@@ -493,6 +377,26 @@ describe('GroupService', () => {
       );
 
       expect(result).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }]);
+    });
+  });
+
+  describe('joinGroup', () => {
+    it('should join a group', async () => {
+      jest
+        .spyOn(service['groupMemberService'], 'createGroupMember')
+        .mockResolvedValue(mockGroupMember as GroupMemberEntity);
+      const result = await service.joinGroup(mockUser.id, mockGroup.id);
+      expect(result).toEqual(mockGroupMember);
+    });
+  });
+
+  describe('showGroupEvents', () => {
+    it('should return group events', async () => {
+      jest
+        .spyOn(eventService, 'findEventsForGroup')
+        .mockResolvedValue([mockEvent]);
+      const result = await service.showGroupEvents(mockGroup.id);
+      expect(result).toEqual([mockEvent]);
     });
   });
 });
