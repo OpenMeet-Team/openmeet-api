@@ -38,7 +38,7 @@ export class UserSeedService {
         this.repository.create({
           firstName: 'Super',
           lastName: 'Admin',
-          email: 'admin@example.com',
+          email: 'admin@openmeet.net',
           password,
           role: {
             id: RoleEnum.admin,
@@ -68,7 +68,7 @@ export class UserSeedService {
         this.repository.create({
           firstName: 'John',
           lastName: 'Doe',
-          email: 'john.doe@example.com',
+          email: 'john.doe@openmeet.net',
           password,
           role: {
             id: RoleEnum.user,

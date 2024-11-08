@@ -95,17 +95,14 @@ export class EventService {
     const createdEvent = await this.eventRepository.save(event);
 
     const eventAttendeeDto = {
-      eventId: createdEvent.id,
       role: EventAttendeeRole.Host,
       status: EventAttendeeStatus.Confirmed,
     };
-    await this.eventAttendeeService.attendEvent(eventAttendeeDto, userId);
-
-    const params = {
-      name: `${createdEvent.shortId}_${createdEvent.slug}`,
+    await this.eventAttendeeService.attendEvent(
+      eventAttendeeDto,
       userId,
-    };
-    this.eventEmitter.emit('channel.created', params);
+      createdEvent.id,
+    );
     return createdEvent;
   }
 
@@ -349,6 +346,16 @@ export class EventService {
     const randomEvents = shuffledEvents.slice(0, 5);
 
     return randomEvents;
+  }
+
+  async showRandomEvents(limit: number): Promise<EventEntity[]> {
+    await this.getTenantSpecificEventRepository();
+    return this.eventRepository.find({
+      where: { status: Status.Published },
+      relations: ['attendees'],
+      order: { createdAt: 'DESC' },
+      take: limit,
+    });
   }
 
   async getRecommendedEventsByEventId(eventId: number): Promise<EventEntity[]> {

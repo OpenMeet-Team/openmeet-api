@@ -32,12 +32,19 @@ import { User } from '../user/domain/user';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
+import { EventAttendeeService } from '../event-attendee/event-attendee.service';
+import { CreateEventAttendeeDto } from '../event-attendee/dto/create-eventAttendee.dto';
+import { UpdateEventAttendeeDto } from '../event-attendee/dto/update-eventAttendee.dto';
+import { QueryEventAttendeeDto } from '../event-attendee/dto/query-eventAttendee.dto';
 @ApiTags('Events')
 @Controller('events')
 @ApiBearerAuth()
 @UseGuards(JWTAuthGuard)
 export class EventController {
-  constructor(private readonly eventService: EventService) {}
+  constructor(
+    private readonly eventService: EventService,
+    private readonly eventAttendeeService: EventAttendeeService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new event' })
@@ -48,6 +55,55 @@ export class EventController {
     const userId = user?.id;
     return this.eventService.create(createEventDto, userId);
   }
+
+  @Post(':eventId/attend')
+  @ApiOperation({ summary: 'Attending aa event' })
+  async attendEvent(
+    @AuthUser() user: User,
+    @Body() createEventAttendeeDto: CreateEventAttendeeDto,
+    @Param('eventId') eventId: number,
+  ) {
+    const userId = user.id;
+    return await this.eventAttendeeService.attendEvent(
+      createEventAttendeeDto,
+      userId,
+      eventId,
+    );
+  }
+
+  @Patch('/event-attendee')
+  @ApiOperation({ summary: 'Attending aa event' })
+  async updateEvent(
+    @AuthUser() user: User,
+    @Body() updateEventAttendeeDto: UpdateEventAttendeeDto,
+  ) {
+    const userId = user.id;
+    return await this.eventAttendeeService.updateEventAttendee(
+      userId,
+      updateEventAttendeeDto,
+    );
+  }
+
+  @Get('/event-attendee/me')
+  @ApiOperation({ summary: 'Get all event attendee' })
+  async findAllAttendee(
+    @Query() pagination: PaginationDto,
+    @Query() query: QueryEventAttendeeDto,
+    @AuthUser() user: User,
+  ): Promise<any> {
+    const userId = user?.id;
+    query.userId = userId;
+    return this.eventAttendeeService.findAll(pagination, query);
+  }
+
+  @Get('event-attendee/:eventId')
+  getEventAttendees(
+    @Param('eventId') eventId: number,
+    @Query() pagination: PaginationDto,
+  ) {
+    return this.eventAttendeeService.getEventAttendees(eventId, pagination);
+  }
+
 
   @Post(':eventId/comment')
   @ApiOperation({ summary: 'Create a new comment' })

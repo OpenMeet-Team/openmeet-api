@@ -13,7 +13,7 @@ async function getAuthToken(
   email: string,
   password: string,
 ): Promise<string> {
-  const server = request.agent(app).set('tenant-id', TESTING_TENANT_ID);
+  const server = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
   const response = await server
     .post('/api/v1/auth/email/login')
     .send({ email, password });
@@ -28,7 +28,7 @@ async function createGroup(
   const server = request(app);
   const response = await server
     .post('/api/groups')
-    .set('tenant-id', TESTING_TENANT_ID)
+    .set('x-tenant-id', TESTING_TENANT_ID)
     .set('Authorization', `Bearer ${authToken}`)
     .send(groupData);
   // console.log('createGroup response.body', response.body);
@@ -75,7 +75,7 @@ async function deleteGroup(app: string, authToken: string, groupId: number) {
   const server = request(app);
   await server
     .delete(`/api/groups/${groupId}`)
-    .set('tenant-id', TESTING_TENANT_ID)
+    .set('x-tenant-id', TESTING_TENANT_ID)
     .set('Authorization', `Bearer ${authToken}`);
 }
 
@@ -83,14 +83,14 @@ async function deleteEvent(app: string, authToken: string, eventId: number) {
   const server = request(app);
   await server
     .delete(`/api/events/${eventId}`)
-    .set('tenant-id', TESTING_TENANT_ID)
+    .set('x-tenant-id', TESTING_TENANT_ID)
     .set('Authorization', `Bearer ${authToken}`);
 }
 
 async function loginAsTester() {
   const loginResponse = await request(APP_URL)
     .post('/api/v1/auth/email/login')
-    .set('tenant-id', TESTING_TENANT_ID)
+    .set('x-tenant-id', TESTING_TENANT_ID)
     .send({
       email: TESTER_EMAIL,
       password: TESTER_PASSWORD,
@@ -103,7 +103,7 @@ async function createCategory(app, token, categoryData) {
   const response = await request(app)
     .post('/api/categories')
     .set('Authorization', `Bearer ${token}`)
-    .set('tenant-id', TESTING_TENANT_ID)
+    .set('x-tenant-id', TESTING_TENANT_ID)
     .send(categoryData);
   // console.log('createCategory response.body', response.body);
   expect(response.status).toBe(201);
@@ -114,7 +114,7 @@ async function createEvent(app, token, eventData) {
   const response = await request(app)
     .post('/api/events')
     .set('Authorization', `Bearer ${token}`)
-    .set('tenant-id', TESTING_TENANT_ID)
+    .set('x-tenant-id', TESTING_TENANT_ID)
     .send(eventData);
   // console.log('createEvent response.body', response.body);
   expect(response.status).toBe(201);
@@ -139,12 +139,12 @@ async function getRecommendedEvents(
   if (isAuthenticated) {
     response = await request(app)
       .get(getRecommendedEventsUrl)
-      .set('tenant-id', TESTING_TENANT_ID);
+      .set('x-tenant-id', TESTING_TENANT_ID);
   } else {
     response = await request(app)
       .get(getRecommendedEventsUrl)
       .set('Authorization', `Bearer ${token}`)
-      .set('tenant-id', TESTING_TENANT_ID);
+      .set('x-tenant-id', TESTING_TENANT_ID);
   }
   expect(response.status).toBe(200);
   return response.body;
@@ -154,7 +154,7 @@ async function updateEvent(app, token, eventId, eventData) {
   const response = await request(app)
     .patch(`/api/events/${eventId}`)
     .set('Authorization', `Bearer ${token}`)
-    .set('tenant-id', TESTING_TENANT_ID)
+    .set('x-tenant-id', TESTING_TENANT_ID)
     .send(eventData);
 
   expect(response.status).toBe(200);
@@ -166,7 +166,7 @@ async function getAllEvents(app, token) {
   const response = await request(app)
     .get(`/api/events`)
     .set('Authorization', `Bearer ${token}`)
-    .set('tenant-id', TESTING_TENANT_ID);
+    .set('x-tenant-id', TESTING_TENANT_ID);
 
   expect(response.status).toBe(200);
 
@@ -177,7 +177,7 @@ async function getEvent(app, token, eventId) {
   const response = await request(app)
     .get(`/api/events/${eventId}`)
     .set('Authorization', `Bearer ${token}`)
-    .set('tenant-id', TESTING_TENANT_ID);
+    .set('x-tenant-id', TESTING_TENANT_ID);
   // console.log('getEvent response', response.body);
   expect(response.status).toBe(200);
 
@@ -187,7 +187,7 @@ async function getMyEvents(app, token) {
   const response = await request(app)
     .get(`/api/dashboard/my-events`)
     .set('Authorization', `Bearer ${token}`)
-    .set('tenant-id', TESTING_TENANT_ID);
+    .set('x-tenant-id', TESTING_TENANT_ID);
 
   expect(response.status).toBe(200);
   return response.body;

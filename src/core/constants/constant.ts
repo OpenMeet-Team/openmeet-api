@@ -30,9 +30,22 @@ export enum GroupPermission {
   SeeMembers = 'SEE_MEMBERS',
   SeeEvents = 'SEE_EVENTS',
   SeeDiscussions = 'SEE_DISCUSSIONS',
+  SeeGroup = 'SEE_GROUP',
 }
 
 export enum Visibility {
+  Public = 'public',
+  Authenticated = 'authenticated',
+  Private = 'private',
+}
+
+export enum GroupStatus {
+  Draft = 'draft',
+  Pending = 'pending',
+  Published = 'published',
+}
+
+export enum GroupVisibility {
   Public = 'public',
   Authenticated = 'authenticated',
   Private = 'private',

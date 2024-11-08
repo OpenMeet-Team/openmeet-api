@@ -8,6 +8,7 @@ import { CreateEventAttendeeDto } from './dto/create-eventAttendee.dto';
 import { DeepPartial } from 'typeorm';
 import { QueryEventAttendeeDto } from './dto/query-eventAttendee.dto';
 import { paginate } from '../utils/generic-pagination';
+import { UpdateEventAttendeeDto } from './dto/update-eventAttendee.dto';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventAttendeeService {
@@ -29,10 +30,11 @@ export class EventAttendeeService {
   async attendEvent(
     createEventAttendeeDto: CreateEventAttendeeDto,
     userId: number,
+    eventId: number,
   ): Promise<EventAttendeesEntity> {
     await this.getTenantSpecificEventRepository();
 
-    const event = { id: createEventAttendeeDto.eventId };
+    const event = { id: eventId };
     const user = { id: userId };
 
     const mappedDto: DeepPartial<EventAttendeesEntity> = {
@@ -140,6 +142,26 @@ export class EventAttendeeService {
       where: { event: { id: eventId }, user: { id: userId } },
       relations: ['user'],
     });
+  }
+
+  async updateEventAttendee(
+    attendeeId: number,
+    body: UpdateEventAttendeeDto,
+  ): Promise<any> {
+    await this.getTenantSpecificEventRepository();
+
+    const attendee = await this.eventAttendeesRepository.findOne({
+      where: { userId: attendeeId },
+    });
+
+    if (!attendee) {
+      throw new NotFoundException(`Attendee with ID ${attendeeId} not found`);
+    }
+
+    const updatedAttendee = { ...attendee, ...body };
+    await this.eventAttendeesRepository.save(updatedAttendee);
+
+    return updatedAttendee;
   }
 
   async findEventAttendees(eventId: number): Promise<any> {

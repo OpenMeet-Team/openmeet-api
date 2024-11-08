@@ -22,7 +22,7 @@ export const mockCategory = {
 // Mock for UserEntity
 export const mockUser = {
   id: 1,
-  email: 'test@example.com',
+  email: 'test@openmeet.net',
   password: 'password',
   firstName: 'John',
   lastName: 'Doe',
@@ -119,6 +119,10 @@ export const mockGroupMemberService = {
 
 export const mockGroupRoleService = {
   findOne: jest.fn().mockResolvedValue(mockGroupRole),
+};
+
+export const mockMailService = {
+  groupMemberJoined: jest.fn().mockResolvedValue(undefined),
 };
 
 export const mockGroupService = {

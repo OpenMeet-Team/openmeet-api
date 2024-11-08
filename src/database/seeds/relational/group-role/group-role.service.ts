@@ -37,6 +37,10 @@ export class GroupRoleSeedService {
       'MANAGE_REPORTS',
       'MANAGE_BILLING',
       'CREATE_EVENT',
+      'SEE_GROUP',
+      'SEE_EVENTS',
+      'SEE_DISCUSSIONS',
+      'SEE_MEMBERS',
     ]);
     await this.createGroupRoleIfNotExists('admin', [
       'MANAGE_GROUP',
@@ -45,6 +49,10 @@ export class GroupRoleSeedService {
       'MANAGE_DISCUSSIONS',
       'MANAGE_REPORTS',
       'CREATE_EVENT',
+      'SEE_GROUP',
+      'SEE_EVENTS',
+      'SEE_DISCUSSIONS',
+      'SEE_MEMBERS',
     ]);
     await this.createGroupRoleIfNotExists('guest', []);
     await this.createGroupRoleIfNotExists('member', [
@@ -53,10 +61,15 @@ export class GroupRoleSeedService {
       'SEE_MEMBERS',
       'SEE_EVENTS',
       'SEE_DISCUSSIONS',
+      'SEE_GROUP',
     ]);
     await this.createGroupRoleIfNotExists('moderator', [
       'MANAGE_MEMBERS',
       'MANAGE_DISCUSSIONS',
+      'SEE_GROUP',
+      'SEE_EVENTS',
+      'SEE_DISCUSSIONS',
+      'SEE_MEMBERS',
     ]);
   }
 
@@ -77,6 +90,7 @@ export class GroupRoleSeedService {
       // Assign permissions to the group role
       const permissions =
         await this.getGroupPermissionsByNames(permissionNames);
+
       groupRole.groupPermissions = permissions;
       await this.groupRoleRepository.save(groupRole);
     }
@@ -86,6 +100,9 @@ export class GroupRoleSeedService {
   private async getGroupPermissionsByNames(
     names: string[],
   ): Promise<GroupPermissionEntity[]> {
+    if (names.length === 0) {
+      return [];
+    }
     return this.groupPermissionRepository.find({
       where: names.map((name) => ({ name: name as GroupPermission })),
     });

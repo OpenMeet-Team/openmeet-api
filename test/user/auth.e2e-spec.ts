@@ -13,7 +13,7 @@ describe('Auth Module', () => {
   const mail = `http://${MAIL_HOST}:${MAIL_PORT}`;
   const newUserFirstName = `Tester${Date.now()}`;
   const newUserLastName = `E2E`;
-  const newUserEmail = `User.${Date.now()}@example.com`;
+  const newUserEmail = `User.${Date.now()}@openmeet.net`;
   const newUserPassword = `secret`;
 
   let authToken: string;
@@ -22,7 +22,7 @@ describe('Auth Module', () => {
 
   beforeAll(async () => {
     authToken = await getAuthToken(app, TESTER_EMAIL, TESTER_PASSWORD);
-    serverApp = request.agent(app).set('tenant-id', TESTING_TENANT_ID);
+    serverApp = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
     serverEmail = request.agent(mail);
   });
 
@@ -116,7 +116,7 @@ describe('Auth Module', () => {
     it('should successfully for user with confirmed email: /api/v1/auth/email/login (POST)', async () => {
       const req = serverApp
         .post('/api/v1/auth/email/login')
-        .set('tenant-id', '1');
+        .set('x-tenant-id', '1');
 
       const response = await req.send({
         email: newUserEmail,
@@ -144,7 +144,7 @@ describe('Auth Module', () => {
       const server = request
         .agent(app)
         .set('Authorization', `Bearer ${newUserApiToken}`)
-        .set('tenant-id', '1');
+        .set('x-tenant-id', '1');
 
       const req = server.get('/api/v1/auth/me');
       const response = await req.send();
@@ -171,7 +171,7 @@ describe('Auth Module', () => {
       const req = request
         .agent(app)
         .set('Authorization', `Bearer ${refreshToken}`)
-        .set('tenant-id', '1')
+        .set('x-tenant-id', '1')
         .post('/api/v1/auth/refresh');
 
       const refreshResponse = await req.send();
@@ -184,7 +184,7 @@ describe('Auth Module', () => {
       const req2 = request
         .agent(app)
         .set('Authorization', `Bearer ${refreshToken}`)
-        .set('tenant-id', '1')
+        .set('x-tenant-id', '1')
         .post('/api/v1/auth/refresh');
 
       const refreshResponse2 = await req2.send().expect(200);
@@ -267,7 +267,7 @@ describe('Auth Module', () => {
     it.skip('should update profile email successfully: /api/v1/auth/me (PATCH)', async () => {
       const newUserFirstName = `Tester${Date.now()}`;
       const newUserLastName = `E2E`;
-      const newUserEmail = `user.${Date.now()}@example.com`;
+      const newUserEmail = `user.${Date.now()}@openmeet.net`;
       const newUserPassword = `secret`;
       const newUserNewEmail = `new.${newUserEmail}`;
 
