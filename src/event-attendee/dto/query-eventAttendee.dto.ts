@@ -1,6 +1,10 @@
-import { IsOptional, IsString, IsDateString } from 'class-validator';
+import { IsNumber, IsOptional, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  EventAttendeeRole,
+  EventAttendeeStatus,
+} from '../../core/constants/constant';
 
 export class QueryEventAttendeeDto {
   @ApiPropertyOptional()
@@ -11,25 +15,19 @@ export class QueryEventAttendeeDto {
 
   // @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsNumber()
   @Type(() => Number)
   userId: number;
 
-  @ApiPropertyOptional({
-    description: 'Filter events from this date.',
-    type: String,
-  })
+  @ApiPropertyOptional()
   @IsOptional()
-  @IsDateString()
+  @IsString()
   @Type(() => String)
-  fromDate: string;
+  role: EventAttendeeRole;
 
-  @ApiPropertyOptional({
-    description: 'Filter events to this date.',
-    type: String,
-  })
+  @ApiPropertyOptional()
   @IsOptional()
-  @IsDateString()
+  @IsString()
   @Type(() => String)
-  toDate: string;
+  status: EventAttendeeStatus;
 }

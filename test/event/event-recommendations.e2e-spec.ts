@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { APP_URL, TESTING_TENANT_ID } from '../utils/constants';
-import { Status } from '../../src/core/constants/constant';
+import { EventStatus } from '../../src/core/constants/constant';
 import {
   loginAsTester,
   createEvent,
@@ -40,7 +40,7 @@ describe('EventController Recommendations (e2e)', () => {
     testEvent = await createEvent(APP_URL, token, {
       name: 'Main Event',
       description: 'Main event description',
-      status: Status.Published,
+      status: EventStatus.Published,
       categories: [category1.id, category2.id],
       startDate: new Date().toISOString(),
       maxAttendees: 100,
@@ -51,7 +51,7 @@ describe('EventController Recommendations (e2e)', () => {
     testEvent2 = await createEvent(APP_URL, token, {
       name: 'Recommended Event 1',
       description: 'Recommended event 1 description',
-      status: Status.Published,
+      status: EventStatus.Published,
       startDate: new Date().toISOString(),
       categories: [category1.id],
       type: 'in person',
@@ -61,7 +61,7 @@ describe('EventController Recommendations (e2e)', () => {
     testEvent3 = await createEvent(APP_URL, token, {
       name: 'Recommended Event 2',
       description: 'Recommended event 2 description',
-      status: Status.Published,
+      status: EventStatus.Published,
       startDate: new Date().toISOString(),
       categories: [category2.id],
       type: 'hybrid',
@@ -71,7 +71,7 @@ describe('EventController Recommendations (e2e)', () => {
     testEvent4 = await createEvent(APP_URL, token, {
       name: 'Unrelated Event',
       description: 'Unrelated event description',
-      status: Status.Published,
+      status: EventStatus.Published,
       categories: [categoryUnrelated.id],
       startDate: new Date().toISOString(),
       type: 'in person',

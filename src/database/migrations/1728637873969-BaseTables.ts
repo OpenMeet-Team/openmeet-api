@@ -24,7 +24,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `CREATE TABLE "${schema}"."files" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "path" character varying NOT NULL, "fileName" character varying NOT NULL, "fileSize" integer NOT NULL, "mimeType" character varying NOT NULL, CONSTRAINT "PK_6c16b9093a142e0e7613b04a3d9" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
-      `CREATE TYPE "${schema}"."eventAttendees_status_enum" AS ENUM('invited', 'confirmed', 'attended', 'cancelled', 'rejected')`,
+      `CREATE TYPE "${schema}"."eventAttendees_status_enum" AS ENUM('invited', 'confirmed', 'attended', 'cancelled', 'rejected', 'maybe', 'pending')`,
     );
     await queryRunner.query(
       `CREATE TYPE "${schema}"."eventAttendees_role_enum" AS ENUM('participant', 'host', 'speaker', 'moderator', 'guest')`,

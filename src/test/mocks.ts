@@ -189,6 +189,11 @@ export const mockEventService = {
   showGroupEvents: jest.fn().mockResolvedValue(mockEvents),
   deleteEventsByGroup: jest.fn().mockResolvedValue(undefined),
   findEventsForGroup: jest.fn().mockResolvedValue(mockEvents),
+  showEvent: jest.fn().mockResolvedValue(mockEvent),
+  editEvent: jest.fn().mockResolvedValue(mockEvent),
+  attendEvent: jest.fn().mockResolvedValue(mockEventAttendee),
+  cancelAttendingEvent: jest.fn().mockResolvedValue(mockEventAttendee),
+  getEventAttendees: jest.fn().mockResolvedValue(mockEventAttendees),
 };
 
 export const mockFilesS3PresignedService = {

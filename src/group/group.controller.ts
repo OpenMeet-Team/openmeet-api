@@ -70,7 +70,7 @@ export class GroupController {
   @Get('me/:id')
   @ApiOperation({ summary: 'Get group by ID Authenticated' })
   async editGroup(@Param('id') id: number): Promise<GroupEntity> {
-    return await this.groupService.editGroup(+id);
+    return await this.groupService.editGroup(id);
   }
 
   @Public()

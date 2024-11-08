@@ -15,9 +15,9 @@ import { CategoryEntity } from '../../../../../category/infrastructure/persisten
 import { GroupEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group.entity';
 import { Expose } from 'class-transformer';
 import {
-  Status,
-  Visibility,
   EventType,
+  EventVisibility,
+  EventStatus,
 } from '../../../../../core/constants/constant';
 import { GroupMemberEntity } from '../../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { FileEntity } from '../../../../../file/infrastructure/persistence/relational/entities/file.entity';
@@ -76,16 +76,16 @@ export class EventEntity extends EntityRelationalHelper {
   @Column({
     nullable: true,
     type: 'enum',
-    enum: Status,
+    enum: EventStatus,
   })
-  status: Status;
+  status: EventStatus;
 
   @Column({
     nullable: true,
     type: 'enum',
-    enum: Visibility,
+    enum: EventVisibility,
   })
-  visibility: Visibility;
+  visibility: EventVisibility;
 
   @ManyToOne(() => UserEntity, (user) => user.events)
   @JoinColumn({ name: 'userId' })

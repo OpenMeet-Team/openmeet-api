@@ -18,9 +18,8 @@ import { GroupUserPermissionEntity } from './infrastructure/persistence/relation
 import {
   GroupPermission,
   GroupRole,
+  GroupStatus,
   GroupVisibility,
-  Status,
-  Visibility,
 } from '../core/constants/constant';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { PaginationDto } from '../utils/dto/pagination.dto';
@@ -265,7 +264,7 @@ export class GroupService {
       .leftJoinAndSelect('group.groupMembers', 'groupMembers')
       .leftJoinAndSelect('groupMembers.user', 'user')
       .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
-      .where('group.status = :status', { status: Status.Published });
+      .where('group.status = :status', { status: GroupStatus.Published });
 
     if (userId) {
       groupQuery.andWhere('user.id = :userId', { userId });
@@ -463,7 +462,10 @@ export class GroupService {
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.groupMembers', 'groupMembers')
       .leftJoinAndSelect('group.categories', 'categories')
-      .where({ visibility: Visibility.Public, status: Status.Published })
+      .where({
+        visibility: GroupVisibility.Public,
+        status: GroupStatus.Published,
+      })
       .orderBy('RANDOM()')
       .limit(5)
       .getMany(); // TODO: later provide featured flag or configuration object
