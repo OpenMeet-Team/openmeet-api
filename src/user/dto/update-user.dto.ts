@@ -8,7 +8,7 @@ import { StatusDto } from '../../status/dto/status.dto';
 import { lowerCaseTransformer } from '../../utils/transformers/lower-case.transformer';
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {
-  @ApiPropertyOptional({ example: 'test1@example.com', type: String })
+  @ApiPropertyOptional({ example: 'test1@openmeet.net', type: String })
   @Transform(lowerCaseTransformer)
   @IsOptional()
   @IsEmail()

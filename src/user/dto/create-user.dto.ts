@@ -13,7 +13,7 @@ import { StatusDto } from '../../status/dto/status.dto';
 import { lowerCaseTransformer } from '../../utils/transformers/lower-case.transformer';
 
 export class CreateUserDto {
-  @ApiProperty({ example: 'test1@example.com', type: String })
+  @ApiProperty({ example: 'test1@openmeet.net', type: String })
   @Transform(lowerCaseTransformer)
   @IsNotEmpty()
   @IsEmail()

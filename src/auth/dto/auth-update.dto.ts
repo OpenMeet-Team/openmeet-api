@@ -19,7 +19,7 @@ export class AuthUpdateDto {
   @IsNotEmpty({ message: 'mustBeNotEmpty' })
   lastName?: string;
 
-  @ApiPropertyOptional({ example: 'new.email@example.com' })
+  @ApiPropertyOptional({ example: 'new.email@openmeet.net' })
   @IsOptional()
   @IsNotEmpty()
   @IsEmail()
