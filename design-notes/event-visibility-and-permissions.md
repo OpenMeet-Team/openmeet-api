@@ -1,5 +1,43 @@
 # Event System Implementation Guide
 
+## Table of Contents
+
+- [Table of Contents](#table-of-contents)
+- [Core Concepts](#core-concepts)
+  - [Visibility System](#visibility-system)
+  - [Permission System](#permission-system)
+  - [Attendance Flow](#attendance-flow)
+- [Technical Considerations](#technical-considerations)
+  - [Key Components Needed](#key-components-needed)
+  - [Edge Cases to Handle](#edge-cases-to-handle)
+- [Development Priorities](#development-priorities)
+- [Security Considerations](#security-considerations)
+- [User Stories](#user-stories)
+  - [Public Events](#public-events)
+    - [Story 1A: Host Perspective - Creating a Public Event with Capacity](#story-1a-host-perspective---creating-a-public-event-with-capacity)
+      - [Scenario: Creating and Managing a Public Event](#scenario-creating-and-managing-a-public-event)
+    - [Story 1B: Attendee Perspective - Joining a Public Event](#story-1b-attendee-perspective---joining-a-public-event)
+      - [Scenario: Finding and Joining a Public Event](#scenario-finding-and-joining-a-public-event)
+  - [Private Group Events](#private-group-events)
+    - [Story 2A: Host Perspective - Private Group Event with Approval](#story-2a-host-perspective---private-group-event-with-approval)
+      - [Scenario: Managing a Restricted Event](#scenario-managing-a-restricted-event)
+    - [Story 2B: Attendee Perspective - Requesting to Join a Group Event](#story-2b-attendee-perspective---requesting-to-join-a-group-event)
+      - [Scenario: Applying for a Restricted Event](#scenario-applying-for-a-restricted-event)
+  - [Private Invite-Only Events](#private-invite-only-events)
+    - [Story 3A: Host Perspective - Private Invite-Only Event](#story-3a-host-perspective---private-invite-only-event)
+      - [Scenario: Managing Private Invitations](#scenario-managing-private-invitations)
+    - [Story 3B: Attendee Perspective - Attending a Private Event](#story-3b-attendee-perspective---attending-a-private-event)
+      - [Scenario: Using a Private Invitation](#scenario-using-a-private-invitation)
+- [Detailed User Flow](#detailed-user-flow)
+  - [Event Discovery \& Attendance](#event-discovery--attendance)
+    - [Interest \& Requirements Phase](#interest--requirements-phase)
+    - [Joining Process](#joining-process)
+    - [Confirmation Phase](#confirmation-phase)
+  - [Flow Classification](#flow-classification)
+  - [Notes](#notes)
+
+
+
 ## Core Concepts
 
 ### Visibility System
@@ -48,7 +86,7 @@ The visibility system controls both discoverability and access:
 1. **Pre-Attendance Checks**
    - Group membership validation
    - Capacity limits on attendance
-   - Age/location restrictions
+   - Age/location restrictions (advanced feature, post MVP)
    - Custom questionnaire responses (advanced feature, post MVP)
 
 2. **Approval Workflow**
@@ -266,3 +304,59 @@ The visibility system controls both discoverability and access:
    - Gets updates from host
    - Can view other confirmed families
    - Has access to host contact
+
+## Detailed User Flow
+
+### Event Discovery & Attendance
+Discovery Phase
+Sarah is not logged in and browsing OpenMeet's event listings for photography workshops in her area. She finds
+"Urban Photography Walk - Downtown" which is listed as a public event hosted by the Local Photography Club.
+
+The event listing shows:
+
+- Basic details (date, time, location)
+- 12 spots remaining out of 20 total
+
+#### Interest & Requirements Phase
+Sarah clicks or scrolls to view more details and sees:
+
+- Full event description
+- Current attendee list
+- Requirements for attendance:
+
+  - Must be a member of Local Photography Club (linked)
+  - Must have a DSLR camera (equipment requirement)
+  - Requires host approval
+
+#### Joining Process
+Sarah joins the Local Photography Club (separate group membership flow)
+Returns to event and clicks "Request to Attend"
+Fills out attendance questionnaire (if the host created one, otherwise disccuss in DM or email):
+
+- What camera equipment she'll bring
+- Her experience level
+- Why she wants to attend
+
+Submits request and sees "Pending Host Approval"
+
+#### Confirmation Phase
+- Host reviews Sarah's request and her profile
+- Host approves Sarah's attendance
+- Sarah receives confirmation email with:
+
+  - Final event details
+  - Meeting point information
+  - What to bring
+  - How to contact organizers
+
+### Flow Classification
+This story illustrates how the three key aspects interplay:
+
+- Discoverability: Listed (Sarah found it in search)
+- Access: Restricted (requires group membership)
+- Confirmation: Manual (host approval required)
+
+### Notes
+
+- how to enforce the group membership requirement? Is it automatic or is the host validating that?
+- what happens if the host doesn't approve the attendance? What does the user see?
