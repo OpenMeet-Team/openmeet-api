@@ -120,7 +120,7 @@ describe('Auth Module', () => {
     it('should successfully for user with confirmed email: /api/v1/auth/email/login (POST)', async () => {
       const req = serverApp
         .post('/api/v1/auth/email/login')
-        .set('x-tenant-id', '1');
+        .set('x-tenant-id', TESTING_TENANT_ID);
 
       const response = await req.send({
         email: newUserEmail,
@@ -148,7 +148,7 @@ describe('Auth Module', () => {
       const server = request
         .agent(app)
         .set('Authorization', `Bearer ${newUserApiToken}`)
-        .set('x-tenant-id', '1');
+        .set('x-tenant-id', TESTING_TENANT_ID);
 
       const req = server.get('/api/v1/auth/me');
       const response = await req.send();
@@ -175,7 +175,7 @@ describe('Auth Module', () => {
       const req = request
         .agent(app)
         .set('Authorization', `Bearer ${refreshToken}`)
-        .set('x-tenant-id', '1')
+        .set('x-tenant-id', TESTING_TENANT_ID)
         .post('/api/v1/auth/refresh');
 
       const refreshResponse = await req.send();
@@ -188,7 +188,7 @@ describe('Auth Module', () => {
       const req2 = request
         .agent(app)
         .set('Authorization', `Bearer ${refreshToken}`)
-        .set('x-tenant-id', '1')
+        .set('x-tenant-id', TESTING_TENANT_ID)
         .post('/api/v1/auth/refresh');
 
       const refreshResponse2 = await req2.send().expect(200);

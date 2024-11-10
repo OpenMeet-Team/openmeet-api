@@ -22,7 +22,7 @@ export class UserSeedService {
     this.repository = dataSource.getRepository(UserEntity);
     this.roleRepository = dataSource.getRepository(RoleEntity);
 
-    for (const roleName of [RoleEnum.User, RoleEnum.Editor, RoleEnum.Admin]) {
+    for (const roleName of [RoleEnum.User, RoleEnum.Admin]) {
       const count = await this.repository.count({
         where: {
           role: {
@@ -45,7 +45,7 @@ export class UserSeedService {
           this.repository.create({
             firstName: roleName,
             lastName: roleName,
-            email: `${tenantId}.${roleName.toLowerCase()}@openmeet.net`,
+            email: `${tenantId}.${roleName.toLowerCase()}@openmeet.net`, // ex. 1.user@openmeet.net, 1.admin@openmeet.net
             password,
             role: {
               id: role?.id,

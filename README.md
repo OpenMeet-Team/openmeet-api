@@ -69,7 +69,7 @@ Additionally, you may place a file  at `./config/tenants.json` to configure tena
 
 `TENANTS_B64` example:
 ```bash
-export TENANTS_B64=WwogIHsKICAgICJpZCI6ICIiLAogICAgIm5hbWUiOiAiUHVibGljIgogIH0sCiAgewogICAgImlkIjogIjEiLAogICAgIm5hbWUiOiAiT3Blbk1lZXQiCiAgfSwKICB7CiAgICAiaWQiOiAiMiIsCiAgICAibmFtZSI6ICJUZXN0aW5nIgogIH0KXQo=
+export TENANTS_B64=WwogIHsKICAgICJpZCI6ICIiLAogICAgIm5hbWUiOiAiUHVibGljIgogIH0sCiAgewogICAgImlkIjogIjEiLAogICAgIm5hbWUiOiAiT3Blbk1lZXQiCiAgfSwKICB7CiAgICAiaWQiOiAidGVzdGluZyIsCiAgICAibmFtZSI6ICJUZXN0aW5nIgogIH0KXQ==
 ```
 
 #### Run unit tests

@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { TESTING_APP_URL } from '../utils/constants';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import {
   loginAsTester,
   createGroup,
@@ -96,7 +96,7 @@ describe('EventController (e2e)', () => {
     const deleteEventResponse = await request(TESTING_APP_URL)
       .delete(`/api/events/${testEvent.id}`)
       .set('Authorization', `Bearer ${token}`)
-      .set('x-tenant-id', '1');
+      .set('x-tenant-id', TESTING_TENANT_ID);
     expect(deleteEventResponse.status).toBe(200);
   });
 
@@ -106,14 +106,14 @@ describe('EventController (e2e)', () => {
       await request(TESTING_APP_URL)
         .delete(`/api/events/${testEvent.id}`)
         .set('Authorization', `Bearer ${token}`)
-        .set('x-tenant-id', '1');
+        .set('x-tenant-id', TESTING_TENANT_ID);
     }
 
     if (testGroup && testGroup.id) {
       await request(TESTING_APP_URL)
         .delete(`/api/groups/${testGroup.id}`)
         .set('Authorization', `Bearer ${token}`)
-        .set('x-tenant-id', '1');
+        .set('x-tenant-id', TESTING_TENANT_ID);
     }
   });
 });

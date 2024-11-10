@@ -163,7 +163,10 @@ describe('EventService', () => {
         user: { id: TESTING_USER_ID } as UserEntity,
       } as unknown as EventAttendeesEntity);
 
-      const event = await service.create(createEventDto, TESTING_USER_ID);
+      const event = await service.create(
+        createEventDto,
+        TESTING_USER_ID as number,
+      );
       expect(event).toBeDefined();
     });
   });
@@ -290,7 +293,7 @@ describe('EventService', () => {
       jest.spyOn(service, 'attendEvent').mockResolvedValue(mockEventAttendee);
       const result = await service.attendEvent(
         mockEventAttendee,
-        TESTING_USER_ID,
+        TESTING_USER_ID as number,
         mockEvent.id as number,
       );
       expect(result).toEqual(mockEventAttendee);
@@ -304,7 +307,7 @@ describe('EventService', () => {
         .mockResolvedValue(mockEventAttendee);
       const result = await service.cancelAttendingEvent(
         mockEvent.id as number,
-        TESTING_USER_ID,
+        TESTING_USER_ID as number,
       );
       expect(result).toEqual(mockEventAttendee);
     });
