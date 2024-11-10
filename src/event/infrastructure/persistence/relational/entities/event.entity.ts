@@ -64,6 +64,15 @@ export class EventEntity extends EntityRelationalHelper {
   @Column({ type: 'int', nullable: true })
   maxAttendees: number;
 
+  @Column({ type: 'boolean', default: false })
+  requireApproval: boolean;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  approvalQuestion: string;
+
+  @Column({ type: 'boolean', default: false })
+  requireGroupMembership: boolean;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   location: string;
 
@@ -86,6 +95,9 @@ export class EventEntity extends EntityRelationalHelper {
     enum: EventVisibility,
   })
   visibility: EventVisibility;
+
+  @Column({ type: 'boolean', default: false })
+  allowWaitlist: boolean;
 
   @ManyToOne(() => UserEntity, (user) => user.events)
   @JoinColumn({ name: 'userId' })

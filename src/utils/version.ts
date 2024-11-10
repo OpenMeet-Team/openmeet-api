@@ -15,7 +15,6 @@ export function getBuildInfo(): BuildInfo {
     const packageJson = JSON.parse(
       Buffer.from(packageJsonB64, 'base64').toString(),
     );
-    console.log(packageJson);
 
     return {
       version: packageJson.version,
@@ -24,8 +23,7 @@ export function getBuildInfo(): BuildInfo {
       branch: gitBranch,
       environment: process.env.NODE_ENV || 'development',
     };
-  } catch (error) {
-    console.warn('Failed to get build info:', error);
+  } catch {
     return {
       version: '1.0.0',
       commitHash: 'unknown',

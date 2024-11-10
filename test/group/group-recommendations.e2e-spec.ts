@@ -1,8 +1,8 @@
 import request from 'supertest';
 import {
-  APP_URL,
-  TESTER_EMAIL,
-  TESTER_PASSWORD,
+  TESTING_APP_URL,
+  TESTING_USER_EMAIL,
+  TESTING_USER_PASSWORD,
   TESTING_TENANT_ID,
 } from '../utils/constants';
 import { EventEntity } from '../../src/event/infrastructure/persistence/relational/entities/event.entity';
@@ -18,12 +18,12 @@ describe('GroupRecommendations (e2e)', () => {
 
   // Helper function to log in as the test user
   async function loginAsTester() {
-    const loginResponse = await request(APP_URL)
+    const loginResponse = await request(TESTING_APP_URL)
       .post('/api/v1/auth/email/login')
       .set('x-tenant-id', TESTING_TENANT_ID)
       .send({
-        email: TESTER_EMAIL,
-        password: TESTER_PASSWORD,
+        email: TESTING_USER_EMAIL,
+        password: TESTING_USER_PASSWORD,
       });
 
     expect(loginResponse.status).toBe(200);
@@ -32,7 +32,7 @@ describe('GroupRecommendations (e2e)', () => {
 
   // Helper function to create a group
   async function createGroup(token, groupData) {
-    const response = await request(APP_URL)
+    const response = await request(TESTING_APP_URL)
       .post('/api/groups')
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID)
@@ -44,7 +44,7 @@ describe('GroupRecommendations (e2e)', () => {
 
   // Helper function to create a category
   async function createCategory(token, categoryData) {
-    const response = await request(APP_URL)
+    const response = await request(TESTING_APP_URL)
       .post('/api/categories')
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID)
@@ -56,7 +56,7 @@ describe('GroupRecommendations (e2e)', () => {
 
   // Helper function to create an event
   async function createEvent(token, eventData) {
-    const response = await request(APP_URL)
+    const response = await request(TESTING_APP_URL)
       .post('/api/events')
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID)
@@ -160,14 +160,14 @@ describe('GroupRecommendations (e2e)', () => {
 
   it('should return recommended events with complete event details', async () => {
     //  group should exist
-    const groupResponse = await request(APP_URL)
+    const groupResponse = await request(TESTING_APP_URL)
       .get(`/api/groups/${testGroup.id}`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
 
     expect(groupResponse.status).toBe(200);
 
-    const response = await request(APP_URL)
+    const response = await request(TESTING_APP_URL)
       .get(`/api/groups/${testGroup.id}/recommended-events`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
@@ -196,7 +196,7 @@ describe('GroupRecommendations (e2e)', () => {
   afterEach(async () => {
     // Clean up events
     for (const event of testEvents) {
-      await request(APP_URL)
+      await request(TESTING_APP_URL)
         .delete(`/api/events/${event.id}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
@@ -204,7 +204,7 @@ describe('GroupRecommendations (e2e)', () => {
 
     // Clean up group
     if (testGroup) {
-      await request(APP_URL)
+      await request(TESTING_APP_URL)
         .delete(`/api/groups/${testGroup.id}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
@@ -212,7 +212,7 @@ describe('GroupRecommendations (e2e)', () => {
 
     // Clean up categories
     for (const category of testCategories) {
-      await request(APP_URL)
+      await request(TESTING_APP_URL)
         .delete(`/api/categories/${category.id}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);

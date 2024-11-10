@@ -11,25 +11,29 @@ import { PermissionSeedService } from './permission/permission-seed.service';
 import { UserPermissionSeedService } from './user-permission/user-permission-seed.service';
 import { GroupRoleSeedService } from './group-role/group-role.service';
 import { fetchTenants, Tenant } from '../../../utils/tenant-config';
+import { env } from 'process';
 
 const runSeed = async () => {
   const tenants: Tenant[] = fetchTenants();
-  const tenantIds = tenants.map((t) => t.id);
+  const tenantIds = tenants.map((t) => t.id).filter((id) => !!id); // filter out 'public'
 
   const app = await NestFactory.create(SeedModule);
   for (const tenantId of tenantIds) {
     console.log('Running seeds for tenant:', tenantId);
-    // // run
-    await app.get(RoleSeedService).run(tenantId);
+
     await app.get(StatusSeedService).run(tenantId);
-    await app.get(UserSeedService).run(tenantId);
-    await app.get(CategorySeedService).run(tenantId);
     await app.get(PermissionSeedService).run(tenantId);
     await app.get(UserPermissionSeedService).run(tenantId);
+    await app.get(RoleSeedService).run(tenantId);
     await app.get(GroupPermissionSeedService).run(tenantId);
     await app.get(GroupRoleSeedService).run(tenantId);
-    await app.get(GroupSeedService).run(tenantId);
-    await app.get(EventSeedService).run(tenantId);
+    await app.get(UserSeedService).run(tenantId);
+    await app.get(CategorySeedService).run(tenantId);
+
+    if (env.NODE_ENV !== 'production') {
+      await app.get(GroupSeedService).run(tenantId);
+      await app.get(EventSeedService).run(tenantId);
+    }
   }
 
   await app.close();

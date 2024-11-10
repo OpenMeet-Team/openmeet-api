@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   IsEnum,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -90,6 +91,34 @@ export class CreateEventDto {
   @IsArray({})
   @Type(() => Number)
   categories: number[]; // Array of category IDs
+
+  @ApiProperty({
+    description: 'If the event requires approval for attendance',
+  })
+  @IsOptional()
+  @IsBoolean()
+  requireApproval?: boolean;
+
+  @ApiProperty({
+    description: 'If the event requires group membership',
+  })
+  @IsOptional()
+  @IsBoolean()
+  requireGroupMembership?: boolean;
+
+  @ApiProperty({
+    description: 'The approval question for the event',
+  })
+  @IsOptional()
+  @IsString()
+  approvalQuestion?: string;
+
+  @ApiProperty({
+    description: 'If the event allows waitlist',
+  })
+  @IsOptional()
+  @IsBoolean()
+  allowWaitlist?: boolean;
 
   @ApiProperty({
     description: 'The latitude of the event location',

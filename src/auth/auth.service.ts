@@ -148,9 +148,9 @@ export class AuthService {
         id: StatusEnum.active,
       };
 
-      const role = await this.roleService.findByName(RoleEnum.user);
+      const role = await this.roleService.findByName(RoleEnum.User);
       if (!role) {
-        throw new Error(`Role not found: ${RoleEnum.user}`);
+        throw new Error(`Role not found: ${RoleEnum.User}`);
       }
 
       user = await this.userService.create({
@@ -205,9 +205,9 @@ export class AuthService {
   }
 
   async register(dto: AuthRegisterLoginDto): Promise<any> {
-    const role = await this.roleService.findByName(RoleEnum.user);
+    const role = await this.roleService.findByName(RoleEnum.User);
     if (!role) {
-      throw new Error(`Role not found: ${RoleEnum.user}`);
+      throw new Error(`Role not found: ${RoleEnum.User}`);
     }
     const user = await this.userService.create({
       ...dto,

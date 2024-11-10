@@ -1,7 +1,7 @@
-import { APP_URL } from '../utils/constants';
+import { TESTING_APP_URL } from '../utils/constants';
 import request from 'supertest';
 
-const app = APP_URL;
+const app = TESTING_APP_URL;
 
 describe('Get Kubernetes Metrics', () => {
   const server = request.agent(app);

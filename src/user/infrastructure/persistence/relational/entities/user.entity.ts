@@ -13,6 +13,7 @@ import {
   OneToMany,
   ManyToMany,
   JoinTable,
+  BeforeInsert,
 } from 'typeorm';
 import { RoleEntity } from '../../../../../role/infrastructure/persistence/relational/entities/role.entity';
 import { StatusEntity } from '../../../../../status/infrastructure/persistence/relational/entities/status.entity';
@@ -33,7 +34,7 @@ import { UserPermissionEntity } from './user-permission.entity';
 import { GroupUserPermissionEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group-user-permission.entity';
 import { GroupMemberEntity } from '../../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group.entity';
-
+import { ulid } from 'ulid';
 @Entity({
   name: 'users',
 })
@@ -43,6 +44,12 @@ export class UserEntity extends EntityRelationalHelper {
   })
   @PrimaryGeneratedColumn()
   id: number;
+
+  @ApiProperty({
+    type: String,
+  })
+  @Column({ type: String, unique: true })
+  ulid: string;
 
   @ApiProperty({
     type: String,
@@ -173,5 +180,10 @@ export class UserEntity extends EntityRelationalHelper {
   })
   get name(): string {
     return `${this.firstName || ''} ${this.lastName || ''}`.trim();
+  }
+
+  @BeforeInsert()
+  generateUlid() {
+    this.ulid = ulid().toLowerCase();
   }
 }

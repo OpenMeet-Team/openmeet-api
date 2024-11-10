@@ -3,6 +3,7 @@ import { TenantConnectionService } from '../tenant/tenant.service';
 import { Repository } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
 import { RoleEntity } from './infrastructure/persistence/relational/entities/role.entity';
+import { RoleEnum } from './role.enum';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class RoleService {
@@ -19,9 +20,9 @@ export class RoleService {
     this.roleRepository = dataSource.getRepository(RoleEntity);
   }
 
-  async findByName(id: number) {
+  async findByName(name: RoleEnum) {
     await this.getTenantSpecificEventRepository();
-    const role = await this.roleRepository.findOne({ where: { id } });
+    const role = await this.roleRepository.findOne({ where: { name } });
     return role;
   }
 }
