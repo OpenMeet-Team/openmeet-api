@@ -53,7 +53,7 @@ export async function createGroupsAndEvents(
   const eventData: CreateEventDto = {
     name: 'Test Event',
     description: 'An event created for testing purposes',
-    type: 'public',
+    type: 'hybrid',
     startDate: new Date(),
     endDate: new Date(new Date().getTime() + 24 * 60 * 60 * 1000), // One day after the start date
     maxAttendees: 100,

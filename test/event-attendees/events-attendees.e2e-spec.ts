@@ -35,7 +35,7 @@ describe('EventAttendeeController (e2e)', () => {
         description: 'A test event',
         startDate: '2024-12-31T00:00:00Z',
         endDate: '2024-12-31T23:59:59Z',
-        type: 'public',
+        type: 'hybrid',
         location: 'Test Location',
         locationOnline: 'https://test-online-location.com',
         maxAttendees: 100,
