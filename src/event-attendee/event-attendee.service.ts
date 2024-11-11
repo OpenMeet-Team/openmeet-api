@@ -176,4 +176,16 @@ export class EventAttendeeService {
     attendee.status = EventAttendeeStatus.Cancelled;
     return this.eventAttendeesRepository.save(attendee);
   }
+
+  async findEventAttendeesByEventId(
+    eventId: number,
+    limit: number = 0,
+  ): Promise<EventAttendeesEntity[]> {
+    await this.getTenantSpecificEventRepository();
+    return await this.eventAttendeesRepository.find({
+      where: { event: { id: eventId } },
+      relations: ['user'],
+      take: limit,
+    });
+  }
 }

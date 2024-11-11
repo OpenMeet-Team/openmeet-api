@@ -290,27 +290,21 @@ export class EventService {
     return event;
   }
 
-  async showEvent(id: number, userId: number): Promise<EventEntity> {
+  async showEvent(id: number, userId?: number): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
     const event = await this.eventRepository.findOne({
       where: { id },
-      relations: [
-        'user',
-        'attendees',
-        'group',
-        'group.groupMembers',
-        'categories',
-      ],
+      relations: ['user', 'group', 'categories'],
     });
 
     if (!event) {
       throw new NotFoundException(`Event with ID ${id} not found`);
     }
 
-    event.attendees = event.attendees.slice(0, 5);
-    event.categories = event.categories.slice(0, 5);
+    event.attendees =
+      await this.eventAttendeeService.findEventAttendeesByEventId(id, 5);
 
-    if (event.group) {
+    if (event.group && userId) {
       event.groupMember = await this.groupMemberService.findGroupMemberByUserId(
         event.group.id,
         userId,
@@ -356,7 +350,6 @@ export class EventService {
 
   async getRecommendedEventsByEventId(eventId: number): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
-    const maxEvents = 5;
 
     const event = await this.eventRepository.findOne({
       where: { id: eventId },
@@ -364,45 +357,46 @@ export class EventService {
     });
 
     if (!event) {
-      throw new NotFoundException(`Event with ID ${eventId} not found`);
-    }
+      return await this.showRandomEvents(4);
+    } else {
+      const maxEvents = 5;
+      const categoryIds = event.categories?.map((c) => c.id);
 
-    const categoryIds = event.categories?.map((c) => c.id);
-
-    let recommendedEvents: EventEntity[] = [];
-    try {
-      recommendedEvents = await this.findRecommendedEventsForEvent(
-        eventId,
-        categoryIds,
-        0,
-        maxEvents,
-      );
-    } catch (error) {
-      console.error('Error fetching recommended events:', error);
-    }
-
-    const remainingEventsToFetch = maxEvents - recommendedEvents.length;
-
-    if (remainingEventsToFetch > 0) {
+      let recommendedEvents: EventEntity[] = [];
       try {
-        const randomEvents = await this.findRandomEventsForEvent(
+        recommendedEvents = await this.findRecommendedEventsForEvent(
           eventId,
+          categoryIds,
           0,
-          remainingEventsToFetch,
+          maxEvents,
         );
-        recommendedEvents = [...recommendedEvents, ...randomEvents];
       } catch (error) {
-        console.error('Error fetching random events:', error);
+        console.error('Error fetching recommended events:', error);
       }
+
+      const remainingEventsToFetch = maxEvents - recommendedEvents.length;
+
+      if (remainingEventsToFetch > 0) {
+        try {
+          const randomEvents = await this.findRandomEventsForEvent(
+            eventId,
+            0,
+            remainingEventsToFetch,
+          );
+          recommendedEvents = [...recommendedEvents, ...randomEvents];
+        } catch (error) {
+          console.error('Error fetching random events:', error);
+        }
+      }
+
+      // Deduplicate events
+      const uniqueEvents = recommendedEvents.filter(
+        (event, index, self) =>
+          index === self.findIndex((t) => t.id === event.id),
+      );
+
+      return uniqueEvents.slice(0, maxEvents);
     }
-
-    // Deduplicate events
-    const uniqueEvents = recommendedEvents.filter(
-      (event, index, self) =>
-        index === self.findIndex((t) => t.id === event.id),
-    );
-
-    return uniqueEvents.slice(0, maxEvents);
   }
 
   async findRecommendedEventsForEvent(
@@ -483,12 +477,6 @@ export class EventService {
         .orderBy('RANDOM()')
         .limit(maxEvents)
         .getMany();
-
-      if (recommendedEvents.length < minEvents) {
-        throw new NotFoundException(
-          `Not enough recommended events found for group ${groupId}. Found ${recommendedEvents.length}, expected at least ${minEvents}.`,
-        );
-      }
 
       return recommendedEvents.slice(0, maxEvents);
     } catch (error) {

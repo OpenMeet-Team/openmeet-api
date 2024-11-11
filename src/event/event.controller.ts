@@ -11,12 +11,7 @@ import {
   Req,
   Query,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiBearerAuth,
-  ApiQuery,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Request } from 'express';
 import { CommentDto, CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
@@ -151,7 +146,7 @@ export class EventController {
   }
 
   @Get(':id/attendees')
-  @ApiOperation({ summary: 'Get all event attendee' })
+  @ApiOperation({ summary: 'Get all event attendees' })
   async findAllAttendees(
     @Param('id') id: number,
     @Query() pagination: PaginationDto,
@@ -209,12 +204,10 @@ export class EventController {
 
   @Public()
   @Get(':id/recommended-events')
-  @ApiQuery({ name: 'maxEvents', type: Number, required: false })
-  @ApiQuery({ name: 'minEvents', type: Number, required: false })
   @ApiOperation({
-    summary: 'Get recommended events based on an existing event',
+    summary: 'Get similar events',
   })
   async getRecommendedEvents(@Param('id') id: number): Promise<EventEntity[]> {
-    return await this.eventService.getRecommendedEventsByEventId(+id);
+    return await this.eventService.getRecommendedEventsByEventId(id);
   }
 }

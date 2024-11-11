@@ -188,21 +188,10 @@ describe('GroupController', () => {
         .spyOn(groupService, 'getRecommendedEvents')
         .mockResolvedValue(mockEvents as EventEntity[]);
 
-      const result = await controller.getRecommendedEvents(
-        1,
-        minEvents,
-        maxEvents,
-      );
+      const result = await controller.getRecommendedEvents(1);
 
       expect(result.length).toBeGreaterThanOrEqual(minEvents);
       expect(result.length).toBeLessThanOrEqual(maxEvents);
-    });
-
-    it('should return empty array when limits are not valid', async () => {
-      jest.spyOn(groupService, 'getRecommendedEvents').mockResolvedValue([]);
-
-      const result = await controller.getRecommendedEvents(1, -1, 5);
-      expect(result).toEqual([]);
     });
   });
 });

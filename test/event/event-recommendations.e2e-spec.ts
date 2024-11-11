@@ -155,12 +155,4 @@ describe('EventController Recommendations (e2e)', () => {
   //     recommendedEvents.some((event) => event.name === 'Unrelated Event'),
   //   ).toBeFalsy();
   // });
-
-  it('should return 404 for non-existent event', async () => {
-    await request(TESTING_APP_URL)
-      .get('/api/events/99999/recommended-events')
-      .set('Authorization', `Bearer ${token}`)
-      .set('x-tenant-id', TESTING_TENANT_ID)
-      .expect(404);
-  });
 });

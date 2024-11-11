@@ -24,7 +24,6 @@ export class HomeService {
 
   getRootRedirect() {
     const environment = this.configService.get('app.nodeEnv', { infer: true });
-    console.log('environment', environment);
     const isProd = environment === 'production';
 
     const redirectUrl = isProd
