@@ -4,8 +4,8 @@ import {
   loginAsTester,
   createGroup,
   createEvent,
-  getEvent,
-  getMyEvents,
+  // getEvent,
+  // getMyEvents,
   updateEvent,
 } from '../utils/functions';
 
@@ -68,16 +68,16 @@ describe('EventController (e2e)', () => {
     expect(testEvent2.description).toBe('Test Description');
 
     //   update the event
-    // const updatedEvent = await updateEvent(
-    //   TESTING_APP_URL,
-    //   token,
-    //   testEvent.id,
-    //   {
-    //     name: 'Updated Test Event',
-    //   },
-    // );
+    const updatedEvent = await updateEvent(
+      TESTING_APP_URL,
+      token,
+      testEvent.id,
+      {
+        name: 'Updated Test Event',
+      },
+    );
 
-    // expect(updatedEvent.name).toBe('Updated Test Event');
+    expect(updatedEvent.name).toBe('Updated Test Event');
 
     // // get the event
     // const foundEvent = await getEvent(TESTING_APP_URL, token, testEvent.id);
