@@ -30,15 +30,7 @@ export class EventEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({
-    type: String,
-    nullable: true,
-    transformer: {
-      to: (value: string) => value.toLowerCase(),
-      from: (value: string) => value,
-    },
-  })
-  @Expose()
+  @Column({ type: String, unique: true })
   ulid: string;
 
   @Column({ type: 'varchar', length: 255 })

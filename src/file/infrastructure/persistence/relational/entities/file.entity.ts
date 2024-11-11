@@ -1,5 +1,5 @@
 import { BeforeInsert, Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
-import { Expose, Transform } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { ApiProperty } from '@nestjs/swagger';
@@ -18,15 +18,7 @@ export class FileEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({
-    type: String,
-    nullable: true,
-    transformer: {
-      to: (value: string) => value.toLowerCase(),
-      from: (value: string) => value,
-    },
-  })
-  @Expose()
+  @Column({ type: String, unique: true })
   ulid: string;
 
   @ApiProperty({
