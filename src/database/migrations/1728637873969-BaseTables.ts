@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class BaseTables1731320082410 implements MigrationInterface {
-  name = 'BaseTables1731320082410';
+export class BaseTables1728637873969 implements MigrationInterface {
+  name = 'BaseTables1728637873969';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const schema = queryRunner.connection.options.name || 'public';
