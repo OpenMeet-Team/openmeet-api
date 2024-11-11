@@ -21,7 +21,7 @@ export class DashboardService {
     private readonly groupService: GroupService,
     private readonly groupMemberService: GroupMemberService,
     private readonly eventAttendeeService: EventAttendeeService,
-  ) {}
+  ) { }
 
   async getTenantSpecificRepositories() {
     const tenantId = this.request.tenantId;
@@ -32,6 +32,7 @@ export class DashboardService {
   }
 
   async getMyEvents(userId: number): Promise<EventEntity[]> {
+    await this.getTenantSpecificRepositories();
     try {
       const createdEvents = await this.eventService.getEventsByCreator(userId);
 
@@ -60,6 +61,7 @@ export class DashboardService {
   }
 
   async getMyGroups(userId: number): Promise<GroupEntity[]> {
+    await this.getTenantSpecificRepositories();
     try {
       const groupsByMember = await this.groupService.getGroupsByMember(userId);
 

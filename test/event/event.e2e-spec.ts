@@ -5,7 +5,7 @@ import {
   createGroup,
   createEvent,
   getEvent,
-  // getMyEvents,
+  getMyEvents,
   updateEvent,
 } from '../utils/functions';
 
@@ -84,20 +84,20 @@ describe('EventController (e2e)', () => {
     expect(foundEvent.name).toBe('Updated Test Event');
 
     // // getEventsByCreator
-    // const myEvents = await getMyEvents(TESTING_APP_URL, token);
-    // // expect one of the results to be the updated event
-    // expect(myEvents.some((event) => event.id === updatedEvent.id)).toBe(true);
-    // // expect the other result to be the original event
-    // expect(myEvents.some((event) => event.id === testEvent2.id)).toBe(true);
+    const myEvents = await getMyEvents(TESTING_APP_URL, token);
+    // expect one of the results to be the updated event
+    expect(myEvents.some((event) => event.id === updatedEvent.id)).toBe(true);
+    // expect the other result to be the original event
+    expect(myEvents.some((event) => event.id === testEvent2.id)).toBe(true);
 
     // getEventsByAttendee
 
     // Clean up by deleting the event
-    // const deleteEventResponse = await request(TESTING_APP_URL)
-    //   .delete(`/api/events/${testEvent.id}`)
-    //   .set('Authorization', `Bearer ${token}`)
-    //   .set('x-tenant-id', TESTING_TENANT_ID);
-    // expect(deleteEventResponse.status).toBe(200);
+    const deleteEventResponse = await request(TESTING_APP_URL)
+      .delete(`/api/events/${testEvent.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
+    expect(deleteEventResponse.status).toBe(200);
   });
 
   // After each test, clean up by deleting the group
