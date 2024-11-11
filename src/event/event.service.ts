@@ -115,7 +115,7 @@ export class EventService {
     const topicName = `${timestamp}-${message.split(' ').slice(0, 5).join('-').toLowerCase()}`;
 
     const params = {
-      to: `${event.shortId}_${event.slug}`,
+      to: `${event.ulid}_${event.slug}`,
       type: 'stream',
       topic: topicName,
       content: message,
@@ -161,7 +161,7 @@ export class EventService {
   async getTopics(eventId: number) {
     try {
       const event = await this.findOne(eventId);
-      const streamName = `${event.shortId}_${event.slug}`;
+      const streamName = `${event.ulid}_${event.slug}`;
 
       const response = this.zulipService.GetZulipTopics(streamName);
 
@@ -182,7 +182,7 @@ export class EventService {
     const event = await this.findOne(eventId);
 
     const params = {
-      to: `${event.shortId}_${event.slug}`,
+      to: `${event.ulid}_${event.slug}`,
       type: 'stream',
       topic: topicName,
       content: message,

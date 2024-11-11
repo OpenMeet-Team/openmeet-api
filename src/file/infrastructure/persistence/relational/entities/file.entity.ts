@@ -1,5 +1,5 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
-import { Transform } from 'class-transformer';
+import { BeforeInsert, Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Expose, Transform } from 'class-transformer';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { ApiProperty } from '@nestjs/swagger';
@@ -8,6 +8,7 @@ import appConfig from '../../../../../config/app.config';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { FileConfig, FileDriver } from '../../../../config/file-config.type';
 import fileConfig from '../../../../config/file.config';
+import { ulid } from 'ulid';
 
 @Entity({ name: 'files' })
 export class FileEntity extends EntityRelationalHelper {
@@ -16,6 +17,17 @@ export class FileEntity extends EntityRelationalHelper {
   })
   @PrimaryGeneratedColumn()
   id: number;
+
+  @Column({
+    type: String,
+    nullable: true,
+    transformer: {
+      to: (value: string) => value.toLowerCase(),
+      from: (value: string) => value,
+    },
+  })
+  @Expose()
+  ulid: string;
 
   @ApiProperty({
     type: String,
@@ -75,4 +87,9 @@ export class FileEntity extends EntityRelationalHelper {
     },
   )
   path: string;
+
+  @BeforeInsert()
+  generateShortId() {
+    this.ulid = ulid().toLowerCase();
+  }
 }
