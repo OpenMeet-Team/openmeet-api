@@ -353,7 +353,6 @@ export class EventService {
 
     const event = await this.eventRepository.findOne({
       where: { id: eventId },
-      relations: ['categories'],
     });
 
     if (!event) {
@@ -405,15 +404,17 @@ export class EventService {
     minEvents: number = 0,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
+    await this.getTenantSpecificEventRepository();
     const queryBuilder = this.eventRepository
       .createQueryBuilder('event')
-      .select('event.id')
       .addSelect('RANDOM()', 'random')
       .distinct(true)
       .innerJoin('event.categories', 'category')
       .where('event.status = :status', { status: EventStatus.Published })
       .andWhere('event.id != :eventId', { eventId })
-      .andWhere('category.id IN (:...categoryIds)', { categoryIds })
+      .andWhere('category.id IN (:...categoryIds)', {
+        categoryIds: categoryIds || [],
+      })
       .orderBy('random')
       .limit(maxEvents);
     const ids = await queryBuilder.getRawMany();
@@ -430,10 +431,10 @@ export class EventService {
     minEvents: number = 0,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
+    await this.getTenantSpecificEventRepository();
     try {
       const randomEvents = await this.eventRepository
         .createQueryBuilder('event')
-        .select('event.id')
         .addSelect('RANDOM()', 'random')
         .where('event.status = :status', { status: EventStatus.Published })
         .andWhere('event.id != :eventId', { eventId })
