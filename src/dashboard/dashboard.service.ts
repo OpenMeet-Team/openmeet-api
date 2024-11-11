@@ -21,7 +21,7 @@ export class DashboardService {
     private readonly groupService: GroupService,
     private readonly groupMemberService: GroupMemberService,
     private readonly eventAttendeeService: EventAttendeeService,
-  ) { }
+  ) {}
 
   async getTenantSpecificRepositories() {
     const tenantId = this.request.tenantId;
