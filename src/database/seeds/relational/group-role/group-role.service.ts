@@ -28,48 +28,48 @@ export class GroupRoleSeedService {
     );
 
     // Seed group roles and their permissions
-    await this.createGroupRoleIfNotExists('owner', [
-      'MANAGE_GROUP',
-      'DELETE_GROUP',
-      'MANAGE_MEMBERS',
-      'MANAGE_EVENTS',
-      'MANAGE_DISCUSSIONS',
-      'MANAGE_REPORTS',
-      'MANAGE_BILLING',
-      'CREATE_EVENT',
-      'SEE_GROUP',
-      'SEE_EVENTS',
-      'SEE_DISCUSSIONS',
-      'SEE_MEMBERS',
+    await this.createGroupRoleIfNotExists(GroupRole.Owner, [
+      GroupPermission.ManageGroup,
+      GroupPermission.DeleteGroup,
+      GroupPermission.ManageMembers,
+      GroupPermission.ManageEvents,
+      GroupPermission.ManageDiscussions,
+      GroupPermission.ManageReports,
+      GroupPermission.ManageBilling,
+      GroupPermission.CreateEvent,
+      GroupPermission.SeeGroup,
+      GroupPermission.SeeEvents,
+      GroupPermission.SeeDiscussions,
+      GroupPermission.SeeMembers,
     ]);
-    await this.createGroupRoleIfNotExists('admin', [
-      'MANAGE_GROUP',
-      'MANAGE_MEMBERS',
-      'MANAGE_EVENTS',
-      'MANAGE_DISCUSSIONS',
-      'MANAGE_REPORTS',
-      'CREATE_EVENT',
-      'SEE_GROUP',
-      'SEE_EVENTS',
-      'SEE_DISCUSSIONS',
-      'SEE_MEMBERS',
+    await this.createGroupRoleIfNotExists(GroupRole.Admin, [
+      GroupPermission.ManageGroup,
+      GroupPermission.ManageMembers,
+      GroupPermission.ManageEvents,
+      GroupPermission.ManageDiscussions,
+      GroupPermission.ManageReports,
+      GroupPermission.CreateEvent,
+      GroupPermission.SeeGroup,
+      GroupPermission.SeeEvents,
+      GroupPermission.SeeDiscussions,
+      GroupPermission.SeeMembers,
     ]);
-    await this.createGroupRoleIfNotExists('guest', []);
-    await this.createGroupRoleIfNotExists('member', [
-      'MESSAGE_DISCUSSION',
-      'MESSAGE_MEMBER',
-      'SEE_MEMBERS',
-      'SEE_EVENTS',
-      'SEE_DISCUSSIONS',
-      'SEE_GROUP',
+    await this.createGroupRoleIfNotExists(GroupRole.Guest, []);
+    await this.createGroupRoleIfNotExists(GroupRole.Member, [
+      GroupPermission.MessageDiscussion,
+      GroupPermission.MessageMember,
+      GroupPermission.SeeMembers,
+      GroupPermission.SeeEvents,
+      GroupPermission.SeeDiscussions,
+      GroupPermission.SeeGroup,
     ]);
-    await this.createGroupRoleIfNotExists('moderator', [
-      'MANAGE_MEMBERS',
-      'MANAGE_DISCUSSIONS',
-      'SEE_GROUP',
-      'SEE_EVENTS',
-      'SEE_DISCUSSIONS',
-      'SEE_MEMBERS',
+    await this.createGroupRoleIfNotExists(GroupRole.Moderator, [
+      GroupPermission.ManageMembers,
+      GroupPermission.ManageDiscussions,
+      GroupPermission.SeeGroup,
+      GroupPermission.SeeEvents,
+      GroupPermission.SeeDiscussions,
+      GroupPermission.SeeMembers,
     ]);
   }
 

@@ -9,13 +9,13 @@ export class BaseTables1728637873969 implements MigrationInterface {
     await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
 
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."userPermissions" ("id" SERIAL NOT NULL, "granted" boolean NOT NULL DEFAULT false, "userId" integer, "permissionId" integer, CONSTRAINT "PK_5cbba686fa42e45a2914c590261" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."userPermissions" ("id" SERIAL NOT NULL, "userId" integer, "permissionId" integer, CONSTRAINT "PK_5cbba686fa42e45a2914c590261" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
       `CREATE TABLE "${schema}"."permissions" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, CONSTRAINT "PK_920331560282b8bd21bb02290df" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."roles" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" integer NOT NULL, "name" character varying NOT NULL, CONSTRAINT "PK_c1433d71a4838793a49dcad46ab" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."roles" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying NOT NULL, CONSTRAINT "PK_c1433d71a4838793a49dcad46ab" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
       `CREATE TABLE "${schema}"."statuses" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" integer NOT NULL, "name" character varying NOT NULL, CONSTRAINT "PK_2fd3770acdb67736f1a3e3d5399" PRIMARY KEY ("id"))`,
@@ -24,7 +24,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `CREATE TABLE "${schema}"."files" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "path" character varying NOT NULL, "fileName" character varying NOT NULL, "fileSize" integer NOT NULL, "mimeType" character varying NOT NULL, CONSTRAINT "PK_6c16b9093a142e0e7613b04a3d9" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
-      `CREATE TYPE "${schema}"."eventAttendees_status_enum" AS ENUM('invited', 'confirmed', 'attended', 'cancelled', 'rejected', 'maybe', 'pending')`,
+      `CREATE TYPE "${schema}"."eventAttendees_status_enum" AS ENUM('invited', 'confirmed', 'attended', 'cancelled', 'rejected', 'maybe', 'pending', 'waitlist')`,
     );
     await queryRunner.query(
       `CREATE TYPE "${schema}"."eventAttendees_role_enum" AS ENUM('participant', 'host', 'speaker', 'moderator', 'guest')`,
@@ -39,7 +39,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `CREATE TABLE "${schema}"."subcategories" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "title" character varying(255) NOT NULL, "description" text NOT NULL, "type" "${schema}"."subcategories_type_enum", "categoryId" integer, CONSTRAINT "PK_793ef34ad0a3f86f09d4837007c" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."groupUserPermissions" ("id" SERIAL NOT NULL, "granted" boolean NOT NULL DEFAULT true, "userId" integer, "groupId" integer, "groupPermissionId" integer, CONSTRAINT "PK_30cda485108935e7b1ab2fc17a7" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."groupUserPermissions" ("id" SERIAL NOT NULL, "userId" integer, "groupId" integer, "groupPermissionId" integer, CONSTRAINT "PK_30cda485108935e7b1ab2fc17a7" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
       `CREATE TABLE "${schema}"."groupPermissions" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, CONSTRAINT "PK_e501cb9db2ccf705c2ebf31d230" PRIMARY KEY ("id"))`,
@@ -69,10 +69,10 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `CREATE TYPE "${schema}"."events_visibility_enum" AS ENUM('public', 'authenticated', 'private')`,
     );
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."events" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, "type" character varying(255) NOT NULL, "imageId" integer, "locationOnline" character varying(255), "slug" character varying(255) NOT NULL, "description" text NOT NULL, "visibility" "${schema}"."events_visibility_enum", "startDate" TIMESTAMP NOT NULL, "endDate" TIMESTAMP, "maxAttendees" integer, "location" character varying(255), "lat" double precision, "lon" double precision, "status" "${schema}"."events_status_enum", "userId" integer, "groupId" integer, CONSTRAINT "PK_40731c7151fe4be3116e45ddf73" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."events" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, "type" character varying(255) NOT NULL, "imageId" integer, "locationOnline" character varying(255), "slug" character varying(255) NOT NULL, "description" text NOT NULL, "visibility" "${schema}"."events_visibility_enum", "startDate" TIMESTAMP NOT NULL, "endDate" TIMESTAMP, "maxAttendees" integer, "location" character varying(255), "lat" double precision, "lon" double precision, "requireApproval" boolean NOT NULL DEFAULT false, "approvalQuestion" text, "requireGroupMembership" boolean NOT NULL DEFAULT false, "allowWaitlist" boolean NOT NULL DEFAULT false, "status" "${schema}"."events_status_enum", "userId" integer, "groupId" integer, CONSTRAINT "PK_40731c7151fe4be3116e45ddf73" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."users" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "email" character varying, "password" character varying, "provider" character varying NOT NULL DEFAULT 'email', "bio" text, "location" character varying(255), "lat" double precision, "lon" double precision, "socialId" character varying, "firstName" character varying, "lastName" character varying, "deletedAt" TIMESTAMP, "photoId" integer, "statusId" integer, "roleId" integer, CONSTRAINT "UQ_97672ac88f789774dd47f7c8be3" UNIQUE ("email"), CONSTRAINT "REL_f856a4818b32c69dbc8811f3d2" UNIQUE ("photoId"), CONSTRAINT "PK_a3ffb1c0c8416b9fc6f907b7433" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."users" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "email" character varying, "password" character varying, "provider" character varying NOT NULL DEFAULT 'email', "bio" text, "location" character varying(255), "lat" double precision, "lon" double precision, "socialId" character varying, "firstName" character varying, "lastName" character varying, "deletedAt" TIMESTAMP, "photoId" integer, "statusId" integer, "ulid" character varying, "roleId" integer, "zulipId" integer, CONSTRAINT "UQ_97672ac88f789774dd47f7c8be3" UNIQUE ("email"), CONSTRAINT "REL_f856a4818b32c69dbc8811f3d2" UNIQUE ("photoId"), CONSTRAINT "PK_a3ffb1c0c8416b9fc6f907b7433" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
       `CREATE INDEX "IDX_2025eaefc4e1b443c84f6ca9b2" ON "${schema}"."users" ("socialId") `,
@@ -82,6 +82,9 @@ export class BaseTables1728637873969 implements MigrationInterface {
     );
     await queryRunner.query(
       `CREATE INDEX "IDX_af99afb7cf88ce20aff6977e68" ON "${schema}"."users" ("lastName") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_9862f6790e495938c25933f8d2" ON "${schema}"."users" ("ulid") `,
     );
     await queryRunner.query(
       `CREATE TABLE "${schema}"."sessions" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "hash" character varying NOT NULL, "deletedAt" TIMESTAMP, "userId" integer, CONSTRAINT "PK_3238ef96f18b355b671619111bc" PRIMARY KEY ("id"))`,
@@ -319,6 +322,9 @@ export class BaseTables1728637873969 implements MigrationInterface {
     await queryRunner.query(`DROP TABLE "${schema}"."userInterests"`);
     await queryRunner.query(
       `DROP INDEX "${schema}"."IDX_3e703b5162d4195681549dfc3e"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "${schema}"."IDX_9862f6790e495938c25933f8d2"`,
     );
     await queryRunner.query(
       `DROP INDEX "${schema}"."IDX_5f9d73047c3849c5b1495a8011"`,

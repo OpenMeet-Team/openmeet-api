@@ -9,7 +9,7 @@ export class GroupPermissionSeedService {
   private repository: Repository<GroupPermissionEntity>;
 
   constructor(
-    private readonly tenantConnectionService: TenantConnectionService, // For tenant-specific DB handling
+    private readonly tenantConnectionService: TenantConnectionService,
   ) {}
 
   async run(tenantId: string) {

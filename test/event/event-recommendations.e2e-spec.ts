@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { APP_URL, TESTING_TENANT_ID } from '../utils/constants';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import { EventStatus } from '../../src/core/constants/constant';
 import {
   loginAsTester,
@@ -23,21 +23,21 @@ describe('EventController Recommendations (e2e)', () => {
     token = await loginAsTester();
 
     // Create categories
-    category1 = await createCategory(APP_URL, token, {
+    category1 = await createCategory(TESTING_APP_URL, token, {
       name: 'Category 1',
       slug: 'category-1',
     });
-    category2 = await createCategory(APP_URL, token, {
+    category2 = await createCategory(TESTING_APP_URL, token, {
       name: 'Category 2',
       slug: 'category-2',
     });
-    categoryUnrelated = await createCategory(APP_URL, token, {
+    categoryUnrelated = await createCategory(TESTING_APP_URL, token, {
       name: 'Category Unrelated',
       slug: 'category-unrelated',
     });
 
     // Create a main event
-    testEvent = await createEvent(APP_URL, token, {
+    testEvent = await createEvent(TESTING_APP_URL, token, {
       name: 'Main Event',
       description: 'Main event description',
       status: EventStatus.Published,
@@ -48,7 +48,7 @@ describe('EventController Recommendations (e2e)', () => {
     });
 
     // Create some potential recommended events
-    testEvent2 = await createEvent(APP_URL, token, {
+    testEvent2 = await createEvent(TESTING_APP_URL, token, {
       name: 'Recommended Event 1',
       description: 'Recommended event 1 description',
       status: EventStatus.Published,
@@ -58,7 +58,7 @@ describe('EventController Recommendations (e2e)', () => {
       maxAttendees: 100,
     });
 
-    testEvent3 = await createEvent(APP_URL, token, {
+    testEvent3 = await createEvent(TESTING_APP_URL, token, {
       name: 'Recommended Event 2',
       description: 'Recommended event 2 description',
       status: EventStatus.Published,
@@ -68,7 +68,7 @@ describe('EventController Recommendations (e2e)', () => {
       maxAttendees: 100,
     });
 
-    testEvent4 = await createEvent(APP_URL, token, {
+    testEvent4 = await createEvent(TESTING_APP_URL, token, {
       name: 'Unrelated Event',
       description: 'Unrelated event description',
       status: EventStatus.Published,
@@ -78,7 +78,7 @@ describe('EventController Recommendations (e2e)', () => {
       maxAttendees: 100,
     });
     // get all events and check that there are at least the number we created
-    const allEvents = await getAllEvents(APP_URL, token);
+    const allEvents = await getAllEvents(TESTING_APP_URL, token);
     expect(allEvents.data).toBeInstanceOf(Array);
     expect(allEvents.data.length).toBeGreaterThanOrEqual(4);
   });
@@ -86,7 +86,7 @@ describe('EventController Recommendations (e2e)', () => {
   afterAll(async () => {
     //  delete test events
     for (const event of [testEvent, testEvent2, testEvent3, testEvent4]) {
-      await request(APP_URL)
+      await request(TESTING_APP_URL)
         .delete(`/api/events/${event.id}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
@@ -94,7 +94,7 @@ describe('EventController Recommendations (e2e)', () => {
 
     // delete categories
     for (const category of [category1, category2, categoryUnrelated]) {
-      await request(APP_URL)
+      await request(TESTING_APP_URL)
         .delete(`/api/categories/${category.id}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
@@ -105,7 +105,7 @@ describe('EventController Recommendations (e2e)', () => {
     const minEvents = 0;
     const maxEvents = 2;
     const recommendedEvents = await getRecommendedEvents(
-      APP_URL,
+      TESTING_APP_URL,
       token,
       testEvent.id,
       minEvents,
@@ -157,7 +157,7 @@ describe('EventController Recommendations (e2e)', () => {
   // });
 
   it('should return 404 for non-existent event', async () => {
-    await request(APP_URL)
+    await request(TESTING_APP_URL)
       .get('/api/events/99999/recommended-events')
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID)

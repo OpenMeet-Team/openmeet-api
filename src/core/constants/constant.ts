@@ -20,6 +20,7 @@ export enum GroupRole {
 
 export enum GroupPermission {
   ManageGroup = 'MANAGE_GROUP',
+  DeleteGroup = 'DELETE_GROUP',
   ManageMembers = 'MANAGE_MEMBERS',
   ManageEvents = 'MANAGE_EVENTS',
   ManageDiscussions = 'MANAGE_DISCUSSIONS',
@@ -35,13 +36,12 @@ export enum GroupPermission {
 }
 
 export enum UserPermission {
-  // Admin Permissions
-  CreateEvent = 'CREATE_EVENTS',
-  ManageEvent = 'MANAGE_EVENTS',
-  DeleteEvent = 'DELETE_EVENTS',
-  CreateGroup = 'CREATE_GROUPS',
-  ManageGroup = 'MANAGE_GROUPS',
-  DeleteGroup = 'DELETE_GROUPS',
+  CreateEvents = 'CREATE_EVENTS',
+  ManageEvents = 'MANAGE_EVENTS',
+  DeleteEvents = 'DELETE_EVENTS',
+  CreateGroups = 'CREATE_GROUPS',
+  ManageGroups = 'MANAGE_GROUPS',
+  DeleteGroups = 'DELETE_GROUPS',
   ManageCategories = 'MANAGE_CATEGORIES',
   CreateCategories = 'CREATE_CATEGORIES',
   DeleteCategories = 'DELETE_CATEGORIES',
@@ -61,7 +61,6 @@ export enum UserPermission {
   CreateAttendees = 'CREATE_ATTENDEES',
   ManageAttendees = 'MANAGE_ATTENDEES',
   DeleteAttendees = 'DELETE_ATTENDEES',
-  // User Permissions
   ViewGroups = 'VIEW_GROUPS',
   ViewEvents = 'VIEW_EVENTS',
   AttendEvents = 'ATTEND_EVENTS',
@@ -119,6 +118,7 @@ export enum EventAttendeeStatus {
   Rejected = 'rejected',
   Maybe = 'maybe',
   Pending = 'pending',
+  Waitlist = 'waitlist',
 }
 
 export enum EntityType {

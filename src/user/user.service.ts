@@ -77,9 +77,9 @@ export class UserService {
       );
     }
 
-    const role = await this.roleService.findByName(RoleEnum.admin);
+    const role = await this.roleService.findByName(RoleEnum.User);
     if (!role) {
-      throw new Error(`Role not found: ${RoleEnum.user}`);
+      throw new Error(`Role not found: ${RoleEnum.User}`);
     }
 
     const clonedPayload = {
@@ -305,9 +305,9 @@ export class UserService {
     }
 
     if (clonedPayload.role?.id) {
-      const role = await this.roleService.findByName(RoleEnum.user);
+      const role = await this.roleService.findByName(RoleEnum.User);
       if (!role) {
-        throw new Error(`Role not found: ${RoleEnum.user}`);
+        throw new Error(`Role not found: ${RoleEnum.User}`);
       }
       clonedPayload.role = role;
     }

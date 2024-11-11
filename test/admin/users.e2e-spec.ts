@@ -1,16 +1,21 @@
-import { APP_URL, ADMIN_EMAIL, ADMIN_PASSWORD } from '../utils/constants';
+import {
+  TESTING_ADMIN_EMAIL,
+  TESTING_ADMIN_PASSWORD,
+  TESTING_APP_URL,
+  TESTING_TENANT_ID,
+} from '../utils/constants';
 import request from 'supertest';
 import { RoleEnum } from '../../src/role/role.enum';
 import { StatusEnum } from '../../src/status/status.enum';
 
 describe('Users Module', () => {
-  const app = APP_URL;
+  const app = TESTING_APP_URL;
   let apiToken;
 
   beforeAll(async () => {
     await request(app)
       .post('/api/v1/auth/email/login')
-      .send({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD })
+      .send({ email: TESTING_ADMIN_EMAIL, password: TESTING_ADMIN_PASSWORD })
       .then(({ body }) => {
         apiToken = body.token;
       });
@@ -18,7 +23,7 @@ describe('Users Module', () => {
 
   describe('Update', () => {
     let newUser;
-    const server = request.agent(app).set('x-tenant-id', '1');
+    const server = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
 
     const newUserEmail = `user-first.${Date.now()}@openmeet.net`;
     const newUserChangedEmail = `user-first-changed.${Date.now()}@openmeet.net`;
@@ -77,7 +82,7 @@ describe('Users Module', () => {
   describe('Create', () => {
     const newUserByAdminEmail = `user-created-by-admin.${Date.now()}@openmeet.net`;
     const newUserByAdminPassword = `secret`;
-    const server = request.agent(app).set('x-tenant-id', '1');
+    const server = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
 
     describe('User with "Admin" role', () => {
       it.skip('should fail to create new user with invalid email: /api/v1/users (POST)', () => {
@@ -102,7 +107,7 @@ describe('Users Module', () => {
             firstName: `UserByAdmin${Date.now()}`,
             lastName: 'E2E',
             role: {
-              id: RoleEnum.user,
+              id: RoleEnum.User,
             },
             status: {
               id: StatusEnum.active,
@@ -129,7 +134,7 @@ describe('Users Module', () => {
   });
 
   describe('Get many', () => {
-    const server = request.agent(app).set('x-tenant-id', '1');
+    const server = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
 
     describe('User with "Admin" role', () => {
       it.skip('should get list of users: /api/v1/users (GET)', () => {
