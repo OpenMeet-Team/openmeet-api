@@ -71,13 +71,10 @@ export enum UserPermission {
 }
 
 export enum EventPermission {
-  // participant permissions
   ViewEvent = 'VIEW_EVENT',
   AttendEvent = 'ATTEND_EVENT',
   MessageAttendees = 'MESSAGE_ATTENDEES',
   CreateDiscussion = 'CREATE_DISCUSSION',
-
-  // Host permissions
   ManageEvent = 'MANAGE_EVENT',
   ApproveAttendees = 'APPROVE_ATTENDEES',
   ManageAttendees = 'MANAGE_ATTENDEES',
