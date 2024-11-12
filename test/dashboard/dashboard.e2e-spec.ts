@@ -3,7 +3,6 @@ import {
   TESTING_USER_EMAIL,
   TESTING_USER_PASSWORD,
   TESTING_TENANT_ID,
-  // TESTING_USER_ID,
 } from '../utils/constants';
 import request from 'supertest';
 import { getAuthToken } from '../utils/functions';
