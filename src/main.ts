@@ -75,7 +75,11 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, options);
   // Customize Swagger module to remove `apiPrefix` from the specified paths
   document.paths = Object.keys(document.paths).reduce((paths, path) => {
-    const isHealthOrMetricsPath = [`/${apiPrefix}/health/liveness`, `/${apiPrefix}/health/readiness`, `/${apiPrefix}/metrics`].includes(path)
+    const isHealthOrMetricsPath = [
+      `/${apiPrefix}/health/liveness`,
+      `/${apiPrefix}/health/readiness`,
+      `/${apiPrefix}/metrics`,
+    ].includes(path);
     // Remove the prefix only for specified health or metrics paths
     if (isHealthOrMetricsPath) {
       paths[path.replace(`/${apiPrefix}`, '')] = document.paths[path];
@@ -83,7 +87,7 @@ async function bootstrap() {
       paths[path] = document.paths[path];
     }
     return paths;
-  }, {})
+  }, {});
 
   SwaggerModule.setup('docs', app, document);
 

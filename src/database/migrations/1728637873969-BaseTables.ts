@@ -125,10 +125,10 @@ export class BaseTables1728637873969 implements MigrationInterface {
     );
 
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."eventRoles" ("shortId" character varying NOT NULL, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, CONSTRAINT "PK_b31b0a0a1d4bbfa5f1a01509sdf" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."eventRoles" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, CONSTRAINT "PK_b31b0a0a1d4bbfa5f1a01509sdf" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."eventPermissions" ("shortId" character varying NOT NULL, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, CONSTRAINT "PK_e501cb9db2ccf705c2ebf31d231" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."eventPermissions" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, CONSTRAINT "PK_e501cb9db2ccf705c2ebf31d231" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
       `CREATE TABLE "${schema}"."eventRolePermissions" ("eventRoleId" integer NOT NULL, "eventPermissionId" integer NOT NULL, CONSTRAINT "PK_9e7ab7e8aec914fa1886f6asdf" PRIMARY KEY ("eventRoleId", "eventPermissionId"))`,
@@ -139,11 +139,12 @@ export class BaseTables1728637873969 implements MigrationInterface {
     await queryRunner.query(
       `CREATE INDEX "IDX_${schema}_eventRolePermissionsEvent_eventPermissionId" ON "${schema}"."eventRolePermissions" ("eventPermissionId") `,
     );
+
     await queryRunner.query(
       `CREATE TABLE "${schema}"."groupRolePermissions" ("groupRoleId" integer NOT NULL, "groupPermissionId" integer NOT NULL, CONSTRAINT "PK_94b1b1a9f9de31ff9194917e780" PRIMARY KEY ("groupRoleId", "groupPermissionId"))`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_46e6c75432e2666666becab4ef" ON "${schema}"."groupRolePermissions" ("groupRoleId") `,
+      `CREATE INDEX "IDX_${schema}_groupRolePermissions_groupRoleId" ON "${schema}"."groupRolePermissions" ("groupRoleId") `,
     );
     await queryRunner.query(
       `CREATE INDEX "IDX_${schema}_groupRolePermissions_groupPermissionId" ON "${schema}"."groupRolePermissions" ("groupPermissionId")`,
@@ -419,10 +420,10 @@ export class BaseTables1728637873969 implements MigrationInterface {
     await queryRunner.query(`DROP TABLE "${schema}"."groupCategories"`);
 
     await queryRunner.query(
-      `DROP INDEX "${schema}"."IDX_46e6c75432e2666666becab4ef"`,
+      `DROP INDEX "${schema}"."IDX_${schema}_groupRolePermissions_groupRoleId"`,
     );
     await queryRunner.query(
-      `DROP INDEX "${schema}"."IDX_${schema}_groupRolePermissions_groupRoleId"`,
+      `DROP INDEX "${schema}"."IDX_${schema}_groupRolePermissions_groupPermissionId"`,
     );
 
     await queryRunner.query(
@@ -496,11 +497,11 @@ export class BaseTables1728637873969 implements MigrationInterface {
     await queryRunner.query(`DROP TABLE "${schema}"."roles"`);
 
     await queryRunner.query(`DROP TABLE "${schema}"."permissions"`);
-    
+
     await queryRunner.query(`DROP TABLE "${schema}"."rolePermissions"`);
-    
+
     await queryRunner.query(`DROP TABLE "${schema}"."userPermissions"`);
-    
+
     await queryRunner.query(`DROP TABLE "${schema}"."sessions"`);
   }
 }
