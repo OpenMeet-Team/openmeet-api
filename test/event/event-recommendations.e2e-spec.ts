@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
-import { EventStatus } from '../../src/core/constants/constant';
+import { EventStatus, EventType } from '../../src/core/constants/constant';
 import {
   loginAsTester,
   createEvent,
@@ -44,7 +44,7 @@ describe('EventController Recommendations (e2e)', () => {
       categories: [category1.id, category2.id],
       startDate: new Date().toISOString(),
       maxAttendees: 100,
-      type: 'hybrid',
+      type: EventType.Hybrid,
     });
 
     // Create some potential recommended events
@@ -54,7 +54,7 @@ describe('EventController Recommendations (e2e)', () => {
       status: EventStatus.Published,
       startDate: new Date().toISOString(),
       categories: [category1.id],
-      type: 'hybrid',
+      type: EventType.Hybrid,
       maxAttendees: 100,
     });
 

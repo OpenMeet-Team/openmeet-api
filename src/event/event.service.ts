@@ -104,6 +104,12 @@ export class EventService {
       userId,
       createdEvent.id,
     );
+
+    const tenantId = this.request.tenantId;
+    const params = {
+      name: `${tenantId}_event_${createdEvent.ulid}`,
+    };
+    this.eventEmitter.emit('channel.created', params);
     return createdEvent;
   }
 
@@ -113,9 +119,9 @@ export class EventService {
 
     const timestamp = Date.now();
     const topicName = `${timestamp}-${message.split(' ').slice(0, 5).join('-').toLowerCase()}`;
-
+    const tenantId = this.request.tenantId;
     const params = {
-      to: `${event.ulid}_${event.slug}`,
+      to: `${tenantId}_event_${event.ulid}`,
       type: 'stream',
       topic: topicName,
       content: message,
@@ -160,8 +166,9 @@ export class EventService {
 
   async getTopics(eventId: number) {
     try {
+      const tenantId = this.request.tenantId;
       const event = await this.findOne(eventId);
-      const streamName = `${event.ulid}_${event.slug}`;
+      const streamName = `${tenantId}_event_${event.ulid}`;
 
       const response = this.zulipService.GetZulipTopics(streamName);
 
@@ -180,9 +187,9 @@ export class EventService {
     const { message } = body;
 
     const event = await this.findOne(eventId);
-
+    const tenantId = this.request.tenantId;
     const params = {
-      to: `${event.ulid}_${event.slug}`,
+      to: `${tenantId}_event_${event.ulid}`,
       type: 'stream',
       topic: topicName,
       content: message,

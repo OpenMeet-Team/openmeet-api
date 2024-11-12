@@ -6,7 +6,11 @@ import {
   TESTING_TENANT_ID,
 } from './constants';
 import { CreateEventDto } from '../../src/event/dto/create-event.dto';
-import { EventStatus, GroupStatus } from '../../src/core/constants/constant';
+import {
+  EventStatus,
+  EventType,
+  GroupStatus,
+} from '../../src/core/constants/constant';
 
 async function getAuthToken(
   app: string,
@@ -53,7 +57,7 @@ export async function createGroupsAndEvents(
   const eventData: CreateEventDto = {
     name: 'Test Event',
     description: 'An event created for testing purposes',
-    type: 'hybrid',
+    type: EventType.Hybrid,
     startDate: new Date(),
     endDate: new Date(new Date().getTime() + 24 * 60 * 60 * 1000), // One day after the start date
     maxAttendees: 100,
