@@ -8,6 +8,7 @@ import {
   ManyToMany,
   OneToOne,
   BeforeInsert,
+  Index,
 } from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
@@ -36,7 +37,8 @@ export class EventEntity extends EntityRelationalHelper {
   @Column({ type: 'varchar', length: 255 })
   name: string;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ type: 'varchar', length: 255, unique: true })
+  @Index()
   slug: string;
 
   @ApiProperty({

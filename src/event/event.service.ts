@@ -31,6 +31,7 @@ import { GroupMemberService } from '../group-member/group-member.service';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { ZulipService } from '../zulip/zulip.service';
 import { CreateEventAttendeeDto } from 'src/event-attendee/dto/create-eventAttendee.dto';
+import { ulid } from 'ulid';
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
   private eventRepository: Repository<EventEntity>;
@@ -80,10 +81,10 @@ export class EventService {
       throw new NotFoundException(`Error finding categories: ${error.message}`);
     }
 
-    const slugifiedName = slugify(createEventDto.name, {
+    const slugifiedName = `${slugify(createEventDto.name, {
       strict: true,
       lower: true,
-    });
+    })}_${ulid().toLowerCase()}`;
 
     const mappedDto = {
       ...createEventDto,
@@ -564,10 +565,10 @@ export class EventService {
     let slugifiedName = '';
 
     if (updateEventDto.name) {
-      slugifiedName = slugify(updateEventDto.name, {
+      slugifiedName = `${slugify(updateEventDto.name, {
         strict: true,
         lower: true,
-      });
+      })}-${ulid().toLowerCase()}`;
     }
 
     const mappedDto: any = {
