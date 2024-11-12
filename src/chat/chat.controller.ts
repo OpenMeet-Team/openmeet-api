@@ -31,7 +31,7 @@ export class ChatController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get Caht' })
+  @ApiOperation({ summary: 'Get Chat' })
   async getChat(@AuthUser() user: User): Promise<any> {
     const userId = user.id;
     const event = await this.chatServise.userMesages(+userId);
