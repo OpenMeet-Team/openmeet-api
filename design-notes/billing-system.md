@@ -1,39 +1,46 @@
-# Billing System
+# System Design Document: Stripe Billing System
 
-This system is responsible for managing customer subscriptions, and billing. It ties into the Usage Limits system to ensure customers do not exceed the limits they pay for.
+## Overview
+A comprehensive billing system using Stripe to handle one-off payments and subscription-based pricing models (monthly/yearly). 
+The system will manage user subscriptions, credits, and payment processing while ensuring security and compliance.
 
-Customers start on a free plan. Once they use their credits, they can upgrade to a paid plan, or pay as they go.
+## Business Context
 
-If there are credits on the account beyond the free tier, they can be donated to others in the form of rewards or "buy me a coffee" credits.
+- Need for flexible payment options to monetize the platform
+- Support for both subscription and pay-as-you-go models
+- Provide users with self-service billing management
+- Generate predictable recurring revenue
 
-## Goals
+## Goals & Success Metrics
 
-We have a successful system if:
+- Customers able to pay for monthly/yearly subscriptions
+- Monthly Recurring Revenue (MRR) growth
+- Payment success rate > 95%
 
-- Customers are able to pay for an account.
-- Customers are able to see their usage and costs.
-- Customers are able to upgrade and downgrade their account.
-- Customers have activity halted after exceeding their limit and are encouraged to upgrade.
-- Taxes are calculated and collected correctly if we need to collect taxes.
-- Credits can be rewarded to other users for "buy me a coffee" or other rewards.
+## System Requirements
 
-## Features
+### Functional Requirements
 
-- Subscription management, pay as you go, monthly, yearly
-- Payment processing
-- Tax collection
-- Rewards for credits
-- Leverages usage tracking/limits system
+- Support for one-off payments
+- Monthly and yearly subscription options
+- Credit system for pay-as-you-go features
+- Self-service customer portal
+- Automated billing notifications
+- Usage tracking and reporting
 
-## Implementation
+### Non-Functional Requirements
 
-- We will use Stripe for payment processing.
-- We will use Stripe Tax for tax collection?
+- 99.9% payment processing uptime
+- 5s payment processing time
+- PCI compliance
+- Scalable to handle 10,000+ subscribers
 
+## Technical Design
 
 ### Stripe Integration
 
 1. **Products & Prices Setup**
+
 - Define products in Stripe dashboard
   - Free tier (price: $0)
   - Mid-tier (monthly/yearly options)
@@ -41,6 +48,7 @@ We have a successful system if:
   - Pay-as-you-go credits (one-off purchases)
 
 2. **Subscription Handling**
+
 - Use Stripe Customer objects to track users
 - Implement Stripe Checkout for simple payment flow
 - Use Stripe Customer Portal for self-service management
@@ -48,13 +56,8 @@ We have a successful system if:
   - Handle subscription upgrades/downgrades
   - View billing history
 
-3. **Payment Methods**
-- Credit/debit cards
-- ACH payments for US customers
-- Local payment methods based on region
-- Support automatic recurring billing
-
 4. **Webhooks Implementation**
+
 - Handle essential events:
   - `customer.subscription.created`
   - `customer.subscription.updated`
@@ -62,28 +65,22 @@ We have a successful system if:
   - `invoice.paid`
   - `invoice.payment_failed`
   - `checkout.session.completed`
+- possibly handle:
+  - `payment_intent.succeeded`
+  - `payment_intent.payment_failed`
+  - `customer.updated`
+  - `customer.deleted`
+  - `charge.succeeded`
+  - `charge.failed`
+  - `charge.refunded`
 
 5. **Credit System**
+
 - Track credits in local database
 - Implement credit purchase through Stripe one-off payments
 - Enable credit transfers between users
 - Automatic credit allocation from subscriptions
 - How do we handle payments to customers if they want to cash out their credits?
-
-6. **Tax Handling**
-- Implement Stripe Tax
-- Automatically calculate tax based on customer location
-- Generate tax-compliant receipts
-- Handle tax exemptions for qualifying customers?
-
-### Error Handling
-
-- Implement retry logic for failed payments
-- Set up automated customer notifications for:
-  - Payment failures
-  - Subscription renewals
-  - Credit balance warnings
-  - Usage limit approaching
 
 ### Security Considerations
 
@@ -96,7 +93,7 @@ We have a successful system if:
 - Never commit secret keys (`sk_*`) to version control
 - Set up webhook signing secrets per environment
 
-### Monitoring
+### Monitoring the system
 
 - Track key metrics:
   - Monthly Recurring Revenue (MRR)
@@ -106,4 +103,23 @@ We have a successful system if:
 - Set up alerts for unusual patterns
 - Monitor webhook delivery and processing
 
+### Security & Compliance
 
+- Stripe webhook signature verification
+- Encrypted payment data
+- PCI compliance measures
+- Audit logging
+- Rate limiting on payment endpoints
+
+## Testing Strategy
+
+- Unit tests for billing logic
+- Integration tests with Stripe API
+- Load testing for payment endpoints
+- Security penetration testing
+- Webhook reliability testing
+
+## Deployment Strategy
+
+- Environment-specific Stripe keys
+- Database migration strategy must be smooth and reliable
