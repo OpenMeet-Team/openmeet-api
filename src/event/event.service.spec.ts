@@ -298,9 +298,8 @@ describe('EventService', () => {
     it('should attend an event', async () => {
       jest.spyOn(service, 'attendEvent').mockResolvedValue(mockEventAttendee);
       const result = await service.attendEvent(
-        mockEventAttendee,
-        TESTING_USER_ID as number,
         mockEvent.id as number,
+        mockEventAttendee,
       );
       expect(result).toEqual(mockEventAttendee);
     });
