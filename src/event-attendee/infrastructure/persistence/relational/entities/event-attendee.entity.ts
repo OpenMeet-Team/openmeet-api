@@ -1,18 +1,13 @@
-import { Entity, PrimaryColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventEntity } from '../../../../../event/infrastructure/persistence/relational/entities/event.entity';
-import {
-  EventAttendeeRole,
-  EventAttendeeStatus,
-} from '../../../../../core/constants/constant';
+import { EventAttendeeStatus } from '../../../../../core/constants/constant';
+import { EventRoleEntity } from '../../../../../event-role/infrastructure/persistence/relational/entities/event-role.entity';
 
 @Entity({ name: 'eventAttendees' })
 export class EventAttendeesEntity {
-  @PrimaryColumn({ type: 'int' })
-  eventId: number;
-
-  @PrimaryColumn()
-  userId: number;
+  @PrimaryGeneratedColumn()
+  id: number;
 
   @Column({
     nullable: true,
@@ -21,23 +16,15 @@ export class EventAttendeesEntity {
   })
   status: EventAttendeeStatus;
 
-  @Column({
-    nullable: true,
-    type: 'enum',
-    enum: EventAttendeeRole,
-  })
-  role: EventAttendeeRole;
+  @ManyToOne(() => EventRoleEntity, (eventRole) => eventRole.attendees)
+  role: EventRoleEntity;
 
-  @ManyToOne(() => EventEntity, (event) => event.attendees, {
-    onDelete: 'CASCADE',
-  })
-  @JoinColumn({ name: 'eventId' })
+  @ManyToOne(() => EventEntity, (event) => event.attendees)
   event: EventEntity;
 
-  // Many-to-One relationship with User
-  @ManyToOne(() => UserEntity, (user) => user.attendedEvents, {
-    onDelete: 'CASCADE',
-  })
-  @JoinColumn({ name: 'userId' })
+  @ManyToOne(() => UserEntity, (user) => user.attendedEvents)
   user: UserEntity;
+
+  @Column({ type: 'text', nullable: true })
+  approvalAnswer?: string;
 }

@@ -80,11 +80,11 @@ describe('EventController (e2e)', () => {
 
     expect(updatedEvent.name).toBe('Updated Test Event');
 
-    // get the event
+    // // get the event
     const foundEvent = await getEvent(TESTING_APP_URL, token, testEvent.id);
     expect(foundEvent.name).toBe('Updated Test Event');
 
-    // getEventsByCreator
+    // // getEventsByCreator
     const myEvents = await getMyEvents(TESTING_APP_URL, token);
     // expect one of the results to be the updated event
     expect(myEvents.some((event) => event.id === updatedEvent.id)).toBe(true);

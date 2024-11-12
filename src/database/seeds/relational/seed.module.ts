@@ -17,11 +17,14 @@ import fileConfig from '../../../file/config/file.config';
 import { EventSeedModule } from './event/event-seed.module';
 import authConfig from '../../../auth/config/auth.config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
-
 import { GroupPermissionSeedModule } from './group-permission/group-permission-seed.module';
+import { EventRoleSeedModule } from './event-role/event-role-seed.module';
+import { EventPermissionSeedModule } from './event-permission/event-permission-seed.module';
 
 @Module({
   imports: [
+    EventPermissionSeedModule,
+    EventRoleSeedModule,
     GroupPermissionSeedModule,
     EventEmitterModule.forRoot(),
     EventSeedModule,
