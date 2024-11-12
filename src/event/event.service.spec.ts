@@ -119,7 +119,7 @@ describe('EventService', () => {
         name: 'Test Event',
         description: 'Test Event Description',
         startDate: new Date(),
-        type: 'in person',
+        type: 'hybrid',
         location: 'Test Location',
         locationOnline: 'Test Location Online',
         maxAttendees: 100,

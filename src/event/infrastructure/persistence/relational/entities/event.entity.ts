@@ -7,6 +7,8 @@ import {
   OneToMany,
   ManyToMany,
   OneToOne,
+  BeforeInsert,
+  Index,
 } from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
@@ -22,16 +24,21 @@ import {
 import { GroupMemberEntity } from '../../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { FileEntity } from '../../../../../file/infrastructure/persistence/relational/entities/file.entity';
 import { ApiProperty } from '@nestjs/swagger';
+import { ulid } from 'ulid';
 
 @Entity({ name: 'events' })
 export class EventEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Column({ type: String, unique: true })
+  ulid: string;
+
   @Column({ type: 'varchar', length: 255 })
   name: string;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ type: 'varchar', length: 255, unique: true })
+  @Index()
   slug: string;
 
   @ApiProperty({
@@ -119,5 +126,10 @@ export class EventEntity extends EntityRelationalHelper {
   @Expose()
   get attendeesCount(): number {
     return this.attendees ? this.attendees.length : 0;
+  }
+
+  @BeforeInsert()
+  generateShortId() {
+    this.ulid = ulid().toLowerCase();
   }
 }

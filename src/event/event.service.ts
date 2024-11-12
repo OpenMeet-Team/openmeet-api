@@ -33,6 +33,7 @@ import { ZulipService } from '../zulip/zulip.service';
 import { CreateEventAttendeeDto } from '../event-attendee/dto/create-eventAttendee.dto';
 import { EventRoleService } from '../event-role/event-role.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { ulid } from 'ulid';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -84,10 +85,10 @@ export class EventService {
       throw new NotFoundException(`Error finding categories: ${error.message}`);
     }
 
-    const slugifiedName = slugify(createEventDto.name, {
+    const slugifiedName = `${slugify(createEventDto.name, {
       strict: true,
       lower: true,
-    });
+    })}_${ulid().toLowerCase()}`;
 
     const mappedDto = {
       ...createEventDto,
@@ -112,8 +113,14 @@ export class EventService {
       user: user as UserEntity,
       event: createdEvent,
     };
+
     await this.eventAttendeeService.create(eventAttendeeDto);
 
+    const tenantId = this.request.tenantId;
+    const params = {
+      name: `${tenantId}_event_${createdEvent.ulid}`,
+    };
+    this.eventEmitter.emit('channel.created', params);
     return createdEvent;
   }
 
@@ -123,9 +130,9 @@ export class EventService {
 
     const timestamp = Date.now();
     const topicName = `${timestamp}-${message.split(' ').slice(0, 5).join('-').toLowerCase()}`;
-
+    const tenantId = this.request.tenantId;
     const params = {
-      to: `${event.shortId}_${event.slug}`,
+      to: `${tenantId}_event_${event.ulid}`,
       type: 'stream',
       topic: topicName,
       content: message,
@@ -170,8 +177,9 @@ export class EventService {
 
   async getTopics(eventId: number) {
     try {
+      const tenantId = this.request.tenantId;
       const event = await this.findOne(eventId);
-      const streamName = `${event.shortId}_${event.slug}`;
+      const streamName = `${tenantId}_event_${event.ulid}`;
 
       const response = this.zulipService.GetZulipTopics(streamName);
 
@@ -190,9 +198,9 @@ export class EventService {
     const { message } = body;
 
     const event = await this.findOne(eventId);
-
+    const tenantId = this.request.tenantId;
     const params = {
-      to: `${event.shortId}_${event.slug}`,
+      to: `${tenantId}_event_${event.ulid}`,
       type: 'stream',
       topic: topicName,
       content: message,
@@ -485,10 +493,10 @@ export class EventService {
     let slugifiedName = '';
 
     if (updateEventDto.name) {
-      slugifiedName = slugify(updateEventDto.name, {
+      slugifiedName = `${slugify(updateEventDto.name, {
         strict: true,
         lower: true,
-      });
+      })}-${ulid().toLowerCase()}`;
     }
 
     const mappedDto: any = {
