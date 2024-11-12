@@ -38,6 +38,11 @@ export class ZulipService {
     });
   }
 
+  async FetchMessages(params: any) {
+    const client = await initializeZulipClient();
+    return await client.messages.retrieve(params);
+  }
+
   async GetZulipTopics(streamName: string) {
     const client = await initializeZulipClient();
     const streamResponse = await client.streams.retrieve();

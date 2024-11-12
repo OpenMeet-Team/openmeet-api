@@ -24,6 +24,7 @@ async function bootstrap() {
   const configService = app.get(ConfigService<AllConfigType>);
 
   app.enableShutdownHooks();
+  const apiPrefix = configService.getOrThrow('app.apiPrefix', { infer: true });
   app.setGlobalPrefix(
     configService.getOrThrow('app.apiPrefix', { infer: true }),
     {
@@ -72,6 +73,18 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, options);
+  // Customize Swagger module to remove `apiPrefix` from the specified paths
+  document.paths = Object.keys(document.paths).reduce((paths, path) => {
+    const isHealthOrMetricsPath = [`/${apiPrefix}/health/liveness`, `/${apiPrefix}/health/readiness`, `/${apiPrefix}/metrics`].includes(path)
+    // Remove the prefix only for specified health or metrics paths
+    if (isHealthOrMetricsPath) {
+      paths[path.replace(`/${apiPrefix}`, '')] = document.paths[path];
+    } else {
+      paths[path] = document.paths[path];
+    }
+    return paths;
+  }, {})
+
   SwaggerModule.setup('docs', app, document);
 
   // Exclude health check endpoints from global prefix

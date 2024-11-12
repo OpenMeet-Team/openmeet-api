@@ -43,6 +43,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { RoleModule } from './role/role.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ZulipModule } from './zulip/zulip.module';
+import { ChatModule } from './chat/chat.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -113,6 +114,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     DashboardModule,
     RoleModule,
     ZulipModule,
+    ChatModule,
   ],
   providers: [
     TenantConnectionService,
