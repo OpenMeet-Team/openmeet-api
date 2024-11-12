@@ -212,6 +212,15 @@ export class UserService {
     });
   }
 
+  async findOne(id: User['id']): Promise<NullableType<UserEntity>> {
+    await this.getTenantSpecificRepository();
+
+    return this.usersRepository.findOne({
+      where: { id: Number(id) },
+      relations: ['role'],
+    });
+  }
+
   async findByEmail(email: User['email']): Promise<NullableType<UserEntity>> {
     if (!email) return null;
 
@@ -235,6 +244,16 @@ export class UserService {
     return this.usersRepository.findOne({
       where: { socialId, provider },
     });
+  }
+
+  async addZulipIdInUser(email: string, zulipId: number) {
+    await this.getTenantSpecificRepository();
+    const user = await this.findByEmail(email);
+    if (user) {
+      user.zulipId = zulipId;
+      await this.usersRepository.save(user);
+    }
+    return this.findByEmail(email);
   }
 
   async update(id: User['id'], payload: any): Promise<User | null> {

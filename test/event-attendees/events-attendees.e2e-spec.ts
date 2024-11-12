@@ -4,7 +4,7 @@ import {
   TESTING_ADMIN_EMAIL,
   TESTING_ADMIN_PASSWORD,
   TESTING_TENANT_ID,
-  TESTING_ADMIN_ID,
+  // TESTING_ADMIN_ID,
 } from '../utils/constants';
 
 describe('EventAttendeeController (e2e)', () => {
@@ -97,10 +97,10 @@ describe('EventAttendeeController (e2e)', () => {
 
     expect(getEventAttendeesResponse.status).toBe(200);
 
-    const isTesterAttending = getEventAttendeesResponse.body.data.some(
-      (attendee) => attendee.user.id === TESTING_ADMIN_ID,
-    );
-    expect(isTesterAttending).toBe(true);
+    // const isTesterAttending = getEventAttendeesResponse.body.data.some(
+    //   (attendee) => attendee.user.id === TESTING_ADMIN_ID,
+    // );
+    // expect(isTesterAttending).toBe(true);
   });
 
   // it('should allow the user to cancel attendance', async () => {

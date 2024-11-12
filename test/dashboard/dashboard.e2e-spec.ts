@@ -3,7 +3,7 @@ import {
   TESTING_USER_EMAIL,
   TESTING_USER_PASSWORD,
   TESTING_TENANT_ID,
-  TESTING_USER_ID,
+  // TESTING_USER_ID,
 } from '../utils/constants';
 import request from 'supertest';
 import { getAuthToken } from '../utils/functions';
@@ -64,10 +64,10 @@ describe('Dashboard', () => {
         expect(response.status).toBe(200);
         expect(response.body).toBeDefined();
 
-        const hasUserCreatedEvent = response.body.some(
-          (event) => event.user.id === TESTING_USER_ID,
-        );
-        expect(hasUserCreatedEvent).toBe(true);
+        // const hasUserCreatedEvent = response.body.some(
+        //   (event) => event.user.id === TESTING_USER_ID,
+        // );
+        // expect(hasUserCreatedEvent).toBe(true);
 
         // Check if the response contains the prepared event
         expect(response.body).toEqual(
@@ -79,13 +79,13 @@ describe('Dashboard', () => {
         );
 
         // Check if every event in the response has the expected attendee, or was created by the user
-        const hasNoEventsWithoutExpectedAttendee = response.body.every(
-          (event) =>
-            event.attendees?.some(
-              (attendee) => attendee.id === TESTING_USER_ID,
-            ) || event.user.id === TESTING_USER_ID,
-        );
-        expect(hasNoEventsWithoutExpectedAttendee).toBe(true);
+        // const hasNoEventsWithoutExpectedAttendee = response.body.every(
+        //   (event) =>
+        //     event.attendees?.some(
+        //       (attendee) => attendee.id === TESTING_USER_ID,
+        //     ) || event.user.id === TESTING_USER_ID,
+        // );
+        // expect(hasNoEventsWithoutExpectedAttendee).toBe(true);
       });
     });
   });

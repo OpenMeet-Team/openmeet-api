@@ -1,13 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { UserService } from './user.service';
-import { Repository } from 'typeorm';
-import { UserEntity } from './infrastructure/persistence/relational/entities/user.entity';
 import { ZulipService } from '../zulip/zulip.service';
 
 @Injectable()
 export class UserCreatedListener {
-  private usersRepository: Repository<UserEntity>;
   constructor(
     private readonly userService: UserService,
     private readonly zulipService: ZulipService,
@@ -15,17 +12,21 @@ export class UserCreatedListener {
   @OnEvent('user.created')
   async handleUserCreatedEvent(event: any) {
     try {
+      await this.userService.getTenantSpecificRepository();
       const response = await this.zulipService.CreateZulipUser(event);
+      if (response.result === 'success') {
+        const emailParts = event.email.split('_');
+        const actualEmail = emailParts.slice(1).join('_');
 
-      const user = await this.userService.findByEmail(event.email);
-      if (response.result === 'success' && user) {
-        user.zulipId = response.user_id;
-
-        await this.usersRepository.save(user);
+        await this.userService.addZulipIdInUser(actualEmail, response.user_id);
       }
     } catch (error) {
       console.error('Failed to create user:', error);
       throw new NotFoundException('Failed to create user');
     }
+    console.log(
+      '🚀 ~ UserCreatedListener ~ handleUserCreatedEvent ~ console:',
+      console,
+    );
   }
 }
