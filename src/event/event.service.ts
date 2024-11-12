@@ -18,10 +18,10 @@ import { QueryEventDto } from './dto/query-events.dto';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { paginate } from '../utils/generic-pagination';
 import {
-  EventAttendeeRole,
   EventAttendeeStatus,
   EventStatus,
   EventVisibility,
+  EventAttendeeRole,
 } from '../core/constants/constant';
 import slugify from 'slugify';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
@@ -30,7 +30,10 @@ import { CategoryEntity } from '../category/infrastructure/persistence/relationa
 import { GroupMemberService } from '../group-member/group-member.service';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { ZulipService } from '../zulip/zulip.service';
-import { CreateEventAttendeeDto } from 'src/event-attendee/dto/create-eventAttendee.dto';
+import { CreateEventAttendeeDto } from '../event-attendee/dto/create-eventAttendee.dto';
+import { EventRoleService } from '../event-role/event-role.service';
+import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
   private eventRepository: Repository<EventEntity>;
@@ -44,6 +47,7 @@ export class EventService {
     private readonly groupMemberService: GroupMemberService,
     private readonly fileService: FilesS3PresignedService,
     private readonly zulipService: ZulipService,
+    private readonly eventRoleService: EventRoleService,
   ) {
     void this.initializeRepository();
   }
@@ -95,15 +99,21 @@ export class EventService {
     const event = this.eventRepository.create(mappedDto as EventEntity);
     const createdEvent = await this.eventRepository.save(event);
 
-    const eventAttendeeDto = {
-      role: EventAttendeeRole.Host,
-      status: EventAttendeeStatus.Confirmed,
-    };
-    await this.eventAttendeeService.attendEvent(
-      eventAttendeeDto,
-      userId,
-      createdEvent.id,
+    const hostRole = await this.eventRoleService.findByName(
+      EventAttendeeRole.Host,
     );
+    if (!hostRole) {
+      throw new NotFoundException('Host role not found');
+    }
+
+    const eventAttendeeDto: CreateEventAttendeeDto = {
+      role: hostRole,
+      status: EventAttendeeStatus.Confirmed,
+      user: user as UserEntity,
+      event: createdEvent,
+    };
+    await this.eventAttendeeService.create(eventAttendeeDto);
+
     return createdEvent;
   }
 
@@ -546,7 +556,7 @@ export class EventService {
   async getEventsByAttendee(userId: number) {
     await this.getTenantSpecificEventRepository();
     const events = await this.eventRepository.find({
-      where: { attendees: { userId } },
+      where: { attendees: { user: { id: userId } } },
       relations: ['user', 'attendees'],
     });
     return events.map((event) => ({
@@ -616,34 +626,44 @@ export class EventService {
   }
 
   async attendEvent(
-    createEventAttendeeDto: CreateEventAttendeeDto,
-    userId: number,
     id: number,
+    createEventAttendeeDto: CreateEventAttendeeDto,
   ) {
     await this.getTenantSpecificEventRepository();
 
-    // const event = await this.findOne(id);
-
-    // TODO check if attendee requires validation
-    if (false) {
-      // Create a pending attendee
-      return this.eventAttendeeService.attendEvent(
-        {
-          ...createEventAttendeeDto,
-          status: EventAttendeeStatus.Pending,
-        },
-        userId,
-        id,
-      );
-    }
-    return this.eventAttendeeService.attendEvent(
-      {
-        ...createEventAttendeeDto,
-        status: EventAttendeeStatus.Confirmed,
-      },
-      userId,
-      id,
+    const event = await this.findOne(id);
+    const participantRole = await this.eventRoleService.findOne(
+      EventAttendeeRole.Participant,
     );
+
+    if (!participantRole) {
+      throw new NotFoundException('Participant role not found');
+    }
+
+    if (event.allowWaitlist) {
+      const count = await this.eventAttendeeService.getEventAttendeesCount(id);
+      if (count >= event.maxAttendees) {
+        return this.eventAttendeeService.create({
+          ...createEventAttendeeDto,
+          status: EventAttendeeStatus.Waitlist,
+          role: participantRole,
+        });
+      }
+    }
+
+    if (event.requireApproval) {
+      return this.eventAttendeeService.create({
+        ...createEventAttendeeDto,
+        status: EventAttendeeStatus.Pending,
+        role: participantRole,
+      });
+    }
+
+    return this.eventAttendeeService.create({
+      ...createEventAttendeeDto,
+      status: EventAttendeeStatus.Confirmed,
+      role: participantRole,
+    });
   }
 
   async getEventAttendees(eventId: number, pagination: PaginationDto) {

@@ -13,6 +13,7 @@ import { SubCategoryEntity } from '../sub-category/infrastructure/persistence/re
 import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
 import { GroupUserPermissionEntity } from '../group/infrastructure/persistence/relational/entities/group-user-permission.entity';
 import { GroupRoleEntity } from 'src/group-role/infrastructure/persistence/relational/entities/group-role.entity';
+import { EventRoleEntity } from 'src/event-role/infrastructure/persistence/relational/entities/event-role.entity';
 
 export const mockCategory = {
   id: 1,
@@ -57,11 +58,12 @@ export const mockEvent = {
 export const mockEventAttendee = {
   id: 1,
   status: EventAttendeeStatus.Confirmed,
-  role: EventAttendeeRole.Participant,
+  role: {
+    id: 1,
+  },
+  approvalAnswer: 'test',
   event: mockEvent,
   user: mockUser,
-  eventId: 1,
-  userId: 1,
 } as EventAttendeesEntity;
 
 export const mockGroupUserPermission = {
@@ -77,6 +79,11 @@ export const mockGroupMember = {
   user: mockUser,
   group: mockGroup,
 } as GroupMemberEntity;
+
+export const mockEventRole = {
+  id: 1,
+  name: EventAttendeeRole.Participant,
+} as EventRoleEntity;
 
 export const mockSubCategory = {
   id: 1,
@@ -151,6 +158,10 @@ export const mockCategoryService = {
   getHomePageFeaturedCategories: jest.fn().mockResolvedValue([mockCategory]),
   findOne: jest.fn().mockResolvedValue(mockCategory),
   findByIds: jest.fn().mockResolvedValue([mockCategory]),
+};
+
+export const mockEventRoleService = {
+  findOne: jest.fn().mockResolvedValue(mockEventRole),
 };
 
 export const mockSubCategoryService = {

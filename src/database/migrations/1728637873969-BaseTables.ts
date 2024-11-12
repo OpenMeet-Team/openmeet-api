@@ -30,7 +30,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `CREATE TYPE "${schema}"."eventAttendees_role_enum" AS ENUM('participant', 'host', 'speaker', 'moderator', 'guest')`,
     );
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."eventAttendees" ("eventId" integer NOT NULL, "userId" integer NOT NULL, "role" "${schema}"."eventAttendees_role_enum", "status" "${schema}"."eventAttendees_status_enum", CONSTRAINT "PK_e47b1fedacf94185d9310d135e0" PRIMARY KEY ("eventId", "userId"))`,
+      `CREATE TABLE "${schema}"."eventAttendees" ("id" SERIAL NOT NULL, "approvalAnswer" text, "roleId" integer NOT NULL, "eventId" integer NOT NULL, "userId" integer NOT NULL, "role" "${schema}"."eventAttendees_role_enum", "status" "${schema}"."eventAttendees_status_enum", CONSTRAINT "PK_e47b1fedacf94185d9310d135e0" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
       `CREATE TYPE "${schema}"."subcategories_type_enum" AS ENUM('EVENT', 'GROUP')`,
@@ -102,10 +102,25 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `CREATE INDEX "IDX_5cb213a16a7b5204c8aff88151" ON "${schema}"."rolePermissions" ("permissionId") `,
     );
     await queryRunner.query(
+      `CREATE TABLE "${schema}"."eventRoles" ("shortId" character varying NOT NULL, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, CONSTRAINT "PK_b31b0a0a1d4bbfa5f1a01509sdf" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "${schema}"."eventPermissions" ("shortId" character varying NOT NULL, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, CONSTRAINT "PK_e501cb9db2ccf705c2ebf31d231" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE TABLE "${schema}"."eventRolePermissions" ("eventRoleId" integer NOT NULL, "eventPermissionId" integer NOT NULL, CONSTRAINT "PK_9e7ab7e8aec914fa1886f6asdf" PRIMARY KEY ("eventRoleId", "eventPermissionId"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_5d51857bafbbd071698f736234" ON "${schema}"."eventRolePermissions" ("eventRoleId") `,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_5d51857bafbbd071698f736854" ON "${schema}"."eventRolePermissions" ("eventPermissionId") `,
+    );
+    await queryRunner.query(
       `CREATE TABLE "${schema}"."groupRolePermissions" ("groupRoleId" integer NOT NULL, "groupPermissionId" integer NOT NULL, CONSTRAINT "PK_94b1b1a9f9de31ff9194917e780" PRIMARY KEY ("groupRoleId", "groupPermissionId"))`,
     );
     await queryRunner.query(
-      `CREATE INDEX "IDX_5d51857bafbbd071698f736578" ON "${schema}"."groupRolePermissions" ("groupRoleId") `,
+      `CREATE INDEX "IDX_46e6c75432e2666666becab4ef" ON "${schema}"."groupRolePermissions" ("groupRoleId") `,
     );
     await queryRunner.query(
       `CREATE INDEX "IDX_46e6c75432e2666666becab4fe" ON "${schema}"."groupRolePermissions" ("groupPermissionId") `,
@@ -338,23 +353,29 @@ export class BaseTables1728637873969 implements MigrationInterface {
     );
     await queryRunner.query(`DROP TABLE "${schema}"."groupCategories"`);
     await queryRunner.query(
+      `DROP INDEX "${schema}"."IDX_46e6c75432e2666666becab4ef"`,
+    );
+    await queryRunner.query(
       `DROP INDEX "${schema}"."IDX_46e6c75432e2666666becab4fe"`,
     );
     await queryRunner.query(
       `DROP INDEX "${schema}"."IDX_5d51857bafbbd071698f736578"`,
     );
-    await queryRunner.query(`DROP TABLE "${schema}"."groupRolePermissions"`);
+    await queryRunner.query(
+      `DROP INDEX "${schema}"."IDX_5d51857bafbbd071698f736234"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "${schema}"."IDX_5d51857bafbbd071698f736854"`,
+    );
     await queryRunner.query(
       `DROP INDEX "${schema}"."IDX_5cb213a16a7b5204c8aff88151"`,
     );
     await queryRunner.query(
       `DROP INDEX "${schema}"."IDX_b20f4ad2fcaa0d311f92516267"`,
     );
-    await queryRunner.query(`DROP TABLE "${schema}"."rolePermissions"`);
     await queryRunner.query(
       `DROP INDEX "${schema}"."IDX_57de40bc620f456c7311aa3a1e"`,
     );
-    await queryRunner.query(`DROP TABLE "${schema}"."sessions"`);
     await queryRunner.query(
       `DROP INDEX "${schema}"."IDX_af99afb7cf88ce20aff6977e68"`,
     );
@@ -364,6 +385,10 @@ export class BaseTables1728637873969 implements MigrationInterface {
     await queryRunner.query(
       `DROP INDEX "${schema}"."IDX_2025eaefc4e1b443c84f6ca9b2"`,
     );
+
+    await queryRunner.query(`DROP TABLE "${schema}"."eventRoles"`);
+    await queryRunner.query(`DROP TABLE "${schema}"."eventPermissions"`);
+    await queryRunner.query(`DROP TABLE "${schema}"."eventRolePermissions"`);
     await queryRunner.query(`DROP TABLE "${schema}"."users"`);
     await queryRunner.query(`DROP TABLE "${schema}"."events"`);
     await queryRunner.query(`DROP TYPE "${schema}"."events_status_enum"`);
@@ -373,6 +398,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
     await queryRunner.query(`DROP TABLE "${schema}"."groupMembers"`);
     await queryRunner.query(`DROP TABLE "${schema}"."groupRoles"`);
     await queryRunner.query(`DROP TABLE "${schema}"."groupPermissions"`);
+    await queryRunner.query(`DROP TABLE "${schema}"."groupRolePermissions"`);
     await queryRunner.query(`DROP TABLE "${schema}"."groupUserPermissions"`);
     await queryRunner.query(`DROP TABLE "${schema}"."subcategories"`);
     await queryRunner.query(`DROP TYPE "${schema}"."subcategories_type_enum"`);
@@ -381,6 +407,8 @@ export class BaseTables1728637873969 implements MigrationInterface {
     await queryRunner.query(`DROP TABLE "${schema}"."statuses"`);
     await queryRunner.query(`DROP TABLE "${schema}"."roles"`);
     await queryRunner.query(`DROP TABLE "${schema}"."permissions"`);
+    await queryRunner.query(`DROP TABLE "${schema}"."rolePermissions"`);
     await queryRunner.query(`DROP TABLE "${schema}"."userPermissions"`);
+    await queryRunner.query(`DROP TABLE "${schema}"."sessions"`);
   }
 }

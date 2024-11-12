@@ -121,14 +121,17 @@ export class EventController {
     @Body() createEventAttendeeDto: CreateEventAttendeeDto,
     @Param('id') id: number,
   ) {
-    const userId = user.id;
-    return this.eventService.attendEvent(createEventAttendeeDto, userId, id);
+    return this.eventService.attendEvent(id, {
+      ...createEventAttendeeDto,
+      user: user as UserEntity,
+      event: { id } as EventEntity,
+    });
   }
 
   @Post(':id/cancel-attending')
   @ApiOperation({ summary: 'Cancel attending an event' })
   async cancelAttendingEvent(@Param('id') id: number, @AuthUser() user: User) {
-    return await this.eventService.cancelAttendingEvent(id, user?.id);
+    return await this.eventService.cancelAttendingEvent(id, user.id);
   }
 
   @Patch(':id/attendees/:userId')

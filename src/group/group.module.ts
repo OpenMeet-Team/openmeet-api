@@ -17,6 +17,7 @@ import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-pres
 import { GroupRoleService } from '../group-role/group-role.service';
 import { ZulipService } from '../zulip/zulip.service';
 import { MailModule } from '../mail/mail.module';
+import { EventRoleService } from 'src/event-role/event-role.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -40,6 +41,7 @@ import { MailModule } from '../mail/mail.module';
     FilesS3PresignedService,
     GroupRoleService,
     ZulipService,
+    EventRoleService,
   ],
   exports: [GroupService],
 })

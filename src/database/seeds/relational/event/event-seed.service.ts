@@ -12,6 +12,7 @@ import {
   EventAttendeeStatus,
 } from '../../../../core/constants/constant';
 import { EventAttendeesEntity } from '../../../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
+import { EventRoleEntity } from 'src/event-role/infrastructure/persistence/relational/entities/event-role.entity';
 
 @Injectable()
 export class EventSeedService {
@@ -20,7 +21,7 @@ export class EventSeedService {
   private categoryRepository: Repository<CategoryEntity>;
   private eventRepository: Repository<EventEntity>;
   private eventAttendeesRepository: Repository<EventAttendeesEntity>;
-
+  private eventRoleRepository: Repository<EventRoleEntity>;
   constructor(
     private readonly tenantConnectionService: TenantConnectionService,
   ) {}
@@ -32,6 +33,7 @@ export class EventSeedService {
     this.userRepository = dataSource.getRepository(UserEntity);
     this.categoryRepository = dataSource.getRepository(CategoryEntity);
     this.eventRepository = dataSource.getRepository(EventEntity);
+    this.eventRoleRepository = dataSource.getRepository(EventRoleEntity);
     this.eventAttendeesRepository =
       dataSource.getRepository(EventAttendeesEntity);
 
@@ -43,13 +45,9 @@ export class EventSeedService {
 
   private async seedEvents() {
     const allCategories = await this.categoryRepository.find();
-    const allUsers = await this.userRepository.find();
-    const allGroups = await this.groupRepository.find();
+    const allEventRoles = await this.eventRoleRepository.find();
 
     for (const eventData of eventSeedData) {
-      const randomUser = this.getRandomItem(allUsers);
-      const randomGroup =
-        Math.random() > 0.5 ? this.getRandomItem(allGroups) : null;
       const numberOfCategories = Math.floor(Math.random() * 3) + 1;
       const selectedCategories = this.getRandomCategories(
         allCategories,
@@ -73,18 +71,24 @@ export class EventSeedService {
         lon: eventData.lon ?? 0,
         status: eventData.status,
         visibility: eventData.visibility,
-        group: randomGroup?.id ? { id: randomGroup.id } : undefined,
-        user: { id: randomUser.id },
+        group: eventData.group,
+        user: eventData.user,
         categories: selectedCategories.map((category) => category),
+        approvalQuestion: eventData.approvalQuestion ?? '',
+        allowWaitlist: eventData.allowWaitlist ?? false,
+        requireApproval: eventData.requireApproval ?? false,
+        requireGroupMembership: eventData.requireGroupMembership ?? false,
       });
 
       const createdEvent = await this.eventRepository.save(event);
 
       const attendee = this.eventAttendeesRepository.create({
         status: EventAttendeeStatus.Confirmed,
-        role: EventAttendeeRole.Host,
+        role: allEventRoles.find(
+          (role) => role.name === EventAttendeeRole.Host,
+        ),
         event: { id: createdEvent.id },
-        user: { id: randomUser.id },
+        user: eventData.user,
       });
       await this.eventAttendeesRepository.save(attendee);
     }

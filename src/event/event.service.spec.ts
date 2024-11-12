@@ -29,10 +29,12 @@ import {
   mockFilesS3PresignedService,
   mockRepository,
   mockEventAttendee,
+  mockEventRoleService,
 } from '../test/mocks';
 import { mockEvents } from '../test/mocks';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { EventRoleService } from '../event-role/event-role.service';
 
 describe('EventService', () => {
   let service: EventService;
@@ -89,6 +91,10 @@ describe('EventService', () => {
             createTopic: jest.fn().mockResolvedValue({}),
             sendMessage: jest.fn().mockResolvedValue({}),
           },
+        },
+        {
+          provide: EventRoleService,
+          useValue: mockEventRoleService,
         },
       ],
     }).compile();
@@ -153,7 +159,7 @@ describe('EventService', () => {
       ]);
 
       // Mock event attendee service
-      jest.spyOn(eventAttendeeService, 'attendEvent').mockResolvedValue({
+      jest.spyOn(eventAttendeeService, 'create').mockResolvedValue({
         id: 1,
         userId: TESTING_USER_ID,
         eventId: 1,

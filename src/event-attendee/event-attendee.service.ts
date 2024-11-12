@@ -5,7 +5,6 @@ import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { EventAttendeesEntity } from './infrastructure/persistence/relational/entities/event-attendee.entity';
 import { CreateEventAttendeeDto } from './dto/create-eventAttendee.dto';
-import { DeepPartial } from 'typeorm';
 import { QueryEventAttendeeDto } from './dto/query-eventAttendee.dto';
 import { paginate } from '../utils/generic-pagination';
 import { UpdateEventAttendeeDto } from './dto/update-eventAttendee.dto';
@@ -28,25 +27,15 @@ export class EventAttendeeService {
       dataSource.getRepository(EventAttendeesEntity);
   }
 
-  async attendEvent(
+  async create(
     createEventAttendeeDto: CreateEventAttendeeDto,
-    userId: number,
-    eventId: number,
   ): Promise<EventAttendeesEntity> {
     await this.getTenantSpecificEventRepository();
 
-    const event = { id: eventId };
-    const user = { id: userId };
-
-    const mappedDto: DeepPartial<EventAttendeesEntity> = {
-      status: createEventAttendeeDto.status,
-      role: createEventAttendeeDto.role,
-      event, // Attach the event object
-      user, // Attach the user object
-    };
-
     try {
-      const attendee = this.eventAttendeesRepository.create(mappedDto);
+      const attendee = this.eventAttendeesRepository.create(
+        createEventAttendeeDto,
+      );
       return await this.eventAttendeesRepository.save(attendee);
     } catch (error) {
       // Handle database save errors
@@ -169,6 +158,7 @@ export class EventAttendeeService {
     await this.getTenantSpecificEventRepository();
     const attendee = await this.eventAttendeesRepository.findOne({
       where: { user: { id: userId }, event: { id } },
+      relations: ['user', 'role.permissions'],
     });
     if (!attendee) {
       throw new NotFoundException(`Attendee with ID ${userId} not found`);
@@ -184,8 +174,18 @@ export class EventAttendeeService {
     await this.getTenantSpecificEventRepository();
     return await this.eventAttendeesRepository.find({
       where: { event: { id: eventId } },
-      relations: ['user'],
+      relations: ['user', 'role'],
       take: limit,
+    });
+  }
+
+  async getEventAttendeesCount(eventId: number): Promise<number> {
+    await this.getTenantSpecificEventRepository();
+    return await this.eventAttendeesRepository.count({
+      where: {
+        event: { id: eventId },
+        status: EventAttendeeStatus.Confirmed,
+      },
     });
   }
 }
