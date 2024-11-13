@@ -88,7 +88,7 @@ export class EventService {
     const slugifiedName = `${slugify(createEventDto.name, {
       strict: true,
       lower: true,
-    })}_${ulid().toLowerCase()}`;
+    })}_${ulid().toLowerCase().slice(0, 6)}`;
 
     const mappedDto = {
       ...createEventDto,
@@ -496,7 +496,7 @@ export class EventService {
       slugifiedName = `${slugify(updateEventDto.name, {
         strict: true,
         lower: true,
-      })}-${ulid().toLowerCase()}`;
+      })}_${ulid().toLowerCase().slice(0, 6)}`;
     }
 
     const mappedDto: any = {
