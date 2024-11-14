@@ -66,25 +66,19 @@ export class UserSeedService {
     const adminCredentials = {
       email: `${tenantId}.${this.configService.get('ADMIN_EMAIL') as string}`,
       password: this.configService.get('ADMIN_PASSWORD') as string,
-      firstName: this.configService.get('ADMIN_FIRST_NAME') as string,
-      lastName: this.configService.get('ADMIN_LAST_NAME') as string,
+      firstName: 'The',
+      lastName: 'Admin',
     };
 
     const testUserCredentials = {
       email: `${tenantId}.${this.configService.get('TEST_USER_EMAIL') as string}`,
       password: this.configService.get('TEST_USER_PASSWORD') as string,
-      firstName: this.configService.get('TEST_USER_FIRST_NAME') as string,
-      lastName: this.configService.get('TEST_USER_LAST_NAME') as string,
+      firstName: 'Test',
+      lastName: 'User',
     };
     /* eslint-enable no-restricted-syntax */
 
-    await this.createUserIfNotExists(
-      adminCredentials,
-      RoleEnum.Admin,
-    );
-    await this.createUserIfNotExists(
-      testUserCredentials,
-      RoleEnum.User,
-    );
+    await this.createUserIfNotExists(adminCredentials, RoleEnum.Admin);
+    await this.createUserIfNotExists(testUserCredentials, RoleEnum.User);
   }
 }

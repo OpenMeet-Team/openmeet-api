@@ -118,6 +118,5 @@ The admin user is created with the following environment variables at database s
 
 - ADMIN_EMAIL
 - ADMIN_PASSWORD
-- ADMIN_FIRST_NAME
-- ADMIN_LAST_NAME
+
 

@@ -12,7 +12,7 @@ describe('Auth', () => {
   const app = TESTING_APP_URL;
 
   describe('Admin', () => {
-    it.only('should successfully login via /api/v1/auth/email/login (POST)', async () => {
+    it('should successfully login via /api/v1/auth/email/login (POST)', async () => {
       const server = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
 
       const req = server.post('/api/v1/auth/email/login');

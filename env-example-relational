@@ -9,20 +9,16 @@ BACKEND_DOMAIN=http://localhost:3000
 
 TENANTS_B64=WwogIHsKICAgICJpZCI6ICIiLAogICAgIm5hbWUiOiAiUHVibGljIgogIH0sCiAgewogICAgImlkIjogIjEiLAogICAgIm5hbWUiOiAiT3Blbk1lZXQiCiAgfSwKICB7CiAgICAiaWQiOiAidGVzdGluZyIsCiAgICAibmFtZSI6ICJUZXN0aW5nIgogIH0KXQ==
 
+# Test tenant, must exist in the TENANTS_B64 variable
+TEST_TENANT_ID=testing
+
 # Admin of the installation
 ADMIN_EMAIL=admin@openmeet.net
 ADMIN_PASSWORD=secret
-ADMIN_FIRST_NAME=Admin
-ADMIN_LAST_NAME=Openmeet
 
 # Test user
 TEST_USER_EMAIL=test@openmeet.net
 TEST_USER_PASSWORD=secret
-TEST_USER_FIRST_NAME=Test
-TEST_USER_LAST_NAME=User
-
-# Test tenant, must exist in the TENANTS_B64 variable
-TEST_TENANT_ID=testing
 
 DATABASE_TYPE=postgres
 DATABASE_HOST=postgres
