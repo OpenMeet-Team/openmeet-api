@@ -43,7 +43,7 @@ export class UserSeedService {
       const salt = await bcrypt.genSalt();
       const hashedPassword = await bcrypt.hash(credentials.password, salt);
 
-      const user = await this.repository.save(
+      await this.repository.save(
         this.repository.create({
           firstName: credentials.firstName,
           lastName: credentials.lastName,
@@ -53,7 +53,6 @@ export class UserSeedService {
           status: new StatusEntity(),
         } as UserEntity),
       );
-      console.log(user);
     }
   }
 
@@ -65,30 +64,27 @@ export class UserSeedService {
 
     /* eslint-disable no-restricted-syntax */
     const adminCredentials = {
-      email: this.configService.get('ADMIN_EMAIL') as string,
+      email: `${tenantId}.${this.configService.get('ADMIN_EMAIL') as string}`,
       password: this.configService.get('ADMIN_PASSWORD') as string,
       firstName: this.configService.get('ADMIN_FIRST_NAME') as string,
       lastName: this.configService.get('ADMIN_LAST_NAME') as string,
     };
 
     const testUserCredentials = {
-      email: this.configService.get('TEST_USER_EMAIL') as string,
+      email: `${tenantId}.${this.configService.get('TEST_USER_EMAIL') as string}`,
       password: this.configService.get('TEST_USER_PASSWORD') as string,
       firstName: this.configService.get('TEST_USER_FIRST_NAME') as string,
       lastName: this.configService.get('TEST_USER_LAST_NAME') as string,
     };
     /* eslint-enable no-restricted-syntax */
 
-    const adminUser = await this.createUserIfNotExists(
+    await this.createUserIfNotExists(
       adminCredentials,
       RoleEnum.Admin,
     );
-    const testUser = await this.createUserIfNotExists(
+    await this.createUserIfNotExists(
       testUserCredentials,
       RoleEnum.User,
     );
-
-    console.log(adminUser);
-    console.log(testUser);
   }
 }

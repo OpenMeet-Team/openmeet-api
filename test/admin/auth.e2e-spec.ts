@@ -1,4 +1,6 @@
 import request from 'supertest';
+import { describe, it, expect } from '@jest/globals';
+
 import {
   TESTING_ADMIN_EMAIL,
   TESTING_ADMIN_PASSWORD,
@@ -10,11 +12,12 @@ describe('Auth', () => {
   const app = TESTING_APP_URL;
 
   describe('Admin', () => {
-    it('should successfully login via /api/v1/auth/email/login (POST)', async () => {
+    it.only('should successfully login via /api/v1/auth/email/login (POST)', async () => {
       const server = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
 
       const req = server.post('/api/v1/auth/email/login');
 
+      console.log('admin:', TESTING_ADMIN_EMAIL, TESTING_ADMIN_PASSWORD);
       const response = await req.send({
         email: TESTING_ADMIN_EMAIL,
         password: TESTING_ADMIN_PASSWORD,
