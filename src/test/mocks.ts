@@ -15,6 +15,7 @@ import { GroupUserPermissionEntity } from '../group/infrastructure/persistence/r
 import { GroupRoleEntity } from 'src/group-role/infrastructure/persistence/relational/entities/group-role.entity';
 import { EventRoleEntity } from 'src/event-role/infrastructure/persistence/relational/entities/event-role.entity';
 import { ChatEntity } from 'src/chat/infrastructure/persistence/relational/entities/chat.entity';
+import { ZulipClient } from 'zulip-js';
 
 export const mockCategory = {
   id: 1,
@@ -28,6 +29,10 @@ export const mockUser = {
   password: 'password',
   firstName: 'John',
   lastName: 'Doe',
+  name: 'John Doe',
+  zulipUsername: 'test',
+  zulipApiKey: 'test',
+  zulipUserId: 1,
   createdAt: new Date(),
   updatedAt: new Date(),
 } as UserEntity;
@@ -107,6 +112,11 @@ export const mockChat = {
   participants: [mockUser],
 } as ChatEntity;
 
+export const mockZulipMessage = {
+  id: 1,
+  content: 'test',
+};
+
 export const mockSubCategories = [mockSubCategory];
 
 export const mockGroupMembers = [mockGroupMember];
@@ -162,6 +172,22 @@ export const mockZulipMessageResponse = {
   id: 1,
 };
 
+export const mockZulipUser = {
+  id: 1,
+};
+
+export const mockZulipClient = {
+  streams: {
+    retrieve: jest.fn().mockResolvedValue([mockZulipStream]),
+  },
+  messages: {
+    retrieve: jest.fn().mockResolvedValue([mockZulipMessage]),
+  },
+  users: {
+    create: jest.fn().mockResolvedValue(mockZulipUser),
+  },
+} as unknown as ZulipClient;
+
 export const mockChatService = {
   getChatByUser: jest.fn().mockResolvedValue(mockChat),
   sendMessage: jest.fn().mockResolvedValue(mockZulipMessageResponse),
@@ -205,6 +231,7 @@ export const mockCategoryService = {
 
 export const mockZulipService = {
   getStream: jest.fn().mockResolvedValue(mockZulipStream),
+  getInitialisedClient: jest.fn().mockResolvedValue(mockZulipClient),
 };
 
 export const mockEventRoleService = {

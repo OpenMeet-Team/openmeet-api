@@ -142,6 +142,12 @@ declare module 'zulip-js' {
     message_id: number;
   }
 
+  export interface ZulipCreateUserParams {
+    email: string;
+    password: string;
+    full_name: string;
+  }
+
   export type ZulipEvent =
     | ZulipHeartbeatEvent
     | ZulipMsgEvent
@@ -228,7 +234,6 @@ declare module 'zulip-js' {
         remove(params: { message_ids: number[] }): ZulipApiResponse;
       };
       update(params: { message_id: number; content: string }): ZulipApiResponse;
-      delete(params: { message_id: number }): ZulipApiResponse;
       getById(params: { message_id: number }): ZulipApiResponse<ZulipMessage>;
       getHistoryById(params: {
         message_ids: number[];
@@ -281,11 +286,7 @@ declare module 'zulip-js' {
           }): ZulipApiResponse;
         };
       };
-      create(params: {
-        email: string;
-        password: string;
-        full_name: string;
-      }): ZulipApiResponse<ZulipUser>;
+      create(params: ZulipCreateUserParams): ZulipApiResponse<ZulipUser>;
       retrieve(): ZulipApiResponse<{ users: ZulipUser[] }>;
     };
     // emojis: EmojisClient;

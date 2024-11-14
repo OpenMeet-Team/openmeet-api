@@ -1,9 +1,16 @@
-import { mockUser, mockUserService, mockZulipStream } from '../test/mocks';
+import {
+  mockUser,
+  mockUserService,
+  mockZulipClient,
+  mockZulipMessage,
+  mockZulipStream,
+} from '../test/mocks';
 import { ZulipService } from './zulip.service';
 import { Test } from '@nestjs/testing';
 import { UserService } from '../user/user.service';
+import { REQUEST } from '@nestjs/core';
 
-describe.skip('ZulipService', () => {
+describe('ZulipService', () => {
   let zulipService: ZulipService;
 
   beforeEach(async () => {
@@ -11,6 +18,7 @@ describe.skip('ZulipService', () => {
       providers: [
         ZulipService,
         { provide: UserService, useValue: mockUserService },
+        { provide: REQUEST, useValue: {} },
       ],
     }).compile();
     zulipService = module.get<ZulipService>(ZulipService);
@@ -20,8 +28,18 @@ describe.skip('ZulipService', () => {
     expect(zulipService).toBeDefined();
   });
 
+  describe('getInitialisedClient', () => {
+    it('should return client', async () => {
+      const client = await zulipService.getInitialisedClient(mockUser);
+      expect(client).toBeDefined();
+    });
+  });
+
   describe('getUserStreams', () => {
     it('should return streams', async () => {
+      jest
+        .spyOn(zulipService, 'getInitialisedClient')
+        .mockResolvedValue(mockZulipClient);
       const streams = await zulipService.getUserStreams(mockUser);
       expect(streams).toBeDefined();
     });
@@ -29,6 +47,9 @@ describe.skip('ZulipService', () => {
 
   describe('getUserStreamId', () => {
     it('should return stream id', async () => {
+      jest
+        .spyOn(zulipService, 'getInitialisedClient')
+        .mockResolvedValue(mockZulipClient);
       const streamId = await zulipService.getUserStreamId(mockUser, 'test');
       expect(streamId).toBeDefined();
     });
@@ -36,6 +57,9 @@ describe.skip('ZulipService', () => {
 
   describe('getUsers', () => {
     it('should return users', async () => {
+      jest
+        .spyOn(zulipService, 'getInitialisedClient')
+        .mockResolvedValue(mockZulipClient);
       const users = await zulipService.getUsers();
       expect(users).toBeDefined();
     });
@@ -43,6 +67,9 @@ describe.skip('ZulipService', () => {
 
   describe('getUserMessages', () => {
     it('should return messages', async () => {
+      jest
+        .spyOn(zulipService, 'getInitialisedClient')
+        .mockResolvedValue(mockZulipClient);
       const messages = await zulipService.getUserMessages(mockUser, {
         num_before: 0,
         num_after: 1,
@@ -54,6 +81,9 @@ describe.skip('ZulipService', () => {
 
   describe('getUserProfile', () => {
     it('should return profile', async () => {
+      jest
+        .spyOn(zulipService, 'getInitialisedClient')
+        .mockResolvedValue(mockZulipClient);
       const profile = await zulipService.getUserProfile(mockUser);
       expect(profile).toBeDefined();
     });
@@ -61,6 +91,9 @@ describe.skip('ZulipService', () => {
 
   describe('getUserStreamTopics', () => {
     it('should return stream topics', async () => {
+      jest
+        .spyOn(zulipService, 'getInitialisedClient')
+        .mockResolvedValue(mockZulipClient);
       const topics = await zulipService.getUserStreamTopics(
         mockUser,
         mockZulipStream.id,
@@ -71,6 +104,9 @@ describe.skip('ZulipService', () => {
 
   describe('getAdminSettings', () => {
     it('should return settings', async () => {
+      jest
+        .spyOn(zulipService, 'getInitialisedClient')
+        .mockResolvedValue(mockZulipClient);
       const settings = await zulipService.getAdminSettings();
       expect(settings).toBeDefined();
     });
@@ -78,6 +114,9 @@ describe.skip('ZulipService', () => {
 
   describe('fetchApiKey', () => {
     it('should return api key', async () => {
+      jest
+        .spyOn(zulipService, 'getInitialisedClient')
+        .mockResolvedValue(mockZulipClient);
       const apiKey = await zulipService.fetchApiKey(
         mockUser.email as string,
         mockUser.password as string,
@@ -86,23 +125,61 @@ describe.skip('ZulipService', () => {
     });
   });
 
-  describe('createUser', () => {
+  describe('updateUserSettings', () => {
     it('should return user', async () => {
-      const user = await zulipService.createUser(mockUser);
+      jest
+        .spyOn(zulipService, 'getInitialisedClient')
+        .mockResolvedValue(mockZulipClient);
+      const user = await zulipService.updateUserSettings(mockUser, {});
       expect(user).toBeDefined();
     });
   });
 
-  describe('getAdminUsers', () => {
-    it('should return users', async () => {
-      const users = await zulipService.getAdminUsers();
-      expect(users).toBeDefined();
+  describe('createUser', () => {
+    it('should return user', async () => {
+      const user = await zulipService.createUser({
+        email: mockUser.email as string,
+        password: 'secret',
+        full_name: mockUser.name as string,
+      });
+      expect(user).toBeDefined();
     });
   });
 
   describe('sendUserMessage', () => {
     it('should return message', async () => {
+      jest
+        .spyOn(zulipService, 'getInitialisedClient')
+        .mockResolvedValue(mockZulipClient);
       const message = await zulipService.sendUserMessage(mockUser, {});
+      expect(message).toBeDefined();
+    });
+  });
+
+  describe('createChannel', () => {
+    it('should return channel', async () => {
+      const channel = await zulipService.createChannel(mockUser, {});
+      expect(channel).toBeDefined();
+    });
+  });
+
+  describe('updateUserMessage', () => {
+    it('should return message', async () => {
+      const message = await zulipService.updateUserMessage(
+        mockUser,
+        mockZulipMessage.id,
+        mockZulipMessage.content,
+      );
+      expect(message).toBeDefined();
+    });
+  });
+
+  describe('deleteUserMessage', () => {
+    it('should return message', async () => {
+      const message = await zulipService.deleteUserMessage(
+        mockUser,
+        mockZulipMessage.id,
+      );
       expect(message).toBeDefined();
     });
   });

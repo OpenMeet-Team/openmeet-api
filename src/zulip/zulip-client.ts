@@ -1,6 +1,6 @@
 import zulipInit, { ZulipClient, ZulipInitialConfig } from 'zulip-js';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
-// // const config = { zuliprc: path.resolve(__dirname, '../..', 'zuliprc') };
+
 const adminConfig = {
   username: process.env.ZULIP_USERNAME,
   apiKey: process.env.ZULIP_API_KEY,
