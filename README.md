@@ -36,6 +36,8 @@ npm run start:dev
 
 ### Testing
 
+In the env file you should set the `TEST_TENANT_ID` to the id of the tenant you want to use for testing, and that tenant must exist in the `TENANTS_B64` variable described below.
+
 #### Env setup
 
 ```bash
@@ -109,4 +111,13 @@ Deploy and manage your own OpenMeet instance.
 API is deployed via kubernetes deployment using kustomize from repo [openmeet-infrastructure](https://github.com/OpenMeet-Team/openmeet-infrastructure/tree/main/k8s/api).
 
 API is deployed behind an ALB and ingress.
+
+#### Admin user
+
+The admin user is created with the following environment variables at database seeding.
+
+- ADMIN_EMAIL
+- ADMIN_PASSWORD
+- ADMIN_FIRST_NAME
+- ADMIN_LAST_NAME
 
