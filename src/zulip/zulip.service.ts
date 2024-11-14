@@ -135,7 +135,8 @@ export class ZulipService {
     return await client.messages.send(params);
   }
 
-  async createZulipChannel(user: UserEntity, params) {
+  // Test the rest of the functions
+  async createChannel(user: UserEntity, params) {
     const client = await getClient(user);
     const meParams = {
       subscriptions: JSON.stringify([{ name: params.name }]),
@@ -143,12 +144,7 @@ export class ZulipService {
     return await client.users.me.subscriptions.add(meParams);
   }
 
-  async postZulipComment(user: UserEntity, params) {
-    const client = await getClient(user);
-    return await client.messages.send(params);
-  }
-
-  async editZulipMessage(user: UserEntity, messageId: number, content: string) {
+  async editUserMessage(user: UserEntity, messageId: number, content: string) {
     const client = await getClient(user);
     return await client.messages.update({
       message_id: messageId,
@@ -156,16 +152,11 @@ export class ZulipService {
     });
   }
 
-  async deleteZulipMessage(user: UserEntity, messageId: number) {
+  async deleteUserMessage(user: UserEntity, messageId: number) {
     const client = await getClient(user);
     return await client.messages.delete({
       message_id: messageId,
     });
-  }
-
-  async fetchMessages(user: UserEntity, params) {
-    const client = await getClient(user);
-    return await client.messages.retrieve(params);
   }
 
   async getZulipTopics(user: UserEntity, streamName: string) {

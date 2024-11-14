@@ -32,6 +32,10 @@ export class ChatService {
       where: { participants: { id: userId } },
     });
 
+    if (!foundChats.length) {
+      return [];
+    }
+
     const chats = await this.chatRepository.find({
       relations: ['participants'],
       where: { id: In(foundChats.map((chat) => chat.id)) },
@@ -54,6 +58,7 @@ export class ChatService {
   }
 
   async showChat(ulid: string, userId: number) {
+    await this.getTenantSpecificChatRepository();
     // Return chat messages with the given user ulid or slug
     const chat = await this.chatRepository.findOne({
       where: { ulid },
@@ -96,7 +101,7 @@ export class ChatService {
     return chat;
   }
 
-  async getChatByUserUlid(userId: number, userUlid: string) {
+  async getChatByUser(userId: number, userUlid: string) {
     await this.getTenantSpecificChatRepository();
 
     const participant = await this.userService.findByUlid(userUlid);
@@ -146,7 +151,7 @@ export class ChatService {
     });
   }
 
-  async sendMessage(userId: number, ulid: string, content: string) {
+  async sendMessage(chatUlid: string, userId: number, content: string) {
     await this.getTenantSpecificChatRepository();
     const user = await this.userService.findOne(userId);
     if (!user) {
@@ -154,7 +159,7 @@ export class ChatService {
     }
 
     const chat = await this.chatRepository.findOne({
-      where: { ulid },
+      where: { ulid: chatUlid },
       relations: ['participants'],
     });
 
@@ -175,120 +180,12 @@ export class ChatService {
       await participant.reload();
     }
 
-    const test = await this.zulipService.sendUserMessage(user, {
+    const messageResponse = await this.zulipService.sendUserMessage(user, {
       type: 'direct',
       to: [participant.zulipUserId],
       content: content,
     });
 
-    return test;
-
-    // let channelId: number;
-
-    // if channel does not exist, create it
-    // await this.zulipService
-    //   .getUserStreamId(user, `chat_${user.ulid}`)
-    //   .then(async (response) => {
-    //     if (response.result === 'success') {
-    //       channelId = response.stream_id;
-    //     } else {
-    //       await this.zulipService
-    //         .createZulipChannel(user, {
-    //           name: `chat_${user.ulid}`,
-    //         })
-    //         .then((response) => {
-    //           if (response.result === 'success') {
-    //             channelId = response.stream_id;
-    //           }
-    //         });
-    //     }
-    //   });
-
-    // if topic does not exist, create it
-
-    // Send message to zulip
+    return messageResponse;
   }
-
-  // async findAll(): Promise<Chat[]> {
-  //   return this.chatRepository.find({ relations: ['user'] });
-  // }
-
-  // async findByUser(user: User): Promise<Chat[]> {
-  //   return this.chatRepository.find({ where: { user }, relations: ['user'] });
-  // }
-
-  // async createChat(user: User, title: string): Promise<Chat> {
-  //   const chat = this.chatRepository.create({ title, user });
-  //   return this.chatRepository.save(chat);
-  // }
-
-  // async postMessage(userId: number, body: CommentDto) {
-  //   const user = await this.userService.findOne(userId);
-
-  //   const request = {
-  //     type: 'private',
-  //     to: [user?.zulipId],
-  //     content: body.message,
-  //   };
-
-  //   try {
-  //     const response = await this.zulipService.postZulipComment(user, request);
-  //     console.log('Message sent successfully:', response);
-  //     return response;
-  //   } catch (error) {
-  //     console.error('Error sending message to Zulip:', error);
-  //     throw new Error('Failed to post message');
-  //   }
-  // }
-
-  // async userMessages(userId: number) {
-  //   const tenantId = this.request.tenantId;
-  //   const user = await this.userService.findOne(userId);
-  //   const tenantSpecificEmail = `${tenantId}_${user?.email}`;
-  //   const params = {
-  //     narrow: [
-  //       // { operator: "type", operand: "private" },
-  //       { operator: 'pm-with', operand: `${tenantSpecificEmail}` },
-  //     ],
-  //     anchor: 'newest',
-  //     num_before: 100,
-  //     num_after: 0,
-  //   };
-
-  //   try {
-  //     const response = await this.zulipService.fetchMessages(user, params);
-  //     console.log('Message sent successfully:', response);
-  //     return response;
-  //   } catch (error) {
-  //     console.error('Error sending message to Zulip:', error);
-  //     throw new Error('Failed to fetch Zulip messages');
-  //   }
-  // }
-
-  // async usersConversation(userId1, userId2) {
-  //   const user1 = await this.userService.findOne(userId1);
-  //   const user2 = await this.userService.findOne(userId2);
-
-  //   const params = {
-  //     narrow: [
-  //       // { operator: "type", operand: "private" },
-  //       {
-  //         operator: 'pm-with',
-  //         operand: `${'tanzeelsaleemwork@gmail.com'},${'test114@example.com'}`,
-  //       },
-  //     ],
-  //     anchor: 'newest',
-  //     num_before: 100,
-  //     num_after: 0,
-  //   };
-
-  //   try {
-  //     const response = await this.zulipService.FetchMessages(params);
-  //     console.log('Message sent successfully:', response);
-  //     return response;
-  //   } catch (error) {
-  //     console.error('Error sending message to Zulip:', error);
-  //     throw new Error('Failed to create Zulip topic');
-  //   }
-  // }
 }

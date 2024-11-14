@@ -14,6 +14,7 @@ import { FileEntity } from '../file/infrastructure/persistence/relational/entiti
 import { GroupUserPermissionEntity } from '../group/infrastructure/persistence/relational/entities/group-user-permission.entity';
 import { GroupRoleEntity } from 'src/group-role/infrastructure/persistence/relational/entities/group-role.entity';
 import { EventRoleEntity } from 'src/event-role/infrastructure/persistence/relational/entities/event-role.entity';
+import { ChatEntity } from 'src/chat/infrastructure/persistence/relational/entities/chat.entity';
 
 export const mockCategory = {
   id: 1,
@@ -102,9 +103,9 @@ export const mockEventTopic = {
 
 export const mockChat = {
   id: 1,
-  uuid: 'test',
+  ulid: 'test',
   participants: [mockUser],
-};
+} as ChatEntity;
 
 export const mockSubCategories = [mockSubCategory];
 
@@ -157,7 +158,13 @@ export const mockZulipStream = {
   name: 'test',
 };
 
+export const mockZulipMessageResponse = {
+  id: 1,
+};
+
 export const mockChatService = {
+  getChatByUser: jest.fn().mockResolvedValue(mockChat),
+  sendMessage: jest.fn().mockResolvedValue(mockZulipMessageResponse),
   showChat: jest.fn().mockResolvedValue(mockChat),
   showChats: jest.fn().mockResolvedValue([mockChat]),
 };
@@ -186,6 +193,8 @@ export const mockGroupService = {
 
 export const mockUserService = {
   findOne: jest.fn().mockResolvedValue(mockUser),
+  findByEmail: jest.fn().mockResolvedValue(mockUser),
+  findByUlid: jest.fn().mockResolvedValue(mockUser),
 };
 
 export const mockCategoryService = {

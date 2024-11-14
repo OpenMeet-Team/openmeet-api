@@ -21,29 +21,29 @@ export class ChatController {
 
   @Get('user/:ulid')
   @ApiOperation({ summary: 'Get Chat by User ulid' })
-  async getChatByUserUlid(
-    @Param('ulid') userUlid: string,
+  async showChatByUser(
+    @Param('ulid') participantUlid: string,
     @AuthUser() user: User,
   ): Promise<ChatEntity | null> {
-    return await this.chatService.getChatByUserUlid(user.id, userUlid);
+    return await this.chatService.getChatByUser(user.id, participantUlid);
   }
 
   @Get(':uuid')
   @ApiOperation({ summary: 'Get Chat' })
   async showChat(
-    @Param('uuid') uuid: string,
+    @Param('uuid') chatUlid: string,
     @AuthUser() user: User,
   ): Promise<ChatEntity> {
-    return await this.chatService.showChat(uuid, user.id);
+    return await this.chatService.showChat(chatUlid, user.id);
   }
 
   @Post(':ulid/message')
   @ApiOperation({ summary: 'Send a message' })
   async sendMessage(
-    @Param('ulid') ulid: string,
+    @Param('ulid') chatUlid: string,
     @Body() body: { content: string },
     @AuthUser() user: User,
   ): Promise<any> {
-    return await this.chatService.sendMessage(user.id, ulid, body.content);
+    return await this.chatService.sendMessage(chatUlid, user.id, body.content);
   }
 }
