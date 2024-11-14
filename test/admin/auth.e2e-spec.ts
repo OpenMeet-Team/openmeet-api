@@ -17,7 +17,6 @@ describe('Auth', () => {
 
       const req = server.post('/api/v1/auth/email/login');
 
-      console.log('admin:', TESTING_ADMIN_EMAIL, TESTING_ADMIN_PASSWORD);
       const response = await req.send({
         email: TESTING_ADMIN_EMAIL,
         password: TESTING_ADMIN_PASSWORD,
