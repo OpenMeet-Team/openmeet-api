@@ -124,11 +124,11 @@ export class UserController {
   }
 
   @Public()
-  @Get(':id/profile')
+  @Get(':ulid/profile')
   @ApiOperation({ summary: 'Get user profile' })
-  getProfile(@Param('id') id: User['id']): Promise<NullableType<User>> {
+  showProfile(@Param('ulid') ulid: User['ulid']): Promise<NullableType<User>> {
     try {
-      return this.userService.findProfile(id);
+      return this.userService.showProfile(ulid);
     } catch (err) {
       console.log(err);
       throw new NotFoundException('User not found');

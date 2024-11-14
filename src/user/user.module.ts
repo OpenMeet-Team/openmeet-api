@@ -8,9 +8,9 @@ import { TenantModule } from '../tenant/tenant.module';
 import { RelationalUserPersistenceModule } from './infrastructure/persistence/relational/relational-persistence.module';
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { RoleModule } from '../role/role.module';
-import { UserCreatedListener } from './user-created.listener';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { ZulipService } from '../zulip/zulip.service';
+import { UserListener } from './user.listener';
 
 const infrastructurePersistenceModule = RelationalUserPersistenceModule;
 
@@ -25,7 +25,7 @@ const infrastructurePersistenceModule = RelationalUserPersistenceModule;
   providers: [
     UserService,
     SubCategoryService,
-    UserCreatedListener,
+    UserListener,
     FilesS3PresignedService,
     ZulipService,
   ],

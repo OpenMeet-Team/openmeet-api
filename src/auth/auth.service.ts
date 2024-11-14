@@ -32,6 +32,7 @@ import { GroupService } from '../group/group.service';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { RoleService } from '../role/role.service';
 import { RoleEnum } from '../role/role.enum';
+import { StatusEntity } from 'src/status/infrastructure/persistence/relational/entities/status.entity';
 
 @Injectable()
 export class AuthService {
@@ -308,7 +309,7 @@ export class AuthService {
 
     user.status = {
       id: StatusEnum.active,
-    };
+    } as StatusEntity;
 
     await this.userService.update(user.id, user);
   }
@@ -350,7 +351,7 @@ export class AuthService {
     user.email = newEmail;
     user.status = {
       id: StatusEnum.active,
-    };
+    } as StatusEntity;
 
     await this.userService.update(user.id, user);
   }

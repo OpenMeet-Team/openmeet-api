@@ -174,7 +174,7 @@ export class EventAttendeeService {
     await this.getTenantSpecificEventRepository();
     return await this.eventAttendeesRepository.find({
       where: { event: { id: eventId } },
-      relations: ['user', 'role'],
+      relations: ['user', 'role.permissions'],
       take: limit,
     });
   }

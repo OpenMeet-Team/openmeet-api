@@ -7,17 +7,16 @@ export class ChannelCreatedListener {
   constructor(private readonly zulipService: ZulipService) {}
   @OnEvent('channel.created')
   async handleUserCreatedEvent(params: any) {
-    console.log(
+    await console.log(
       '🚀 ~ ChannelCreatedListener ~ handleUserCreatedEvent ~ params:',
       params,
     );
     try {
-      const response = await this.zulipService.CreateZulipChannel(params);
-      console.log(
-        '🚀 ~ ChannelCreatedListener ~ handleUserCreatedEvent ~ response:',
-        response,
-      );
-
+      // const response = await this.zulipService.createZulipChannel(params);
+      // console.log(
+      //   '🚀 ~ ChannelCreatedListener ~ handleUserCreatedEvent ~ response:',
+      //   response,
+      // );
       // if (response.result === 'success') {
       // To subscribe another user to a channel, you may pass in
       // the `principals` parameter, like so:

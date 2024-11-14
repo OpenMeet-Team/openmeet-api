@@ -13,6 +13,7 @@ import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-pres
 import { FileModule } from '../file/file.module';
 import { ZulipService } from '../zulip/zulip.service';
 import { EventRoleService } from 'src/event-role/event-role.service';
+import { UserModule } from 'src/user/user.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { EventRoleService } from 'src/event-role/event-role.service';
     AuthModule,
     EventAttendeeModule,
     FileModule,
+    UserModule,
   ],
   controllers: [EventController],
   providers: [

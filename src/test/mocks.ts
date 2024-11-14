@@ -95,6 +95,17 @@ export const mockGroupRole = {
   name: GroupRole.Guest,
 } as GroupRoleEntity;
 
+export const mockEventTopic = {
+  id: 1,
+  name: 'test',
+};
+
+export const mockChat = {
+  id: 1,
+  uuid: 'test',
+  participants: [mockUser],
+};
+
 export const mockSubCategories = [mockSubCategory];
 
 export const mockGroupMembers = [mockGroupMember];
@@ -106,6 +117,10 @@ export const mockEventAttendeeService = {
   getEventAttendees: jest.fn().mockResolvedValue(mockEventAttendees),
   leaveEvent: jest.fn().mockResolvedValue(mockEventAttendee),
   findEventDetailsAttendees: jest.fn().mockResolvedValue(mockEventAttendees),
+};
+
+export const mockAuthService = {
+  validateToken: jest.fn().mockResolvedValue(true),
 };
 
 export const mockGroupMemberService = {
@@ -132,6 +147,21 @@ export const mockMailService = {
   groupMemberJoined: jest.fn().mockResolvedValue(undefined),
 };
 
+export const mockZulipStreamTopic = {
+  name: 'test',
+  max_id: 450,
+};
+
+export const mockZulipStream = {
+  id: 410,
+  name: 'test',
+};
+
+export const mockChatService = {
+  showChat: jest.fn().mockResolvedValue(mockChat),
+  showChats: jest.fn().mockResolvedValue([mockChat]),
+};
+
 export const mockGroupService = {
   getHomePageFeaturedGroups: jest.fn().mockResolvedValue(mockGroups),
   getHomePageUserCreatedGroups: jest.fn().mockResolvedValue(mockGroups),
@@ -154,10 +184,18 @@ export const mockGroupService = {
   showGroupEvents: jest.fn().mockResolvedValue(mockEvents),
 };
 
+export const mockUserService = {
+  findOne: jest.fn().mockResolvedValue(mockUser),
+};
+
 export const mockCategoryService = {
   getHomePageFeaturedCategories: jest.fn().mockResolvedValue([mockCategory]),
   findOne: jest.fn().mockResolvedValue(mockCategory),
   findByIds: jest.fn().mockResolvedValue([mockCategory]),
+};
+
+export const mockZulipService = {
+  getStream: jest.fn().mockResolvedValue(mockZulipStream),
 };
 
 export const mockEventRoleService = {

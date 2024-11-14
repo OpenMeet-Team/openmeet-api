@@ -8,7 +8,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Repository } from 'typeorm';
-import { CommentDto, CreateEventDto } from './dto/create-event.dto';
+import { CreateEventDto, EventTopicCommentDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { REQUEST } from '@nestjs/core';
@@ -34,6 +34,7 @@ import { CreateEventAttendeeDto } from '../event-attendee/dto/create-eventAttend
 import { EventRoleService } from '../event-role/event-role.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { ulid } from 'ulid';
+import { UserService } from '../user/user.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -49,6 +50,7 @@ export class EventService {
     private readonly fileService: FilesS3PresignedService,
     private readonly zulipService: ZulipService,
     private readonly eventRoleService: EventRoleService,
+    private readonly userService: UserService,
   ) {
     void this.initializeRepository();
   }
@@ -116,105 +118,112 @@ export class EventService {
 
     await this.eventAttendeeService.create(eventAttendeeDto);
 
-    const tenantId = this.request.tenantId;
-    const params = {
-      name: `${tenantId}_event_${createdEvent.ulid}`,
-    };
-    this.eventEmitter.emit('channel.created', params);
+    // const tenantId = this.request.tenantId;
+    // const params = {
+    //   name: `${tenantId}_event_${createdEvent.ulid}`,
+    // };
+    // this.eventEmitter.emit('channel.created', params);
     return createdEvent;
   }
 
-  async postComment(body: CommentDto, eventId: number) {
-    const { message } = body;
-    const event = await this.findOne(eventId);
-
-    const timestamp = Date.now();
-    const topicName = `${timestamp}-${message.split(' ').slice(0, 5).join('-').toLowerCase()}`;
-    const tenantId = this.request.tenantId;
-    const params = {
-      to: `${tenantId}_event_${event.ulid}`,
-      type: 'stream',
-      topic: topicName,
-      content: message,
-    };
-
-    try {
-      const response = await this.zulipService.PostZulipComment(params);
-      console.log('Message sent successfully:', response);
-      return response;
-    } catch (error) {
-      console.error('Error sending message to Zulip:', error);
-      throw new Error('Failed to create Zulip topic');
-    }
-  }
-
-  async updateComment(body: CommentDto, messageId: number) {
-    const { message } = body;
-
-    try {
-      const response = await this.zulipService.EditZulipMessage(
-        messageId,
-        message,
-      );
-      console.log('Message sent successfully:', response);
-      return response;
-    } catch (error) {
-      console.error('Error sending message to Zulip:', error);
-      throw new Error('Failed to create Zulip topic');
-    }
-  }
-
-  async deleteComment(messageId: number) {
-    try {
-      const response = await this.zulipService.DeleteZulipMessage(messageId);
-      console.log('Message sent successfully:', response);
-      return response;
-    } catch (error) {
-      console.error('Error sending message to Zulip:', error);
-      throw new Error('Failed to create Zulip topic');
-    }
-  }
-
-  async getTopics(eventId: number) {
-    try {
-      const tenantId = this.request.tenantId;
-      const event = await this.findOne(eventId);
-      const streamName = `${tenantId}_event_${event.ulid}`;
-
-      const response = this.zulipService.GetZulipTopics(streamName);
-
-      return response;
-    } catch (error) {
-      console.error('Error fetching topics and messages from Zulip:', error);
-      throw new Error('Failed to fetch topics and messages');
-    }
-  }
-
-  async postCommentinTopic(
-    body: CommentDto,
-    topicName: string,
+  async postComment(
     eventId: number,
+    userId: number,
+    body: EventTopicCommentDto,
   ) {
-    const { message } = body;
-
+    const { content } = body;
     const event = await this.findOne(eventId);
+    const user = await this.userService.findOne(userId);
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
     const tenantId = this.request.tenantId;
     const params = {
-      to: `${tenantId}_event_${event.ulid}`,
-      type: 'stream',
-      topic: topicName,
-      content: message,
+      to: `tenant_${tenantId}__event_${event.ulid}`,
+      type: 'channel',
+      topic: body.topic || `event_${event.ulid}`,
+      content: content,
     };
 
     try {
-      const response = await this.zulipService.PostZulipComment(params);
-      console.log('Message sent successfully to topic:', topicName);
+      const response = await this.zulipService.sendUserMessage(user, params);
+      console.log('Message sent successfully:', response);
       return response;
     } catch (error) {
       console.error('Error sending message to Zulip:', error);
-      throw new Error('Failed to send message to the topic');
+      throw new Error('Failed to post Zulip comment');
     }
   }
+
+  // async updateComment(body: CommentDto, messageId: number) {
+  //   const { message } = body;
+
+  //   try {
+  //     const response = await this.zulipService.editZulipMessage(
+  //       messageId,
+  //       message,
+  //     );
+  //     console.log('Message sent successfully:', response);
+  //     return response;
+  //   } catch (error) {
+  //     console.error('Error sending message to Zulip:', error);
+  //     throw new Error('Failed to update Zulip comment');
+  //   }
+  // }
+
+  // async deleteComment(messageId: number) {
+  //   try {
+  //     const response = await this.zulipService.deleteZulipMessage(messageId);
+  //     console.log('Message sent successfully:', response);
+  //     return response;
+  //   } catch (error) {
+  //     console.error('Error sending message to Zulip:', error);
+  //     throw new Error('Failed to delete Zulip comment');
+  //   }
+  // }
+
+  // async showTopics(eventId: number) {
+  //   try {
+  //     const tenantId = this.request.tenantId;
+  //     const event = await this.findOne(eventId);
+  //     const streamName = `${tenantId}_event_${event.ulid}`;
+
+  //     // const response = await this.zulipService.getZulipTopics(streamName);
+
+  //     // return response;
+  //   } catch (error) {
+  //     console.error('Error fetching topics and messages from Zulip:', error);
+  //     throw new Error('Failed to fetch topics and messages');
+  //   }
+  // }
+
+  // async postCommentOnTopic(
+  //   body: CommentDto,
+  //   topicName: string,
+  //   eventId: number,
+  // ) {
+  //   const { message } = body;
+
+  //   const event = await this.findOne(eventId);
+  //   const tenantId = this.request.tenantId;
+  //   const params = {
+  //     to: `${tenantId}_event_${event.ulid}`,
+  //     type: 'stream',
+  //     topic: topicName,
+  //     content: message,
+  //   };
+
+  //   try {
+  //     const response = await this.zulipService.postZulipComment(params);
+  //     console.log('Message sent successfully to topic:', topicName);
+  //     return response;
+  //   } catch (error) {
+  //     console.error('Error sending message to Zulip:', error);
+  //     throw new Error('Failed to send message to the topic');
+  //   }
+  // }
 
   async findAll(pagination: PaginationDto, query: QueryEventDto): Promise<any> {
     await this.getTenantSpecificEventRepository();

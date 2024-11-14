@@ -90,7 +90,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
     );
 
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."users" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "ulid" character varying NOT NULL, "email" character varying, "password" character varying, "provider" character varying NOT NULL DEFAULT 'email', "socialId" character varying, "firstName" character varying, "lastName" character varying, "deletedAt" TIMESTAMP, "bio" text, "zulipId" integer, "photoId" integer, "statusId" integer, "roleId" integer, CONSTRAINT "UQ_0aa955856df38a0cb6a33b16525" UNIQUE ("ulid"), CONSTRAINT "UQ_97672ac88f789774dd47f7c8be3" UNIQUE ("email"), CONSTRAINT "REL_f856a4818b32c69dbc8811f3d2" UNIQUE ("photoId"), CONSTRAINT "PK_a3ffb1c0c8416b9fc6f907b7433" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."users" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "ulid" character varying NOT NULL, "email" character varying, "password" character varying, "provider" character varying NOT NULL DEFAULT 'email', "socialId" character varying, "firstName" character varying, "lastName" character varying, "deletedAt" TIMESTAMP, "bio" text, "zulipUserId" integer, "zulipUsername" character varying, "zulipApiKey" character varying, "photoId" integer, "statusId" integer, "roleId" integer, CONSTRAINT "UQ_0aa955856df38a0cb6a33b16525" UNIQUE ("ulid"), CONSTRAINT "UQ_97672ac88f789774dd47f7c8be3" UNIQUE ("email"), CONSTRAINT "REL_f856a4818b32c69dbc8811f3d2" UNIQUE ("photoId"), CONSTRAINT "PK_a3ffb1c0c8416b9fc6f907b7433" PRIMARY KEY ("id"))`,
     );
 
     await queryRunner.query(
@@ -104,7 +104,24 @@ export class BaseTables1728637873969 implements MigrationInterface {
     );
 
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."userPermissions" ("id" SERIAL NOT NULL, "userId" integer, "permissionId" integer, CONSTRAINT "PK_5cbba686fa42e45a2914c590261" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."chats" ("id" SERIAL NOT NULL, "ulid" character varying, "participants" integer[], "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_5cbba686fa42e45a2914c590ads" PRIMARY KEY ("id"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_${schema}_chats_participants" ON "${schema}"."chats" ("participants")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_${schema}_chats_ulid" ON "${schema}"."chats" ("ulid")`,
+    );
+
+    // userChats join table
+    await queryRunner.query(
+      `CREATE TABLE "${schema}"."userChats" ("userId" integer NOT NULL, "chatId" integer NOT NULL, CONSTRAINT "PK_5cbba686fa42e45a2914c590asd" PRIMARY KEY ("userId", "chatId"))`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_${schema}_userChats_userId" ON "${schema}"."userChats" ("userId")`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_${schema}_userChats_chatId" ON "${schema}"."userChats" ("chatId")`,
     );
 
     await queryRunner.query(
@@ -239,6 +256,10 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `ALTER TABLE "${schema}"."users" ADD CONSTRAINT "FK_368e146b785b574f42ae9e53d5e" FOREIGN KEY ("roleId") REFERENCES "${schema}"."roles"("id")`,
     );
 
+    // userPermissions
+    await queryRunner.query(
+      `CREATE TABLE "${schema}"."userPermissions" ("id" SERIAL NOT NULL, "userId" integer, "permissionId" integer, CONSTRAINT "PK_5cbba686fa42e45a2914c590261" PRIMARY KEY ("id"))`,
+    );
     await queryRunner.query(
       `ALTER TABLE "${schema}"."userPermissions" ADD CONSTRAINT "FK_f9a54628e2dcdb14a6df1da8d3b" FOREIGN KEY ("userId") REFERENCES "${schema}"."users"("id")`,
     );
@@ -335,6 +356,18 @@ export class BaseTables1728637873969 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "${schema}"."userPermissions" DROP CONSTRAINT "FK_f9a54628e2dcdb14a6df1da8d3b"`,
     );
+
+    await queryRunner.query(
+      `ALTER TABLE "${schema}"."chats" DROP CONSTRAINT "FK_5cbba686fa42e45a2914c590ads"`,
+    );
+    await queryRunner.query(`DROP INDEX "IDX_${schema}_chats_participants"`);
+    await queryRunner.query(`DROP INDEX "IDX_${schema}_chats_ulid"`);
+
+    await queryRunner.query(
+      `ALTER TABLE "${schema}"."userChats" DROP CONSTRAINT "PK_5cbba686fa42e45a2914c590ads"`,
+    );
+    await queryRunner.query(`DROP INDEX "IDX_${schema}_userChats_chatId"`);
+    await queryRunner.query(`DROP INDEX "IDX_${schema}_userChats_userId"`);
 
     await queryRunner.query(
       `ALTER TABLE "${schema}"."users" DROP CONSTRAINT "FK_368e146b785b574f42ae9e53d5e"`,

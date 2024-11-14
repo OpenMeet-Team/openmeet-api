@@ -35,6 +35,7 @@ import { GroupUserPermissionEntity } from '../../../../../group/infrastructure/p
 import { GroupMemberEntity } from '../../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group.entity';
 import { ulid } from 'ulid';
+import { ChatEntity } from '../../../../../chat/infrastructure/persistence/relational/entities/chat.entity';
 @Entity({
   name: 'users',
 })
@@ -142,7 +143,13 @@ export class UserEntity extends EntityRelationalHelper {
     type: 'integer',
     nullable: true,
   })
-  zulipId?: number;
+  zulipUserId?: number;
+
+  @Column({ type: String, nullable: true })
+  zulipApiKey?: string;
+
+  @Column({ type: String, nullable: true })
+  zulipUsername?: string;
 
   @ManyToOne(() => RoleEntity, (role) => role.users)
   @JoinColumn({ name: 'roleId' })
@@ -150,6 +157,14 @@ export class UserEntity extends EntityRelationalHelper {
 
   @OneToMany(() => EventEntity, (event) => event.user)
   events: EventEntity[];
+
+  @ManyToMany(() => ChatEntity, (chat) => chat.participants)
+  @JoinTable({
+    name: 'userChats',
+    joinColumn: { name: 'userId', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'chatId', referencedColumnName: 'id' },
+  })
+  chats: ChatEntity[];
 
   @OneToMany(() => GroupMemberEntity, (groupMember) => groupMember.user)
   groupMembers: GroupMemberEntity[];
