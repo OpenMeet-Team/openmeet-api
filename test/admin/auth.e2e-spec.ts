@@ -1,6 +1,4 @@
 import request from 'supertest';
-import { describe, it, expect } from '@jest/globals';
-
 import {
   TESTING_ADMIN_EMAIL,
   TESTING_ADMIN_PASSWORD,
