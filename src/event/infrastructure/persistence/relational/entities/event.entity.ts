@@ -122,7 +122,10 @@ export class EventEntity extends EntityRelationalHelper {
   @JoinColumn({ name: 'groupId' })
   group?: GroupEntity | null;
 
-  @OneToMany(() => EventAttendeesEntity, (event) => event.event)
+  @OneToMany(() => EventAttendeesEntity, (event) => event.event, {
+    cascade: true,
+    onDelete: 'CASCADE',
+  })
   attendees: EventAttendeesEntity[];
 
   @ManyToMany(() => CategoryEntity, (category) => category.events)
