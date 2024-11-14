@@ -32,7 +32,7 @@ import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-pres
 import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
 import { GroupRoleService } from '../group-role/group-role.service';
 import { MailService } from '../mail/mail.service';
-import { ulid } from 'ulid';
+import { generateShortCode } from '../utils/short-code';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -215,10 +215,11 @@ export class GroupService {
       );
     }
 
+    const shortCode = await generateShortCode();
     const slugifiedName = `${slugify(createGroupDto.name, {
       strict: true,
       lower: true,
-    })}_${ulid().toLowerCase().slice(0, 6)}`;
+    })}-${shortCode.toLowerCase()}`;
 
     const mappedGroupDto = {
       ...createGroupDto,
@@ -410,12 +411,12 @@ export class GroupService {
     }
 
     let slugifiedName = '';
-
+    const shortCode = await generateShortCode();
     if (updateGroupDto.name) {
       slugifiedName = `${slugify(updateGroupDto.name, {
         strict: true,
         lower: true,
-      })}_${ulid().toLowerCase().slice(0, 6)}`;
+      })}-${shortCode.toLowerCase()}`;
     }
 
     const mappedGroupDto = {
