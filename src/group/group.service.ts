@@ -32,6 +32,7 @@ import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-pres
 import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
 import { GroupRoleService } from '../group-role/group-role.service';
 import { MailService } from '../mail/mail.service';
+import { generateShortCode } from '../utils/short-code';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -214,10 +215,11 @@ export class GroupService {
       );
     }
 
-    const slugifiedName = slugify(createGroupDto.name, {
+    const shortCode = await generateShortCode();
+    const slugifiedName = `${slugify(createGroupDto.name, {
       strict: true,
       lower: true,
-    });
+    })}-${shortCode.toLowerCase()}`;
 
     const mappedGroupDto = {
       ...createGroupDto,
@@ -409,12 +411,12 @@ export class GroupService {
     }
 
     let slugifiedName = '';
-
+    const shortCode = await generateShortCode();
     if (updateGroupDto.name) {
-      slugifiedName = slugify(updateGroupDto.name, {
+      slugifiedName = `${slugify(updateGroupDto.name, {
         strict: true,
         lower: true,
-      });
+      })}-${shortCode.toLowerCase()}`;
     }
 
     const mappedGroupDto = {
@@ -499,6 +501,16 @@ export class GroupService {
       })
       .where('groupRole.name != :ownerRole', { ownerRole: GroupRole.Owner })
       .getMany();
+  }
+
+  async joinGroupThroughLink(userId: number, slug: string) {
+    await this.getTenantSpecificGroupRepository();
+    const group = await this.groupRepository.findOne({ where: { slug } });
+    let response;
+    if (group) {
+      response = await this.joinGroup(userId, group?.id);
+    }
+    return response;
   }
 
   async joinGroup(userId: number, groupId: number) {
