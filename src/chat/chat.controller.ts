@@ -7,7 +7,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { ChatService } from './chat.servise';
+import { ChatService } from './chat.service';
 import { CommentDto } from '../event/dto/create-event.dto';
 import { JWTAuthGuard } from '../core/guards/auth.guard';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
