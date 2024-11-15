@@ -125,6 +125,15 @@ export class GroupController {
   //   return this.groupService.showGroupDiscussions(+id);
   // }
 
+  @Post(':slug/join')
+  @ApiOperation({ summary: 'Joining a group through link' })
+  async joinGroupThroughLink(
+    @AuthUser() user: User,
+    @Param('slug') slug: string,
+  ) {
+    return this.groupService.joinGroupThroughLink(user.id, slug);
+  }
+
   @Post(':id/join')
   @ApiOperation({ summary: 'Joining a group' })
   async joinGroup(

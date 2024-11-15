@@ -33,8 +33,9 @@ import { ZulipService } from '../zulip/zulip.service';
 import { CreateEventAttendeeDto } from '../event-attendee/dto/create-eventAttendee.dto';
 import { EventRoleService } from '../event-role/event-role.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
-import { ulid } from 'ulid';
 import { UserService } from '../user/user.service';
+import { generateShortCode } from '../utils/short-code';
+
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -87,10 +88,11 @@ export class EventService {
       throw new NotFoundException(`Error finding categories: ${error.message}`);
     }
 
+    const shortCode = await generateShortCode();
     const slugifiedName = `${slugify(createEventDto.name, {
       strict: true,
       lower: true,
-    })}_${ulid().toLowerCase()}`;
+    })}-${shortCode.toLowerCase()}`;
 
     const mappedDto = {
       ...createEventDto,
@@ -496,12 +498,12 @@ export class EventService {
     const user = { id: userId };
 
     let slugifiedName = '';
-
+    const shortCode = await generateShortCode();
     if (updateEventDto.name) {
       slugifiedName = `${slugify(updateEventDto.name, {
         strict: true,
         lower: true,
-      })}-${ulid().toLowerCase()}`;
+      })}-${shortCode.toLowerCase()}`;
     }
 
     const mappedDto: any = {
