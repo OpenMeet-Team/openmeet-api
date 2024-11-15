@@ -118,11 +118,7 @@ export class EventService {
 
     await this.eventAttendeeService.create(eventAttendeeDto);
 
-    // const tenantId = this.request.tenantId;
-    // const params = {
-    //   name: `${tenantId}_event_${createdEvent.ulid}`,
-    // };
-    // this.eventEmitter.emit('channel.created', params);
+    this.eventEmitter.emit('event.created', createdEvent);
     return createdEvent;
   }
 

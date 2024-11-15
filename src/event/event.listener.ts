@@ -1,11 +1,11 @@
-import { ZulipService } from './../zulip/zulip.service';
+import { ZulipService } from '../zulip/zulip.service';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 
 @Injectable()
 export class ChannelCreatedListener {
   constructor(private readonly zulipService: ZulipService) {}
-  @OnEvent('channel.created')
+  @OnEvent('event.created')
   async handleUserCreatedEvent(params: any) {
     await console.log(
       '🚀 ~ ChannelCreatedListener ~ handleUserCreatedEvent ~ params:',
