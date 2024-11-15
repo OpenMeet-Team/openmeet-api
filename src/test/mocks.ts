@@ -176,17 +176,44 @@ export const mockZulipUser = {
   id: 1,
 };
 
+export const mockZulipApiResponse = {
+  result: 'success',
+  msg: 'test',
+  code: 'test',
+};
+
 export const mockZulipClient = {
   streams: {
     retrieve: jest.fn().mockResolvedValue([mockZulipStream]),
+    topics: {
+      retrieve: jest.fn().mockResolvedValue([mockZulipStreamTopic]),
+    },
+    getStreamId: jest.fn().mockResolvedValue(mockZulipStream.id),
   },
   messages: {
     retrieve: jest.fn().mockResolvedValue([mockZulipMessage]),
+    update: jest.fn().mockResolvedValue(mockZulipMessage),
+    send: jest.fn().mockResolvedValue(mockZulipMessageResponse),
+    deleteById: jest.fn().mockResolvedValue(mockZulipApiResponse),
   },
   users: {
     create: jest.fn().mockResolvedValue(mockZulipUser),
+    me: {
+      getProfile: jest.fn().mockResolvedValue(mockZulipUser),
+      subscriptions: {
+        add: jest.fn().mockResolvedValue(mockZulipApiResponse),
+      },
+    },
+    retrieve: jest.fn().mockResolvedValue(mockZulipUser),
+  },
+  callEndpoint: jest.fn().mockResolvedValue(mockZulipMessageResponse),
+  server: {
+    settings: jest.fn().mockResolvedValue(mockZulipMessageResponse),
   },
 } as unknown as ZulipClient;
+
+export const mockGetClient = jest.fn().mockResolvedValue(mockZulipClient);
+export const mockGetAdminClient = jest.fn().mockResolvedValue(mockZulipClient);
 
 export const mockChatService = {
   getChatByUser: jest.fn().mockResolvedValue(mockChat),

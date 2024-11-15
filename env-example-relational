@@ -77,6 +77,6 @@ TESTING_ADMIN_ID=2
 TESTING_TENANT_ID=testing
 
 # Zulip
-ZULIP_USERNAME=tanzeelsaleemwork@gmail.com
-ZULIP_API_KEY=RLL1phVlBJVOWJChegPUUir80rDKrBAq
-ZULIP_REALM=https://zulip-dev.openmeet.net
+ZULIP_USERNAME=
+ZULIP_API_KEY=
+ZULIP_REALM=

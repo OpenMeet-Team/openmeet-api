@@ -1,4 +1,6 @@
 import {
+  mockGetAdminClient,
+  mockGetClient,
   mockUser,
   mockUserService,
   mockZulipClient,
@@ -9,6 +11,11 @@ import { ZulipService } from './zulip.service';
 import { Test } from '@nestjs/testing';
 import { UserService } from '../user/user.service';
 import { REQUEST } from '@nestjs/core';
+
+jest.mock('./zulip-client', () => ({
+  getClient: mockGetClient,
+  getAdminClient: mockGetAdminClient,
+}));
 
 describe('ZulipService', () => {
   let zulipService: ZulipService;
