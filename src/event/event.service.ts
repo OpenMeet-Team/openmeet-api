@@ -36,7 +36,6 @@ import { UserEntity } from '../user/infrastructure/persistence/relational/entiti
 import { UserService } from '../user/user.service';
 import { generateShortCode } from '../utils/short-code';
 
-
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
   private eventRepository: Repository<EventEntity>;

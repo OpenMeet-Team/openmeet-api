@@ -3,7 +3,6 @@ import { Injectable } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import bcrypt from 'bcryptjs';
 import { RoleEnum } from '../../../../role/role.enum';
-import { StatusEnum } from '../../../../status/status.enum';
 import { UserEntity } from '../../../../user/infrastructure/persistence/relational/entities/user.entity';
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
 import { RoleEntity } from 'src/role/infrastructure/persistence/relational/entities/role.entity';
