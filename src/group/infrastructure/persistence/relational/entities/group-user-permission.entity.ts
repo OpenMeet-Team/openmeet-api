@@ -1,7 +1,7 @@
 import { Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
-import { GroupEntity } from './group.entity';
 import { GroupPermissionEntity } from '../../../../../group-permission/infrastructure/persistence/relational/entities/group-permission.entity';
+import { GroupEntity } from './group.entity';
 
 @Entity({ name: 'groupUserPermissions' })
 export class GroupUserPermissionEntity {

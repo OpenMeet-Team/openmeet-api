@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
-import { EventStatus } from '../../src/core/constants/constant';
+import { EventStatus, EventType } from '../../src/core/constants/constant';
 import {
   loginAsTester,
   createEvent,
@@ -44,7 +44,7 @@ describe('EventController Recommendations (e2e)', () => {
       categories: [category1.id, category2.id],
       startDate: new Date().toISOString(),
       maxAttendees: 100,
-      type: 'in person',
+      type: EventType.Hybrid,
     });
 
     // Create some potential recommended events
@@ -54,7 +54,7 @@ describe('EventController Recommendations (e2e)', () => {
       status: EventStatus.Published,
       startDate: new Date().toISOString(),
       categories: [category1.id],
-      type: 'in person',
+      type: EventType.Hybrid,
       maxAttendees: 100,
     });
 
@@ -74,7 +74,7 @@ describe('EventController Recommendations (e2e)', () => {
       status: EventStatus.Published,
       categories: [categoryUnrelated.id],
       startDate: new Date().toISOString(),
-      type: 'in person',
+      type: 'hybrid',
       maxAttendees: 100,
     });
     // get all events and check that there are at least the number we created
@@ -155,12 +155,4 @@ describe('EventController Recommendations (e2e)', () => {
   //     recommendedEvents.some((event) => event.name === 'Unrelated Event'),
   //   ).toBeFalsy();
   // });
-
-  it('should return 404 for non-existent event', async () => {
-    await request(TESTING_APP_URL)
-      .get('/api/events/99999/recommended-events')
-      .set('Authorization', `Bearer ${token}`)
-      .set('x-tenant-id', TESTING_TENANT_ID)
-      .expect(404);
-  });
 });

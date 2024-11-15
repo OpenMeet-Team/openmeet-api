@@ -12,6 +12,7 @@ import { GroupMemberModule } from '../group-member/group-member.module';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { FileModule } from '../file/file.module';
 import { ZulipService } from '../zulip/zulip.service';
+import { EventRoleService } from 'src/event-role/event-role.service';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ZulipService } from '../zulip/zulip.service';
     FilesS3PresignedService,
     ChannelCreatedListener,
     ZulipService,
+    EventRoleService,
   ],
   exports: [EventService],
 })

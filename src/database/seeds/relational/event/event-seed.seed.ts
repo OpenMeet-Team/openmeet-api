@@ -6,7 +6,7 @@ import {
 
 export const eventSeedData = [
   {
-    name: '[Draft][Public][Hybrid][Past] Tech Conference 2024',
+    name: '[admin][Draft][Public][Hybrid][Past][approvalQuestion] Tech Conference 2024',
     slug: 'tech-conference-2024',
     type: EventType.Hybrid,
     locationOnline: 'https://zoom.us/j/123456789',
@@ -18,11 +18,15 @@ export const eventSeedData = [
     location: 'Convention Center, Tech City',
     lat: 37.7749,
     lon: -122.4194,
+    user: {
+      id: 2,
+    },
     status: EventStatus.Draft,
     visibility: EventVisibility.Public,
+    approvalQuestion: 'Are you a developer?',
   },
   {
-    name: '[Pending][Authenticated][In-Person][Past] Local Art Exhibition',
+    name: '[admin][Pending][Authenticated][In-Person][Past][allowWaitlist] Local Art Exhibition',
     slug: 'local-art-exhibition',
     type: EventType.InPerson,
     description:
@@ -33,11 +37,15 @@ export const eventSeedData = [
     location: 'City Art Gallery',
     lat: 40.7128,
     lon: -74.006,
+    user: {
+      id: 2,
+    },
     status: EventStatus.Pending,
     visibility: EventVisibility.Authenticated,
+    allowWaitlist: true,
   },
   {
-    name: '[Published][Public][Online][Upcoming] Virtual Book Club Meeting',
+    name: '[admin][Published][Public][Online][Upcoming][requireApproval] Virtual Book Club Meeting',
     slug: 'virtual-book-club-meeting',
     type: EventType.Online,
     locationOnline: 'https://meet.google.com/abc-defg-hij',
@@ -46,11 +54,15 @@ export const eventSeedData = [
     startDate: new Date('2024-06-20T19:00:00'),
     endDate: new Date('2024-06-20T21:00:00'),
     maxAttendees: 50,
+    user: {
+      id: 2,
+    },
     status: EventStatus.Published,
     visibility: EventVisibility.Private,
+    requireApproval: true,
   },
   {
-    name: '[Draft][Public][In-Person][Past] Charity Marathon',
+    name: '[admin][Draft][Public][In-Person][Past][requireGroupMembership] Charity Marathon',
     slug: 'charity-marathon',
     type: EventType.InPerson,
     description:
@@ -59,13 +71,20 @@ export const eventSeedData = [
     endDate: new Date('2024-10-01T13:00:00'),
     maxAttendees: 5000,
     location: 'City Park',
+    group: {
+      id: 1,
+    },
+    user: {
+      id: 2,
+    },
     lat: 51.5074,
     lon: -0.1278,
     status: EventStatus.Draft,
     visibility: EventVisibility.Public,
+    requireGroupMembership: true,
   },
   {
-    name: '[Pending][Private][Hybrid][Upcoming] Startup Pitch Night',
+    name: '[admin][Pending][Private][Hybrid][Upcoming][approvalQuestion] Startup Pitch Night',
     slug: 'startup-pitch-night',
     type: EventType.Hybrid,
     locationOnline: 'https://twitch.tv/startup-pitch',
@@ -77,27 +96,35 @@ export const eventSeedData = [
     location: 'Innovation Hub',
     lat: 37.3382,
     lon: -121.8863,
+    user: {
+      id: 2,
+    },
     status: EventStatus.Pending,
     visibility: EventVisibility.Private,
+    approvalQuestion: 'Are you a startup?',
   },
 
   {
-    name: '[Published][Public][In-Person][Upcoming] Annual Food Festival',
+    name: '[admin][Published][Public][In-Person][Upcoming][allowWaitlist] Annual Food Festival',
     slug: 'annual-food-festival',
     type: EventType.InPerson,
     description:
       'A celebration of local and international cuisines. Features food stalls, cooking demonstrations, and eating contests.',
     startDate: new Date('2025-07-22T11:00:00'),
     endDate: new Date('2025-07-24T22:00:00'),
-    maxAttendees: 10000,
+    maxAttendees: 1,
     location: 'City Square',
     lat: 48.8566,
     lon: 2.3522,
+    user: {
+      id: 2,
+    },
     status: EventStatus.Published,
     visibility: EventVisibility.Public,
+    allowWaitlist: true,
   },
   {
-    name: '[Draft][Public][Hybrid][Upcoming] Virtual Reality Gaming Tournament',
+    name: '[admin][Draft][Public][Hybrid][Upcoming][requireGroupMembership] Virtual Reality Gaming Tournament',
     slug: 'vr-gaming-tournament',
     type: EventType.Hybrid,
     locationOnline: 'https://twitch.tv/vr-tournament',
@@ -107,13 +134,20 @@ export const eventSeedData = [
     endDate: new Date('2024-12-12T18:00:00'),
     maxAttendees: 500,
     location: 'Tech Arena',
+    group: {
+      id: 1,
+    },
+    user: {
+      id: 2,
+    },
     lat: 37.4419,
     lon: -122.143,
     status: EventStatus.Draft,
     visibility: EventVisibility.Public,
+    requireGroupMembership: true,
   },
   {
-    name: '[Pending][Private][In-Person][Upcoming] Mindfulness and Meditation Retreat',
+    name: '[admin][Pending][Private][In-Person][Upcoming][approvalQuestion][requireApproval] Mindfulness and Meditation Retreat',
     slug: 'mindfulness-meditation-retreat',
     type: EventType.InPerson,
     description:
@@ -124,11 +158,16 @@ export const eventSeedData = [
     location: 'Tranquil Gardens Retreat Center',
     lat: 34.0522,
     lon: -118.2437,
+    user: {
+      id: 2,
+    },
     status: EventStatus.Pending,
     visibility: EventVisibility.Private,
+    approvalQuestion: 'Are you a mindfulness practitioner?',
+    requireApproval: true,
   },
   {
-    name: '[Published][Public][Online][Upcoming] Online Photography Workshop',
+    name: '[admin][Published][Public][Online][Upcoming][requireGroupMembership] Online Photography Workshop',
     slug: 'online-photography-workshop',
     type: EventType.Online,
     locationOnline: 'https://zoom.us/j/987654321',
@@ -137,11 +176,18 @@ export const eventSeedData = [
     startDate: new Date('2024-11-05T18:00:00'),
     endDate: new Date('2024-11-05T21:00:00'),
     maxAttendees: 100,
+    user: {
+      id: 2,
+    },
     status: EventStatus.Published,
     visibility: EventVisibility.Public,
+    requireGroupMembership: true,
+    group: {
+      id: 1,
+    },
   },
   {
-    name: '[Published][Public][In-Person][Upcoming] Sustainable Living Expo',
+    name: '[admin][Published][Public][In-Person][Upcoming]] Sustainable Living Expo',
     slug: 'sustainable-living-expo',
     type: EventType.InPerson,
     description:
@@ -152,6 +198,9 @@ export const eventSeedData = [
     location: 'Green Living Convention Center',
     lat: 52.3676,
     lon: 4.9041,
+    user: {
+      id: 2,
+    },
     status: EventStatus.Published,
     visibility: EventVisibility.Public,
   },

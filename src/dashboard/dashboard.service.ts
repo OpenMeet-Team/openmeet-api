@@ -32,34 +32,30 @@ export class DashboardService {
   }
 
   async getMyEvents(userId: number): Promise<EventEntity[]> {
-    try {
-      const createdEvents = await this.eventService.getEventsByCreator(userId);
+    await this.getTenantSpecificRepositories();
+    const createdEvents = await this.eventService.getEventsByCreator(userId);
 
-      const attendingEvents =
-        await this.eventService.getEventsByAttendee(userId);
+    const attendingEvents = await this.eventService.getEventsByAttendee(userId);
 
-      // Combine and deduplicate events
-      const allEvents = [...createdEvents, ...attendingEvents];
-      const uniqueEvents = Array.from(
-        new Map(allEvents.map((event) => [event.id, event])).values(),
-      );
+    // Combine and deduplicate events
+    const allEvents = [...createdEvents, ...attendingEvents];
+    const uniqueEvents = Array.from(
+      new Map(allEvents.map((event) => [event.id, event])).values(),
+    );
 
-      return (await Promise.all(
-        uniqueEvents.map(async (event) => ({
-          ...event,
-          attendee: await this.eventAttendeeService.findEventAttendeeByUserId(
-            event.id,
-            userId,
-          ),
-        })),
-      )) as EventEntity[];
-    } catch (error) {
-      console.error('Failed to fetch user events:', error);
-      throw new NotFoundException('Failed to fetch user events');
-    }
+    return (await Promise.all(
+      uniqueEvents.map(async (event) => ({
+        ...event,
+        attendee: await this.eventAttendeeService.findEventAttendeeByUserId(
+          event.id,
+          userId,
+        ),
+      })),
+    )) as EventEntity[];
   }
 
   async getMyGroups(userId: number): Promise<GroupEntity[]> {
+    await this.getTenantSpecificRepositories();
     try {
       const groupsByMember = await this.groupService.getGroupsByMember(userId);
 

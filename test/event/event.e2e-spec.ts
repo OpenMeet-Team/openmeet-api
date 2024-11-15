@@ -8,6 +8,7 @@ import {
   getMyEvents,
   updateEvent,
 } from '../utils/functions';
+import { EventType } from '../../src/core/constants/constant';
 
 describe('EventController (e2e)', () => {
   let token;
@@ -33,7 +34,7 @@ describe('EventController (e2e)', () => {
       description: 'Test Description',
       startDate: new Date().toISOString(),
       endDate: new Date(new Date().getTime() + 3600000).toISOString(), // 1 hour later
-      type: 'hybrid',
+      type: EventType.Hybrid,
       location: 'Test Location',
       locationOnline: 'https://test-event.com',
       maxAttendees: 10,
@@ -53,7 +54,7 @@ describe('EventController (e2e)', () => {
       description: 'Test Description',
       startDate: new Date().toISOString(),
       endDate: new Date(new Date().getTime() + 3600000).toISOString(), // 1 hour later
-      type: 'hybrid',
+      type: EventType.Hybrid,
       location: 'Test Location',
       locationOnline: 'https://test-event.com',
       maxAttendees: 10,
@@ -79,11 +80,11 @@ describe('EventController (e2e)', () => {
 
     expect(updatedEvent.name).toBe('Updated Test Event');
 
-    // get the event
+    // // get the event
     const foundEvent = await getEvent(TESTING_APP_URL, token, testEvent.id);
     expect(foundEvent.name).toBe('Updated Test Event');
 
-    // getEventsByCreator
+    // // getEventsByCreator
     const myEvents = await getMyEvents(TESTING_APP_URL, token);
     // expect one of the results to be the updated event
     expect(myEvents.some((event) => event.id === updatedEvent.id)).toBe(true);
