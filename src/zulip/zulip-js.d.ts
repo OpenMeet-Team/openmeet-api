@@ -32,7 +32,10 @@ declare module 'zulip-js' {
     avatar_url: string | null;
   }
 
-  export type ZulipNarrow = ['stream' | 'topic', string];
+  export interface ZulipNarrow {
+    operator: string;
+    operand: string | number;
+  }
 
   export type ZulipDest =
     | {
@@ -142,6 +145,20 @@ declare module 'zulip-js' {
     message_id: number;
   }
 
+  export type ZulipAnchor = number | 'first_unread' | 'newest' | 'oldest';
+
+  export interface ZulipMessagesRetrieveParams {
+    narrow?: ZulipNarrow[];
+    anchor: ZulipAnchor;
+    num_before: number;
+    num_after: number;
+    client_gravatar?: boolean;
+    apply_markdown?: boolean;
+    message_ids?: number[];
+    include_anchor?: boolean;
+    // num_before required if message_ids is not provided
+  }
+
   export interface ZulipCreateUserParams {
     email: string;
     password: string;
@@ -166,6 +183,18 @@ declare module 'zulip-js' {
     max_id: number;
   }
 
+  export type ZulipFlag = 'starred' | 'read' | 'collapsed' | 'mentioned';
+
+  export interface ZulipFlagsAddParams {
+    messages: number[];
+    flag: ZulipFlag;
+  }
+
+  export interface ZulipFlagsRemoveParams {
+    messages: number[];
+    flag: ZulipFlag;
+  }
+
   export interface ZuliprcConfig {
     zuliprc: string;
   }
@@ -178,6 +207,14 @@ declare module 'zulip-js' {
   export interface ZulipSuccessResponse {
     msg: string;
     result: 'success';
+  }
+  export interface ZulipMessagesRetrieveResponse {
+    found_anchor: boolean;
+    found_oldest: boolean;
+    found_newest: boolean;
+    history_limited: boolean;
+    anchor: number;
+    messages: ZulipMessage[];
   }
 
   export type ZulipApiResponse<T = object> = Promise<
@@ -208,30 +245,19 @@ declare module 'zulip-js' {
           content: string;
         },
       ): ZulipApiResponse<{ id: number }>;
-      retrieve(params: {
-        narrow?: any[];
-        anchor: number | 'first_unread' | 'newest' | 'oldest';
-        num_before: number;
-        num_after: number;
-        client_gravatar?: boolean;
-        apply_markdown?: boolean;
-        message_ids?: number[];
-      }): ZulipApiResponse<{
-        result: 'success' | 'error';
-        msg: string;
-        found_anchor: boolean;
-        found_oldest: boolean;
-        found_newest: boolean;
-        history_limited: boolean;
-        anchor: number;
-        messages: ZulipMessage[];
-      }>;
+      retrieve(
+        params: ZulipMessagesRetrieveParams,
+      ): ZulipApiResponse<ZulipMessagesRetrieveResponse>;
       render(params: { content: string }): ZulipApiResponse<{
         rendered_content: string;
       }>;
       flags: {
-        add(params: { message_ids: number[] }): ZulipApiResponse;
-        remove(params: { message_ids: number[] }): ZulipApiResponse;
+        add(params: ZulipFlagsAddParams): ZulipApiResponse<{
+          messages: number[];
+        }>;
+        remove(params: ZulipFlagsRemoveParams): ZulipApiResponse<{
+          messages: number[];
+        }>;
       };
       update(params: { message_id: number; content: string }): ZulipApiResponse;
       getById(params: { message_id: number }): ZulipApiResponse<ZulipMessage>;

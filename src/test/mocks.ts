@@ -195,6 +195,10 @@ export const mockZulipClient = {
     update: jest.fn().mockResolvedValue(mockZulipMessage),
     send: jest.fn().mockResolvedValue(mockZulipMessageResponse),
     deleteById: jest.fn().mockResolvedValue(mockZulipApiResponse),
+    flags: {
+      add: jest.fn().mockResolvedValue(mockZulipApiResponse),
+      remove: jest.fn().mockResolvedValue(mockZulipApiResponse),
+    },
   },
   users: {
     create: jest.fn().mockResolvedValue(mockZulipUser),
@@ -216,10 +220,11 @@ export const mockGetClient = jest.fn().mockResolvedValue(mockZulipClient);
 export const mockGetAdminClient = jest.fn().mockResolvedValue(mockZulipClient);
 
 export const mockChatService = {
-  getChatByUser: jest.fn().mockResolvedValue(mockChat),
+  getChatByUlid: jest.fn().mockResolvedValue(mockChat),
+  getChatByParticipantUlid: jest.fn().mockResolvedValue(mockChat),
   sendMessage: jest.fn().mockResolvedValue(mockZulipMessageResponse),
-  showChat: jest.fn().mockResolvedValue(mockChat),
-  showChats: jest.fn().mockResolvedValue([mockChat]),
+  showChats: jest.fn().mockResolvedValue({ chats: [mockChat], chat: mockChat }),
+  setMessagesRead: jest.fn().mockResolvedValue({ messages: [1, 2, 3] }),
 };
 
 export const mockGroupService = {

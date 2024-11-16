@@ -39,27 +39,9 @@ describe('ChatController', () => {
 
   describe('showChats', () => {
     it('should find all chats', async () => {
-      const result = await controller.showChats(mockUser);
-      expect(result).toEqual([mockChat]);
-      expect(chatService.showChats).toHaveBeenCalledWith(mockUser.id);
-    });
-  });
-
-  describe('showChatByUser', () => {
-    it('should find a chat by user ulid', async () => {
-      const result = await controller.showChatByUser(mockUser.ulid, mockUser);
-      expect(result).toEqual(mockChat);
-    });
-  });
-
-  describe('showChat', () => {
-    it('should show a chat', async () => {
-      const result = await controller.showChat(mockChat.ulid, mockUser);
-      expect(result).toEqual(mockChat);
-      expect(chatService.showChat).toHaveBeenCalledWith(
-        mockChat.ulid,
-        mockUser.id,
-      );
+      const result = await controller.showChats(mockUser, {});
+      expect(result).toEqual({ chats: [mockChat], chat: mockChat });
+      expect(chatService.showChats).toHaveBeenCalledWith(mockUser.id, {});
     });
   });
 
@@ -72,6 +54,16 @@ describe('ChatController', () => {
       );
 
       expect(result).toEqual(mockZulipMessageResponse);
+    });
+  });
+
+  describe('setMessagesRead', () => {
+    it('should set messages as read', async () => {
+      const result = await controller.setMessagesRead(
+        { messages: [1, 2, 3] },
+        mockUser,
+      );
+      expect(result).toEqual({ messages: [1, 2, 3] });
     });
   });
 });

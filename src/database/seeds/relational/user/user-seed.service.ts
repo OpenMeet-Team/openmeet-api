@@ -8,6 +8,7 @@ import { TenantConnectionService } from '../../../../tenant/tenant.service';
 import { RoleEntity } from 'src/role/infrastructure/persistence/relational/entities/role.entity';
 import { ConfigService } from '@nestjs/config';
 import { StatusEntity } from '../../../../status/infrastructure/persistence/relational/entities/status.entity';
+
 @Injectable()
 export class UserSeedService {
   private repository: Repository<UserEntity>;
@@ -63,19 +64,18 @@ export class UserSeedService {
 
     /* eslint-disable no-restricted-syntax */
     const adminCredentials = {
-      email: `${tenantId}.${this.configService.get('ADMIN_EMAIL') as string}`,
+      email: this.configService.get('ADMIN_EMAIL') as string,
       password: this.configService.get('ADMIN_PASSWORD') as string,
       firstName: 'The',
       lastName: 'Admin',
     };
 
     const testUserCredentials = {
-      email: `${tenantId}.${this.configService.get('TEST_USER_EMAIL') as string}`,
+      email: this.configService.get('TEST_USER_EMAIL') as string,
       password: this.configService.get('TEST_USER_PASSWORD') as string,
       firstName: 'Test',
       lastName: 'User',
     };
-    /* eslint-enable no-restricted-syntax */
 
     await this.createUserIfNotExists(adminCredentials, RoleEnum.Admin);
     await this.createUserIfNotExists(testUserCredentials, RoleEnum.User);

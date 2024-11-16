@@ -54,24 +54,18 @@ describe('ChatService', () => {
 
   describe('showChats', () => {
     it('should return chats', async () => {
-      jest.spyOn(service, 'showChats').mockResolvedValue([mockChat]);
-      const result = await service.showChats(mockUser.id);
-      expect(result).toEqual([mockChat]);
-    });
-  });
-
-  describe('showChat', () => {
-    it('should return chat', async () => {
-      jest.spyOn(service, 'showChat').mockResolvedValue(mockChat);
-      const result = await service.showChat(mockChat.ulid, mockUser.id);
-      expect(result).toEqual(mockChat);
+      jest
+        .spyOn(service, 'showChats')
+        .mockResolvedValue({ chats: [mockChat], chat: mockChat });
+      const result = await service.showChats(mockUser.id, {});
+      expect(result).toEqual({ chats: [mockChat], chat: mockChat });
     });
   });
 
   describe('getChatByUserUlid', () => {
     it('should return chat', async () => {
-      jest.spyOn(service, 'getChatByUser').mockResolvedValue(mockChat);
-      const result = await service.getChatByUser(mockUser.id, mockUser.ulid);
+      jest.spyOn(service, 'getChatByUlid').mockResolvedValue(mockChat);
+      const result = await service.getChatByUlid(mockUser.ulid, mockUser.id);
       expect(result).toEqual(mockChat);
     });
   });
@@ -79,7 +73,7 @@ describe('ChatService', () => {
   describe('createChat', () => {
     it('should return chat', async () => {
       jest.spyOn(service, 'createChat').mockResolvedValue(mockChat);
-      const result = await service.createChat(mockUser.id, mockUser.ulid);
+      const result = await service.createChat(mockUser.id, mockUser);
       expect(result).toEqual(mockChat);
     });
   });

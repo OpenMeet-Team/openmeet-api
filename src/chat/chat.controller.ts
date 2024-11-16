@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ChatService } from './chat.service';
 import { JWTAuthGuard } from '../core/guards/auth.guard';
@@ -15,26 +23,11 @@ export class ChatController {
 
   @Get()
   @ApiOperation({ summary: 'Show Chat List' })
-  async showChats(@AuthUser() user: User): Promise<ChatEntity[]> {
-    return await this.chatService.showChats(user.id);
-  }
-
-  @Get('user/:ulid')
-  @ApiOperation({ summary: 'Get Chat by User ulid' })
-  async showChatByUser(
-    @Param('ulid') participantUlid: string,
+  async showChats(
     @AuthUser() user: User,
-  ): Promise<ChatEntity | null> {
-    return await this.chatService.getChatByUser(user.id, participantUlid);
-  }
-
-  @Get(':uuid')
-  @ApiOperation({ summary: 'Get Chat' })
-  async showChat(
-    @Param('uuid') chatUlid: string,
-    @AuthUser() user: User,
-  ): Promise<ChatEntity> {
-    return await this.chatService.showChat(chatUlid, user.id);
+    @Query() query: any,
+  ): Promise<{ chats: ChatEntity[]; chat: ChatEntity | null }> {
+    return await this.chatService.showChats(user.id, query);
   }
 
   @Post(':ulid/message')
@@ -45,5 +38,14 @@ export class ChatController {
     @AuthUser() user: User,
   ): Promise<any> {
     return await this.chatService.sendMessage(chatUlid, user.id, body.content);
+  }
+
+  @Post('messages/read')
+  @ApiOperation({ summary: 'Set messages read' })
+  async setMessagesRead(
+    @Body() body: { messages: number[] },
+    @AuthUser() user: User,
+  ): Promise<any> {
+    return await this.chatService.setMessagesRead(user.id, body.messages);
   }
 }

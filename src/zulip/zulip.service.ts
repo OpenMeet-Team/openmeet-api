@@ -1,6 +1,11 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { getAdminClient, getClient } from './zulip-client';
-import { ZulipApiResponse, ZulipClient, ZulipCreateUserParams } from 'zulip-js';
+import {
+  ZulipApiResponse,
+  ZulipClient,
+  ZulipCreateUserParams,
+  ZulipMessagesRetrieveParams,
+} from 'zulip-js';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { REQUEST } from '@nestjs/core';
 import { ulid } from 'ulid';
@@ -8,30 +13,26 @@ import { UserService } from '../user/user.service';
 
 @Injectable()
 export class ZulipService {
+  [x: string]: any;
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly userService: UserService,
   ) {}
 
   async getInitialisedClient(user: UserEntity): Promise<ZulipClient> {
-    // console.log('tenantId', this.request.tenantId, user);
     try {
-      // Attempt to get the client with existing user credentials
-      return await getClient(user);
-    } catch (error) {
-      console.error('Error getting zulip client:', error, error.message);
+      if (!user.zulipUserId) {
+        // Generate a unique email and password for the new Zulip user
+        const userEmail = `tenant_${this.request.tenantId}__${user.ulid}@zulip.openmeet.net`;
+        const userPassword = ulid();
 
-      // Generate a unique email and password for the new Zulip user
-      const userEmail = `tenant_${this.request.tenantId}__user_${user.ulid}@zulip.openmeet.net`;
-      const userPassword = ulid();
-
-      try {
         await this.createUser({
           email: userEmail,
           password: userPassword,
           full_name: user.name as string,
         }).then((createUserResponse) => {
           if (createUserResponse?.result !== 'success') {
+            console.log('createUserResponse', createUserResponse);
             throw new Error('Failed to create Zulip user');
           }
         });
@@ -44,21 +45,26 @@ export class ZulipService {
         }
 
         // Store the Zulip credentials in your user service
-        await this.userService.addZulipCredentialsToUser(user.id, {
-          zulipUsername: userEmail,
-          zulipApiKey: apiKeyResponse.api_key,
-          zulipUserId: apiKeyResponse.user_id,
-        });
-
-        // Retry getting the client with the new credentials
-        return await getClient(user);
-      } catch (creationError) {
-        console.error(
-          'Error during user creation or API key retrieval:',
-          creationError.message,
+        const updatedUser = await this.userService.addZulipCredentialsToUser(
+          user.id,
+          {
+            zulipUsername: userEmail,
+            zulipApiKey: apiKeyResponse.api_key,
+            zulipUserId: apiKeyResponse.user_id,
+          },
         );
-        throw new Error('Unable to initialize Zulip client');
+
+        if (!updatedUser) {
+          throw new NotFoundException('Failed to update user');
+        }
+
+        return await getClient(updatedUser);
       }
+
+      return await getClient(user);
+    } catch (error) {
+      console.error('Failed to create Zulip user:', error);
+      throw new NotFoundException('Failed to create Zulip user');
     }
   }
 
@@ -77,7 +83,7 @@ export class ZulipService {
     return await client.users.retrieve();
   }
 
-  async getUserMessages(user: UserEntity, query) {
+  async getUserMessages(user: UserEntity, query: ZulipMessagesRetrieveParams) {
     const client = await this.getInitialisedClient(user);
     return await client.messages.retrieve(query);
   }
@@ -153,6 +159,22 @@ export class ZulipService {
     const client = await getClient(user);
     return await client.messages.deleteById({
       message_id: messageId,
+    });
+  }
+
+  async addUserMessagesReadFlag(user: UserEntity, messageIds: number[]) {
+    const client = await getClient(user);
+    return await client.messages.flags.add({
+      messages: messageIds,
+      flag: 'read',
+    });
+  }
+
+  async removeUserMessagesReadFlag(user: UserEntity, messageIds: number[]) {
+    const client = await getClient(user);
+    return await client.messages.flags.remove({
+      messages: messageIds,
+      flag: 'read',
     });
   }
 

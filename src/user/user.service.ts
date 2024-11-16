@@ -251,9 +251,9 @@ export class UserService {
       user.zulipUserId = zulipUserId;
       user.zulipApiKey = zulipApiKey;
       user.zulipUsername = zulipUsername;
-      await this.usersRepository.save(user as UserEntity);
+      return await this.usersRepository.save(user as UserEntity);
     }
-    return this.findById(userId);
+    return null;
   }
 
   async update(id: User['id'], payload: any): Promise<User | null> {

@@ -7,24 +7,22 @@ const adminConfig = {
   realm: process.env.ZULIP_REALM || '',
 };
 
-let zulipClient: ZulipClient;
+let zulipAdminClient: ZulipClient;
 
 export const getClient = async (user: UserEntity) => {
-  if (!zulipClient) {
-    zulipClient = await zulipInit({
-      username: user.zulipUsername,
-      apiKey: user.zulipApiKey,
-      realm: process.env.ZULIP_REALM || '',
-    } as Partial<ZulipInitialConfig>);
-  }
-
-  return zulipClient;
+  return await zulipInit({
+    username: user.zulipUsername,
+    apiKey: user.zulipApiKey,
+    realm: process.env.ZULIP_REALM || '',
+  } as Partial<ZulipInitialConfig>);
 };
 
 export const getAdminClient = async () => {
-  if (!zulipClient) {
-    zulipClient = await zulipInit(adminConfig as Partial<ZulipInitialConfig>);
+  if (!zulipAdminClient) {
+    zulipAdminClient = await zulipInit(
+      adminConfig as Partial<ZulipInitialConfig>,
+    );
   }
 
-  return zulipClient;
+  return zulipAdminClient;
 };

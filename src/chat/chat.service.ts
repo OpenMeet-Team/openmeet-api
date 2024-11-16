@@ -25,18 +25,29 @@ export class ChatService {
     this.chatRepository = dataSource.getRepository(ChatEntity);
   }
 
-  async showChats(userId: number) {
+  async showChats(userId: number, query: any) {
     await this.getTenantSpecificChatRepository();
+
+    let chat: ChatEntity | null = null;
+    let chats: ChatEntity[] = [];
+
+    if (query.user) {
+      chat = await this.getChatByParticipantUlid(query.user, userId);
+    }
+
+    if (query.chat) {
+      chat = await this.getChatByUlid(query.chat, userId);
+    }
 
     const foundChats = await this.chatRepository.find({
       where: { participants: { id: userId } },
     });
 
     if (!foundChats.length) {
-      return [];
+      return { chats: [], chat };
     }
 
-    const chats = await this.chatRepository.find({
+    chats = await this.chatRepository.find({
       relations: ['participants'],
       where: { id: In(foundChats.map((chat) => chat.id)) },
     });
@@ -45,28 +56,46 @@ export class ChatService {
       chat.participant = chat.participants.find(
         (participant) => participant.id !== userId,
       ) as UserEntity;
+      chat.user = chat.participants.find(
+        (participant) => participant.id === userId,
+      ) as UserEntity;
     });
 
-    // const messages = await this.zulipService.getUserMessages(user, {
-    //   num_before: 0,
-    //   num_after: 1,
-    //   anchor: 'first_unread',
-    //   narrow: [{ operator: 'is', operand: 'private' }],
-    // });
+    const messagesResponse = await this.zulipService.getUserMessages(
+      chats[0].user,
+      {
+        num_before: 0,
+        num_after: 100,
+        anchor: 'first_unread',
+        narrow: [
+          { operator: 'is', operand: 'private' },
+          { operator: 'is', operand: 'unread' },
+        ],
+      },
+    );
 
-    return chats;
+    if (messagesResponse.result === 'success') {
+      // loop through chats and add messages to each chat
+      chats.forEach((chat) => {
+        chat.messages = messagesResponse.messages.filter(
+          (message) => message.sender_id === chat.participant?.zulipUserId,
+        );
+      });
+    }
+
+    return { chats, chat };
   }
 
-  async showChat(ulid: string, userId: number) {
+  async getChatByUlid(chatUlid: string, userId: number) {
     await this.getTenantSpecificChatRepository();
-    // Return chat messages with the given user ulid or slug
+
     const chat = await this.chatRepository.findOne({
-      where: { ulid },
+      where: { ulid: chatUlid },
       relations: ['participants'],
     });
 
     if (!chat) {
-      throw new NotFoundException('Chat not found');
+      return null;
     }
 
     const user = await this.userService.findOne(userId);
@@ -74,22 +103,27 @@ export class ChatService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    // Set the participant to the other user in the chat
+
     chat.participant = chat.participants.find(
       (participant) => participant.id !== userId,
     ) as UserEntity;
+
+    if (!chat.participant) {
+      throw new NotFoundException('Participant not found');
+    }
 
     chat.user = user;
 
     const messagesResponse = await this.zulipService.getUserMessages(user, {
       num_before: 0,
-      num_after: 10,
-      anchor: 'first_unread',
+      num_after: 100,
+      anchor: 'oldest',
+      include_anchor: false,
       narrow: [
         { operator: 'is', operand: 'private' },
         {
           operator: 'pm-with',
-          operand: chat.participant.zulipUsername,
+          operand: chat.participant.zulipUsername || '',
         },
       ],
     });
@@ -101,13 +135,13 @@ export class ChatService {
     return chat;
   }
 
-  async getChatByUser(userId: number, userUlid: string) {
+  async getChatByParticipantUlid(participantUlid: string, userId: number) {
     await this.getTenantSpecificChatRepository();
 
-    const participant = await this.userService.findByUlid(userUlid);
+    const participant = await this.userService.findByUlid(participantUlid);
 
-    if (!participant) {
-      throw new NotFoundException('Participant not found');
+    if (!participant || participant.id === userId) {
+      return null;
     }
 
     const chat = await this.chatRepository
@@ -120,35 +154,28 @@ export class ChatService {
           participantIds: [userId, participant.id],
         },
       )
-      .select(['chats', 'participants'])
+      .select(['participants'])
       .getOne();
 
     if (!chat) {
-      return await this.createChat(userId, userUlid);
+      const createdChat = await this.createChat(userId, participant);
+      if (!createdChat) {
+        throw new NotFoundException('Chat not created');
+      }
+      return this.getChatByUlid(createdChat.ulid, userId);
     }
 
-    return chat;
+    return this.getChatByUlid(chat.ulid, userId);
   }
 
-  async createChat(userId: number, userUlid: string) {
+  async createChat(userId: number, participant: UserEntity) {
     await this.getTenantSpecificChatRepository();
-
-    const participant = await this.userService.findByUlid(userUlid);
-
-    if (!participant) {
-      throw new NotFoundException('User not found');
-    }
 
     const chat = this.chatRepository.create({
       participants: [{ id: userId }, { id: participant.id }],
     });
 
-    await this.chatRepository.save(chat);
-
-    return this.chatRepository.findOne({
-      where: { id: chat.id },
-      relations: ['participants'],
-    });
+    return await this.chatRepository.save(chat);
   }
 
   async sendMessage(chatUlid: string, userId: number, content: string) {
@@ -187,5 +214,14 @@ export class ChatService {
     });
 
     return messageResponse;
+  }
+
+  async setMessagesRead(userId: number, messageIds: number[]) {
+    await this.getTenantSpecificChatRepository();
+    const user = await this.userService.findOne(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return await this.zulipService.addUserMessagesReadFlag(user, messageIds);
   }
 }

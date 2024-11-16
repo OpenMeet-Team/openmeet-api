@@ -190,4 +190,21 @@ describe('ZulipService', () => {
       expect(message).toBeDefined();
     });
   });
+
+  describe('addUserMessagesReadFlag', () => {
+    it('should return message', async () => {
+      const message = await zulipService.addUserMessagesReadFlag(mockUser, []);
+      expect(message).toBeDefined();
+    });
+  });
+
+  describe('removeUserMessagesReadFlag', () => {
+    it('should return message', async () => {
+      const message = await zulipService.removeUserMessagesReadFlag(
+        mockUser,
+        [],
+      );
+      expect(message).toBeDefined();
+    });
+  });
 });
