@@ -2,9 +2,12 @@ import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { getAdminClient, getClient } from './zulip-client';
 import {
   ZulipApiResponse,
+  ZulipChannelMessageParams,
   ZulipClient,
   ZulipCreateUserParams,
+  ZulipDirectMessageParams,
   ZulipMessagesRetrieveParams,
+  ZulipSubscriptionParams,
 } from 'zulip-js';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { REQUEST } from '@nestjs/core';
@@ -69,7 +72,7 @@ export class ZulipService {
   }
 
   async getUserStreams(user: UserEntity) {
-    const client = await this.getInitialisedClient(user);
+    const client = await getClient(user);
     return await client.streams.retrieve();
   }
 
@@ -78,13 +81,13 @@ export class ZulipService {
     return await client.streams.getStreamId(streamName);
   }
 
-  async getUsers() {
+  async getAdminUsers() {
     const client = await getAdminClient();
     return await client.users.retrieve();
   }
 
   async getUserMessages(user: UserEntity, query: ZulipMessagesRetrieveParams) {
-    const client = await this.getInitialisedClient(user);
+    const client = await getClient(user);
     return await client.messages.retrieve(query);
   }
 
@@ -129,19 +132,33 @@ export class ZulipService {
     return await client.users.create(params);
   }
 
-  async sendUserMessage(user: UserEntity, params) {
+  async sendUserMessage(
+    user: UserEntity,
+    params: ZulipDirectMessageParams | ZulipChannelMessageParams,
+  ) {
     const client = await getClient(user);
     return await client.messages.send(params);
   }
 
-  // Test the rest of the functions
-  async createChannel(user: UserEntity, params) {
+  async subscribeUserToChannel(
+    user: UserEntity,
+    params: ZulipSubscriptionParams,
+  ) {
     const client = await getClient(user);
-    const meParams = {
-      subscriptions: JSON.stringify([{ name: params.name }]),
-    };
-    return await client.users.me.subscriptions.add(meParams);
+    return await client.users.me.subscriptions.add(params);
   }
+
+  async getAdminMessages(query: ZulipMessagesRetrieveParams) {
+    const client = await getAdminClient();
+    return await client.messages.retrieve(query);
+  }
+
+  async getAdminStreamTopics(streamId: number) {
+    const client = await getAdminClient();
+    return await client.streams.topics.retrieve({ stream_id: streamId });
+  }
+
+  // Test the rest of the functions
 
   async updateUserMessage(
     user: UserEntity,

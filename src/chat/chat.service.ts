@@ -114,6 +114,8 @@ export class ChatService {
 
     chat.user = user;
 
+    await this.zulipService.initializeClient(user);
+
     const messagesResponse = await this.zulipService.getUserMessages(user, {
       num_before: 0,
       num_after: 100,
@@ -209,7 +211,7 @@ export class ChatService {
 
     const messageResponse = await this.zulipService.sendUserMessage(user, {
       type: 'direct',
-      to: [participant.zulipUserId],
+      to: [participant.zulipUserId as number],
       content: content,
     });
 

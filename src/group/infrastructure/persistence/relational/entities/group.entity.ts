@@ -105,6 +105,12 @@ export class GroupEntity extends EntityRelationalHelper {
   })
   categories: CategoryEntity[];
 
+  @Column({ type: 'integer', nullable: true })
+  zulipChannelId: number;
+
+  discussions: any[];
+  messages: any[];
+
   @BeforeInsert()
   generateSlug() {
     if (!this.slug) {

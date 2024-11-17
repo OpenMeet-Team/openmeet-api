@@ -37,17 +37,6 @@ declare module 'zulip-js' {
     operand: string | number;
   }
 
-  export type ZulipDest =
-    | {
-        type: 'direct';
-        to: [number];
-      }
-    | {
-        type: 'channel';
-        to: string | number;
-        topic: string;
-      };
-
   export interface ZulipReaction {
     emoji_code: string;
     emoji_name: string;
@@ -159,11 +148,57 @@ declare module 'zulip-js' {
     // num_before required if message_ids is not provided
   }
 
+  interface ZulipSubscription {
+    name: string;
+    description?: string;
+  }
+
+  interface ZulipSubscriptionParams {
+    subscriptions: ZulipSubscription[];
+    principals?: (string | number)[];
+    authorization_errors_fatal?: boolean;
+    announce?: boolean;
+    invite_only?: boolean;
+    is_web_public?: boolean;
+    is_default_stream?: boolean;
+    history_public_to_subscribers?: boolean;
+    stream_post_policy?: number;
+    message_retention_days?: string | number;
+    can_remove_subscribers_group?: number;
+  }
+
+  interface ZulipRemoveSubscriptionParams {
+    subscriptions: ZulipSubscription[];
+    principals?: (string | number)[];
+  }
+
   export interface ZulipCreateUserParams {
     email: string;
     password: string;
     full_name: string;
   }
+
+  interface ZulipBaseMessageParams {
+    content: string;
+    queue_id?: string;
+    local_id?: string;
+    read_by_sender?: boolean;
+  }
+
+  export interface ZulipDirectMessageParams extends ZulipBaseMessageParams {
+    type: 'direct';
+    to: number | number[] | string | string[];
+  }
+
+  export interface ZulipChannelMessageParams extends ZulipBaseMessageParams {
+    type: 'channel' | 'stream';
+    to: string | number; // Channel name or ID
+    topic: string; // Required for channel messages
+  }
+
+  export type ZulipCreateMessageParams =
+    | ZulipDirectMessageParams
+    | ZulipChannelMessageParams;
 
   export type ZulipEvent =
     | ZulipHeartbeatEvent
@@ -240,11 +275,11 @@ declare module 'zulip-js' {
     };
     messages: {
       send(
-        params: ZulipDest & {
-          type: 'direct' | 'channel';
-          content: string;
-        },
-      ): ZulipApiResponse<{ id: number }>;
+        params: ZulipDirectMessageParams | ZulipChannelMessageParams,
+      ): ZulipApiResponse<{
+        id: number;
+        automatic_new_visibility_policy?: number;
+      }>;
       retrieve(
         params: ZulipMessagesRetrieveParams,
       ): ZulipApiResponse<ZulipMessagesRetrieveResponse>;
@@ -305,11 +340,14 @@ declare module 'zulip-js' {
         };
         getProfile(): ApiResponse<ZulipUser>;
         subscriptions: {
-          remove(params: { stream_id: number }): ZulipApiResponse;
-          add(params: {
-            stream_id?: number;
-            subscriptions: string;
-          }): ZulipApiResponse;
+          remove(params: ZulipRemoveSubscriptionParams): ZulipApiResponse<{
+            removed?: string[];
+            not_removed?: string[];
+          }>;
+          add(params: ZulipSubscriptionParams): ZulipApiResponse<{
+            subscribed?: string[];
+            already_subscribed?: string[];
+          }>;
         };
       };
       create(params: ZulipCreateUserParams): ZulipApiResponse<ZulipUser>;

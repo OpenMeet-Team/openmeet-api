@@ -124,34 +124,55 @@ export class EventService {
   }
 
   async postComment(
-    eventId: number,
+    eventUlid: string,
     userId: number,
     body: EventTopicCommentDto,
   ) {
-    const { content } = body;
-    const event = await this.findOne(eventId);
-    const user = await this.userService.findOne(userId);
+    await this.getTenantSpecificEventRepository();
+    console.log(body);
+    const { content, topic } = body;
 
+    const event = await this.eventRepository.findOneByOrFail({
+      ulid: eventUlid,
+    });
+
+    const user = await this.userService.findById(userId);
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    const tenantId = this.request.tenantId;
+    // First make sure the user has a zulip client
+    await this.zulipService.getInitialisedClient(user);
+
+    const eventChannelName = `tenant_${this.request.tenantId}__event_${event.ulid}`;
+
+    // check if zulip channels exists
+    const streamResponse = await this.zulipService.getUserStreamId(
+      user,
+      eventChannelName,
+    );
+
+    if (streamResponse.result !== 'success') {
+      // create channel
+      await this.zulipService.subscribeUserToChannel(user, {
+        subscriptions: [
+          {
+            name: eventChannelName,
+            description: 'Test description for an event channel',
+          },
+        ],
+      });
+    }
+
     const params = {
-      to: `tenant_${tenantId}__event_${event.ulid}`,
-      type: 'channel',
-      topic: body.topic || `event_${event.ulid}`,
+      to: eventChannelName,
+      type: 'channel' as const,
+      topic: topic || `event_${event.ulid}`,
       content: content,
     };
 
-    try {
-      const response = await this.zulipService.sendUserMessage(user, params);
-      console.log('Message sent successfully:', response);
-      return response;
-    } catch (error) {
-      console.error('Error sending message to Zulip:', error);
-      throw new Error('Failed to post Zulip comment');
-    }
+    const response = await this.zulipService.sendUserMessage(user, params);
+    return response;
   }
 
   // async updateComment(body: CommentDto, messageId: number) {
@@ -343,7 +364,21 @@ export class EventService {
         );
     }
 
+    event.topics = event.zulipChannelId
+      ? await this.findEventTopicsByEventId(event.zulipChannelId)
+      : [];
+
     return event;
+  }
+
+  async findEventTopicsByEventId(zulipChannelId: number): Promise<any[]> {
+    const topics = await this.zulipService.getAdminStreamTopics(zulipChannelId);
+
+    if (topics.result === 'success') {
+      return topics.topics;
+    }
+
+    return [];
   }
 
   async findRandom(): Promise<EventEntity[]> {

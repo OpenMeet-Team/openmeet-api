@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Request } from 'express';
-import { CreateEventDto, EventTopicCommentDto } from './dto/create-event.dto';
+import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventService } from './event.service';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
@@ -83,7 +83,6 @@ export class EventController {
     return event;
   }
 
-  @Public()
   @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Show event details by ID' })
@@ -162,14 +161,14 @@ export class EventController {
     return this.eventService.getEventAttendees(id, pagination);
   }
 
-  @Post(':id/topics')
+  @Post(':ulid/comments')
   @ApiOperation({ summary: 'Create a new comment' })
-  async comment(
-    @Body() body: EventTopicCommentDto,
-    @Param('id') id: number,
+  async createComment(
+    @Body() body: { content: string; topic?: string },
+    @Param('ulid') ulid: string,
     @AuthUser() user: User,
   ) {
-    return await this.eventService.postComment(id, user.id, body);
+    return await this.eventService.postComment(ulid, user.id, body);
   }
 
   // @Post(':id/topics/:commentId')

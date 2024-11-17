@@ -44,9 +44,6 @@ describe('ZulipService', () => {
 
   describe('getUserStreams', () => {
     it('should return streams', async () => {
-      jest
-        .spyOn(zulipService, 'getInitialisedClient')
-        .mockResolvedValue(mockZulipClient);
       const streams = await zulipService.getUserStreams(mockUser);
       expect(streams).toBeDefined();
     });
@@ -62,21 +59,15 @@ describe('ZulipService', () => {
     });
   });
 
-  describe('getUsers', () => {
+  describe('getAdminUsers', () => {
     it('should return users', async () => {
-      jest
-        .spyOn(zulipService, 'getInitialisedClient')
-        .mockResolvedValue(mockZulipClient);
-      const users = await zulipService.getUsers();
+      const users = await zulipService.getAdminUsers();
       expect(users).toBeDefined();
     });
   });
 
   describe('getUserMessages', () => {
     it('should return messages', async () => {
-      jest
-        .spyOn(zulipService, 'getInitialisedClient')
-        .mockResolvedValue(mockZulipClient);
       const messages = await zulipService.getUserMessages(mockUser, {
         num_before: 0,
         num_after: 1,
@@ -155,18 +146,12 @@ describe('ZulipService', () => {
 
   describe('sendUserMessage', () => {
     it('should return message', async () => {
-      jest
-        .spyOn(zulipService, 'getInitialisedClient')
-        .mockResolvedValue(mockZulipClient);
-      const message = await zulipService.sendUserMessage(mockUser, {});
+      const message = await zulipService.sendUserMessage(mockUser, {
+        to: 'test',
+        content: 'test',
+        type: 'direct',
+      });
       expect(message).toBeDefined();
-    });
-  });
-
-  describe('createChannel', () => {
-    it('should return channel', async () => {
-      const channel = await zulipService.createChannel(mockUser, {});
-      expect(channel).toBeDefined();
     });
   });
 
@@ -205,6 +190,33 @@ describe('ZulipService', () => {
         [],
       );
       expect(message).toBeDefined();
+    });
+  });
+
+  describe('subscribeUserToChannel', () => {
+    it('should return user', async () => {
+      const user = await zulipService.subscribeUserToChannel(mockUser, {
+        subscriptions: [{ name: 'test' }],
+      });
+      expect(user).toBeDefined();
+    });
+  });
+
+  describe('getAdminMessages', () => {
+    it('should return messages', async () => {
+      const messages = await zulipService.getAdminMessages({
+        anchor: 'first_unread',
+        num_before: 0,
+        num_after: 1,
+      });
+      expect(messages).toBeDefined();
+    });
+  });
+
+  describe('getAdminStreamTopics', () => {
+    it('should return stream topics', async () => {
+      const topics = await zulipService.getAdminStreamTopics(1);
+      expect(topics).toBeDefined();
     });
   });
 });
