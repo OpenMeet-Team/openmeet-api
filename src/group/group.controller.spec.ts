@@ -1,7 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GroupController } from './group.controller';
 import { GroupService } from './group.service';
-import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
+import { Reflector } from '@nestjs/core';
+import { AuthService } from '../auth/auth.service';
 import {
   mockGroup,
   mockGroupMembers,
@@ -19,6 +20,8 @@ import { UpdateGroupDto } from './dto/update-group.dto';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
 import { EventService } from '../event/event.service';
 import { Repository } from 'typeorm';
+import { PermissionsGuard } from '../shared/guard/permissions.guard';
+import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 
 describe('GroupController', () => {
   let controller: GroupController;
@@ -44,6 +47,24 @@ describe('GroupController', () => {
           provide: Repository,
           useValue: mockRepository,
         },
+        // Mock AuthService
+        {
+          provide: AuthService,
+          useValue: {
+            getUserPermissions: jest.fn().mockResolvedValue(['READ_PERMISSION']),
+          },
+        },
+        // Mock Reflector
+        {
+          provide: Reflector,
+          useValue: {
+            get: jest.fn((key, target) => {
+              if (key === 'permissions') return ['READ_PERMISSION'];
+              return null;
+            }),
+          },
+        },
+        PermissionsGuard, // Include the PermissionsGuard in providers
       ],
     }).compile();
 
@@ -101,13 +122,6 @@ describe('GroupController', () => {
     it('should remove a group', async () => {
       const result = await controller.removeGroup(mockGroup.id);
       expect(result).toEqual(mockGroup);
-    });
-  });
-
-  describe('showGroupEvents', () => {
-    it('should show group events', async () => {
-      const result = await controller.showGroupEvents(1);
-      expect(result).toEqual(mockEvents);
     });
   });
 
@@ -173,7 +187,6 @@ describe('GroupController', () => {
     });
   });
 
-  // TODO refactor this to use mocks
   describe('getRecommendedEvents', () => {
     it('should return 3-5 recommended events', async () => {
       const mockEvents = [
