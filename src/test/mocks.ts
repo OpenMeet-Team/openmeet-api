@@ -14,6 +14,8 @@ import { FileEntity } from '../file/infrastructure/persistence/relational/entiti
 import { GroupUserPermissionEntity } from '../group/infrastructure/persistence/relational/entities/group-user-permission.entity';
 import { GroupRoleEntity } from 'src/group-role/infrastructure/persistence/relational/entities/group-role.entity';
 import { EventRoleEntity } from 'src/event-role/infrastructure/persistence/relational/entities/event-role.entity';
+import { ChatEntity } from 'src/chat/infrastructure/persistence/relational/entities/chat.entity';
+import { ZulipClient } from 'zulip-js';
 
 export const mockCategory = {
   id: 1,
@@ -27,6 +29,10 @@ export const mockUser = {
   password: 'password',
   firstName: 'John',
   lastName: 'Doe',
+  name: 'John Doe',
+  zulipUsername: 'test',
+  zulipApiKey: 'test',
+  zulipUserId: 1,
   createdAt: new Date(),
   updatedAt: new Date(),
 } as UserEntity;
@@ -95,6 +101,22 @@ export const mockGroupRole = {
   name: GroupRole.Guest,
 } as GroupRoleEntity;
 
+export const mockEventTopic = {
+  id: 1,
+  name: 'test',
+};
+
+export const mockChat = {
+  id: 1,
+  ulid: 'test',
+  participants: [mockUser],
+} as ChatEntity;
+
+export const mockZulipMessage = {
+  id: 1,
+  content: 'test',
+};
+
 export const mockSubCategories = [mockSubCategory];
 
 export const mockGroupMembers = [mockGroupMember];
@@ -106,6 +128,10 @@ export const mockEventAttendeeService = {
   getEventAttendees: jest.fn().mockResolvedValue(mockEventAttendees),
   leaveEvent: jest.fn().mockResolvedValue(mockEventAttendee),
   findEventDetailsAttendees: jest.fn().mockResolvedValue(mockEventAttendees),
+};
+
+export const mockAuthService = {
+  validateToken: jest.fn().mockResolvedValue(true),
 };
 
 export const mockGroupMemberService = {
@@ -132,6 +158,75 @@ export const mockMailService = {
   groupMemberJoined: jest.fn().mockResolvedValue(undefined),
 };
 
+export const mockZulipStreamTopic = {
+  name: 'test',
+  max_id: 450,
+};
+
+export const mockZulipStream = {
+  id: 410,
+  name: 'test',
+};
+
+export const mockZulipMessageResponse = {
+  id: 1,
+};
+
+export const mockZulipUser = {
+  id: 1,
+};
+
+export const mockZulipApiResponse = {
+  result: 'success',
+  msg: 'test',
+  code: 'test',
+};
+
+export const mockZulipClient = {
+  streams: {
+    retrieve: jest.fn().mockResolvedValue([mockZulipStream]),
+    topics: {
+      retrieve: jest.fn().mockResolvedValue([mockZulipStreamTopic]),
+    },
+    getStreamId: jest.fn().mockResolvedValue(mockZulipStream.id),
+  },
+  messages: {
+    retrieve: jest.fn().mockResolvedValue([mockZulipMessage]),
+    update: jest.fn().mockResolvedValue(mockZulipMessage),
+    send: jest.fn().mockResolvedValue(mockZulipMessageResponse),
+    deleteById: jest.fn().mockResolvedValue(mockZulipApiResponse),
+    flags: {
+      add: jest.fn().mockResolvedValue(mockZulipApiResponse),
+      remove: jest.fn().mockResolvedValue(mockZulipApiResponse),
+    },
+  },
+  users: {
+    create: jest.fn().mockResolvedValue(mockZulipUser),
+    me: {
+      getProfile: jest.fn().mockResolvedValue(mockZulipUser),
+      subscriptions: {
+        add: jest.fn().mockResolvedValue(mockZulipApiResponse),
+      },
+    },
+    retrieve: jest.fn().mockResolvedValue(mockZulipUser),
+  },
+  callEndpoint: jest.fn().mockResolvedValue(mockZulipMessageResponse),
+  server: {
+    settings: jest.fn().mockResolvedValue(mockZulipMessageResponse),
+  },
+} as unknown as ZulipClient;
+
+export const mockGetClient = jest.fn().mockResolvedValue(mockZulipClient);
+export const mockGetAdminClient = jest.fn().mockResolvedValue(mockZulipClient);
+
+export const mockChatService = {
+  getChatByUlid: jest.fn().mockResolvedValue(mockChat),
+  getChatByParticipantUlid: jest.fn().mockResolvedValue(mockChat),
+  sendMessage: jest.fn().mockResolvedValue(mockZulipMessageResponse),
+  showChats: jest.fn().mockResolvedValue({ chats: [mockChat], chat: mockChat }),
+  setMessagesRead: jest.fn().mockResolvedValue({ messages: [1, 2, 3] }),
+};
+
 export const mockGroupService = {
   getHomePageFeaturedGroups: jest.fn().mockResolvedValue(mockGroups),
   getHomePageUserCreatedGroups: jest.fn().mockResolvedValue(mockGroups),
@@ -154,10 +249,21 @@ export const mockGroupService = {
   showGroupEvents: jest.fn().mockResolvedValue(mockEvents),
 };
 
+export const mockUserService = {
+  findOne: jest.fn().mockResolvedValue(mockUser),
+  findByEmail: jest.fn().mockResolvedValue(mockUser),
+  findByUlid: jest.fn().mockResolvedValue(mockUser),
+};
+
 export const mockCategoryService = {
   getHomePageFeaturedCategories: jest.fn().mockResolvedValue([mockCategory]),
   findOne: jest.fn().mockResolvedValue(mockCategory),
   findByIds: jest.fn().mockResolvedValue([mockCategory]),
+};
+
+export const mockZulipService = {
+  getStream: jest.fn().mockResolvedValue(mockZulipStream),
+  getInitialisedClient: jest.fn().mockResolvedValue(mockZulipClient),
 };
 
 export const mockEventRoleService = {

@@ -122,20 +122,6 @@ export class UserService {
       clonedPayload.photo = fileObject;
     }
 
-    // if (clonedPayload.role?.id) {
-    //   const roleObject = Object.values(RoleEnum)
-    //     .map(String)
-    //     .includes(String(clonedPayload.role.id));
-    //   if (!roleObject) {
-    //     throw new UnprocessableEntityException({
-    //       status: HttpStatus.UNPROCESSABLE_ENTITY,
-    //       errors: {
-    //         role: 'roleNotExists',
-    //       },
-    //     });
-    //   }
-    // }
-
     if (clonedPayload.status?.id) {
       const statusObject = Object.values(StatusEnum)
         .map(String)
@@ -153,13 +139,7 @@ export class UserService {
     const userCreated = await this.usersRepository.save(
       this.usersRepository.create(clonedPayload),
     );
-    const tenantId = this.request.tenantId;
-    const params = {
-      email: `${tenantId}_${clonedPayload.email}`,
-      password: createProfileDto.password,
-      full_name: `${clonedPayload.firstName} ${clonedPayload.lastName}`,
-    };
-    this.eventEmitter.emit('user.created', params);
+    this.eventEmitter.emit('user.created', userCreated);
 
     return userCreated;
   }
@@ -189,10 +169,10 @@ export class UserService {
     // });
   }
 
-  async findProfile(id: User['id']): Promise<NullableType<User>> {
+  async showProfile(ulid: User['ulid']): Promise<NullableType<User>> {
     await this.getTenantSpecificRepository();
     return this.usersRepository.findOne({
-      where: { id: Number(id) },
+      where: { ulid },
       relations: [
         'subCategory',
         'groups',
@@ -203,11 +183,11 @@ export class UserService {
     });
   }
 
-  async findById(id: User['id']): Promise<NullableType<User>> {
+  async findById(id: User['id']): Promise<NullableType<UserEntity>> {
     await this.getTenantSpecificRepository();
 
     return this.usersRepository.findOne({
-      where: { id: Number(id) },
+      where: { id },
       relations: ['role'],
     });
   }
@@ -218,6 +198,13 @@ export class UserService {
     return this.usersRepository.findOne({
       where: { id: Number(id) },
       relations: ['role'],
+    });
+  }
+
+  async findByUlid(ulid: User['ulid']): Promise<NullableType<UserEntity>> {
+    await this.getTenantSpecificRepository();
+    return this.usersRepository.findOne({
+      where: { ulid },
     });
   }
 
@@ -246,14 +233,27 @@ export class UserService {
     });
   }
 
-  async addZulipIdInUser(email: string, zulipId: number) {
+  async addZulipCredentialsToUser(
+    userId: number,
+    {
+      zulipUsername,
+      zulipApiKey,
+      zulipUserId,
+    }: {
+      zulipUsername: string;
+      zulipApiKey: string;
+      zulipUserId: number;
+    },
+  ) {
     await this.getTenantSpecificRepository();
-    const user = await this.findByEmail(email);
+    const user = await this.findById(userId);
     if (user) {
-      user.zulipId = zulipId;
-      await this.usersRepository.save(user);
+      user.zulipUserId = zulipUserId;
+      user.zulipApiKey = zulipApiKey;
+      user.zulipUsername = zulipUsername;
+      return await this.usersRepository.save(user as UserEntity);
     }
-    return this.findByEmail(email);
+    return null;
   }
 
   async update(id: User['id'], payload: any): Promise<User | null> {
@@ -340,7 +340,10 @@ export class UserService {
       }
     }
     await this.usersRepository.save({ id, ...clonedPayload } as UserEntity); // FIXME:
-    return await this.findById(id);
+
+    const user = await this.findById(id);
+    this.eventEmitter.emit('user.updated', user);
+    return user;
   }
 
   async remove(id: User['id']): Promise<void> {

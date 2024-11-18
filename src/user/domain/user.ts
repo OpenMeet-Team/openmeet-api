@@ -66,6 +66,12 @@ export class User {
   })
   status?: Status;
 
+  @ApiProperty({
+    type: String,
+    example: '1234567890',
+  })
+  ulid: string;
+
   @ApiProperty()
   createdAt: Date;
 

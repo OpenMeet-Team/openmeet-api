@@ -171,3 +171,17 @@ export class CommentDto {
   // @IsNumber()
   // eventId: number;
 }
+
+export class EventTopicCommentDto {
+  @ApiProperty({
+    description: 'The content of the comment',
+  })
+  content: string;
+
+  @ApiProperty({
+    description: 'The topic id of the event',
+  })
+  @IsOptional()
+  @IsString()
+  topic?: string;
+}

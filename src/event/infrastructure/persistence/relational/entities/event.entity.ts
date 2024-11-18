@@ -132,4 +132,10 @@ export class EventEntity extends EntityRelationalHelper {
   generateShortId() {
     this.ulid = ulid().toLowerCase();
   }
+
+  @Column({ type: 'integer', nullable: true })
+  zulipChannelId: number;
+
+  topics: any[];
+  messages: any[];
 }
