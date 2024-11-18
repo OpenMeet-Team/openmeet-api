@@ -64,7 +64,7 @@ export class EventController {
     return this.eventService.create(createEventDto, userId);
   }
 
-  @Permissions(UserPermission.CreateEvents)
+  @Permissions()
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get('me')
   @ApiOperation({ summary: 'Get all user events' })
