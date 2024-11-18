@@ -1,4 +1,11 @@
-import { Entity, Column, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventEntity } from '../../../../../event/infrastructure/persistence/relational/entities/event.entity';
 import { EventAttendeeStatus } from '../../../../../core/constants/constant';
@@ -8,6 +15,12 @@ import { EventRoleEntity } from '../../../../../event-role/infrastructure/persis
 export class EventAttendeesEntity {
   @PrimaryGeneratedColumn()
   id: number;
+
+  @CreateDateColumn({ type: 'timestamp' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamp' })
+  updatedAt: Date;
 
   @Column({
     nullable: true,

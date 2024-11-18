@@ -188,4 +188,11 @@ export class EventAttendeeService {
       },
     });
   }
+
+  async deleteEventAttendees(eventId: number): Promise<any> {
+    await this.getTenantSpecificEventRepository();
+    return await this.eventAttendeesRepository.delete({
+      event: { id: eventId },
+    });
+  }
 }

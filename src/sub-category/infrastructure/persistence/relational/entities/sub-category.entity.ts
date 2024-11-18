@@ -5,6 +5,8 @@ import {
   ManyToMany,
   ManyToOne,
   PrimaryGeneratedColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { CategoryEntity } from '../../../../../category/infrastructure/persistence/relational/entities/categories.entity';
@@ -15,6 +17,12 @@ import { UserEntity } from '../../../../../user/infrastructure/persistence/relat
 export class SubCategoryEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
+
+  @CreateDateColumn({ type: 'timestamp' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamp' })
+  updatedAt: Date;
 
   @Column({ type: 'varchar', length: 255 })
   title: string;
