@@ -38,7 +38,7 @@ import { generateShortCode } from '../utils/short-code';
 export class GroupService {
   private groupMembersRepository: Repository<GroupMemberEntity>;
   private groupRepository: Repository<GroupEntity>;
-  private readonly groupMemberPermissionsRepository: Repository<GroupUserPermissionEntity>;
+  private groupMemberPermissionsRepository: Repository<GroupUserPermissionEntity>;
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
@@ -57,6 +57,9 @@ export class GroupService {
       await this.tenantConnectionService.getTenantConnection(tenantId);
     this.groupRepository = dataSource.getRepository(GroupEntity);
     this.groupMembersRepository = dataSource.getRepository(GroupMemberEntity);
+    this.groupMemberPermissionsRepository = dataSource.getRepository(
+      GroupUserPermissionEntity,
+    );
   }
 
   async getGroupsWhereUserCanCreateEvents(

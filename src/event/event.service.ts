@@ -581,6 +581,11 @@ export class EventService {
   async remove(id: number): Promise<void> {
     await this.getTenantSpecificEventRepository();
     const event = await this.findOne(id);
+
+    // Delete related event attendees first
+    await this.eventAttendeeService.deleteEventAttendees(event.id);
+
+    // Now delete the event
     await this.eventRepository.remove(event);
   }
 
