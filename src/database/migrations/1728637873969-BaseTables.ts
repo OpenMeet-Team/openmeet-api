@@ -30,7 +30,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `CREATE TYPE "${schema}"."eventAttendees_role_enum" AS ENUM('participant', 'host', 'speaker', 'moderator', 'guest')`,
     );
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."eventAttendees" ("id" SERIAL NOT NULL, "approvalAnswer" text, "roleId" integer NOT NULL, "eventId" integer NOT NULL, "userId" integer NOT NULL, "role" "${schema}"."eventAttendees_role_enum", "status" "${schema}"."eventAttendees_status_enum", CONSTRAINT "PK_e47b1fedacf94185d9310d135e0" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."eventAttendees" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "approvalAnswer" text, "roleId" integer NOT NULL, "eventId" integer NOT NULL, "userId" integer NOT NULL, "role" "${schema}"."eventAttendees_role_enum", "status" "${schema}"."eventAttendees_status_enum", CONSTRAINT "PK_e47b1fedacf94185d9310d135e0" PRIMARY KEY ("id"))`,
     );
 
     await queryRunner.query(
