@@ -9,6 +9,8 @@ import {
   OneToOne,
   BeforeInsert,
   Index,
+  CreateDateColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
@@ -30,6 +32,12 @@ import { ulid } from 'ulid';
 export class EventEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
+
+  @CreateDateColumn({ type: 'timestamp' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamp' })
+  updatedAt: Date;
 
   @Column({ type: String, unique: true })
   ulid: string;
@@ -114,7 +122,10 @@ export class EventEntity extends EntityRelationalHelper {
   @JoinColumn({ name: 'groupId' })
   group?: GroupEntity | null;
 
-  @OneToMany(() => EventAttendeesEntity, (event) => event.event)
+  @OneToMany(() => EventAttendeesEntity, (event) => event.event, {
+    cascade: true,
+    onDelete: 'CASCADE',
+  })
   attendees: EventAttendeesEntity[];
 
   @ManyToMany(() => CategoryEntity, (category) => category.events)

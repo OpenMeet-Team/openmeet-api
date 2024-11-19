@@ -1,4 +1,11 @@
-import { Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { GroupEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group.entity';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
@@ -8,6 +15,12 @@ import { GroupRoleEntity } from '../../../../../group-role/infrastructure/persis
 export class GroupMemberEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
+
+  @CreateDateColumn({ type: 'timestamp' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'timestamp' })
+  updatedAt: Date;
 
   @ManyToOne(() => UserEntity, (user) => user.groupMembers)
   user: UserEntity;
