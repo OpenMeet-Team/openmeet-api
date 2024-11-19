@@ -52,11 +52,11 @@ export class GroupController {
   @ApiOperation({
     summary: 'Get all groups, public endpoint with search and pagination',
   })
-  async findAll(
+  async showAll(
     @Query() pagination: PaginationDto,
     @Query() query: QueryGroupDto,
   ): Promise<GroupEntity[]> {
-    return this.groupService.findAll(pagination, query);
+    return this.groupService.showAll(pagination, query);
   }
 
   @Get('me')
@@ -67,53 +67,53 @@ export class GroupController {
     return await this.groupService.getGroupsWhereUserCanCreateEvents(user.id);
   }
 
-  @Get('me/:id')
+  @Get('me/:slug')
   @ApiOperation({ summary: 'Get group by ID Authenticated' })
-  async editGroup(@Param('id') id: number): Promise<GroupEntity> {
-    return await this.groupService.editGroup(id);
+  async editGroup(@Param('slug') slug: string): Promise<GroupEntity> {
+    return await this.groupService.editGroup(slug);
   }
 
   @Public()
-  @Get(':id')
+  @Get(':slug')
   @ApiOperation({
-    summary: 'Get group by ID and authenticated user, public endpoint',
+    summary: 'Get group by group slug and authenticated user, public endpoint',
   })
   async showGroup(
-    @Param('id') id: number,
+    @Param('slug') slug: string,
     @Optional() @AuthUser() user?: User,
   ): Promise<GroupEntity> {
-    return await this.groupService.showGroup(+id, user?.id);
+    return await this.groupService.showGroup(slug, user?.id);
   }
 
-  @Patch(':id')
-  @ApiOperation({ summary: 'Update a group by ID' })
+  @Patch(':slug')
+  @ApiOperation({ summary: 'Update a group by slug' })
   async updateGroup(
-    @Param('id') id: number,
+    @Param('slug') slug: string,
     @Body() updateGroupDto: UpdateGroupDto,
   ): Promise<GroupEntity> {
-    return this.groupService.update(+id, updateGroupDto);
+    return this.groupService.update(slug, updateGroupDto);
   }
 
-  @Delete(':id')
-  @ApiOperation({ summary: 'Delete a group by ID' })
-  async removeGroup(@Param('id') id: number): Promise<any> {
-    return this.groupService.remove(+id);
+  @Delete(':slug')
+  @ApiOperation({ summary: 'Delete a group by slug' })
+  async removeGroup(@Param('slug') slug: string): Promise<any> {
+    return this.groupService.remove(slug);
   }
 
   @Public()
-  @Get(':id/events')
+  @Get(':slug/events')
   @ApiOperation({ summary: 'Get all group events' })
-  async showGroupEvents(@Param('id') id: number): Promise<EventEntity[]> {
-    return await this.groupService.showGroupEvents(id);
+  async showGroupEvents(@Param('slug') slug: string): Promise<EventEntity[]> {
+    return await this.groupService.showGroupEvents(slug);
   }
 
   @Public()
-  @Get(':id/members')
+  @Get(':slug/members')
   @ApiOperation({ summary: 'Get all group members' })
   async showGroupMembers(
-    @Param('id') id: number,
+    @Param('slug') slug: string,
   ): Promise<GroupMemberEntity[]> {
-    return this.groupService.showGroupMembers(+id);
+    return this.groupService.showGroupMembers(slug);
   }
 
   // @Public()
@@ -127,69 +127,63 @@ export class GroupController {
 
   @Post(':slug/join')
   @ApiOperation({ summary: 'Joining a group through link' })
-  async joinGroupThroughLink(
-    @AuthUser() user: User,
-    @Param('slug') slug: string,
-  ) {
-    return this.groupService.joinGroupThroughLink(user.id, slug);
+  async joinGroup(@AuthUser() user: User, @Param('slug') slug: string) {
+    return this.groupService.joinGroup(slug, user.id);
   }
 
-  @Post(':id/join')
-  @ApiOperation({ summary: 'Joining a group' })
-  async joinGroup(
-    @AuthUser() user: User,
-    @Param('id') id: number,
-  ): Promise<GroupMemberEntity | null> {
-    return this.groupService.joinGroup(user.id, +id);
-  }
-
-  @Delete(':id/leave')
+  @Delete(':slug/leave')
   @ApiOperation({ summary: 'Leave a group' })
-  async leaveGroup(@AuthUser() user: User, @Param('id') id: number) {
-    return this.groupMemberService.leaveGroup(user.id, +id);
+  async leaveGroup(@AuthUser() user: User, @Param('slug') slug: string) {
+    return this.groupService.leaveGroup(slug, user.id);
   }
 
-  @Delete(':id/members/:userId')
+  @Delete(':slug/members/:groupMemberId')
   @ApiOperation({ summary: 'Remove a group member' })
   async removeGroupMember(
-    @Param('id') id: number,
-    @Param('userId') userId: number,
+    @Param('slug') slug: string,
+    @Param('groupMemberId') groupMemberId: number,
   ) {
-    return this.groupMemberService.removeGroupMember(id, userId);
+    return this.groupService.removeGroupMember(slug, groupMemberId);
   }
 
-  @Patch(':id/members/:userId')
+  @Patch(':slug/members/:groupMemberId')
   @ApiOperation({ summary: 'Update a group member role' })
   async updateGroupMemberRole(
-    @Param('id') id: number,
-    @Param('userId') userId: number,
+    @Param('slug') slug: string,
+    @Param('groupMemberId') groupMemberId: number,
     @Body() updateDto: UpdateGroupMemberRoleDto,
   ): Promise<GroupMemberEntity> {
-    return this.groupMemberService.updateGroupMemberRole(id, userId, updateDto);
+    return this.groupService.updateGroupMemberRole(
+      slug,
+      groupMemberId,
+      updateDto,
+    );
   }
 
-  @Post(':id/members/:userId/approve')
+  @Post(':slug/members/:groupMemberId/approve')
   @ApiOperation({ summary: 'Approve a group member' })
   async approveMember(
-    @Param('id') id: number,
-    @Param('userId') userId: number,
+    @Param('slug') slug: string,
+    @Param('groupMemberId') groupMemberId: number,
   ): Promise<GroupMemberEntity> {
-    return this.groupMemberService.approveMember(id, userId);
+    return this.groupService.approveMember(slug, groupMemberId);
   }
 
-  @Delete(':id/members/:userId/reject')
+  @Delete(':slug/members/:groupMemberId/reject')
   @ApiOperation({ summary: 'Reject a group member' })
   async rejectMember(
-    @Param('id') id: number,
-    @Param('userId') userId: number,
+    @Param('slug') slug: string,
+    @Param('groupMemberId') groupMemberId: number,
   ): Promise<GroupMemberEntity> {
-    return this.groupMemberService.rejectMember(id, userId);
+    return this.groupService.rejectMember(slug, groupMemberId);
   }
 
   @Public()
-  @Get(':id/recommended-events')
+  @Get(':slug/recommended-events')
   @ApiOperation({ summary: 'Get similar events for the group' })
-  async getRecommendedEvents(@Param('id') id: number): Promise<EventEntity[]> {
-    return await this.groupService.getRecommendedEvents(id);
+  async showGroupRecommendedEvents(
+    @Param('slug') slug: string,
+  ): Promise<EventEntity[]> {
+    return await this.groupService.showGroupRecommendedEvents(slug);
   }
 }

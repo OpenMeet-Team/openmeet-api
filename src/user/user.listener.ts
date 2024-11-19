@@ -19,8 +19,7 @@ export class UserListener {
       await this.userService.getTenantSpecificRepository();
       await this.zulipService.getInitialisedClient(user); // this will create a new zulip user if it doesn't exist
     } catch (error) {
-      console.error('Failed to create zulip user:', error);
-      throw new NotFoundException('Failed to create zulip user');
+      console.error('UserListener: Failed to create zulip user', error.message);
     }
   }
 

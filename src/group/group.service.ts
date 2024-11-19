@@ -33,6 +33,7 @@ import { FileEntity } from '../file/infrastructure/persistence/relational/entiti
 import { GroupRoleService } from '../group-role/group-role.service';
 import { MailService } from '../mail/mail.service';
 import { generateShortCode } from '../utils/short-code';
+import { UpdateGroupMemberRoleDto } from 'src/group-member/dto/create-groupMember.dto';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -127,16 +128,15 @@ export class GroupService {
     return groups;
   }
 
-  // Get recommended events for a group, suppliment with random events if not enough
-  async getRecommendedEvents(
-    groupId: number,
+  async showGroupRecommendedEvents(
+    slug: string,
     minEvents: number = 3,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
     await this.getTenantSpecificGroupRepository();
 
     const group = await this.groupRepository.findOne({
-      where: { id: groupId as number },
+      where: { slug },
       relations: ['categories'],
     });
 
@@ -149,7 +149,7 @@ export class GroupService {
       try {
         recommendedEvents =
           (await this.eventService.findRecommendedEventsForGroup(
-            groupId,
+            group.id,
             categoryIds,
             minEvents,
             maxEvents,
@@ -165,7 +165,7 @@ export class GroupService {
         let randomEvents: EventEntity[] = [];
         try {
           randomEvents = await this.eventService.findRandomEventsForGroup(
-            groupId,
+            group.id,
             remainingEventsToFetch,
             remainingEventsToFetch,
           );
@@ -181,16 +181,6 @@ export class GroupService {
         (event, index, self) =>
           index === self.findIndex((t) => t.id === event.id),
       );
-
-      if (uniqueEvents.length < minEvents) {
-        throw new NotFoundException(
-          `Not enough events found for group ${groupId}`,
-        );
-      }
-
-      if (uniqueEvents.length > maxEvents) {
-        return uniqueEvents.slice(0, maxEvents);
-      }
 
       return uniqueEvents;
     }
@@ -256,7 +246,7 @@ export class GroupService {
   }
 
   // Find all groups with relations
-  async findAll(pagination: PaginationDto, query: QueryGroupDto): Promise<any> {
+  async showAll(pagination: PaginationDto, query: QueryGroupDto): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     const { page, limit } = pagination;
     const { search, userId, location, categories } = query;
@@ -306,11 +296,11 @@ export class GroupService {
     return await paginate(groupQuery, { page, limit });
   }
 
-  async editGroup(id: number): Promise<any> {
+  async editGroup(slug: string): Promise<any> {
     await this.getTenantSpecificGroupRepository();
 
     return await this.groupRepository.findOne({
-      where: { id },
+      where: { slug },
       relations: ['createdBy', 'categories'],
     });
   }
@@ -339,10 +329,10 @@ export class GroupService {
     return group;
   }
 
-  async showGroup(id: number, userId?: number): Promise<any> {
+  async showGroup(slug: string, userId?: number): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     const group = await this.groupRepository.findOne({
-      where: { id },
+      where: { slug },
       relations: ['createdBy', 'categories'],
     });
 
@@ -350,10 +340,10 @@ export class GroupService {
       throw new NotFoundException('Group not found');
     }
 
-    group.events = await this.eventService.findEventsForGroup(id, 5);
+    group.events = await this.eventService.findEventsForGroup(group.id, 5);
 
     group.groupMembers = await this.groupMemberService.findGroupDetailsMembers(
-      id,
+      group.id,
       5,
     );
 
@@ -387,11 +377,15 @@ export class GroupService {
   }
 
   async update(
-    id: number,
+    slug: string,
     updateGroupDto: UpdateGroupDto,
   ): Promise<GroupEntity> {
     await this.getTenantSpecificGroupRepository();
-    const group = await this.findOne(id);
+    const group = await this.groupRepository.findOneBy({ slug });
+
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
 
     let categoryEntities: any[] = [];
     const categoryIds = updateGroupDto.categories;
@@ -410,18 +404,8 @@ export class GroupService {
       );
     }
 
-    let slugifiedName = '';
-    const shortCode = await generateShortCode();
-    if (updateGroupDto.name) {
-      slugifiedName = `${slugify(updateGroupDto.name, {
-        strict: true,
-        lower: true,
-      })}-${shortCode.toLowerCase()}`;
-    }
-
     const mappedGroupDto = {
       ...updateGroupDto,
-      slug: slugifiedName,
       categories: categoryEntities,
     };
 
@@ -446,13 +430,17 @@ export class GroupService {
     return this.groupRepository.save(updatedGroup);
   }
 
-  async remove(id: number): Promise<void> {
+  async remove(slug: string): Promise<void> {
     await this.getTenantSpecificGroupRepository();
-    const group = await this.findOne(id);
+    const group = await this.groupRepository.findOneBy({ slug });
+
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
 
     // First, delete all group members associated with the group
-    await this.groupMembersRepository.delete({ group: { id } });
-    await this.eventService.deleteEventsByGroup(id);
+    await this.groupMembersRepository.delete({ group: { id: group.id } });
+    await this.eventService.deleteEventsByGroup(group.id);
 
     await this.groupRepository.remove(group);
   }
@@ -503,30 +491,46 @@ export class GroupService {
       .getMany();
   }
 
-  async joinGroupThroughLink(userId: number, slug: string) {
+  async approveMember(slug: string, groupMemberId: number) {
     await this.getTenantSpecificGroupRepository();
-    const group = await this.groupRepository.findOne({ where: { slug } });
-    let response;
-    if (group) {
-      response = await this.joinGroup(userId, group?.id);
+    const group = await this.groupRepository.findOne({
+      where: { slug },
+    });
+    if (!group) {
+      throw new NotFoundException('Group not found');
     }
-    return response;
+    return await this.groupMemberService.approveMember(groupMemberId);
   }
 
-  async joinGroup(userId: number, groupId: number) {
+  async rejectMember(slug: string, groupMemberId: number) {
+    await this.getTenantSpecificGroupRepository();
+    const group = await this.groupRepository.findOne({
+      where: { slug },
+    });
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
+    return await this.groupMemberService.rejectMember(groupMemberId);
+  }
+
+  async joinGroup(slug: string, userId: number) {
     await this.getTenantSpecificGroupRepository();
 
     const groupEntity = await this.groupRepository.findOne({
-      where: { id: groupId },
+      where: { slug },
       relations: ['createdBy'],
     });
+
+    if (!groupEntity) {
+      throw new NotFoundException('Group not found');
+    }
 
     if (
       groupEntity?.requireApproval ||
       groupEntity?.visibility === GroupVisibility.Private
     ) {
       await this.groupMemberService.createGroupMember(
-        { userId, groupId },
+        { userId, groupId: groupEntity.id },
         GroupRole.Guest,
       );
 
@@ -542,24 +546,81 @@ export class GroupService {
       // }
     } else {
       await this.groupMemberService.createGroupMember(
-        { userId, groupId },
+        { userId, groupId: groupEntity.id },
         GroupRole.Member,
       );
     }
 
     return await this.groupMemberService.findGroupMemberByUserId(
-      groupId,
+      groupEntity.id,
       userId,
     );
   }
 
-  async showGroupMembers(groupId: number): Promise<GroupMemberEntity[]> {
+  async leaveGroup(slug: string, userId: number) {
     await this.getTenantSpecificGroupRepository();
-    return await this.groupMemberService.findGroupDetailsMembers(groupId, 0);
+    const group = await this.groupRepository.findOne({
+      where: { slug },
+    });
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
+    return await this.groupMemberService.leaveGroup(userId, group.id);
   }
 
-  async showGroupEvents(groupId: number): Promise<EventEntity[]> {
+  async removeGroupMember(slug: string, groupMemberId: number) {
     await this.getTenantSpecificGroupRepository();
-    return await this.eventService.findEventsForGroup(groupId, 0);
+    const group = await this.groupRepository.findOne({
+      where: { slug },
+    });
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
+    return await this.groupMemberService.removeGroupMember(
+      group.id,
+      groupMemberId,
+    );
+  }
+
+  async updateGroupMemberRole(
+    slug: string,
+    groupMemberId: number,
+    updateDto: UpdateGroupMemberRoleDto,
+  ) {
+    await this.getTenantSpecificGroupRepository();
+    const group = await this.groupRepository.findOne({
+      where: { slug },
+    });
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
+    return await this.groupMemberService.updateGroupMemberRole(
+      groupMemberId,
+      updateDto,
+    );
+  }
+
+  async showGroupMembers(slug: string): Promise<GroupMemberEntity[]> {
+    await this.getTenantSpecificGroupRepository();
+    const group = await this.groupRepository.findOne({
+      where: { slug },
+    });
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
+    return await this.groupMemberService.findGroupDetailsMembers(group.id, 0);
+  }
+
+  async showGroupEvents(slug: string): Promise<EventEntity[]> {
+    await this.getTenantSpecificGroupRepository();
+    const group = await this.groupRepository.findOne({
+      where: { slug },
+    });
+
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
+
+    return await this.eventService.findEventsForGroup(group.id, 0);
   }
 }

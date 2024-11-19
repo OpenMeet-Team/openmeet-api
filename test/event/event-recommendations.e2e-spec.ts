@@ -87,7 +87,7 @@ describe('EventController Recommendations (e2e)', () => {
     //  delete test events
     for (const event of [testEvent, testEvent2, testEvent3, testEvent4]) {
       await request(TESTING_APP_URL)
-        .delete(`/api/events/${event.id}`)
+        .delete(`/api/events/${event.slug}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
     }
@@ -107,7 +107,7 @@ describe('EventController Recommendations (e2e)', () => {
     const recommendedEvents = await getRecommendedEvents(
       TESTING_APP_URL,
       token,
-      testEvent.id,
+      testEvent.slug,
       minEvents,
       maxEvents,
       true,

@@ -50,13 +50,13 @@ describe('EventAttendeeController (e2e)', () => {
     return eventResponse.body;
   }
 
-  async function attendEvent(token, eventId) {
+  async function attendEvent(token, eventSlug) {
     const attendResponse = await request(TESTING_APP_URL)
-      .post(`/api/events/${eventId}/attend`)
+      .post(`/api/events/${eventSlug}/attend`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID)
       .send({
-        eventId,
+        eventId: testEvent.id,
       });
 
     expect(attendResponse.status).toBe(201);
@@ -66,13 +66,13 @@ describe('EventAttendeeController (e2e)', () => {
   beforeEach(async () => {
     token = await loginAsTester();
     testEvent = await createEvent(token);
-    await attendEvent(token, testEvent.id);
+    await attendEvent(token, testEvent.slug);
   });
 
   afterEach(async () => {
-    if (testEvent && testEvent.id) {
+    if (testEvent && testEvent.slug) {
       await request(TESTING_APP_URL)
-        .delete(`/api/events/${testEvent.id}`)
+        .delete(`/api/events/${testEvent.slug}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
     }
@@ -91,7 +91,7 @@ describe('EventAttendeeController (e2e)', () => {
 
   it('should retrieve attendees of an event', async () => {
     const getEventAttendeesResponse = await request(TESTING_APP_URL)
-      .get(`/api/events/${testEvent.id}/attendees`)
+      .get(`/api/events/${testEvent.slug}/attendees`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
 

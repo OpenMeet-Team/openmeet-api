@@ -36,6 +36,8 @@ import { GroupMemberEntity } from '../../../../../group-member/infrastructure/pe
 import { GroupEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group.entity';
 import { ulid } from 'ulid';
 import { ChatEntity } from '../../../../../chat/infrastructure/persistence/relational/entities/chat.entity';
+import slugify from 'slugify';
+import { generateShortCode } from '../../../../../utils/short-code';
 @Entity({
   name: 'users',
 })
@@ -49,7 +51,13 @@ export class UserEntity extends EntityRelationalHelper {
   @ApiProperty({
     type: String,
   })
-  @Column({ type: String, unique: true })
+  @Column({ type: 'varchar', length: 255, unique: true })
+  slug: string;
+
+  @ApiProperty({
+    type: String,
+  })
+  @Column({ type: 'char', length: 26, unique: true })
   ulid: string;
 
   @ApiProperty({
@@ -199,6 +207,15 @@ export class UserEntity extends EntityRelationalHelper {
 
   @BeforeInsert()
   generateUlid() {
-    this.ulid = ulid().toLowerCase();
+    if (!this.ulid) {
+      this.ulid = ulid().toLowerCase();
+    }
+  }
+
+  @BeforeInsert()
+  generateSlug() {
+    if (!this.slug) {
+      this.slug = `${slugify(this.name, { strict: true, lower: true })}-${generateShortCode().toLowerCase()}`;
+    }
   }
 }
