@@ -14,7 +14,7 @@ services:
       - ./pg-init-scripts:/docker-entrypoint-initdb.d
 
   maildev:
-    build:  
+    build:
       context: .
       dockerfile: maildev.Dockerfile
     expose:
