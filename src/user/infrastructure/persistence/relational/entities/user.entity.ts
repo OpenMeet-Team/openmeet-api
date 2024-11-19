@@ -57,7 +57,7 @@ export class UserEntity extends EntityRelationalHelper {
   @ApiProperty({
     type: String,
   })
-  @Column({ type: 'char', length: 26, unique: true })
+  @Column({ type: 'char', length: 26 })
   ulid: string;
 
   @ApiProperty({
