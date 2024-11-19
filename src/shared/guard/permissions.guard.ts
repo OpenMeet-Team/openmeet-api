@@ -36,13 +36,13 @@ export class PermissionsGuard implements CanActivate {
       return true;
     }
 
-    const groupId = request.headers['x-groupid-ulid'];
-    const eventId = request.headers['x-eventid-ulid'];
+    const groupSlug = request.headers['x-group-slug'];
+    const eventSlug = request.headers['x-event-slug'];
     let userPermissions;
-    if (groupId) {
-      userPermissions = await this.getGroupPermissions(user.id, groupId);
-    } else if (eventId) {
-      userPermissions = await this.getEventPermissions(user.id, eventId);
+    if (groupSlug) {
+      userPermissions = await this.getGroupPermissions(user.id, groupSlug);
+    } else if (eventSlug) {
+      userPermissions = await this.getEventPermissions(user.id, eventSlug);
     } else {
       userPermissions = await this.getUserPermissions(user.id);
     }
@@ -85,11 +85,11 @@ export class PermissionsGuard implements CanActivate {
 
   private async getGroupPermissions(
     userId: number,
-    groupId: string,
+    groupSlug: string,
   ): Promise<Set<string>> {
     const groupPermissions = new Set<string>();
 
-    const group = await this.authService.getGroup(groupId);
+    const group = await this.authService.getGroup(groupSlug);
 
     // Fetch the user's group membership
     const groupMember = await this.authService.getGroupMembers(
@@ -126,10 +126,10 @@ export class PermissionsGuard implements CanActivate {
 
   private async getEventPermissions(
     userId: number,
-    eventId: string,
+    eventSlug: string,
   ): Promise<Set<string>> {
     const eventPermissions = new Set<string>();
-    const event = await this.authService.getEvent(eventId);
+    const event = await this.authService.getEvent(eventSlug);
 
     const eventAttendee = await this.authService.getEventAttendees(
       event.id,
@@ -148,11 +148,11 @@ export class PermissionsGuard implements CanActivate {
       attendeePermissionsMap.set(ap.role.permission.name, true);
     });
 
-    attendeePermissionsMap.forEach((granted, premNane) => {
+    attendeePermissionsMap.forEach((granted, permNane) => {
       if (granted) {
-        eventPermissions.add(premNane);
+        eventPermissions.add(permNane);
       } else {
-        eventPermissions.delete(premNane);
+        eventPermissions.delete(permNane);
       }
     });
     return eventPermissions;

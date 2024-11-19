@@ -335,14 +335,14 @@ export class EventService {
     return event;
   }
 
-  async findEventByUlid(ulid: string): Promise<EventEntity> {
+  async findEventBySlug(slug: string): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
     const event = await this.eventRepository.findOne({
-      where: { ulid },
+      where: { slug },
     });
 
     if (!event) {
-      throw new NotFoundException(`Event with ID ${ulid} not found`);
+      throw new NotFoundException(`Event with ID ${slug} not found`);
     }
 
     return event;

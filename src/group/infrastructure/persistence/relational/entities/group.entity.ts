@@ -35,7 +35,7 @@ export class GroupEntity extends EntityRelationalHelper {
 
   @Column({ type: String, unique: true })
   ulid: string;
-  
+
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 

@@ -342,17 +342,17 @@ export class GroupService {
     return group;
   }
 
-  async findGroupByUlid(ulid: string): Promise<GroupEntity> {
+  async findGroupBySlug(slug: string): Promise<GroupEntity> {
     await this.getTenantSpecificGroupRepository();
-    const event = await this.groupRepository.findOne({
-      where: { ulid },
+    const group = await this.groupRepository.findOne({
+      where: { slug },
     });
 
-    if (!event) {
-      throw new NotFoundException(`Group with ID ${ulid} not found`);
+    if (!group) {
+      throw new NotFoundException(`Group with ID ${slug} not found`);
     }
 
-    return event;
+    return group;
   }
 
   async showGroup(id: number, userId?: number): Promise<any> {

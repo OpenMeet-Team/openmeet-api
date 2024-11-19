@@ -649,12 +649,12 @@ export class AuthService {
     return this.eventAttendeeService.findEventAttendeeByUserId(eventId, userId);
   }
 
-  async getEvent(ulid: string) {
-    return this.eventService.findEventByUlid(ulid);
+  async getEvent(slug: string) {
+    return this.eventService.findEventBySlug(slug);
   }
 
-  async getGroup(ulid: string) {
-    return this.groupService.findGroupByUlid(ulid);
+  async getGroup(slug: string) {
+    return this.groupService.findGroupBySlug(slug);
   }
 
   async getGroupMembers(
