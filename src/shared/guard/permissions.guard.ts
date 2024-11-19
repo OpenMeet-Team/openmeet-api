@@ -21,18 +21,31 @@ export class PermissionsGuard implements CanActivate {
       PERMISSIONS_KEY,
       context.getHandler(),
     );
+    const isPublic = this.reflector.get<boolean>(
+      'isPublic',
+      context.getHandler(),
+    );
     if (!requiredPermissions) {
       return true; // No permissions required
     }
 
     const request = context.switchToHttp().getRequest();
     const user = request.user;
-    console.log('🚀 ~ PermissionsGuard ~ canActivate ~ user:', user);
 
-    const groupId = request.params.id || request.body.id;
+    if (!user && isPublic) {
+      return true;
+    }
 
-    // Fetch user's permissions
-    const userPermissions = await this.getUserPermissions(user.id, groupId);
+    const groupId = request.headers['x-groupid-ulid'];
+    const eventId = request.headers['x-eventid-ulid'];
+    let userPermissions;
+    if (groupId) {
+      userPermissions = await this.getGroupPermissions(user.id, groupId);
+    } else if (eventId) {
+      userPermissions = await this.getEventPermissions(user.id, eventId);
+    } else {
+      userPermissions = await this.getUserPermissions(user.id);
+    }
 
     // Check if user has all required permissions
     const hasPermission = requiredPermissions.every((permission) =>
@@ -46,10 +59,7 @@ export class PermissionsGuard implements CanActivate {
     return true;
   }
 
-  private async getUserPermissions(
-    userId: number,
-    groupId?: number,
-  ): Promise<Set<string>> {
+  private async getUserPermissions(userId: number): Promise<Set<string>> {
     const permissions = new Set<string>();
 
     // Fetch user-specific permissions
@@ -70,24 +80,22 @@ export class PermissionsGuard implements CanActivate {
       }
     });
 
-    // If groupId is provided, fetch group permissions
-    if (groupId) {
-      // Fetch group-specific permissions
-      const groupPermissions = await this.getGroupPermissions(userId, groupId);
-      groupPermissions.forEach((perm) => permissions.add(perm));
-    }
-
     return permissions;
   }
 
   private async getGroupPermissions(
     userId: number,
-    groupId: number,
+    groupId: string,
   ): Promise<Set<string>> {
     const groupPermissions = new Set<string>();
 
+    const group = await this.authService.getGroup(groupId);
+
     // Fetch the user's group membership
-    const groupMember = await this.authService.getGroupMembers(userId, groupId);
+    const groupMember = await this.authService.getGroupMembers(
+      userId,
+      group.id,
+    );
 
     if (!groupMember) {
       // User is not a member of the group
@@ -96,12 +104,12 @@ export class PermissionsGuard implements CanActivate {
 
     // Fetch user-specific group permissions
     const userGroupPermissions =
-      await this.authService.getGroupMemberPermissions(userId, groupId);
+      await this.authService.getGroupMemberPermissions(userId, group.id);
 
     // Map of permission name to granted status
     const userGroupPermissionsMap = new Map<string, boolean>();
     userGroupPermissions.forEach((ugp) => {
-      userGroupPermissionsMap.set(ugp.groupPermission.name, ugp.granted);
+      userGroupPermissionsMap.set(ugp.groupPermission.name, true);
     });
 
     // Apply user-specific group permissions
@@ -114,5 +122,39 @@ export class PermissionsGuard implements CanActivate {
     });
 
     return groupPermissions;
+  }
+
+  private async getEventPermissions(
+    userId: number,
+    eventId: string,
+  ): Promise<Set<string>> {
+    const eventPermissions = new Set<string>();
+    const event = await this.authService.getEvent(eventId);
+
+    const eventAttendee = await this.authService.getEventAttendees(
+      event.id,
+      userId,
+    );
+
+    if (!eventAttendee) {
+      return eventPermissions;
+    }
+    const attendeePermissions = await this.authService.getAttendeePermissions(
+      eventAttendee.id,
+    );
+
+    const attendeePermissionsMap = new Map<string, boolean>();
+    attendeePermissions.forEach((ap) => {
+      attendeePermissionsMap.set(ap.role.permission.name, true);
+    });
+
+    attendeePermissionsMap.forEach((granted, premNane) => {
+      if (granted) {
+        eventPermissions.add(premNane);
+      } else {
+        eventPermissions.delete(premNane);
+      }
+    });
+    return eventPermissions;
   }
 }

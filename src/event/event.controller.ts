@@ -30,7 +30,6 @@ import { UpdateEventAttendeeDto } from '../event-attendee/dto/update-eventAttend
 import { QueryEventAttendeeDto } from '../event-attendee/dto/query-eventAttendee.dto';
 import { Permissions } from '../shared/guard/permissions.decorator';
 import { PermissionsGuard } from '../shared/guard/permissions.guard';
-import { UserPermission } from '../core/constants/constant';
 
 @ApiTags('Events')
 @Controller('events')

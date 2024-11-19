@@ -51,14 +51,16 @@ describe('GroupController', () => {
         {
           provide: AuthService,
           useValue: {
-            getUserPermissions: jest.fn().mockResolvedValue(['READ_PERMISSION']),
+            getUserPermissions: jest
+              .fn()
+              .mockResolvedValue(['READ_PERMISSION']),
           },
         },
         // Mock Reflector
         {
           provide: Reflector,
           useValue: {
-            get: jest.fn((key, target) => {
+            get: jest.fn((key) => {
               if (key === 'permissions') return ['READ_PERMISSION'];
               return null;
             }),
@@ -88,7 +90,7 @@ describe('GroupController', () => {
 
   describe('editGroup', () => {
     it('should edit a group', async () => {
-      const result = await controller.editGroup(1);
+      const result = await controller.editGroup(1, '');
       expect(result).toEqual(mockGroup);
     });
   });

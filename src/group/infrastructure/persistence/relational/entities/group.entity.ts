@@ -24,11 +24,15 @@ import { UserEntity } from '../../../../../user/infrastructure/persistence/relat
 import { Expose } from 'class-transformer';
 import { FileEntity } from '../../../../../file/infrastructure/persistence/relational/entities/file.entity';
 import { ApiProperty } from '@nestjs/swagger';
+import { ulid } from 'ulid';
 
 @Entity({ name: 'groups' })
 export class GroupEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
+
+  @Column({ type: String, unique: true })
+  ulid: string;
 
   @Column({ type: 'varchar', length: 255 })
   name: string;
@@ -116,6 +120,11 @@ export class GroupEntity extends EntityRelationalHelper {
     if (!this.slug) {
       this.slug = slugify(this.name, { lower: true });
     }
+  }
+
+  @BeforeInsert()
+  generateShortId() {
+    this.ulid = ulid().toLowerCase();
   }
 
   @Expose()

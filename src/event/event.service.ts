@@ -335,6 +335,19 @@ export class EventService {
     return event;
   }
 
+  async findEventByUlid(ulid: string): Promise<EventEntity> {
+    await this.getTenantSpecificEventRepository();
+    const event = await this.eventRepository.findOne({
+      where: { ulid },
+    });
+
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${ulid} not found`);
+    }
+
+    return event;
+  }
+
   async showEvent(id: number, userId?: number): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
     const event = await this.eventRepository.findOne({

@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Optional,
+  Headers,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CreateGroupDto } from './dto/create-group.dto';
@@ -72,11 +73,15 @@ export class GroupController {
     return await this.groupService.getGroupsWhereUserCanCreateEvents(user.id);
   }
 
-  @Permissions(GroupPermission.ManageGroup)
+  @Permissions(GroupPermission.ManageGroup, GroupPermission.DeleteGroup)
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get('me/:id')
   @ApiOperation({ summary: 'Get group by ID Authenticated' })
-  async editGroup(@Param('id') id: number): Promise<GroupEntity> {
+  async editGroup(
+    @Param('id') id: number,
+    @Headers('x-groupid-ulid') groupUlid: string,
+  ): Promise<GroupEntity> {
+    console.log('🚀 ~ GroupController ~ groupUlid:', groupUlid);
     return await this.groupService.editGroup(id);
   }
 
