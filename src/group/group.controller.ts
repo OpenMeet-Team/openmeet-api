@@ -79,9 +79,9 @@ export class GroupController {
   @ApiOperation({ summary: 'Get group by ID Authenticated' })
   async editGroup(
     @Param('id') id: number,
-    @Headers('x-groupid-ulid') groupUlid: string,
+    @Headers('x-group-slug') groupSlug: string,
   ): Promise<GroupEntity> {
-    console.log('🚀 ~ GroupController ~ groupUlid:', groupUlid);
+    console.log('🚀 ~ GroupController ~ groupUlid:', groupSlug);
     return await this.groupService.editGroup(id);
   }
 
