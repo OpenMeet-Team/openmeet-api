@@ -1,6 +1,7 @@
 services:
   postgres:
-    image: postgres:16.4-alpine
+    ## use the db with postGIS extentions
+    image: postgis/postgis:16-3.4-alpine
     expose:
       - 5432
     environment:
@@ -8,6 +9,9 @@ services:
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_DB: ${DATABASE_NAME}
     entrypoint: ["docker-entrypoint.sh", "-c", "max_connections=${DATABASE_MAX_CONNECTIONS}"]
+    volumes:
+      # init scripts for PostGIS
+      - ./pg-init-scripts:/docker-entrypoint-initdb.d
 
   maildev:
     build:
