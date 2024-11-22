@@ -68,6 +68,15 @@ export class EventService {
     this.eventRepository = dataSource.getRepository(EventEntity);
   }
 
+  async findEventBySlug(slug: string): Promise<EventEntity> {
+    await this.getTenantSpecificEventRepository();
+    const event = await this.eventRepository.findOne({ where: { slug } });
+    if (!event) {
+      throw new NotFoundException(`Event with slug ${slug} not found`);
+    }
+    return event;
+  }
+
   async create(
     createEventDto: CreateEventDto,
     userId: number,
