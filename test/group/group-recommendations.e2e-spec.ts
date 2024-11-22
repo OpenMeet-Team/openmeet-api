@@ -161,14 +161,14 @@ describe('GroupRecommendations (e2e)', () => {
   it('should return recommended events with complete event details', async () => {
     //  group should exist
     const groupResponse = await request(TESTING_APP_URL)
-      .get(`/api/groups/${testGroup.id}`)
+      .get(`/api/groups/${testGroup.slug}`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
 
     expect(groupResponse.status).toBe(200);
 
     const response = await request(TESTING_APP_URL)
-      .get(`/api/groups/${testGroup.id}/recommended-events`)
+      .get(`/api/groups/${testGroup.slug}/recommended-events`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
 
@@ -197,7 +197,7 @@ describe('GroupRecommendations (e2e)', () => {
     // Clean up events
     for (const event of testEvents) {
       await request(TESTING_APP_URL)
-        .delete(`/api/events/${event.id}`)
+        .delete(`/api/events/${event.slug}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
     }
@@ -205,7 +205,7 @@ describe('GroupRecommendations (e2e)', () => {
     // Clean up group
     if (testGroup) {
       await request(TESTING_APP_URL)
-        .delete(`/api/groups/${testGroup.id}`)
+        .delete(`/api/groups/${testGroup.slug}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
     }

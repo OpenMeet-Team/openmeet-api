@@ -5,7 +5,8 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:16.4-alpine
+    # use the db with postGIS extentions
+    image: postgis/postgis:16-3.4-alpine
     container_name: openmeet_postgres
     ports:
       - ${DATABASE_PORT}:5432
@@ -13,6 +14,8 @@ services:
       - .env
     volumes:
       - dbdata:/var/lib/postgresql/data
+      # init scripts for PostGIS  
+      - ./pg-init-scripts:/docker-entrypoint-initdb.d
     environment:
       POSTGRES_USER: ${DATABASE_USERNAME}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}

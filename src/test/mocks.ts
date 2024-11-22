@@ -48,6 +48,7 @@ export const mockFile = {
 // Mock for GroupEntity
 export const mockGroup = {
   id: 1,
+  slug: 'test-group',
   name: 'Test Group',
   image: mockFile,
   categories: [mockCategory],
@@ -57,6 +58,7 @@ export const mockGroup = {
 // Mock for EventEntity
 export const mockEvent = {
   id: 1,
+  slug: 'test-event',
   name: 'Test Event',
   attendeesCount: 1,
 } as EventEntity;
@@ -128,6 +130,7 @@ export const mockEventAttendeeService = {
   getEventAttendees: jest.fn().mockResolvedValue(mockEventAttendees),
   leaveEvent: jest.fn().mockResolvedValue(mockEventAttendee),
   findEventDetailsAttendees: jest.fn().mockResolvedValue(mockEventAttendees),
+  create: jest.fn().mockResolvedValue(mockEventAttendee),
 };
 
 export const mockAuthService = {
@@ -247,6 +250,12 @@ export const mockGroupService = {
   leaveGroup: jest.fn().mockResolvedValue(mockGroupMember),
   showGroupMembers: jest.fn().mockResolvedValue(mockGroupMembers),
   showGroupEvents: jest.fn().mockResolvedValue(mockEvents),
+  showRecommendedEvents: jest.fn().mockResolvedValue(mockEvents),
+  showGroupRecommendedEvents: jest.fn().mockResolvedValue(mockEvents),
+  rejectMember: jest.fn().mockResolvedValue(mockGroupMember),
+  approveMember: jest.fn().mockResolvedValue(mockGroupMember),
+  removeGroupMember: jest.fn().mockResolvedValue(mockGroupMember),
+  updateGroupMemberRole: jest.fn().mockResolvedValue(mockGroupMember),
 };
 
 export const mockUserService = {
@@ -268,6 +277,7 @@ export const mockZulipService = {
 
 export const mockEventRoleService = {
   findOne: jest.fn().mockResolvedValue(mockEventRole),
+  findByName: jest.fn().mockResolvedValue(mockEventRole),
 };
 
 export const mockSubCategoryService = {
@@ -289,7 +299,7 @@ export const mockEventService = {
   remove: jest.fn().mockResolvedValue(mockEvent),
   getEventsByCreator: jest.fn().mockResolvedValue(mockEvents),
   getEventsByAttendee: jest.fn().mockResolvedValue(mockEvents),
-  getRecommendedEventsByEventId: jest.fn().mockResolvedValue(mockEvents),
+  showRecommendedEvents: jest.fn().mockResolvedValue(mockEvents),
   getHomePageUserNextHostedEvent: jest.fn().mockResolvedValue(mockEvent),
   getHomePageUserRecentEventDrafts: jest.fn().mockResolvedValue(mockEvents),
   getHomePageFeaturedEvents: jest.fn().mockResolvedValue(mockEvents),
@@ -311,6 +321,9 @@ export const mockEventService = {
   attendEvent: jest.fn().mockResolvedValue(mockEventAttendee),
   cancelAttendingEvent: jest.fn().mockResolvedValue(mockEventAttendee),
   getEventAttendees: jest.fn().mockResolvedValue(mockEventAttendees),
+  showRecommendedEventsByEventSlug: jest.fn().mockResolvedValue(mockEvents),
+  showAllEvents: jest.fn().mockResolvedValue(mockEvents),
+  showEventAttendees: jest.fn().mockResolvedValue(mockEventAttendees),
 };
 
 export const mockFilesS3PresignedService = {
@@ -321,6 +334,7 @@ export const mockFilesS3PresignedService = {
 export const mockRepository = {
   find: jest.fn(),
   findOne: jest.fn(),
+  findOneBy: jest.fn(),
   save: jest.fn(),
   delete: jest.fn(),
   softRemove: jest.fn(),
@@ -341,6 +355,9 @@ export const mockRepository = {
   skip: jest.fn().mockReturnThis(),
   take: jest.fn().mockReturnThis(),
   remove: jest.fn(),
+  findOneOrFail: jest.fn(),
+  findOneByOrFail: jest.fn(),
+  merge: jest.fn(),
 };
 
 export const mockDashboardService = {

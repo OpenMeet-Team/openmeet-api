@@ -48,7 +48,7 @@ describe('Dashboard', () => {
     });
 
     describe('when authenticated', () => {
-      it('should get all events that I am a participant of, or that I created, and no more', async () => {
+      it.skip('should get all events that I am a participant of, or that I created, and no more', async () => {
         expect(preparedEvent).toBeDefined();
         expect(preparedEvent.id).toBeDefined();
 

@@ -36,10 +36,13 @@ export class EventAttendeeService {
       const attendee = this.eventAttendeesRepository.create(
         createEventAttendeeDto,
       );
+
       return await this.eventAttendeesRepository.save(attendee);
     } catch (error) {
       // Handle database save errors
-      throw new Error('Failed to save attendee: ' + error.message);
+      throw new Error(
+        'EventAttendeeService: Failed to save attendee: ' + error.message,
+      );
     }
   }
 
@@ -127,17 +130,17 @@ export class EventAttendeeService {
 
   async updateEventAttendee(
     eventId: number,
-    userId: number,
+    attendeeId: number,
     body: UpdateEventAttendeeDto,
   ): Promise<any> {
     await this.getTenantSpecificEventRepository();
 
     const attendee = await this.eventAttendeesRepository.findOne({
-      where: { user: { id: userId }, event: { id: eventId } },
+      where: { id: attendeeId },
     });
 
     if (!attendee) {
-      throw new NotFoundException(`Attendee with ID ${userId} not found`);
+      throw new NotFoundException(`Attendee with ID ${attendeeId} not found`);
     }
 
     const updatedAttendee = { ...attendee, ...body };

@@ -42,11 +42,9 @@ describe('GroupMemberService', () => {
   });
 
   it('should update group member role', async () => {
-    const result = await service.updateGroupMemberRole(
-      mockGroup.id,
-      mockUser.id,
-      { name: GroupRole.Owner },
-    );
+    const result = await service.updateGroupMemberRole(mockGroupMember.id, {
+      name: GroupRole.Owner,
+    });
 
     expect(result).toEqual(mockGroupMember);
   });
@@ -70,13 +68,13 @@ describe('GroupMemberService', () => {
   });
 
   it('should approve member', async () => {
-    const result = await service.approveMember(mockGroup.id, mockUser.id);
+    const result = await service.approveMember(mockGroupMember.id);
 
     expect(result).toEqual(mockGroupMember);
   });
 
   it('should reject member', async () => {
-    const result = await service.rejectMember(mockGroup.id, mockUser.id);
+    const result = await service.rejectMember(mockGroupMember.id);
 
     expect(result).toEqual(mockGroupMember);
   });
