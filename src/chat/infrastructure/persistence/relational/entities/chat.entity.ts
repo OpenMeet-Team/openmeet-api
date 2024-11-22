@@ -24,12 +24,14 @@ export class ChatEntity extends EntityRelationalHelper {
 
   user: UserEntity;
 
-  @Column({ type: String, unique: true })
+  @Column({ type: 'char', length: 26, unique: true })
   ulid: string;
 
   @BeforeInsert()
   generateUlid() {
-    this.ulid = ulid().toLowerCase();
+    if (!this.ulid) {
+      this.ulid = ulid().toLowerCase();
+    }
   }
 
   participant: UserEntity;

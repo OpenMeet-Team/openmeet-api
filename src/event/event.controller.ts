@@ -44,11 +44,11 @@ export class EventController {
   @ApiOperation({
     summary: 'Get all events. Public endpoint with search and pagination',
   })
-  async findme(
+  async showAllEvents(
     @Query() pagination: PaginationDto,
     @Query() query: QueryEventDto,
   ): Promise<EventEntity[]> {
-    return this.eventService.findAll(pagination, query);
+    return this.eventService.showAllEvents(pagination, query);
   }
 
   @Post()
@@ -57,108 +57,99 @@ export class EventController {
     @Body() createEventDto: CreateEventDto,
     @AuthUser() user: User,
   ): Promise<EventEntity> {
-    const userId = user?.id;
-    return this.eventService.create(createEventDto, userId);
+    return this.eventService.create(createEventDto, user.id);
   }
 
   @Get('me')
   @ApiOperation({ summary: 'Get all user events' })
-  async findAll(
+  async showAllUserEvents(
     @Query() pagination: PaginationDto,
-    @Query() query: QueryEventDto,
     @AuthUser() user: User,
   ): Promise<EventEntity[]> {
-    const userId = user?.id;
-    query.userId = userId;
-    return this.eventService.findAll(pagination, query);
+    return this.eventService.showAllUserEvents(user.id);
   }
 
-  @Get('me/:id')
+  @Get('me/:slug')
   @ApiOperation({ summary: 'Edit event by ID' })
-  async editEvent(@Param('id') id: number): Promise<EventEntity | null> {
-    const event = await this.eventService.editEvent(id);
+  async editEvent(@Param('slug') slug: string): Promise<EventEntity | null> {
+    const event = await this.eventService.editEvent(slug);
     if (!event) {
-      throw new NotFoundException(`Event with ID ${id} not found`);
+      throw new NotFoundException(`Event with slug ${slug} not found`);
     }
     return event;
   }
 
   @Public()
-  @Get(':id')
+  @Get(':slug')
   @ApiOperation({ summary: 'Show event details by ID' })
   async showEvent(
-    @Param('id') id: number,
+    @Param('slug') slug: string,
     @AuthUser() user: User,
   ): Promise<EventEntity> {
-    const event = await this.eventService.showEvent(id, user?.id);
-    if (!event) {
-      throw new NotFoundException(`Event with ID ${id} not found`);
-    }
-    return event;
+    return this.eventService.showEvent(slug, user?.id);
   }
 
-  @Patch(':id')
+  @Patch(':slug')
   @ApiOperation({ summary: 'Update an event by ID' })
   async update(
-    @Param('id') id: number,
+    @Param('slug') slug: string,
     @Body() updateEventDto: UpdateEventDto,
     @Req() req: Request,
   ): Promise<EventEntity> {
     const user = req.user as UserEntity;
     const userId = user?.id;
-    return this.eventService.update(id, updateEventDto, userId);
+    return this.eventService.update(slug, updateEventDto, userId);
   }
 
-  @Delete(':id')
-  async remove(@Param('id') id: number): Promise<void> {
-    return this.eventService.remove(id);
+  @Delete(':slug')
+  async remove(@Param('slug') slug: string): Promise<void> {
+    return this.eventService.remove(slug);
   }
 
-  @Post(':id/attend')
+  @Post(':slug/attend')
   @ApiOperation({ summary: 'Attending an event' })
   async attendEvent(
     @AuthUser() user: User,
     @Body() createEventAttendeeDto: CreateEventAttendeeDto,
-    @Param('id') id: number,
+    @Param('slug') slug: string,
   ) {
-    return this.eventService.attendEvent(id, {
-      ...createEventAttendeeDto,
-      user: user as UserEntity,
-      event: { id } as EventEntity,
-    });
+    return this.eventService.attendEvent(slug, user.id, createEventAttendeeDto);
   }
 
-  @Post(':id/cancel-attending')
+  @Post(':slug/cancel-attending')
   @ApiOperation({ summary: 'Cancel attending an event' })
-  async cancelAttendingEvent(@Param('id') id: number, @AuthUser() user: User) {
-    return await this.eventService.cancelAttendingEvent(id, user.id);
+  async cancelAttendingEvent(
+    @Param('slug') slug: string,
+    @AuthUser() user: User,
+  ) {
+    return await this.eventService.cancelAttendingEvent(slug, user.id);
   }
 
-  @Patch(':id/attendees/:userId')
+  @Patch(':slug/attendees/:attendeeId')
   @ApiOperation({ summary: 'Update event attendee' })
-  async updateEvent(
+  async updateEventAttendee(
     @Body() updateEventAttendeeDto: UpdateEventAttendeeDto,
-    @Param('id') id: number,
-    @Param('userId') userId: number,
+    @Param('slug') slug: string,
+    @Param('attendeeId') attendeeId: number,
   ) {
-    return await this.eventAttendeeService.updateEventAttendee(
-      id,
-      userId,
+    return this.eventService.updateEventAttendee(
+      slug,
+      attendeeId,
       updateEventAttendeeDto,
     );
   }
 
-  @Get(':id/attendees')
+  @Get(':slug/attendees')
   @ApiOperation({ summary: 'Get all event attendees' })
-  async findAllAttendees(
-    @Param('id') id: number,
+  async showEventAttendees(
+    @Param('slug') slug: string,
     @Query() pagination: PaginationDto,
     @Query() query: QueryEventAttendeeDto,
     @AuthUser() user: User,
   ): Promise<any> {
     const userId = user?.id;
     query.userId = userId;
-    return this.eventService.getEventAttendees(id, pagination);
+    return this.eventService.showEventAttendees(slug, pagination);
   }
 
   @Post(':ulid/comments')
@@ -205,11 +196,11 @@ export class EventController {
   // }
 
   @Public()
-  @Get(':id/recommended-events')
+  @Get(':slug/recommended-events')
   @ApiOperation({
     summary: 'Get similar events',
   })
-  async getRecommendedEvents(@Param('id') id: number): Promise<EventEntity[]> {
-    return await this.eventService.getRecommendedEventsByEventId(id);
+  async showRecommendedEvents(@Param('slug') slug: string) {
+    return await this.eventService.showRecommendedEventsByEventSlug(slug);
   }
 }

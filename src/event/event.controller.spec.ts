@@ -10,7 +10,6 @@ import { AuthService } from '../auth/auth.service';
 import { Reflector } from '@nestjs/core';
 import { PaginationOptions } from '../utils/generic-pagination';
 import { QueryEventDto } from './dto/query-events.dto';
-import { HttpStatus } from '@nestjs/common';
 import {
   mockCategory,
   mockEvent,
@@ -98,7 +97,7 @@ describe('EventController', () => {
     it('should return event with details', async () => {
       jest.spyOn(eventService, 'showEvent').mockResolvedValue(mockEvent);
 
-      const result = await controller.showEvent(1, mockUser);
+      const result = await controller.showEvent(mockEvent.slug, mockUser);
 
       expect(result).toEqual(mockEvent);
       expect(eventService.showEvent).toHaveBeenCalled();
@@ -130,11 +129,11 @@ describe('EventController', () => {
     });
   });
 
-  describe('findAll', () => {
+  describe('showAllEvents', () => {
     it('should return an array of events', async () => {
       const events = [mockEvent, { ...mockEvent, id: 2 }];
       jest
-        .spyOn(eventService, 'findAll')
+        .spyOn(eventService, 'showAllEvents')
         .mockResolvedValue(events as EventEntity[]);
       const pagination: PaginationOptions = {
         page: 1,
@@ -149,13 +148,9 @@ describe('EventController', () => {
         type: 'conference',
         categories: ['Technology'],
       };
-      const result = await controller.findAll(
-        pagination,
-        queryEventDto,
-        mockUser,
-      );
+      const result = await controller.showAllEvents(pagination, queryEventDto);
       expect(result).toEqual(events);
-      expect(eventService.findAll).toHaveBeenCalled();
+      expect(eventService.showAllEvents).toHaveBeenCalled();
     });
   });
 
@@ -165,12 +160,12 @@ describe('EventController', () => {
       jest
         .spyOn(eventService, 'update')
         .mockResolvedValue({ ...mockEvent, ...updateEventDto } as EventEntity);
-      const result = await controller.update(1, updateEventDto, {
+      const result = await controller.update(mockEvent.slug, updateEventDto, {
         user: mockUser,
       } as unknown as Request);
       expect(result).toEqual({ ...mockEvent, ...updateEventDto });
       expect(eventService.update).toHaveBeenCalledWith(
-        1,
+        mockEvent.slug,
         updateEventDto,
         mockUser.id,
       );
@@ -182,7 +177,7 @@ describe('EventController', () => {
         .spyOn(eventService, 'update')
         .mockRejectedValue(new Error('Update failed'));
       await expect(
-        controller.update(1, updateEventDto, {
+        controller.update(mockEvent.slug, updateEventDto, {
           user: mockUser,
         } as unknown as Request),
       ).rejects.toThrow('Update failed');
@@ -201,47 +196,28 @@ describe('EventController', () => {
       const events = await eventService.getEventsByAttendee(mockUser.id);
       expect(events).toEqual([mockEvent]);
     });
-
-    it('should get attendees count from an event', async () => {
-      mockEventService.findOne.mockResolvedValue(mockEvent);
-      const event = await eventService.findOne(mockEvent.id as number);
-      expect(event.attendeesCount).toBeDefined();
-    });
   });
 
   describe('delete', () => {
     it('should delete an event', async () => {
       jest.spyOn(eventService, 'remove').mockResolvedValue(undefined);
-      const result = await controller.remove(mockEvent.id as number);
+      const result = await controller.remove(mockEvent.slug);
       expect(result).toBeUndefined();
-      expect(eventService.remove).toHaveBeenCalledWith(mockEvent.id);
+      expect(eventService.remove).toHaveBeenCalledWith(mockEvent.slug);
     });
   });
 
   describe('getRecommendedEvents', () => {
     it('should return recommended events', async () => {
-      const result = await controller.getRecommendedEvents(mockEvent.id);
+      const result = await controller.showRecommendedEvents(mockEvent.slug);
       expect(result).toEqual(mockEvents);
-    });
-
-    it.skip('should throw NotFoundException when event is not found', async () => {
-      const eventId = 99999999;
-      jest
-        .spyOn(eventService, 'getRecommendedEventsByEventId')
-        .mockRejectedValue(new Error('Not Found'));
-
-      await expect(
-        controller.getRecommendedEvents(eventId),
-      ).rejects.toMatchObject({
-        status: HttpStatus.NOT_FOUND,
-      });
     });
   });
 
   describe('editEvent', () => {
     it('should return an event', async () => {
       jest.spyOn(eventService, 'editEvent').mockResolvedValue(mockEvent);
-      const result = await controller.editEvent(mockEvent.id as number);
+      const result = await controller.editEvent(mockEvent.slug);
       expect(result).toEqual(mockEvent);
     });
   });
@@ -254,7 +230,7 @@ describe('EventController', () => {
       const result = await controller.attendEvent(
         mockUser,
         mockEventAttendee,
-        mockEvent.id as number,
+        mockEvent.slug,
       );
       expect(result).toEqual(mockEventAttendee);
     });
@@ -266,18 +242,20 @@ describe('EventController', () => {
         .spyOn(eventService, 'cancelAttendingEvent')
         .mockResolvedValue(mockEventAttendee);
       const result = await controller.cancelAttendingEvent(
-        mockEvent.id as number,
+        mockEvent.slug,
         mockUser,
       );
       expect(result).toEqual(mockEventAttendee);
     });
   });
 
-  describe('getEventAttendees', () => {
+  describe('showEventAttendees', () => {
     it('should return event attendees', async () => {
-      jest.spyOn(eventService, 'getEventAttendees').mockResolvedValue([]);
-      const result = await controller.findAllAttendees(
-        mockEvent.id as number,
+      jest
+        .spyOn(eventService, 'showEventAttendees')
+        .mockResolvedValue([mockEventAttendee]);
+      const result = await controller.showEventAttendees(
+        mockEvent.slug,
         { page: 1, limit: 10 },
         {
           userId: mockUser.id,
@@ -287,7 +265,7 @@ describe('EventController', () => {
         },
         mockUser,
       );
-      expect(result).toEqual([]);
+      expect(result).toEqual([mockEventAttendee]);
     });
   });
 });

@@ -23,52 +23,46 @@ export class ZulipService {
   ) {}
 
   async getInitialisedClient(user: UserEntity): Promise<ZulipClient> {
-    try {
-      if (!user.zulipUserId) {
-        // Generate a unique email and password for the new Zulip user
-        const userEmail = `tenant_${this.request.tenantId}__${user.ulid}@zulip.openmeet.net`;
-        const userPassword = ulid();
+    if (!user.zulipUserId) {
+      // Generate a unique email and password for the new Zulip user
+      const userEmail = `tenant_${this.request.tenantId}__${user.ulid}@zulip.openmeet.net`;
+      const userPassword = ulid();
 
-        await this.createUser({
-          email: userEmail,
-          password: userPassword,
-          full_name: user.name as string,
-        }).then((createUserResponse) => {
-          if (createUserResponse?.result !== 'success') {
-            console.log('createUserResponse', createUserResponse);
-            throw new Error('Failed to create Zulip user');
-          }
-        });
-
-        // Fetch the API key for the newly created user
-        const apiKeyResponse = await this.fetchApiKey(userEmail, userPassword);
-
-        if (apiKeyResponse.result !== 'success') {
-          throw new Error('Failed to fetch API key for new Zulip user');
+      await this.createUser({
+        email: userEmail,
+        password: userPassword,
+        full_name: user.name as string,
+      }).then((createUserResponse) => {
+        if (createUserResponse?.result !== 'success') {
+          throw new Error('Failed to create Zulip user');
         }
+      });
 
-        // Store the Zulip credentials in your user service
-        const updatedUser = await this.userService.addZulipCredentialsToUser(
-          user.id,
-          {
-            zulipUsername: userEmail,
-            zulipApiKey: apiKeyResponse.api_key,
-            zulipUserId: apiKeyResponse.user_id,
-          },
-        );
+      // Fetch the API key for the newly created user
+      const apiKeyResponse = await this.fetchApiKey(userEmail, userPassword);
 
-        if (!updatedUser) {
-          throw new NotFoundException('Failed to update user');
-        }
-
-        return await getClient(updatedUser);
+      if (apiKeyResponse.result !== 'success') {
+        throw new Error('Failed to fetch API key for new Zulip user');
       }
 
-      return await getClient(user);
-    } catch (error) {
-      console.error('Failed to create Zulip user:', error);
-      throw new NotFoundException('Failed to create Zulip user');
+      // Store the Zulip credentials in your user service
+      const updatedUser = await this.userService.addZulipCredentialsToUser(
+        user.id,
+        {
+          zulipUsername: userEmail,
+          zulipApiKey: apiKeyResponse.api_key,
+          zulipUserId: apiKeyResponse.user_id,
+        },
+      );
+
+      if (!updatedUser) {
+        throw new NotFoundException('Failed to update user');
+      }
+
+      return await getClient(updatedUser);
     }
+
+    return await getClient(user);
   }
 
   async getUserStreams(user: UserEntity) {

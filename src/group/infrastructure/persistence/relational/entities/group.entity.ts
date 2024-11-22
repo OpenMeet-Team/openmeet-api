@@ -17,7 +17,6 @@ import { CategoryEntity } from '../../../../../category/infrastructure/persisten
 import { EventEntity } from '../../../../../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupMemberEntity } from '../../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupUserPermissionEntity } from './group-user-permission.entity';
-import slugify from 'slugify';
 import {
   GroupVisibility,
   GroupStatus,
@@ -26,11 +25,17 @@ import { UserEntity } from '../../../../../user/infrastructure/persistence/relat
 import { Expose } from 'class-transformer';
 import { FileEntity } from '../../../../../file/infrastructure/persistence/relational/entities/file.entity';
 import { ApiProperty } from '@nestjs/swagger';
+import { ulid } from 'ulid';
+import slugify from 'slugify';
+import { generateShortCode } from '../../../../../utils/short-code';
 
 @Entity({ name: 'groups' })
 export class GroupEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
+
+  @Column({ type: 'char', length: 26, unique: true })
+  ulid: string;
 
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
@@ -41,7 +46,7 @@ export class GroupEntity extends EntityRelationalHelper {
   @Column({ type: 'varchar', length: 255 })
   name: string;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ type: 'varchar', length: 255, unique: true })
   slug: string;
 
   @Column({ type: 'text' })
@@ -120,9 +125,16 @@ export class GroupEntity extends EntityRelationalHelper {
   messages: any[];
 
   @BeforeInsert()
+  generateUlid() {
+    if (!this.ulid) {
+      this.ulid = ulid().toLowerCase();
+    }
+  }
+
+  @BeforeInsert()
   generateSlug() {
     if (!this.slug) {
-      this.slug = slugify(this.name, { lower: true });
+      this.slug = `${slugify(this.name, { strict: true, lower: true })}-${generateShortCode().toLowerCase()}`;
     }
   }
 
