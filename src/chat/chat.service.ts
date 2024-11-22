@@ -61,27 +61,22 @@ export class ChatService {
       ) as UserEntity;
     });
 
-    const messagesResponse = await this.zulipService.getUserMessages(
-      chats[0].user,
-      {
-        num_before: 0,
-        num_after: 100,
-        anchor: 'first_unread',
-        narrow: [
-          { operator: 'is', operand: 'private' },
-          { operator: 'is', operand: 'unread' },
-        ],
-      },
-    );
+    const messages = await this.zulipService.getUserMessages(chats[0].user, {
+      num_before: 0,
+      num_after: 100,
+      anchor: 'first_unread',
+      narrow: [
+        { operator: 'is', operand: 'private' },
+        { operator: 'is', operand: 'unread' },
+      ],
+    });
 
-    if (messagesResponse.result === 'success') {
-      // loop through chats and add messages to each chat
-      chats.forEach((chat) => {
-        chat.messages = messagesResponse.messages.filter(
-          (message) => message.sender_id === chat.participant?.zulipUserId,
-        );
-      });
-    }
+    // loop through chats and add messages to each chat
+    chats.forEach((chat) => {
+      chat.messages = messages.filter(
+        (message) => message.sender_id === chat.participant?.zulipUserId,
+      );
+    });
 
     return { chats, chat };
   }
@@ -116,7 +111,7 @@ export class ChatService {
 
     await this.zulipService.initializeClient(user);
 
-    const messagesResponse = await this.zulipService.getUserMessages(user, {
+    const messages = await this.zulipService.getUserMessages(user, {
       num_before: 0,
       num_after: 100,
       anchor: 'oldest',
@@ -130,9 +125,7 @@ export class ChatService {
       ],
     });
 
-    if (messagesResponse.result === 'success') {
-      chat.messages = messagesResponse.messages;
-    }
+    chat.messages = messages;
 
     return chat;
   }

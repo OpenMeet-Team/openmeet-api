@@ -18,6 +18,7 @@ import { GroupRoleService } from '../group-role/group-role.service';
 import { ZulipService } from '../zulip/zulip.service';
 import { MailModule } from '../mail/mail.module';
 import { EventRoleService } from 'src/event-role/event-role.service';
+import { ZulipModule } from 'src/zulip/zulip.module';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
@@ -32,6 +33,7 @@ import { AuthModule } from '../auth/auth.module';
     MailModule,
     GroupMemberModule,
     EventAttendeeModule,
+    ZulipModule,
     forwardRef(() => AuthModule),
   ],
   controllers: [GroupController],

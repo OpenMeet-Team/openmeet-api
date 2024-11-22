@@ -29,6 +29,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { ulid } from 'ulid';
 import slugify from 'slugify';
 import { generateShortCode } from '../../../../../utils/short-code';
+import { ZulipMessage, ZulipTopic } from 'zulip-js';
 
 @Entity({ name: 'events' })
 export class EventEntity extends EntityRelationalHelper {
@@ -158,6 +159,6 @@ export class EventEntity extends EntityRelationalHelper {
     }
   }
 
-  topics: any[];
-  messages: any[];
+  messages: ZulipMessage[];
+  topics: ZulipTopic[];
 }

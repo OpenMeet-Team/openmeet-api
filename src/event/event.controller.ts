@@ -162,7 +162,7 @@ export class EventController {
     @Body() body: { content: string; topic?: string },
     @Param('ulid') ulid: string,
     @AuthUser() user: User,
-  ) {
+  ): Promise<{ id: number }> {
     return await this.eventService.postComment(ulid, user.id, body);
   }
 
@@ -206,5 +206,39 @@ export class EventController {
   })
   async showRecommendedEvents(@Param('slug') slug: string) {
     return await this.eventService.showRecommendedEventsByEventSlug(slug);
+  }
+
+  @Post(':slug/discussions')
+  @ApiOperation({ summary: 'Send a message to a group discussion' })
+  async sendEventDiscussionMessage(
+    @Param('slug') slug: string,
+    @AuthUser() user: User,
+    @Body() body: { message: string; topicName: string },
+  ): Promise<{ id: number }> {
+    return this.eventService.sendEventDiscussionMessage(slug, user.id, body);
+  }
+
+  @Patch(':slug/discussions/:messageId')
+  @ApiOperation({ summary: 'Update a group discussion message' })
+  async updateEventDiscussionMessage(
+    @Param('slug') slug: string,
+    @Param('messageId') messageId: number,
+    @AuthUser() user: User,
+    @Body() body: { message: string },
+  ): Promise<{ id: number }> {
+    return this.eventService.updateEventDiscussionMessage(
+      messageId,
+      body.message,
+      user.id,
+    );
+  }
+
+  @Delete(':slug/discussions/:messageId')
+  @ApiOperation({ summary: 'Delete a group discussion message' })
+  async deleteEventDiscussionMessage(
+    @Param('slug') slug: string,
+    @Param('messageId') messageId: number,
+  ): Promise<{ id: number }> {
+    return this.eventService.deleteEventDiscussionMessage(messageId);
   }
 }

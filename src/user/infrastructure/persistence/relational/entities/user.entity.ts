@@ -196,6 +196,13 @@ export class UserEntity extends EntityRelationalHelper {
   @JoinTable({ name: 'userInterests' })
   subCategory: SubCategoryEntity[];
 
+  // @VirtualColumn({
+  //   query: (alias) => `
+  //     CONCAT(${alias}.firstName, ' ', ${alias}.lastName)
+  //   `,
+  // })
+  // name: string;
+
   @Expose()
   @ApiProperty({
     type: String,

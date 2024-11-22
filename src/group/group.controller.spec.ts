@@ -13,6 +13,10 @@ import {
   mockGroupMember,
   mockEventService,
   mockRepository,
+  mockZulipMessage,
+  mockGroupAboutResponse,
+  mockZulipMessageResponse,
+  mockZulipStreamTopic,
 } from '../test/mocks';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { CreateGroupDto } from './dto/create-group.dto';
@@ -220,6 +224,56 @@ describe('GroupController', () => {
 
       expect(result.length).toBeGreaterThanOrEqual(minEvents);
       expect(result.length).toBeLessThanOrEqual(maxEvents);
+    });
+  });
+
+  describe('showGroupDiscussions', () => {
+    it('should return group discussions', async () => {
+      const result = await controller.showGroupDiscussions(mockGroup.slug);
+      expect(result).toEqual({
+        messages: [mockZulipMessage],
+        topics: [mockZulipStreamTopic],
+      });
+    });
+  });
+
+  describe('showGroupAbout', () => {
+    it('should return group about', async () => {
+      const result = await controller.showGroupAbout(mockGroup.slug);
+      expect(result).toEqual(mockGroupAboutResponse);
+    });
+  });
+
+  describe('sendGroupDiscussionMessage', () => {
+    it('should send a group discussion message', async () => {
+      const result = await controller.sendGroupDiscussionMessage(
+        mockGroup.slug,
+        mockUser,
+        { message: 'test', topicName: 'test' },
+      );
+      expect(result).toEqual(mockZulipMessageResponse);
+    });
+  });
+
+  describe.skip('updateGroupDiscussionMessage', () => {
+    it('should update a group discussion message', async () => {
+      const result = await controller.updateGroupDiscussionMessage(
+        mockGroup.slug,
+        mockZulipMessage.id,
+        mockUser,
+        { message: 'test' },
+      );
+      expect(result).toEqual(mockZulipMessageResponse);
+    });
+  });
+
+  describe.skip('deleteGroupDiscussionMessage', () => {
+    it('should delete a group discussion message', async () => {
+      const result = await controller.deleteGroupDiscussionMessage(
+        mockGroup.slug,
+        mockZulipMessage.id,
+      );
+      expect(result).toEqual(mockZulipMessageResponse);
     });
   });
 });

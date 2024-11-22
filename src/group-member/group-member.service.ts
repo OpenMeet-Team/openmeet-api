@@ -50,6 +50,21 @@ export class GroupMemberService {
     return await this.groupMemberRepository.findOne({
       where: { group: { id: groupId }, user: { id: userId } },
       relations: ['groupRole', 'groupRole.groupPermissions', 'user'],
+      select: {
+        id: true,
+        user: {
+          slug: true,
+          firstName: true,
+          lastName: true,
+          photo: {
+            path: true,
+          },
+        },
+        groupRole: {
+          name: true,
+          groupPermissions: true,
+        },
+      },
     });
   }
 

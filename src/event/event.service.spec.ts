@@ -33,6 +33,8 @@ import {
   mockUserService,
   mockZulipService,
   mockUser,
+  mockZulipMessageResponse,
+  mockZulipMessage,
 } from '../test/mocks';
 import { mockEvents } from '../test/mocks';
 import { Repository } from 'typeorm';
@@ -269,6 +271,46 @@ describe('EventService', () => {
         mockUser.id,
       );
       expect(result).toEqual(mockEventAttendee);
+    });
+  });
+
+  describe('sendEventDiscussionMessage', () => {
+    it('should send an event discussion message', async () => {
+      jest
+        .spyOn(service, 'sendEventDiscussionMessage')
+        .mockResolvedValue(mockZulipMessageResponse);
+      const result = await service.sendEventDiscussionMessage(
+        mockEvent.slug,
+        mockUser.id,
+        { message: 'Test Message', topicName: 'Test Topic' },
+      );
+      expect(result).toEqual(mockZulipMessageResponse);
+    });
+  });
+
+  describe('updateEventDiscussionMessage', () => {
+    it('should update an event discussion message', async () => {
+      jest
+        .spyOn(service, 'updateEventDiscussionMessage')
+        .mockResolvedValue(mockZulipMessageResponse);
+      const result = await service.updateEventDiscussionMessage(
+        mockZulipMessage.id,
+        mockZulipMessage.content,
+        mockUser.id,
+      );
+      expect(result).toEqual(mockZulipMessageResponse);
+    });
+  });
+
+  describe('deleteEventDiscussionMessage', () => {
+    it('should delete an event discussion message', async () => {
+      jest
+        .spyOn(service, 'deleteEventDiscussionMessage')
+        .mockResolvedValue(mockZulipMessageResponse);
+      const result = await service.deleteEventDiscussionMessage(
+        mockZulipMessage.id,
+      );
+      expect(result).toEqual(mockZulipMessageResponse);
     });
   });
 });
