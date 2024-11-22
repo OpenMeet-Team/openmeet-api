@@ -6,6 +6,7 @@ import {
   InternalServerErrorException,
   UnprocessableEntityException,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { CreateEventDto, EventTopicCommentDto } from './dto/create-event.dto';
@@ -93,12 +94,26 @@ export class EventService {
       lower: true,
     })}-${shortCode.toLowerCase()}`;
 
+    let locationPoint;
+    if (createEventDto.lat && createEventDto.lon) {
+      const { lat, lon } = createEventDto;
+      if (isNaN(lat) || isNaN(lon)) {
+        throw new BadRequestException('Invalid latitude or longitude');
+      }
+      // Construct GeoJSON
+      locationPoint = {
+        type: 'Point',
+        coordinates: [lon, lat],
+      };
+    }
+
     const mappedDto = {
       ...createEventDto,
       user,
       slug: slugifiedName,
       group,
       categories,
+      locationPoint,
     };
     const event = this.eventRepository.create(mappedDto as EventEntity);
     const createdEvent = await this.eventRepository.save(event);
@@ -247,16 +262,24 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
 
     const { page, limit } = pagination;
-    const { search, userId, fromDate, toDate, categories, location, type } =
-      query;
+    const {
+      search,
+      userId,
+      fromDate,
+      toDate,
+      categories,
+      location,
+      type,
+      radius,
+    } = query;
 
     const eventQuery = this.eventRepository
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.user', 'user')
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.group', 'group')
-      .leftJoinAndSelect('event.attendees', 'attendees')
-      .where('event.status = :status', { status: EventStatus.Published });
+      .leftJoinAndSelect('event.attendees', 'attendees');
+    // .where('event.status = :status', { status: EventStatus.Published });
 
     if (userId) {
       eventQuery.andWhere('event.user = :userId', { userId });
@@ -274,9 +297,26 @@ export class EventService {
     }
 
     if (location) {
-      eventQuery.andWhere('event.location LIKE :location', {
-        location: `%${location}%`,
-      });
+      // Split and validate location
+      const [lon, lat] = location.split(',').map(Number);
+      if (isNaN(lon) || isNaN(lat)) {
+        throw new BadRequestException(
+          'Invalid location format. Expected "lon,lat".',
+        );
+      }
+
+      // Default radius to 5 kilometers if not provided
+      const searchRadius = radius ?? 5;
+
+      // Find events within the radius using ST_DWithin
+      eventQuery.andWhere(
+        `ST_DWithin(
+          event.locationPoint,
+          ST_SetSRID(ST_MakePoint(:lon, :lat), 4326),
+          :radius
+        )`,
+        { lon, lat, radius: searchRadius * 1000 }, // Convert kilometers to meters
+      );
     }
 
     if (type) {

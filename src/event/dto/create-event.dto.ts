@@ -65,13 +65,6 @@ export class CreateEventDto {
   type: string;
 
   @ApiProperty({
-    description: 'The location of the event',
-  })
-  @IsOptional()
-  @IsString()
-  location: string;
-
-  @ApiProperty({
     description: 'The online link of the event',
   })
   @IsString()

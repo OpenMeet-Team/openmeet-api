@@ -88,8 +88,13 @@ export class EventEntity extends EntityRelationalHelper {
   @Column({ type: 'boolean', default: false })
   requireGroupMembership: boolean;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
-  location: string;
+  @Column({
+    type: 'geography',
+    spatialFeatureType: 'Point',
+    srid: 4326,
+    nullable: true,
+  })
+  locationPoint?: string;
 
   @Column({ type: 'double precision', nullable: true })
   lat: number;

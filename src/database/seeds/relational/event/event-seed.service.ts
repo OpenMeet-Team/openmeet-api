@@ -66,7 +66,7 @@ export class EventSeedService {
         startDate: eventData.startDate,
         endDate: eventData.endDate,
         maxAttendees: eventData.maxAttendees,
-        location: eventData.location ?? '',
+        // locationPoint: eventData.locationPoint ?? '',
         lat: eventData.lat ?? 0,
         lon: eventData.lon ?? 0,
         status: eventData.status,
