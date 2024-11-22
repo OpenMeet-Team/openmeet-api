@@ -62,15 +62,24 @@ export class CategoryService {
     id: number,
     updateCategoryDto: UpdateCategoryDto,
   ): Promise<CategoryEntity | void> {
-    console.log('TODO, fix this id, updateCategoryDto', id, updateCategoryDto);
     await this.getTenantSpecificCategoryRepository();
-    // const category = await this.findOne(id);
-    // return this.categoryRepository.save(updatedCategory);
+    const category = await this.findOne(id);
+    if (!category) {
+      throw new NotFoundException(`Category with ID ${id} not found`);
+    }
+    return this.categoryRepository.save(updateCategoryDto);
   }
 
   async remove(id: number): Promise<void> {
     await this.getTenantSpecificCategoryRepository();
-    const category = await this.findOne(id);
+    const category = await this.categoryRepository.findOne({
+      where: { id },
+    });
+
+    if (!category) {
+      throw new NotFoundException(`Category with ID ${id} not found`);
+    }
+
     await this.categoryRepository.remove(category);
   }
 

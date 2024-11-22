@@ -14,6 +14,12 @@ export class User {
 
   @ApiProperty({
     type: String,
+    example: 'john-doe',
+  })
+  slug: string;
+
+  @ApiProperty({
+    type: String,
     example: 'john.doe@openmeet.net',
   })
   @Expose({ groups: ['me', 'admin'] })
