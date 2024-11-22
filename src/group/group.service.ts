@@ -39,7 +39,7 @@ import { UpdateGroupMemberRoleDto } from 'src/group-member/dto/create-groupMembe
 export class GroupService {
   private groupMembersRepository: Repository<GroupMemberEntity>;
   private groupRepository: Repository<GroupEntity>;
-  private readonly groupMemberPermissionsRepository: Repository<GroupUserPermissionEntity>;
+  private groupMemberPermissionsRepository: Repository<GroupUserPermissionEntity>;
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
@@ -58,6 +58,9 @@ export class GroupService {
       await this.tenantConnectionService.getTenantConnection(tenantId);
     this.groupRepository = dataSource.getRepository(GroupEntity);
     this.groupMembersRepository = dataSource.getRepository(GroupMemberEntity);
+    this.groupMemberPermissionsRepository = dataSource.getRepository(
+      GroupUserPermissionEntity,
+    );
   }
 
   async getGroupsWhereUserCanCreateEvents(
@@ -329,7 +332,21 @@ export class GroupService {
     return group;
   }
 
+  async findGroupBySlug(slug: string): Promise<GroupEntity> {
+    await this.getTenantSpecificGroupRepository();
+    const group = await this.groupRepository.findOne({
+      where: { slug },
+    });
+
+    if (!group) {
+      throw new NotFoundException(`Group with ID ${slug} not found`);
+    }
+
+    return group;
+  }
+
   async showGroup(slug: string, userId?: number): Promise<any> {
+
     await this.getTenantSpecificGroupRepository();
     const group = await this.groupRepository.findOne({
       where: { slug },

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { GroupEntity } from './infrastructure/persistence/relational/entities/group.entity';
@@ -18,6 +18,7 @@ import { GroupRoleService } from '../group-role/group-role.service';
 import { ZulipService } from '../zulip/zulip.service';
 import { MailModule } from '../mail/mail.module';
 import { EventRoleService } from 'src/event-role/event-role.service';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { EventRoleService } from 'src/event-role/event-role.service';
     MailModule,
     GroupMemberModule,
     EventAttendeeModule,
+    forwardRef(() => AuthModule),
   ],
   controllers: [GroupController],
   providers: [
