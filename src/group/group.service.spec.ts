@@ -40,7 +40,6 @@ import { MailService } from '../mail/mail.service';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
 import { ZulipService } from '../zulip/zulip.service';
 import { UserService } from '../user/user.service';
-import { UpdateGroupMemberRoleDto } from 'src/group-member/dto/create-groupMember.dto';
 
 describe('GroupService', () => {
   let service: GroupService;
@@ -414,7 +413,7 @@ describe('GroupService', () => {
       expect(result).toEqual(mockZulipMessage);
     });
   });
-  
+
   describe('showGroupEvents', () => {
     it('should return group events', async () => {
       const result = await service.showGroupEvents(mockGroup.slug);

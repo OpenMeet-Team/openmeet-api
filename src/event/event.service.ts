@@ -36,7 +36,6 @@ import { UserService } from '../user/user.service';
 import { UpdateEventAttendeeDto } from 'src/event-attendee/dto/update-eventAttendee.dto';
 import { ZulipTopic } from 'zulip-js';
 
-
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
   private eventRepository: Repository<EventEntity>;
@@ -179,7 +178,7 @@ export class EventService {
 
     return await this.zulipService.sendUserMessage(user, params);
   }
-  
+
   async showAllUserEvents(userId: number): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
     return this.eventRepository.find({
@@ -667,21 +666,6 @@ export class EventService {
     if (!event) {
       throw new NotFoundException('Event not found');
     }
-    return this.eventAttendeeService.getEventAttendees(event.id, pagination);
-  }
-
-  async updateEventAttendee(
-    slug: string,
-    attendeeId: number,
-    updateEventAttendeeDto: UpdateEventAttendeeDto,
-  ) {
-    await this.getTenantSpecificEventRepository();
-
-    const event = await this.eventRepository.findOne({ where: { slug } });
-    if (!event) {
-      throw new NotFoundException('Event not found');
-    }
-
     return this.eventAttendeeService.getEventAttendees(event.id, pagination);
   }
 

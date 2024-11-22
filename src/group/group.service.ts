@@ -37,7 +37,6 @@ import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember
 import { ZulipMessage, ZulipTopic } from 'zulip-js';
 import { ZulipService } from '../zulip/zulip.service';
 import { UserService } from '../user/user.service';
-import { UpdateGroupMemberRoleDto } from 'src/group-member/dto/create-groupMember.dto';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -570,17 +569,6 @@ export class GroupService {
     return await this.groupMemberService.rejectMember(groupMemberId);
   }
 
-  async rejectMember(slug: string, groupMemberId: number) {
-    await this.getTenantSpecificGroupRepository();
-    const group = await this.groupRepository.findOne({
-      where: { slug },
-    });
-    if (!group) {
-      throw new NotFoundException('Group not found');
-    }
-    return await this.groupMemberService.rejectMember(groupMemberId);
-  }
-
   async joinGroup(slug: string, userId: number) {
     await this.getTenantSpecificGroupRepository();
 
@@ -644,44 +632,6 @@ export class GroupService {
     if (!group) {
       throw new NotFoundException('Group not found');
     }
-    return await this.groupMemberService.removeGroupMember(
-      group.id,
-      groupMemberId,
-    );
-  }
-
-  async updateGroupMemberRole(
-    slug: string,
-    groupMemberId: number,
-    updateDto: UpdateGroupMemberRoleDto,
-  ) {
-    await this.getTenantSpecificGroupRepository();
-    const group = await this.groupRepository.findOne({
-      where: { slug },
-    });
-    if (!group) {
-      throw new NotFoundException('Group not found');
-    }
-
-    return await this.groupMemberService.leaveGroup(userId, group.id);
-  }
-
-  async removeGroupMember(slug: string, groupMemberId: number) {
-    return await this.groupMemberService.updateGroupMemberRole(
-      groupMemberId,
-      updateDto,
-    );
-  }
-
-  async showGroupMembers(slug: string): Promise<GroupMemberEntity[]> {
-    await this.getTenantSpecificGroupRepository();
-    const group = await this.groupRepository.findOne({
-      where: { slug },
-    });
-    if (!group) {
-      throw new NotFoundException('Group not found');
-    }
-
     return await this.groupMemberService.removeGroupMember(
       group.id,
       groupMemberId,

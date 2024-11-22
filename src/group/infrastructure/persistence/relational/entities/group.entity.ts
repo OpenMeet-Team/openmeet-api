@@ -133,13 +133,6 @@ export class GroupEntity extends EntityRelationalHelper {
   }
 
   @BeforeInsert()
-  generateUlid() {
-    if (!this.ulid) {
-      this.ulid = ulid().toLowerCase();
-    }
-  }
-
-  @BeforeInsert()
   generateSlug() {
     if (!this.slug) {
       this.slug = `${slugify(this.name, { strict: true, lower: true })}-${generateShortCode().toLowerCase()}`;
