@@ -19,6 +19,8 @@ import {
   mockGroup,
   mockGroupService,
   mockUser,
+  mockZulipMessage,
+  mockZulipMessageResponse,
 } from '../test/mocks';
 import { mockEvents } from '../test/mocks';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
@@ -266,6 +268,48 @@ describe('EventController', () => {
         mockUser,
       );
       expect(result).toEqual([mockEventAttendee]);
+    });
+  });
+
+  describe('sendEventDiscussionMessage', () => {
+    it('should send an event discussion message', async () => {
+      jest
+        .spyOn(eventService, 'sendEventDiscussionMessage')
+        .mockResolvedValue(mockZulipMessageResponse);
+      const result = await controller.sendEventDiscussionMessage(
+        mockEvent.slug,
+        mockUser,
+        { message: 'Test Message', topicName: 'Test Topic' },
+      );
+      expect(result).toEqual(mockZulipMessageResponse);
+    });
+  });
+
+  describe('updateEventDiscussionMessage', () => {
+    it('should update an event discussion message', async () => {
+      jest
+        .spyOn(eventService, 'updateEventDiscussionMessage')
+        .mockResolvedValue(mockZulipMessageResponse);
+      const result = await controller.updateEventDiscussionMessage(
+        mockEvent.slug,
+        mockZulipMessage.id,
+        mockUser,
+        { message: 'Updated Message' },
+      );
+      expect(result).toEqual(mockZulipMessageResponse);
+    });
+  });
+
+  describe('deleteEventDiscussionMessage', () => {
+    it('should delete an event discussion message', async () => {
+      jest
+        .spyOn(eventService, 'deleteEventDiscussionMessage')
+        .mockResolvedValue(mockZulipMessageResponse);
+      const result = await controller.deleteEventDiscussionMessage(
+        mockEvent.slug,
+        mockZulipMessage.id,
+      );
+      expect(result).toEqual(mockZulipMessageResponse);
     });
   });
 });

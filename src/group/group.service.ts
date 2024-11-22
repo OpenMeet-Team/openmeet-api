@@ -33,7 +33,10 @@ import { FileEntity } from '../file/infrastructure/persistence/relational/entiti
 import { GroupRoleService } from '../group-role/group-role.service';
 import { MailService } from '../mail/mail.service';
 import { generateShortCode } from '../utils/short-code';
-import { UpdateGroupMemberRoleDto } from 'src/group-member/dto/create-groupMember.dto';
+import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
+import { ZulipMessage, ZulipTopic } from 'zulip-js';
+import { ZulipService } from '../zulip/zulip.service';
+import { UserService } from '../user/user.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -50,6 +53,8 @@ export class GroupService {
     private readonly fileService: FilesS3PresignedService,
     private readonly groupRoleService: GroupRoleService,
     private readonly mailService: MailService,
+    private readonly zulipService: ZulipService,
+    private readonly userService: UserService,
   ) {}
 
   async getTenantSpecificGroupRepository() {
@@ -340,13 +345,6 @@ export class GroupService {
       throw new NotFoundException('Group not found');
     }
 
-    group.events = await this.eventService.findEventsForGroup(group.id, 5);
-
-    group.groupMembers = await this.groupMemberService.findGroupDetailsMembers(
-      group.id,
-      5,
-    );
-
     if (userId) {
       group.groupMember = await this.groupMemberService.findGroupMemberByUserId(
         group.id,
@@ -355,6 +353,48 @@ export class GroupService {
     }
 
     return group;
+  }
+
+  async showGroupAbout(slug: string): Promise<{
+    events: EventEntity[];
+    groupMembers: GroupMemberEntity[];
+    messages: ZulipMessage[];
+    topics: ZulipTopic[];
+  }> {
+    await this.getTenantSpecificGroupRepository();
+    const group = await this.groupRepository.findOne({
+      where: { slug },
+    });
+
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
+
+    group.events = await this.eventService.findEventsForGroup(group.id, 5);
+
+    group.groupMembers = await this.groupMemberService.findGroupDetailsMembers(
+      group.id,
+      5,
+    );
+
+    if (group.zulipChannelId) {
+      group.topics = await this.zulipService.getAdminStreamTopics(
+        group.zulipChannelId,
+      );
+      group.messages = await this.zulipService.getAdminMessages({
+        anchor: 'oldest',
+        num_before: 0,
+        num_after: 100,
+        narrow: [{ operator: 'stream', operand: group.zulipChannelId }],
+      });
+    }
+
+    return {
+      events: group.events,
+      groupMembers: group.groupMembers,
+      messages: group.messages || [],
+      topics: group.topics || [],
+    };
   }
 
   async findRandomEvents(id: number): Promise<any> {
@@ -622,5 +662,112 @@ export class GroupService {
     }
 
     return await this.eventService.findEventsForGroup(group.id, 0);
+  }
+
+  async showGroupDiscussions(
+    slug: string,
+  ): Promise<{ messages: ZulipMessage[]; topics: ZulipTopic[] }> {
+    await this.getTenantSpecificGroupRepository();
+
+    const group = await this.groupRepository.findOne({
+      where: { slug },
+    });
+
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
+
+    if (!group.zulipChannelId) {
+      return {
+        messages: [],
+        topics: [],
+      };
+    }
+
+    const messages = await this.zulipService.getAdminMessages({
+      anchor: 'oldest',
+      num_before: 0,
+      num_after: 100,
+      narrow: [{ operator: 'channel', operand: group.zulipChannelId }],
+    });
+
+    const topics = await this.zulipService.getAdminStreamTopics(
+      group.zulipChannelId,
+    );
+
+    return {
+      messages,
+      topics,
+    };
+  }
+
+  async sendGroupDiscussionMessage(
+    slug: string,
+    userId: number,
+    body: { message: string; topicName: string },
+  ): Promise<{ id: number }> {
+    await this.getTenantSpecificGroupRepository();
+
+    const group = await this.groupRepository.findOne({
+      where: { slug },
+    });
+    if (!group) {
+      throw new NotFoundException('Group not found');
+    }
+
+    const user = await this.userService.findOne(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const groupChannelName = `tenant_${this.request.tenantId}__group_${group.ulid}`;
+    if (!group.zulipChannelId) {
+      // create channel
+      await this.zulipService.subscribeUserToChannel(user, {
+        subscriptions: [
+          {
+            name: groupChannelName,
+          },
+        ],
+      });
+      const stream = await this.zulipService.getAdminStreamId(groupChannelName);
+      // TODO remove default topic from channel
+      // await this.zulipService.deleteAdminStreamTopic(
+      //   stream.id,
+      //   'channel events',
+      // );
+      group.zulipChannelId = stream.id;
+      await this.groupRepository.save(group);
+    }
+
+    await this.zulipService.getInitialisedClient(user);
+
+    const params = {
+      to: group.zulipChannelId,
+      type: 'channel' as const,
+      topic: body.topicName,
+      content: body.message,
+    };
+
+    return await this.zulipService.sendUserMessage(user, params);
+  }
+
+  async updateGroupDiscussionMessage(
+    messageId: number,
+    message: string,
+    userId: number,
+  ): Promise<{ id: number }> {
+    const user = await this.userService.findOne(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return await this.zulipService.updateUserMessage(user, messageId, message);
+    // return await this.zulipService.updateAdminMessage(messageId, message);
+  }
+
+  async deleteGroupDiscussionMessage(
+    messageId: number,
+  ): Promise<{ id: number }> {
+    return await this.zulipService.deleteAdminMessage(messageId);
   }
 }

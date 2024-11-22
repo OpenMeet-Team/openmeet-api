@@ -26,6 +26,7 @@ import { GroupMemberEntity } from '../group-member/infrastructure/persistence/re
 import { GroupMemberService } from '../group-member/group-member.service';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
 import { EventService } from '../event/event.service';
+import { ZulipMessage, ZulipTopic } from 'zulip-js';
 
 @ApiTags('Groups')
 @Controller('groups')
@@ -101,6 +102,18 @@ export class GroupController {
   }
 
   @Public()
+  @Get(':slug/about')
+  @ApiOperation({ summary: 'Get group about' })
+  async showGroupAbout(@Param('slug') slug: string): Promise<{
+    events: EventEntity[];
+    groupMembers: GroupMemberEntity[];
+    messages: ZulipMessage[];
+    topics: ZulipTopic[];
+  }> {
+    return await this.groupService.showGroupAbout(slug);
+  }
+
+  @Public()
   @Get(':slug/events')
   @ApiOperation({ summary: 'Get all group events' })
   async showGroupEvents(@Param('slug') slug: string): Promise<EventEntity[]> {
@@ -116,14 +129,48 @@ export class GroupController {
     return this.groupService.showGroupMembers(slug);
   }
 
-  // @Public()
-  // @Get(':id/discussions')
-  // @ApiOperation({ summary: 'Get all group discussions' })
-  // async showGroupDiscussions(
-  //   @Param('id') id: number,
-  // ): Promise<DiscussionEntity[]> {
-  //   return this.groupService.showGroupDiscussions(+id);
-  // }
+  @Public()
+  @Get(':slug/discussions')
+  @ApiOperation({ summary: 'Get all group discussions' })
+  async showGroupDiscussions(
+    @Param('slug') slug: string,
+  ): Promise<{ messages: ZulipMessage[]; topics: ZulipTopic[] }> {
+    return this.groupService.showGroupDiscussions(slug);
+  }
+
+  @Post(':slug/discussions')
+  @ApiOperation({ summary: 'Send a message to a group discussion' })
+  async sendGroupDiscussionMessage(
+    @Param('slug') slug: string,
+    @AuthUser() user: User,
+    @Body() body: { message: string; topicName: string },
+  ): Promise<{ id: number }> {
+    return this.groupService.sendGroupDiscussionMessage(slug, user.id, body);
+  }
+
+  @Patch(':slug/discussions/:messageId')
+  @ApiOperation({ summary: 'Update a group discussion message' })
+  async updateGroupDiscussionMessage(
+    @Param('slug') slug: string,
+    @Param('messageId') messageId: number,
+    @AuthUser() user: User,
+    @Body() body: { message: string },
+  ): Promise<{ id: number }> {
+    return this.groupService.updateGroupDiscussionMessage(
+      messageId,
+      body.message,
+      user.id,
+    );
+  }
+
+  @Delete(':slug/discussions/:messageId')
+  @ApiOperation({ summary: 'Delete a group discussion message' })
+  async deleteGroupDiscussionMessage(
+    @Param('slug') slug: string,
+    @Param('messageId') messageId: number,
+  ): Promise<{ id: number }> {
+    return this.groupService.deleteGroupDiscussionMessage(messageId);
+  }
 
   @Post(':slug/join')
   @ApiOperation({ summary: 'Joining a group through link' })

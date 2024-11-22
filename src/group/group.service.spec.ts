@@ -10,11 +10,13 @@ import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import {
   mockCategory,
   mockCategoryService,
+  mockDiscussions,
   mockEvent,
   mockEventService,
   mockFile,
   mockFilesS3PresignedService,
   mockGroup,
+  mockGroupAboutResponse,
   mockGroupMember,
   mockGroupMemberService,
   mockGroupRoleService,
@@ -25,6 +27,9 @@ import {
   mockPagination,
   mockRepository,
   mockTenantConnectionService,
+  mockUserService,
+  mockZulipMessage,
+  mockZulipService,
 } from '../test/mocks';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { mockUser } from '../test/mocks';
@@ -32,7 +37,9 @@ import { DeleteResult, Repository } from 'typeorm';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupRoleService } from '../group-role/group-role.service';
 import { MailService } from '../mail/mail.service';
-import { UpdateGroupMemberRoleDto } from 'src/group-member/dto/create-groupMember.dto';
+import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
+import { ZulipService } from '../zulip/zulip.service';
+import { UserService } from '../user/user.service';
 
 describe('GroupService', () => {
   let service: GroupService;
@@ -76,6 +83,14 @@ describe('GroupService', () => {
         {
           provide: MailService,
           useValue: mockMailService,
+        },
+        {
+          provide: ZulipService,
+          useValue: mockZulipService,
+        },
+        {
+          provide: UserService,
+          useValue: mockUserService,
         },
       ],
     }).compile();
@@ -360,6 +375,51 @@ describe('GroupService', () => {
         { name: 'admin' } as UpdateGroupMemberRoleDto,
       );
       expect(result).toEqual(mockGroupMember);
+    });
+  });
+
+  describe.skip('showGroupDiscussions', () => {
+    it('should return group discussions', async () => {
+      const result = await service.showGroupDiscussions(mockGroup.slug);
+      expect(result).toEqual(mockDiscussions);
+    });
+  });
+
+  describe.skip('showGroupAbout', () => {
+    it('should return group about', async () => {
+      const result = await service.showGroupAbout(mockGroup.slug);
+      expect(result).toEqual(mockGroupAboutResponse);
+    });
+  });
+
+  describe.skip('sendGroupDiscussionMessage', () => {
+    it('should send a group discussion message', async () => {
+      const result = await service.sendGroupDiscussionMessage(
+        mockGroup.slug,
+        mockUser.id,
+        { message: 'test', topicName: 'test' },
+      );
+      expect(result).toEqual(mockZulipMessage);
+    });
+  });
+
+  describe.skip('updateGroupDiscussionMessage', () => {
+    it('should update a group discussion message', async () => {
+      const result = await service.updateGroupDiscussionMessage(
+        mockZulipMessage.id,
+        'test',
+        mockUser.id,
+      );
+      expect(result).toEqual(mockZulipMessage);
+    });
+  });
+
+  describe.skip('deleteGroupDiscussionMessage', () => {
+    it('should delete a group discussion message', async () => {
+      const result = await service.deleteGroupDiscussionMessage(
+        mockZulipMessage.id,
+      );
+      expect(result).toEqual(mockZulipMessage);
     });
   });
 });
