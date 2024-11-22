@@ -346,7 +346,6 @@ export class GroupService {
   }
 
   async showGroup(slug: string, userId?: number): Promise<any> {
-
     await this.getTenantSpecificGroupRepository();
     const group = await this.groupRepository.findOne({
       where: { slug },

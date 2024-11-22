@@ -9,7 +9,7 @@ import {
   Query,
   UseGuards,
   Optional,
-  Headers,
+  // Headers,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CreateGroupDto } from './dto/create-group.dto';
@@ -79,7 +79,7 @@ export class GroupController {
   @ApiOperation({ summary: 'Get group by ID Authenticated' })
   async editGroup(
     @Param('slug') slug: string,
-    @Headers('x-group-slug') groupSlug: string,
+    // @Headers('x-group-slug') groupSlug: string,
   ): Promise<GroupEntity> {
     return await this.groupService.editGroup(slug);
   }
