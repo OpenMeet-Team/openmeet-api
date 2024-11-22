@@ -40,6 +40,7 @@ import { MailService } from '../mail/mail.service';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
 import { ZulipService } from '../zulip/zulip.service';
 import { UserService } from '../user/user.service';
+import { UpdateGroupMemberRoleDto } from 'src/group-member/dto/create-groupMember.dto';
 
 describe('GroupService', () => {
   let service: GroupService;
@@ -413,13 +414,55 @@ describe('GroupService', () => {
       expect(result).toEqual(mockZulipMessage);
     });
   });
+  
+  describe('showGroupEvents', () => {
+    it('should return group events', async () => {
+      const result = await service.showGroupEvents(mockGroup.slug);
+      expect(result).toEqual([mockEvent]);
+    });
+  });
 
-  describe.skip('deleteGroupDiscussionMessage', () => {
-    it('should delete a group discussion message', async () => {
-      const result = await service.deleteGroupDiscussionMessage(
-        mockZulipMessage.id,
+  describe('rejectMember', () => {
+    it('should reject a group member', async () => {
+      const result = await service.rejectMember(
+        mockGroup.slug,
+        mockGroupMember.id,
       );
-      expect(result).toEqual(mockZulipMessage);
+      expect(result).toEqual(mockGroupMember);
+    });
+  });
+
+  describe('approveMember', () => {
+    it('should approve a group member', async () => {
+      const result = await service.approveMember(
+        mockGroup.slug,
+        mockGroupMember.id,
+      );
+      expect(result).toEqual(mockGroupMember);
+    });
+  });
+
+  describe('removeGroupMember', () => {
+    it('should remove a group member', async () => {
+      const result = await service.removeGroupMember(
+        mockGroup.slug,
+        mockGroupMember.id,
+      );
+      expect(result).toEqual(mockGroupMember);
+    });
+  });
+
+  describe('updateGroupMemberRole', () => {
+    it('should update a group member role', async () => {
+      jest
+        .spyOn(service['groupRepository'], 'findOneBy')
+        .mockResolvedValue(mockGroup as GroupEntity);
+      const result = await service.updateGroupMemberRole(
+        mockGroup.slug,
+        mockGroupMember.id,
+        { name: 'admin' } as UpdateGroupMemberRoleDto,
+      );
+      expect(result).toEqual(mockGroupMember);
     });
   });
 });
