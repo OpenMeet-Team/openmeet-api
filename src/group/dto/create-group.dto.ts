@@ -41,12 +41,12 @@ export class CreateGroupDto {
   @IsNotEmpty()
   description: string;
 
-  @ApiProperty({
-    description: 'The location of the group',
-  })
-  @IsOptional()
-  @IsString()
-  location: string;
+  // @ApiProperty({
+  //   description: 'The location of the group',
+  // })
+  // @IsOptional()
+  // @IsString()
+  // location: string;
 
   @ApiProperty({
     description: 'The latitude of the group location',

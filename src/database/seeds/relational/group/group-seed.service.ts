@@ -55,7 +55,7 @@ export class GroupSeedService {
           }),
           status: groupData.status,
           visibility: groupData.visibility,
-          location: groupData.location,
+          // locationPoint: groupData.location,
           lat: groupData.lat,
           lon: groupData.lon,
           requireApproval: groupData.requireApproval,
