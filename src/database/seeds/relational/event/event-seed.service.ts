@@ -6,7 +6,6 @@ import { CategoryEntity } from '../../../../category/infrastructure/persistence/
 import { GroupEntity } from '../../../../group/infrastructure/persistence/relational/entities/group.entity';
 import { UserEntity } from '../../../../user/infrastructure/persistence/relational/entities/user.entity';
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
-import slugify from 'slugify';
 import {
   EventAttendeeRole,
   EventAttendeeStatus,
@@ -45,7 +44,9 @@ export class EventSeedService {
 
   private async seedEvents() {
     const allCategories = await this.categoryRepository.find();
-    const allEventRoles = await this.eventRoleRepository.find();
+    const hostRole = await this.eventRoleRepository.findOne({
+      where: { name: EventAttendeeRole.Host },
+    });
 
     for (const eventData of eventSeedData) {
       const numberOfCategories = Math.floor(Math.random() * 3) + 1;
@@ -56,10 +57,6 @@ export class EventSeedService {
 
       const event = await this.eventRepository.create({
         name: eventData.name,
-        slug: slugify(eventData.name, {
-          strict: true,
-          lower: true,
-        }),
         type: eventData.type,
         locationOnline: eventData.locationOnline ?? '',
         description: eventData.description,
@@ -84,9 +81,7 @@ export class EventSeedService {
 
       const attendee = this.eventAttendeesRepository.create({
         status: EventAttendeeStatus.Confirmed,
-        role: allEventRoles.find(
-          (role) => role.name === EventAttendeeRole.Host,
-        ),
+        role: { id: hostRole?.id },
         event: { id: createdEvent.id },
         user: eventData.user,
       });

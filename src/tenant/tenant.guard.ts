@@ -9,7 +9,7 @@ import { Request } from 'express';
 
 // Define a custom decorator key to mark routes to bypass the guard
 export const IS_PUBLIC_KEY = 'isPublic';
-
+console.log('guard');
 @Injectable()
 export class TenantGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
@@ -17,6 +17,7 @@ export class TenantGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request: Request = context.switchToHttp().getRequest();
 
+    console.log('here');
     // Check if the route is marked as public and should bypass the guard
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
@@ -37,10 +38,11 @@ export class TenantGuard implements CanActivate {
     if (!tenantId) {
       throw new UnauthorizedException('Tenant ID is required');
     }
-    // You can add additional validation logic for tenant ID here if needed
 
     // Optionally store tenant ID in the request object for further use
     request['tenantId'] = tenantId;
+
+    console.log('tenantguard', request['tenantId']);
     return true;
   }
 }

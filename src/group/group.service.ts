@@ -357,6 +357,8 @@ export class GroupService {
       relations: ['createdBy', 'categories'],
     });
 
+    console.log(this.request.tenantId);
+
     if (!group) {
       throw new NotFoundException('Group not found');
     }
@@ -740,7 +742,7 @@ export class GroupService {
     const groupChannelName = `tenant_${this.request.tenantId}__group_${group.ulid}`;
     if (!group.zulipChannelId) {
       // create channel
-      await this.zulipService.subscribeUserToChannel(user, {
+      await this.zulipService.subscribeAdminToChannel({
         subscriptions: [
           {
             name: groupChannelName,
@@ -748,11 +750,13 @@ export class GroupService {
         ],
       });
       const stream = await this.zulipService.getAdminStreamId(groupChannelName);
-      // TODO remove default topic from channel
-      // await this.zulipService.deleteAdminStreamTopic(
-      //   stream.id,
-      //   'channel events',
-      // );
+
+      // remove default topic from channel
+      await this.zulipService.deleteAdminStreamTopic(
+        stream.id,
+        'channel events',
+      );
+
       group.zulipChannelId = stream.id;
       await this.groupRepository.save(group);
     }
