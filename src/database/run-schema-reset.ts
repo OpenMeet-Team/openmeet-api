@@ -19,6 +19,9 @@ async function deleteAllSchemas() {
         AND schema_name != 'pg_toast'
         AND schema_name != 'pg_temp_1'
         AND schema_name != 'pg_toast_temp_1'
+        AND schema_name != 'tiger_data'
+        AND schema_name != 'tiger'
+        AND schema_name != 'topology'
     `);
 
     console.log(
