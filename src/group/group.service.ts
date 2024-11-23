@@ -59,6 +59,7 @@ export class GroupService {
 
   async getTenantSpecificGroupRepository() {
     const tenantId = this.request.tenantId;
+    console.log(this.request['tenantId']);
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
     this.groupRepository = dataSource.getRepository(GroupEntity);
@@ -356,8 +357,6 @@ export class GroupService {
       where: { slug },
       relations: ['createdBy', 'categories'],
     });
-
-    console.log(this.request.tenantId);
 
     if (!group) {
       throw new NotFoundException('Group not found');
