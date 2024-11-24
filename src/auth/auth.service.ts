@@ -33,8 +33,6 @@ import { GroupMemberEntity } from '../group-member/infrastructure/persistence/re
 import { RoleService } from '../role/role.service';
 import { RoleEnum } from '../role/role.enum';
 import { StatusEntity } from 'src/status/infrastructure/persistence/relational/entities/status.entity';
-import { EventAttendeeService } from '../event-attendee/event-attendee.service';
-import { EventService } from '../event/event.service';
 
 @Injectable()
 export class AuthService {
@@ -43,8 +41,6 @@ export class AuthService {
     private userService: UserService,
     private groupService: GroupService,
     private sessionService: SessionService,
-    private eventService: EventService,
-    private eventAttendeeService: EventAttendeeService,
     private mailService: MailService,
     private readonly roleService: RoleService,
     private configService: ConfigService<AllConfigType>,
@@ -645,18 +641,6 @@ export class AuthService {
     return this.userService.getUserPermissions(userId);
   }
 
-  async getEventAttendees(userId: number, eventId: number) {
-    return this.eventAttendeeService.findEventAttendeeByUserId(eventId, userId);
-  }
-
-  async getEvent(slug: string) {
-    return this.eventService.findEventBySlug(slug);
-  }
-
-  async getGroup(slug: string) {
-    return this.groupService.findGroupBySlug(slug);
-  }
-
   async getGroupMembers(
     userId: number,
     groupId: number,
@@ -669,9 +653,5 @@ export class AuthService {
     groupId: number,
   ): Promise<any[]> {
     return this.groupService.getGroupMemberPermissions(userId, groupId);
-  }
-
-  async getAttendeePermissions(id: number): Promise<any[]> {
-    return this.eventAttendeeService.getEventAttendeePermissions(id);
   }
 }

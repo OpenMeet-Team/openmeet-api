@@ -9,7 +9,7 @@ import {
   Query,
   UseGuards,
   Optional,
-  // Headers,
+  Headers,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CreateGroupDto } from './dto/create-group.dto';
@@ -28,9 +28,6 @@ import { GroupMemberService } from '../group-member/group-member.service';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
 import { EventService } from '../event/event.service';
 import { ZulipMessage, ZulipTopic } from 'zulip-js';
-import { Permissions } from '../shared/guard/permissions.decorator';
-import { PermissionsGuard } from '../shared/guard/permissions.guard';
-import { GroupPermission } from '../core/constants/constant';
 
 @ApiTags('Groups')
 @Controller('groups')
@@ -64,8 +61,6 @@ export class GroupController {
     return this.groupService.showAll(pagination, query);
   }
 
-  @Permissions(GroupPermission.ManageGroup)
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get('me')
   @ApiOperation({ summary: 'Get groups where user can create events' })
   async showGroupsWhereUserCanCreateEvents(
@@ -74,13 +69,11 @@ export class GroupController {
     return await this.groupService.getGroupsWhereUserCanCreateEvents(user.id);
   }
 
-  @Permissions(GroupPermission.ManageGroup, GroupPermission.DeleteGroup)
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get('me/:slug')
   @ApiOperation({ summary: 'Get group by ID Authenticated' })
   async editGroup(
     @Param('slug') slug: string,
-    // @Headers('x-group-slug') groupSlug: string,
+    @Headers('x-group-slug') groupSlug: string,
   ): Promise<GroupEntity> {
     return await this.groupService.editGroup(slug);
   }
