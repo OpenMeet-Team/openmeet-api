@@ -115,37 +115,4 @@ export class PermissionsGuard implements CanActivate {
     return groupPermissions;
   }
 
-  private async getEventPermissions(
-    userId: number,
-    eventSlug: string,
-  ): Promise<Set<string>> {
-    const eventPermissions = new Set<string>();
-    const event = await this.authService.getEvent(eventSlug);
-
-    const eventAttendee = await this.authService.getEventAttendees(
-      event.id,
-      userId,
-    );
-
-    if (!eventAttendee) {
-      return eventPermissions;
-    }
-    const attendeePermissions = await this.authService.getAttendeePermissions(
-      eventAttendee.id,
-    );
-
-    const attendeePermissionsMap = new Map<string, boolean>();
-    attendeePermissions.forEach((ap) => {
-      attendeePermissionsMap.set(ap.role.permission.name, true);
-    });
-
-    attendeePermissionsMap.forEach((granted, permNane) => {
-      if (granted) {
-        eventPermissions.add(permNane);
-      } else {
-        eventPermissions.delete(permNane);
-      }
-    });
-    return eventPermissions;
-  }
 }

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { GroupEntity } from './infrastructure/persistence/relational/entities/group.entity';
