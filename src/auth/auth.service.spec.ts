@@ -11,6 +11,9 @@ import { RoleService } from '../role/role.service';
 import { EventService } from '../event/event.service';
 import { mockEventAttendeeService, mockEventService } from '../test/mocks';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
+import { RoleEnum } from '../role/role.enum';
+import { UnprocessableEntityException } from '@nestjs/common';
+import { HttpStatus } from '@nestjs/common';
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -18,10 +21,16 @@ describe('AuthService', () => {
   const mockSessionService = {
     findById: jest.fn(),
     update: jest.fn(),
+    create: jest.fn().mockResolvedValue({
+      id: 1,
+      hash: 'mock-session-hash',
+    }),
   };
 
   const mockUserService = {
     findById: jest.fn(),
+    findByEmail: jest.fn(),
+    create: jest.fn(),
   };
 
   const mockJwtService = {
@@ -29,7 +38,7 @@ describe('AuthService', () => {
   };
 
   const mockConfigService = {
-    getOrThrow: jest.fn(),
+    getOrThrow: jest.fn().mockReturnValue('mock-secret'),
   };
 
   const mockGroupService = {
@@ -38,13 +47,23 @@ describe('AuthService', () => {
 
   const mockMailService = {
     sendEmail: jest.fn(),
+    userSignUp: jest.fn().mockResolvedValue(true),
   };
 
   const mockRoleService = {
     findById: jest.fn(),
+    findByName: jest.fn(),
+  };
+
+  const mockDefaultRole = {
+    id: 1,
+    name: RoleEnum.User,
   };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+    mockRoleService.findByName.mockResolvedValue(mockDefaultRole);
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
@@ -129,6 +148,86 @@ describe('AuthService', () => {
       await expect(
         authService.refreshToken({ sessionId: 1, hash: 'oldHash' }),
       ).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('register', () => {
+    const mockRegistrationData = {
+      email: 'test@openmeet.net',
+      password: 'Password123!',
+      firstName: 'John',
+      lastName: 'Doe',
+    };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+
+      // Default happy path setup
+      mockRoleService.findByName.mockResolvedValue(mockDefaultRole);
+      mockUserService.findByEmail.mockResolvedValue(null);
+      mockUserService.create.mockResolvedValue({
+        id: 1,
+        ...mockRegistrationData,
+        role: mockDefaultRole,
+      });
+      mockSessionService.create.mockResolvedValue({
+        id: 1,
+        hash: 'mock-session-hash',
+      });
+    });
+
+    it('should successfully register a new user', async () => {
+      const result = await authService.register(mockRegistrationData);
+
+      // Check only essential response properties
+      expect(result).toHaveProperty('token');
+      expect(result).toHaveProperty('refreshToken');
+      expect(result).toHaveProperty('user');
+
+      // Verify core functionality executed
+      expect(mockUserService.create).toHaveBeenCalled();
+      expect(mockMailService.userSignUp).toHaveBeenCalled();
+    });
+
+    it('should not allow duplicate email registration', async () => {
+      mockUserService.create.mockRejectedValue(new Error());
+
+      await expect(
+        authService.register(mockRegistrationData),
+      ).rejects.toThrow();
+
+      expect(mockMailService.userSignUp).not.toHaveBeenCalled();
+    });
+
+    it('should validate password requirements', async () => {
+      const invalidData = {
+        ...mockRegistrationData,
+        password: 'weak',
+      };
+
+      mockUserService.create.mockRejectedValue(new Error());
+
+      await expect(authService.register(invalidData)).rejects.toThrow();
+
+      expect(mockMailService.userSignUp).not.toHaveBeenCalled();
+    });
+
+    it('should create a session for the new user', async () => {
+      const result = await authService.register(mockRegistrationData);
+
+      expect(result.refreshToken).toBeDefined();
+      expect(mockSessionService.create).toHaveBeenCalled();
+    });
+
+    it('should require a valid role', async () => {
+      mockRoleService.findByName.mockResolvedValue(null);
+
+      await expect(authService.register(mockRegistrationData)).rejects.toThrow(
+        /Role not found/,
+      );
+
+      expect(mockUserService.create).not.toHaveBeenCalled();
+      expect(mockMailService.userSignUp).not.toHaveBeenCalled();
     });
   });
 });
