@@ -139,11 +139,11 @@ export class PermissionsGuard implements CanActivate {
       attendeePermissionsMap.set(ap.role.permission.name, true);
     });
 
-    attendeePermissionsMap.forEach((granted, permissionName) => {
+    attendeePermissionsMap.forEach((granted, permNane) => {
       if (granted) {
-        eventPermissions.add(permissionName);
+        eventPermissions.add(permNane);
       } else {
-        eventPermissions.delete(permissionName);
+        eventPermissions.delete(permNane);
       }
     });
     return eventPermissions;
