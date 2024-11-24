@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { PassportModule } from '@nestjs/passport';
@@ -11,11 +11,13 @@ import { SessionModule } from '../session/session.module';
 import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
 import { RoleModule } from '../role/role.module';
+import { EventModule } from '../event/event.module';
 
 @Module({
   imports: [
     UserModule,
-    GroupModule,
+    forwardRef(() => GroupModule),
+    forwardRef(() => EventModule),
     SessionModule,
     PassportModule,
     MailModule,
