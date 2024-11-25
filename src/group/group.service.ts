@@ -323,9 +323,7 @@ export class GroupService {
       groupQuery.andWhere(
         `(group.name LIKE :search OR
           group.slug LIKE :search OR 
-          group.description LIKE :search OR
-          CAST(group.status AS TEXT) LIKE :search OR
-          CAST(group.visibility AS TEXT) LIKE :search)`,
+          group.description LIKE :search)`,
         { search: `%${search}%` },
       );
     }

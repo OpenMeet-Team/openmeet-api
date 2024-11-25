@@ -280,10 +280,7 @@ export class EventService {
       eventQuery.andWhere(
         `(event.name LIKE :search OR
           event.slug LIKE :search OR 
-          event.description LIKE :search OR
-          CAST(event.type AS TEXT) LIKE :search OR
-          CAST(event.status AS TEXT) LIKE :search OR
-          CAST(event.visibility AS TEXT) LIKE :search)`,
+          event.description LIKE :search)`,
         { search: `%${search}%` },
       );
     }
