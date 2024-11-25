@@ -7,6 +7,8 @@ import { CategoryService } from '../category/category.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { getBuildInfo } from '../utils/version';
+import { PaginationDto } from '../utils/dto/pagination.dto';
+import { HomeQuery } from './dto/home-query.dto';
 
 @Injectable()
 export class HomeService {
@@ -77,6 +79,16 @@ export class HomeService {
       upcomingEvents: upcomingEvents,
       memberGroups: memberGroups,
       interests: interests,
+    };
+  }
+
+  async globalSearch(pagination: PaginationDto, query: HomeQuery) {
+    const event = await this.eventService.searchAllEvents(pagination, query);
+    const group = await this.groupService.searchAllGroup(pagination, query);
+
+    return {
+      events: event,
+      groups: group,
     };
   }
 }
