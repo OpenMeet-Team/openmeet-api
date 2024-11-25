@@ -153,10 +153,7 @@ export class EventService {
     const eventChannelName = `tenant_${this.request.tenantId}__event_${event.ulid}`;
 
     // check if zulip channels exists
-    const stream = await this.zulipService.getUserStreamId(
-      user,
-      eventChannelName,
-    );
+    const stream = await this.zulipService.getAdminStreamId(eventChannelName);
 
     if (!stream.id) {
       // create channel
@@ -416,37 +413,16 @@ export class EventService {
     }
     await this.getTenantSpecificEventRepository();
 
-    try {
-      const randomEventIds = await this.eventRepository
-        .createQueryBuilder('event')
-        .leftJoin('event.group', 'group')
-        .select('event.id')
-        .where('event.status = :status', { status: EventStatus.Published })
-        .andWhere('(group.id != :groupId OR group.id IS NULL)', { groupId })
-        .orderBy('RANDOM()')
-        .limit(maxEvents)
-        .getRawMany();
-
-      // Then fetch full event details for these IDs
-      const events = await this.eventRepository
-        .createQueryBuilder('event')
-        .leftJoinAndSelect('event.group', 'group')
-        .leftJoinAndSelect('event.categories', 'categories')
-        .leftJoinAndSelect('event.attendees', 'attendees')
-        .where('event.id IN (:...ids)', {
-          ids: randomEventIds.map((e) => e.event_id),
-        })
-        .getMany();
-
-      return events;
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new InternalServerErrorException(
-        `Error finding random events for group ${groupId}: ${error.message}`,
-      );
-    }
+    return await this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoin('event.group', 'group')
+      .leftJoin('event.attendees', 'attendees')
+      .leftJoin('event.categories', 'categories')
+      .where('event.status = :status', { status: EventStatus.Published })
+      .andWhere('(group.id != :groupId OR group.id IS NULL)', { groupId })
+      .orderBy('RANDOM()')
+      .limit(maxEvents)
+      .getMany();
   }
 
   async update(

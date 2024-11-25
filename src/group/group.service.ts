@@ -152,7 +152,7 @@ export class GroupService {
     if (!group) {
       return await this.eventService.showRandomEvents(4);
     } else {
-      const categoryIds = group.categories.map((c) => c.id);
+      const categoryIds = group.categories?.map((c) => c && c.id);
 
       let recommendedEvents: EventEntity[] = [];
       try {
