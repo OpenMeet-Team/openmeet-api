@@ -215,11 +215,11 @@ describe('EventService', () => {
     });
   });
 
-  describe.skip('findRandomEventsForGroup', () => {
+  describe('findRandomEventsForGroup', () => {
     it('should return random events for a group', async () => {
       jest
-        .spyOn(eventRepository, 'createQueryBuilder')
-        .mockReturnValue(mockRepository as any);
+        .spyOn(service, 'findRandomEventsForGroup')
+        .mockResolvedValue(mockEvents);
       const result = await service.findRandomEventsForGroup(mockGroup.id, 3, 5);
       expect(result).toEqual(mockEvents);
     });

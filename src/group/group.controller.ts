@@ -24,9 +24,7 @@ import { User } from '../user/domain/user';
 import { QueryGroupDto } from './dto/group-query.dto';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
-import { GroupMemberService } from '../group-member/group-member.service';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
-import { EventService } from '../event/event.service';
 import { ZulipMessage, ZulipTopic } from 'zulip-js';
 import { Permissions } from '../shared/guard/permissions.decorator';
 import { PermissionsGuard } from '../shared/guard/permissions.guard';
@@ -37,11 +35,7 @@ import { GroupPermission } from '../core/constants/constant';
 @ApiBearerAuth()
 @UseGuards(JWTAuthGuard)
 export class GroupController {
-  constructor(
-    private readonly groupService: GroupService,
-    private readonly groupMemberService: GroupMemberService,
-    private readonly eventService: EventService,
-  ) {}
+  constructor(private readonly groupService: GroupService) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a new group' })

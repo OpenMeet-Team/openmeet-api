@@ -413,7 +413,7 @@ declare module 'zulip-js' {
           ): ZulipApiResponse<ZulipSubscriptionResponse>;
         };
       };
-      create(params: ZulipCreateUserParams): ZulipApiResponse<ZulipUser>;
+      create(params: ZulipCreateUserParams): ZulipApiResponse<{ id: number }>;
       retrieve(): ZulipApiResponse<{ users: ZulipUser[] }>;
     };
     // emojis: EmojisClient;
