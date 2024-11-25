@@ -37,6 +37,7 @@ import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember
 import { ZulipMessage, ZulipTopic } from 'zulip-js';
 import { ZulipService } from '../zulip/zulip.service';
 import { UserService } from '../user/user.service';
+import { HomeQuery } from '../home/dto/home-query.dto';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -261,7 +262,10 @@ export class GroupService {
       .leftJoinAndSelect('group.groupMembers', 'groupMembers')
       .leftJoinAndSelect('groupMembers.user', 'user')
       .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
-      .where('group.status = :status', { status: GroupStatus.Published });
+      .where('group.status = :status', { status: GroupStatus.Published })
+      .andWhere('group.visibility = :visibility', {
+        visibility: GroupVisibility.Public,
+      });
 
     if (userId) {
       groupQuery.andWhere('user.id = :userId', { userId });
@@ -288,12 +292,37 @@ export class GroupService {
 
     if (search) {
       groupQuery.andWhere(
-        `(group.name LIKE :search OR 
-          group.description LIKE :search OR 
-          group.location LIKE :search OR 
-          group.type LIKE :search OR 
-          CAST(group.lat AS TEXT) LIKE :search OR 
-          CAST(group.lon AS TEXT) LIKE :search)`,
+        `(group.name LIKE :search OR
+          group.slug LIKE :search`,
+        { search: `%${search}%` },
+      );
+    }
+
+    return await paginate(groupQuery, { page, limit });
+  }
+
+  async searchAllGroup(
+    pagination: PaginationDto,
+    query: HomeQuery,
+  ): Promise<any> {
+    await this.getTenantSpecificGroupRepository();
+    const { page, limit } = pagination;
+    const { search } = query;
+    const groupQuery = this.groupRepository
+      .createQueryBuilder('group')
+      .leftJoinAndSelect('group.categories', 'categories')
+      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
+      .leftJoinAndSelect('groupMembers.user', 'user')
+      .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
+      .where('group.status = :status', { status: GroupStatus.Published })
+      .andWhere('group.visibility = :visibility', {
+        visibility: GroupVisibility.Public,
+      });
+
+    if (search) {
+      groupQuery.andWhere(
+        `(group.name LIKE :search OR
+          group.slug LIKE :search)`,
         { search: `%${search}%` },
       );
     }
