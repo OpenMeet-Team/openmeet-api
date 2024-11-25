@@ -213,11 +213,7 @@ export class EventService {
     if (search) {
       eventQuery.andWhere(
         `(event.name LIKE :search OR
-          event.slug LIKE :search OR 
-          event.description LIKE :search OR
-          CAST(event.type AS TEXT) LIKE :search OR
-          CAST(event.status AS TEXT) LIKE :search OR
-          CAST(event.visibility AS TEXT) LIKE :search)`,
+          event.slug LIKE :search)`,
         { search: `%${search}%` },
       );
     }
@@ -274,13 +270,15 @@ export class EventService {
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.group', 'group')
       .leftJoinAndSelect('event.attendees', 'attendees')
-      .where('event.status = :status', { status: EventStatus.Published });
+      .where('event.status = :status', { status: EventStatus.Published })
+      .andWhere('event.visibility = :visibility', {
+        visibility: EventVisibility.Public,
+      });
 
     if (search) {
       eventQuery.andWhere(
         `(event.name LIKE :search OR
-          event.slug LIKE :search OR 
-          event.description LIKE :search)`,
+          event.slug LIKE :search)`,
         { search: `%${search}%` },
       );
     }

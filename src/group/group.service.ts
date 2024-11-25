@@ -265,7 +265,10 @@ export class GroupService {
       .leftJoinAndSelect('group.groupMembers', 'groupMembers')
       .leftJoinAndSelect('groupMembers.user', 'user')
       .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
-      .where('group.status = :status', { status: GroupStatus.Published });
+      .where('group.status = :status', { status: GroupStatus.Published })
+      .andWhere('group.visibility = :visibility', {
+        visibility: GroupVisibility.Public,
+      });
 
     if (userId) {
       groupQuery.andWhere('user.id = :userId', { userId });
@@ -293,10 +296,7 @@ export class GroupService {
     if (search) {
       groupQuery.andWhere(
         `(group.name LIKE :search OR
-          group.slug LIKE :search OR 
-          group.description LIKE :search OR
-          CAST(group.status AS TEXT) LIKE :search OR
-          CAST(group.visibility AS TEXT) LIKE :search)`,
+          group.slug LIKE :search`,
         { search: `%${search}%` },
       );
     }
@@ -317,13 +317,15 @@ export class GroupService {
       .leftJoinAndSelect('group.groupMembers', 'groupMembers')
       .leftJoinAndSelect('groupMembers.user', 'user')
       .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
-      .where('group.status = :status', { status: GroupStatus.Published });
+      .where('group.status = :status', { status: GroupStatus.Published })
+      .andWhere('group.visibility = :visibility', {
+        visibility: GroupVisibility.Public,
+      });
 
     if (search) {
       groupQuery.andWhere(
         `(group.name LIKE :search OR
-          group.slug LIKE :search OR 
-          group.description LIKE :search)`,
+          group.slug LIKE :search)`,
         { search: `%${search}%` },
       );
     }

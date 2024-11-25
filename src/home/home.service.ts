@@ -83,8 +83,10 @@ export class HomeService {
   }
 
   async globalSearch(pagination: PaginationDto, query: HomeQuery) {
-    const event = await this.eventService.searchAllEvents(pagination, query);
-    const group = await this.groupService.searchAllGroup(pagination, query);
+    const [event, group] = await Promise.all([
+      this.eventService.searchAllEvents(pagination, query),
+      this.groupService.searchAllGroup(pagination, query),
+    ]);
 
     return {
       events: event,
