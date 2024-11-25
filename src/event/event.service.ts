@@ -160,7 +160,7 @@ export class EventService {
 
     if (!stream.id) {
       // create channel
-      await this.zulipService.subscribeUserToChannel(user, {
+      await this.zulipService.subscribeAdminToChannel({
         subscriptions: [
           {
             name: eventChannelName,
