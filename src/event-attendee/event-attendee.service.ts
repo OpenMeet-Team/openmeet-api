@@ -157,14 +157,6 @@ export class EventAttendeeService {
     });
   }
 
-  async getEventAttendeePermissions(id: number) {
-    await this.getTenantSpecificEventRepository();
-    return await this.eventAttendeesRepository.find({
-      where: { id },
-      relations: ['role', 'role.permissions'],
-    });
-  }
-
   async cancelAttendingEvent(id: number, userId: number) {
     await this.getTenantSpecificEventRepository();
     const attendee = await this.eventAttendeesRepository.findOne({

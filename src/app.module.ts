@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, Scope } from '@nestjs/common';
 import { UserModule } from './user/user.module';
 import { FileModule } from './file/file.module';
 import { AuthModule } from './auth/auth.module';
@@ -31,7 +31,7 @@ import { TenantGuard } from './tenant/tenant.guard';
 import { CategoryModule } from './category/category.module';
 import { GroupModule } from './group/group.module';
 import { SubCategoryModule } from './sub-category/sub-category.module';
-// import { PermissionsGuard } from './shared/guard/permissions.guard';
+import { PermissionsGuard } from './shared/guard/permissions.guard';
 import { GroupMemberModule } from './group-member/group-member.module';
 import { EventAttendeeModule } from './event-attendee/event-attendee.module';
 import { HealthModule } from './health/health.module';
@@ -122,12 +122,12 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       provide: APP_GUARD,
       useClass: TenantGuard, // Registered TenantGuard globally
     },
-    // {
-    // provide: APP_GUARD,
-    // useClass: PermissionsGuard,
-    // scope: Scope.REQUEST,
-    // durable: true,
-    // },
+    {
+      provide: APP_GUARD,
+      useClass: PermissionsGuard,
+      scope: Scope.REQUEST,
+      durable: true,
+    },
     RequestCounterInterceptor,
     makeCounterProvider({
       name: 'http_requests_total',

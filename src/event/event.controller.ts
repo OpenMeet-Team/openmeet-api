@@ -28,8 +28,6 @@ import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { CreateEventAttendeeDto } from '../event-attendee/dto/create-eventAttendee.dto';
 import { UpdateEventAttendeeDto } from '../event-attendee/dto/update-eventAttendee.dto';
 import { QueryEventAttendeeDto } from '../event-attendee/dto/query-eventAttendee.dto';
-import { Permissions } from '../shared/guard/permissions.decorator';
-import { PermissionsGuard } from '../shared/guard/permissions.guard';
 
 @ApiTags('Events')
 @Controller('events')
@@ -62,8 +60,6 @@ export class EventController {
     return this.eventService.create(createEventDto, user.id);
   }
 
-  @Permissions()
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get('me')
   @ApiOperation({ summary: 'Get all user events' })
   async showAllUserEvents(
