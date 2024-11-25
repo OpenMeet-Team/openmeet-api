@@ -38,6 +38,11 @@ export class ZulipService {
         full_name: user.name as string,
       }).then((createUserResponse) => {
         if (createUserResponse?.result !== 'success') {
+          // console.log(createUserResponse, {
+          //   email: userEmail,
+          //   password: userPassword,
+          //   full_name: user.name as string,
+          // });
           throw new Error('Failed to create Zulip user');
         }
       });
