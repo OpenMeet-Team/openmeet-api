@@ -399,7 +399,7 @@ declare module 'zulip-js' {
             topic: string;
           }>;
         };
-        getProfile(): ApiResponse<ZulipUser>;
+        getProfile(): ZulipApiResponse<ZulipUser>;
         subscriptions: {
           remove(params: ZulipRemoveSubscriptionParams): ZulipApiResponse<{
             removed: string[];

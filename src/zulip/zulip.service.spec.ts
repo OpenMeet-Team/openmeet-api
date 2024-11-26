@@ -9,6 +9,7 @@ import {
   mockZulipMessageResponse,
   mockZulipStream,
   mockZulipStreamTopic,
+  mockZulipUser,
 } from '../test/mocks';
 import { ZulipService } from './zulip.service';
 import { Test } from '@nestjs/testing';
@@ -70,10 +71,13 @@ describe('ZulipService', () => {
     });
   });
 
-  describe.skip('getUserProfile', () => {
+  describe('getUserProfile', () => {
     it('should return profile', async () => {
+      jest
+        .spyOn(zulipService, 'getUserProfile')
+        .mockResolvedValue(mockZulipUser);
       const profile = await zulipService.getUserProfile(mockUser);
-      expect(profile).toBeDefined();
+      expect(profile).toEqual(mockZulipUser);
     });
   });
 
@@ -100,11 +104,14 @@ describe('ZulipService', () => {
     });
   });
 
-  describe.skip('getAdminApiKey', () => {
+  describe('getAdminApiKey', () => {
     it('should return api key', async () => {
       jest
         .spyOn(zulipService, 'getInitialisedClient')
         .mockResolvedValue(mockZulipClient);
+      jest
+        .spyOn(zulipService, 'getAdminApiKey')
+        .mockResolvedValue(mockZulipFetchApiKeyResponse);
       const apiKeyResponse = await zulipService.getAdminApiKey(
         mockUser.zulipUsername as string,
         mockUser.password as string,
@@ -122,8 +129,11 @@ describe('ZulipService', () => {
     });
   });
 
-  describe.skip('createUser', () => {
+  describe('createUser', () => {
     it('should return created user', async () => {
+      jest
+        .spyOn(zulipService, 'createUser')
+        .mockResolvedValue({ id: mockZulipUser.user_id });
       const user = await zulipService.createUser({
         email: mockUser.email as string,
         password: mockUser.password as string,

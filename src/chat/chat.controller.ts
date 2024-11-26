@@ -25,7 +25,7 @@ export class ChatController {
   @ApiOperation({ summary: 'Show Chat List' })
   async showChats(
     @AuthUser() user: User,
-    @Query() query: any,
+    @Query() query?: { member?: string; chat?: string },
   ): Promise<{ chats: ChatEntity[]; chat: ChatEntity | null }> {
     return await this.chatService.showChats(user.id, query);
   }

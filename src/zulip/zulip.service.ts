@@ -16,7 +16,7 @@ import {
 } from 'zulip-js';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { REQUEST } from '@nestjs/core';
-// import { ulid } from 'ulid';
+import { ulid } from 'ulid';
 import { UserService } from '../user/user.service';
 
 @Injectable()
@@ -28,56 +28,53 @@ export class ZulipService {
   ) {}
 
   async getInitialisedClient(user: UserEntity): Promise<ZulipClient> {
-    // if (!user.zulipUserId) {
-    //   // Generate a unique email and password for the new Zulip user
-    //   const userEmail = `tenant_${this.request.tenantId}__${user.ulid}@zulip.openmeet.net`;
-    //   const userPassword = ulid();
+    if (!user.zulipUserId) {
+      //   // Generate a unique email and password for the new Zulip user
+      const userEmail = `tenant_${this.request.tenantId}__${user.ulid}@zulip.openmeet.net`;
+      const userPassword = ulid();
 
-    //   console.log(userEmail, userPassword);
+      console.log(userEmail, userPassword);
 
-    //   await this.createUser({
-    //     email: userEmail,
-    //     password: userPassword,
-    //     full_name: user.name as string,
-    //   }).then((createUserResponse) => {
-    //     console.log('createUserResponse', createUserResponse);
-    //     if (createUserResponse?.result !== 'success') {
-    //       throw new Error(`createUser: ${createUserResponse.msg}`);
-    //     }
-    //   });
+      const createdZulipUser = await this.createUser({
+        email: userEmail,
+        password: userPassword,
+        full_name: user.name as string,
+      });
 
-    //   // Fetch the API key for the newly created user
-    //   const apiKeyResponse = await this.getAdminApiKey(userEmail, userPassword);
+      console.log('createdZulipUser', createdZulipUser);
 
-    //   if (!apiKeyResponse.api_key) {
-    //     throw new Error(
-    //       `fetchApiKey: Failed to fetch API key for new Zulip user`,
-    //     );
-    //   }
+      // Fetch the API key for the newly created user
+      const apiKeyResponse = await this.getAdminApiKey(userEmail, userPassword);
 
-    //   try {
-    //     // Store the Zulip credentials in your user service
-    //     const updatedUser = await this.userService.addZulipCredentialsToUser(
-    //       user.id,
-    //       {
-    //         zulipUsername: userEmail,
-    //         zulipApiKey: apiKeyResponse.api_key,
-    //         zulipUserId: apiKeyResponse.user_id,
-    //       },
-    //     );
+      if (!apiKeyResponse.api_key) {
+        throw new Error(
+          `fetchApiKey: Failed to fetch API key for new Zulip user`,
+        );
+      }
 
-    //     console.log('updatedUser', updatedUser);
+      try {
+        // Store the Zulip credentials in your user service
+        const updatedUser = await this.userService.addZulipCredentialsToUser(
+          user.id,
+          {
+            zulipUsername: userEmail,
+            zulipApiKey: apiKeyResponse.api_key,
+            zulipUserId: apiKeyResponse.user_id,
+          },
+        );
 
-    //     if (!updatedUser) {
-    //       throw new Error(`addZulipCredentialsToUser: Failed to update user`);
-    //     }
+        console.log('updatedUser', updatedUser);
 
-    //     return await getClient(updatedUser);
-    //   } catch (error) {
-    //     console.error('Error adding Zulip credentials to user:', error);
-    //     throw error;
-    //   }
-    // }
+        if (!updatedUser) {
+          throw new Error(`addZulipCredentialsToUser: Failed to update user`);
+        }
+
+        return await getClient(updatedUser);
+      } catch (error) {
+        console.error('Error adding Zulip credentials to user:', error);
+        throw error;
+      }
+    }
 
     return await getClient(user);
   }
@@ -122,7 +119,7 @@ export class ZulipService {
     const profileResponse = await client.users.me.getProfile();
 
     if (profileResponse.result === 'success') {
-      return profileResponse.user;
+      return profileResponse;
     }
     throw new Error(`getUserProfile: ${profileResponse.msg}`);
   }
@@ -190,7 +187,7 @@ export class ZulipService {
 
     const response = await client.users.create(params);
     if (response.result === 'success') {
-      return response;
+      return { id: response.id };
     }
     throw new Error(`createUser: ${response.msg}`);
   }

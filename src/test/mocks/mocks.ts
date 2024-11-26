@@ -62,7 +62,9 @@ export const mockChatService = {
   getChatByUlid: jest.fn().mockResolvedValue(mockChat),
   getChatByParticipantUlid: jest.fn().mockResolvedValue(mockChat),
   sendMessage: jest.fn().mockResolvedValue(mockZulipMessageResponse),
-  showChats: jest.fn().mockResolvedValue({ chats: [mockChat], chat: mockChat }),
+  showChats: jest
+    .fn()
+    .mockResolvedValue({ chats: [mockChat], chat: mockChat || null }),
   setMessagesRead: jest
     .fn()
     .mockResolvedValue({ messages: [mockZulipMessage.id] }),

@@ -244,6 +244,7 @@ export const mockZulipService = {
   updateUserMessage: jest.fn().mockResolvedValue(mockZulipMessageResponse),
   updateUserProfile: jest.fn().mockResolvedValue(mockZulipApiResponse),
   getAdminApiKey: jest.fn().mockResolvedValue(mockZulipFetchApiKeyResponse),
+  getUserProfile: jest.fn().mockResolvedValue(mockZulipUser),
 };
 
 export const mockGetZulipClient = jest.fn().mockResolvedValue(mockZulipClient);

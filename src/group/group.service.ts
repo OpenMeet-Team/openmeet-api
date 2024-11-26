@@ -150,7 +150,6 @@ export class GroupService {
     });
 
     if (!group) {
-      console.log('showGroupRecommendedEvents', slug);
       return await this.eventService.showRandomEvents(4);
     } else {
       const categoryIds = group.categories?.map((c) => c && c.id);

@@ -17,7 +17,7 @@ export class ChatEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToMany(() => UserEntity, (user) => user.chats)
+  @ManyToMany(() => UserEntity, (user) => user.chats, { eager: true })
   participants: UserEntity[];
 
   messages: ZulipMessage[];
