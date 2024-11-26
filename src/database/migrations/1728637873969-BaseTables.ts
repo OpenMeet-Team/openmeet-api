@@ -69,7 +69,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `CREATE TYPE "${schema}"."groups_visibility_enum" AS ENUM('public', 'authenticated', 'private')`,
     );
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."groups" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "zulipChannelId" integer, "name" character varying(255) NOT NULL, "slug" character varying(255) NOT NULL, "description" text NOT NULL, "status" "${schema}"."groups_status_enum", "visibility" "${schema}"."groups_visibility_enum", "requireApproval" boolean NOT NULL DEFAULT true, "location" character varying(255), "lat" double precision, "lon" double precision, "createdById" integer, "imageId" integer, "locationPoint" geography(Point, 4326), CONSTRAINT "REL_44626591821828ce1d26311312" UNIQUE ("imageId"), CONSTRAINT "PK_659d1483316afb28afd3a90646e" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."groups" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL,"ulid" character varying(26) NOT NULL, "zulipChannelId" integer, "name" character varying(255) NOT NULL, "slug" character varying(255) NOT NULL, "description" text NOT NULL, "status" "${schema}"."groups_status_enum", "visibility" "${schema}"."groups_visibility_enum", "requireApproval" boolean NOT NULL DEFAULT true, "location" character varying(255), "lat" double precision, "lon" double precision, "createdById" integer, "imageId" integer, "locationPoint" geography(Point, 4326), CONSTRAINT "REL_44626591821828ce1d26311312" UNIQUE ("imageId"), CONSTRAINT "PK_659d1483316afb28afd3a90646e" PRIMARY KEY ("id"))`,
     );
 
     await queryRunner.query(
