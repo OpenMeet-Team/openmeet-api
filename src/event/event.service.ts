@@ -211,11 +211,9 @@ export class EventService {
     }
 
     if (search) {
-      eventQuery.andWhere(
-        `(event.name LIKE :search OR
-          event.slug LIKE :search)`,
-        { search: `%${search}%` },
-      );
+      eventQuery.andWhere(`(event.name LIKE :search)`, {
+        search: `%${search}%`,
+      });
     }
 
     if (location) {
@@ -270,17 +268,12 @@ export class EventService {
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.group', 'group')
       .leftJoinAndSelect('event.attendees', 'attendees')
-      .where('event.status = :status', { status: EventStatus.Published })
-      .andWhere('event.visibility = :visibility', {
-        visibility: EventVisibility.Public,
-      });
+      .where('event.status = :status', { status: EventStatus.Published });
 
     if (search) {
-      eventQuery.andWhere(
-        `(event.name LIKE :search OR
-          event.slug LIKE :search)`,
-        { search: `%${search}%` },
-      );
+      eventQuery.andWhere(`(event.name LIKE :search)`, {
+        search: `%${search}%`,
+      });
     }
 
     return paginate(eventQuery, { page, limit });
