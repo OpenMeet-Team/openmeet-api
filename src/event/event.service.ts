@@ -326,7 +326,7 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
     return this.eventRepository.find({
       where: { status: EventStatus.Published },
-      relations: ['attendees'],
+      relations: ['attendees', 'categories'],
       order: { createdAt: 'DESC' },
       take: limit,
     });
@@ -480,12 +480,14 @@ export class EventService {
     if (!event) {
       throw new NotFoundException('Event not found');
     }
+    const eventCopy = { ...event };
 
     // Delete related event attendees first
     await this.eventAttendeeService.deleteEventAttendees(event.id);
 
     // Now delete the event
     await this.eventRepository.remove(event);
+    this.eventEmitter.emit('event.deleted', eventCopy);
   }
 
   async deleteEventsByGroup(groupId: number): Promise<void> {

@@ -1,4 +1,10 @@
-import { ZulipClient, ZulipConfig, ZulipMessage, ZulipUser } from 'zulip-js';
+import {
+  ZulipClient,
+  ZulipConfig,
+  ZulipFetchApiKeyResponse,
+  ZulipMessage,
+  ZulipUser,
+} from 'zulip-js';
 
 export const mockZulipSetting = {
   zulip_version: '1.0.0',
@@ -65,6 +71,12 @@ export const mockZulipSubscriptionResponse = {
   subscribed: true,
   stream_id: mockZulipStream.id,
 };
+
+export const mockZulipFetchApiKeyResponse = {
+  api_key: 'test',
+  email: mockZulipUser.email,
+  user_id: mockZulipUser.user_id,
+} as ZulipFetchApiKeyResponse;
 
 export const mockZulipClient = {
   config: {} as ZulipConfig,
@@ -230,6 +242,8 @@ export const mockZulipService = {
   updateAdminMessage: jest.fn().mockResolvedValue(mockZulipMessageResponse),
   deleteAdminMessage: jest.fn().mockResolvedValue(mockZulipApiResponse),
   updateUserMessage: jest.fn().mockResolvedValue(mockZulipMessageResponse),
+  updateUserProfile: jest.fn().mockResolvedValue(mockZulipApiResponse),
+  getAdminApiKey: jest.fn().mockResolvedValue(mockZulipFetchApiKeyResponse),
 };
 
 export const mockGetZulipClient = jest.fn().mockResolvedValue(mockZulipClient);

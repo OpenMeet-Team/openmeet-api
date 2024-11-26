@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { UserService } from './user.service';
 import { ZulipService } from '../zulip/zulip.service';
@@ -14,25 +14,23 @@ export class UserListener {
   ) {}
 
   @OnEvent('user.created')
-  async handleUserCreatedEvent(user: UserEntity) {
-    try {
-      await this.userService.getTenantSpecificRepository();
-      await this.zulipService.getInitialisedClient(user); // this will create a new zulip user if it doesn't exist
-    } catch (error) {
-      console.error('UserListener: Failed to create zulip user', error.message);
-    }
+  handleUserCreatedEvent(user: UserEntity) {
+    console.log('user.created', user);
   }
 
   @OnEvent('user.updated')
   async handleUserUpdatedEvent(user: UserEntity) {
-    try {
-      await this.zulipService.getInitialisedClient(user);
-      await this.zulipService.updateUserSettings(user, {
-        full_name: user.name,
-      });
-    } catch (error) {
-      console.error('Failed to create or update zulip user:', error);
-      throw new NotFoundException('Failed to create or update zulip user');
+    console.log('user.updated', user);
+
+    if (user.zulipUsername && user.zulipApiKey) {
+      try {
+        await this.zulipService.updateUserSettings(user, {
+          full_name: user.name,
+        });
+      } catch (error) {
+        console.error('Failed to update zulip user settings:', error);
+        throw new Error('Failed to update zulip user settings');
+      }
     }
   }
 }

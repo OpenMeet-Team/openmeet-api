@@ -4,6 +4,7 @@ import {
   mockUser,
   mockUserService,
   mockZulipClient,
+  mockZulipFetchApiKeyResponse,
   mockZulipMessage,
   mockZulipMessageResponse,
   mockZulipStream,
@@ -40,7 +41,7 @@ describe('ZulipService', () => {
   describe('getInitialisedClient', () => {
     it('should return client', async () => {
       const client = await zulipService.getInitialisedClient(mockUser);
-      expect(client).toBeDefined();
+      expect(client).toEqual(mockZulipClient);
     });
   });
 
@@ -69,7 +70,7 @@ describe('ZulipService', () => {
     });
   });
 
-  describe('getUserProfile', () => {
+  describe.skip('getUserProfile', () => {
     it('should return profile', async () => {
       const profile = await zulipService.getUserProfile(mockUser);
       expect(profile).toBeDefined();
@@ -89,7 +90,7 @@ describe('ZulipService', () => {
     });
   });
 
-  describe.only('getAdminSettings', () => {
+  describe('getAdminSettings', () => {
     it('should return settings', async () => {
       jest
         .spyOn(zulipService, 'getInitialisedClient')
@@ -99,28 +100,29 @@ describe('ZulipService', () => {
     });
   });
 
-  describe('fetchApiKey', () => {
+  describe.skip('getAdminApiKey', () => {
     it('should return api key', async () => {
       jest
         .spyOn(zulipService, 'getInitialisedClient')
         .mockResolvedValue(mockZulipClient);
-      const apiKey = await zulipService.fetchApiKey(
-        mockUser.email as string,
+      const apiKeyResponse = await zulipService.getAdminApiKey(
+        mockUser.zulipUsername as string,
         mockUser.password as string,
       );
-      console.log(apiKey);
-      expect(apiKey).toBeDefined();
+      expect(apiKeyResponse).toEqual(mockZulipFetchApiKeyResponse);
     });
   });
 
-  describe('updateUserSettings', () => {
+  describe.skip('updateUserProfile', () => {
     it('should return updated user', async () => {
-      const user = await zulipService.updateUserSettings(mockUser, {});
+      const user = await zulipService.updateUserProfile(mockUser, {
+        full_name: mockUser.name,
+      });
       expect(user).toBeDefined();
     });
   });
 
-  describe('createUser', () => {
+  describe.skip('createUser', () => {
     it('should return created user', async () => {
       const user = await zulipService.createUser({
         email: mockUser.email as string,

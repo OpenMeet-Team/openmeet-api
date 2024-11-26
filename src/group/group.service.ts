@@ -138,7 +138,7 @@ export class GroupService {
   }
 
   async showGroupRecommendedEvents(
-    slug: string,
+    slug?: string,
     minEvents: number = 3,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
@@ -150,6 +150,7 @@ export class GroupService {
     });
 
     if (!group) {
+      console.log('showGroupRecommendedEvents', slug);
       return await this.eventService.showRandomEvents(4);
     } else {
       const categoryIds = group.categories?.map((c) => c && c.id);
@@ -353,6 +354,7 @@ export class GroupService {
 
   async showGroup(slug: string, userId?: number): Promise<any> {
     await this.getTenantSpecificGroupRepository();
+
     const group = await this.groupRepository.findOne({
       where: { slug },
       relations: ['createdBy', 'categories'],

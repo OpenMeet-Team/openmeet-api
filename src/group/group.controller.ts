@@ -234,7 +234,7 @@ export class GroupController {
   @Get(':slug/recommended-events')
   @ApiOperation({ summary: 'Get similar events for the group' })
   async showGroupRecommendedEvents(
-    @Param('slug') slug: string,
+    @Param('slug') slug?: string,
   ): Promise<EventEntity[]> {
     return await this.groupService.showGroupRecommendedEvents(slug);
   }

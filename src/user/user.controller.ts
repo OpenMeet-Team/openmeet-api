@@ -9,7 +9,6 @@ import {
   HttpStatus,
   HttpCode,
   SerializeOptions,
-  NotFoundException,
   Patch,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -124,15 +123,10 @@ export class UserController {
   }
 
   @Public()
-  @Get(':ulid/profile')
+  @Get(':slug/profile')
   @ApiOperation({ summary: 'Get user profile' })
-  showProfile(@Param('ulid') ulid: User['ulid']): Promise<NullableType<User>> {
-    try {
-      return this.userService.showProfile(ulid);
-    } catch (err) {
-      console.log(err);
-      throw new NotFoundException('User not found');
-    }
+  showProfile(@Param('slug') slug: User['slug']): Promise<NullableType<User>> {
+    return this.userService.showProfile(slug);
   }
 
   @Delete(':id')

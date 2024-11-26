@@ -276,7 +276,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
     );
 
     await queryRunner.query(
-      `ALTER TABLE "${schema}"."sessions" ADD CONSTRAINT "FK_57de40bc620f456c7311aa3a1e6" FOREIGN KEY ("userId") REFERENCES "${schema}"."users"("id")`,
+      `ALTER TABLE "${schema}"."sessions" ADD CONSTRAINT "FK_57de40bc620f456c7311aa3a1e7" FOREIGN KEY ("userId") REFERENCES "${schema}"."users"("id") ON DELETE CASCADE`,
     );
 
     await queryRunner.query(
@@ -355,7 +355,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
     );
 
     await queryRunner.query(
-      `ALTER TABLE "${schema}"."sessions" DROP CONSTRAINT "FK_57de40bc620f456c7311aa3a1e6"`,
+      `ALTER TABLE "${schema}"."sessions" DROP CONSTRAINT "FK_57de40bc620f456c7311aa3a1e7"`,
     );
 
     await queryRunner.query(
