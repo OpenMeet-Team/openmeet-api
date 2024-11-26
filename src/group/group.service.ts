@@ -311,12 +311,11 @@ export class GroupService {
 
       // Default radius to 5 kilometers if not provided
       const searchRadius = radius ?? 5;
-      console.log(lon, lat, radius);
       // Find events within the radius using ST_DWithin
       groupQuery.andWhere(
         `ST_DWithin(
           group.locationPoint,
-          ST_SetSRID(ST_MakePoint(:lon, :lat), 4326),
+          ST_SetSRID(ST_MakePoint(:lon, :lat), ${process.env.POSTGIS_SRID}),
           :radius
         )`,
         { lon, lat, radius: searchRadius * 1000 }, // Convert kilometers to meters

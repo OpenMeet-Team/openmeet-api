@@ -114,6 +114,13 @@ export class CreateEventDto {
   allowWaitlist?: boolean;
 
   @ApiProperty({
+    description: 'The location for the event',
+  })
+  @IsOptional()
+  @IsString()
+  location?: string;
+
+  @ApiProperty({
     description: 'The latitude of the event location',
   })
   @IsOptional()

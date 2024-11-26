@@ -94,7 +94,11 @@ export class EventEntity extends EntityRelationalHelper {
     srid: 4326,
     nullable: true,
   })
+  @Index()
   locationPoint?: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  location: string;
 
   @Column({ type: 'double precision', nullable: true })
   lat: number;

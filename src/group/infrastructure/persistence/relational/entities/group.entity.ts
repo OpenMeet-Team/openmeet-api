@@ -11,6 +11,7 @@ import {
   PrimaryGeneratedColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { CategoryEntity } from '../../../../../category/infrastructure/persistence/relational/entities/categories.entity';
@@ -70,7 +71,11 @@ export class GroupEntity extends EntityRelationalHelper {
     srid: 4326,
     nullable: true,
   })
+  @Index()
   locationPoint: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  location: string;
 
   @Column({ type: 'double precision', nullable: true })
   lat: number;

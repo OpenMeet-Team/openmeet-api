@@ -312,7 +312,7 @@ export class EventService {
       eventQuery.andWhere(
         `ST_DWithin(
           event.locationPoint,
-          ST_SetSRID(ST_MakePoint(:lon, :lat), 4326),
+          ST_SetSRID(ST_MakePoint(:lon, :lat), ${process.env.POSTGIS_SRID}),
           :radius
         )`,
         { lon, lat, radius: searchRadius * 1000 }, // Convert kilometers to meters

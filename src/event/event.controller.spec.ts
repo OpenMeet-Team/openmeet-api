@@ -33,7 +33,7 @@ const createEventDto: CreateEventDto = {
   endDate: new Date(),
   group: mockGroup.id,
   type: 'in_person',
-  // location: 'Test Location',
+  location: 'Test Location',
   locationOnline: 'Test Location Online',
   maxAttendees: 100,
   categories: [mockCategory.id],
