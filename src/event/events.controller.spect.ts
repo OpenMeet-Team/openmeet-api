@@ -13,6 +13,7 @@ import { QueryEventDto } from '../event/dto/query-events.dto';
 import {
   mockCategory,
   mockEvent,
+  mockEventAttendees,
   mockEventService,
   mockGroup,
   mockGroupService,
@@ -102,8 +103,8 @@ describe('EventController', () => {
     });
 
     it('should get attendees count from an event', async () => {
-      mockEventService.findOne.mockResolvedValue(mockEvent);
-      const event = await eventService.findOne(mockEvent.id as number);
+      mockEventService.showEventAttendees.mockResolvedValue(mockEventAttendees);
+      const event = await eventService.showEvent(mockEvent.slug);
       expect(event.attendeesCount).toEqual(1);
     });
   });
@@ -133,11 +134,11 @@ describe('EventController', () => {
     });
   });
 
-  describe('findAll', () => {
+  describe('showAllEvents', () => {
     it('should return an array of events', async () => {
       const events = [mockEvent, { ...mockEvent, id: 2 }];
       jest
-        .spyOn(eventService, 'findAll')
+        .spyOn(eventService, 'showAllEvents')
         .mockResolvedValue(events as EventEntity[]);
       const pagination: PaginationOptions = {
         page: 1,
@@ -152,13 +153,9 @@ describe('EventController', () => {
         type: 'conference',
         categories: ['Technology'],
       };
-      const result = await controller.findAll(
-        pagination,
-        queryEventDto,
-        mockUser,
-      );
+      const result = await controller.showAllEvents(pagination, queryEventDto);
       expect(result).toEqual(events);
-      expect(eventService.findAll).toHaveBeenCalled();
+      expect(eventService.showAllEvents).toHaveBeenCalled();
     });
   });
 
@@ -168,12 +165,12 @@ describe('EventController', () => {
       jest
         .spyOn(eventService, 'update')
         .mockResolvedValue({ ...mockEvent, ...updateEventDto } as EventEntity);
-      const result = await controller.update(1, updateEventDto, {
+      const result = await controller.update(mockEvent.slug, updateEventDto, {
         user: mockUser,
       } as unknown as Request);
       expect(result).toEqual({ ...mockEvent, ...updateEventDto });
       expect(eventService.update).toHaveBeenCalledWith(
-        1,
+        mockEvent.slug,
         updateEventDto,
         mockUser.id,
       );
@@ -185,7 +182,7 @@ describe('EventController', () => {
         .spyOn(eventService, 'update')
         .mockRejectedValue(new Error('Update failed'));
       await expect(
-        controller.update(1, updateEventDto, {
+        controller.update(mockEvent.slug, updateEventDto, {
           user: mockUser,
         } as unknown as Request),
       ).rejects.toThrow('Update failed');
@@ -209,9 +206,9 @@ describe('EventController', () => {
   describe('delete', () => {
     it('should delete an event', async () => {
       jest.spyOn(eventService, 'remove').mockResolvedValue(undefined);
-      const result = await controller.remove(mockEvent.id as number);
+      const result = await controller.remove(mockEvent.slug);
       expect(result).toBeUndefined();
-      expect(eventService.remove).toHaveBeenCalledWith(mockEvent.id);
+      expect(eventService.remove).toHaveBeenCalledWith(mockEvent.slug);
     });
   });
 });

@@ -31,7 +31,7 @@ export class FileEntity extends EntityRelationalHelper {
   @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
 
-  @Column({ type: String, unique: true })
+  @Column({ type: 'char', length: 26, unique: true })
   ulid: string;
 
   @ApiProperty({
@@ -94,7 +94,7 @@ export class FileEntity extends EntityRelationalHelper {
   path: string;
 
   @BeforeInsert()
-  generateShortId() {
+  generateUlid() {
     this.ulid = ulid().toLowerCase();
   }
 }

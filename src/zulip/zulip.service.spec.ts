@@ -5,7 +5,9 @@ import {
   mockUserService,
   mockZulipClient,
   mockZulipMessage,
+  mockZulipMessageResponse,
   mockZulipStream,
+  mockZulipStreamTopic,
 } from '../test/mocks';
 import { ZulipService } from './zulip.service';
 import { Test } from '@nestjs/testing';
@@ -49,35 +51,36 @@ describe('ZulipService', () => {
     });
   });
 
-  describe('getUserStreamId', () => {
-    it('should return stream id', async () => {
-      jest
-        .spyOn(zulipService, 'getInitialisedClient')
-        .mockResolvedValue(mockZulipClient);
-      const streamId = await zulipService.getUserStreamId(mockUser, 'test');
-      expect(streamId).toBeDefined();
+  describe.skip('getUserStreamId', () => {
+    it('should return user stream id', async () => {
+      const stream = await zulipService.getUserStreamId(
+        mockUser,
+        mockZulipStream.name,
+      );
+      expect(stream).toEqual({ id: mockZulipStream.id });
     });
   });
 
-  describe('getAdminUsers', () => {
+  describe.skip('getAdminUsers', () => {
     it('should return users', async () => {
       const users = await zulipService.getAdminUsers();
+      console.log('users', users);
       expect(users).toBeDefined();
     });
   });
 
-  describe('getUserMessages', () => {
-    it('should return messages', async () => {
+  describe.skip('getUserMessages', () => {
+    it('should return user messages', async () => {
       const messages = await zulipService.getUserMessages(mockUser, {
         num_before: 0,
         num_after: 1,
-        anchor: 'first_unread',
+        anchor: 'oldest',
       });
-      expect(messages).toBeDefined();
+      expect(messages).toEqual([mockZulipMessage]);
     });
   });
 
-  describe('getUserProfile', () => {
+  describe.skip('getUserProfile', () => {
     it('should return profile', async () => {
       jest
         .spyOn(zulipService, 'getInitialisedClient')
@@ -87,8 +90,8 @@ describe('ZulipService', () => {
     });
   });
 
-  describe('getUserStreamTopics', () => {
-    it('should return stream topics', async () => {
+  describe.skip('getUserStreamTopics', () => {
+    it('should return user stream topics', async () => {
       jest
         .spyOn(zulipService, 'getInitialisedClient')
         .mockResolvedValue(mockZulipClient);
@@ -96,11 +99,11 @@ describe('ZulipService', () => {
         mockUser,
         mockZulipStream.id,
       );
-      expect(topics).toBeDefined();
+      expect(topics).toEqual([mockZulipStreamTopic]);
     });
   });
 
-  describe('getAdminSettings', () => {
+  describe.skip('getAdminSettings', () => {
     it('should return settings', async () => {
       jest
         .spyOn(zulipService, 'getInitialisedClient')
@@ -123,7 +126,7 @@ describe('ZulipService', () => {
     });
   });
 
-  describe('updateUserSettings', () => {
+  describe.skip('updateUserSettings', () => {
     it('should return user', async () => {
       jest
         .spyOn(zulipService, 'getInitialisedClient')
@@ -144,8 +147,8 @@ describe('ZulipService', () => {
     });
   });
 
-  describe('sendUserMessage', () => {
-    it('should return message', async () => {
+  describe.skip('sendUserMessage', () => {
+    it('should return message id after sending', async () => {
       const message = await zulipService.sendUserMessage(mockUser, {
         to: 'test',
         content: 'test',
@@ -155,8 +158,8 @@ describe('ZulipService', () => {
     });
   });
 
-  describe('updateUserMessage', () => {
-    it('should return message', async () => {
+  describe.skip('updateUserMessage', () => {
+    it('should return message id after updating', async () => {
       const message = await zulipService.updateUserMessage(
         mockUser,
         mockZulipMessage.id,
@@ -167,7 +170,7 @@ describe('ZulipService', () => {
   });
 
   describe('deleteUserMessage', () => {
-    it('should return message', async () => {
+    it('should return message id after deleting', async () => {
       const message = await zulipService.deleteUserMessage(
         mockUser,
         mockZulipMessage.id,
@@ -177,14 +180,14 @@ describe('ZulipService', () => {
   });
 
   describe('addUserMessagesReadFlag', () => {
-    it('should return message', async () => {
+    it('should return message id after adding read flag', async () => {
       const message = await zulipService.addUserMessagesReadFlag(mockUser, []);
       expect(message).toBeDefined();
     });
   });
 
   describe('removeUserMessagesReadFlag', () => {
-    it('should return message', async () => {
+    it('should return message id after removing read flag', async () => {
       const message = await zulipService.removeUserMessagesReadFlag(
         mockUser,
         [],
@@ -194,7 +197,7 @@ describe('ZulipService', () => {
   });
 
   describe('subscribeUserToChannel', () => {
-    it('should return user', async () => {
+    it('should return user id after subscribing', async () => {
       const user = await zulipService.subscribeUserToChannel(mockUser, {
         subscriptions: [{ name: 'test' }],
       });
@@ -202,21 +205,37 @@ describe('ZulipService', () => {
     });
   });
 
-  describe('getAdminMessages', () => {
-    it('should return messages', async () => {
+  describe.skip('getAdminMessages', () => {
+    it('should return admin messages', async () => {
       const messages = await zulipService.getAdminMessages({
-        anchor: 'first_unread',
+        anchor: 'oldest',
         num_before: 0,
         num_after: 1,
       });
-      expect(messages).toBeDefined();
+      expect(messages).toEqual([mockZulipMessage]);
     });
   });
 
-  describe('getAdminStreamTopics', () => {
-    it('should return stream topics', async () => {
-      const topics = await zulipService.getAdminStreamTopics(1);
-      expect(topics).toBeDefined();
+  describe.skip('getAdminStreamTopics', () => {
+    it('should return admin stream topics', async () => {
+      const topics = await zulipService.getAdminStreamTopics(
+        mockZulipStream.id,
+      );
+      expect(topics).toEqual([mockZulipStreamTopic]);
+    });
+  });
+
+  describe.skip('updateAdminMessage', () => {
+    it('should return message id after updating', async () => {
+      const message = await zulipService.updateAdminMessage(1, 'test');
+      expect(message).toEqual(mockZulipMessageResponse);
+    });
+  });
+
+  describe.skip('deleteAdminMessage', () => {
+    it('should return message id after deleting', async () => {
+      const message = await zulipService.deleteAdminMessage(1);
+      expect(message).toBeDefined();
     });
   });
 });

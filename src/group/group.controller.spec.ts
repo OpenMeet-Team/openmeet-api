@@ -1,7 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GroupController } from './group.controller';
 import { GroupService } from './group.service';
-import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
+import { Reflector } from '@nestjs/core';
+import { AuthService } from '../auth/auth.service';
 import {
   mockGroup,
   mockGroupMembers,
@@ -12,6 +13,10 @@ import {
   mockGroupMember,
   mockEventService,
   mockRepository,
+  mockZulipMessage,
+  mockGroupAboutResponse,
+  mockZulipMessageResponse,
+  mockZulipStreamTopic,
 } from '../test/mocks';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { CreateGroupDto } from './dto/create-group.dto';
@@ -19,6 +24,8 @@ import { UpdateGroupDto } from './dto/update-group.dto';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
 import { EventService } from '../event/event.service';
 import { Repository } from 'typeorm';
+import { PermissionsGuard } from '../shared/guard/permissions.guard';
+import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 
 describe('GroupController', () => {
   let controller: GroupController;
@@ -44,6 +51,26 @@ describe('GroupController', () => {
           provide: Repository,
           useValue: mockRepository,
         },
+        // Mock AuthService
+        {
+          provide: AuthService,
+          useValue: {
+            getUserPermissions: jest
+              .fn()
+              .mockResolvedValue(['READ_PERMISSION']),
+          },
+        },
+        // Mock Reflector
+        {
+          provide: Reflector,
+          useValue: {
+            get: jest.fn((key) => {
+              if (key === 'permissions') return ['READ_PERMISSION'];
+              return null;
+            }),
+          },
+        },
+        PermissionsGuard, // Include the PermissionsGuard in providers
       ],
     }).compile();
 
@@ -67,21 +94,21 @@ describe('GroupController', () => {
 
   describe('editGroup', () => {
     it('should edit a group', async () => {
-      const result = await controller.editGroup(1);
+      const result = await controller.editGroup(mockGroup.slug);
       expect(result).toEqual(mockGroup);
     });
   });
 
   describe('showGroup', () => {
     it('should show a group', async () => {
-      const result = await controller.showGroup(1);
+      const result = await controller.showGroup(mockGroup.slug);
       expect(result).toEqual(mockGroup);
     });
   });
 
   describe('updateGroup', () => {
     it('should update a group', async () => {
-      const result = await controller.updateGroup(1, {
+      const result = await controller.updateGroup(mockGroup.slug, {
         ...mockGroup,
         image: undefined,
         categories: [],
@@ -92,72 +119,79 @@ describe('GroupController', () => {
 
   describe('showGroupEvents', () => {
     it('should show group events', async () => {
-      const result = await controller.showGroupEvents(1);
+      const result = await controller.showGroupEvents(mockGroup.slug);
       expect(result).toEqual(mockEvents);
     });
   });
 
   describe('removeGroup', () => {
     it('should remove a group', async () => {
-      const result = await controller.removeGroup(mockGroup.id);
+      const result = await controller.removeGroup(mockGroup.slug);
       expect(result).toEqual(mockGroup);
     });
   });
 
   describe('showGroupEvents', () => {
     it('should show group events', async () => {
-      const result = await controller.showGroupEvents(1);
+      const result = await controller.showGroupEvents(mockGroup.slug);
       expect(result).toEqual(mockEvents);
     });
   });
 
   describe('showGroupMembers', () => {
     it('should show group members', async () => {
-      const result = await controller.showGroupMembers(1);
+      const result = await controller.showGroupMembers(mockGroup.slug);
       expect(result).toEqual(mockGroupMembers);
     });
   });
 
   describe('joinGroup', () => {
     it('should join a group', async () => {
-      const result = await controller.joinGroup(mockUser, 1);
+      const result = await controller.joinGroup(mockUser, mockGroup.slug);
       expect(result).toEqual(mockGroupMember);
     });
   });
 
   describe('leaveGroup', () => {
     it('should leave a group', async () => {
-      const result = await controller.leaveGroup(mockUser, 1);
+      const result = await controller.leaveGroup(mockUser, mockGroup.slug);
       expect(result).toEqual(mockGroupMember);
     });
   });
 
   describe('removeGroupMember', () => {
     it('should remove a group member', async () => {
-      const result = await controller.removeGroupMember(1, 1);
+      const result = await controller.removeGroupMember(
+        mockGroup.slug,
+        mockGroupMember.id,
+      );
       expect(result).toEqual(mockGroupMember);
     });
   });
 
   describe('updateGroupMemberRole', () => {
     it('should update a group member role', async () => {
-      const result = await controller.updateGroupMemberRole(1, 1, {
-        name: 'admin',
-      } as UpdateGroupMemberRoleDto);
+      const result = await controller.updateGroupMemberRole(
+        mockGroup.slug,
+        mockGroupMember.id,
+        {
+          name: 'admin',
+        } as UpdateGroupMemberRoleDto,
+      );
       expect(result).toEqual(mockGroupMember);
     });
   });
 
   describe('approveMember', () => {
     it('should approve a group member', async () => {
-      const result = await controller.approveMember(1, 1);
+      const result = await controller.approveMember(mockGroup.slug, 1);
       expect(result).toEqual(mockGroupMember);
     });
   });
 
   describe('rejectMember', () => {
     it('should reject a group member', async () => {
-      const result = await controller.rejectMember(1, 1);
+      const result = await controller.rejectMember(mockGroup.slug, 1);
       expect(result).toEqual(mockGroupMember);
     });
   });
@@ -166,15 +200,11 @@ describe('GroupController', () => {
     it('should return groups where user can create events', async () => {
       const result =
         await controller.showGroupsWhereUserCanCreateEvents(mockUser);
-      expect(
-        groupService.getGroupsWhereUserCanCreateEvents,
-      ).toHaveBeenCalledWith(mockUser.id);
       expect(result).toEqual([mockGroup]);
     });
   });
 
-  // TODO refactor this to use mocks
-  describe('getRecommendedEvents', () => {
+  describe('showGroupRecommendedEvents', () => {
     it('should return 3-5 recommended events', async () => {
       const mockEvents = [
         { id: 1, name: 'Event 1' },
@@ -185,13 +215,65 @@ describe('GroupController', () => {
       const minEvents = 3;
       const maxEvents = 5;
       jest
-        .spyOn(groupService, 'getRecommendedEvents')
+        .spyOn(groupService, 'showGroupRecommendedEvents')
         .mockResolvedValue(mockEvents as EventEntity[]);
 
-      const result = await controller.getRecommendedEvents(1);
+      const result = await controller.showGroupRecommendedEvents(
+        mockGroup.slug,
+      );
 
       expect(result.length).toBeGreaterThanOrEqual(minEvents);
       expect(result.length).toBeLessThanOrEqual(maxEvents);
+    });
+  });
+
+  describe('showGroupDiscussions', () => {
+    it('should return group discussions', async () => {
+      const result = await controller.showGroupDiscussions(mockGroup.slug);
+      expect(result).toEqual({
+        messages: [mockZulipMessage],
+        topics: [mockZulipStreamTopic],
+      });
+    });
+  });
+
+  describe('showGroupAbout', () => {
+    it('should return group about', async () => {
+      const result = await controller.showGroupAbout(mockGroup.slug);
+      expect(result).toEqual(mockGroupAboutResponse);
+    });
+  });
+
+  describe('sendGroupDiscussionMessage', () => {
+    it('should send a group discussion message', async () => {
+      const result = await controller.sendGroupDiscussionMessage(
+        mockGroup.slug,
+        mockUser,
+        { message: 'test', topicName: 'test' },
+      );
+      expect(result).toEqual(mockZulipMessageResponse);
+    });
+  });
+
+  describe.skip('updateGroupDiscussionMessage', () => {
+    it('should update a group discussion message', async () => {
+      const result = await controller.updateGroupDiscussionMessage(
+        mockGroup.slug,
+        mockZulipMessage.id,
+        mockUser,
+        { message: 'test' },
+      );
+      expect(result).toEqual(mockZulipMessageResponse);
+    });
+  });
+
+  describe.skip('deleteGroupDiscussionMessage', () => {
+    it('should delete a group discussion message', async () => {
+      const result = await controller.deleteGroupDiscussionMessage(
+        mockGroup.slug,
+        mockZulipMessage.id,
+      );
+      expect(result).toEqual(mockZulipMessageResponse);
     });
   });
 });

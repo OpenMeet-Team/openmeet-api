@@ -20,7 +20,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
     );
 
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."files" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "ulid" character varying, "fileName" character varying NOT NULL, "fileSize" integer NOT NULL, "mimeType" character varying NOT NULL, "path" character varying NOT NULL, CONSTRAINT "PK_6c16b9093a142e0e7613b04a3d9" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."files" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "ulid" character varying NOT NULL, "fileName" character varying NOT NULL, "fileSize" integer NOT NULL, "mimeType" character varying NOT NULL, "path" character varying NOT NULL, CONSTRAINT "PK_6c16b9093a142e0e7613b04a3d9" PRIMARY KEY ("id"))`,
     );
 
     await queryRunner.query(
@@ -73,7 +73,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
     );
 
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."categories" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, "slug" character varying(255), CONSTRAINT "PK_24dbc6126a28ff948da33e97d3b" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."categories" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "name" character varying(255) NOT NULL, "slug" character varying(255) NOT NULL, CONSTRAINT "PK_24dbc6126a28ff948da33e97d3b" PRIMARY KEY ("id"))`,
     );
 
     await queryRunner.query(
@@ -90,9 +90,8 @@ export class BaseTables1728637873969 implements MigrationInterface {
     );
 
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."users" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "ulid" character varying NOT NULL, "email" character varying, "password" character varying, "provider" character varying NOT NULL DEFAULT 'email', "socialId" character varying, "firstName" character varying, "lastName" character varying, "deletedAt" TIMESTAMP, "bio" text, "zulipUserId" integer, "zulipUsername" character varying, "zulipApiKey" character varying, "photoId" integer, "statusId" integer, "roleId" integer, CONSTRAINT "UQ_0aa955856df38a0cb6a33b16525" UNIQUE ("ulid"), CONSTRAINT "UQ_97672ac88f789774dd47f7c8be3" UNIQUE ("email"), CONSTRAINT "REL_f856a4818b32c69dbc8811f3d2" UNIQUE ("photoId"), CONSTRAINT "PK_a3ffb1c0c8416b9fc6f907b7433" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."users" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "slug" character varying(255) NOT NULL, "ulid" character varying(26) NOT NULL, "email" character varying, "password" character varying, "provider" character varying NOT NULL DEFAULT 'email', "socialId" character varying, "firstName" character varying, "lastName" character varying, "deletedAt" TIMESTAMP, "bio" text, "zulipUserId" integer, "zulipUsername" character varying, "zulipApiKey" character varying, "photoId" integer, "statusId" integer, "roleId" integer, CONSTRAINT "UQ_97672ac88f789774dd47f7c8be3" UNIQUE ("email"), CONSTRAINT "REL_f856a4818b32c69dbc8811f3d2" UNIQUE ("photoId"), CONSTRAINT "PK_a3ffb1c0c8416b9fc6f907b7433" PRIMARY KEY ("id"))`,
     );
-
     await queryRunner.query(
       `CREATE INDEX "IDX_${schema}_users_socialId" ON "${schema}"."users" ("socialId")`,
     );
@@ -102,9 +101,12 @@ export class BaseTables1728637873969 implements MigrationInterface {
     await queryRunner.query(
       `CREATE INDEX "IDX_${schema}_users_lastName" ON "${schema}"."users" ("lastName")`,
     );
+    await queryRunner.query(
+      `CREATE INDEX "IDX_${schema}_users_slug" ON "${schema}"."users" ("slug")`,
+    );
 
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."chats" ("id" SERIAL NOT NULL, "ulid" character varying, "participants" integer[], "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_5cbba686fa42e45a2914c590ads" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."chats" ("id" SERIAL NOT NULL, "ulid" character varying(26) NOT NULL, "participants" integer[], "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "PK_5cbba686fa42e45a2914c590ads" PRIMARY KEY ("id"))`,
     );
     await queryRunner.query(
       `CREATE INDEX "IDX_${schema}_chats_participants" ON "${schema}"."chats" ("participants")`,
@@ -296,7 +298,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `ALTER TABLE "${schema}"."eventCategories" ADD CONSTRAINT "FK_5f9d73047c3849c5b1495a80113" FOREIGN KEY ("categoriesId") REFERENCES "${schema}"."categories"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
     );
     await queryRunner.query(
-      `ALTER TABLE "${schema}"."eventCategories" ADD CONSTRAINT "FK_3e703b5162d4195681549dfc3e4" FOREIGN KEY ("eventsId") REFERENCES "${schema}"."events"("id")`,
+      `ALTER TABLE "${schema}"."eventCategories" ADD CONSTRAINT "FK_3e703b5162d4195681549dfc3e4" FOREIGN KEY ("eventsId") REFERENCES "${schema}"."events"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
     );
 
     await queryRunner.query(
@@ -388,6 +390,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "${schema}"."events" DROP CONSTRAINT "FK_35515e57a42f4fd00a4172371bb"`,
     );
+    await queryRunner.query(`DROP INDEX "IDX_${schema}_events_slug"`);
 
     await queryRunner.query(
       `ALTER TABLE "${schema}"."groups" DROP CONSTRAINT "FK_44626591821828ce1d263113128"`,
@@ -395,6 +398,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "${schema}"."groups" DROP CONSTRAINT "FK_e0522c4be8bab20520896919da0"`,
     );
+    await queryRunner.query(`DROP INDEX "IDX_${schema}_groups_slug"`);
 
     await queryRunner.query(
       `ALTER TABLE "${schema}"."groupMembers" DROP CONSTRAINT "FK_08cacea15f2aef324f78fddebff"`,
@@ -450,6 +454,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
     await queryRunner.query(
       `DROP INDEX "${schema}"."IDX_${schema}_groupCategories_groupId"`,
     );
+
     await queryRunner.query(`DROP TABLE "${schema}"."groupCategories"`);
 
     await queryRunner.query(
@@ -485,6 +490,9 @@ export class BaseTables1728637873969 implements MigrationInterface {
     );
     await queryRunner.query(
       `DROP INDEX "${schema}"."IDX_${schema}_users_socialId"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX "${schema}"."IDX_${schema}_users_slug"`,
     );
 
     await queryRunner.query(`DROP TABLE "${schema}"."eventRoles"`);

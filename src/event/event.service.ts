@@ -23,8 +23,8 @@ import {
   EventStatus,
   EventVisibility,
   EventAttendeeRole,
+  PostgisSrid,
 } from '../core/constants/constant';
-import slugify from 'slugify';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
@@ -35,7 +35,8 @@ import { CreateEventAttendeeDto } from '../event-attendee/dto/create-eventAttend
 import { EventRoleService } from '../event-role/event-role.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { UserService } from '../user/user.service';
-import { generateShortCode } from '../utils/short-code';
+import { UpdateEventAttendeeDto } from 'src/event-attendee/dto/update-eventAttendee.dto';
+import { ZulipTopic } from 'zulip-js';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -70,6 +71,15 @@ export class EventService {
     this.eventRepository = dataSource.getRepository(EventEntity);
   }
 
+  async findEventBySlug(slug: string): Promise<EventEntity> {
+    await this.getTenantSpecificEventRepository();
+    const event = await this.eventRepository.findOne({ where: { slug } });
+    if (!event) {
+      throw new NotFoundException(`Event with slug ${slug} not found`);
+    }
+    return event;
+  }
+
   async create(
     createEventDto: CreateEventDto,
     userId: number,
@@ -88,12 +98,6 @@ export class EventService {
       throw new NotFoundException(`Error finding categories: ${error.message}`);
     }
 
-    const shortCode = await generateShortCode();
-    const slugifiedName = `${slugify(createEventDto.name, {
-      strict: true,
-      lower: true,
-    })}-${shortCode.toLowerCase()}`;
-
     let locationPoint;
     if (createEventDto.lat && createEventDto.lon) {
       const { lat, lon } = createEventDto;
@@ -110,7 +114,6 @@ export class EventService {
     const mappedDto = {
       ...createEventDto,
       user,
-      slug: slugifiedName,
       group,
       categories,
       locationPoint,
@@ -142,14 +145,18 @@ export class EventService {
     eventUlid: string,
     userId: number,
     body: EventTopicCommentDto,
-  ) {
+  ): Promise<{ id: number }> {
     await this.getTenantSpecificEventRepository();
-    console.log(body);
+
     const { content, topic } = body;
 
-    const event = await this.eventRepository.findOneByOrFail({
-      ulid: eventUlid,
+    const event = await this.eventRepository.findOne({
+      where: { ulid: eventUlid },
     });
+
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
 
     const user = await this.userService.findById(userId);
     if (!user) {
@@ -162,18 +169,17 @@ export class EventService {
     const eventChannelName = `tenant_${this.request.tenantId}__event_${event.ulid}`;
 
     // check if zulip channels exists
-    const streamResponse = await this.zulipService.getUserStreamId(
+    const stream = await this.zulipService.getUserStreamId(
       user,
       eventChannelName,
     );
 
-    if (streamResponse.result !== 'success') {
+    if (!stream.id) {
       // create channel
       await this.zulipService.subscribeUserToChannel(user, {
         subscriptions: [
           {
             name: eventChannelName,
-            description: 'Test description for an event channel',
           },
         ],
       });
@@ -186,79 +192,21 @@ export class EventService {
       content: content,
     };
 
-    const response = await this.zulipService.sendUserMessage(user, params);
-    return response;
+    return await this.zulipService.sendUserMessage(user, params);
   }
 
-  // async updateComment(body: CommentDto, messageId: number) {
-  //   const { message } = body;
+  async showAllUserEvents(userId: number): Promise<EventEntity[]> {
+    await this.getTenantSpecificEventRepository();
+    return this.eventRepository.find({
+      where: { user: { id: userId } },
+      relations: ['attendees'],
+    }); // TODO: add user attending and user attended events
+  }
 
-  //   try {
-  //     const response = await this.zulipService.editZulipMessage(
-  //       messageId,
-  //       message,
-  //     );
-  //     console.log('Message sent successfully:', response);
-  //     return response;
-  //   } catch (error) {
-  //     console.error('Error sending message to Zulip:', error);
-  //     throw new Error('Failed to update Zulip comment');
-  //   }
-  // }
-
-  // async deleteComment(messageId: number) {
-  //   try {
-  //     const response = await this.zulipService.deleteZulipMessage(messageId);
-  //     console.log('Message sent successfully:', response);
-  //     return response;
-  //   } catch (error) {
-  //     console.error('Error sending message to Zulip:', error);
-  //     throw new Error('Failed to delete Zulip comment');
-  //   }
-  // }
-
-  // async showTopics(eventId: number) {
-  //   try {
-  //     const tenantId = this.request.tenantId;
-  //     const event = await this.findOne(eventId);
-  //     const streamName = `${tenantId}_event_${event.ulid}`;
-
-  //     // const response = await this.zulipService.getZulipTopics(streamName);
-
-  //     // return response;
-  //   } catch (error) {
-  //     console.error('Error fetching topics and messages from Zulip:', error);
-  //     throw new Error('Failed to fetch topics and messages');
-  //   }
-  // }
-
-  // async postCommentOnTopic(
-  //   body: CommentDto,
-  //   topicName: string,
-  //   eventId: number,
-  // ) {
-  //   const { message } = body;
-
-  //   const event = await this.findOne(eventId);
-  //   const tenantId = this.request.tenantId;
-  //   const params = {
-  //     to: `${tenantId}_event_${event.ulid}`,
-  //     type: 'stream',
-  //     topic: topicName,
-  //     content: message,
-  //   };
-
-  //   try {
-  //     const response = await this.zulipService.postZulipComment(params);
-  //     console.log('Message sent successfully to topic:', topicName);
-  //     return response;
-  //   } catch (error) {
-  //     console.error('Error sending message to Zulip:', error);
-  //     throw new Error('Failed to send message to the topic');
-  //   }
-  // }
-
-  async findAll(pagination: PaginationDto, query: QueryEventDto): Promise<any> {
+  async showAllEvents(
+    pagination: PaginationDto,
+    query: QueryEventDto,
+  ): Promise<any> {
     await this.getTenantSpecificEventRepository();
 
     const { page, limit } = pagination;
@@ -278,8 +226,8 @@ export class EventService {
       .leftJoinAndSelect('event.user', 'user')
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.group', 'group')
-      .leftJoinAndSelect('event.attendees', 'attendees');
-    // .where('event.status = :status', { status: EventStatus.Published });
+      .leftJoinAndSelect('event.attendees', 'attendees')
+      .where('event.status = :status', { status: EventStatus.Published });
 
     if (userId) {
       eventQuery.andWhere('event.user = :userId', { userId });
@@ -312,7 +260,7 @@ export class EventService {
       eventQuery.andWhere(
         `ST_DWithin(
           event.locationPoint,
-          ST_SetSRID(ST_MakePoint(:lon, :lat), ${process.env.POSTGIS_SRID}),
+          ST_SetSRID(ST_MakePoint(:lon, :lat), ${PostgisSrid.SRID}),
           :radius
         )`,
         { lon, lat, radius: searchRadius * 1000 }, // Convert kilometers to meters
@@ -352,42 +300,19 @@ export class EventService {
     return paginate(eventQuery, { page, limit });
   }
 
-  async findOne(id: number): Promise<EventEntity> {
+  async showEvent(slug: string, userId?: number): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
     const event = await this.eventRepository.findOne({
-      where: { id },
-      relations: [
-        'user',
-        'attendees',
-        'group',
-        'group.groupMembers',
-        'categories',
-      ],
-    });
-
-    if (!event) {
-      throw new NotFoundException(`Event with ID ${id} not found`);
-    }
-
-    event.attendees = event.attendees.slice(0, 5);
-    event.categories = event.categories.slice(0, 5);
-
-    return event;
-  }
-
-  async showEvent(id: number, userId?: number): Promise<EventEntity> {
-    await this.getTenantSpecificEventRepository();
-    const event = await this.eventRepository.findOne({
-      where: { id },
+      where: { slug },
       relations: ['user', 'group', 'categories'],
     });
 
     if (!event) {
-      throw new NotFoundException(`Event with ID ${id} not found`);
+      throw new NotFoundException('Event not found');
     }
 
     event.attendees =
-      await this.eventAttendeeService.findEventAttendeesByEventId(id, 5);
+      await this.eventAttendeeService.findEventAttendeesByEventId(event.id, 5);
 
     if (event.group && userId) {
       event.groupMember = await this.groupMemberService.findGroupMemberByUserId(
@@ -404,21 +329,25 @@ export class EventService {
         );
     }
 
-    event.topics = event.zulipChannelId
-      ? await this.findEventTopicsByEventId(event.zulipChannelId)
-      : [];
+    if (event.zulipChannelId) {
+      event.topics = await this.zulipService.getAdminStreamTopics(
+        event.zulipChannelId,
+      );
+      event.messages = await this.zulipService.getAdminMessages({
+        anchor: 'oldest',
+        num_before: 0,
+        num_after: 100,
+        narrow: [{ operator: 'stream', operand: event.zulipChannelId }],
+      });
+    }
 
     return event;
   }
 
-  async findEventTopicsByEventId(zulipChannelId: number): Promise<any[]> {
-    const topics = await this.zulipService.getAdminStreamTopics(zulipChannelId);
-
-    if (topics.result === 'success') {
-      return topics.topics;
-    }
-
-    return [];
+  async findEventTopicsByEventId(
+    zulipChannelId: number,
+  ): Promise<ZulipTopic[]> {
+    return await this.zulipService.getAdminStreamTopics(zulipChannelId);
   }
 
   async findRandom(): Promise<EventEntity[]> {
@@ -447,11 +376,11 @@ export class EventService {
     });
   }
 
-  async getRecommendedEventsByEventId(eventId: number): Promise<EventEntity[]> {
+  async showRecommendedEventsByEventSlug(slug: string): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
 
     const event = await this.eventRepository.findOne({
-      where: { id: eventId },
+      where: { slug },
       relations: ['categories'],
     });
 
@@ -460,7 +389,7 @@ export class EventService {
     } else {
       const categoryIds = event.categories?.map((c) => c.id);
 
-      return await this.findRecommendedEventsForEvent(eventId, categoryIds, 4);
+      return await this.findRecommendedEventsForEvent(event.id, categoryIds, 4);
     }
   }
 
@@ -562,27 +491,19 @@ export class EventService {
   }
 
   async update(
-    id: number,
+    slug: string,
     updateEventDto: UpdateEventDto,
     userId: number | undefined,
   ): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
-    const event = await this.findOne(id);
+    const event = await this.eventRepository.findOneOrFail({
+      where: { slug },
+    });
     const group = updateEventDto.group ? { id: updateEventDto.group } : null;
     const user = { id: userId };
 
-    let slugifiedName = '';
-    const shortCode = await generateShortCode();
-    if (updateEventDto.name) {
-      slugifiedName = `${slugify(updateEventDto.name, {
-        strict: true,
-        lower: true,
-      })}-${shortCode.toLowerCase()}`;
-    }
-
     const mappedDto: any = {
       ...updateEventDto,
-      slug: slugifiedName,
       user,
       group,
     };
@@ -618,10 +539,12 @@ export class EventService {
     return this.eventRepository.save(updatedEvent);
   }
 
-  async remove(id: number): Promise<void> {
+  async remove(slug: string): Promise<void> {
     await this.getTenantSpecificEventRepository();
-    await this.getTenantSpecificEventRepository();
-    const event = await this.findOne(id);
+    const event = await this.eventRepository.findOne({ where: { slug } });
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
 
     // Delete related event attendees first
     await this.eventAttendeeService.deleteEventAttendees(event.id);
@@ -707,26 +630,34 @@ export class EventService {
     });
   }
 
-  async editEvent(id: number) {
+  async editEvent(slug: string) {
     await this.getTenantSpecificEventRepository();
     return this.eventRepository.findOne({
-      where: { id },
+      where: { slug },
       relations: ['group', 'categories'],
     });
   }
 
-  async cancelAttendingEvent(id: number, userId: number) {
+  async cancelAttendingEvent(slug: string, userId: number) {
     await this.getTenantSpecificEventRepository();
-    return this.eventAttendeeService.cancelAttendingEvent(id, userId);
+    const event = await this.eventRepository.findOne({ where: { slug } });
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+    return this.eventAttendeeService.cancelAttendingEvent(event.id, userId);
   }
 
   async attendEvent(
-    id: number,
+    slug: string,
+    userId: number,
     createEventAttendeeDto: CreateEventAttendeeDto,
   ) {
     await this.getTenantSpecificEventRepository();
 
-    const event = await this.findOne(id);
+    const event = await this.eventRepository.findOne({ where: { slug } });
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
     const participantRole = await this.eventRoleService.findOne(
       EventAttendeeRole.Participant,
     );
@@ -736,10 +667,14 @@ export class EventService {
     }
 
     if (event.allowWaitlist) {
-      const count = await this.eventAttendeeService.getEventAttendeesCount(id);
+      const count = await this.eventAttendeeService.getEventAttendeesCount(
+        event.id,
+      );
       if (count >= event.maxAttendees) {
         return this.eventAttendeeService.create({
           ...createEventAttendeeDto,
+          event,
+          user: { id: userId } as UserEntity,
           status: EventAttendeeStatus.Waitlist,
           role: participantRole,
         });
@@ -749,6 +684,8 @@ export class EventService {
     if (event.requireApproval) {
       return this.eventAttendeeService.create({
         ...createEventAttendeeDto,
+        event,
+        user: { id: userId } as UserEntity,
         status: EventAttendeeStatus.Pending,
         role: participantRole,
       });
@@ -756,13 +693,109 @@ export class EventService {
 
     return this.eventAttendeeService.create({
       ...createEventAttendeeDto,
+      event,
+      user: { id: userId } as UserEntity,
       status: EventAttendeeStatus.Confirmed,
       role: participantRole,
     });
   }
 
-  async getEventAttendees(eventId: number, pagination: PaginationDto) {
+  async showEventAttendees(slug: string, pagination: PaginationDto) {
     await this.getTenantSpecificEventRepository();
-    return this.eventAttendeeService.getEventAttendees(eventId, pagination);
+
+    const event = await this.eventRepository.findOne({ where: { slug } });
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+    return this.eventAttendeeService.getEventAttendees(event.id, pagination);
+  }
+
+  async updateEventAttendee(
+    slug: string,
+    attendeeId: number,
+    updateEventAttendeeDto: UpdateEventAttendeeDto,
+  ) {
+    await this.getTenantSpecificEventRepository();
+
+    const event = await this.eventRepository.findOne({ where: { slug } });
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    return this.eventAttendeeService.updateEventAttendee(
+      event.id,
+      attendeeId,
+      updateEventAttendeeDto,
+    );
+  }
+
+  async sendEventDiscussionMessage(
+    slug: string,
+    userId: number,
+    body: { message: string; topicName: string },
+  ): Promise<{ id: number }> {
+    await this.getTenantSpecificEventRepository();
+
+    const event = await this.eventRepository.findOne({
+      where: { slug },
+    });
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    const user = await this.userService.findOne(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const eventChannelName = `tenant_${this.request.tenantId}__event_${event.ulid}`;
+    if (!event.zulipChannelId) {
+      // create channel
+      await this.zulipService.subscribeUserToChannel(user, {
+        subscriptions: [
+          {
+            name: eventChannelName,
+          },
+        ],
+      });
+      const stream = await this.zulipService.getAdminStreamId(eventChannelName);
+      // TODO remove default topic from channel
+      // await this.zulipService.deleteAdminStreamTopic(
+      //   stream.id,
+      //   'channel events',
+      // );
+      event.zulipChannelId = stream.id;
+      await this.eventRepository.save(event);
+    }
+
+    await this.zulipService.getInitialisedClient(user);
+
+    const params = {
+      to: event.zulipChannelId,
+      type: 'channel' as const,
+      topic: body.topicName,
+      content: body.message,
+    };
+
+    return await this.zulipService.sendUserMessage(user, params);
+  }
+
+  async updateEventDiscussionMessage(
+    messageId: number,
+    message: string,
+    userId: number,
+  ): Promise<{ id: number }> {
+    const user = await this.userService.findOne(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return await this.zulipService.updateUserMessage(user, messageId, message);
+    // return await this.zulipService.updateAdminMessage(messageId, message);
+  }
+
+  async deleteEventDiscussionMessage(
+    messageId: number,
+  ): Promise<{ id: number }> {
+    return await this.zulipService.deleteAdminMessage(messageId);
   }
 }

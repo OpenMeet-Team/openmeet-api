@@ -27,6 +27,9 @@ import { GroupMemberEntity } from '../../../../../group-member/infrastructure/pe
 import { FileEntity } from '../../../../../file/infrastructure/persistence/relational/entities/file.entity';
 import { ApiProperty } from '@nestjs/swagger';
 import { ulid } from 'ulid';
+import slugify from 'slugify';
+import { generateShortCode } from '../../../../../utils/short-code';
+import { ZulipMessage, ZulipTopic } from 'zulip-js';
 
 @Entity({ name: 'events' })
 export class EventEntity extends EntityRelationalHelper {
@@ -39,7 +42,7 @@ export class EventEntity extends EntityRelationalHelper {
   @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
 
-  @Column({ type: String, unique: true })
+  @Column({ type: 'char', length: 26, unique: true })
   ulid: string;
 
   @Column({ type: 'varchar', length: 255 })
@@ -98,6 +101,7 @@ export class EventEntity extends EntityRelationalHelper {
   locationPoint?: string;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
+  @Index()
   location: string;
 
   @Column({ type: 'double precision', nullable: true })
@@ -143,19 +147,28 @@ export class EventEntity extends EntityRelationalHelper {
   groupMember: GroupMemberEntity | null;
   attendee: EventAttendeesEntity | null;
 
+  @Column({ type: 'integer', nullable: true })
+  zulipChannelId: number;
+
   @Expose()
   get attendeesCount(): number {
     return this.attendees ? this.attendees.length : 0;
   }
 
   @BeforeInsert()
-  generateShortId() {
-    this.ulid = ulid().toLowerCase();
+  generateUlid() {
+    if (!this.ulid) {
+      this.ulid = ulid().toLowerCase();
+    }
   }
 
-  @Column({ type: 'integer', nullable: true })
-  zulipChannelId: number;
+  @BeforeInsert()
+  generateSlug() {
+    if (!this.slug) {
+      this.slug = `${slugify(this.name, { strict: true, lower: true })}-${generateShortCode().toLowerCase()}`;
+    }
+  }
 
-  topics: any[];
-  messages: any[];
+  messages: ZulipMessage[];
+  topics: ZulipTopic[];
 }

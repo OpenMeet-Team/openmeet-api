@@ -84,7 +84,7 @@ declare module 'zulip-js' {
     content_type: string;
   }
 
-  interface ZulipSettings {
+  export interface ZulipSettings {
     authentication_methods: {
       password: boolean;
       dev: boolean;
@@ -225,6 +225,13 @@ declare module 'zulip-js' {
     flag: ZulipFlag;
   }
 
+  export enum StreamPostPolicy {
+    AnyUser = 1,
+    AdminOnly = 2,
+    FullMembersOnly = 3,
+    ModeratorOnly = 4,
+  }
+
   export interface ZulipFlagsRemoveParams {
     messages: number[];
     flag: ZulipFlag;
@@ -234,15 +241,64 @@ declare module 'zulip-js' {
     zuliprc: string;
   }
 
+  export interface ZulipDetachedUpload {
+    create_time: number;
+    id: number;
+    messages: { date_sent: number; id: number }[];
+    size: number;
+    name: string;
+    path_id: string;
+  }
+
+  export interface ZulipSubscriptionParams {
+    /** List of dictionaries containing channel details */
+    subscriptions: {
+      name: string;
+      description?: string;
+    }[];
+    /** List of user IDs or emails to subscribe */
+    principals?: (string | number)[];
+    /** Whether authorization errors should be considered fatal */
+    authorization_errors_fatal?: boolean;
+    /** Whether to announce new channel creation */
+    announce?: boolean;
+    /** Whether new channels should be private */
+    invite_only?: boolean;
+    /** Whether new channels should be web-public */
+    is_web_public?: boolean;
+    /** Whether new channels should be default for new users */
+    is_default_stream?: boolean;
+    /** Whether history should be available to new subscribers */
+    history_public_to_subscribers?: boolean;
+    /** Policy for which users can post messages */
+    stream_post_policy?: StreamPostPolicy;
+    /** Days to retain messages, "realm_default" or "unlimited" */
+    message_retention_days?: string | number;
+    /** ID of group allowed to remove subscribers */
+    can_remove_subscribers_group?: number;
+  }
+
+  export interface ZulipSubscriptionResponse {
+    subscribed: {
+      [userId: number]: string[];
+    };
+    already_subscribed: {
+      [userId: number]: string[];
+    };
+    unauthorized?: string[];
+  }
+
   export interface ZulipErrorResponse {
     code: string;
     msg: string;
     result: 'error';
   }
+
   export interface ZulipSuccessResponse {
     msg: string;
     result: 'success';
   }
+
   export interface ZulipMessagesRetrieveResponse {
     found_anchor: boolean;
     found_oldest: boolean;
@@ -266,6 +322,9 @@ declare module 'zulip-js' {
           user_id: number;
         }[];
       }>;
+      // fetchApiKey(
+      //   params: ZulipFetchApiKeyParams,
+      // ): ZulipApiResponse<ZulipFetchApiKeyResponse>;
     };
     server: {
       settings(): ZulipApiResponse<ZulipSettings>;
@@ -294,7 +353,12 @@ declare module 'zulip-js' {
           messages: number[];
         }>;
       };
-      update(params: { message_id: number; content: string }): ZulipApiResponse;
+      update(params: {
+        message_id: number;
+        content: string;
+      }): ZulipApiResponse<{
+        detached_uploads: ZulipDetachedUpload[];
+      }>;
       getById(params: { message_id: number }): ZulipApiResponse<ZulipMessage>;
       getHistoryById(params: {
         message_ids: number[];
@@ -341,13 +405,12 @@ declare module 'zulip-js' {
         getProfile(): ApiResponse<ZulipUser>;
         subscriptions: {
           remove(params: ZulipRemoveSubscriptionParams): ZulipApiResponse<{
-            removed?: string[];
-            not_removed?: string[];
+            removed: string[];
+            not_removed: string[];
           }>;
-          add(params: ZulipSubscriptionParams): ZulipApiResponse<{
-            subscribed?: string[];
-            already_subscribed?: string[];
-          }>;
+          add(
+            params: ZulipSubscriptionParams,
+          ): ZulipApiResponse<ZulipSubscriptionResponse>;
         };
       };
       create(params: ZulipCreateUserParams): ZulipApiResponse<ZulipUser>;
@@ -364,11 +427,7 @@ declare module 'zulip-js' {
     };
     streams: {
       retrieve(): ZulipApiResponse<{ streams: ZulipStream[] }>;
-      getStreamId(name: string): ZulipApiResponse<{
-        result: 'success' | 'error';
-        msg: string;
-        stream_id: number;
-      }>;
+      getStreamId(name: string): ZulipApiResponse<{ stream_id: number }>;
       subscriptions: {
         retrieve(params: {
           stream_id: number;
@@ -384,13 +443,25 @@ declare module 'zulip-js' {
     // filters: FiltersClient;
   }
 
+  export interface ZulipFetchApiKeyResponse {
+    api_key: string;
+    email: string;
+    user_id: number;
+  }
+
+  // API Key Request Parameters
+  export interface ZulipFetchApiKeyParams {
+    username: string;
+    password: string;
+  }
+
   export type ZulipInitialConfig = ZuliprcConfig | Pick<ZulipConfig, 'realm'>;
 
-  export function callEndpoint(
+  export function callEndpoint<T = unknown>(
     endpoint: string,
     method: HttpMethod,
     params: Params,
-  ): Promise<unknown>;
+  ): ZulipApiResponse<T>;
 
   export default function zulip(
     initialConfig: Partial<ZulipInitialConfig>,

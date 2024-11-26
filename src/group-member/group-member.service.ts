@@ -50,24 +50,34 @@ export class GroupMemberService {
     return await this.groupMemberRepository.findOne({
       where: { group: { id: groupId }, user: { id: userId } },
       relations: ['groupRole', 'groupRole.groupPermissions', 'user'],
+      select: {
+        id: true,
+        user: {
+          slug: true,
+          firstName: true,
+          lastName: true,
+          photo: {
+            path: true,
+          },
+        },
+        groupRole: {
+          name: true,
+          groupPermissions: true,
+        },
+      },
     });
   }
 
   async updateGroupMemberRole(
-    groupId: number,
-    userId: number,
+    groupMemberId: number,
     updateDto: UpdateGroupMemberRoleDto,
   ): Promise<any> {
     await this.getTenantSpecificEventRepository();
     const { name } = updateDto;
-    const groupMember = await this.groupMemberRepository.findOne({
-      where: { user: { id: userId }, group: { id: groupId } },
+    const groupMember = await this.groupMemberRepository.findOneOrFail({
+      where: { id: groupMemberId },
     });
-    if (!groupMember) {
-      throw new NotFoundException(
-        `Group member with user ID ${userId} and group ID ${groupId} not found`,
-      );
-    }
+
     const groupRole = await this.groupRoleService.findOne(name);
     if (!groupRole) {
       throw new NotFoundException(`Group role with name ${name} not found`);
@@ -77,7 +87,7 @@ export class GroupMemberService {
     await this.groupMemberRepository.save(groupMember);
 
     return await this.groupMemberRepository.findOne({
-      where: { user: { id: userId }, group: { id: groupId } },
+      where: { id: groupMemberId },
       relations: ['groupRole', 'groupRole.groupPermissions', 'user'],
     });
   }
@@ -96,10 +106,13 @@ export class GroupMemberService {
     return await this.groupMemberRepository.remove(groupMember);
   }
 
-  async removeGroupMember(groupId: number, userId: number): Promise<any> {
+  async removeGroupMember(
+    groupId: number,
+    groupMemberId: number,
+  ): Promise<any> {
     await this.getTenantSpecificEventRepository();
     const groupMember = await this.groupMemberRepository.findOne({
-      where: { group: { id: groupId }, user: { id: userId } },
+      where: { group: { id: groupId }, id: groupMemberId },
     });
 
     if (!groupMember) {
@@ -118,14 +131,12 @@ export class GroupMemberService {
     });
   }
 
-  async approveMember(groupId: number, userId: number): Promise<any> {
+  async approveMember(groupMemberId: number): Promise<any> {
     await this.getTenantSpecificEventRepository();
-    const groupMember = await this.groupMemberRepository.findOne({
-      where: { group: { id: groupId }, user: { id: userId } },
+    const groupMember = await this.groupMemberRepository.findOneOrFail({
+      where: { id: groupMemberId },
     });
-    if (!groupMember) {
-      throw new NotFoundException('Group member not found');
-    }
+
     const groupRole = await this.groupRoleService.findOne(GroupRole.Member);
     if (!groupRole) {
       throw new NotFoundException('Group role not found');
@@ -134,14 +145,11 @@ export class GroupMemberService {
     return await this.groupMemberRepository.save(groupMember);
   }
 
-  async rejectMember(groupId: number, userId: number): Promise<any> {
+  async rejectMember(groupMemberId: number): Promise<any> {
     await this.getTenantSpecificEventRepository();
-    const groupMember = await this.groupMemberRepository.findOne({
-      where: { group: { id: groupId }, user: { id: userId } },
+    const groupMember = await this.groupMemberRepository.findOneOrFail({
+      where: { id: groupMemberId },
     });
-    if (!groupMember) {
-      throw new NotFoundException('Group member not found');
-    }
     return await this.groupMemberRepository.remove(groupMember);
   }
 
