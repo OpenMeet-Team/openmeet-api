@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { PostgisSrid } from '../../core/constants/constant';
 
 export class BaseTables1728637873969 implements MigrationInterface {
   name = 'BaseTables1728637873969';
@@ -69,7 +70,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `CREATE TYPE "${schema}"."groups_visibility_enum" AS ENUM('public', 'authenticated', 'private')`,
     );
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."groups" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL,"ulid" character varying(26) NOT NULL, "zulipChannelId" integer, "name" character varying(255) NOT NULL, "slug" character varying(255) NOT NULL, "description" text NOT NULL, "status" "${schema}"."groups_status_enum", "visibility" "${schema}"."groups_visibility_enum", "requireApproval" boolean NOT NULL DEFAULT true, "location" character varying(255), "lat" double precision, "lon" double precision, "createdById" integer, "imageId" integer, "locationPoint" geography(Point, 4326), CONSTRAINT "REL_44626591821828ce1d26311312" UNIQUE ("imageId"), CONSTRAINT "PK_659d1483316afb28afd3a90646e" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."groups" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL,"ulid" character varying(26) NOT NULL, "zulipChannelId" integer, "name" character varying(255) NOT NULL, "slug" character varying(255) NOT NULL, "description" text NOT NULL, "status" "${schema}"."groups_status_enum", "visibility" "${schema}"."groups_visibility_enum", "requireApproval" boolean NOT NULL DEFAULT true, "location" character varying(255), "lat" double precision, "lon" double precision, "createdById" integer, "imageId" integer, "locationPoint" geography(Point, ${PostgisSrid.SRID}), CONSTRAINT "REL_44626591821828ce1d26311312" UNIQUE ("imageId"), CONSTRAINT "PK_659d1483316afb28afd3a90646e" PRIMARY KEY ("id"))`,
     );
 
     await queryRunner.query(
@@ -86,7 +87,7 @@ export class BaseTables1728637873969 implements MigrationInterface {
       `CREATE TYPE "${schema}"."events_visibility_enum" AS ENUM('public', 'authenticated', 'private')`,
     );
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."events" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "ulid" character varying, "zulipChannelId" integer, "name" character varying(255) NOT NULL, "slug" character varying(255) NOT NULL, "type" "${schema}"."events_type_enum" NOT NULL, "locationOnline" character varying(255), "description" text NOT NULL, "startDate" TIMESTAMP NOT NULL, "endDate" TIMESTAMP, "maxAttendees" integer, "requireApproval" boolean NOT NULL DEFAULT false, "approvalQuestion" character varying(255), "requireGroupMembership" boolean NOT NULL DEFAULT false, "location" character varying(255), "lat" double precision, "lon" double precision, "status" "${schema}"."events_status_enum", "visibility" "${schema}"."events_visibility_enum", "allowWaitlist" boolean NOT NULL DEFAULT false, "imageId" integer, "userId" integer, "groupId" integer, "locationPoint" geography(Point, 4326), CONSTRAINT "REL_35515e57a42f4fd00a4172371b" UNIQUE ("imageId"), CONSTRAINT "PK_40731c7151fe4be3116e45ddf73" PRIMARY KEY ("id"))`,
+      `CREATE TABLE "${schema}"."events" ("createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "id" SERIAL NOT NULL, "ulid" character varying, "zulipChannelId" integer, "name" character varying(255) NOT NULL, "slug" character varying(255) NOT NULL, "type" "${schema}"."events_type_enum" NOT NULL, "locationOnline" character varying(255), "description" text NOT NULL, "startDate" TIMESTAMP NOT NULL, "endDate" TIMESTAMP, "maxAttendees" integer, "requireApproval" boolean NOT NULL DEFAULT false, "approvalQuestion" character varying(255), "requireGroupMembership" boolean NOT NULL DEFAULT false, "location" character varying(255), "lat" double precision, "lon" double precision, "status" "${schema}"."events_status_enum", "visibility" "${schema}"."events_visibility_enum", "allowWaitlist" boolean NOT NULL DEFAULT false, "imageId" integer, "userId" integer, "groupId" integer, "locationPoint" geography(Point, ${PostgisSrid.SRID}), CONSTRAINT "REL_35515e57a42f4fd00a4172371b" UNIQUE ("imageId"), CONSTRAINT "PK_40731c7151fe4be3116e45ddf73" PRIMARY KEY ("id"))`,
     );
 
     await queryRunner.query(
@@ -197,6 +198,22 @@ export class BaseTables1728637873969 implements MigrationInterface {
     );
     await queryRunner.query(
       `CREATE INDEX "IDX_${schema}_userInterests_subcategoriesId" ON "${schema}"."userInterests" ("subcategoriesId")`,
+    );
+
+    await queryRunner.query(
+      `CREATE INDEX "IDX_${schema}_events_location" ON "${schema}"."events" ("location")`,
+    );
+
+    await queryRunner.query(
+      `CREATE INDEX "IDX_${schema}_events_locationPoint" ON "${schema}"."events" USING GIST ("locationPoint")`,
+    );
+
+    await queryRunner.query(
+      `CREATE INDEX "IDX_${schema}_groups_location" ON "${schema}"."groups" ("location")`,
+    );
+
+    await queryRunner.query(
+      `CREATE INDEX "IDX_${schema}_groups_locationPoint" ON "${schema}"."groups" USING GIST ("locationPoint")`,
     );
 
     // Add foreign key constraints with schema prefix
@@ -454,6 +471,14 @@ export class BaseTables1728637873969 implements MigrationInterface {
     await queryRunner.query(
       `DROP INDEX "${schema}"."IDX_${schema}_groupCategories_groupId"`,
     );
+
+    await queryRunner.query(`DROP INDEX "IDX_${schema}_events_location"`);
+
+    await queryRunner.query(`DROP INDEX "IDX_${schema}_events_locationPoint"`);
+
+    await queryRunner.query(`DROP INDEX "IDX_${schema}_groups_location"`);
+
+    await queryRunner.query(`DROP INDEX "IDX_${schema}_groups_locationPoint"`);
 
     await queryRunner.query(`DROP TABLE "${schema}"."groupCategories"`);
 

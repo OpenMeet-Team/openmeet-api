@@ -21,6 +21,7 @@ import { GroupUserPermissionEntity } from './group-user-permission.entity';
 import {
   GroupVisibility,
   GroupStatus,
+  PostgisSrid,
 } from '../../../../../core/constants/constant';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
 import { Expose } from 'class-transformer';
@@ -74,7 +75,7 @@ export class GroupEntity extends EntityRelationalHelper {
   @Column({
     type: 'geography',
     spatialFeatureType: 'Point',
-    srid: 4326,
+    srid: PostgisSrid.SRID,
     nullable: true,
   })
   @Index()

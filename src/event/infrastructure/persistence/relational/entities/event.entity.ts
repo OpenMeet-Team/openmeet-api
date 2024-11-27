@@ -22,6 +22,7 @@ import {
   EventType,
   EventVisibility,
   EventStatus,
+  PostgisSrid,
 } from '../../../../../core/constants/constant';
 import { GroupMemberEntity } from '../../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { FileEntity } from '../../../../../file/infrastructure/persistence/relational/entities/file.entity';
@@ -94,7 +95,7 @@ export class EventEntity extends EntityRelationalHelper {
   @Column({
     type: 'geography',
     spatialFeatureType: 'Point',
-    srid: 4326,
+    srid: PostgisSrid.SRID,
     nullable: true,
   })
   @Index()
