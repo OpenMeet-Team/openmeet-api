@@ -144,6 +144,11 @@ export class UserService {
     return userCreated;
   }
 
+  async findAll(): Promise<User[]> {
+    await this.getTenantSpecificRepository();
+    return await this.usersRepository.find();
+  }
+
   async findManyWithPagination({
     filterOptions,
     sortOptions,

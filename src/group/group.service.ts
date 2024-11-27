@@ -573,7 +573,7 @@ export class GroupService {
 
   async joinGroup(slug: string, userId: number) {
     await this.getTenantSpecificGroupRepository();
-
+    console.log('joinGroup', slug, userId);
     const groupEntity = await this.groupRepository.findOne({
       where: { slug },
       relations: ['createdBy'],

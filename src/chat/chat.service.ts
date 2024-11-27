@@ -221,6 +221,11 @@ export class ChatService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+
+    if (!messageIds.length) {
+      return { messages: [] };
+    }
+
     return await this.zulipService.addUserMessagesReadFlag(user, messageIds);
   }
 }
