@@ -11,6 +11,7 @@ import {
   PrimaryGeneratedColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { EntityRelationalHelper } from '../../../../../utils/relational-entity-helper';
 import { CategoryEntity } from '../../../../../category/infrastructure/persistence/relational/entities/categories.entity';
@@ -45,6 +46,7 @@ export class GroupEntity extends EntityRelationalHelper {
   updatedAt: Date;
 
   @Column({ type: 'varchar', length: 255 })
+  @Index()
   name: string;
 
   @Column({ type: 'varchar', length: 255, unique: true })
