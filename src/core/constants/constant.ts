@@ -132,3 +132,7 @@ export enum EventType {
   Online = 'online',
   Hybrid = 'hybrid',
 }
+
+export enum PostgisSrid {
+  SRID = 4326,
+}

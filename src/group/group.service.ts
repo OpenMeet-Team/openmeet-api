@@ -5,6 +5,7 @@ import {
   Scope,
   UnprocessableEntityException,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
@@ -20,6 +21,7 @@ import {
   GroupRole,
   GroupStatus,
   GroupVisibility,
+  PostgisSrid,
 } from '../core/constants/constant';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { PaginationDto } from '../utils/dto/pagination.dto';
@@ -219,11 +221,25 @@ export class GroupService {
       lower: true,
     })}-${shortCode.toLowerCase()}`;
 
+    let locationPoint;
+    if (createGroupDto.lat && createGroupDto.lon) {
+      const { lat, lon } = createGroupDto;
+      if (isNaN(lat) || isNaN(lon)) {
+        throw new BadRequestException('Invalid latitude or longitude');
+      }
+      // Construct GeoJSON
+      locationPoint = {
+        type: 'Point',
+        coordinates: [lon, lat],
+      };
+    }
+
     const mappedGroupDto = {
       ...createGroupDto,
       slug: slugifiedName,
       categories: categoryEntities,
       createdBy: { id: userId },
+      locationPoint,
     };
 
     if (mappedGroupDto.image?.id) {
@@ -257,7 +273,7 @@ export class GroupService {
   async showAll(pagination: PaginationDto, query: QueryGroupDto): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     const { page, limit } = pagination;
-    const { search, userId, location, categories } = query;
+    const { search, userId, location, categories, radius } = query;
     const groupQuery = this.groupRepository
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.categories', 'categories')
@@ -284,9 +300,25 @@ export class GroupService {
     }
 
     if (location) {
-      groupQuery.andWhere('group.location LIKE :location', {
-        location: `%${location}%`,
-      });
+      // Split and validate location
+      const [lon, lat] = location.split(',').map(Number);
+      if (isNaN(lon) || isNaN(lat)) {
+        throw new BadRequestException(
+          'Invalid location format. Expected "lon,lat".',
+        );
+      }
+
+      // Default radius to 5 kilometers if not provided
+      const searchRadius = radius ?? 5;
+      // Find events within the radius using ST_DWithin
+      groupQuery.andWhere(
+        `ST_DWithin(
+          group.locationPoint,
+          ST_SetSRID(ST_MakePoint(:lon, :lat), ${PostgisSrid.SRID}),
+          :radius
+        )`,
+        { lon, lat, radius: searchRadius * 1000 }, // Convert kilometers to meters
+      );
     }
 
     if (search) {
