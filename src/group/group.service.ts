@@ -308,11 +308,8 @@ export class GroupService {
     const { search } = query;
     const groupQuery = this.groupRepository
       .createQueryBuilder('group')
-      .leftJoinAndSelect('group.categories', 'categories')
-      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
-      .leftJoinAndSelect('groupMembers.user', 'user')
-      .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
-      .where('group.status = :status', { status: GroupStatus.Published });
+      .where('group.status = :status', { status: GroupStatus.Published })
+      .select(['group.name', 'group.slug']);
 
     if (search) {
       groupQuery.andWhere(`(group.name LIKE :search)`, {

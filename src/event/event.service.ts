@@ -264,11 +264,8 @@ export class EventService {
     const { search } = query;
     const eventQuery = this.eventRepository
       .createQueryBuilder('event')
-      .leftJoinAndSelect('event.user', 'user')
-      .leftJoinAndSelect('event.categories', 'categories')
-      .leftJoinAndSelect('event.group', 'group')
-      .leftJoinAndSelect('event.attendees', 'attendees')
-      .where('event.status = :status', { status: EventStatus.Published });
+      .where('event.status = :status', { status: EventStatus.Published })
+      .select(['event.name', 'event.slug']);
 
     if (search) {
       eventQuery.andWhere(`(event.name LIKE :search)`, {

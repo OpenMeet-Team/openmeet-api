@@ -87,21 +87,10 @@ export class HomeService {
       this.eventService.searchAllEvents(pagination, query),
       this.groupService.searchAllGroup(pagination, query),
     ]);
-    console.log('🚀 ~ HomeService ~ globalSearch ~ event:', event);
-
-    const transformedEvents = event?.data.map((event) => ({
-      name: event.name,
-      slug: event.slug,
-    }));
-
-    const transformedGroups = group?.data.map((group) => ({
-      name: group.name,
-      slug: group.slug,
-    }));
 
     return {
-      events: transformedEvents,
-      groups: transformedGroups,
+      events: event,
+      groups: group,
     };
   }
 }
