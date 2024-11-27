@@ -5,7 +5,6 @@ import { GroupEntity } from '../../../../group/infrastructure/persistence/relati
 import { UserEntity } from '../../../../user/infrastructure/persistence/relational/entities/user.entity';
 import { CategoryEntity } from '../../../../category/infrastructure/persistence/relational/entities/categories.entity';
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
-import slugify from 'slugify';
 import { GroupMemberEntity } from '../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupRole } from '../../../../core/constants/constant';
 import { GroupRoleEntity } from '../../../../group-role/infrastructure/persistence/relational/entities/group-role.entity';
@@ -49,10 +48,6 @@ export class GroupSeedService {
         const group = this.groupRepository.create({
           name: groupData.name,
           description: groupData.description,
-          slug: slugify(groupData.name, {
-            strict: true,
-            lower: true,
-          }),
           status: groupData.status,
           visibility: groupData.visibility,
           location: groupData.location,

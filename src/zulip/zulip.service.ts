@@ -38,6 +38,11 @@ export class ZulipService {
         full_name: user.name as string,
       }).then((createUserResponse) => {
         if (createUserResponse?.result !== 'success') {
+          // console.log(createUserResponse, {
+          //   email: userEmail,
+          //   password: userPassword,
+          //   full_name: user.name as string,
+          // });
           throw new Error('Failed to create Zulip user');
         }
       });
@@ -215,8 +220,26 @@ export class ZulipService {
     user: UserEntity,
     params: ZulipSubscriptionParams,
   ) {
-    const client = await getClient(user);
+    console.log(params);
+    // const client = await getClient(user);
+    const client = await getAdminClient();
+    // const response = await client.callEndpoint(
+    //   `users/me/subscriptions`,
+    //   'POST',
+    //   params,
+    // );
     const response = await client.users.me.subscriptions.add(params);
+    console.log(response);
+    if (response.result === 'success') {
+      return response;
+    }
+    throw new Error(response.msg);
+  }
+
+  async subscribeAdminToChannel(params: ZulipSubscriptionParams) {
+    const client = await getAdminClient();
+    const response = await client.users.me.subscriptions.add(params);
+    console.log(response);
     if (response.result === 'success') {
       return response;
     }
