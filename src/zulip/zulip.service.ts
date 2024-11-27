@@ -33,15 +33,11 @@ export class ZulipService {
       const userEmail = `tenant_${this.request.tenantId}__${user.ulid}@zulip.openmeet.net`;
       const userPassword = ulid();
 
-      console.log(userEmail, userPassword);
-
       const createdZulipUser = await this.createUser({
         email: userEmail,
         password: userPassword,
         full_name: user.name as string,
       });
-
-      console.log('createdZulipUser', createdZulipUser);
 
       // Fetch the API key for the newly created user
       const apiKeyResponse = await this.getAdminApiKey(userEmail, userPassword);
@@ -62,8 +58,6 @@ export class ZulipService {
             zulipUserId: apiKeyResponse.user_id,
           },
         );
-
-        console.log('updatedUser', updatedUser);
 
         if (!updatedUser) {
           throw new Error(`addZulipCredentialsToUser: Failed to update user`);
@@ -211,7 +205,6 @@ export class ZulipService {
     params: ZulipSubscriptionParams,
   ) {
     const client = await getClient(user);
-    // const client = await getAdminClient();
     // const response = await client.callEndpoint(
     //   `users/me/subscriptions`,
     //   'POST',
@@ -227,6 +220,7 @@ export class ZulipService {
   async subscribeAdminToChannel(params: ZulipSubscriptionParams) {
     const client = await getAdminClient();
     const response = await client.users.me.subscriptions.add(params);
+    console.log(response);
     if (response.result === 'success') {
       return response;
     }
