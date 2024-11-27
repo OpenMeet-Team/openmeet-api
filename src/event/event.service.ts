@@ -595,7 +595,7 @@ export class EventService {
     if (!event) {
       throw new NotFoundException('Event not found');
     }
-    const participantRole = await this.eventRoleService.findOne(
+    const participantRole = await this.eventRoleService.findByName(
       EventAttendeeRole.Participant,
     );
 
