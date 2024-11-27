@@ -108,29 +108,30 @@ describe('GroupController (e2e)', () => {
     expect(deleteGroup2Response.status).toBe(200);
   });
 
-  it.skip('should retrieve group members', async () => {
+  it('should retrieve group members', async () => {
+    testGroup = await createGroup(token, {
+      name: 'Test Group',
+      description: 'A test group',
+    });
     const expectedMemberId = 2;
-    const groupId = testGroup.slug;
     const getGroupMembersResponse = await request(TESTING_APP_URL)
-      .get(`/api/groups/${groupId}/members`)
+      .get(`/api/groups/${testGroup.slug}/members`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
 
     expect(getGroupMembersResponse.status).toBe(200);
 
-    const isMemberPresent = getGroupMembersResponse.body.data?.some(
+    const isMemberPresent = getGroupMembersResponse.body?.some(
       (member) => member.user.id === expectedMemberId,
     );
+
     expect(isMemberPresent).toBe(true);
 
-    if (getGroupMembersResponse.status === 200) {
-      const groupMembers = getGroupMembersResponse.body.data;
-      const isMemberPresent = groupMembers.some(
-        (member) => member.user.id === expectedMemberId,
-      );
-      console.log(isMemberPresent);
-      expect(isMemberPresent).toBe(true);
-    }
+    const deleteGroupResponse = await request(TESTING_APP_URL)
+      .delete(`/api/groups/${testGroup.slug}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
+    expect(deleteGroupResponse.status).toBe(200);
   });
 
   // After each test, clean up any remaining test groups

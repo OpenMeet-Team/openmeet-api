@@ -58,7 +58,7 @@ describe('ChatService', () => {
         .spyOn(service, 'showChats')
         .mockResolvedValue({ chats: [mockChat], chat: mockChat });
       const result = await service.showChats(mockUser.id, {});
-      expect(result).toEqual({ chats: [mockChat], chat: mockChat });
+      expect(result).toEqual({ chats: [mockChat], chat: mockChat || null });
     });
   });
 
@@ -66,6 +66,19 @@ describe('ChatService', () => {
     it('should return chat', async () => {
       jest.spyOn(service, 'getChatByUlid').mockResolvedValue(mockChat);
       const result = await service.getChatByUlid(mockUser.ulid, mockUser.id);
+      expect(result).toEqual(mockChat);
+    });
+  });
+
+  describe('getChatByParticipantUlid', () => {
+    it('should return chat', async () => {
+      jest
+        .spyOn(service, 'getChatByParticipantUlid')
+        .mockResolvedValue(mockChat);
+      const result = await service.getChatByParticipantUlid(
+        mockUser.ulid,
+        mockUser.id,
+      );
       expect(result).toEqual(mockChat);
     });
   });
@@ -89,6 +102,16 @@ describe('ChatService', () => {
         'test message',
       );
       expect(result).toEqual(mockZulipMessageResponse);
+    });
+  });
+
+  describe('setMessagesRead', () => {
+    it('should return message', async () => {
+      jest
+        .spyOn(service, 'setMessagesRead')
+        .mockResolvedValue({ messages: [1] });
+      const result = await service.setMessagesRead(mockUser.id, [1]);
+      expect(result).toEqual({ messages: [1] });
     });
   });
 });

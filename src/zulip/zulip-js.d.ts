@@ -322,9 +322,6 @@ declare module 'zulip-js' {
           user_id: number;
         }[];
       }>;
-      // fetchApiKey(
-      //   params: ZulipFetchApiKeyParams,
-      // ): ZulipApiResponse<ZulipFetchApiKeyResponse>;
     };
     server: {
       settings(): ZulipApiResponse<ZulipSettings>;
@@ -402,7 +399,7 @@ declare module 'zulip-js' {
             topic: string;
           }>;
         };
-        getProfile(): ApiResponse<ZulipUser>;
+        getProfile(): ZulipApiResponse<ZulipUser>;
         subscriptions: {
           remove(params: ZulipRemoveSubscriptionParams): ZulipApiResponse<{
             removed: string[];
@@ -413,7 +410,7 @@ declare module 'zulip-js' {
           ): ZulipApiResponse<ZulipSubscriptionResponse>;
         };
       };
-      create(params: ZulipCreateUserParams): ZulipApiResponse<ZulipUser>;
+      create(params: ZulipCreateUserParams): ZulipApiResponse<{ id: number }>;
       retrieve(): ZulipApiResponse<{ users: ZulipUser[] }>;
     };
     // emojis: EmojisClient;
@@ -447,12 +444,22 @@ declare module 'zulip-js' {
     api_key: string;
     email: string;
     user_id: number;
+    result: 'success' | 'error';
   }
 
   // API Key Request Parameters
   export interface ZulipFetchApiKeyParams {
     username: string;
     password: string;
+  }
+
+  export interface ZulipUpdateUserProfileParams {
+    full_name?: string;
+    new_email?: string;
+    profile_data?: {
+      [key: string]: string;
+    };
+    role?: number;
   }
 
   export type ZulipInitialConfig = ZuliprcConfig | Pick<ZulipConfig, 'realm'>;

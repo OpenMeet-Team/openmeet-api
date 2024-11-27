@@ -144,6 +144,11 @@ export class UserService {
     return userCreated;
   }
 
+  async findAll(): Promise<User[]> {
+    await this.getTenantSpecificRepository();
+    return await this.usersRepository.find();
+  }
+
   async findManyWithPagination({
     filterOptions,
     sortOptions,
@@ -169,10 +174,11 @@ export class UserService {
     // });
   }
 
-  async showProfile(ulid: User['ulid']): Promise<NullableType<User>> {
+  async showProfile(slug: User['slug']): Promise<NullableType<User>> {
     await this.getTenantSpecificRepository();
-    return this.usersRepository.findOne({
-      where: { ulid },
+
+    const user = await this.usersRepository.findOne({
+      where: { slug },
       relations: [
         'subCategory',
         'groups',
@@ -181,6 +187,8 @@ export class UserService {
         'groupMembers.groupRole',
       ],
     });
+
+    return user;
   }
 
   async findById(id: User['id']): Promise<NullableType<UserEntity>> {
@@ -247,13 +255,15 @@ export class UserService {
   ) {
     await this.getTenantSpecificRepository();
     const user = await this.findById(userId);
-    if (user) {
-      user.zulipUserId = zulipUserId;
-      user.zulipApiKey = zulipApiKey;
-      user.zulipUsername = zulipUsername;
-      return await this.usersRepository.save(user as UserEntity);
+
+    if (!user) {
+      return null;
     }
-    return null;
+
+    user.zulipUserId = zulipUserId;
+    user.zulipApiKey = zulipApiKey;
+    user.zulipUsername = zulipUsername;
+    return this.usersRepository.save(user as UserEntity);
   }
 
   async update(id: User['id'], payload: any): Promise<User | null> {

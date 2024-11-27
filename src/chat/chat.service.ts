@@ -109,7 +109,15 @@ export class ChatService {
 
     chat.user = user;
 
-    await this.zulipService.initializeClient(user);
+    if (!user.zulipUserId) {
+      await this.zulipService.getInitialisedClient(user);
+      await user.reload();
+    }
+
+    if (!chat.participant.zulipUserId) {
+      await this.zulipService.getInitialisedClient(chat.participant);
+      await chat.participant.reload();
+    }
 
     const messages = await this.zulipService.getUserMessages(user, {
       num_before: 0,
@@ -141,15 +149,10 @@ export class ChatService {
 
     const chat = await this.chatRepository
       .createQueryBuilder('chats')
-      .innerJoin(
-        'chats.participants',
-        'participants',
-        'participants.id IN (:...participantIds)',
-        {
-          participantIds: [userId, participant.id],
-        },
-      )
-      .select(['participants'])
+      .leftJoinAndSelect('chats.participants', 'participants')
+      .where('participants.id IN (:...participantIds)', {
+        participantIds: [userId, participant.id],
+      })
       .getOne();
 
     if (!chat) {
@@ -159,7 +162,6 @@ export class ChatService {
       }
       return this.getChatByUlid(createdChat.ulid, userId);
     }
-
     return this.getChatByUlid(chat.ulid, userId);
   }
 
@@ -170,7 +172,9 @@ export class ChatService {
       participants: [{ id: userId }, { id: participant.id }],
     });
 
-    return await this.chatRepository.save(chat);
+    const savedChat = await this.chatRepository.save(chat);
+
+    return savedChat;
   }
 
   async sendMessage(chatUlid: string, userId: number, content: string) {
@@ -217,6 +221,11 @@ export class ChatService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+
+    if (!messageIds.length) {
+      return { messages: [] };
+    }
+
     return await this.zulipService.addUserMessagesReadFlag(user, messageIds);
   }
 }

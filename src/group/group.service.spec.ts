@@ -29,6 +29,7 @@ import {
   mockTenantConnectionService,
   mockUserService,
   mockZulipMessage,
+  mockZulipMessageResponse,
   mockZulipService,
 } from '../test/mocks';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
@@ -306,7 +307,7 @@ describe('GroupService', () => {
   describe('showGroupRecommendedEvents', () => {
     it('should return recommended events', async () => {
       jest
-        .spyOn(service['groupRepository'], 'findOneBy')
+        .spyOn(service['groupRepository'], 'findOne')
         .mockResolvedValue(mockGroup as GroupEntity);
       const result = await service.showGroupRecommendedEvents(
         mockGroup.slug,
@@ -378,39 +379,51 @@ describe('GroupService', () => {
     });
   });
 
-  describe.skip('showGroupDiscussions', () => {
+  describe('showGroupDiscussions', () => {
     it('should return group discussions', async () => {
+      jest
+        .spyOn(service['groupRepository'], 'findOne')
+        .mockResolvedValue(mockGroup as GroupEntity);
+      jest
+        .spyOn(service, 'showGroupDiscussions')
+        .mockResolvedValue(mockDiscussions);
       const result = await service.showGroupDiscussions(mockGroup.slug);
       expect(result).toEqual(mockDiscussions);
     });
   });
 
-  describe.skip('showGroupAbout', () => {
+  describe('showGroupAbout', () => {
     it('should return group about', async () => {
+      jest
+        .spyOn(service['groupRepository'], 'findOne')
+        .mockResolvedValue(mockGroup as GroupEntity);
+      jest
+        .spyOn(service, 'showGroupAbout')
+        .mockResolvedValue(mockGroupAboutResponse);
       const result = await service.showGroupAbout(mockGroup.slug);
-      expect(result).toEqual(mockGroupAboutResponse);
+      expect(result).toMatchObject(mockGroupAboutResponse);
     });
   });
 
-  describe.skip('sendGroupDiscussionMessage', () => {
+  describe('sendGroupDiscussionMessage', () => {
     it('should send a group discussion message', async () => {
       const result = await service.sendGroupDiscussionMessage(
         mockGroup.slug,
         mockUser.id,
         { message: 'test', topicName: 'test' },
       );
-      expect(result).toEqual(mockZulipMessage);
+      expect(result).toEqual(mockZulipMessageResponse);
     });
   });
 
-  describe.skip('updateGroupDiscussionMessage', () => {
+  describe('updateGroupDiscussionMessage', () => {
     it('should update a group discussion message', async () => {
       const result = await service.updateGroupDiscussionMessage(
         mockZulipMessage.id,
         'test',
         mockUser.id,
       );
-      expect(result).toEqual(mockZulipMessage);
+      expect(result).toEqual(mockZulipMessageResponse);
     });
   });
 

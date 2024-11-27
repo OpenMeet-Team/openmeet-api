@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { getAdminClient, getClient } from './zulip-client';
 import {
   ZulipChannelMessageParams,
@@ -11,6 +11,7 @@ import {
   ZulipSettings,
   ZulipSubscriptionParams,
   ZulipTopic,
+  ZulipUpdateUserProfileParams,
   ZulipUser,
 } from 'zulip-js';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
@@ -28,47 +29,45 @@ export class ZulipService {
 
   async getInitialisedClient(user: UserEntity): Promise<ZulipClient> {
     if (!user.zulipUserId) {
-      // Generate a unique email and password for the new Zulip user
+      //   // Generate a unique email and password for the new Zulip user
       const userEmail = `tenant_${this.request.tenantId}__${user.ulid}@zulip.openmeet.net`;
       const userPassword = ulid();
 
-      await this.createUser({
+      const createdZulipUser = await this.createUser({
         email: userEmail,
         password: userPassword,
         full_name: user.name as string,
-      }).then((createUserResponse) => {
-        if (createUserResponse?.result !== 'success') {
-          // console.log(createUserResponse, {
-          //   email: userEmail,
-          //   password: userPassword,
-          //   full_name: user.name as string,
-          // });
-          throw new Error('Failed to create Zulip user');
-        }
       });
 
       // Fetch the API key for the newly created user
-      const apiKeyResponse = await this.fetchApiKey(userEmail, userPassword);
+      const apiKeyResponse = await this.getAdminApiKey(userEmail, userPassword);
 
       if (!apiKeyResponse.api_key) {
-        throw new Error('Failed to fetch API key for new Zulip user');
+        throw new Error(
+          `fetchApiKey: Failed to fetch API key for new Zulip user`,
+        );
       }
 
-      // Store the Zulip credentials in your user service
-      const updatedUser = await this.userService.addZulipCredentialsToUser(
-        user.id,
-        {
-          zulipUsername: userEmail,
-          zulipApiKey: apiKeyResponse.api_key,
-          zulipUserId: apiKeyResponse.user_id,
-        },
-      );
+      try {
+        // Store the Zulip credentials in your user service
+        const updatedUser = await this.userService.addZulipCredentialsToUser(
+          user.id,
+          {
+            zulipUsername: userEmail,
+            zulipApiKey: apiKeyResponse.api_key,
+            zulipUserId: apiKeyResponse.user_id,
+          },
+        );
 
-      if (!updatedUser) {
-        throw new NotFoundException('Failed to update user');
+        if (!updatedUser) {
+          throw new Error(`addZulipCredentialsToUser: Failed to update user`);
+        }
+
+        return await getClient(updatedUser);
+      } catch (error) {
+        console.error('Error adding Zulip credentials to user:', error);
+        throw error;
       }
-
-      return await getClient(updatedUser);
     }
 
     return await getClient(user);
@@ -79,36 +78,22 @@ export class ZulipService {
     return await client.streams.retrieve();
   }
 
-  async getUserStreamId(
-    user: UserEntity,
-    streamName: string,
-  ): Promise<{ id: number }> {
-    const client = await getClient(user);
-    const channelResponse = await client.streams.getStreamId(streamName);
-
-    if (channelResponse.result === 'success') {
-      return { id: channelResponse.stream_id };
-    }
-    throw new Error(channelResponse.msg);
-  }
-
   async getAdminStreamId(streamName: string): Promise<{ id: number }> {
     const client = await getAdminClient();
     const channelResponse = await client.streams.getStreamId(streamName);
     if (channelResponse.result === 'success') {
       return { id: channelResponse.stream_id };
     }
-    throw new Error(channelResponse.msg);
+    throw new Error(`getAdminStreamId: ${channelResponse.msg}`);
   }
 
   async getAdminUsers(): Promise<ZulipUser[]> {
     const client = await getAdminClient();
     const usersResponse = await client.users.retrieve();
-
     if (usersResponse.result === 'success') {
       return usersResponse.users;
     }
-    throw new Error(usersResponse.msg);
+    throw new Error(`getAdminUsers: ${usersResponse.msg}`);
   }
 
   async getUserMessages(
@@ -120,7 +105,7 @@ export class ZulipService {
     if (messageResponse.result === 'success') {
       return messageResponse.messages;
     }
-    throw new Error(messageResponse.msg);
+    throw new Error(`getUserMessages: ${messageResponse.msg}`);
   }
 
   async getUserProfile(user: UserEntity): Promise<ZulipUser> {
@@ -128,9 +113,9 @@ export class ZulipService {
     const profileResponse = await client.users.me.getProfile();
 
     if (profileResponse.result === 'success') {
-      return profileResponse.user;
+      return profileResponse;
     }
-    throw new Error(profileResponse.msg);
+    throw new Error(`getUserProfile: ${profileResponse.msg}`);
   }
 
   async getUserStreamTopics(
@@ -144,7 +129,7 @@ export class ZulipService {
     if (topicsResponse.result === 'success') {
       return topicsResponse.topics;
     }
-    throw new Error(topicsResponse.msg);
+    throw new Error(`getUserStreamTopics: ${topicsResponse.msg}`);
   }
 
   async getAdminSettings(): Promise<ZulipSettings> {
@@ -154,17 +139,13 @@ export class ZulipService {
     if (settingsResponse.result === 'success') {
       return settingsResponse;
     }
-    throw new Error(settingsResponse.msg);
+    throw new Error(`getAdminSettings: ${settingsResponse.msg}`);
   }
 
-  async fetchApiKey(
+  async getAdminApiKey(
     username: string,
     password: string,
-  ): Promise<{
-    api_key: string;
-    email: string;
-    user_id: number;
-  }> {
+  ): Promise<ZulipFetchApiKeyResponse> {
     const client = await getAdminClient();
     const apiKeyResponse = await client.callEndpoint<ZulipFetchApiKeyResponse>(
       '/fetch_api_key',
@@ -172,34 +153,37 @@ export class ZulipService {
       { username, password },
     );
 
-    if (apiKeyResponse.result === 'error') {
-      throw new Error(apiKeyResponse.msg);
+    if (apiKeyResponse.result === 'success') {
+      return apiKeyResponse;
     }
 
-    return {
-      api_key: apiKeyResponse.api_key,
-      email: apiKeyResponse.email,
-      user_id: apiKeyResponse.user_id,
-    };
+    throw new Error(`getAdminApiKey: ${apiKeyResponse.msg}`);
   }
 
-  async updateUserSettings(user: UserEntity, params) {
+  async updateUserProfile(
+    user: UserEntity,
+    params: ZulipUpdateUserProfileParams,
+  ) {
     const client = await getClient(user);
-    const settingsResponse = await client.callEndpoint(`settings`, 'PATCH', {
-      full_name: params.full_name,
-      email: params.email,
-      old_password: params.old_password,
-      new_password: params.new_password,
-    });
+    const settingsResponse = await client.callEndpoint(
+      `users/${user.zulipUserId}`,
+      'PATCH',
+      params,
+    );
     if (settingsResponse.result === 'success') {
       return settingsResponse;
     }
-    throw new Error(settingsResponse.msg);
+    throw new Error(`updateUserProfile: ${settingsResponse.msg}`);
   }
 
   async createUser(params: ZulipCreateUserParams) {
     const client = await getAdminClient();
-    return await client.users.create(params);
+
+    const response = await client.users.create(params);
+    if (response.result === 'success') {
+      return { id: response.id };
+    }
+    throw new Error(`createUser: ${response.msg}`);
   }
 
   async sendUserMessage(
@@ -213,27 +197,24 @@ export class ZulipService {
       return { id: message.id };
     }
 
-    throw new Error(message.msg);
+    throw new Error(`sendUserMessage: ${message.msg}`);
   }
 
   async subscribeUserToChannel(
     user: UserEntity,
     params: ZulipSubscriptionParams,
   ) {
-    console.log(params);
-    // const client = await getClient(user);
-    const client = await getAdminClient();
+    const client = await getClient(user);
     // const response = await client.callEndpoint(
     //   `users/me/subscriptions`,
     //   'POST',
     //   params,
     // );
     const response = await client.users.me.subscriptions.add(params);
-    console.log(response);
     if (response.result === 'success') {
       return response;
     }
-    throw new Error(response.msg);
+    throw new Error(`subscribeUserToChannel: ${response.msg}`);
   }
 
   async subscribeAdminToChannel(params: ZulipSubscriptionParams) {
@@ -243,7 +224,7 @@ export class ZulipService {
     if (response.result === 'success') {
       return response;
     }
-    throw new Error(response.msg);
+    throw new Error(`subscribeAdminToChannel: ${response.msg}`);
   }
 
   async getAdminMessages(
@@ -254,7 +235,7 @@ export class ZulipService {
     if (messageResponse.result === 'success') {
       return messageResponse.messages;
     }
-    throw new Error(messageResponse.msg);
+    throw new Error(`getAdminMessages: ${messageResponse.msg}`);
   }
 
   async getAdminStreamTopics(streamId: number): Promise<ZulipTopic[]> {
@@ -265,7 +246,7 @@ export class ZulipService {
     if (topicsResponse.result === 'success') {
       return topicsResponse.topics;
     }
-    throw new Error(topicsResponse.msg);
+    throw new Error(`getAdminStreamTopics: ${topicsResponse.msg}`);
   }
 
   // Test the rest of the functions
@@ -283,7 +264,7 @@ export class ZulipService {
     if (updateResponse.result === 'success') {
       return { id: messageId };
     }
-    throw new Error(updateResponse.msg);
+    throw new Error(`updateUserMessage: ${updateResponse.msg}`);
   }
 
   async updateAdminMessage(
@@ -298,7 +279,7 @@ export class ZulipService {
     if (updateResponse.result === 'success') {
       return { id: messageId };
     }
-    throw new Error(updateResponse.msg);
+    throw new Error(`updateAdminMessage: ${updateResponse.msg}`);
   }
 
   async deleteUserMessage(
@@ -312,7 +293,7 @@ export class ZulipService {
     if (deleteResponse.result === 'success') {
       return { id: messageId };
     }
-    throw new Error(deleteResponse.msg);
+    throw new Error(`deleteUserMessage: ${deleteResponse.msg}`);
   }
 
   async deleteAdminMessage(messageId: number): Promise<{ id: number }> {
@@ -324,7 +305,7 @@ export class ZulipService {
     if (deleteResponse.result === 'success') {
       return { id: messageId };
     }
-    throw new Error(deleteResponse.msg);
+    throw new Error(`deleteAdminMessage: ${deleteResponse.msg}`);
   }
 
   async addUserMessagesReadFlag(
@@ -339,7 +320,7 @@ export class ZulipService {
     if (addResponse.result === 'success') {
       return { messages: messageIds };
     }
-    throw new Error(addResponse.msg);
+    throw new Error(`addUserMessagesReadFlag: ${addResponse.msg}`);
   }
 
   async removeUserMessagesReadFlag(
@@ -354,7 +335,7 @@ export class ZulipService {
     if (removeResponse.result === 'success') {
       return { messages: messageIds };
     }
-    throw new Error(removeResponse.msg);
+    throw new Error(`removeUserMessagesReadFlag: ${removeResponse.msg}`);
   }
 
   async deleteAdminStreamTopic(
@@ -373,6 +354,6 @@ export class ZulipService {
     if (deleteResponse.result === 'success') {
       return { id: streamId };
     }
-    throw new Error(deleteResponse.msg);
+    throw new Error(`deleteAdminStreamTopic: ${deleteResponse.msg}`);
   }
 }
