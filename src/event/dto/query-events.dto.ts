@@ -43,6 +43,21 @@ export class QueryEventDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => Number)
+  radius?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  lat?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  lon?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   @Type(() => String)
   type: string;
