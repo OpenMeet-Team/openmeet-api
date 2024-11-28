@@ -59,7 +59,6 @@ export class GroupService {
 
   async getTenantSpecificGroupRepository() {
     const tenantId = this.request.tenantId;
-
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
     this.groupRepository = dataSource.getRepository(GroupEntity);

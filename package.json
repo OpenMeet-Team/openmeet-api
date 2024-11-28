@@ -37,7 +37,7 @@
     "start:swc": "nest start -b swc -w",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "test": "jest",
-    "test:all": "lint && jest && npm run test:e2e",
+    "test:all": "npm run lint && jest && npm run test:e2e",
     "test:watch": "jest --watch",
     "test:e2e:watch": "env-cmd jest --watch --config ./test/jest-e2e.json",
     "test:cov": "jest --coverage",

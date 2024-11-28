@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ChatService } from './chat.service';
-import { JWTAuthGuard } from '../core/guards/auth.guard';
+import { JWTAuthGuard } from '../auth/auth.guard';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
 import { ChatEntity } from './infrastructure/persistence/relational/entities/chat.entity';

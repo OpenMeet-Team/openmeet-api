@@ -3,7 +3,6 @@ import {
   NotFoundException,
   Inject,
   Scope,
-  InternalServerErrorException,
   UnprocessableEntityException,
   HttpStatus,
 } from '@nestjs/common';
@@ -379,28 +378,22 @@ export class EventService {
     }
     await this.getTenantSpecificEventRepository();
 
-    try {
-      const recommendedEvents = await this.eventRepository
-        .createQueryBuilder('event')
-        .leftJoinAndSelect('event.group', 'group')
-        .leftJoinAndSelect('event.categories', 'categories')
-        .leftJoinAndSelect('event.attendees', 'attendees')
-        .where('event.status = :status', { status: EventStatus.Published })
-        .andWhere('(group.id != :groupId OR group.id IS NULL)', { groupId })
-        .andWhere('categories.id IN (:...categories)', { categories })
-        .orderBy('RANDOM()')
-        .limit(maxEvents)
-        .getMany();
+    const query = this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.group', 'group')
+      .leftJoinAndSelect('event.categories', 'categories')
+      .leftJoinAndSelect('event.attendees', 'attendees')
+      .where('event.status = :status', { status: EventStatus.Published })
+      .andWhere('event.group.id != :groupId', { groupId })
+      .orderBy('RANDOM()')
+      .limit(maxEvents);
 
-      return recommendedEvents.slice(0, maxEvents);
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new InternalServerErrorException(
-        `Error finding recommended events for group ${groupId}: ${error.message}`,
-      );
+    if (categories && categories.length) {
+      query.andWhere('categories.id IN (:...categoryIds)', {
+        categoryIds: categories || [],
+      });
     }
+    return await query.getMany();
   }
 
   async findRandomEventsForGroup(

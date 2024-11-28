@@ -9,7 +9,6 @@ import {
   Query,
   UseGuards,
   Optional,
-  // Headers,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CreateGroupDto } from './dto/create-group.dto';
@@ -17,7 +16,7 @@ import { UpdateGroupDto } from './dto/update-group.dto';
 import { GroupEntity } from './infrastructure/persistence/relational/entities/group.entity';
 import { GroupService } from './group.service';
 import { Public } from '../auth/decorators/public.decorator';
-import { JWTAuthGuard } from '../core/guards/auth.guard';
+import { JWTAuthGuard } from '../auth/auth.guard';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';

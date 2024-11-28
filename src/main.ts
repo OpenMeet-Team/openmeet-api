@@ -12,7 +12,7 @@ import { AppModule } from './app.module';
 import validationOptions from './utils/validation-options';
 import { AllConfigType } from './config/config.type';
 import { ResolvePromisesInterceptor } from './utils/serializer.interceptor';
-import { AggregateByTenantContextIdStrategy } from './strategy/tanent.strategy';
+import { AggregateByTenantContextIdStrategy } from './strategy/tenant.strategy';
 import { TenantGuard } from './tenant/tenant.guard';
 import { RequestCounterInterceptor } from './interceptors/request-counter.interceptor';
 import { getBuildInfo } from './utils/version';

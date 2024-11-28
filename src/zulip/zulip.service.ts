@@ -33,7 +33,7 @@ export class ZulipService {
       const userEmail = `tenant_${this.request.tenantId}__${user.ulid}@zulip.openmeet.net`;
       const userPassword = ulid();
 
-      const createdZulipUser = await this.createUser({
+      await this.createUser({
         email: userEmail,
         password: userPassword,
         full_name: user.name as string,
@@ -48,26 +48,21 @@ export class ZulipService {
         );
       }
 
-      try {
-        // Store the Zulip credentials in your user service
-        const updatedUser = await this.userService.addZulipCredentialsToUser(
-          user.id,
-          {
-            zulipUsername: userEmail,
-            zulipApiKey: apiKeyResponse.api_key,
-            zulipUserId: apiKeyResponse.user_id,
-          },
-        );
+      // Store the Zulip credentials in your user service
+      const updatedUser = await this.userService.addZulipCredentialsToUser(
+        user.id,
+        {
+          zulipUsername: userEmail,
+          zulipApiKey: apiKeyResponse.api_key,
+          zulipUserId: apiKeyResponse.user_id,
+        },
+      );
 
-        if (!updatedUser) {
-          throw new Error(`addZulipCredentialsToUser: Failed to update user`);
-        }
-
-        return await getClient(updatedUser);
-      } catch (error) {
-        console.error('Error adding Zulip credentials to user:', error);
-        throw error;
+      if (!updatedUser) {
+        throw new Error(`addZulipCredentialsToUser: Failed to update user`);
       }
+
+      return await getClient(updatedUser);
     }
 
     return await getClient(user);

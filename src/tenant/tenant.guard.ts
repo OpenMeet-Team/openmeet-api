@@ -6,9 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
-
-// Define a custom decorator key to mark routes to bypass the guard
-export const IS_PUBLIC_KEY = 'isPublic';
+import { IS_TENANT_PUBLIC_KEY } from '../core/constants/constant';
 
 @Injectable()
 export class TenantGuard implements CanActivate {
@@ -17,14 +15,13 @@ export class TenantGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request: Request = context.switchToHttp().getRequest();
 
-    // Check if the route is marked as public and should bypass the guard
-    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    const isTenantPublic = this.reflector.getAllAndOverride<boolean>(
+      IS_TENANT_PUBLIC_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
-    if (isPublic) {
-      return true; // Skip guard for public routes
+    if (isTenantPublic) {
+      return true;
     }
 
     const path = request.route.path;
@@ -38,7 +35,6 @@ export class TenantGuard implements CanActivate {
       throw new UnauthorizedException('Tenant ID is required');
     }
 
-    // Optionally store tenant ID in the request object for further use
     request['tenantId'] = tenantId;
     return true;
   }
