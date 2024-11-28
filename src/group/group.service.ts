@@ -348,7 +348,8 @@ export class GroupService {
       .select(['group.name', 'group.slug']);
 
     if (search) {
-      groupQuery.andWhere(`(group.name LIKE :search)`, {
+      console.log('ilike', `%${search}%`);
+      groupQuery.andWhere(`(group.name ILIKE :search)`, {
         search: `%${search}%`,
       });
     }
@@ -624,6 +625,7 @@ export class GroupService {
 
   async joinGroup(slug: string, userId: number) {
     await this.getTenantSpecificGroupRepository();
+
     const groupEntity = await this.groupRepository.findOne({
       where: { slug },
       relations: ['createdBy'],
@@ -802,19 +804,16 @@ export class GroupService {
       const stream = await this.zulipService.getAdminStreamId(groupChannelName);
 
       // remove default topic from channel
-      // await this.zulipService.deleteAdminStreamTopic(
-      //   stream.id,
-      //   'channel events',
-      // );
+      await this.zulipService.deleteAdminStreamTopic(
+        stream.id,
+        'channel events',
+      );
 
       group.zulipChannelId = stream.id;
       await this.groupRepository.save(group);
     }
 
-    if (!user.zulipUserId) {
-      await this.zulipService.getInitialisedClient(user);
-      await user.reload();
-    }
+    await this.zulipService.getInitialisedClient(user);
 
     const params = {
       to: group.zulipChannelId,
