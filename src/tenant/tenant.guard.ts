@@ -17,16 +17,6 @@ export class TenantGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request: Request = context.switchToHttp().getRequest();
 
-    // Check if the route is marked as public and should bypass the guard
-    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
-
-    if (isPublic) {
-      return true; // Skip guard for public routes
-    }
-
     const path = request.route.path;
     // Allow access to the metrics endpoint
     if (path === '/metrics') {
