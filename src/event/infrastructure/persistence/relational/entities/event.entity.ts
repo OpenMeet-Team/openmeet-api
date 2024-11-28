@@ -22,6 +22,7 @@ import {
   EventType,
   EventVisibility,
   EventStatus,
+  PostgisSrid,
 } from '../../../../../core/constants/constant';
 import { GroupMemberEntity } from '../../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { FileEntity } from '../../../../../file/infrastructure/persistence/relational/entities/file.entity';
@@ -92,7 +93,17 @@ export class EventEntity extends EntityRelationalHelper {
   @Column({ type: 'boolean', default: false })
   requireGroupMembership: boolean;
 
+  @Column({
+    type: 'geography',
+    spatialFeatureType: 'Point',
+    srid: PostgisSrid.SRID,
+    nullable: true,
+  })
+  @Index()
+  locationPoint?: string;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
+  @Index()
   location: string;
 
   @Column({ type: 'double precision', nullable: true })

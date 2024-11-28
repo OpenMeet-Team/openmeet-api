@@ -21,6 +21,7 @@ import { GroupUserPermissionEntity } from './group-user-permission.entity';
 import {
   GroupVisibility,
   GroupStatus,
+  PostgisSrid,
 } from '../../../../../core/constants/constant';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
 import { Expose } from 'class-transformer';
@@ -72,7 +73,17 @@ export class GroupEntity extends EntityRelationalHelper {
   @Column({ type: 'boolean', default: true })
   requireApproval: boolean;
 
+  @Column({
+    type: 'geography',
+    spatialFeatureType: 'Point',
+    srid: PostgisSrid.SRID,
+    nullable: true,
+  })
+  @Index()
+  locationPoint: string;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
+  @Index()
   location: string;
 
   @Column({ type: 'double precision', nullable: true })

@@ -3,9 +3,9 @@ import {
   NotFoundException,
   Inject,
   Scope,
-  InternalServerErrorException,
   UnprocessableEntityException,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { CreateEventDto, EventTopicCommentDto } from './dto/create-event.dto';
@@ -22,6 +22,7 @@ import {
   EventStatus,
   EventVisibility,
   EventAttendeeRole,
+  PostgisSrid,
 } from '../core/constants/constant';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -97,11 +98,25 @@ export class EventService {
       throw new NotFoundException(`Error finding categories: ${error.message}`);
     }
 
+    let locationPoint;
+    if (createEventDto.lat && createEventDto.lon) {
+      const { lat, lon } = createEventDto;
+      if (isNaN(lat) || isNaN(lon)) {
+        throw new BadRequestException('Invalid latitude or longitude');
+      }
+      // Construct GeoJSON
+      locationPoint = {
+        type: 'Point',
+        coordinates: [lon, lat],
+      };
+    }
+
     const mappedDto = {
       ...createEventDto,
       user,
       group,
       categories,
+      locationPoint,
     };
     const event = this.eventRepository.create(mappedDto as EventEntity);
     const createdEvent = await this.eventRepository.save(event);
@@ -192,8 +207,18 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
 
     const { page, limit } = pagination;
-    const { search, userId, fromDate, toDate, categories, location, type } =
-      query;
+    const {
+      search,
+      userId,
+      fromDate,
+      toDate,
+      categories,
+      location,
+      type,
+      radius,
+      lat,
+      lon,
+    } = query;
 
     const eventQuery = this.eventRepository
       .createQueryBuilder('event')
@@ -213,15 +238,36 @@ export class EventService {
       });
     }
 
-    if (location) {
-      eventQuery.andWhere('event.location LIKE :location', {
-        location: `%${location}%`,
-      });
+    if (lat && lon) {
+      if (isNaN(lon) || isNaN(lat)) {
+        throw new BadRequestException(
+          'Invalid location format. Expected "lon,lat".',
+        );
+      }
+
+      // Default radius to 5 kilometers if not provided
+      const searchRadius = radius ?? 5;
+
+      // Find events within the radius using ST_DWithin
+      eventQuery.andWhere(
+        `ST_DWithin(
+          event.locationPoint,
+          ST_SetSRID(ST_MakePoint(:lon, :lat), ${PostgisSrid.SRID}),
+          :radius
+        )`,
+        { lon, lat, radius: searchRadius * 1000 }, // Convert kilometers to meters
+      );
     }
 
     if (type) {
       eventQuery.andWhere('event.type LIKE :type', {
         type: `%${type}%`,
+      });
+    }
+
+    if (location) {
+      eventQuery.andWhere('event.location LIKE :location', {
+        location: `%${location}%`,
       });
     }
 
@@ -396,28 +442,22 @@ export class EventService {
     }
     await this.getTenantSpecificEventRepository();
 
-    try {
-      const recommendedEvents = await this.eventRepository
-        .createQueryBuilder('event')
-        .leftJoinAndSelect('event.group', 'group')
-        .leftJoinAndSelect('event.categories', 'categories')
-        .leftJoinAndSelect('event.attendees', 'attendees')
-        .where('event.status = :status', { status: EventStatus.Published })
-        .andWhere('(group.id != :groupId OR group.id IS NULL)', { groupId })
-        .andWhere('categories.id IN (:...categories)', { categories })
-        .orderBy('RANDOM()')
-        .limit(maxEvents)
-        .getMany();
+    const query = this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.group', 'group')
+      .leftJoinAndSelect('event.categories', 'categories')
+      .leftJoinAndSelect('event.attendees', 'attendees')
+      .where('event.status = :status', { status: EventStatus.Published })
+      .andWhere('event.group.id != :groupId', { groupId })
+      .orderBy('RANDOM()')
+      .limit(maxEvents);
 
-      return recommendedEvents.slice(0, maxEvents);
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new InternalServerErrorException(
-        `Error finding recommended events for group ${groupId}: ${error.message}`,
-      );
+    if (categories && categories.length) {
+      query.andWhere('categories.id IN (:...categoryIds)', {
+        categoryIds: categories || [],
+      });
     }
+    return await query.getMany();
   }
 
   async findRandomEventsForGroup(

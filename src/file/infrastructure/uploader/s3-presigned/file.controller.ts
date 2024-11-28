@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
 import { FilesS3PresignedService } from './file.service';
 import { FileUploadDto } from './dto/file.dto';
 import { FileResponseDto } from './dto/file-response.dto';
-import { JWTAuthGuard } from '../../../../core/guards/auth.guard';
+import { JWTAuthGuard } from '../../../../auth/auth.guard';
 
 @ApiBearerAuth()
 @UseGuards(JWTAuthGuard)
