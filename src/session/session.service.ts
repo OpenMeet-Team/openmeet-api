@@ -41,7 +41,7 @@ export class SessionService {
     const newSessionEntity = this.sessionRepository.create(
       data as Partial<SessionEntity>,
     );
-
+    // console.log(await this.sessionRepository.find(), newSessionEntity);
     // Save the new session to the database
     const savedSessionEntity =
       await this.sessionRepository.save(newSessionEntity);
