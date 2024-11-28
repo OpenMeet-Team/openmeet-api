@@ -132,3 +132,6 @@ export enum EventType {
   Online = 'online',
   Hybrid = 'hybrid',
 }
+
+export const IS_PUBLIC_KEY = 'isPublic';
+export const IS_TENANT_PUBLIC_KEY = 'isTenantPublic';

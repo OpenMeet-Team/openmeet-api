@@ -19,7 +19,11 @@ export const AppDataSource = (tenantId: string) => {
     synchronize: process.env.DATABASE_SYNCHRONIZE === 'true',
     dropSchema: false,
     keepConnectionAlive: true,
-    logging: process.env.NODE_ENV === 'development' ? true : false,
+    logging:
+      process.env.NODE_ENV === 'development'
+        ? ['error', 'schema', 'warn', 'log']
+        : false,
+    logger: process.env.TYPEORM_LOGGER,
     entities: [__dirname + '/../**/*.entity{.ts,.js}'],
     migrations: [__dirname + '/migrations/**/*{.ts,.js}'],
     cli: {

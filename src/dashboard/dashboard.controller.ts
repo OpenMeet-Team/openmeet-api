@@ -1,7 +1,7 @@
 import { Controller, Get, Injectable, Scope, UseGuards } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { JWTAuthGuard } from '../core/guards/auth.guard';
+import { JWTAuthGuard } from '../auth/auth.guard';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiOkResponse } from '@nestjs/swagger';
 import { AuthUser } from '../core/decorators/auth-user.decorator';

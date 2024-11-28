@@ -120,7 +120,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     TenantConnectionService,
     {
       provide: APP_GUARD,
-      useClass: TenantGuard, // Registered TenantGuard globally
+      useClass: TenantGuard,
     },
     // {
     // provide: APP_GUARD,

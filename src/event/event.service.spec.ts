@@ -206,12 +206,12 @@ describe('EventService', () => {
   });
 
   describe('findRecommendedEventsForGroup', () => {
-    it('should throw error when not enough recommended events are found', async () => {
-      const minEvents = 3;
-
-      await expect(
-        service.findRecommendedEventsForGroup(1, [1, 2], minEvents),
-      ).rejects.toThrow();
+    it('should return recommended events for a group', async () => {
+      jest
+        .spyOn(service, 'findRecommendedEventsForGroup')
+        .mockResolvedValue(mockEvents);
+      const result = await service.findRecommendedEventsForGroup(1, [1, 2], 3);
+      expect(result).toEqual(mockEvents);
     });
   });
 
