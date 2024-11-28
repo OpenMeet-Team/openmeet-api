@@ -47,6 +47,7 @@ export class GroupEntity extends EntityRelationalHelper {
   updatedAt: Date;
 
   @Column({ type: 'varchar', length: 255 })
+  @Index()
   name: string;
 
   @Column({ type: 'varchar', length: 255, unique: true })

@@ -95,4 +95,5 @@ export const mockGroupService = {
     .mockResolvedValue(mockZulipMessageResponse),
   showGroupAbout: jest.fn().mockResolvedValue(mockGroupAboutResponse),
   showGroupDiscussions: jest.fn().mockResolvedValue(mockDiscussions),
+  searchAllGroups: jest.fn().mockResolvedValue(mockGroups),
 };

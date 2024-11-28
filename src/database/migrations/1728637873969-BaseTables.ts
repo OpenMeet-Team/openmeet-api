@@ -197,7 +197,15 @@ export class BaseTables1728637873969 implements MigrationInterface {
     );
 
     await queryRunner.query(
-      `CREATE TABLE "${schema}"."userInterests" ("usersId" integer NOT NULL, "subcategoriesId" integer NOT NULL, CONSTRAINT "PK_${schema}_userInterests_id" PRIMARY KEY ("usersId", "subcategoriesId"))`,
+      `CREATE INDEX "IDX_${schema}_events_name" ON "${schema}"."events" ("name")`,
+    );
+
+    await queryRunner.query(
+      `CREATE INDEX "IDX_${schema}_groups_name" ON "${schema}"."groups" ("name")`,
+    );
+
+    await queryRunner.query(
+      `CREATE TABLE "${schema}"."userInterests" ("usersId" integer NOT NULL, "subcategoriesId" integer NOT NULL, CONSTRAINT "PK_0a021a19dbadecae6d249244d49" PRIMARY KEY ("usersId", "subcategoriesId"))`,
     );
     await queryRunner.query(
       `CREATE INDEX "IDX_${schema}_userInterests_usersId" ON "${schema}"."userInterests" ("usersId")`,
@@ -528,6 +536,10 @@ export class BaseTables1728637873969 implements MigrationInterface {
     await queryRunner.query(
       `DROP INDEX "${schema}"."IDX_${schema}_users_slug"`,
     );
+
+    await queryRunner.query(`DROP INDEX "IDX_${schema}_events_name"`);
+
+    await queryRunner.query(`DROP INDEX "IDX_${schema}_groups_name"`);
 
     await queryRunner.query(`DROP TABLE "${schema}"."eventRoles"`);
     await queryRunner.query(`DROP TABLE "${schema}"."eventPermissions"`);

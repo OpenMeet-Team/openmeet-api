@@ -36,6 +36,7 @@ import { UserEntity } from '../user/infrastructure/persistence/relational/entiti
 import { UserService } from '../user/user.service';
 import { UpdateEventAttendeeDto } from 'src/event-attendee/dto/update-eventAttendee.dto';
 import { ZulipTopic } from 'zulip-js';
+import { HomeQuery } from '../home/dto/home-query.dto';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -232,14 +233,9 @@ export class EventService {
     }
 
     if (search) {
-      eventQuery.andWhere(
-        `(event.name LIKE :search OR 
-          event.description LIKE :search OR 
-          event.location LIKE :search OR 
-          CAST(event.lat AS TEXT) LIKE :search OR 
-          CAST(event.lon AS TEXT) LIKE :search)`,
-        { search: `%${search}%` },
-      );
+      eventQuery.andWhere(`(event.name LIKE :search)`, {
+        search: `%${search}%`,
+      });
     }
 
     if (lat && lon) {
@@ -297,6 +293,27 @@ export class EventService {
       }, {});
 
       eventQuery.andWhere(`(${likeConditions})`, likeParameters);
+    }
+
+    return paginate(eventQuery, { page, limit });
+  }
+
+  async searchAllEvents(
+    pagination: PaginationDto,
+    query: HomeQuery,
+  ): Promise<any> {
+    await this.getTenantSpecificEventRepository();
+    const { page, limit } = pagination;
+    const { search } = query;
+    const eventQuery = this.eventRepository
+      .createQueryBuilder('event')
+      .where('event.status = :status', { status: EventStatus.Published })
+      .select(['event.name', 'event.slug']);
+
+    if (search) {
+      eventQuery.andWhere(`(event.name LIKE :search)`, {
+        search: `%${search}%`,
+      });
     }
 
     return paginate(eventQuery, { page, limit });

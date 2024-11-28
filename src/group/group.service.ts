@@ -39,6 +39,7 @@ import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember
 import { ZulipMessage, ZulipTopic } from 'zulip-js';
 import { ZulipService } from '../zulip/zulip.service';
 import { UserService } from '../user/user.service';
+import { HomeQuery } from '../home/dto/home-query.dto';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -326,15 +327,30 @@ export class GroupService {
     }
 
     if (search) {
-      groupQuery.andWhere(
-        `(group.name LIKE :search OR 
-          group.description LIKE :search OR 
-          group.location LIKE :search OR 
-          group.type LIKE :search OR 
-          CAST(group.lat AS TEXT) LIKE :search OR 
-          CAST(group.lon AS TEXT) LIKE :search)`,
-        { search: `%${search}%` },
-      );
+      groupQuery.andWhere(`(group.name LIKE :search)`, {
+        search: `%${search}%`,
+      });
+    }
+
+    return await paginate(groupQuery, { page, limit });
+  }
+
+  async searchAllGroups(
+    pagination: PaginationDto,
+    query: HomeQuery,
+  ): Promise<any> {
+    await this.getTenantSpecificGroupRepository();
+    const { page, limit } = pagination;
+    const { search } = query;
+    const groupQuery = this.groupRepository
+      .createQueryBuilder('group')
+      .where('group.status = :status', { status: GroupStatus.Published })
+      .select(['group.name', 'group.slug']);
+
+    if (search) {
+      groupQuery.andWhere(`(group.name LIKE :search)`, {
+        search: `%${search}%`,
+      });
     }
 
     return await paginate(groupQuery, { page, limit });

@@ -47,6 +47,7 @@ export class EventEntity extends EntityRelationalHelper {
   ulid: string;
 
   @Column({ type: 'varchar', length: 255 })
+  @Index()
   name: string;
 
   @Column({ type: 'varchar', length: 255, unique: true })
