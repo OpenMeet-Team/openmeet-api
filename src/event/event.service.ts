@@ -5,6 +5,7 @@ import {
   Scope,
   UnprocessableEntityException,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { CreateEventDto, EventTopicCommentDto } from './dto/create-event.dto';
@@ -21,6 +22,7 @@ import {
   EventStatus,
   EventVisibility,
   EventAttendeeRole,
+  PostgisSrid,
 } from '../core/constants/constant';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -95,11 +97,25 @@ export class EventService {
       throw new NotFoundException(`Error finding categories: ${error.message}`);
     }
 
+    let locationPoint;
+    if (createEventDto.lat && createEventDto.lon) {
+      const { lat, lon } = createEventDto;
+      if (isNaN(lat) || isNaN(lon)) {
+        throw new BadRequestException('Invalid latitude or longitude');
+      }
+      // Construct GeoJSON
+      locationPoint = {
+        type: 'Point',
+        coordinates: [lon, lat],
+      };
+    }
+
     const mappedDto = {
       ...createEventDto,
       user,
       group,
       categories,
+      locationPoint,
     };
     const event = this.eventRepository.create(mappedDto as EventEntity);
     const createdEvent = await this.eventRepository.save(event);
@@ -190,8 +206,18 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
 
     const { page, limit } = pagination;
-    const { search, userId, fromDate, toDate, categories, location, type } =
-      query;
+    const {
+      search,
+      userId,
+      fromDate,
+      toDate,
+      categories,
+      location,
+      type,
+      radius,
+      lat,
+      lon,
+    } = query;
 
     const eventQuery = this.eventRepository
       .createQueryBuilder('event')
@@ -216,15 +242,36 @@ export class EventService {
       );
     }
 
-    if (location) {
-      eventQuery.andWhere('event.location LIKE :location', {
-        location: `%${location}%`,
-      });
+    if (lat && lon) {
+      if (isNaN(lon) || isNaN(lat)) {
+        throw new BadRequestException(
+          'Invalid location format. Expected "lon,lat".',
+        );
+      }
+
+      // Default radius to 5 kilometers if not provided
+      const searchRadius = radius ?? 5;
+
+      // Find events within the radius using ST_DWithin
+      eventQuery.andWhere(
+        `ST_DWithin(
+          event.locationPoint,
+          ST_SetSRID(ST_MakePoint(:lon, :lat), ${PostgisSrid.SRID}),
+          :radius
+        )`,
+        { lon, lat, radius: searchRadius * 1000 }, // Convert kilometers to meters
+      );
     }
 
     if (type) {
       eventQuery.andWhere('event.type LIKE :type', {
         type: `%${type}%`,
+      });
+    }
+
+    if (location) {
+      eventQuery.andWhere('event.location LIKE :location', {
+        location: `%${location}%`,
       });
     }
 
