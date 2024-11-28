@@ -20,6 +20,16 @@ export class QueryGroupDto {
   @Type(() => Number)
   radius?: number;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  lat?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  lon?: number;
+
   // @ApiPropertyOptional()
   @IsOptional()
   @IsString()

@@ -273,7 +273,7 @@ export class GroupService {
   async showAll(pagination: PaginationDto, query: QueryGroupDto): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     const { page, limit } = pagination;
-    const { search, userId, location, categories, radius } = query;
+    const { search, userId, categories, radius, location, lat, lon } = query;
     const groupQuery = this.groupRepository
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.categories', 'categories')
@@ -284,6 +284,12 @@ export class GroupService {
 
     if (userId) {
       groupQuery.andWhere('user.id = :userId', { userId });
+    }
+
+    if (location) {
+      groupQuery.andWhere('group.location LIKE :location', {
+        location: `%${location}%`,
+      });
     }
 
     if (categories && categories.length > 0) {
@@ -299,9 +305,7 @@ export class GroupService {
       groupQuery.andWhere(`(${likeConditions})`, likeParameters);
     }
 
-    if (location) {
-      // Split and validate location
-      const [lon, lat] = location.split(',').map(Number);
+    if (lat && lon) {
       if (isNaN(lon) || isNaN(lat)) {
         throw new BadRequestException(
           'Invalid location format. Expected "lon,lat".',

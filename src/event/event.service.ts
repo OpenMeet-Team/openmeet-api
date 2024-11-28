@@ -219,6 +219,8 @@ export class EventService {
       location,
       type,
       radius,
+      lat,
+      lon,
     } = query;
 
     const eventQuery = this.eventRepository
@@ -244,9 +246,7 @@ export class EventService {
       );
     }
 
-    if (location) {
-      // Split and validate location
-      const [lon, lat] = location.split(',').map(Number);
+    if (lat && lon) {
       if (isNaN(lon) || isNaN(lat)) {
         throw new BadRequestException(
           'Invalid location format. Expected "lon,lat".',
@@ -270,6 +270,12 @@ export class EventService {
     if (type) {
       eventQuery.andWhere('event.type LIKE :type', {
         type: `%${type}%`,
+      });
+    }
+
+    if (location) {
+      eventQuery.andWhere('event.location LIKE :location', {
+        location: `%${location}%`,
       });
     }
 
