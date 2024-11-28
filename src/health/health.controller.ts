@@ -1,11 +1,10 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { Public } from '../auth/decorators/public.decorator';
+import { TenantPublic } from '../tenant/tenant-public.decorator';
 import { TypeOrmHealthIndicator } from '@nestjs/terminus';
 import { Req } from '@nestjs/common';
 import { Request } from 'express';
 import { HealthIndicatorResult } from '@nestjs/terminus';
-
 import {
   HealthCheckService,
   HttpHealthIndicator,
@@ -14,6 +13,7 @@ import {
 
 @ApiTags('Health')
 @Controller('health')
+@TenantPublic()
 export class HealthController {
   constructor(
     private health: HealthCheckService,
@@ -22,7 +22,6 @@ export class HealthController {
   ) {}
 
   @HealthCheck()
-  @Public()
   @Get('liveness')
   @ApiOperation({ summary: 'Liveness probe' })
   async liveness(@Req() req: Request) {
@@ -52,7 +51,6 @@ export class HealthController {
   }
 
   @HealthCheck()
-  @Public()
   @Get('readiness')
   @ApiOperation({ summary: 'Readiness probe' })
   async readiness() {

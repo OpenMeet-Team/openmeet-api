@@ -17,7 +17,7 @@ import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventService } from './event.service';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
-import { JWTAuthGuard } from '../core/guards/auth.guard';
+import { JWTAuthGuard } from '../auth/auth.guard';
 import { QueryEventDto } from './dto/query-events.dto';
 import { Public } from '../auth/decorators/public.decorator';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
