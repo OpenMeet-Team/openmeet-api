@@ -284,17 +284,17 @@ export class EventService {
         );
     }
 
-    if (event.zulipChannelId) {
-      event.topics = await this.zulipService.getAdminStreamTopics(
-        event.zulipChannelId,
-      );
-      event.messages = await this.zulipService.getAdminMessages({
-        anchor: 'oldest',
-        num_before: 0,
-        num_after: 100,
-        narrow: [{ operator: 'stream', operand: event.zulipChannelId }],
-      });
-    }
+    event.topics = event.zulipChannelId
+      ? await this.zulipService.getAdminStreamTopics(event.zulipChannelId)
+      : [];
+    event.messages = event.zulipChannelId
+      ? await this.zulipService.getAdminMessages({
+          anchor: 'oldest',
+          num_before: 0,
+          num_after: 100,
+          narrow: [{ operator: 'stream', operand: event.zulipChannelId }],
+        })
+      : [];
 
     return event;
   }

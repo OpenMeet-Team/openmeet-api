@@ -572,7 +572,6 @@ export class GroupService {
 
   async joinGroup(slug: string, userId: number) {
     await this.getTenantSpecificGroupRepository();
-
     const groupEntity = await this.groupRepository.findOne({
       where: { slug },
       relations: ['createdBy'],
@@ -751,16 +750,19 @@ export class GroupService {
       const stream = await this.zulipService.getAdminStreamId(groupChannelName);
 
       // remove default topic from channel
-      await this.zulipService.deleteAdminStreamTopic(
-        stream.id,
-        'channel events',
-      );
+      // await this.zulipService.deleteAdminStreamTopic(
+      //   stream.id,
+      //   'channel events',
+      // );
 
       group.zulipChannelId = stream.id;
       await this.groupRepository.save(group);
     }
 
-    await this.zulipService.getInitialisedClient(user);
+    if (!user.zulipUserId) {
+      await this.zulipService.getInitialisedClient(user);
+      await user.reload();
+    }
 
     const params = {
       to: group.zulipChannelId,
