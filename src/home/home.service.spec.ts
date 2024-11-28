@@ -10,6 +10,8 @@ import {
   mockEventService,
   mockGroup,
   mockGroupService,
+  mockHomeQuery,
+  mockPagination,
   mockSubCategory,
   mockSubCategoryService,
   mockTenantConnectionService,
@@ -30,7 +32,6 @@ describe('HomeService', () => {
         { provide: GroupService, useValue: mockGroupService },
         { provide: EventService, useValue: mockEventService },
         { provide: CategoryService, useValue: mockCategoryService },
-        { provide: GroupService, useValue: mockGroupService },
         { provide: SubCategoryService, useValue: mockSubCategoryService },
         { provide: ConfigService, useValue: mockConfigService },
         {
@@ -65,5 +66,14 @@ describe('HomeService', () => {
       categories: [mockCategory],
       interests: [mockSubCategory],
     });
+  });
+
+  it('should return a list of events and groups based on search query', async () => {
+    const result = await service.globalSearch(mockPagination, mockHomeQuery);
+
+    expect(result).toBeDefined();
+
+    expect(result).toHaveProperty('events');
+    expect(result).toHaveProperty('groups');
   });
 });

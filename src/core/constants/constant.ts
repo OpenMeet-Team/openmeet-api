@@ -135,3 +135,7 @@ export enum EventType {
 
 export const IS_PUBLIC_KEY = 'isPublic';
 export const IS_TENANT_PUBLIC_KEY = 'isTenantPublic';
+
+export enum PostgisSrid {
+  SRID = 4326,
+}

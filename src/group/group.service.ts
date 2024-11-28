@@ -5,6 +5,7 @@ import {
   Scope,
   UnprocessableEntityException,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
@@ -20,6 +21,7 @@ import {
   GroupRole,
   GroupStatus,
   GroupVisibility,
+  PostgisSrid,
 } from '../core/constants/constant';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { PaginationDto } from '../utils/dto/pagination.dto';
@@ -37,6 +39,7 @@ import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember
 import { ZulipMessage, ZulipTopic } from 'zulip-js';
 import { ZulipService } from '../zulip/zulip.service';
 import { UserService } from '../user/user.service';
+import { HomeQuery } from '../home/dto/home-query.dto';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -219,11 +222,25 @@ export class GroupService {
       lower: true,
     })}-${shortCode.toLowerCase()}`;
 
+    let locationPoint;
+    if (createGroupDto.lat && createGroupDto.lon) {
+      const { lat, lon } = createGroupDto;
+      if (isNaN(lat) || isNaN(lon)) {
+        throw new BadRequestException('Invalid latitude or longitude');
+      }
+      // Construct GeoJSON
+      locationPoint = {
+        type: 'Point',
+        coordinates: [lon, lat],
+      };
+    }
+
     const mappedGroupDto = {
       ...createGroupDto,
       slug: slugifiedName,
       categories: categoryEntities,
       createdBy: { id: userId },
+      locationPoint,
     };
 
     if (mappedGroupDto.image?.id) {
@@ -257,7 +274,7 @@ export class GroupService {
   async showAll(pagination: PaginationDto, query: QueryGroupDto): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     const { page, limit } = pagination;
-    const { search, userId, location, categories } = query;
+    const { search, userId, categories, radius, location, lat, lon } = query;
     const groupQuery = this.groupRepository
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.categories', 'categories')
@@ -268,6 +285,12 @@ export class GroupService {
 
     if (userId) {
       groupQuery.andWhere('user.id = :userId', { userId });
+    }
+
+    if (location) {
+      groupQuery.andWhere('group.location LIKE :location', {
+        location: `%${location}%`,
+      });
     }
 
     if (categories && categories.length > 0) {
@@ -283,22 +306,51 @@ export class GroupService {
       groupQuery.andWhere(`(${likeConditions})`, likeParameters);
     }
 
-    if (location) {
-      groupQuery.andWhere('group.location LIKE :location', {
-        location: `%${location}%`,
-      });
+    if (lat && lon) {
+      if (isNaN(lon) || isNaN(lat)) {
+        throw new BadRequestException(
+          'Invalid location format. Expected "lon,lat".',
+        );
+      }
+
+      // Default radius to 5 kilometers if not provided
+      const searchRadius = radius ?? 5;
+      // Find events within the radius using ST_DWithin
+      groupQuery.andWhere(
+        `ST_DWithin(
+          group.locationPoint,
+          ST_SetSRID(ST_MakePoint(:lon, :lat), ${PostgisSrid.SRID}),
+          :radius
+        )`,
+        { lon, lat, radius: searchRadius * 1000 }, // Convert kilometers to meters
+      );
     }
 
     if (search) {
-      groupQuery.andWhere(
-        `(group.name LIKE :search OR 
-          group.description LIKE :search OR 
-          group.location LIKE :search OR 
-          group.type LIKE :search OR 
-          CAST(group.lat AS TEXT) LIKE :search OR 
-          CAST(group.lon AS TEXT) LIKE :search)`,
-        { search: `%${search}%` },
-      );
+      groupQuery.andWhere(`(group.name LIKE :search)`, {
+        search: `%${search}%`,
+      });
+    }
+
+    return await paginate(groupQuery, { page, limit });
+  }
+
+  async searchAllGroups(
+    pagination: PaginationDto,
+    query: HomeQuery,
+  ): Promise<any> {
+    await this.getTenantSpecificGroupRepository();
+    const { page, limit } = pagination;
+    const { search } = query;
+    const groupQuery = this.groupRepository
+      .createQueryBuilder('group')
+      .where('group.status = :status', { status: GroupStatus.Published })
+      .select(['group.name', 'group.slug']);
+
+    if (search) {
+      groupQuery.andWhere(`(group.name LIKE :search)`, {
+        search: `%${search}%`,
+      });
     }
 
     return await paginate(groupQuery, { page, limit });

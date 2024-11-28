@@ -152,3 +152,10 @@ export const mockTenantConnectionService = {
     }),
   }),
 };
+
+export const mockHomeQuery = {
+  search: '',
+  userId: 1,
+  location: '',
+  categories: [],
+};
