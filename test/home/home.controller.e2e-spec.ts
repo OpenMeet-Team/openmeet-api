@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { loginAsTester } from './../utils/functions';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
+import { mockPagination } from '../../src/test/mocks';
 
 describe('HomeController (e2e)', () => {
   const server = request
@@ -41,6 +42,26 @@ describe('HomeController (e2e)', () => {
         expect(res.body.upcomingEvents).toBeInstanceOf(Array);
         expect(res.body.memberGroups).toBeInstanceOf(Array);
         expect(res.body.interests).toBeInstanceOf(Array);
+      });
+  });
+
+  it('should return search results for events and groups', () => {
+    const searchQuery = 'Publish';
+
+    return server
+      .get('/api/home/search')
+      .query({
+        search: searchQuery,
+        page: mockPagination.page,
+        limit: mockPagination.limit,
+      })
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.events).toBeDefined();
+        expect(res.body.events.data).toBeInstanceOf(Array);
+
+        expect(res.body.groups).toBeDefined();
+        expect(res.body.groups.data).toBeInstanceOf(Array);
       });
   });
 });

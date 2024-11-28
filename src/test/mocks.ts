@@ -63,6 +63,10 @@ export const mockEvent = {
   attendeesCount: 1,
 } as EventEntity;
 
+export const mockHomeQuery = {
+  search: 'Test',
+};
+
 export const mockEventAttendee = {
   id: 1,
   status: EventAttendeeStatus.Confirmed,
@@ -277,6 +281,7 @@ export const mockGroupService = {
     .mockResolvedValue(mockZulipMessageResponse),
   showGroupAbout: jest.fn().mockResolvedValue(mockGroupAboutResponse),
   showGroupDiscussions: jest.fn().mockResolvedValue(mockDiscussions),
+  searchAllGroup: jest.fn().mockResolvedValue(mockGroup),
 };
 
 export const mockUserService = {
@@ -357,6 +362,7 @@ export const mockEventService = {
   deleteEventDiscussionMessage: jest
     .fn()
     .mockResolvedValue(mockZulipMessageResponse),
+  searchAllEvents: jest.fn().mockResolvedValue(mockEvent),
 };
 
 export const mockFilesS3PresignedService = {

@@ -6,7 +6,13 @@ import { GroupEntity } from '../group/infrastructure/persistence/relational/enti
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { CategoryEntity } from '../category/infrastructure/persistence/relational/entities/categories.entity';
 import { AuthService } from '../auth/auth.service';
-import { mockUser } from '../test/mocks';
+import {
+  mockEvent,
+  mockGroup,
+  mockHomeQuery,
+  mockPagination,
+  mockUser,
+} from '../test/mocks';
 
 describe('HomeController', () => {
   let controller: HomeController;
@@ -15,6 +21,7 @@ describe('HomeController', () => {
   const mockHomeService = {
     getGuestHomeState: jest.fn(),
     getUserHomeState: jest.fn(),
+    globalSearch: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -77,6 +84,25 @@ describe('HomeController', () => {
 
       expect(result).toEqual(mockUserHomeState);
       expect(homeService.getUserHomeState).toHaveBeenCalled();
+    });
+  });
+
+  describe('searchEventGroup', () => {
+    it('should return events and groups based on search query', async () => {
+      const mockSearchResult = {
+        events: [mockEvent],
+        groups: [mockGroup],
+      };
+
+      mockHomeService.globalSearch.mockResolvedValue(mockSearchResult);
+
+      const result = await controller.searchEventGroup(
+        mockPagination,
+        mockHomeQuery,
+      );
+
+      expect(result).toEqual(mockSearchResult);
+      expect(homeService.globalSearch).toHaveBeenCalled();
     });
   });
 });
