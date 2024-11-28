@@ -9,9 +9,9 @@ import { AuthService } from '../auth/auth.service';
 import {
   mockEvent,
   mockGroup,
-  mockHomeQuery,
   mockPagination,
   mockUser,
+  mockHomeQuery,
 } from '../test/mocks';
 
 describe('HomeController', () => {

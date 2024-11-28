@@ -300,7 +300,7 @@ export class GroupService {
     return await paginate(groupQuery, { page, limit });
   }
 
-  async searchAllGroup(
+  async searchAllGroups(
     pagination: PaginationDto,
     query: HomeQuery,
   ): Promise<any> {

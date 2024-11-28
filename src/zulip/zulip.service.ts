@@ -33,7 +33,7 @@ export class ZulipService {
       const userEmail = `tenant_${this.request.tenantId}__${user.ulid}@zulip.openmeet.net`;
       const userPassword = ulid();
 
-      const createdZulipUser = await this.createUser({
+      await this.createUser({
         email: userEmail,
         password: userPassword,
         full_name: user.name as string,
