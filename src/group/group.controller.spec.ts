@@ -16,7 +16,7 @@ import {
   mockZulipMessage,
   mockGroupAboutResponse,
   mockZulipMessageResponse,
-  mockZulipStreamTopic,
+  mockDiscussions,
 } from '../test/mocks';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { CreateGroupDto } from './dto/create-group.dto';
@@ -51,7 +51,6 @@ describe('GroupController', () => {
           provide: Repository,
           useValue: mockRepository,
         },
-        // Mock AuthService
         {
           provide: AuthService,
           useValue: {
@@ -119,6 +118,7 @@ describe('GroupController', () => {
 
   describe('showGroupEvents', () => {
     it('should show group events', async () => {
+      jest.spyOn(groupService, 'showGroupEvents').mockResolvedValue(mockEvents);
       const result = await controller.showGroupEvents(mockGroup.slug);
       expect(result).toEqual(mockEvents);
     });
@@ -229,16 +229,21 @@ describe('GroupController', () => {
 
   describe('showGroupDiscussions', () => {
     it('should return group discussions', async () => {
+      jest
+        .spyOn(groupService, 'showGroupDiscussions')
+        .mockResolvedValue(mockDiscussions);
+
       const result = await controller.showGroupDiscussions(mockGroup.slug);
-      expect(result).toEqual({
-        messages: [mockZulipMessage],
-        topics: [mockZulipStreamTopic],
-      });
+      expect(result).toEqual(mockDiscussions);
     });
   });
 
   describe('showGroupAbout', () => {
     it('should return group about', async () => {
+      jest
+        .spyOn(groupService, 'showGroupAbout')
+        .mockResolvedValue(mockGroupAboutResponse);
+
       const result = await controller.showGroupAbout(mockGroup.slug);
       expect(result).toEqual(mockGroupAboutResponse);
     });
@@ -255,7 +260,7 @@ describe('GroupController', () => {
     });
   });
 
-  describe.skip('updateGroupDiscussionMessage', () => {
+  describe('updateGroupDiscussionMessage', () => {
     it('should update a group discussion message', async () => {
       const result = await controller.updateGroupDiscussionMessage(
         mockGroup.slug,
@@ -267,7 +272,7 @@ describe('GroupController', () => {
     });
   });
 
-  describe.skip('deleteGroupDiscussionMessage', () => {
+  describe('deleteGroupDiscussionMessage', () => {
     it('should delete a group discussion message', async () => {
       const result = await controller.deleteGroupDiscussionMessage(
         mockGroup.slug,

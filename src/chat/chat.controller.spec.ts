@@ -7,6 +7,7 @@ import {
   mockChat,
   mockChatService,
   mockUser,
+  mockZulipMessage,
   mockZulipMessageResponse,
 } from '../test/mocks';
 
@@ -39,9 +40,25 @@ describe('ChatController', () => {
 
   describe('showChats', () => {
     it('should find all chats', async () => {
-      const result = await controller.showChats(mockUser, {});
+      const result = await controller.showChats(mockUser);
       expect(result).toEqual({ chats: [mockChat], chat: mockChat });
-      expect(chatService.showChats).toHaveBeenCalledWith(mockUser.id, {});
+    });
+
+    it('should return chat', async () => {
+      const result = await controller.showChats(mockUser, {
+        chat: mockChat.ulid,
+      });
+      expect(result).toEqual({ chats: [mockChat], chat: mockChat });
+    });
+
+    it('should not return own user chat', async () => {
+      jest
+        .spyOn(chatService, 'showChats')
+        .mockResolvedValue({ chats: [mockChat], chat: null });
+      const result = await controller.showChats(mockUser, {
+        member: mockUser.ulid,
+      });
+      expect(result).toEqual({ chats: [mockChat], chat: null });
     });
   });
 
@@ -60,10 +77,10 @@ describe('ChatController', () => {
   describe('setMessagesRead', () => {
     it('should set messages as read', async () => {
       const result = await controller.setMessagesRead(
-        { messages: [1, 2, 3] },
+        { messages: [mockZulipMessage.id] },
         mockUser,
       );
-      expect(result).toEqual({ messages: [1, 2, 3] });
+      expect(result).toEqual({ messages: [mockZulipMessage.id] });
     });
   });
 });

@@ -37,7 +37,6 @@ export class TenantGuard implements CanActivate {
     if (!tenantId) {
       throw new UnauthorizedException('Tenant ID is required');
     }
-    // You can add additional validation logic for tenant ID here if needed
 
     // Optionally store tenant ID in the request object for further use
     request['tenantId'] = tenantId;

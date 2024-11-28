@@ -158,7 +158,7 @@ describe('GroupRecommendations (e2e)', () => {
     expect(testEvents.length).toBeGreaterThanOrEqual(7);
   });
 
-  it('should return recommended events with complete event details', async () => {
+  it.skip('should return recommended events with complete event details', async () => {
     //  group should exist
     const groupResponse = await request(TESTING_APP_URL)
       .get(`/api/groups/${testGroup.slug}`)

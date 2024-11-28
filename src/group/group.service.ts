@@ -61,6 +61,7 @@ export class GroupService {
 
   async getTenantSpecificGroupRepository() {
     const tenantId = this.request.tenantId;
+
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
     this.groupRepository = dataSource.getRepository(GroupEntity);
@@ -139,7 +140,7 @@ export class GroupService {
   }
 
   async showGroupRecommendedEvents(
-    slug: string,
+    slug?: string,
     minEvents: number = 3,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
@@ -153,7 +154,7 @@ export class GroupService {
     if (!group) {
       return await this.eventService.showRandomEvents(4);
     } else {
-      const categoryIds = group.categories.map((c) => c.id);
+      const categoryIds = group.categories?.map((c) => c && c.id);
 
       let recommendedEvents: EventEntity[] = [];
       try {
@@ -388,6 +389,7 @@ export class GroupService {
 
   async showGroup(slug: string, userId?: number): Promise<any> {
     await this.getTenantSpecificGroupRepository();
+
     const group = await this.groupRepository.findOne({
       where: { slug },
       relations: ['createdBy', 'categories'],
@@ -776,7 +778,7 @@ export class GroupService {
     const groupChannelName = `tenant_${this.request.tenantId}__group_${group.ulid}`;
     if (!group.zulipChannelId) {
       // create channel
-      await this.zulipService.subscribeUserToChannel(user, {
+      await this.zulipService.subscribeAdminToChannel({
         subscriptions: [
           {
             name: groupChannelName,
@@ -784,11 +786,13 @@ export class GroupService {
         ],
       });
       const stream = await this.zulipService.getAdminStreamId(groupChannelName);
-      // TODO remove default topic from channel
-      // await this.zulipService.deleteAdminStreamTopic(
-      //   stream.id,
-      //   'channel events',
-      // );
+
+      // remove default topic from channel
+      await this.zulipService.deleteAdminStreamTopic(
+        stream.id,
+        'channel events',
+      );
+
       group.zulipChannelId = stream.id;
       await this.groupRepository.save(group);
     }

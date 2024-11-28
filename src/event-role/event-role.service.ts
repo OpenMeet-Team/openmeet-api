@@ -31,6 +31,7 @@ export class EventRoleService {
     await this.getTenantSpecificEventRepository();
     return await this.eventRoleRepository.findOne({
       where: { name },
+      relations: ['permissions'],
     });
   }
 
