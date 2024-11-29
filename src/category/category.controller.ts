@@ -18,6 +18,7 @@ import { JWTAuthGuard } from '../auth/auth.guard';
 import { Permissions } from '../shared/guard/permissions.decorator';
 import { UserPermission } from '../core/constants/constant';
 import { PermissionsGuard } from '../shared/guard/permissions.guard';
+import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('Categories')
 @Controller('categories')
@@ -36,8 +37,7 @@ export class CategoryController {
     return this.categoryService.create(createCategoryDto);
   }
 
-  @Permissions(UserPermission.ManageCategories)
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Get all categories' })
   async findAll(): Promise<CategoryEntity[]> {
