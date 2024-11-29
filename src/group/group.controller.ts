@@ -47,7 +47,7 @@ export class GroupController {
     return this.groupService.create(createGroupDto, user.id);
   }
 
-  @Permissions(UserPermission.ViewGroups, GroupPermission.SeeGroup)
+  @Permissions(UserPermission.ViewGroups)
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Public()
   @Get()
@@ -61,7 +61,7 @@ export class GroupController {
     return this.groupService.showAll(pagination, query);
   }
 
-  @Permissions(GroupPermission.CreateEvent)
+  @Permissions(UserPermission.CreateEvents)
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get('me')
   @ApiOperation({ summary: 'Get groups where user can create events' })
@@ -77,7 +77,11 @@ export class GroupController {
     return await this.groupService.showDashboardGroups(user.id);
   }
 
-  @Permissions(GroupPermission.ManageGroup, GroupPermission.SeeGroup)
+  @Permissions(
+    GroupPermission.ManageGroup,
+    GroupPermission.SeeGroup,
+    UserPermission.ManageGroup,
+  )
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get(':slug/edit')
   @ApiOperation({ summary: 'Edit a group by slug' })
@@ -97,7 +101,7 @@ export class GroupController {
     return await this.groupService.showGroup(slug, user?.id);
   }
 
-  @Permissions(GroupPermission.ManageGroup)
+  @Permissions(UserPermission.ManageGroups)
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Patch(':slug')
   @ApiOperation({ summary: 'Update a group by slug' })
@@ -108,7 +112,7 @@ export class GroupController {
     return this.groupService.update(slug, updateGroupDto);
   }
 
-  @Permissions(GroupPermission.DeleteGroup)
+  @Permissions(UserPermission.DeleteGroups)
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Delete(':slug')
   @ApiOperation({ summary: 'Delete a group by slug' })
@@ -248,7 +252,7 @@ export class GroupController {
     return this.groupService.rejectMember(slug, groupMemberId);
   }
 
-  @Permissions(GroupPermission.SeeEvents)
+  @Permissions(UserPermission.ViewEvents)
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Public()
   @Get(':slug/recommended-events')
