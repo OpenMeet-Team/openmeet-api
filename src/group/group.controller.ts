@@ -27,7 +27,7 @@ import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember
 import { ZulipMessage, ZulipTopic } from 'zulip-js';
 import { Permissions } from '../shared/guard/permissions.decorator';
 import { PermissionsGuard } from '../shared/guard/permissions.guard';
-import { GroupPermission } from '../core/constants/constant';
+import { GroupPermission, UserPermission } from '../core/constants/constant';
 
 @ApiTags('Groups')
 @Controller('groups')
@@ -36,6 +36,8 @@ import { GroupPermission } from '../core/constants/constant';
 export class GroupController {
   constructor(private readonly groupService: GroupService) {}
 
+  @Permissions(UserPermission.CreateGroups)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post()
   @ApiOperation({ summary: 'Create a new group' })
   async create(
@@ -45,6 +47,8 @@ export class GroupController {
     return this.groupService.create(createGroupDto, user.id);
   }
 
+  @Permissions(UserPermission.ViewGroups, GroupPermission.SeeGroup)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Public()
   @Get()
   @ApiOperation({
@@ -57,7 +61,7 @@ export class GroupController {
     return this.groupService.showAll(pagination, query);
   }
 
-  @Permissions(GroupPermission.ManageGroup)
+  @Permissions(GroupPermission.CreateEvent)
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get('me')
   @ApiOperation({ summary: 'Get groups where user can create events' })
@@ -67,7 +71,7 @@ export class GroupController {
     return await this.groupService.getGroupsWhereUserCanCreateEvents(user.id);
   }
 
-  @Permissions(GroupPermission.ManageGroup, GroupPermission.DeleteGroup)
+  @Permissions(GroupPermission.SeeGroup)
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get('me/:slug')
   @ApiOperation({ summary: 'Get group by ID Authenticated' })
@@ -90,6 +94,8 @@ export class GroupController {
     return await this.groupService.showGroup(slug, user?.id);
   }
 
+  @Permissions(GroupPermission.ManageGroup)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Patch(':slug')
   @ApiOperation({ summary: 'Update a group by slug' })
   async updateGroup(
@@ -99,6 +105,8 @@ export class GroupController {
     return this.groupService.update(slug, updateGroupDto);
   }
 
+  @Permissions(GroupPermission.DeleteGroup)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Delete(':slug')
   @ApiOperation({ summary: 'Delete a group by slug' })
   async removeGroup(@Param('slug') slug: string): Promise<any> {
@@ -142,6 +150,8 @@ export class GroupController {
     return this.groupService.showGroupDiscussions(slug);
   }
 
+  @Permissions(GroupPermission.ManageDiscussions)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/discussions')
   @ApiOperation({ summary: 'Send a message to a group discussion' })
   async sendGroupDiscussionMessage(
@@ -152,6 +162,8 @@ export class GroupController {
     return this.groupService.sendGroupDiscussionMessage(slug, user.id, body);
   }
 
+  @Permissions(GroupPermission.ManageDiscussions)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Patch(':slug/discussions/:messageId')
   @ApiOperation({ summary: 'Update a group discussion message' })
   async updateGroupDiscussionMessage(
@@ -167,6 +179,8 @@ export class GroupController {
     );
   }
 
+  @Permissions(GroupPermission.ManageDiscussions)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Delete(':slug/discussions/:messageId')
   @ApiOperation({ summary: 'Delete a group discussion message' })
   async deleteGroupDiscussionMessage(
@@ -176,6 +190,8 @@ export class GroupController {
     return this.groupService.deleteGroupDiscussionMessage(messageId);
   }
 
+  @Permissions(UserPermission.JoinGroups)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/join')
   @ApiOperation({ summary: 'Joining a group through link' })
   async joinGroup(@AuthUser() user: User, @Param('slug') slug: string) {
@@ -229,6 +245,8 @@ export class GroupController {
     return this.groupService.rejectMember(slug, groupMemberId);
   }
 
+  @Permissions(GroupPermission.SeeEvents)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Public()
   @Get(':slug/recommended-events')
   @ApiOperation({ summary: 'Get similar events for the group' })

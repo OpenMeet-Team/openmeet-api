@@ -30,6 +30,10 @@ import { UpdateEventAttendeeDto } from '../event-attendee/dto/update-eventAttend
 import { QueryEventAttendeeDto } from '../event-attendee/dto/query-eventAttendee.dto';
 import { Permissions } from '../shared/guard/permissions.decorator';
 import { PermissionsGuard } from '../shared/guard/permissions.guard';
+import {
+  EventAttendeePermission,
+  UserPermission,
+} from '../core/constants/constant';
 
 @ApiTags('Events')
 @Controller('events')
@@ -53,6 +57,8 @@ export class EventController {
     return this.eventService.showAllEvents(pagination, query);
   }
 
+  @Permissions(UserPermission.CreateEvents)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post()
   @ApiOperation({ summary: 'Create a new event' })
   async create(
@@ -62,7 +68,7 @@ export class EventController {
     return this.eventService.create(createEventDto, user.id);
   }
 
-  @Permissions()
+  @Permissions(UserPermission.ViewEvents)
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get('me')
   @ApiOperation({ summary: 'Get all user events' })
@@ -73,6 +79,8 @@ export class EventController {
     return this.eventService.showAllUserEvents(user.id);
   }
 
+  @Permissions(UserPermission.ManageEvents)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get('me/:slug')
   @ApiOperation({ summary: 'Edit event by ID' })
   async editEvent(@Param('slug') slug: string): Promise<EventEntity | null> {
@@ -93,6 +101,8 @@ export class EventController {
     return this.eventService.showEvent(slug, user?.id);
   }
 
+  @Permissions(UserPermission.ManageEvents)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Patch(':slug')
   @ApiOperation({ summary: 'Update an event by ID' })
   async update(
@@ -105,11 +115,15 @@ export class EventController {
     return this.eventService.update(slug, updateEventDto, userId);
   }
 
+  @Permissions(UserPermission.DeleteEvents)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Delete(':slug')
   async remove(@Param('slug') slug: string): Promise<void> {
     return this.eventService.remove(slug);
   }
 
+  @Permissions(EventAttendeePermission.AttendEvent)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/attend')
   @ApiOperation({ summary: 'Attending an event' })
   async attendEvent(
@@ -120,6 +134,8 @@ export class EventController {
     return this.eventService.attendEvent(slug, user.id, createEventAttendeeDto);
   }
 
+  @Permissions(EventAttendeePermission.CancelEvent)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/cancel-attending')
   @ApiOperation({ summary: 'Cancel attending an event' })
   async cancelAttendingEvent(
@@ -129,6 +145,8 @@ export class EventController {
     return await this.eventService.cancelAttendingEvent(slug, user.id);
   }
 
+  @Permissions(EventAttendeePermission.ManageAttendees)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Patch(':slug/attendees/:attendeeId')
   @ApiOperation({ summary: 'Update event attendee' })
   async updateEventAttendee(
@@ -143,6 +161,8 @@ export class EventController {
     );
   }
 
+  @Permissions(EventAttendeePermission.ManageAttendees)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get(':slug/attendees')
   @ApiOperation({ summary: 'Get all event attendees' })
   async showEventAttendees(
@@ -199,6 +219,8 @@ export class EventController {
   //   return await this.eventService.showTopics(id);
   // }
 
+  @Permissions(UserPermission.ViewEvents)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Public()
   @Get(':slug/recommended-events')
   @ApiOperation({
@@ -208,6 +230,8 @@ export class EventController {
     return await this.eventService.showRecommendedEventsByEventSlug(slug);
   }
 
+  @Permissions(EventAttendeePermission.ManageDiscussions)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/discussions')
   @ApiOperation({ summary: 'Send a message to a group discussion' })
   async sendEventDiscussionMessage(
@@ -218,6 +242,8 @@ export class EventController {
     return this.eventService.sendEventDiscussionMessage(slug, user.id, body);
   }
 
+  @Permissions(EventAttendeePermission.ManageDiscussions)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Patch(':slug/discussions/:messageId')
   @ApiOperation({ summary: 'Update a group discussion message' })
   async updateEventDiscussionMessage(
@@ -233,6 +259,8 @@ export class EventController {
     );
   }
 
+  @Permissions(EventAttendeePermission.ManageDiscussions)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Delete(':slug/discussions/:messageId')
   @ApiOperation({ summary: 'Delete a group discussion message' })
   async deleteEventDiscussionMessage(
