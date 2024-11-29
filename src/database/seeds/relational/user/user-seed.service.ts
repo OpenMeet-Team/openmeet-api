@@ -8,11 +8,15 @@ import { TenantConnectionService } from '../../../../tenant/tenant.service';
 import { RoleEntity } from 'src/role/infrastructure/persistence/relational/entities/role.entity';
 import { ConfigService } from '@nestjs/config';
 import { StatusEntity } from '../../../../status/infrastructure/persistence/relational/entities/status.entity';
+import { PermissionEntity } from '../../../../permission/infrastructure/persistence/relational/entities/permission.entity';
+import { UserPermissionEntity } from '../../../../user/infrastructure/persistence/relational/entities/user-permission.entity';
 
 @Injectable()
 export class UserSeedService {
   private repository: Repository<UserEntity>;
   private roleRepository: Repository<RoleEntity>;
+  private permissionRepository: Repository<PermissionEntity>;
+  private userPermissionRepository: Repository<UserPermissionEntity>;
   constructor(
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly configService: ConfigService,
@@ -39,11 +43,12 @@ export class UserSeedService {
       where: { role: { name: roleName } },
     });
 
+    let createdUser;
     if (!existingUser && role) {
       const salt = await bcrypt.genSalt();
       const hashedPassword = await bcrypt.hash(credentials.password, salt);
 
-      await this.repository.save(
+      createdUser = await this.repository.save(
         this.repository.create({
           firstName: credentials.firstName,
           lastName: credentials.lastName,
@@ -54,6 +59,15 @@ export class UserSeedService {
         } as UserEntity),
       );
     }
+
+    const permissions = await this.permissionRepository.find();
+    const userPermissions = permissions.map((permission) =>
+      this.userPermissionRepository.create({
+        user: createdUser,
+        permission,
+      }),
+    );
+    await this.userPermissionRepository.save(userPermissions);
   }
 
   async run(tenantId: string) {
@@ -61,6 +75,9 @@ export class UserSeedService {
       await this.tenantConnectionService.getTenantConnection(tenantId);
     this.repository = dataSource.getRepository(UserEntity);
     this.roleRepository = dataSource.getRepository(RoleEntity);
+    this.userPermissionRepository =
+      dataSource.getRepository(UserPermissionEntity);
+    this.permissionRepository = dataSource.getRepository(PermissionEntity);
 
     /* eslint-disable no-restricted-syntax */
     const adminCredentials = {
