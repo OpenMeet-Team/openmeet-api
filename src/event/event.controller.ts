@@ -125,7 +125,7 @@ export class EventController {
     return this.eventService.remove(slug);
   }
 
-  @Permissions(EventAttendeePermission.AttendEvent)
+  @Permissions()
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/attend')
   @ApiOperation({ summary: 'Attending an event' })
@@ -137,8 +137,8 @@ export class EventController {
     return this.eventService.attendEvent(slug, user.id, createEventAttendeeDto);
   }
 
-  @Permissions(EventAttendeePermission.CancelEvent)
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  // @Permissions(EventAttendeePermission.CancelEvent)
+  // @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/cancel-attending')
   @ApiOperation({ summary: 'Cancel attending an event' })
   async cancelAttendingEvent(
