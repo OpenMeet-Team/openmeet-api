@@ -32,6 +32,10 @@ declare module 'zulip-js' {
     avatar_url: string | null;
   }
 
+  export enum ZulipDefaults {
+    DefaultChannelTopic = 'channel events',
+  }
+
   export interface ZulipNarrow {
     operator: string;
     operand: string | number;

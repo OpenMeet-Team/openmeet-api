@@ -11,6 +11,7 @@ let zulipAdminClient: ZulipClient;
 
 export const getClient = async (user: UserEntity) => {
   if (!user.zulipUsername || !user.zulipApiKey || !user.zulipUserId) {
+    console.log(user);
     throw new Error('Zulip username, api key or user id not found');
   }
   return await zulipInit({

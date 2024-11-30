@@ -78,9 +78,9 @@ describe('EventAttendeeController (e2e)', () => {
     }
   });
 
-  it('should retrieve the events the user is attending', async () => {
+  it('should retrieve the events the user is attending, hosting or has permission to view', async () => {
     const getMyEventsResponse = await request(TESTING_APP_URL)
-      .get('/api/events/me')
+      .get('/api/events/dashboard')
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
 

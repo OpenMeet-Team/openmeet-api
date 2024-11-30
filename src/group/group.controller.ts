@@ -57,7 +57,6 @@ export class GroupController {
     return this.groupService.showAll(pagination, query);
   }
 
-  @Permissions(GroupPermission.ManageGroup)
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get('me')
   @ApiOperation({ summary: 'Get groups where user can create events' })
@@ -67,14 +66,17 @@ export class GroupController {
     return await this.groupService.getGroupsWhereUserCanCreateEvents(user.id);
   }
 
-  @Permissions(GroupPermission.ManageGroup, GroupPermission.DeleteGroup)
+  @Get('dashboard')
+  @ApiOperation({ summary: 'Get all groups for the dashboard' })
+  async showDashboardGroups(@AuthUser() user: User): Promise<GroupEntity[]> {
+    return await this.groupService.showDashboardGroups(user.id);
+  }
+
+  @Permissions(GroupPermission.ManageGroup)
   @UseGuards(JWTAuthGuard, PermissionsGuard)
-  @Get('me/:slug')
-  @ApiOperation({ summary: 'Get group by ID Authenticated' })
-  async editGroup(
-    @Param('slug') slug: string,
-    // @Headers('x-group-slug') groupSlug: string,
-  ): Promise<GroupEntity> {
+  @Get(':slug/edit')
+  @ApiOperation({ summary: 'Edit a group by slug' })
+  async editGroup(@Param('slug') slug: string): Promise<GroupEntity> {
     return await this.groupService.editGroup(slug);
   }
 

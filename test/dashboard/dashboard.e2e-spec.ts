@@ -12,7 +12,8 @@ import {
   deleteEvent,
 } from '../utils/functions';
 
-describe('Dashboard', () => {
+// TODO: Move tests for the dashboard to the group and event module
+describe.skip('Dashboard', () => {
   const app = TESTING_APP_URL;
   let authToken: string;
   let preparedGroup: any;

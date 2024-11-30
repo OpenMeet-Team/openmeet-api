@@ -24,7 +24,6 @@ import {
   PostgisSrid,
 } from '../../../../../core/constants/constant';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
-import { Expose } from 'class-transformer';
 import { FileEntity } from '../../../../../file/infrastructure/persistence/relational/entities/file.entity';
 import { ApiProperty } from '@nestjs/swagger';
 import { ulid } from 'ulid';
@@ -138,6 +137,8 @@ export class GroupEntity extends EntityRelationalHelper {
   messages: ZulipMessage[];
   topics: ZulipTopic[];
 
+  groupMembersCount: number;
+
   @BeforeInsert()
   generateUlid() {
     if (!this.ulid) {
@@ -152,8 +153,8 @@ export class GroupEntity extends EntityRelationalHelper {
     }
   }
 
-  @Expose()
-  get groupMembersCount(): number {
-    return this.groupMembers ? this.groupMembers.length : 0;
-  }
+  // @Expose()
+  // get groupMembersCount(): number {
+  //   return this.groupMembers ? this.groupMembers.length : 0;
+  // }
 }

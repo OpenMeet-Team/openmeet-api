@@ -110,9 +110,11 @@ export class EventAttendeeService {
     const { limit, page } = pagination;
     const eventAttendee = await this.eventAttendeesRepository
       .createQueryBuilder('eventAttendee')
-      .leftJoinAndSelect('eventAttendee.user', 'user')
-      .leftJoinAndSelect('eventAttendee.event', 'event')
-      .where('event.id = :eventId', { eventId });
+      .leftJoinAndSelect('eventAttendee.role', 'role')
+      // .select(['eventAttendee.role.permissions'])
+      // .leftJoinAndSelect('eventAttendee.user', 'user')
+
+      .where('eventAttendee.eventId = :eventId', { eventId });
 
     return paginate(eventAttendee, { page, limit });
   }
@@ -187,6 +189,21 @@ export class EventAttendeeService {
       where: { event: { id: eventId } },
       relations: ['user', 'role.permissions'],
       take: limit,
+      select: {
+        role: {
+          name: true,
+          permissions: {
+            name: true,
+          },
+        },
+        user: {
+          name: true,
+          slug: true,
+          photo: {
+            path: true,
+          },
+        },
+      },
     });
   }
 

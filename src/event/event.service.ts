@@ -23,6 +23,7 @@ import {
   EventVisibility,
   EventAttendeeRole,
   PostgisSrid,
+  ZULIP_DEFAULT_CHANNEL_TOPIC,
 } from '../core/constants/constant';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -165,6 +166,7 @@ export class EventService {
 
     // First make sure the user has a zulip client
     await this.zulipService.getInitialisedClient(user);
+    await user.reload();
 
     const eventChannelName = `tenant_${this.request.tenantId}__event_${event.ulid}`;
 
@@ -190,14 +192,6 @@ export class EventService {
     };
 
     return await this.zulipService.sendUserMessage(user, params);
-  }
-
-  async showAllUserEvents(userId: number): Promise<EventEntity[]> {
-    await this.getTenantSpecificEventRepository();
-    return this.eventRepository.find({
-      where: { user: { id: userId } },
-      relations: ['attendees'],
-    }); // TODO: add user attending and user attended events
   }
 
   async showAllEvents(
@@ -324,6 +318,16 @@ export class EventService {
     const event = await this.eventRepository.findOne({
       where: { slug },
       relations: ['user', 'group', 'categories'],
+      select: {
+        id: false,
+        user: {
+          name: true,
+          slug: true,
+          photo: {
+            path: true,
+          },
+        },
+      },
     });
 
     if (!event) {
@@ -349,7 +353,9 @@ export class EventService {
     }
 
     event.topics = event.zulipChannelId
-      ? await this.zulipService.getAdminStreamTopics(event.zulipChannelId)
+      ? (
+          await this.zulipService.getAdminStreamTopics(event.zulipChannelId)
+        ).filter((topic) => topic.name !== ZULIP_DEFAULT_CHANNEL_TOPIC)
       : [];
     event.messages = event.zulipChannelId
       ? await this.zulipService.getAdminMessages({
@@ -763,6 +769,7 @@ export class EventService {
     }
 
     await this.zulipService.getInitialisedClient(user);
+    await user.reload();
 
     const params = {
       to: event.zulipChannelId,
@@ -791,5 +798,28 @@ export class EventService {
     messageId: number,
   ): Promise<{ id: number }> {
     return await this.zulipService.deleteAdminMessage(messageId);
+  }
+
+  async showDashboardEvents(userId: number): Promise<EventEntity[]> {
+    await this.getTenantSpecificEventRepository();
+    const createdEvents = await this.getEventsByCreator(userId);
+
+    const attendingEvents = await this.getEventsByAttendee(userId);
+
+    // Combine and deduplicate events
+    const allEvents = [...createdEvents, ...attendingEvents];
+    const uniqueEvents = Array.from(
+      new Map(allEvents.map((event) => [event.id, event])).values(),
+    );
+
+    return (await Promise.all(
+      uniqueEvents.map(async (event) => ({
+        ...event,
+        attendee: await this.eventAttendeeService.findEventAttendeeByUserId(
+          event.id,
+          userId,
+        ),
+      })),
+    )) as EventEntity[];
   }
 }
