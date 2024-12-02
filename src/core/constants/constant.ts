@@ -139,3 +139,6 @@ export const IS_TENANT_PUBLIC_KEY = 'isTenantPublic';
 export enum PostgisSrid {
   SRID = 4326,
 }
+
+// By default zulip creates a topic called channel events, we don't want to show this in the UI
+export const ZULIP_DEFAULT_CHANNEL_TOPIC = 'channel events';

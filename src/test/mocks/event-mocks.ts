@@ -95,4 +95,5 @@ export const mockEventService = {
     .mockResolvedValue(mockZulipMessageResponse),
   showRandomEvents: jest.fn().mockResolvedValue(mockEvents),
   searchAllEvents: jest.fn().mockResolvedValue(mockEvents),
+  showDashboardEvents: jest.fn().mockResolvedValue(mockEvents),
 };

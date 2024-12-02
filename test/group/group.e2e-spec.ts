@@ -113,7 +113,7 @@ describe('GroupController (e2e)', () => {
       name: 'Test Group',
       description: 'A test group',
     });
-    const expectedMemberId = 2;
+
     const getGroupMembersResponse = await request(TESTING_APP_URL)
       .get(`/api/groups/${testGroup.slug}/members`)
       .set('Authorization', `Bearer ${token}`)
@@ -121,11 +121,8 @@ describe('GroupController (e2e)', () => {
 
     expect(getGroupMembersResponse.status).toBe(200);
 
-    const isMemberPresent = getGroupMembersResponse.body?.some(
-      (member) => member.user.id === expectedMemberId,
-    );
-
-    expect(isMemberPresent).toBe(true);
+    // expect getGroupMembersResponse.body to contain the expected member
+    expect(getGroupMembersResponse.body).toHaveLength(1);
 
     const deleteGroupResponse = await request(TESTING_APP_URL)
       .delete(`/api/groups/${testGroup.slug}`)

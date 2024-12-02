@@ -24,8 +24,8 @@ export class UserListener {
 
     if (user.zulipUsername && user.zulipApiKey) {
       try {
-        await this.zulipService.updateUserSettings(user, {
-          full_name: user.name,
+        await this.zulipService.updateAdminProfile(user, {
+          full_name: `${user.firstName} ${user.lastName}`.trim() || 'Anonymous',
         });
       } catch (error) {
         console.error('Failed to update zulip user settings:', error);

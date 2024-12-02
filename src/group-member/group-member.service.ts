@@ -1,7 +1,7 @@
 import { Inject, Injectable, NotFoundException, Scope } from '@nestjs/common';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { GroupMemberEntity } from './infrastructure/persistence/relational/entities/group-member.entity';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import {
   CreateGroupMemberDto,
   UpdateGroupMemberRoleDto,
@@ -125,9 +125,26 @@ export class GroupMemberService {
   async findGroupDetailsMembers(groupId: number, limit: number): Promise<any> {
     await this.getTenantSpecificEventRepository();
     return await this.groupMemberRepository.find({
-      where: { group: { id: groupId } },
+      where: {
+        group: { id: groupId },
+        groupRole: { name: Not(GroupRole.Guest) },
+      },
       take: limit,
-      relations: ['user', 'groupRole'],
+      relations: ['user.photo', 'groupRole'],
+      select: {
+        id: false,
+        groupRole: {
+          name: true,
+        },
+        user: {
+          slug: true,
+          name: true,
+          photo: {
+            path: true,
+            fileName: false,
+          },
+        },
+      },
     });
   }
 
@@ -167,5 +184,16 @@ export class GroupMemberService {
     };
     const groupMember = this.groupMemberRepository.create(mappedDto);
     return await this.groupMemberRepository.save(groupMember);
+  }
+
+  async getGroupMembersCount(groupId: number): Promise<number> {
+    await this.getTenantSpecificEventRepository();
+
+    return await this.groupMemberRepository.count({
+      where: {
+        group: { id: groupId },
+        groupRole: { name: Not(GroupRole.Guest) },
+      },
+    });
   }
 }

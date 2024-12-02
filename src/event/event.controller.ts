@@ -6,7 +6,6 @@ import {
   Param,
   Patch,
   Delete,
-  NotFoundException,
   UseGuards,
   Req,
   Query,
@@ -28,8 +27,6 @@ import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { CreateEventAttendeeDto } from '../event-attendee/dto/create-eventAttendee.dto';
 import { UpdateEventAttendeeDto } from '../event-attendee/dto/update-eventAttendee.dto';
 import { QueryEventAttendeeDto } from '../event-attendee/dto/query-eventAttendee.dto';
-import { Permissions } from '../shared/guard/permissions.decorator';
-import { PermissionsGuard } from '../shared/guard/permissions.guard';
 
 @ApiTags('Events')
 @Controller('events')
@@ -53,6 +50,14 @@ export class EventController {
     return this.eventService.showAllEvents(pagination, query);
   }
 
+  @Get('dashboard')
+  @ApiOperation({
+    summary: 'Get all events for the dashboard.',
+  })
+  async showDashboardEvents(@AuthUser() user: User): Promise<EventEntity[]> {
+    return this.eventService.showDashboardEvents(user.id);
+  }
+
   @Post()
   @ApiOperation({ summary: 'Create a new event' })
   async create(
@@ -62,25 +67,10 @@ export class EventController {
     return this.eventService.create(createEventDto, user.id);
   }
 
-  @Permissions()
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
-  @Get('me')
-  @ApiOperation({ summary: 'Get all user events' })
-  async showAllUserEvents(
-    @Query() pagination: PaginationDto,
-    @AuthUser() user: User,
-  ): Promise<EventEntity[]> {
-    return this.eventService.showAllUserEvents(user.id);
-  }
-
-  @Get('me/:slug')
+  @Get(':slug/edit')
   @ApiOperation({ summary: 'Edit event by ID' })
   async editEvent(@Param('slug') slug: string): Promise<EventEntity | null> {
-    const event = await this.eventService.editEvent(slug);
-    if (!event) {
-      throw new NotFoundException(`Event with slug ${slug} not found`);
-    }
-    return event;
+    return await this.eventService.editEvent(slug);
   }
 
   @Public()

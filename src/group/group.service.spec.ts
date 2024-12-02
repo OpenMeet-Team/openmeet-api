@@ -477,4 +477,11 @@ describe('GroupService', () => {
       expect(result).toEqual(mockGroupMember);
     });
   });
+
+  describe('showDashboardGroups', () => {
+    it('should return dashboard groups', async () => {
+      const result = await service.showDashboardGroups(mockUser.id);
+      expect(result).toEqual([mockGroup]);
+    });
+  });
 });

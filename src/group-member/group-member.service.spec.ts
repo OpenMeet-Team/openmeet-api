@@ -90,4 +90,11 @@ describe('GroupMemberService', () => {
       // expect(result.groupRole?.name).toEqual(GroupRole.Guest);
     });
   });
+
+  describe('getGroupMembersCount', () => {
+    it('should get group members count', async () => {
+      const result = await service.getGroupMembersCount(mockGroup.id);
+      expect(result).toBe(1);
+    });
+  });
 });

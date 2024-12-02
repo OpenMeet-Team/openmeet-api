@@ -312,4 +312,11 @@ describe('EventController', () => {
       expect(result).toEqual(mockZulipMessageResponse);
     });
   });
+
+  describe('showDashboardEvents', () => {
+    it('should return dashboard events', async () => {
+      const result = await controller.showDashboardEvents(mockUser);
+      expect(result).toEqual(mockEvents);
+    });
+  });
 });

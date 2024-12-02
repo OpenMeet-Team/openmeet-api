@@ -36,7 +36,7 @@ export class ZulipService {
       await this.createUser({
         email: userEmail,
         password: userPassword,
-        full_name: user.name as string,
+        full_name: `${user.firstName} ${user.lastName}`.trim() || 'Anonymous',
       });
 
       // Fetch the API key for the newly created user
@@ -155,11 +155,11 @@ export class ZulipService {
     throw new Error(`getAdminApiKey: ${apiKeyResponse.msg}`);
   }
 
-  async updateUserProfile(
+  async updateAdminProfile(
     user: UserEntity,
     params: ZulipUpdateUserProfileParams,
   ) {
-    const client = await getClient(user);
+    const client = await getAdminClient();
     const settingsResponse = await client.callEndpoint(
       `users/${user.zulipUserId}`,
       'PATCH',
@@ -215,7 +215,6 @@ export class ZulipService {
   async subscribeAdminToChannel(params: ZulipSubscriptionParams) {
     const client = await getAdminClient();
     const response = await client.users.me.subscriptions.add(params);
-    console.log(response);
     if (response.result === 'success') {
       return response;
     }
