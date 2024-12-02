@@ -289,7 +289,7 @@ export class GroupService {
     }
 
     if (location) {
-      groupQuery.andWhere('group.location LIKE :location', {
+      groupQuery.andWhere('group.location ILIKE :location', {
         location: `%${location}%`,
       });
     }
@@ -328,7 +328,7 @@ export class GroupService {
     }
 
     if (search) {
-      groupQuery.andWhere(`(group.name LIKE :search)`, {
+      groupQuery.andWhere(`group.name ILIKE :search`, {
         search: `%${search}%`,
       });
     }
@@ -349,8 +349,7 @@ export class GroupService {
       .select(['group.name', 'group.slug']);
 
     if (search) {
-      console.log('ilike', `%${search}%`);
-      groupQuery.andWhere(`(group.name ILIKE :search)`, {
+      groupQuery.andWhere('group.name ILIKE :search', {
         search: `%${search}%`,
       });
     }
@@ -410,6 +409,19 @@ export class GroupService {
     const group = await this.groupRepository.findOne({
       where: { slug },
       relations: ['createdBy', 'categories'],
+      select: {
+        createdBy: {
+          name: true,
+          slug: true,
+          photo: {
+            path: true,
+          },
+        },
+        categories: {
+          id: true,
+          name: true,
+        },
+      },
     });
 
     if (!group) {

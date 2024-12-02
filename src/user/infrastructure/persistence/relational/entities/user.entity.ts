@@ -215,15 +215,6 @@ export class UserEntity extends EntityRelationalHelper {
   })
   name: string;
 
-  // @Expose()
-  // @ApiProperty({
-  //   type: String,
-  //   example: 'John Doe',
-  // })
-  // get name(): string {
-  //   return `${this.firstName || ''} ${this.lastName || ''}`.trim();
-  // }
-
   @BeforeInsert()
   generateUlid() {
     if (!this.ulid) {
@@ -234,7 +225,10 @@ export class UserEntity extends EntityRelationalHelper {
   @BeforeInsert()
   generateSlug() {
     if (!this.slug) {
-      this.slug = `${slugify(this.name + '-' + generateShortCode().toLowerCase(), { strict: true, lower: true })}`;
+      this.slug = `${slugify(
+        `${this.firstName} ${this.lastName}`.trim().toLowerCase(),
+        { strict: true, lower: true },
+      )}-${generateShortCode().toLowerCase()}`;
     }
   }
 }
