@@ -22,6 +22,7 @@ import {
   GroupStatus,
   GroupVisibility,
   PostgisSrid,
+  ZULIP_DEFAULT_CHANNEL_TOPIC,
 } from '../core/constants/constant';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { PaginationDto } from '../utils/dto/pagination.dto';
@@ -288,7 +289,7 @@ export class GroupService {
     }
 
     if (location) {
-      groupQuery.andWhere('group.location LIKE :location', {
+      groupQuery.andWhere('group.location ILIKE :location', {
         location: `%${location}%`,
       });
     }
@@ -327,7 +328,7 @@ export class GroupService {
     }
 
     if (search) {
-      groupQuery.andWhere(`(group.name LIKE :search)`, {
+      groupQuery.andWhere(`group.name ILIKE :search`, {
         search: `%${search}%`,
       });
     }
@@ -348,7 +349,7 @@ export class GroupService {
       .select(['group.name', 'group.slug']);
 
     if (search) {
-      groupQuery.andWhere(`(group.name LIKE :search)`, {
+      groupQuery.andWhere('group.name ILIKE :search', {
         search: `%${search}%`,
       });
     }
@@ -408,6 +409,19 @@ export class GroupService {
     const group = await this.groupRepository.findOne({
       where: { slug },
       relations: ['createdBy', 'categories'],
+      select: {
+        createdBy: {
+          name: true,
+          slug: true,
+          photo: {
+            path: true,
+          },
+        },
+        categories: {
+          id: true,
+          name: true,
+        },
+      },
     });
 
     if (!group) {
@@ -420,6 +434,9 @@ export class GroupService {
         userId,
       );
     }
+
+    group.groupMembersCount =
+      await this.groupMemberService.getGroupMembersCount(group.id);
 
     return group;
   }
@@ -447,9 +464,10 @@ export class GroupService {
     );
 
     if (group.zulipChannelId) {
-      group.topics = await this.zulipService.getAdminStreamTopics(
-        group.zulipChannelId,
-      );
+      group.topics = (
+        await this.zulipService.getAdminStreamTopics(group.zulipChannelId)
+      ).filter((t) => t.name !== ZULIP_DEFAULT_CHANNEL_TOPIC);
+
       group.messages = await this.zulipService.getAdminMessages({
         anchor: 'oldest',
         num_before: 0,
@@ -761,9 +779,9 @@ export class GroupService {
       narrow: [{ operator: 'channel', operand: group.zulipChannelId }],
     });
 
-    const topics = await this.zulipService.getAdminStreamTopics(
-      group.zulipChannelId,
-    );
+    const topics = (
+      await this.zulipService.getAdminStreamTopics(group.zulipChannelId)
+    ).filter((t) => t.name !== ZULIP_DEFAULT_CHANNEL_TOPIC);
 
     return {
       messages,
@@ -802,12 +820,6 @@ export class GroupService {
       });
       const stream = await this.zulipService.getAdminStreamId(groupChannelName);
 
-      // remove default topic from channel
-      await this.zulipService.deleteAdminStreamTopic(
-        stream.id,
-        'channel events',
-      );
-
       group.zulipChannelId = stream.id;
       await this.groupRepository.save(group);
     }
@@ -841,5 +853,28 @@ export class GroupService {
     messageId: number,
   ): Promise<{ id: number }> {
     return await this.zulipService.deleteAdminMessage(messageId);
+  }
+
+  async showDashboardGroups(userId: number): Promise<GroupEntity[]> {
+    await this.getTenantSpecificGroupRepository();
+
+    const groupsByMember = await this.getGroupsByMember(userId);
+
+    const groupsByCreator = await this.getGroupsByCreator(userId);
+
+    const groups = [...groupsByMember, ...groupsByCreator];
+    const uniqueGroups = Array.from(
+      new Map(groups.map((group) => [group.id, group])).values(),
+    );
+
+    return (await Promise.all(
+      uniqueGroups.map(async (group) => ({
+        ...group,
+        groupMember: await this.groupMemberService.findGroupMemberByUserId(
+          group.id,
+          Number(userId),
+        ),
+      })),
+    )) as GroupEntity[];
   }
 }

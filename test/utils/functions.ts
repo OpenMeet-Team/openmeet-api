@@ -188,7 +188,7 @@ async function getEvent(app, token, eventSlug) {
 }
 async function getMyEvents(app, token) {
   const response = await request(app)
-    .get(`/api/dashboard/my-events`)
+    .get(`/api/events/dashboard`)
     .set('Authorization', `Bearer ${token}`)
     .set('x-tenant-id', TESTING_TENANT_ID);
 

@@ -281,4 +281,11 @@ describe('GroupController', () => {
       expect(result).toEqual(mockZulipMessageResponse);
     });
   });
+
+  describe('showDashboardGroups', () => {
+    it('should return dashboard groups', async () => {
+      const result = await controller.showDashboardGroups(mockUser);
+      expect(result).toEqual([mockGroup]);
+    });
+  });
 });

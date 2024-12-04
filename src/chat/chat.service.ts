@@ -222,6 +222,11 @@ export class ChatService {
       throw new NotFoundException('User not found');
     }
 
+    if (!user.zulipUserId) {
+      await this.zulipService.getInitialisedClient(user);
+      await user.reload();
+    }
+
     if (!messageIds.length) {
       return { messages: [] };
     }

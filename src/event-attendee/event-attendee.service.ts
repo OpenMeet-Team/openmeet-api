@@ -101,18 +101,27 @@ export class EventAttendeeService {
     return { message: 'User has successfully left the event' };
   }
 
-  async getEventAttendees(
+  async showEventAttendees(
     eventId: number,
     pagination: PaginationDto,
+    status?: EventAttendeeStatus,
   ): Promise<any> {
     await this.getTenantSpecificEventRepository();
 
     const { limit, page } = pagination;
     const eventAttendee = await this.eventAttendeesRepository
       .createQueryBuilder('eventAttendee')
-      .leftJoinAndSelect('eventAttendee.user', 'user')
-      .leftJoinAndSelect('eventAttendee.event', 'event')
-      .where('event.id = :eventId', { eventId });
+      .leftJoinAndSelect('eventAttendee.role', 'role')
+
+      .leftJoin('eventAttendee.user', 'user')
+      .leftJoin('user.photo', 'photo')
+      .addSelect(['user.name', 'user.slug', 'photo.path'])
+
+      .where('eventAttendee.eventId = :eventId', { eventId });
+
+    if (status) {
+      eventAttendee.andWhere('eventAttendee.status = :status', { status });
+    }
 
     return paginate(eventAttendee, { page, limit });
   }
@@ -178,7 +187,7 @@ export class EventAttendeeService {
     return this.eventAttendeesRepository.save(attendee);
   }
 
-  async findEventAttendeesByEventId(
+  async showConfirmedEventAttendeesByEventId(
     eventId: number,
     limit: number = 0,
   ): Promise<EventAttendeesEntity[]> {
@@ -187,15 +196,33 @@ export class EventAttendeeService {
       where: { event: { id: eventId } },
       relations: ['user', 'role.permissions'],
       take: limit,
+      select: {
+        role: {
+          name: true,
+          permissions: {
+            name: true,
+          },
+        },
+        user: {
+          name: true,
+          slug: true,
+          photo: {
+            path: true,
+          },
+        },
+      },
     });
   }
 
-  async getEventAttendeesCount(eventId: number): Promise<number> {
+  async showEventAttendeesCount(
+    eventId: number,
+    status?: EventAttendeeStatus,
+  ): Promise<number> {
     await this.getTenantSpecificEventRepository();
     return await this.eventAttendeesRepository.count({
       where: {
         event: { id: eventId },
-        status: EventAttendeeStatus.Confirmed,
+        status: status || EventAttendeeStatus.Confirmed,
       },
     });
   }
@@ -204,6 +231,13 @@ export class EventAttendeeService {
     await this.getTenantSpecificEventRepository();
     return await this.eventAttendeesRepository.delete({
       event: { id: eventId },
+    });
+  }
+
+  async showConfirmedEventAttendeesCount(eventId: number): Promise<number> {
+    await this.getTenantSpecificEventRepository();
+    return await this.eventAttendeesRepository.count({
+      where: { event: { id: eventId }, status: EventAttendeeStatus.Confirmed },
     });
   }
 }

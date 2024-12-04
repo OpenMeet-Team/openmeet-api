@@ -23,6 +23,7 @@ import {
   EventVisibility,
   EventAttendeeRole,
   PostgisSrid,
+  ZULIP_DEFAULT_CHANNEL_TOPIC,
 } from '../core/constants/constant';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -165,6 +166,7 @@ export class EventService {
 
     // First make sure the user has a zulip client
     await this.zulipService.getInitialisedClient(user);
+    await user.reload();
 
     const eventChannelName = `tenant_${this.request.tenantId}__event_${event.ulid}`;
 
@@ -192,14 +194,6 @@ export class EventService {
     return await this.zulipService.sendUserMessage(user, params);
   }
 
-  async showAllUserEvents(userId: number): Promise<EventEntity[]> {
-    await this.getTenantSpecificEventRepository();
-    return this.eventRepository.find({
-      where: { user: { id: userId } },
-      relations: ['attendees'],
-    }); // TODO: add user attending and user attended events
-  }
-
   async showAllEvents(
     pagination: PaginationDto,
     query: QueryEventDto,
@@ -209,7 +203,6 @@ export class EventService {
     const { page, limit } = pagination;
     const {
       search,
-      userId,
       fromDate,
       toDate,
       categories,
@@ -222,18 +215,25 @@ export class EventService {
 
     const eventQuery = this.eventRepository
       .createQueryBuilder('event')
-      .leftJoinAndSelect('event.user', 'user')
+
+      .leftJoin('event.user', 'user')
+      .leftJoin('user.photo', 'photo')
+      .addSelect(['user.name', 'user.slug', 'photo.path'])
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.group', 'group')
-      .leftJoinAndSelect('event.attendees', 'attendees')
+      .loadRelationCountAndMap(
+        'event.attendeesCount',
+        'event.attendees',
+        'attendees',
+        (qb) =>
+          qb.where('attendees.status = :status', {
+            status: EventAttendeeStatus.Confirmed,
+          }),
+      )
       .where('event.status = :status', { status: EventStatus.Published });
 
-    if (userId) {
-      eventQuery.andWhere('event.user = :userId', { userId });
-    }
-
     if (search) {
-      eventQuery.andWhere(`(event.name LIKE :search)`, {
+      eventQuery.andWhere('event.name ILIKE :search', {
         search: `%${search}%`,
       });
     }
@@ -260,13 +260,11 @@ export class EventService {
     }
 
     if (type) {
-      eventQuery.andWhere('event.type LIKE :type', {
-        type: `%${type}%`,
-      });
+      eventQuery.andWhere('event.type = :type', { type });
     }
 
     if (location) {
-      eventQuery.andWhere('event.location LIKE :location', {
+      eventQuery.andWhere('event.location ILIKE :location', {
         location: `%${location}%`,
       });
     }
@@ -311,7 +309,7 @@ export class EventService {
       .select(['event.name', 'event.slug']);
 
     if (search) {
-      eventQuery.andWhere(`(event.name LIKE :search)`, {
+      eventQuery.andWhere('event.name ILIKE :search', {
         search: `%${search}%`,
       });
     }
@@ -324,6 +322,16 @@ export class EventService {
     const event = await this.eventRepository.findOne({
       where: { slug },
       relations: ['user', 'group', 'categories'],
+      select: {
+        id: false,
+        user: {
+          name: true,
+          slug: true,
+          photo: {
+            path: true,
+          },
+        },
+      },
     });
 
     if (!event) {
@@ -331,7 +339,10 @@ export class EventService {
     }
 
     event.attendees =
-      await this.eventAttendeeService.findEventAttendeesByEventId(event.id, 5);
+      await this.eventAttendeeService.showConfirmedEventAttendeesByEventId(
+        event.id,
+        5,
+      );
 
     if (event.group && userId) {
       event.groupMember = await this.groupMemberService.findGroupMemberByUserId(
@@ -339,6 +350,11 @@ export class EventService {
         userId,
       );
     }
+
+    event.attendeesCount =
+      await this.eventAttendeeService.showConfirmedEventAttendeesCount(
+        event.id,
+      );
 
     if (userId) {
       event.attendee =
@@ -348,17 +364,19 @@ export class EventService {
         );
     }
 
-    if (event.zulipChannelId) {
-      event.topics = await this.zulipService.getAdminStreamTopics(
-        event.zulipChannelId,
-      );
-      event.messages = await this.zulipService.getAdminMessages({
-        anchor: 'oldest',
-        num_before: 0,
-        num_after: 100,
-        narrow: [{ operator: 'stream', operand: event.zulipChannelId }],
-      });
-    }
+    event.topics = event.zulipChannelId
+      ? (
+          await this.zulipService.getAdminStreamTopics(event.zulipChannelId)
+        ).filter((topic) => topic.name !== ZULIP_DEFAULT_CHANNEL_TOPIC)
+      : [];
+    event.messages = event.zulipChannelId
+      ? await this.zulipService.getAdminMessages({
+          anchor: 'oldest',
+          num_before: 0,
+          num_after: 100,
+          narrow: [{ operator: 'stream', operand: event.zulipChannelId }],
+        })
+      : [];
 
     return event;
   }
@@ -661,7 +679,7 @@ export class EventService {
     }
 
     if (event.allowWaitlist) {
-      const count = await this.eventAttendeeService.getEventAttendeesCount(
+      const count = await this.eventAttendeeService.showEventAttendeesCount(
         event.id,
       );
       if (count >= event.maxAttendees) {
@@ -701,7 +719,7 @@ export class EventService {
     if (!event) {
       throw new NotFoundException('Event not found');
     }
-    return this.eventAttendeeService.getEventAttendees(event.id, pagination);
+    return this.eventAttendeeService.showEventAttendees(event.id, pagination); // TODO if admin role return all attendees otherwise only confirmed
   }
 
   async updateEventAttendee(
@@ -743,9 +761,10 @@ export class EventService {
     }
 
     const eventChannelName = `tenant_${this.request.tenantId}__event_${event.ulid}`;
+
     if (!event.zulipChannelId) {
       // create channel
-      await this.zulipService.subscribeUserToChannel(user, {
+      await this.zulipService.subscribeAdminToChannel({
         subscriptions: [
           {
             name: eventChannelName,
@@ -753,16 +772,13 @@ export class EventService {
         ],
       });
       const stream = await this.zulipService.getAdminStreamId(eventChannelName);
-      // TODO remove default topic from channel
-      // await this.zulipService.deleteAdminStreamTopic(
-      //   stream.id,
-      //   'channel events',
-      // );
+
       event.zulipChannelId = stream.id;
       await this.eventRepository.save(event);
     }
 
     await this.zulipService.getInitialisedClient(user);
+    await user.reload();
 
     const params = {
       to: event.zulipChannelId,
@@ -791,5 +807,28 @@ export class EventService {
     messageId: number,
   ): Promise<{ id: number }> {
     return await this.zulipService.deleteAdminMessage(messageId);
+  }
+
+  async showDashboardEvents(userId: number): Promise<EventEntity[]> {
+    await this.getTenantSpecificEventRepository();
+    const createdEvents = await this.getEventsByCreator(userId);
+
+    const attendingEvents = await this.getEventsByAttendee(userId);
+
+    // Combine and deduplicate events
+    const allEvents = [...createdEvents, ...attendingEvents];
+    const uniqueEvents = Array.from(
+      new Map(allEvents.map((event) => [event.id, event])).values(),
+    );
+
+    return (await Promise.all(
+      uniqueEvents.map(async (event) => ({
+        ...event,
+        attendee: await this.eventAttendeeService.findEventAttendeeByUserId(
+          event.id,
+          userId,
+        ),
+      })),
+    )) as EventEntity[];
   }
 }

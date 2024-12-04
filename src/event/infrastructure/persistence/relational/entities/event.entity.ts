@@ -17,7 +17,6 @@ import { UserEntity } from '../../../../../user/infrastructure/persistence/relat
 import { EventAttendeesEntity } from '../../../../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { CategoryEntity } from '../../../../../category/infrastructure/persistence/relational/entities/categories.entity';
 import { GroupEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group.entity';
-import { Expose } from 'class-transformer';
 import {
   EventType,
   EventVisibility,
@@ -152,10 +151,12 @@ export class EventEntity extends EntityRelationalHelper {
   @Column({ type: 'integer', nullable: true })
   zulipChannelId: number;
 
-  @Expose()
-  get attendeesCount(): number {
-    return this.attendees ? this.attendees.length : 0;
-  }
+  attendeesCount: number;
+
+  // @Expose()
+  // get attendeesCount(): number {
+  //   return this.attendees ? this.attendees.length : 0;
+  // }
 
   @BeforeInsert()
   generateUlid() {

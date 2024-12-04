@@ -14,6 +14,7 @@ import {
   ManyToMany,
   JoinTable,
   BeforeInsert,
+  VirtualColumn,
 } from 'typeorm';
 import { RoleEntity } from '../../../../../role/infrastructure/persistence/relational/entities/role.entity';
 import { StatusEntity } from '../../../../../status/infrastructure/persistence/relational/entities/status.entity';
@@ -196,21 +197,23 @@ export class UserEntity extends EntityRelationalHelper {
   @JoinTable({ name: 'userInterests' })
   subCategory: SubCategoryEntity[];
 
-  // @VirtualColumn({
-  //   query: (alias) => `
-  //     CONCAT(${alias}.firstName, ' ', ${alias}.lastName)
-  //   `,
-  // })
-  // name: string;
-
-  @Expose()
-  @ApiProperty({
-    type: String,
-    example: 'John Doe',
+  @Column({
+    type: 'varchar',
+    select: true,
+    insert: false,
+    update: false,
+    nullable: true,
+    transformer: {
+      to: () => null,
+      from: (value) => value,
+    },
   })
-  get name(): string {
-    return `${this.firstName || ''} ${this.lastName || ''}`.trim();
-  }
+  @VirtualColumn({
+    query: (alias) => `
+      TRIM(CONCAT(COALESCE(${alias}."firstName", ''), ' ', COALESCE(${alias}."lastName", '')))
+    `,
+  })
+  name: string;
 
   @BeforeInsert()
   generateUlid() {
@@ -222,7 +225,10 @@ export class UserEntity extends EntityRelationalHelper {
   @BeforeInsert()
   generateSlug() {
     if (!this.slug) {
-      this.slug = `${slugify(this.name, { strict: true, lower: true })}-${generateShortCode().toLowerCase()}`;
+      this.slug = `${slugify(
+        `${this.firstName} ${this.lastName}`.trim().toLowerCase(),
+        { strict: true, lower: true },
+      )}-${generateShortCode().toLowerCase()}`;
     }
   }
 }
