@@ -41,6 +41,7 @@ import { ZulipMessage, ZulipTopic } from 'zulip-js';
 import { ZulipService } from '../zulip/zulip.service';
 import { UserService } from '../user/user.service';
 import { HomeQuery } from '../home/dto/home-query.dto';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -59,6 +60,7 @@ export class GroupService {
     private readonly mailService: MailService,
     private readonly zulipService: ZulipService,
     private readonly userService: UserService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async getTenantSpecificGroupRepository() {
@@ -267,6 +269,8 @@ export class GroupService {
       userId,
       groupId: savedGroup.id,
     });
+
+    this.eventEmitter.emit('group.created', savedGroup);
 
     return savedGroup;
   }
@@ -554,7 +558,9 @@ export class GroupService {
     }
 
     const updatedGroup = this.groupRepository.merge(group, mappedGroupDto);
-    return this.groupRepository.save(updatedGroup);
+    const savedGroup = await this.groupRepository.save(updatedGroup);
+    this.eventEmitter.emit('group.updated', savedGroup);
+    return savedGroup;
   }
 
   async remove(slug: string): Promise<void> {
@@ -569,7 +575,8 @@ export class GroupService {
     await this.groupMembersRepository.delete({ group: { id: group.id } });
     await this.eventService.deleteEventsByGroup(group.id);
 
-    await this.groupRepository.remove(group);
+    const deletedGroup = await this.groupRepository.remove(group);
+    this.eventEmitter.emit('group.deleted', deletedGroup);
   }
 
   async getHomePageFeaturedGroups(): Promise<GroupEntity[]> {
@@ -826,6 +833,11 @@ export class GroupService {
 
     await this.zulipService.getInitialisedClient(user);
 
+    const updatedUser = await this.userService.findOne(user.id);
+    if (!updatedUser) {
+      throw new Error('User not found after reload');
+    }
+
     const params = {
       to: group.zulipChannelId,
       type: 'channel' as const,
@@ -833,7 +845,7 @@ export class GroupService {
       content: body.message,
     };
 
-    return await this.zulipService.sendUserMessage(user, params);
+    return await this.zulipService.sendUserMessage(updatedUser, params);
   }
 
   async updateGroupDiscussionMessage(
