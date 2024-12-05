@@ -826,6 +826,11 @@ export class GroupService {
 
     await this.zulipService.getInitialisedClient(user);
 
+    const updatedUser = await this.userService.findOne(user.id);
+    if (!updatedUser) {
+      throw new Error('User not found after reload');
+    }
+
     const params = {
       to: group.zulipChannelId,
       type: 'channel' as const,
@@ -833,7 +838,7 @@ export class GroupService {
       content: body.message,
     };
 
-    return await this.zulipService.sendUserMessage(user, params);
+    return await this.zulipService.sendUserMessage(updatedUser, params);
   }
 
   async updateGroupDiscussionMessage(

@@ -59,18 +59,46 @@ describe('GroupController (e2e)', () => {
     return response.body;
   }
 
+  async function sendGroupDiscussionMessage(
+    token,
+    groupSlug: string,
+    message: string,
+    topicName: string,
+  ) {
+    const response = await request(TESTING_APP_URL)
+      .post(`/api/groups/${groupSlug}/discussions`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID)
+      .send({ message, topicName });
+
+    expect(response.status).toBe(201);
+    return response.body;
+  }
+
+  async function deleteGroupDiscussionMessage(
+    token,
+    groupSlug: string,
+    messageId: number,
+  ) {
+    const response = await request(TESTING_APP_URL)
+      .delete(`/api/groups/${groupSlug}/discussions/${messageId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
+
+    expect(response.status).toBe(200);
+  }
+
   // Before each test, log in as the test user
   beforeEach(async () => {
     token = await loginAsTester();
   });
 
-  it('should successfully create a group, update it, find it, and delete it', async () => {
+  it('should successfully create a group, update it, find it, comment on it, and delete it', async () => {
     // Create a group
     testGroup = await createGroup(token, {
       name: 'Test Group',
       description: 'A test group',
     });
-
     expect(testGroup.name).toBe('Test Group');
     expect(testGroup.description).toBe('A test group');
 
@@ -79,7 +107,6 @@ describe('GroupController (e2e)', () => {
       name: 'Test Group 2',
       description: 'Another test group',
     });
-
     expect(testGroup2.name).toBe('Test Group 2');
     expect(testGroup2.description).toBe('Another test group');
 
@@ -87,12 +114,28 @@ describe('GroupController (e2e)', () => {
     const updatedGroup = await updateGroup(token, testGroup.slug, {
       name: 'Updated Test Group',
     });
-
     expect(updatedGroup.name).toBe('Updated Test Group');
 
     // Get the group
     const foundGroup = await getGroup(token, testGroup.slug);
     expect(foundGroup.name).toBe('Updated Test Group');
+
+    // Comment the group
+    const discussionMessage = await sendGroupDiscussionMessage(
+      token,
+      testGroup.slug,
+      'Hello, world!',
+      'Test Topic',
+    );
+    expect(discussionMessage.id).toBeDefined();
+
+    // Delete the discussion message
+    await deleteGroupDiscussionMessage(
+      token,
+      testGroup.slug,
+      discussionMessage.id,
+    );
+    expect(discussionMessage.id).toBeDefined();
 
     // Clean up by deleting the groups
     const deleteGroupResponse = await request(TESTING_APP_URL)
