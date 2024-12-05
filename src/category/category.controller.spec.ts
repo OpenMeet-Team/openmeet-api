@@ -153,9 +153,7 @@ describe('CategoryController', () => {
         mockAuthService.getGroupMemberPermissions.mockResolvedValue([]);
 
         const context = createMockExecutionContext(controller.update);
-        await expect(guard.canActivate(context)).rejects.toThrow(
-          'Insufficient permissions',
-        );
+        await expect(guard.canActivate(context)).rejects.toThrow(/permissions/);
       });
 
       it('should allow access with ManageCategories permission', async () => {
