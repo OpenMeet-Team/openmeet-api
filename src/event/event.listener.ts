@@ -4,10 +4,11 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 
 @Injectable()
-export class ChannelCreatedListener {
+export class EventListener {
   constructor(private readonly zulipService: ZulipService) {}
+
   @OnEvent('event.created')
-  handleUserCreatedEvent(params: EventEntity) {
+  handleEventCreatedEvent(params: EventEntity) {
     // TODO: push analytics event
     console.log('event.created', params.id);
   }
