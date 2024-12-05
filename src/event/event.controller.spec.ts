@@ -24,8 +24,11 @@ import {
 } from '../test/mocks';
 import { mockEvents } from '../test/mocks';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
-import { EventAttendeeRole } from '../core/constants/constant';
+import { EventAttendeeRole, UserPermission } from '../core/constants/constant';
 import { EventAttendeeStatus } from '../core/constants/constant';
+import { PermissionsGuard } from '../shared/guard/permissions.guard';
+import { ExecutionContext } from '@nestjs/common';
+import { PERMISSIONS_KEY } from '../shared/guard/permissions.decorator';
 
 const createEventDto: CreateEventDto = {
   name: 'Test Event',
@@ -42,18 +45,42 @@ const createEventDto: CreateEventDto = {
   lon: 0,
 };
 
-// const mockEvent: Partial<EventEntity> = {
-//   id: 1,
-//   attendeesCount: 1,
-//   ...createEventDto,
-//   user: mockUser,
-//   group: mockGroup,
-//   categories: createEventDto.categories.map((id) => ({ id }) as CategoryEntity),
-// };
+const mockAuthService = {
+  getGroupMemberPermissions: jest.fn(),
+  validateToken: jest.fn(),
+  getGroup: jest.fn(),
+  getGroupMembers: jest.fn(),
+  getEvent: jest.fn(),
+  getEventAttendees: jest.fn(),
+  getUserPermissions: jest.fn(),
+  getAttendeePermissions: jest.fn(),
+};
 
 describe('EventController', () => {
   let controller: EventController;
   let eventService: EventService;
+  let guard: PermissionsGuard;
+
+  const createMockExecutionContext = (
+    handler: (...args: any[]) => Promise<any>,
+  ): ExecutionContext =>
+    ({
+      getHandler: () => handler,
+      getClass: () => EventController,
+      switchToHttp: () => ({
+        getRequest: () => ({
+          user: mockUser,
+          headers: {
+            'x-event-slug': 'test-event',
+          },
+        }),
+      }),
+      getArgs: () => [],
+      getArgByIndex: () => null,
+      switchToRpc: () => ({}),
+      switchToWs: () => ({}),
+      getType: () => 'http',
+    }) as unknown as ExecutionContext;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -65,17 +92,9 @@ describe('EventController', () => {
         },
         {
           provide: AuthService,
-          useValue: {
-            validateToken: jest.fn().mockResolvedValue(true),
-          },
+          useValue: mockAuthService,
         },
-        {
-          provide: Reflector,
-          useValue: {
-            get: jest.fn(),
-            getAllAndOverride: jest.fn(),
-          },
-        },
+        Reflector,
         {
           provide: GroupService,
           useValue: mockGroupService,
@@ -84,11 +103,13 @@ describe('EventController', () => {
           provide: EventAttendeeService,
           useValue: mockEventAttendeeService,
         },
+        PermissionsGuard,
       ],
     }).compile();
 
     controller = module.get<EventController>(EventController);
     eventService = module.get<EventService>(EventService);
+    guard = module.get<PermissionsGuard>(PermissionsGuard);
   });
 
   it('should be defined', () => {
@@ -317,6 +338,130 @@ describe('EventController', () => {
     it('should return dashboard events', async () => {
       const result = await controller.showDashboardEvents(mockUser);
       expect(result).toEqual(mockEvents);
+    });
+  });
+
+  describe('Global Guards', () => {
+    describe('POST /events', () => {
+      const createEventDto = {
+        name: 'New Event',
+        description: 'Test Description',
+        startDate: new Date(),
+        endDate: new Date(),
+        type: 'in_person',
+        location: 'Test Location',
+        locationOnline: 'Test Location Online',
+        maxAttendees: 100,
+        categories: [mockCategory.id],
+        lat: 0,
+        lon: 0,
+      };
+
+      beforeEach(() => {
+        // Reset all mocks before each test
+        Object.values(mockAuthService).forEach((mock) => mock.mockReset());
+      });
+
+      it('should have CreateEvents permission requirement', () => {
+        // Get the actual metadata from the controller method
+        const permissions = Reflect.getMetadata(
+          PERMISSIONS_KEY,
+          controller.create,
+        );
+
+        expect(permissions).toContain(UserPermission.CreateEvents);
+      });
+
+      it('should deny access without CreateEvents permission', async () => {
+        mockAuthService.getEvent.mockResolvedValue({
+          id: 1,
+          name: 'Test Event',
+        });
+
+        mockAuthService.getEventAttendees.mockResolvedValue(null);
+        mockAuthService.getGroup.mockResolvedValue(mockGroup);
+
+        // Mock no permissions
+        mockAuthService.getGroupMemberPermissions.mockResolvedValue([]);
+        mockAuthService.getUserPermissions.mockResolvedValue([]);
+
+        const context = createMockExecutionContext(controller.create);
+        await expect(guard.canActivate(context)).rejects.toThrow();
+      });
+
+      it('should allow access with CreateEvents permission', async () => {
+        const createdEvent = { id: 1, ...createEventDto };
+        mockEventService.create.mockResolvedValue(createdEvent);
+
+        mockAuthService.getEvent.mockResolvedValue({
+          id: 1,
+          name: 'Test Event',
+        });
+        mockAuthService.getEventAttendees.mockResolvedValue({
+          id: 1,
+          userId: mockUser.id,
+          eventId: 1,
+        });
+
+        mockAuthService.getAttendeePermissions.mockResolvedValue([
+          {
+            role: {
+              permission: {
+                name: UserPermission.CreateEvents,
+              },
+            },
+          },
+        ]);
+
+        mockAuthService.getGroup.mockResolvedValue(mockGroup);
+
+        // Mock the group permissions
+        mockAuthService.getGroupMemberPermissions.mockResolvedValue([
+          { groupPermission: { name: UserPermission.CreateEvents } },
+        ]);
+
+        const context = createMockExecutionContext(controller.create);
+        await expect(guard.canActivate(context)).resolves.toBe(true);
+
+        const result = await controller.create(createEventDto, mockUser);
+        expect(result).toEqual(createdEvent);
+      });
+    });
+
+    describe('GET /events', () => {
+      it('should allow access without ViewEvents permission', async () => {
+        mockAuthService.getGroupMemberPermissions.mockResolvedValue([]);
+
+        const context = createMockExecutionContext(controller.showAllEvents);
+        await expect(guard.canActivate(context)).resolves.toBe(true);
+      });
+
+      it('should allow access with ViewEvents permission', async () => {
+        const events = [{ id: 1, name: 'Test Event' }];
+        mockEventService.showAllEvents.mockResolvedValue(events);
+        mockAuthService.getGroupMemberPermissions.mockResolvedValue([
+          { groupPermission: { name: UserPermission.ViewEvents } },
+        ]);
+
+        const context = createMockExecutionContext(controller.showAllEvents);
+        await expect(guard.canActivate(context)).resolves.toBe(true);
+
+        const result = await controller.showAllEvents(
+          { page: 1, limit: 10 },
+          {
+            search: '',
+            userId: mockUser.id,
+            fromDate: new Date(
+              new Date().setMonth(new Date().getMonth() - 1),
+            ).toISOString(),
+            toDate: new Date().toISOString(),
+            location: 'Test Location',
+            type: 'conference',
+            categories: ['Technology'],
+          },
+        );
+        expect(result).toEqual(events);
+      });
     });
   });
 });

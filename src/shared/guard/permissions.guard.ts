@@ -21,6 +21,7 @@ export class PermissionsGuard implements CanActivate {
       PERMISSIONS_KEY,
       context.getHandler(),
     );
+
     const isPublic = this.reflector.get<boolean>(
       'isPublic',
       context.getHandler(),
