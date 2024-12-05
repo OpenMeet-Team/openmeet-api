@@ -15,5 +15,8 @@ export class ChannelCreatedListener {
   @OnEvent('event.deleted')
   handleEventDeletedEvent(params: EventEntity) {
     console.log('event.deleted', params.id);
+    if (params.zulipChannelId) {
+      this.zulipService.deleteChannel(params.zulipChannelId);
+    }
   }
 }

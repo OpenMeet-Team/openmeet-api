@@ -41,6 +41,7 @@ import { MailService } from '../mail/mail.service';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
 import { ZulipService } from '../zulip/zulip.service';
 import { UserService } from '../user/user.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 describe('GroupService', () => {
   let service: GroupService;
@@ -92,6 +93,12 @@ describe('GroupService', () => {
         {
           provide: UserService,
           useValue: mockUserService,
+        },
+        {
+          provide: EventEmitter2,
+          useValue: {
+            emit: jest.fn(),
+          },
         },
       ],
     }).compile();

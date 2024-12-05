@@ -70,7 +70,7 @@ describe('GroupController (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID)
       .send({ message, topicName });
-
+    console.log(response.body);
     expect(response.status).toBe(201);
     return response.body;
   }

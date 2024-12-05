@@ -20,6 +20,7 @@ import { MailModule } from '../mail/mail.module';
 import { EventRoleService } from 'src/event-role/event-role.service';
 import { ZulipModule } from 'src/zulip/zulip.module';
 import { AuthModule } from '../auth/auth.module';
+import { GroupListener } from './group.listener';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { AuthModule } from '../auth/auth.module';
     GroupRoleService,
     ZulipService,
     EventRoleService,
+    GroupListener,
   ],
   exports: [GroupService],
 })
