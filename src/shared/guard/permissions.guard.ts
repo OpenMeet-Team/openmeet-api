@@ -25,6 +25,7 @@ export class PermissionsGuard implements CanActivate {
       'isPublic',
       context.getHandler(),
     );
+
     if (!requiredPermissions) {
       return true; // No permissions required
     }
@@ -55,7 +56,6 @@ export class PermissionsGuard implements CanActivate {
     if (!hasPermission) {
       throw new ForbiddenException('Insufficient permissions');
     }
-
     return true;
   }
 
