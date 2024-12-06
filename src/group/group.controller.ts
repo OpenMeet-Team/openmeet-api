@@ -77,11 +77,7 @@ export class GroupController {
     return await this.groupService.showDashboardGroups(user.id);
   }
 
-  @Permissions(
-    GroupPermission.ManageGroup,
-    GroupPermission.SeeGroup,
-    UserPermission.ManageGroup,
-  )
+  @Permissions(GroupPermission.ManageGroup)
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get(':slug/edit')
   @ApiOperation({ summary: 'Edit a group by slug' })
