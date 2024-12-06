@@ -75,16 +75,16 @@ export class EventController {
     return this.eventService.create(createEventDto, user.id);
   }
 
-  @Permissions(UserPermission.ViewEvents)
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
-  @Get('me')
-  @ApiOperation({ summary: 'Get all user events' })
-  async showAllUserEvents(
-    @Query() pagination: PaginationDto,
-    @AuthUser() user: User,
-  ): Promise<EventEntity[]> {
-    return this.eventService.showAllUserEvents(user.id);
-  }
+  // @Permissions(UserPermission.ViewEvents)
+  // @UseGuards(JWTAuthGuard, PermissionsGuard)
+  // @Get('me')
+  // @ApiOperation({ summary: 'Get all user events' })
+  // async showAllUserEvents(
+  //   @Query() pagination: PaginationDto,
+  //   @AuthUser() user: User,
+  // ): Promise<EventEntity[]> {
+  //   return await this.eventService.showAllUserEvents(user.id);
+  // }
 
   @Permissions(UserPermission.ManageEvents)
   @UseGuards(JWTAuthGuard, PermissionsGuard)
