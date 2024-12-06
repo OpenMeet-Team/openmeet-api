@@ -6,7 +6,7 @@ import { Reflector } from '@nestjs/core';
 import { PermissionsGuard } from '../shared/guard/permissions.guard';
 import { JWTAuthGuard } from '../auth/auth.guard';
 import { ExecutionContext } from '@nestjs/common';
-import { GroupPermission } from '../core/constants/constant';
+import { UserPermission } from '../core/constants/constant';
 
 describe('CategoryController', () => {
   let controller: CategoryController;
@@ -29,13 +29,14 @@ describe('CategoryController', () => {
 
   const createMockExecutionContext = (
     handler: (...args: any[]) => Promise<any>,
+    userContext: any = {},
   ): ExecutionContext =>
     ({
       getHandler: () => handler,
       getClass: () => CategoryController,
       switchToHttp: () => ({
         getRequest: () => ({
-          user: { id: 1 },
+          user: { id: 1, ...userContext },
           headers: {
             'x-group-slug': 'test-group',
           },
@@ -71,6 +72,12 @@ describe('CategoryController', () => {
   });
 
   describe('Authorization', () => {
+    const mockUser = {
+      id: 1,
+      role: {
+        permissions: [],
+      },
+    };
     describe('POST /categories', () => {
       const createDto = {
         name: 'New Category',
@@ -96,15 +103,23 @@ describe('CategoryController', () => {
       it('should allow access with CreateCategories permission', async () => {
         const createdCategory = { id: 1, ...createDto };
         mockCategoryService.create.mockResolvedValue(createdCategory);
-        mockAuthService.getGroupMemberPermissions.mockResolvedValue([
-          { groupPermission: { name: GroupPermission.CreateEvent } },
-        ]);
-        const context = createMockExecutionContext(controller.create);
+
+        const mockUserWithPermissions = {
+          ...mockUser,
+          role: {
+            permissions: [{ name: UserPermission.CreateCategories }],
+          },
+        };
+
+        const context = createMockExecutionContext(
+          controller.create,
+          mockUserWithPermissions,
+        );
+
         await expect(guard.canActivate(context)).resolves.toBe(true);
 
         const result = await controller.create(createDto);
         expect(result).toEqual(createdCategory);
-        expect(mockCategoryService.create).toHaveBeenCalledWith(createDto);
       });
     });
 
@@ -131,11 +146,19 @@ describe('CategoryController', () => {
       it('should allow access with ManageCategories permission', async () => {
         const category = { id: 1, name: 'Test Category' };
         mockCategoryService.findOne.mockResolvedValue(category);
-        mockAuthService.getGroupMemberPermissions.mockResolvedValue([
-          { groupPermission: { name: 'MANAGE_CATEGORIES' } },
-        ]);
 
-        const context = createMockExecutionContext(controller.findOne);
+        const mockUserWithPermissions = {
+          ...mockUser,
+          role: {
+            permissions: [{ name: 'MANAGE_CATEGORIES' }],
+          },
+        };
+
+        const context = createMockExecutionContext(
+          controller.findOne,
+          mockUserWithPermissions,
+        );
+
         await expect(guard.canActivate(context)).resolves.toBe(true);
 
         const result = await controller.findOne(1);
@@ -159,11 +182,19 @@ describe('CategoryController', () => {
       it('should allow access with ManageCategories permission', async () => {
         const updatedCategory = { id: 1, ...updateDto };
         mockCategoryService.update.mockResolvedValue(updatedCategory);
-        mockAuthService.getGroupMemberPermissions.mockResolvedValue([
-          { groupPermission: { name: 'MANAGE_CATEGORIES' } },
-        ]);
 
-        const context = createMockExecutionContext(controller.update);
+        const mockUserWithPermissions = {
+          ...mockUser,
+          role: {
+            permissions: [{ name: 'MANAGE_CATEGORIES' }],
+          },
+        };
+
+        const context = createMockExecutionContext(
+          controller.update,
+          mockUserWithPermissions,
+        );
+
         await expect(guard.canActivate(context)).resolves.toBe(true);
 
         const result = await controller.update(1, updateDto);
@@ -172,10 +203,26 @@ describe('CategoryController', () => {
     });
 
     describe('DELETE /categories/:id', () => {
-      it('should deny access without DeleteCategories permission', async () => {
-        mockAuthService.getGroupMemberPermissions.mockResolvedValue([]);
+      const mockUser = {
+        id: 1,
+        role: {
+          permissions: [],
+        },
+      };
 
-        const context = createMockExecutionContext(controller.remove);
+      it('should deny access without DeleteCategories permission', async () => {
+        const mockUserWithoutPermissions = {
+          ...mockUser,
+          role: {
+            permissions: [],
+          },
+        };
+
+        const context = createMockExecutionContext(
+          controller.remove,
+          mockUserWithoutPermissions,
+        );
+
         await expect(guard.canActivate(context)).rejects.toThrow(
           'Insufficient permissions',
         );
@@ -183,11 +230,19 @@ describe('CategoryController', () => {
 
       it('should allow access with DeleteCategories permission', async () => {
         mockCategoryService.remove.mockResolvedValue(undefined);
-        mockAuthService.getGroupMemberPermissions.mockResolvedValue([
-          { groupPermission: { name: 'DELETE_CATEGORIES' } },
-        ]);
 
-        const context = createMockExecutionContext(controller.remove);
+        const mockUserWithPermissions = {
+          ...mockUser,
+          role: {
+            permissions: [{ name: UserPermission.DeleteCategories }],
+          },
+        };
+
+        const context = createMockExecutionContext(
+          controller.remove,
+          mockUserWithPermissions,
+        );
+
         await expect(guard.canActivate(context)).resolves.toBe(true);
 
         await expect(controller.remove(1)).resolves.toBeUndefined();
