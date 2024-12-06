@@ -8,11 +8,15 @@ import { TenantConnectionService } from '../../../../tenant/tenant.service';
 import { RoleEntity } from 'src/role/infrastructure/persistence/relational/entities/role.entity';
 import { ConfigService } from '@nestjs/config';
 import { StatusEntity } from '../../../../status/infrastructure/persistence/relational/entities/status.entity';
+import { PermissionEntity } from '../../../../permission/infrastructure/persistence/relational/entities/permission.entity';
+import { UserPermissionEntity } from '../../../../user/infrastructure/persistence/relational/entities/user-permission.entity';
 
 @Injectable()
 export class UserSeedService {
   private repository: Repository<UserEntity>;
   private roleRepository: Repository<RoleEntity>;
+  private permissionRepository: Repository<PermissionEntity>;
+  private userPermissionRepository: Repository<UserPermissionEntity>;
   constructor(
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly configService: ConfigService,
@@ -37,6 +41,7 @@ export class UserSeedService {
 
     const existingUser = await this.repository.count({
       where: { role: { name: roleName } },
+      relations: ['permissions'],
     });
 
     if (!existingUser && role) {
@@ -53,6 +58,10 @@ export class UserSeedService {
           status: new StatusEntity(),
         } as UserEntity),
       );
+    } else {
+      console.log(
+        `User ${credentials.email} already exists or role ${roleName} does not exist`,
+      );
     }
   }
 
@@ -61,6 +70,9 @@ export class UserSeedService {
       await this.tenantConnectionService.getTenantConnection(tenantId);
     this.repository = dataSource.getRepository(UserEntity);
     this.roleRepository = dataSource.getRepository(RoleEntity);
+    this.userPermissionRepository =
+      dataSource.getRepository(UserPermissionEntity);
+    this.permissionRepository = dataSource.getRepository(PermissionEntity);
 
     /* eslint-disable no-restricted-syntax */
     const adminCredentials = {
