@@ -40,45 +40,49 @@ export class PermissionsGuard implements CanActivate {
 
     const groupSlug = request.headers['x-group-slug'];
     const eventSlug = request.headers['x-event-slug'];
-    let userPermissions;
+    let userPermissions: Set<string>;
+
     if (groupSlug) {
+      console.log('groupSlug', groupSlug);
       userPermissions = await this.getGroupPermissions(user.id, groupSlug);
     } else if (eventSlug) {
+      console.log('eventSlug', eventSlug);
       userPermissions = await this.getEventPermissions(user.id, eventSlug);
     } else {
-      userPermissions = await this.getUserPermissions(user.id);
+      console.log('no groupSlug or eventSlug');
+      userPermissions = await this.getRolePermissions(user.id);
     }
 
     // Check if user has all required permissions
     const hasPermission = requiredPermissions.every((permission) =>
       userPermissions.has(permission),
     );
-
+    console.log(
+      'userPermissions',
+      userPermissions,
+      'has permissions',
+      hasPermission,
+      'requires permissions',
+      requiredPermissions,
+    );
     if (!hasPermission) {
       throw new ForbiddenException('Insufficient permissions');
     }
     return true;
   }
 
-  private async getUserPermissions(userId: number): Promise<Set<string>> {
+  private async getRolePermissions(userId: number): Promise<Set<string>> {
     const permissions = new Set<string>();
 
-    // Fetch user-specific permissions
-    const userPermissions = await this.authService.getUserPermissions(userId);
+    // Get user with role and role permissions
+    const user = await this.authService.getUserWithRolePermissions(userId);
 
-    // Map of permission name to granted status
-    const userPermissionsMap = new Map<string, boolean>();
-    userPermissions.forEach((up) => {
-      userPermissionsMap.set(up.permission.name, true);
-    });
+    if (!user?.role?.permissions) {
+      return permissions;
+    }
 
-    // Apply user-specific permissions
-    userPermissionsMap.forEach((granted, permName) => {
-      if (granted) {
-        permissions.add(permName);
-      } else {
-        permissions.delete(permName);
-      }
+    user.role.permissions.forEach((permission) => {
+      permissions.add(permission.name);
     });
 
     return permissions;
@@ -98,28 +102,13 @@ export class PermissionsGuard implements CanActivate {
       group.id,
     );
 
-    if (!groupMember) {
-      // User is not a member of the group
+    if (!groupMember?.[0]?.groupRole?.groupPermissions) {
       return groupPermissions;
     }
 
-    // Fetch user-specific group permissions
-    const userGroupPermissions =
-      await this.authService.getGroupMemberPermissions(userId, group.id);
-
-    // Map of permission name to granted status
-    const userGroupPermissionsMap = new Map<string, boolean>();
-    userGroupPermissions.forEach((ugp) => {
-      userGroupPermissionsMap.set(ugp.groupPermission.name, true);
-    });
-
-    // Apply user-specific group permissions
-    userGroupPermissionsMap.forEach((granted, permName) => {
-      if (granted) {
-        groupPermissions.add(permName);
-      } else {
-        groupPermissions.delete(permName);
-      }
+    // Add role permissions to set
+    groupMember[0].groupRole.groupPermissions.forEach((permission) => {
+      groupPermissions.add(permission.name);
     });
 
     return groupPermissions;
@@ -137,25 +126,15 @@ export class PermissionsGuard implements CanActivate {
       userId,
     );
 
-    if (!eventAttendee) {
+    if (!eventAttendee?.role?.permissions) {
       return eventPermissions;
     }
-    const attendeePermissions = await this.authService.getAttendeePermissions(
-      eventAttendee.id,
-    );
 
-    const attendeePermissionsMap = new Map<string, boolean>();
-    attendeePermissions.forEach((ap) => {
-      attendeePermissionsMap.set(ap.role.permission.name, true);
+    // Add role permissions to set
+    eventAttendee.role.permissions.forEach((permission) => {
+      eventPermissions.add(permission.name);
     });
 
-    attendeePermissionsMap.forEach((granted, permissionName) => {
-      if (granted) {
-        eventPermissions.add(permissionName);
-      } else {
-        eventPermissions.delete(permissionName);
-      }
-    });
     return eventPermissions;
   }
 }
