@@ -41,14 +41,14 @@ export class UserSeedService {
 
     const existingUser = await this.repository.count({
       where: { role: { name: roleName } },
+      relations: ['permissions'],
     });
 
-    let createdUser;
     if (!existingUser && role) {
       const salt = await bcrypt.genSalt();
       const hashedPassword = await bcrypt.hash(credentials.password, salt);
 
-      createdUser = await this.repository.save(
+      await this.repository.save(
         this.repository.create({
           firstName: credentials.firstName,
           lastName: credentials.lastName,
@@ -58,16 +58,11 @@ export class UserSeedService {
           status: new StatusEntity(),
         } as UserEntity),
       );
+    } else {
+      console.log(
+        `User ${credentials.email} already exists or role ${roleName} does not exist`,
+      );
     }
-
-    const permissions = await this.permissionRepository.find();
-    const userPermissions = permissions.map((permission) =>
-      this.userPermissionRepository.create({
-        user: createdUser,
-        permission,
-      }),
-    );
-    await this.userPermissionRepository.save(userPermissions);
   }
 
   async run(tenantId: string) {

@@ -674,4 +674,8 @@ export class AuthService {
   async getAttendeePermissions(id: number): Promise<any[]> {
     return this.eventAttendeeService.getEventAttendeePermissions(id);
   }
+
+  async getUserWithRolePermissions(userId: number) {
+    return this.userService.findById(userId);
+  }
 }

@@ -6,7 +6,7 @@ import { Reflector } from '@nestjs/core';
 import { PermissionsGuard } from '../shared/guard/permissions.guard';
 import { JWTAuthGuard } from '../auth/auth.guard';
 import { ExecutionContext } from '@nestjs/common';
-import { UserPermission } from '../core/constants/constant';
+import { GroupPermission } from '../core/constants/constant';
 
 describe('CategoryController', () => {
   let controller: CategoryController;
@@ -97,7 +97,7 @@ describe('CategoryController', () => {
         const createdCategory = { id: 1, ...createDto };
         mockCategoryService.create.mockResolvedValue(createdCategory);
         mockAuthService.getGroupMemberPermissions.mockResolvedValue([
-          { groupPermission: { name: UserPermission.CreateCategories } },
+          { groupPermission: { name: GroupPermission.CreateEvent } },
         ]);
         const context = createMockExecutionContext(controller.create);
         await expect(guard.canActivate(context)).resolves.toBe(true);

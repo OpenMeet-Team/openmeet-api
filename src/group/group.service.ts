@@ -98,6 +98,7 @@ export class GroupService {
         user: { id: userId },
         group: { id: groupId },
       },
+      relations: ['role', 'role.permissions'],
     });
 
     return groupMembers;

@@ -401,13 +401,17 @@ describe('EventController', () => {
           id: 1,
           userId: mockUser.id,
           eventId: 1,
+          status: EventAttendeeStatus.Confirmed,
+          role: {
+            name: EventAttendeeRole.Host,
+          },
         });
 
         mockAuthService.getAttendeePermissions.mockResolvedValue([
           {
             role: {
               permission: {
-                name: UserPermission.CreateEvents,
+                name: ZUserPermission.CreateEvents,
               },
             },
           },

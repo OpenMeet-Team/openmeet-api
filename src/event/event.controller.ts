@@ -126,8 +126,8 @@ export class EventController {
     return this.eventService.attendEvent(slug, user.id, createEventAttendeeDto);
   }
 
-  // @Permissions(EventAttendeePermission.CancelEvent)
-  // @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Permissions(UserPermission.AttendEvents)
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/cancel-attending')
   @ApiOperation({ summary: 'Cancel attending an event' })
   async cancelAttendingEvent(
