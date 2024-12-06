@@ -11,24 +11,24 @@ export class AuthUpdateDto {
 
   @ApiPropertyOptional({ example: 'John' })
   @IsOptional()
-  @IsNotEmpty({ message: 'mustBeNotEmpty' })
+  @IsNotEmpty({ message: 'Please enter your first name' })
   firstName?: string;
 
   @ApiPropertyOptional({ example: 'Doe' })
   @IsOptional()
-  @IsNotEmpty({ message: 'mustBeNotEmpty' })
+  @IsNotEmpty({ message: 'Please enter your last name' })
   lastName?: string;
 
   @ApiPropertyOptional({ example: 'new.email@openmeet.net' })
   @IsOptional()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'Please enter your email' })
   @IsEmail()
   @Transform(lowerCaseTransformer)
   email?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'Please enter your password' })
   @MinLength(6)
   password?: string;
 
@@ -38,6 +38,6 @@ export class AuthUpdateDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsNotEmpty({ message: 'mustBeNotEmpty' })
+  @IsNotEmpty({ message: 'Please enter your current password' })
   oldPassword?: string;
 }

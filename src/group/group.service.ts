@@ -600,12 +600,20 @@ export class GroupService {
     take: number = 0,
   ): Promise<GroupEntity[]> {
     await this.getTenantSpecificGroupRepository();
-    return await this.groupRepository.find({
+    const groups = await this.groupRepository.find({
       where: { createdBy: { id: userId } },
       take,
-      relations: ['createdBy', 'groupMembers'],
+      relations: ['createdBy'],
       order: { createdAt: 'DESC' },
     });
+
+    return await Promise.all(
+      groups.map(async (group) => {
+        group.groupMembersCount =
+          await this.groupMemberService.getGroupMembersCount(group.id);
+        return group;
+      }),
+    );
   }
 
   async getHomePageUserParticipatedGroups(
