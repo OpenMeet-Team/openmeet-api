@@ -678,4 +678,21 @@ export class AuthService {
   async getUserWithRolePermissions(userId: number) {
     return this.userService.findById(userId);
   }
+
+  async getEventAttendeesBySlug(userId: number, eventSlug: string) {
+    const event = await this.eventService.findEventBySlug(eventSlug);
+    if (!event) return null;
+
+    return this.eventAttendeeService.findEventAttendeeByUserId(
+      event.id,
+      userId,
+    );
+  }
+
+  async getGroupMembersBySlug(userId: number, groupSlug: string) {
+    const group = await this.groupService.findGroupBySlug(groupSlug);
+    if (!group) return null;
+
+    return this.groupService.getGroupMembers(userId, group.id);
+  }
 }

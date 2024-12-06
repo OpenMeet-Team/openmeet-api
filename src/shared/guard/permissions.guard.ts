@@ -8,6 +8,12 @@ import {
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from './permissions.decorator';
 import { AuthService } from '../../auth/auth.service';
+import { Request } from 'express';
+
+interface PermissionRequirement {
+  context: 'event' | 'group' | 'user';
+  permissions: string[];
+}
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
@@ -17,7 +23,7 @@ export class PermissionsGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const requiredPermissions = this.reflector.get<string[]>(
+    const requirements = this.reflector.get<PermissionRequirement[]>(
       PERMISSIONS_KEY,
       context.getHandler(),
     );
@@ -27,114 +33,102 @@ export class PermissionsGuard implements CanActivate {
       context.getHandler(),
     );
 
-    if (!requiredPermissions) {
-      return true; // No permissions required
+    if (!requirements?.length) {
+      return true; // No permissions were required in the controller endpoint
     }
 
-    const request = context.switchToHttp().getRequest();
+    const request = context
+      .switchToHttp()
+      .getRequest<Request & { user: any }>();
     const user = request.user;
 
     if (!user && isPublic) {
-      return true;
+      return true; // We're a non authenticated user and the endpoint is public
     }
 
-    const groupSlug = request.headers['x-group-slug'];
-    const eventSlug = request.headers['x-event-slug'];
-    let userPermissions: Set<string>;
-
-    if (groupSlug) {
-      console.log('groupSlug', groupSlug);
-      userPermissions = await this.getGroupPermissions(user.id, groupSlug);
-    } else if (eventSlug) {
-      console.log('eventSlug', eventSlug);
-      userPermissions = await this.getEventPermissions(user.id, eventSlug);
-    } else {
-      console.log('no groupSlug or eventSlug');
-      userPermissions = await this.getRolePermissions(user.id);
-    }
-
-    // Check if user has all required permissions
-    const hasPermission = requiredPermissions.every((permission) =>
-      userPermissions.has(permission),
-    );
-    console.log(
-      'userPermissions',
-      userPermissions,
-      'has permissions',
-      hasPermission,
-      'requires permissions',
-      requiredPermissions,
-    );
-    if (!hasPermission) {
+    if (!user) {
       throw new ForbiddenException('Insufficient permissions');
     }
+
+    // Check each context's permissions
+    for (const requirement of requirements) {
+      await this.checkContextPermissions(requirement, user, request);
+    }
+
     return true;
   }
 
-  private async getRolePermissions(userId: number): Promise<Set<string>> {
-    const permissions = new Set<string>();
+  private async checkContextPermissions(
+    requirement: PermissionRequirement,
+    user: any,
+    request: Request,
+  ): Promise<void> {
+    const { context, permissions } = requirement;
 
-    // Get user with role and role permissions
-    const user = await this.authService.getUserWithRolePermissions(userId);
+    switch (context) {
+      case 'event': {
+        const eventSlug: string = request.params.slug;
+        const eventAttendee = await this.authService.getEventAttendeesBySlug(
+          user.id,
+          eventSlug,
+        );
+        if (!eventAttendee?.[0]) {
+          throw new ForbiddenException('Insufficient permissions');
+        }
 
-    if (!user?.role?.permissions) {
-      return permissions;
+        if (
+          !this.hasRequiredPermissions(
+            eventAttendee[0].role.permissions,
+            permissions,
+          )
+        ) {
+          throw new ForbiddenException('Insufficient permissions');
+        }
+        break;
+      }
+
+      case 'group': {
+        const groupSlug: string = request.params.groupSlug;
+        const groupMembers = await this.authService.getGroupMembersBySlug(
+          user.id,
+          groupSlug,
+        );
+        if (!groupMembers?.[0]) {
+          throw new ForbiddenException('Insufficient permissions');
+        }
+
+        if (
+          !this.hasRequiredPermissions(
+            groupMembers[0].groupRole.groupPermissions,
+            permissions,
+          )
+        ) {
+          throw new ForbiddenException('Insufficient permissions');
+        }
+        break;
+      }
+
+      case 'user': {
+        if (!user?.role?.permissions) {
+          throw new ForbiddenException('Insufficient permissions');
+        }
+        if (!this.hasRequiredPermissions(user.role.permissions, permissions)) {
+          throw new ForbiddenException('Insufficient permissions');
+        }
+        break;
+      }
+
+      default:
+        throw new ForbiddenException('Invalid permission context');
     }
-
-    user.role.permissions.forEach((permission) => {
-      permissions.add(permission.name);
-    });
-
-    return permissions;
   }
 
-  private async getGroupPermissions(
-    userId: number,
-    groupSlug: string,
-  ): Promise<Set<string>> {
-    const groupPermissions = new Set<string>();
-
-    const group = await this.authService.getGroup(groupSlug);
-
-    // Fetch the user's group membership
-    const groupMember = await this.authService.getGroupMembers(
-      userId,
-      group.id,
+  private hasRequiredPermissions(
+    userPermissions: any[],
+    requiredPermissions: string[],
+  ): boolean {
+    return requiredPermissions.every((required) =>
+      userPermissions.some((p) => p.name === required),
     );
-
-    if (!groupMember?.[0]?.groupRole?.groupPermissions) {
-      return groupPermissions;
-    }
-
-    // Add role permissions to set
-    groupMember[0].groupRole.groupPermissions.forEach((permission) => {
-      groupPermissions.add(permission.name);
-    });
-
-    return groupPermissions;
-  }
-
-  private async getEventPermissions(
-    userId: number,
-    eventSlug: string,
-  ): Promise<Set<string>> {
-    const eventPermissions = new Set<string>();
-    const event = await this.authService.getEvent(eventSlug);
-
-    const eventAttendee = await this.authService.getEventAttendees(
-      event.id,
-      userId,
-    );
-
-    if (!eventAttendee?.role?.permissions) {
-      return eventPermissions;
-    }
-
-    // Add role permissions to set
-    eventAttendee.role.permissions.forEach((permission) => {
-      eventPermissions.add(permission.name);
-    });
-
-    return eventPermissions;
   }
 }
