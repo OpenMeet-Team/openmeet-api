@@ -2,9 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { RoleEntity } from '../../../../role/infrastructure/persistence/relational/entities/role.entity';
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
-import { RoleEnum } from '../../../../role/role.enum'; // Assuming you have RoleEnum for role types.
+import { RoleEnum } from '../../../../role/role.enum';
 import { PermissionEntity } from '../../../../permission/infrastructure/persistence/relational/entities/permission.entity';
-import { UserPermission } from 'src/core/constants/constant';
+import { GroupPermission, UserPermission } from 'src/core/constants/constant';
+import { PermissionRequirement } from 'src/shared/guard/permissions.guard';
 
 @Injectable()
 export class RoleSeedService {
@@ -12,38 +13,56 @@ export class RoleSeedService {
   private permissionRepository: Repository<PermissionEntity>;
 
   constructor(
-    private readonly tenantConnectionService: TenantConnectionService, // For tenant-specific DB handling
+    private readonly tenantConnectionService: TenantConnectionService,
   ) {}
 
   async run(tenantId: string) {
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
 
-    // Initialize repository for roles and permissions
     this.repository = dataSource.getRepository(RoleEntity);
     this.permissionRepository = dataSource.getRepository(PermissionEntity);
 
     // Seed roles and their permissions
     await this.createRoleIfNotExists(RoleEnum.User, [
-      UserPermission.CreateEvents,
-      UserPermission.CreateGroups,
-      UserPermission.CreateIssues,
-      UserPermission.ViewGroups,
-      UserPermission.ViewEvents,
-      UserPermission.AttendEvents,
-      UserPermission.JoinGroups,
-      UserPermission.MessageMembers,
-      UserPermission.MessageAttendees,
-      UserPermission.MessageUsers,
+      {
+        context: 'user',
+        permissions: [
+          UserPermission.CreateGroups,
+          UserPermission.ViewGroups,
+          UserPermission.JoinGroups,
+          UserPermission.CreateEvents,
+          UserPermission.AttendEvents,
+        ],
+      },
     ]);
-    await this.createRoleIfNotExists(RoleEnum.Admin, []); // All permissions
-    await this.createRoleIfNotExists(RoleEnum.Editor, []); // All permissions but not manage settings
+
+    await this.createRoleIfNotExists(RoleEnum.Admin, [
+      {
+        context: 'user',
+        permissions: Object.values(UserPermission),
+      },
+      {
+        context: 'group',
+        permissions: Object.values(GroupPermission),
+      },
+    ]);
+
+    await this.createRoleIfNotExists(RoleEnum.Editor, [
+      {
+        context: 'user',
+        permissions: Object.values(UserPermission),
+      },
+      {
+        context: 'group',
+        permissions: Object.values(GroupPermission),
+      },
+    ]);
   }
 
-  // Helper method to create roles with assigned permissions
   private async createRoleIfNotExists(
     roleName: RoleEnum,
-    permissionNames: UserPermission[],
+    contextPermissions: PermissionRequirement[],
   ) {
     const count = await this.repository.count({ where: { name: roleName } });
 
@@ -52,20 +71,19 @@ export class RoleSeedService {
         name: roleName,
       });
 
-      // Assign permissions to the role
-      const permissions = await this.getPermissionsByNames(permissionNames);
+      const permissions = await this.getPermissionsByNames(contextPermissions);
       role.permissions = permissions;
 
       await this.repository.save(role);
     }
   }
 
-  // Fetch permissions by their names
   private async getPermissionsByNames(
-    names: UserPermission[],
+    contextPermissions: PermissionRequirement[],
   ): Promise<PermissionEntity[]> {
+    const permissionNames = contextPermissions.flatMap((cp) => cp.permissions);
     return this.permissionRepository.find({
-      where: names.map((name) => ({ name })),
+      where: permissionNames.map((name) => ({ name })),
     });
   }
 }

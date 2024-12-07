@@ -27,8 +27,10 @@ import { Public } from '../auth/decorators/public.decorator';
 export class CategoryController {
   constructor(private readonly categoryService: CategoryService) {}
 
-  @Permissions(UserPermission.CreateCategories)
-  // @SetMetadata(PERMISSIONS_KEY, [UserPermission.CreateCategories])
+  @Permissions({
+    context: 'user',
+    permissions: [UserPermission.CreateCategories],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post()
   @ApiOperation({ summary: 'Create a new category' })

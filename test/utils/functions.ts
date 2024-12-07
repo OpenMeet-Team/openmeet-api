@@ -4,6 +4,8 @@ import {
   TESTING_USER_EMAIL,
   TESTING_USER_PASSWORD,
   TESTING_TENANT_ID,
+  TESTING_ADMIN_EMAIL,
+  TESTING_ADMIN_PASSWORD,
 } from './constants';
 import { CreateEventDto } from '../../src/event/dto/create-event.dto';
 import {
@@ -98,6 +100,18 @@ async function loginAsTester() {
     .send({
       email: TESTING_USER_EMAIL,
       password: TESTING_USER_PASSWORD,
+    });
+
+  expect(loginResponse.status).toBe(200);
+  return loginResponse.body.token;
+}
+async function loginAsAdmin() {
+  const loginResponse = await request(TESTING_APP_URL)
+    .post('/api/v1/auth/email/login')
+    .set('x-tenant-id', TESTING_TENANT_ID)
+    .send({
+      email: TESTING_ADMIN_EMAIL,
+      password: TESTING_ADMIN_PASSWORD,
     });
 
   expect(loginResponse.status).toBe(200);
@@ -203,6 +217,7 @@ export {
   deleteGroup,
   deleteEvent,
   loginAsTester,
+  loginAsAdmin,
   getRecommendedEvents,
   updateEvent,
   getEvent,

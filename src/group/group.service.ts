@@ -42,12 +42,14 @@ import { ZulipService } from '../zulip/zulip.service';
 import { UserService } from '../user/user.service';
 import { HomeQuery } from '../home/dto/home-query.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { GroupRoleEntity } from '../group-role/infrastructure/persistence/relational/entities/group-role.entity';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
   private groupMembersRepository: Repository<GroupMemberEntity>;
   private groupRepository: Repository<GroupEntity>;
   private groupMemberPermissionsRepository: Repository<GroupUserPermissionEntity>;
+  private groupRoleRepository: Repository<GroupRoleEntity>;
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
@@ -72,6 +74,7 @@ export class GroupService {
     this.groupMemberPermissionsRepository = dataSource.getRepository(
       GroupUserPermissionEntity,
     );
+    this.groupRoleRepository = dataSource.getRepository(GroupRoleEntity);
   }
 
   async getGroupsWhereUserCanCreateEvents(
@@ -87,36 +90,6 @@ export class GroupService {
           },
         },
       },
-    });
-  }
-
-  async getGroupMembers(
-    userId: number,
-    groupId: number,
-  ): Promise<GroupMemberEntity[]> {
-    await this.getTenantSpecificGroupRepository();
-    const groupMembers = await this.groupMembersRepository.find({
-      where: {
-        user: { id: userId },
-        group: { id: groupId },
-      },
-      relations: ['role', 'role.permissions'],
-    });
-
-    return groupMembers;
-  }
-
-  async getGroupMemberPermissions(
-    userId: number,
-    groupId: number,
-  ): Promise<GroupUserPermissionEntity[]> {
-    await this.getTenantSpecificGroupRepository();
-    return this.groupMemberPermissionsRepository.find({
-      where: {
-        user: { id: userId },
-        group: { id: groupId },
-      },
-      relations: ['groupPermission'],
     });
   }
 
@@ -232,7 +205,6 @@ export class GroupService {
       if (isNaN(lat) || isNaN(lon)) {
         throw new BadRequestException('Invalid latitude or longitude');
       }
-      // Construct GeoJSON
       locationPoint = {
         type: 'Point',
         coordinates: [lon, lat],
@@ -266,9 +238,18 @@ export class GroupService {
 
     const group = this.groupRepository.create(mappedGroupDto);
     const savedGroup = await this.groupRepository.save(group);
-    await this.groupMemberService.createGroupOwner({
-      userId,
-      groupId: savedGroup.id,
+
+    // Get the owner role
+    const ownerRole = await this.groupRoleService.findOne(GroupRole.Owner);
+    if (!ownerRole) {
+      throw new NotFoundException('Owner role not found');
+    }
+
+    // Create group member record with owner role
+    await this.groupMembersRepository.save({
+      user: { id: userId },
+      group: { id: savedGroup.id },
+      groupRole: ownerRole,
     });
 
     this.eventEmitter.emit('group.created', savedGroup);
@@ -889,5 +870,29 @@ export class GroupService {
         ),
       })),
     )) as GroupEntity[];
+  }
+
+  async getGroupMembers(groupId: number): Promise<GroupMemberEntity[]> {
+    await this.getTenantSpecificGroupRepository();
+    return this.groupMembersRepository.find({
+      where: {
+        group: { id: groupId },
+      },
+      relations: ['groupRole', 'groupRole.groupPermissions'],
+    });
+  }
+
+  async getGroupMemberPermissions(
+    userId: number,
+    groupId: number,
+  ): Promise<GroupUserPermissionEntity[]> {
+    await this.getTenantSpecificGroupRepository();
+    return this.groupMemberPermissionsRepository.find({
+      where: {
+        user: { id: userId },
+        group: { id: groupId },
+      },
+      relations: ['groupPermission'],
+    });
   }
 }

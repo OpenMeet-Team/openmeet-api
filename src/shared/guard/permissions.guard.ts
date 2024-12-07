@@ -1,16 +1,15 @@
 // permissions.guard.ts
 import {
-  Injectable,
   CanActivate,
   ExecutionContext,
+  Injectable,
   ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { PERMISSIONS_KEY } from './permissions.decorator';
 import { AuthService } from '../../auth/auth.service';
 import { Request } from 'express';
 
-interface PermissionRequirement {
+export interface PermissionRequirement {
   context: 'event' | 'group' | 'user';
   permissions: string[];
 }
@@ -19,22 +18,16 @@ interface PermissionRequirement {
 export class PermissionsGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
-    private readonly authService: AuthService,
+    private authService: AuthService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const requirements = this.reflector.get<PermissionRequirement[]>(
-      PERMISSIONS_KEY,
+      'permissions',
       context.getHandler(),
     );
-
-    const isPublic = this.reflector.get<boolean>(
-      'isPublic',
-      context.getHandler(),
-    );
-
-    if (!requirements?.length) {
-      return true; // No permissions were required in the controller endpoint
+    if (!requirements) {
+      return true;
     }
 
     const request = context
@@ -42,17 +35,21 @@ export class PermissionsGuard implements CanActivate {
       .getRequest<Request & { user: any }>();
     const user = request.user;
 
-    if (!user && isPublic) {
-      return true; // We're a non authenticated user and the endpoint is public
-    }
+    console.log('request.url', request.url);
+    console.log('permissions requirements', requirements);
 
     if (!user) {
-      throw new ForbiddenException('Insufficient permissions');
+      return false;
     }
 
     // Check each context's permissions
     for (const requirement of requirements) {
-      await this.checkContextPermissions(requirement, user, request);
+      try {
+        await this.checkContextPermissions(requirement, user, request);
+      } catch (error) {
+        console.log('error', error);
+        throw error;
+      }
     }
 
     return true;
@@ -67,13 +64,13 @@ export class PermissionsGuard implements CanActivate {
 
     switch (context) {
       case 'event': {
-        const eventSlug: string = request.params.slug;
+        const eventSlug = request.params.slug;
         const eventAttendee = await this.authService.getEventAttendeesBySlug(
           user.id,
           eventSlug,
         );
         if (!eventAttendee?.[0]) {
-          throw new ForbiddenException('Insufficient permissions');
+          throw new ForbiddenException('Insufficient event permissions');
         }
 
         if (
@@ -82,19 +79,20 @@ export class PermissionsGuard implements CanActivate {
             permissions,
           )
         ) {
-          throw new ForbiddenException('Insufficient permissions');
+          throw new ForbiddenException('Insufficient event permissions');
         }
         break;
       }
 
       case 'group': {
-        const groupSlug: string = request.params.groupSlug;
+        const groupSlug = request.params.groupSlug;
         const groupMembers = await this.authService.getGroupMembersBySlug(
           user.id,
           groupSlug,
         );
+        console.log('groupMembers', groupMembers);
         if (!groupMembers?.[0]) {
-          throw new ForbiddenException('Insufficient permissions');
+          throw new ForbiddenException('Insufficient group permissions');
         }
 
         if (
@@ -103,23 +101,20 @@ export class PermissionsGuard implements CanActivate {
             permissions,
           )
         ) {
-          throw new ForbiddenException('Insufficient permissions');
+          throw new ForbiddenException('Insufficient group permissions');
         }
         break;
       }
 
       case 'user': {
-        if (!user?.role?.permissions) {
-          throw new ForbiddenException('Insufficient permissions');
-        }
-        if (!this.hasRequiredPermissions(user.role.permissions, permissions)) {
-          throw new ForbiddenException('Insufficient permissions');
+        const userPermissions = await this.authService.getUserPermissions(
+          user.id,
+        );
+        if (!this.hasRequiredPermissions(userPermissions, permissions)) {
+          throw new ForbiddenException('Insufficient user permissions');
         }
         break;
       }
-
-      default:
-        throw new ForbiddenException('Invalid permission context');
     }
   }
 
@@ -127,6 +122,8 @@ export class PermissionsGuard implements CanActivate {
     userPermissions: any[],
     requiredPermissions: string[],
   ): boolean {
+    console.log('userPermissions', userPermissions);
+    console.log('requiredPermissions', requiredPermissions);
     return requiredPermissions.every((required) =>
       userPermissions.some((p) => p.name === required),
     );

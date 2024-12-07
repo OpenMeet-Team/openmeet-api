@@ -1,28 +1,10 @@
 import request from 'supertest';
-import {
-  TESTING_APP_URL,
-  TESTING_USER_EMAIL,
-  TESTING_USER_PASSWORD,
-  TESTING_TENANT_ID,
-} from '../utils/constants';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
+import { loginAsTester } from '../utils/functions';
 
 describe('GroupController (e2e)', () => {
   let token;
   let testGroup;
-
-  // Helper function to log in as the test user
-  async function loginAsTester() {
-    const loginResponse = await request(TESTING_APP_URL)
-      .post('/api/v1/auth/email/login')
-      .set('x-tenant-id', TESTING_TENANT_ID)
-      .send({
-        email: TESTING_USER_EMAIL,
-        password: TESTING_USER_PASSWORD,
-      });
-
-    expect(loginResponse.status).toBe(200);
-    return loginResponse.body.token;
-  }
 
   // Helper function to create a group
   async function createGroup(token, groupData) {

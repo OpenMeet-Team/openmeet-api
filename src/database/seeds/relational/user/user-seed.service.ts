@@ -41,7 +41,7 @@ export class UserSeedService {
 
     const existingUser = await this.repository.count({
       where: { role: { name: roleName } },
-      relations: ['permissions'],
+      relations: ['role.permissions'],
     });
 
     if (!existingUser && role) {
@@ -74,17 +74,22 @@ export class UserSeedService {
       dataSource.getRepository(UserPermissionEntity);
     this.permissionRepository = dataSource.getRepository(PermissionEntity);
 
-    /* eslint-disable no-restricted-syntax */
     const adminCredentials = {
-      email: this.configService.get('ADMIN_EMAIL') as string,
-      password: this.configService.get('ADMIN_PASSWORD') as string,
+      email: this.configService.get('ADMIN_EMAIL', { infer: true }) as string,
+      password: this.configService.get('ADMIN_PASSWORD', {
+        infer: true,
+      }) as string,
       firstName: 'The',
       lastName: 'Admin',
     };
 
     const testUserCredentials = {
-      email: this.configService.get('TEST_USER_EMAIL') as string,
-      password: this.configService.get('TEST_USER_PASSWORD') as string,
+      email: this.configService.get('TEST_USER_EMAIL', {
+        infer: true,
+      }) as string,
+      password: this.configService.get('TEST_USER_PASSWORD', {
+        infer: true,
+      }) as string,
       firstName: 'Test',
       lastName: 'User',
     };

@@ -27,11 +27,11 @@ export class GroupRoleService {
     return await this.groupRoleRepository.save(groupRole);
   }
 
-  async findOne(name: string): Promise<any> {
-    await this.getTenantSpecificEventRepository();
-    return await this.groupRoleRepository.findOne({
-      where: { name: name as GroupRole },
-      relations: ['groupPermissions'],
-    });
+  async findOne(name: GroupRole): Promise<GroupRoleEntity | null> {
+    const dataSource = await this.tenantConnectionService.getTenantConnection(
+      this.request.tenantId,
+    );
+    const repository = dataSource.getRepository(GroupRoleEntity);
+    return repository.findOne({ where: { name } });
   }
 }

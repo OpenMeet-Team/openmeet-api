@@ -641,8 +641,22 @@ export class AuthService {
     };
   }
 
-  getUserPermissions(userId: number) {
-    return this.userService.getUserPermissions(userId);
+  async getUserPermissions(userId: number) {
+    const user = await this.userService.findById(userId);
+    if (!user || !user.role) {
+      return [];
+    }
+
+    // Get permissions from user's role
+    const rolePermissions = user.role.permissions || [];
+    console.log('rolePermissions', rolePermissions);
+
+    // Get any additional user-specific permissions
+    const userPermissions = await this.userService.getUserPermissions(userId);
+    console.log('userPermissions', userPermissions);
+
+    // Combine and deduplicate permissions
+    return [...new Set([...rolePermissions, ...userPermissions])];
   }
 
   async getEventAttendees(userId: number, eventId: number) {
@@ -661,7 +675,7 @@ export class AuthService {
     userId: number,
     groupId: number,
   ): Promise<GroupMemberEntity[]> {
-    return this.groupService.getGroupMembers(userId, groupId);
+    return this.groupService.getGroupMembers(groupId);
   }
 
   async getGroupMemberPermissions(
@@ -693,6 +707,6 @@ export class AuthService {
     const group = await this.groupService.findGroupBySlug(groupSlug);
     if (!group) return null;
 
-    return this.groupService.getGroupMembers(userId, group.id);
+    return this.groupService.getGroupMembers(group.id);
   }
 }
