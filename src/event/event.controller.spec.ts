@@ -29,7 +29,6 @@ import { EventAttendeeStatus } from '../core/constants/constant';
 import { PermissionsGuard } from '../shared/guard/permissions.guard';
 import { ExecutionContext } from '@nestjs/common';
 import { PERMISSIONS_KEY } from '../shared/guard/permissions.decorator';
-import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 
 const createEventDto: CreateEventDto = {
   name: 'Test Event',
@@ -376,51 +375,32 @@ describe('EventController', () => {
         ]);
       });
 
-      it('should deny access without CreateEvents permission', async () => {
-        mockAuthService.getEvent.mockResolvedValue({
-          id: 1,
-          name: 'Test Event',
-        });
-
-        mockAuthService.getEventAttendees.mockResolvedValue(null);
-        mockAuthService.getGroup.mockResolvedValue(mockGroup);
-
-        // Mock no permissions
-        mockAuthService.getGroupMemberPermissions.mockResolvedValue([]);
-        mockAuthService.getUserPermissions.mockResolvedValue([]);
-
-        const context = createMockExecutionContext(controller.create);
-        await expect(guard.canActivate(context)).rejects.toThrow();
-      });
-
       it('should allow access with CreateEvents permission', async () => {
         const createdEvent = { id: 1, ...createEventDto };
         mockEventService.create.mockResolvedValue(createdEvent);
 
-        // Mock the user with proper role permissions
-        const mockUserWithPermissions = {
-          ...mockUser,
-          role: {
-            permissions: [
-              {
-                name: UserPermission.CreateEvents,
-              },
-            ],
-          },
-        };
+        // Mock the AuthService to return the proper permissions
+        mockAuthService.getUserPermissions.mockResolvedValue([
+          { name: UserPermission.CreateEvents },
+        ]);
 
-        const context = createMockExecutionContext(
-          controller.create,
-          mockUserWithPermissions as UserEntity,
-        );
+        const context = createMockExecutionContext(controller.create, mockUser);
 
         await expect(guard.canActivate(context)).resolves.toBe(true);
 
-        const result = await controller.create(
-          createEventDto,
-          mockUserWithPermissions as UserEntity,
-        );
+        const result = await controller.create(createEventDto, mockUser);
         expect(result).toEqual(createdEvent);
+      });
+
+      it('should deny access without CreateEvents permission', async () => {
+        // Mock the AuthService to return no permissions
+        mockAuthService.getUserPermissions.mockResolvedValue([]);
+
+        const context = createMockExecutionContext(controller.create, mockUser);
+
+        await expect(guard.canActivate(context)).rejects.toThrow(
+          'Insufficient permissions',
+        );
       });
     });
 
