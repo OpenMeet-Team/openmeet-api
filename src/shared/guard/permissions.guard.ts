@@ -70,7 +70,7 @@ export class PermissionsGuard implements CanActivate {
           eventSlug,
         );
         if (!eventAttendee?.[0]) {
-          throw new ForbiddenException('Insufficient event permissions');
+          throw new ForbiddenException('Insufficient permissions');
         }
 
         if (
@@ -79,7 +79,7 @@ export class PermissionsGuard implements CanActivate {
             permissions,
           )
         ) {
-          throw new ForbiddenException('Insufficient event permissions');
+          throw new ForbiddenException('Insufficient permissions');
         }
         break;
       }
@@ -92,7 +92,7 @@ export class PermissionsGuard implements CanActivate {
         );
         console.log('groupMembers', groupMembers);
         if (!groupMembers?.[0]) {
-          throw new ForbiddenException('Insufficient group permissions');
+          throw new ForbiddenException('Insufficient permissions');
         }
 
         if (
@@ -101,7 +101,7 @@ export class PermissionsGuard implements CanActivate {
             permissions,
           )
         ) {
-          throw new ForbiddenException('Insufficient group permissions');
+          throw new ForbiddenException('Insufficient permissions');
         }
         break;
       }
@@ -111,7 +111,7 @@ export class PermissionsGuard implements CanActivate {
           user.id,
         );
         if (!this.hasRequiredPermissions(userPermissions, permissions)) {
-          throw new ForbiddenException('Insufficient user permissions');
+          throw new ForbiddenException('Insufficient permissions');
         }
         break;
       }
@@ -122,8 +122,10 @@ export class PermissionsGuard implements CanActivate {
     userPermissions: any[],
     requiredPermissions: string[],
   ): boolean {
-    console.log('userPermissions', userPermissions);
-    console.log('requiredPermissions', requiredPermissions);
+    if (!userPermissions || !Array.isArray(userPermissions)) {
+      return false;
+    }
+
     return requiredPermissions.every((required) =>
       userPermissions.some((p) => p.name === required),
     );

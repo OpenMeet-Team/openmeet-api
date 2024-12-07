@@ -87,34 +87,22 @@ describe('CategoryController', () => {
 
       it('should deny access without CreateCategories permission', async () => {
         mockAuthService.getUserPermissions.mockResolvedValue([]);
-        mockAuthService.getGroup.mockResolvedValue({
-          id: 1,
-          name: 'Test Group',
-        });
-        mockAuthService.getGroupMembers.mockResolvedValue([
-          { id: 1, userId: 1, groupId: 1 },
-        ]);
-        mockAuthService.getGroupMemberPermissions.mockResolvedValue([]);
 
         const context = createMockExecutionContext(controller.create);
-        await expect(guard.canActivate(context)).rejects.toThrow(/permissions/);
+        await expect(guard.canActivate(context)).rejects.toThrow(
+          'Insufficient permissions',
+        );
       });
 
       it('should allow access with CreateCategories permission', async () => {
         const createdCategory = { id: 1, ...createDto };
         mockCategoryService.create.mockResolvedValue(createdCategory);
 
-        const mockUserWithPermissions = {
-          ...mockUser,
-          role: {
-            permissions: [{ name: UserPermission.CreateCategories }],
-          },
-        };
+        mockAuthService.getUserPermissions.mockResolvedValue([
+          { name: UserPermission.CreateCategories },
+        ]);
 
-        const context = createMockExecutionContext(
-          controller.create,
-          mockUserWithPermissions,
-        );
+        const context = createMockExecutionContext(controller.create, mockUser);
 
         await expect(guard.canActivate(context)).resolves.toBe(true);
 
@@ -135,7 +123,7 @@ describe('CategoryController', () => {
 
     describe('GET /categories/:id', () => {
       it('should deny access without ManageCategories permission', async () => {
-        mockAuthService.getGroupMemberPermissions.mockResolvedValue([]);
+        mockAuthService.getUserPermissions.mockResolvedValue([]);
 
         const context = createMockExecutionContext(controller.findOne);
         await expect(guard.canActivate(context)).rejects.toThrow(
@@ -147,16 +135,13 @@ describe('CategoryController', () => {
         const category = { id: 1, name: 'Test Category' };
         mockCategoryService.findOne.mockResolvedValue(category);
 
-        const mockUserWithPermissions = {
-          ...mockUser,
-          role: {
-            permissions: [{ name: 'MANAGE_CATEGORIES' }],
-          },
-        };
+        mockAuthService.getUserPermissions.mockResolvedValue([
+          { name: UserPermission.ManageCategories },
+        ]);
 
         const context = createMockExecutionContext(
           controller.findOne,
-          mockUserWithPermissions,
+          mockUser,
         );
 
         await expect(guard.canActivate(context)).resolves.toBe(true);
@@ -211,17 +196,9 @@ describe('CategoryController', () => {
       };
 
       it('should deny access without DeleteCategories permission', async () => {
-        const mockUserWithoutPermissions = {
-          ...mockUser,
-          role: {
-            permissions: [],
-          },
-        };
+        mockAuthService.getUserPermissions.mockResolvedValue([]);
 
-        const context = createMockExecutionContext(
-          controller.remove,
-          mockUserWithoutPermissions,
-        );
+        const context = createMockExecutionContext(controller.remove, mockUser);
 
         await expect(guard.canActivate(context)).rejects.toThrow(
           'Insufficient permissions',
@@ -231,17 +208,11 @@ describe('CategoryController', () => {
       it('should allow access with DeleteCategories permission', async () => {
         mockCategoryService.remove.mockResolvedValue(undefined);
 
-        const mockUserWithPermissions = {
-          ...mockUser,
-          role: {
-            permissions: [{ name: UserPermission.DeleteCategories }],
-          },
-        };
+        mockAuthService.getUserPermissions.mockResolvedValue([
+          { name: UserPermission.DeleteCategories },
+        ]);
 
-        const context = createMockExecutionContext(
-          controller.remove,
-          mockUserWithPermissions,
-        );
+        const context = createMockExecutionContext(controller.remove, mockUser);
 
         await expect(guard.canActivate(context)).resolves.toBe(true);
 
