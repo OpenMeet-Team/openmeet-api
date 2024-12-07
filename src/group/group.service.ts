@@ -283,9 +283,22 @@ export class GroupService {
     const groupQuery = this.groupRepository
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.categories', 'categories')
-      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
-      .leftJoinAndSelect('groupMembers.user', 'user')
-      .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
+
+      .leftJoin('group.createdBy', 'user')
+      .leftJoin('user.photo', 'photo')
+      .addSelect(['user.name', 'user.slug', 'photo.path'])
+
+      .loadRelationCountAndMap(
+        'group.groupMembersCount',
+        'group.groupMembers',
+        'groupMembers',
+        (qb) =>
+          qb
+            .innerJoin('groupMembers.groupRole', 'role')
+            .where('role.name != :roleName', {
+              roleName: GroupRole.Guest,
+            }),
+      )
       .where('group.status = :status', { status: GroupStatus.Published });
 
     if (userId) {

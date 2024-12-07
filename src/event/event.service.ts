@@ -219,6 +219,7 @@ export class EventService {
       .leftJoin('event.user', 'user')
       .leftJoin('user.photo', 'photo')
       .addSelect(['user.name', 'user.slug', 'photo.path'])
+
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.group', 'group')
       .loadRelationCountAndMap(
@@ -338,11 +339,13 @@ export class EventService {
       throw new NotFoundException('Event not found');
     }
 
-    event.attendees =
-      await this.eventAttendeeService.showConfirmedEventAttendeesByEventId(
+    event.attendees = (
+      await this.eventAttendeeService.showEventAttendees(
         event.id,
-        5,
-      );
+        { page: 1, limit: 5 },
+        EventAttendeeStatus.Confirmed,
+      )
+    ).data;
 
     if (event.group && userId) {
       event.groupMember = await this.groupMemberService.findGroupMemberByUserId(

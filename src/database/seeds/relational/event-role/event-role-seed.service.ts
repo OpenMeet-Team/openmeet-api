@@ -26,18 +26,6 @@ export class EventRoleSeedService {
       EventPermissionEntity,
     );
 
-    // DeleteEvent = 'DELETE_EVENT',
-    // CancelEvent = 'CANCEL_EVENT',
-    // ManageEvent = 'MANAGE_EVENT',
-    // ApproveAttendees = 'APPROVE_ATTENDEES',
-    // DeleteAttendees = 'DELETE_ATTENDEES',
-    // ManageAttendees = 'MANAGE_ATTENDEES',
-    // ManageDiscussions = 'MANAGE_DISCUSSIONS',
-    // ViewEvent = 'VIEW_EVENT',
-    // AttendEvent = 'ATTEND_EVENT',
-    // MessageAttendees = 'MESSAGE_ATTENDEES',
-    // CreateDiscussion = 'CREATE_DISCUSSION',
-
     await this.createEventRoleIfNotExists(EventAttendeeRole.Host, [
       EventAttendeePermission.ManageEvent,
       EventAttendeePermission.DeleteEvent,
@@ -50,6 +38,7 @@ export class EventRoleSeedService {
       EventAttendeePermission.AttendEvent,
       EventAttendeePermission.CreateDiscussion,
       EventAttendeePermission.ViewEvent,
+      EventAttendeePermission.ViewDiscussion,
     ]);
 
     await this.createEventRoleIfNotExists(EventAttendeeRole.Moderator, [
@@ -62,24 +51,28 @@ export class EventRoleSeedService {
       EventAttendeePermission.AttendEvent,
       EventAttendeePermission.CreateDiscussion,
       EventAttendeePermission.ViewEvent,
+      EventAttendeePermission.ViewDiscussion,
     ]);
 
     await this.createEventRoleIfNotExists(EventAttendeeRole.Participant, [
       EventAttendeePermission.AttendEvent,
       EventAttendeePermission.CreateDiscussion,
       EventAttendeePermission.ViewEvent,
+      EventAttendeePermission.ViewDiscussion,
     ]);
 
     await this.createEventRoleIfNotExists(EventAttendeeRole.Speaker, [
       EventAttendeePermission.AttendEvent,
       EventAttendeePermission.CreateDiscussion,
       EventAttendeePermission.ViewEvent,
+      EventAttendeePermission.ViewDiscussion,
     ]);
 
     await this.createEventRoleIfNotExists(EventAttendeeRole.Guest, [
       EventAttendeePermission.AttendEvent,
       EventAttendeePermission.CreateDiscussion,
       EventAttendeePermission.ViewEvent,
+      EventAttendeePermission.ViewDiscussion,
     ]);
   }
 
