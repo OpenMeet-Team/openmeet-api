@@ -36,7 +36,10 @@ import { GroupPermission, UserPermission } from '../core/constants/constant';
 export class GroupController {
   constructor(private readonly groupService: GroupService) {}
 
-  @Permissions(UserPermission.CreateGroups)
+  @Permissions({
+    context: 'user',
+    permissions: [UserPermission.CreateGroups],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post()
   @ApiOperation({ summary: 'Create a new group' })
@@ -77,7 +80,10 @@ export class GroupController {
     return await this.groupService.showDashboardGroups(user.id);
   }
 
-  @Permissions(GroupPermission.ManageGroup)
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.ManageGroup],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get(':slug/edit')
   @ApiOperation({ summary: 'Edit a group by slug' })
@@ -97,7 +103,10 @@ export class GroupController {
     return await this.groupService.showGroup(slug, user?.id);
   }
 
-  @Permissions(UserPermission.ManageGroups)
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.ManageGroup],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Patch(':slug')
   @ApiOperation({ summary: 'Update a group by slug' })
@@ -108,7 +117,10 @@ export class GroupController {
     return this.groupService.update(slug, updateGroupDto);
   }
 
-  @Permissions(UserPermission.DeleteGroups)
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.DeleteGroup],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Delete(':slug')
   @ApiOperation({ summary: 'Delete a group by slug' })
@@ -135,6 +147,11 @@ export class GroupController {
     return await this.groupService.showGroupEvents(slug);
   }
 
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.SeeMembers],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Public()
   @Get(':slug/members')
   @ApiOperation({ summary: 'Get all group members' })

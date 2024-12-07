@@ -64,7 +64,10 @@ export class EventController {
     return this.eventService.showDashboardEvents(user.id);
   }
 
-  @Permissions(UserPermission.CreateEvents)
+  @Permissions({
+    context: 'user',
+    permissions: [UserPermission.CreateEvents],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post()
   @ApiOperation({ summary: 'Create a new event' })
@@ -211,8 +214,7 @@ export class EventController {
   //   return await this.eventService.showTopics(id);
   // }
 
-  @Permissions(UserPermission.ViewEvents)
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @UseGuards(JWTAuthGuard)
   @Public()
   @Get(':slug/recommended-events')
   @ApiOperation({
