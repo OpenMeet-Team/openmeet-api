@@ -37,7 +37,7 @@ export class GroupMemberService {
       user,
       group,
       groupRole,
-    };
+    } as unknown as GroupMemberEntity;
     const groupMember = this.groupMemberRepository.create(mappedDto);
     return await this.groupMemberRepository.save(groupMember);
   }
@@ -174,14 +174,14 @@ export class GroupMemberService {
     await this.getTenantSpecificEventRepository();
     const group = { id: createDto.groupId };
     const user = { id: createDto.userId };
-    const role = await this.groupRoleService.findOne(
-      groupRole || GroupRole.Guest,
-    );
+    const role =
+      (await this.groupRoleService.findOne(groupRole as GroupRole)) ||
+      GroupRole.Guest;
     const mappedDto = {
       user,
       group,
       groupRole: role,
-    };
+    } as GroupMemberEntity;
     const groupMember = this.groupMemberRepository.create(mappedDto);
     return await this.groupMemberRepository.save(groupMember);
   }

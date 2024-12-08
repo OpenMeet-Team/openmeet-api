@@ -39,16 +39,16 @@ export class EventRoleSeedService {
     // CreateDiscussion = 'CREATE_DISCUSSION',
 
     await this.createEventRoleIfNotExists(EventAttendeeRole.Host, [
-      EventAttendeePermission.ManageEvent,
-      EventAttendeePermission.DeleteEvent,
-      EventAttendeePermission.CancelEvent,
-      EventAttendeePermission.ManageAttendees,
       EventAttendeePermission.ApproveAttendees,
-      EventAttendeePermission.DeleteAttendees,
-      EventAttendeePermission.ManageDiscussions,
-      EventAttendeePermission.MessageAttendees,
       EventAttendeePermission.AttendEvent,
+      EventAttendeePermission.CancelEvent,
       EventAttendeePermission.CreateDiscussion,
+      EventAttendeePermission.DeleteAttendees,
+      EventAttendeePermission.DeleteEvent,
+      EventAttendeePermission.ManageAttendees,
+      EventAttendeePermission.ManageDiscussions,
+      EventAttendeePermission.ManageEvent,
+      EventAttendeePermission.MessageAttendees,
       EventAttendeePermission.ViewEvent,
     ]);
 

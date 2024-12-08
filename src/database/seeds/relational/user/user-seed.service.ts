@@ -13,6 +13,7 @@ import { StatusEntity } from '../../../../status/infrastructure/persistence/rela
 export class UserSeedService {
   private repository: Repository<UserEntity>;
   private roleRepository: Repository<RoleEntity>;
+
   constructor(
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly configService: ConfigService,
@@ -37,6 +38,7 @@ export class UserSeedService {
 
     const existingUser = await this.repository.count({
       where: { role: { name: roleName } },
+      relations: ['role.permissions'],
     });
 
     if (!existingUser && role) {
@@ -53,6 +55,10 @@ export class UserSeedService {
           status: new StatusEntity(),
         } as UserEntity),
       );
+    } else {
+      console.log(
+        `User ${credentials.email} already exists or role ${roleName} does not exist`,
+      );
     }
   }
 
@@ -62,17 +68,22 @@ export class UserSeedService {
     this.repository = dataSource.getRepository(UserEntity);
     this.roleRepository = dataSource.getRepository(RoleEntity);
 
-    /* eslint-disable no-restricted-syntax */
     const adminCredentials = {
-      email: this.configService.get('ADMIN_EMAIL') as string,
-      password: this.configService.get('ADMIN_PASSWORD') as string,
+      email: this.configService.get('ADMIN_EMAIL', { infer: true }) as string,
+      password: this.configService.get('ADMIN_PASSWORD', {
+        infer: true,
+      }) as string,
       firstName: 'The',
       lastName: 'Admin',
     };
 
     const testUserCredentials = {
-      email: this.configService.get('TEST_USER_EMAIL') as string,
-      password: this.configService.get('TEST_USER_PASSWORD') as string,
+      email: this.configService.get('TEST_USER_EMAIL', {
+        infer: true,
+      }) as string,
+      password: this.configService.get('TEST_USER_PASSWORD', {
+        infer: true,
+      }) as string,
       firstName: 'Test',
       lastName: 'User',
     };
