@@ -59,7 +59,10 @@ export class CategoryController {
     return category;
   }
 
-  @Permissions(UserPermission.ManageCategories)
+  @Permissions({
+    context: 'user',
+    permissions: [UserPermission.ManageCategories],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Patch(':id')
   @ApiOperation({ summary: 'Update a category by ID' })

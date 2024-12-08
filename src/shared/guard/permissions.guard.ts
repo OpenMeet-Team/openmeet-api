@@ -8,6 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { AuthService } from '../../auth/auth.service';
 import { Request } from 'express';
+import { PERMISSIONS_KEY } from './permissions.decorator';
 
 export interface PermissionRequirement {
   context: 'event' | 'group' | 'user';
@@ -22,11 +23,15 @@ export class PermissionsGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    // get permissions as decorated on the controller function
     const requirements = this.reflector.get<PermissionRequirement[]>(
-      'permissions',
+      PERMISSIONS_KEY,
       context.getHandler(),
     );
+
+    // if no permissions are required, allow access
     if (!requirements) {
+      console.log('canActivate: no permissions required');
       return true;
     }
 
@@ -35,20 +40,19 @@ export class PermissionsGuard implements CanActivate {
       .getRequest<Request & { user: any }>();
     const user = request.user;
 
-    console.log('request.url', request.url);
-    console.log('permissions requirements', requirements);
+    console.log('canActivate: request.url', request.url);
+    console.log('canActivate: permissions requirements', requirements);
 
     if (!user) {
-      return false;
+      throw new ForbiddenException('User not authenticated');
     }
 
-    // Check each context's permissions
     for (const requirement of requirements) {
       try {
+        console.log('canActivate: checking context permissions', requirement);
         await this.checkContextPermissions(requirement, user, request);
       } catch (error) {
-        console.log('error', error);
-        throw error;
+        throw error; // Make sure errors are propagated
       }
     }
 
@@ -73,14 +77,14 @@ export class PermissionsGuard implements CanActivate {
           throw new ForbiddenException('Insufficient permissions');
         }
 
-        if (
-          !this.hasRequiredPermissions(
-            eventAttendee[0].role.permissions,
-            permissions,
-          )
-        ) {
+        const hasPermissions = this.hasRequiredPermissions(
+          eventAttendee[0].role.permissions,
+          permissions,
+        );
+        if (!hasPermissions) {
           throw new ForbiddenException('Insufficient permissions');
         }
+        console.log('canActivate: eventAttendee has sufficient permissions');
         break;
       }
 
@@ -90,19 +94,20 @@ export class PermissionsGuard implements CanActivate {
           user.id,
           groupSlug,
         );
-        console.log('groupMembers', groupMembers);
         if (!groupMembers?.[0]) {
+          console.log('canActivate: groupMembers not found');
           throw new ForbiddenException('Insufficient permissions');
         }
 
-        if (
-          !this.hasRequiredPermissions(
-            groupMembers[0].groupRole.groupPermissions,
-            permissions,
-          )
-        ) {
+        const hasPermissions = this.hasRequiredPermissions(
+          groupMembers[0].groupRole.groupPermissions,
+          permissions,
+        );
+        if (!hasPermissions) {
+          console.log('canActivate: groupMembers has insufficient permissions');
           throw new ForbiddenException('Insufficient permissions');
         }
+        console.log('canActivate: groupMembers has sufficient permissions');
         break;
       }
 
@@ -110,9 +115,15 @@ export class PermissionsGuard implements CanActivate {
         const userPermissions = await this.authService.getUserPermissions(
           user.id,
         );
-        if (!this.hasRequiredPermissions(userPermissions, permissions)) {
+        const hasPermissions = this.hasRequiredPermissions(
+          userPermissions,
+          permissions,
+        );
+        if (!hasPermissions) {
+          console.log('canActivate: user has insufficient permissions');
           throw new ForbiddenException('Insufficient permissions');
         }
+        console.log('canActivate: user has sufficient permissions');
         break;
       }
     }
@@ -122,6 +133,11 @@ export class PermissionsGuard implements CanActivate {
     userPermissions: any[],
     requiredPermissions: string[],
   ): boolean {
+    console.log('hasRequiredPermissions: userPermissions', userPermissions);
+    console.log(
+      'hasRequiredPermissions: requiredPermissions',
+      requiredPermissions,
+    );
     if (!userPermissions || !Array.isArray(userPermissions)) {
       return false;
     }
