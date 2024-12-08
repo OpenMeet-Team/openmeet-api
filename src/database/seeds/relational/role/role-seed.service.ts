@@ -4,7 +4,7 @@ import { RoleEntity } from '../../../../role/infrastructure/persistence/relation
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
 import { RoleEnum } from '../../../../role/role.enum';
 import { PermissionEntity } from '../../../../permission/infrastructure/persistence/relational/entities/permission.entity';
-import { GroupPermission, UserPermission } from 'src/core/constants/constant';
+import { UserPermission } from 'src/core/constants/constant';
 import { PermissionRequirement } from 'src/shared/guard/permissions.guard';
 
 @Injectable()
@@ -28,11 +28,16 @@ export class RoleSeedService {
       {
         context: 'user',
         permissions: [
-          UserPermission.CreateGroups,
-          UserPermission.ViewGroups,
-          UserPermission.JoinGroups,
-          UserPermission.CreateEvents,
           UserPermission.AttendEvents,
+          UserPermission.CreateEvents,
+          UserPermission.CreateGroups,
+          UserPermission.CreateIssues,
+          UserPermission.JoinGroups,
+          UserPermission.MessageAttendees,
+          UserPermission.MessageMembers,
+          UserPermission.MessageUsers,
+          UserPermission.ViewEvents,
+          UserPermission.ViewGroups,
         ],
       },
     ]);
@@ -42,20 +47,42 @@ export class RoleSeedService {
         context: 'user',
         permissions: Object.values(UserPermission),
       },
-      {
-        context: 'group',
-        permissions: Object.values(GroupPermission),
-      },
     ]);
 
     await this.createRoleIfNotExists(RoleEnum.Editor, [
       {
         context: 'user',
-        permissions: Object.values(UserPermission),
-      },
-      {
-        context: 'group',
-        permissions: Object.values(GroupPermission),
+        permissions: [
+          UserPermission.CreateAttendees,
+          UserPermission.CreateCategories,
+          UserPermission.CreateDiscussions,
+          UserPermission.CreateEvents,
+          UserPermission.CreateGroups,
+          UserPermission.CreateIssues,
+          UserPermission.CreateReports,
+          UserPermission.CreateUsers,
+          UserPermission.DeleteAttendees,
+          UserPermission.DeleteCategories,
+          UserPermission.DeleteDiscussions,
+          UserPermission.DeleteEvents,
+          UserPermission.DeleteGroups,
+          UserPermission.DeleteIssues,
+          UserPermission.DeleteReports,
+          UserPermission.DeleteUsers,
+          UserPermission.ManageAttendees,
+          UserPermission.ManageCategories,
+          UserPermission.ManageDiscussions,
+          UserPermission.ManageEvents,
+          UserPermission.ManageGroups,
+          UserPermission.ManageIssues,
+          UserPermission.ManageReports,
+          UserPermission.ManageSettings,
+          UserPermission.MessageAttendees,
+          UserPermission.MessageMembers,
+          UserPermission.MessageUsers,
+          UserPermission.ViewEvents,
+          UserPermission.ViewGroups,
+        ],
       },
     ]);
   }

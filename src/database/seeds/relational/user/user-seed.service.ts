@@ -8,15 +8,12 @@ import { TenantConnectionService } from '../../../../tenant/tenant.service';
 import { RoleEntity } from 'src/role/infrastructure/persistence/relational/entities/role.entity';
 import { ConfigService } from '@nestjs/config';
 import { StatusEntity } from '../../../../status/infrastructure/persistence/relational/entities/status.entity';
-import { PermissionEntity } from '../../../../permission/infrastructure/persistence/relational/entities/permission.entity';
-import { UserPermissionEntity } from '../../../../user/infrastructure/persistence/relational/entities/user-permission.entity';
 
 @Injectable()
 export class UserSeedService {
   private repository: Repository<UserEntity>;
   private roleRepository: Repository<RoleEntity>;
-  private permissionRepository: Repository<PermissionEntity>;
-  private userPermissionRepository: Repository<UserPermissionEntity>;
+
   constructor(
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly configService: ConfigService,
@@ -70,9 +67,6 @@ export class UserSeedService {
       await this.tenantConnectionService.getTenantConnection(tenantId);
     this.repository = dataSource.getRepository(UserEntity);
     this.roleRepository = dataSource.getRepository(RoleEntity);
-    this.userPermissionRepository =
-      dataSource.getRepository(UserPermissionEntity);
-    this.permissionRepository = dataSource.getRepository(PermissionEntity);
 
     const adminCredentials = {
       email: this.configService.get('ADMIN_EMAIL', { infer: true }) as string,

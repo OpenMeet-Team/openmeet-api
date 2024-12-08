@@ -50,19 +50,6 @@ describe('EventAttendeeController (e2e)', () => {
     return eventResponse.body;
   }
 
-  // async function attendEvent(token, eventSlug) {
-  //   const attendResponse = await request(TESTING_APP_URL)
-  //     .post(`/api/events/${eventSlug}/attend`)
-  //     .set('Authorization', `Bearer ${token}`)
-  //     .set('x-tenant-id', TESTING_TENANT_ID)
-  //     .send({
-  //       eventId: testEvent.id,
-  //     });
-
-  //   expect(attendResponse.status).toBe(201);
-  //   return attendResponse.body;
-  // }
-
   beforeEach(async () => {
     token = await loginAsTester();
     testEvent = await createEvent(token);
