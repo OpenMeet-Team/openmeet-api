@@ -693,14 +693,17 @@ export class AuthService {
     return this.userService.findById(userId);
   }
 
-  async getEventAttendeesBySlug(userId: number, eventSlug: string) {
+  async getEventAttendeeBySlug(userId: number, eventSlug: string) {
     const event = await this.eventService.findEventBySlug(eventSlug);
+    console.log('getEventAttendeeBySlug: event', event);
     if (!event) return null;
 
-    return this.eventAttendeeService.findEventAttendeeByUserId(
-      event.id,
-      userId,
-    );
+    const eventAttendee =
+      await this.eventAttendeeService.findEventAttendeeByUserId(
+        event.id,
+        userId,
+      );
+    return eventAttendee;
   }
 
   async getGroupMembersBySlug(userId: number, groupSlug: string) {

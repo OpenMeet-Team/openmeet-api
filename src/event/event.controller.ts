@@ -140,7 +140,10 @@ export class EventController {
     return await this.eventService.cancelAttendingEvent(slug, user.id);
   }
 
-  @Permissions(EventAttendeePermission.ManageAttendees)
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.ManageAttendees],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Patch(':slug/attendees/:attendeeId')
   @ApiOperation({ summary: 'Update event attendee' })
@@ -156,7 +159,10 @@ export class EventController {
     );
   }
 
-  @Permissions(EventAttendeePermission.ManageAttendees)
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.ViewEvent],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get(':slug/attendees')
   @ApiOperation({ summary: 'Get all event attendees' })
@@ -166,11 +172,18 @@ export class EventController {
     @Query() query: QueryEventAttendeeDto,
     @AuthUser() user: User,
   ): Promise<any> {
+    console.log('got controller event attendees for user', user);
     const userId = user?.id;
     query.userId = userId;
+    console.log('got controller event attendees for user', userId);
     return this.eventService.showEventAttendees(slug, pagination);
   }
 
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.MessageAttendees],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':ulid/comments')
   @ApiOperation({ summary: 'Create a new comment' })
   async createComment(
@@ -224,7 +237,10 @@ export class EventController {
     return await this.eventService.showRecommendedEventsByEventSlug(slug);
   }
 
-  @Permissions(EventAttendeePermission.ManageDiscussions)
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.MessageAttendees],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/discussions')
   @ApiOperation({ summary: 'Send a message to a group discussion' })
@@ -236,7 +252,10 @@ export class EventController {
     return this.eventService.sendEventDiscussionMessage(slug, user.id, body);
   }
 
-  @Permissions(EventAttendeePermission.ManageDiscussions)
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.ManageDiscussions],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Patch(':slug/discussions/:messageId')
   @ApiOperation({ summary: 'Update a group discussion message' })
@@ -253,7 +272,10 @@ export class EventController {
     );
   }
 
-  @Permissions(EventAttendeePermission.ManageDiscussions)
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.ManageDiscussions],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Delete(':slug/discussions/:messageId')
   @ApiOperation({ summary: 'Delete a group discussion message' })

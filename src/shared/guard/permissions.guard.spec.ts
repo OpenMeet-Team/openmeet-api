@@ -12,15 +12,11 @@ describe('PermissionsGuard', () => {
 
   const mockAuthService = {
     getUserPermissions: jest.fn(),
-    getEventAttendeesBySlug: jest.fn(),
+    getEventAttendeeBySlug: jest.fn(),
     getGroupMembersBySlug: jest.fn(),
   };
 
-  const createMockContext = (
-    permissions: any[],
-    user = { id: 1 },
-    params = {},
-  ): ExecutionContext =>
+  const createMockContext = (user = { id: 1 }, params = {}): ExecutionContext =>
     ({
       getHandler: jest.fn(),
       switchToHttp: () => ({
@@ -60,9 +56,11 @@ describe('PermissionsGuard', () => {
 
   describe('User Permissions', () => {
     it('should allow access with direct user permission', async () => {
-      const mockContext = createMockContext([
+      const requirements = [
         { context: 'user', permissions: [UserPermission.CreateEvents] },
-      ]);
+      ];
+      (reflector.get as jest.Mock).mockReturnValue(requirements);
+      const mockContext = createMockContext({ id: 1 });
 
       mockAuthService.getUserPermissions.mockResolvedValue([
         { name: UserPermission.CreateEvents },
@@ -77,9 +75,7 @@ describe('PermissionsGuard', () => {
         { context: 'user', permissions: [UserPermission.CreateEvents] },
       ]);
 
-      const mockContext = createMockContext([
-        { context: 'user', permissions: [UserPermission.CreateEvents] },
-      ]);
+      const mockContext = createMockContext({ id: 1 });
 
       mockAuthService.getUserPermissions.mockResolvedValue([]);
 
@@ -91,24 +87,23 @@ describe('PermissionsGuard', () => {
 
   describe('Context Permissions', () => {
     describe('Multiple Contexts', () => {
-      it('should deny access when missing group permissions but having event permissions', async () => {
+      it('should deny access when missing one of the required permissions', async () => {
+        (reflector.get as jest.Mock).mockReturnValue([
+          {
+            context: 'event',
+            permissions: [UserPermission.ManageAttendees],
+          },
+          {
+            context: 'group',
+            permissions: [GroupPermission.ManageEvents],
+          },
+        ]);
+
         // Setup context requiring both event and group permissions
-        const mockContext = createMockContext(
-          [
-            {
-              context: 'event',
-              permissions: [UserPermission.ManageAttendees],
-            },
-            {
-              context: 'group',
-              permissions: [GroupPermission.ManageEvents],
-            },
-          ],
-          { id: 1 },
-        );
+        const mockContext = createMockContext({ id: 1 });
 
         // Mock event permissions - user has required event permission
-        mockAuthService.getEventAttendeesBySlug.mockResolvedValue([
+        mockAuthService.getEventAttendeeBySlug.mockResolvedValue([
           {
             role: {
               permissions: [{ name: UserPermission.ManageAttendees }],
@@ -120,7 +115,7 @@ describe('PermissionsGuard', () => {
         mockAuthService.getGroupMembersBySlug.mockResolvedValue([
           {
             groupRole: {
-              groupPermissions: [], // Empty permissions array
+              groupPermissions: [GroupPermission.ManageDiscussions],
             },
           },
         ]);
@@ -132,26 +127,22 @@ describe('PermissionsGuard', () => {
       });
 
       it('should deny access when having group permissions but missing event permissions', async () => {
-        const mockContext = createMockContext(
-          [
-            {
-              context: 'event',
-              permissions: [UserPermission.ManageAttendees],
-            },
-            {
-              context: 'group',
-              permissions: [GroupPermission.ManageEvents],
-            },
-          ],
-          { id: 1 },
+        const requirements = [
           {
-            slug: 'test-event',
-            groupSlug: 'test-group',
+            context: 'event',
+            permissions: [UserPermission.ManageAttendees],
           },
-        );
+          {
+            context: 'group',
+            permissions: [GroupPermission.ManageEvents],
+          },
+        ];
+
+        (reflector.get as jest.Mock).mockReturnValue(requirements);
+        const mockContext = createMockContext({ id: 1 });
 
         // Mock event permissions - user lacks required event permission
-        mockAuthService.getEventAttendeesBySlug.mockResolvedValue([
+        mockAuthService.getEventAttendeeBySlug.mockResolvedValue([
           {
             role: {
               permissions: [],
@@ -177,14 +168,12 @@ describe('PermissionsGuard', () => {
 
   describe('Mixed Permissions', () => {
     it('should handle both user and context permissions', async () => {
-      const mockContext = createMockContext(
-        [
-          { context: 'user', permissions: [UserPermission.CreateEvents] },
-          { context: 'group', permissions: [GroupPermission.ManageEvents] },
-        ],
-        { id: 1 },
-        { groupSlug: 'test-group' },
-      );
+      const requirements = [
+        { context: 'user', permissions: [UserPermission.CreateEvents] },
+        { context: 'group', permissions: [GroupPermission.ManageEvents] },
+      ];
+      (reflector.get as jest.Mock).mockReturnValue(requirements);
+      const mockContext = createMockContext({ id: 1 });
 
       mockAuthService.getUserPermissions.mockResolvedValue([
         { name: UserPermission.CreateEvents },

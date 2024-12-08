@@ -50,23 +50,23 @@ describe('EventAttendeeController (e2e)', () => {
     return eventResponse.body;
   }
 
-  async function attendEvent(token, eventSlug) {
-    const attendResponse = await request(TESTING_APP_URL)
-      .post(`/api/events/${eventSlug}/attend`)
-      .set('Authorization', `Bearer ${token}`)
-      .set('x-tenant-id', TESTING_TENANT_ID)
-      .send({
-        eventId: testEvent.id,
-      });
+  // async function attendEvent(token, eventSlug) {
+  //   const attendResponse = await request(TESTING_APP_URL)
+  //     .post(`/api/events/${eventSlug}/attend`)
+  //     .set('Authorization', `Bearer ${token}`)
+  //     .set('x-tenant-id', TESTING_TENANT_ID)
+  //     .send({
+  //       eventId: testEvent.id,
+  //     });
 
-    expect(attendResponse.status).toBe(201);
-    return attendResponse.body;
-  }
+  //   expect(attendResponse.status).toBe(201);
+  //   return attendResponse.body;
+  // }
 
   beforeEach(async () => {
     token = await loginAsTester();
     testEvent = await createEvent(token);
-    await attendEvent(token, testEvent.slug);
+    // await attendEvent(token, testEvent.slug);
   });
 
   afterEach(async () => {
@@ -90,17 +90,13 @@ describe('EventAttendeeController (e2e)', () => {
   });
 
   it('should retrieve attendees of an event', async () => {
+    // creating or joining event should grant us this permission
     const getEventAttendeesResponse = await request(TESTING_APP_URL)
       .get(`/api/events/${testEvent.slug}/attendees`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
 
     expect(getEventAttendeesResponse.status).toBe(200);
-
-    // const isTesterAttending = getEventAttendeesResponse.body.data.some(
-    //   (attendee) => attendee.user.id === TESTING_ADMIN_ID,
-    // );
-    // expect(isTesterAttending).toBe(true);
   });
 
   // it('should allow the user to cancel attendance', async () => {

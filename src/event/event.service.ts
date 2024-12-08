@@ -135,7 +135,7 @@ export class EventService {
       throw new NotFoundException('Host role not found');
     }
 
-    // Create event attendee record for creator as host
+    // Create event attendee record for creator as host with proper permissions
     await this.eventAttendeesRepository.save({
       event: createdEvent,
       user: { id: userId },
@@ -720,6 +720,7 @@ export class EventService {
   async showEventAttendees(slug: string, pagination: PaginationDto) {
     await this.getTenantSpecificEventRepository();
 
+    console.log('showEventAttendees slug', slug);
     const event = await this.eventRepository.findOne({ where: { slug } });
     if (!event) {
       throw new NotFoundException('Event not found');

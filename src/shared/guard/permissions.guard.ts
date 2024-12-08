@@ -40,6 +40,7 @@ export class PermissionsGuard implements CanActivate {
       .getRequest<Request & { user: any }>();
     const user = request.user;
 
+    console.log('canActivate: request.method', request.method);
     console.log('canActivate: request.url', request.url);
     console.log('canActivate: permissions requirements', requirements);
 
@@ -47,15 +48,13 @@ export class PermissionsGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
+    // Check each requirement - ALL must pass
     for (const requirement of requirements) {
-      try {
-        console.log('canActivate: checking context permissions', requirement);
-        await this.checkContextPermissions(requirement, user, request);
-      } catch (error) {
-        throw error; // Make sure errors are propagated
-      }
+      await this.checkContextPermissions(requirement, user, request);
+      // If checkContextPermissions doesn't throw, this requirement passed
     }
 
+    // Only return true if ALL requirements have been checked and passed
     return true;
   }
 
@@ -66,25 +65,26 @@ export class PermissionsGuard implements CanActivate {
   ): Promise<void> {
     const { context, permissions } = requirement;
 
+    console.log('checkContextPermissions: context', context);
+
     switch (context) {
       case 'event': {
         const eventSlug = request.params.slug;
-        const eventAttendee = await this.authService.getEventAttendeesBySlug(
+        const eventAttendee = await this.authService.getEventAttendeeBySlug(
           user.id,
           eventSlug,
         );
-        if (!eventAttendee?.[0]) {
+        if (!eventAttendee) {
           throw new ForbiddenException('Insufficient permissions');
         }
 
         const hasPermissions = this.hasRequiredPermissions(
-          eventAttendee[0].role.permissions,
+          eventAttendee.role?.permissions || [],
           permissions,
         );
         if (!hasPermissions) {
           throw new ForbiddenException('Insufficient permissions');
         }
-        console.log('canActivate: eventAttendee has sufficient permissions');
         break;
       }
 

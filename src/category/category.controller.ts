@@ -47,8 +47,8 @@ export class CategoryController {
     return this.categoryService.findAll();
   }
 
-  @Permissions(UserPermission.ManageCategories)
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Public()
+  @UseGuards(JWTAuthGuard)
   @Get(':id')
   @ApiOperation({ summary: 'Get category by ID' })
   async findOne(@Param('id') id: number): Promise<CategoryEntity> {

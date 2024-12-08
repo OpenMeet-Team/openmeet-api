@@ -7,6 +7,7 @@ import { PermissionsGuard } from '../shared/guard/permissions.guard';
 import { JWTAuthGuard } from '../auth/auth.guard';
 import { ExecutionContext } from '@nestjs/common';
 import { UserPermission } from '../core/constants/constant';
+import { PERMISSIONS_KEY } from '../shared/guard/permissions.decorator';
 
 describe('CategoryController', () => {
   let controller: CategoryController;
@@ -71,13 +72,7 @@ describe('CategoryController', () => {
     guard = module.get<PermissionsGuard>(PermissionsGuard);
   });
 
-  describe('Authorization', () => {
-    const mockUser = {
-      id: 1,
-      role: {
-        permissions: [],
-      },
-    };
+  describe('Global Guards', () => {
     describe('POST /categories', () => {
       const createDto = {
         name: 'New Category',
@@ -85,13 +80,20 @@ describe('CategoryController', () => {
         slug: 'new-category',
       };
 
-      it('should deny access without CreateCategories permission', async () => {
-        mockAuthService.getUserPermissions.mockResolvedValue([]);
+      beforeEach(() => {
+        // Reset all mocks before each test
+        Object.values(mockAuthService).forEach((mock) => mock.mockReset());
+      });
 
-        const context = createMockExecutionContext(controller.create);
-        await expect(guard.canActivate(context)).rejects.toThrow(
-          'Insufficient permissions',
+      it('should have CreateCategories permission requirement', () => {
+        const permissions = Reflect.getMetadata(
+          PERMISSIONS_KEY,
+          controller.create,
         );
+
+        expect(permissions).toEqual([
+          { context: 'user', permissions: [UserPermission.CreateCategories] },
+        ]);
       });
 
       it('should allow access with CreateCategories permission', async () => {
@@ -102,12 +104,20 @@ describe('CategoryController', () => {
           { name: UserPermission.CreateCategories },
         ]);
 
-        const context = createMockExecutionContext(controller.create, mockUser);
-
+        const context = createMockExecutionContext(controller.create);
         await expect(guard.canActivate(context)).resolves.toBe(true);
 
         const result = await controller.create(createDto);
         expect(result).toEqual(createdCategory);
+      });
+
+      it('should deny access without CreateCategories permission', async () => {
+        mockAuthService.getUserPermissions.mockResolvedValue([]);
+
+        const context = createMockExecutionContext(controller.create);
+        await expect(guard.canActivate(context)).rejects.toThrow(
+          'Insufficient permissions',
+        );
       });
     });
 
@@ -120,37 +130,6 @@ describe('CategoryController', () => {
         expect(result).toEqual(categories);
       });
     });
-
-    describe('GET /categories/:id', () => {
-      it('should deny access without ManageCategories permission', async () => {
-        mockAuthService.getUserPermissions.mockResolvedValue([]);
-
-        const context = createMockExecutionContext(controller.findOne);
-        await expect(guard.canActivate(context)).rejects.toThrow(
-          'Insufficient permissions',
-        );
-      });
-
-      it('should allow access with ManageCategories permission', async () => {
-        const category = { id: 1, name: 'Test Category' };
-        mockCategoryService.findOne.mockResolvedValue(category);
-
-        mockAuthService.getUserPermissions.mockResolvedValue([
-          { name: UserPermission.ManageCategories },
-        ]);
-
-        const context = createMockExecutionContext(
-          controller.findOne,
-          mockUser,
-        );
-
-        await expect(guard.canActivate(context)).resolves.toBe(true);
-
-        const result = await controller.findOne(1);
-        expect(result).toEqual(category);
-      });
-    });
-
     describe('PATCH /categories/:id', () => {
       const updateDto = {
         name: 'Updated Category',
@@ -168,18 +147,11 @@ describe('CategoryController', () => {
         const updatedCategory = { id: 1, ...updateDto };
         mockCategoryService.update.mockResolvedValue(updatedCategory);
 
-        const mockUserWithPermissions = {
-          ...mockUser,
-          role: {
-            permissions: [{ name: 'MANAGE_CATEGORIES' }],
-          },
-        };
+        mockAuthService.getUserPermissions.mockResolvedValue([
+          { name: UserPermission.ManageCategories },
+        ]);
 
-        const context = createMockExecutionContext(
-          controller.update,
-          mockUserWithPermissions,
-        );
-
+        const context = createMockExecutionContext(controller.update);
         await expect(guard.canActivate(context)).resolves.toBe(true);
 
         const result = await controller.update(1, updateDto);

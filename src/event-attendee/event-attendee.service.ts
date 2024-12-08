@@ -108,6 +108,7 @@ export class EventAttendeeService {
   ): Promise<any> {
     await this.getTenantSpecificEventRepository();
 
+    console.log('eventId', eventId);
     const { limit, page } = pagination;
     const eventAttendee = await this.eventAttendeesRepository
       .createQueryBuilder('eventAttendee')
@@ -122,6 +123,7 @@ export class EventAttendeeService {
     if (status) {
       eventAttendee.andWhere('eventAttendee.status = :status', { status });
     }
+    console.log('eventAttendee', eventAttendee);
 
     return paginate(eventAttendee, { page, limit });
   }
