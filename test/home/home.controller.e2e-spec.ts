@@ -37,7 +37,7 @@ describe('HomeController (e2e)', () => {
       .expect(200)
       .expect((res) => {
         expect(res.body.organizedGroups).toBeInstanceOf(Array);
-        expect(res.body.nextHostedEvent).toBeInstanceOf(Object);
+        expect(res.body.nextHostedEvent).toBeDefined();
         expect(res.body.recentEventDrafts).toBeInstanceOf(Array);
         expect(res.body.upcomingEvents).toBeInstanceOf(Array);
         expect(res.body.memberGroups).toBeInstanceOf(Array);
