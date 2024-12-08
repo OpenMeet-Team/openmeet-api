@@ -78,7 +78,10 @@ export class EventController {
     return this.eventService.create(createEventDto, user.id);
   }
 
-  @Permissions(UserPermission.ManageEvents)
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.ManageEvent],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get('me/:slug')
   @ApiOperation({ summary: 'Edit event by ID' })
@@ -86,7 +89,11 @@ export class EventController {
     return await this.eventService.editEvent(slug);
   }
 
-  @Public()
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.ViewEvent],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get(':slug')
   @ApiOperation({ summary: 'Show event details by ID' })
   async showEvent(
@@ -96,7 +103,10 @@ export class EventController {
     return this.eventService.showEvent(slug, user?.id);
   }
 
-  @Permissions(UserPermission.ManageEvents)
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.ManageEvent],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Patch(':slug')
   @ApiOperation({ summary: 'Update an event by ID' })
@@ -110,14 +120,23 @@ export class EventController {
     return this.eventService.update(slug, updateEventDto, userId);
   }
 
-  @Permissions(UserPermission.DeleteEvents)
+  @Permissions({
+    context: 'event',
+    permissions: [
+      EventAttendeePermission.ManageEvent,
+      EventAttendeePermission.DeleteEvent,
+    ],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Delete(':slug')
   async remove(@Param('slug') slug: string): Promise<void> {
     return this.eventService.remove(slug);
   }
 
-  @Permissions()
+  @Permissions({
+    context: 'user',
+    permissions: [UserPermission.AttendEvents],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/attend')
   @ApiOperation({ summary: 'Attending an event' })
@@ -129,7 +148,16 @@ export class EventController {
     return this.eventService.attendEvent(slug, user.id, createEventAttendeeDto);
   }
 
-  @Permissions(UserPermission.AttendEvents)
+  @Permissions(
+    {
+      context: 'user',
+      permissions: [UserPermission.AttendEvents],
+    },
+    {
+      context: 'event',
+      permissions: [EventAttendeePermission.AttendEvent],
+    },
+  )
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/cancel-attending')
   @ApiOperation({ summary: 'Cancel attending an event' })
@@ -179,7 +207,10 @@ export class EventController {
 
   @Permissions({
     context: 'event',
-    permissions: [EventAttendeePermission.MessageAttendees],
+    permissions: [
+      EventAttendeePermission.MessageAttendees,
+      EventAttendeePermission.CreateDiscussion,
+    ],
   })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':ulid/comments')
@@ -237,7 +268,10 @@ export class EventController {
 
   @Permissions({
     context: 'event',
-    permissions: [EventAttendeePermission.MessageAttendees],
+    permissions: [
+      EventAttendeePermission.MessageAttendees,
+      EventAttendeePermission.CreateDiscussion,
+    ],
   })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/discussions')

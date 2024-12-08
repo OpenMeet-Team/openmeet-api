@@ -50,7 +50,10 @@ export class GroupController {
     return this.groupService.create(createGroupDto, user.id);
   }
 
-  @Permissions(UserPermission.ViewGroups)
+  @Permissions({
+    context: 'user',
+    permissions: [UserPermission.ViewGroups],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Public()
   @Get()
@@ -64,7 +67,10 @@ export class GroupController {
     return this.groupService.showAll(pagination, query);
   }
 
-  @Permissions(UserPermission.CreateEvents)
+  @Permissions({
+    context: 'user',
+    permissions: [UserPermission.CreateEvents, UserPermission.ViewGroups],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get('me')
   @ApiOperation({ summary: 'Get groups where user can create events' })
@@ -91,10 +97,19 @@ export class GroupController {
     return await this.groupService.editGroup(slug);
   }
 
-  @Public()
+  @Permissions(
+    {
+      context: 'user',
+      permissions: [UserPermission.ViewGroups],
+    },
+    {
+      context: 'group',
+      permissions: [GroupPermission.SeeMembers, GroupPermission.SeeGroup],
+    },
+  )
   @Get(':slug')
   @ApiOperation({
-    summary: 'Get group by group slug and authenticated user, public endpoint',
+    summary: 'Get group by group slug and authenticated user',
   })
   async showGroup(
     @Param('slug') slug: string,
@@ -128,7 +143,10 @@ export class GroupController {
     return this.groupService.remove(slug);
   }
 
-  @Public()
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.SeeGroup],
+  })
   @Get(':slug/about')
   @ApiOperation({ summary: 'Get group about' })
   async showGroupAbout(@Param('slug') slug: string): Promise<{
