@@ -13,17 +13,26 @@ import { getTenantConfig } from '../utils/tenant-config';
 import { REQUEST } from '@nestjs/core';
 import fs from 'fs';
 import handlebars from 'handlebars';
+import { TenantConfig } from '../core/constants/constant';
+import { TenantConnectionService } from '../tenant/tenant.service';
 
 @Injectable()
 export class MailService {
   private partials: { [key: string]: string } = {};
+  private tenantConfig: TenantConfig;
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly mailerService: MailerService,
     private readonly configService: ConfigService<AllConfigType>,
+    private readonly tenantService: TenantConnectionService,
   ) {
     this.registerPartials();
+  }
+
+  getTenantConfig() {
+    const tenantId = this.request.tenantId;
+    this.tenantConfig = this.tenantService.getTenantConfig(tenantId);
   }
 
   private registerPartials() {
@@ -48,6 +57,8 @@ export class MailService {
   }
 
   async userSignUp(mailData: MailData<{ hash: string }>): Promise<void> {
+    this.getTenantConfig();
+
     const i18n = I18nContext.current();
     let emailConfirmTitle: MaybeType<string>;
     let text1: MaybeType<string>;
@@ -71,6 +82,7 @@ export class MailService {
     url.searchParams.set('hash', mailData.data.hash);
 
     await this.mailerService.sendMail({
+      tenantConfig: this.tenantConfig,
       to: mailData.to,
       subject: emailConfirmTitle,
       text: `${url.toString()} ${emailConfirmTitle}`,
@@ -87,7 +99,7 @@ export class MailService {
         title: emailConfirmTitle,
         url: url.toString(),
         actionTitle: emailConfirmTitle,
-        app_name: this.configService.get('app.name', { infer: true }),
+        app_name: this.tenantConfig.name,
         text1,
         text2,
         text3,
@@ -98,6 +110,8 @@ export class MailService {
   async forgotPassword(
     mailData: MailData<{ hash: string; tokenExpires: number }>,
   ): Promise<void> {
+    this.getTenantConfig();
+
     const i18n = I18nContext.current();
     let resetPasswordTitle: MaybeType<string>;
     let text1: MaybeType<string>;
@@ -124,6 +138,7 @@ export class MailService {
     url.searchParams.set('expires', mailData.data.tokenExpires.toString());
 
     await this.mailerService.sendMail({
+      tenantConfig: this.tenantConfig,
       to: mailData.to,
       subject: resetPasswordTitle,
       text: `${url.toString()} ${resetPasswordTitle}`,
@@ -140,9 +155,7 @@ export class MailService {
         title: resetPasswordTitle,
         url: url.toString(),
         actionTitle: resetPasswordTitle,
-        app_name: this.configService.get('app.name', {
-          infer: true,
-        }),
+        app_name: this.tenantConfig.name,
         text1,
         text2,
         text3,
@@ -152,6 +165,8 @@ export class MailService {
   }
 
   async confirmNewEmail(mailData: MailData<{ hash: string }>): Promise<void> {
+    this.getTenantConfig();
+
     const i18n = I18nContext.current();
     let emailConfirmTitle: MaybeType<string>;
     let text1: MaybeType<string>;
@@ -175,6 +190,7 @@ export class MailService {
     url.searchParams.set('hash', mailData.data.hash);
 
     await this.mailerService.sendMail({
+      tenantConfig: this.tenantConfig,
       to: mailData.to,
       subject: emailConfirmTitle,
       text: `${url.toString()} ${emailConfirmTitle}`,
@@ -191,7 +207,7 @@ export class MailService {
         title: emailConfirmTitle,
         url: url.toString(),
         actionTitle: emailConfirmTitle,
-        app_name: this.configService.get('app.name', { infer: true }),
+        app_name: this.tenantConfig.name,
         text1,
         text2,
         text3,
@@ -202,10 +218,13 @@ export class MailService {
   async groupMemberJoined(
     mailData: MailData<{ group: GroupEntity; user: UserEntity }>,
   ): Promise<void> {
+    this.getTenantConfig();
+
     const tenantConfig = getTenantConfig(this.request.tenantId);
     const url = tenantConfig.frontendDomain + '/auth/confirm-email';
 
     await this.mailerService.sendMail({
+      tenantConfig: this.tenantConfig,
       to: mailData.to,
       title: 'New member has joined your group',
       subject: 'New member has joined your group',

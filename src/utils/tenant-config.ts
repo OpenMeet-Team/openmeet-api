@@ -1,17 +1,7 @@
 import * as fs from 'fs';
+import { TenantConfig } from 'src/core/constants/constant';
 
-export interface Tenant {
-  id: string;
-  name: string;
-  frontendDomain: string;
-  logoUrl: string;
-  companyDomain: string;
-  confirmEmail: boolean;
-  mailDefaultEmail: string;
-  mailDefaultName: string;
-}
-
-export function fetchTenants(): Tenant[] {
+export function fetchTenants(): TenantConfig[] {
   try {
     // 0. Get base64 encoded json file from env variable
     const base64EncodedJson = process.env.TENANTS_B64;
@@ -47,7 +37,7 @@ export function fetchTenants(): Tenant[] {
   }
 }
 
-export function getTenantConfig(tenantId: string): Tenant {
+export function getTenantConfig(tenantId: string): TenantConfig {
   const tenant = fetchTenants().find((t) => t.id === tenantId);
   if (!tenant) {
     throw new Error(`Tenant ${tenantId} not found`);
