@@ -172,10 +172,8 @@ export class EventController {
     @Query() query: QueryEventAttendeeDto,
     @AuthUser() user: User,
   ): Promise<any> {
-    console.log('got controller event attendees for user', user);
     const userId = user?.id;
     query.userId = userId;
-    console.log('got controller event attendees for user', userId);
     return this.eventService.showEventAttendees(slug, pagination);
   }
 

@@ -31,7 +31,6 @@ export class PermissionsGuard implements CanActivate {
 
     // if no permissions are required, allow access
     if (!requirements) {
-      console.log('canActivate: no permissions required');
       return true;
     }
 
@@ -39,10 +38,6 @@ export class PermissionsGuard implements CanActivate {
       .switchToHttp()
       .getRequest<Request & { user: any }>();
     const user = request.user;
-
-    console.log('canActivate: request.method', request.method);
-    console.log('canActivate: request.url', request.url);
-    console.log('canActivate: permissions requirements', requirements);
 
     if (!user) {
       throw new ForbiddenException('User not authenticated');
@@ -64,8 +59,6 @@ export class PermissionsGuard implements CanActivate {
     request: Request,
   ): Promise<void> {
     const { context, permissions } = requirement;
-
-    console.log('checkContextPermissions: context', context);
 
     switch (context) {
       case 'event': {
@@ -95,7 +88,6 @@ export class PermissionsGuard implements CanActivate {
           groupSlug,
         );
         if (!groupMembers?.[0]) {
-          console.log('canActivate: groupMembers not found');
           throw new ForbiddenException('Insufficient permissions');
         }
 
@@ -104,10 +96,8 @@ export class PermissionsGuard implements CanActivate {
           permissions,
         );
         if (!hasPermissions) {
-          console.log('canActivate: groupMembers has insufficient permissions');
           throw new ForbiddenException('Insufficient permissions');
         }
-        console.log('canActivate: groupMembers has sufficient permissions');
         break;
       }
 
@@ -120,10 +110,8 @@ export class PermissionsGuard implements CanActivate {
           permissions,
         );
         if (!hasPermissions) {
-          console.log('canActivate: user has insufficient permissions');
           throw new ForbiddenException('Insufficient permissions');
         }
-        console.log('canActivate: user has sufficient permissions');
         break;
       }
     }
@@ -133,11 +121,6 @@ export class PermissionsGuard implements CanActivate {
     userPermissions: any[],
     requiredPermissions: string[],
   ): boolean {
-    console.log('hasRequiredPermissions: userPermissions', userPermissions);
-    console.log(
-      'hasRequiredPermissions: requiredPermissions',
-      requiredPermissions,
-    );
     if (!userPermissions || !Array.isArray(userPermissions)) {
       return false;
     }

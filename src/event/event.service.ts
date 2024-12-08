@@ -101,7 +101,6 @@ export class EventService {
         createEventDto.categories,
       );
     } catch (error) {
-      console.error('Error finding categories:', error);
       throw new NotFoundException(`Error finding categories: ${error.message}`);
     }
 
@@ -719,8 +718,6 @@ export class EventService {
 
   async showEventAttendees(slug: string, pagination: PaginationDto) {
     await this.getTenantSpecificEventRepository();
-
-    console.log('showEventAttendees slug', slug);
     const event = await this.eventRepository.findOne({ where: { slug } });
     if (!event) {
       throw new NotFoundException('Event not found');

@@ -649,11 +649,9 @@ export class AuthService {
 
     // Get permissions from user's role
     const rolePermissions = user.role.permissions || [];
-    console.log('rolePermissions', rolePermissions);
 
     // Get any additional user-specific permissions
     const userPermissions = await this.userService.getUserPermissions(userId);
-    console.log('userPermissions', userPermissions);
 
     // Combine and deduplicate permissions
     return [...new Set([...rolePermissions, ...userPermissions])];
@@ -695,7 +693,6 @@ export class AuthService {
 
   async getEventAttendeeBySlug(userId: number, eventSlug: string) {
     const event = await this.eventService.findEventBySlug(eventSlug);
-    console.log('getEventAttendeeBySlug: event', event);
     if (!event) return null;
 
     const eventAttendee =
