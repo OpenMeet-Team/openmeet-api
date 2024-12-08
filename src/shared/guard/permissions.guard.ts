@@ -62,7 +62,8 @@ export class PermissionsGuard implements CanActivate {
 
     switch (context) {
       case 'event': {
-        const eventSlug = request.params.slug;
+        const eventSlug = (request.headers['x-event-slug'] ||
+          request.params.slug) as string;
         const eventAttendee = await this.authService.getEventAttendeeBySlug(
           user.id,
           eventSlug,
@@ -82,7 +83,8 @@ export class PermissionsGuard implements CanActivate {
       }
 
       case 'group': {
-        const groupSlug = request.params.groupSlug;
+        const groupSlug = (request.headers['x-group-slug'] ||
+          request.params.groupSlug) as string;
         const groupMembers = await this.authService.getGroupMembersBySlug(
           user.id,
           groupSlug,

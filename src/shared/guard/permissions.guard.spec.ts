@@ -23,6 +23,10 @@ describe('PermissionsGuard', () => {
         getRequest: () => ({
           user,
           params,
+          headers: {
+            'x-event-slug': params['eventSlug'],
+            'x-group-slug': params['groupSlug'],
+          },
         }),
       }),
       getClass: jest.fn(),
@@ -100,7 +104,13 @@ describe('PermissionsGuard', () => {
         ]);
 
         // Setup context requiring both event and group permissions
-        const mockContext = createMockContext({ id: 1 });
+        const mockContext = createMockContext(
+          { id: 1 },
+          {
+            eventSlug: 'event-slug',
+            groupSlug: 'group-slug',
+          },
+        );
 
         // Mock event permissions - user has required event permission
         mockAuthService.getEventAttendeeBySlug.mockResolvedValue([
@@ -139,7 +149,13 @@ describe('PermissionsGuard', () => {
         ];
 
         (reflector.get as jest.Mock).mockReturnValue(requirements);
-        const mockContext = createMockContext({ id: 1 });
+        const mockContext = createMockContext(
+          { id: 1 },
+          {
+            eventSlug: 'event-slug',
+            groupSlug: 'group-slug',
+          },
+        );
 
         // Mock event permissions - user lacks required event permission
         mockAuthService.getEventAttendeeBySlug.mockResolvedValue([
@@ -173,7 +189,12 @@ describe('PermissionsGuard', () => {
         { context: 'group', permissions: [GroupPermission.ManageEvents] },
       ];
       (reflector.get as jest.Mock).mockReturnValue(requirements);
-      const mockContext = createMockContext({ id: 1 });
+      const mockContext = createMockContext(
+        { id: 1 },
+        {
+          groupSlug: 'group-slug',
+        },
+      );
 
       mockAuthService.getUserPermissions.mockResolvedValue([
         { name: UserPermission.CreateEvents },

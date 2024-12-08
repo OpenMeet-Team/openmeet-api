@@ -107,6 +107,7 @@ export class GroupController {
       permissions: [GroupPermission.SeeMembers, GroupPermission.SeeGroup],
     },
   )
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get(':slug')
   @ApiOperation({
     summary: 'Get group by group slug and authenticated user',
@@ -147,6 +148,7 @@ export class GroupController {
     context: 'group',
     permissions: [GroupPermission.SeeGroup],
   })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get(':slug/about')
   @ApiOperation({ summary: 'Get group about' })
   async showGroupAbout(@Param('slug') slug: string): Promise<{
@@ -158,7 +160,11 @@ export class GroupController {
     return await this.groupService.showGroupAbout(slug);
   }
 
-  @Public()
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.SeeGroup],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get(':slug/events')
   @ApiOperation({ summary: 'Get all group events' })
   async showGroupEvents(@Param('slug') slug: string): Promise<EventEntity[]> {
@@ -170,7 +176,6 @@ export class GroupController {
     permissions: [GroupPermission.SeeMembers],
   })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
-  @Public()
   @Get(':slug/members')
   @ApiOperation({ summary: 'Get all group members' })
   async showGroupMembers(
@@ -179,7 +184,11 @@ export class GroupController {
     return this.groupService.showGroupMembers(slug);
   }
 
-  @Public()
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.SeeDiscussions],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get(':slug/discussions')
   @ApiOperation({ summary: 'Get all group discussions' })
   async showGroupDiscussions(
@@ -188,7 +197,10 @@ export class GroupController {
     return this.groupService.showGroupDiscussions(slug);
   }
 
-  @Permissions(GroupPermission.ManageDiscussions)
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.ManageDiscussions],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/discussions')
   @ApiOperation({ summary: 'Send a message to a group discussion' })
@@ -200,7 +212,10 @@ export class GroupController {
     return this.groupService.sendGroupDiscussionMessage(slug, user.id, body);
   }
 
-  @Permissions(GroupPermission.ManageDiscussions)
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.ManageDiscussions],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Patch(':slug/discussions/:messageId')
   @ApiOperation({ summary: 'Update a group discussion message' })
@@ -217,7 +232,10 @@ export class GroupController {
     );
   }
 
-  @Permissions(GroupPermission.ManageDiscussions)
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.ManageDiscussions],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Delete(':slug/discussions/:messageId')
   @ApiOperation({ summary: 'Delete a group discussion message' })
@@ -228,7 +246,10 @@ export class GroupController {
     return this.groupService.deleteGroupDiscussionMessage(messageId);
   }
 
-  @Permissions(UserPermission.JoinGroups)
+  @Permissions({
+    context: 'user',
+    permissions: [UserPermission.JoinGroups],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/join')
   @ApiOperation({ summary: 'Joining a group through link' })
@@ -236,12 +257,22 @@ export class GroupController {
     return this.groupService.joinGroup(slug, user.id);
   }
 
+  @Permissions({
+    context: 'user',
+    permissions: [UserPermission.AttendEvents],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Delete(':slug/leave')
   @ApiOperation({ summary: 'Leave a group' })
   async leaveGroup(@AuthUser() user: User, @Param('slug') slug: string) {
     return this.groupService.leaveGroup(slug, user.id);
   }
 
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.ManageGroup, GroupPermission.ManageMembers],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Delete(':slug/members/:groupMemberId')
   @ApiOperation({ summary: 'Remove a group member' })
   async removeGroupMember(
@@ -251,6 +282,11 @@ export class GroupController {
     return this.groupService.removeGroupMember(slug, groupMemberId);
   }
 
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.ManageGroup, GroupPermission.ManageMembers],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Patch(':slug/members/:groupMemberId')
   @ApiOperation({ summary: 'Update a group member role' })
   async updateGroupMemberRole(
@@ -265,6 +301,11 @@ export class GroupController {
     );
   }
 
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.ManageMembers],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/members/:groupMemberId/approve')
   @ApiOperation({ summary: 'Approve a group member' })
   async approveMember(
@@ -274,6 +315,11 @@ export class GroupController {
     return this.groupService.approveMember(slug, groupMemberId);
   }
 
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.ManageMembers],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Delete(':slug/members/:groupMemberId/reject')
   @ApiOperation({ summary: 'Reject a group member' })
   async rejectMember(
@@ -283,7 +329,10 @@ export class GroupController {
     return this.groupService.rejectMember(slug, groupMemberId);
   }
 
-  @Permissions(UserPermission.ViewEvents)
+  @Permissions({
+    context: 'user',
+    permissions: [UserPermission.ViewEvents],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Public()
   @Get(':slug/recommended-events')
