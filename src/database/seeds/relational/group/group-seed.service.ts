@@ -39,14 +39,16 @@ export class GroupSeedService {
 
   private async seedGroups() {
     const allCategories = await this.categoryRepository.find();
-    const allUsers = await this.userRepository.find();
+    const allUsers = await this.userRepository.find({
+      relations: ['role'],
+    });
 
     for (const user of allUsers) {
       for (const groupData of groupSeedData) {
         const numberOfCategories = Math.floor(Math.random() * 3) + 1;
 
         const group = this.groupRepository.create({
-          name: groupData.name,
+          name: `[${user.role.name}] ${groupData.name}`,
           description: groupData.description,
           status: groupData.status,
           visibility: groupData.visibility,

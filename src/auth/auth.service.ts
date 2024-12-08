@@ -23,7 +23,6 @@ import { JwtPayloadType } from './strategies/types/jwt-payload.type';
 import { UserService } from '../user/user.service';
 import { AllConfigType } from '../config/config.type';
 import { MailService } from '../mail/mail.service';
-// import { RoleEnum } from '../roles/roles.enum';
 import { Session } from '../session/domain/session';
 import { SessionService } from '../session/session.service';
 import { StatusEnum } from '../status/status.enum';
@@ -57,7 +56,7 @@ export class AuthService {
       throw new UnprocessableEntityException({
         status: HttpStatus.UNPROCESSABLE_ENTITY,
         errors: {
-          email: 'notFound',
+          email: 'User not found',
         },
       });
     }
@@ -66,7 +65,7 @@ export class AuthService {
       throw new UnprocessableEntityException({
         status: HttpStatus.UNPROCESSABLE_ENTITY,
         errors: {
-          email: `needLoginViaProvider:${user.provider}`,
+          email: `Login via ${user.provider}`,
         },
       });
     }
@@ -75,7 +74,7 @@ export class AuthService {
       throw new UnprocessableEntityException({
         status: HttpStatus.UNPROCESSABLE_ENTITY,
         errors: {
-          password: 'incorrectPassword',
+          password: 'Incorrect password',
         },
       });
     }
@@ -89,7 +88,7 @@ export class AuthService {
       throw new UnprocessableEntityException({
         status: HttpStatus.UNPROCESSABLE_ENTITY,
         errors: {
-          password: 'incorrectPassword',
+          password: 'Incorrect password',
         },
       });
     }
@@ -256,8 +255,6 @@ export class AuthService {
 
     const createdUser = await this.userService.findById(user.id);
 
-    // if (this.configService.get('tenant.confirmEmail', { infer: true })) { // TODO implement tenant config
-    // if tenant config need to confirm user email, was await by default
     this.mailService
       .userSignUp({
         to: dto.email,
@@ -268,7 +265,6 @@ export class AuthService {
       .catch((err) => {
         console.log(err);
       });
-    // }
 
     return {
       refreshToken,
@@ -474,7 +470,7 @@ export class AuthService {
         throw new UnprocessableEntityException({
           status: HttpStatus.UNPROCESSABLE_ENTITY,
           errors: {
-            oldPassword: 'incorrectOldPassword',
+            oldPassword: 'Incorrect current password',
           },
         });
       }
@@ -488,7 +484,7 @@ export class AuthService {
         throw new UnprocessableEntityException({
           status: HttpStatus.UNPROCESSABLE_ENTITY,
           errors: {
-            oldPassword: 'incorrectOldPassword',
+            oldPassword: 'Incorrect current password',
           },
         });
       } else {

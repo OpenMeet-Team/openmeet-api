@@ -59,34 +59,34 @@ describe('GroupController (e2e)', () => {
     return response.body;
   }
 
-  // async function sendGroupDiscussionMessage(
-  //   token,
-  //   groupSlug: string,
-  //   message: string,
-  //   topicName: string,
-  // ) {
-  //   const response = await request(TESTING_APP_URL)
-  //     .post(`/api/groups/${groupSlug}/discussions`)
-  //     .set('Authorization', `Bearer ${token}`)
-  //     .set('x-tenant-id', TESTING_TENANT_ID)
-  //     .send({ message, topicName });
+  async function sendGroupDiscussionMessage(
+    token,
+    groupSlug: string,
+    message: string,
+    topicName: string,
+  ) {
+    const response = await request(TESTING_APP_URL)
+      .post(`/api/groups/${groupSlug}/discussions`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID)
+      .send({ message, topicName });
 
-  //   expect(response.status).toBe(201);
-  //   return response.body;
-  // }
+    expect(response.status).toBe(201);
+    return response.body;
+  }
 
-  // async function deleteGroupDiscussionMessage(
-  //   token,
-  //   groupSlug: string,
-  //   messageId: number,
-  // ) {
-  //   const response = await request(TESTING_APP_URL)
-  //     .delete(`/api/groups/${groupSlug}/discussions/${messageId}`)
-  //     .set('Authorization', `Bearer ${token}`)
-  //     .set('x-tenant-id', TESTING_TENANT_ID);
+  async function deleteGroupDiscussionMessage(
+    token,
+    groupSlug: string,
+    messageId: number,
+  ) {
+    const response = await request(TESTING_APP_URL)
+      .delete(`/api/groups/${groupSlug}/discussions/${messageId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
 
-  //   expect(response.status).toBe(200);
-  // }
+    expect(response.status).toBe(200);
+  }
 
   // Before each test, log in as the test user
   beforeEach(async () => {
@@ -121,21 +121,21 @@ describe('GroupController (e2e)', () => {
     expect(foundGroup.name).toBe('Updated Test Group');
 
     // Comment the group
-    // const discussionMessage = await sendGroupDiscussionMessage(
-    //   token,
-    //   testGroup.slug,
-    //   'Hello, world!',
-    //   'Test Topic',
-    // );
-    // expect(discussionMessage.id).toBeDefined();
+    const discussionMessage = await sendGroupDiscussionMessage(
+      token,
+      testGroup.slug,
+      'Hello, world!',
+      'Test Topic',
+    );
+    expect(discussionMessage.id).toBeDefined();
 
-    // // Delete the discussion message
-    // await deleteGroupDiscussionMessage(
-    //   token,
-    //   testGroup.slug,
-    //   discussionMessage.id,
-    // );
-    // expect(discussionMessage.id).toBeDefined();
+    // Delete the discussion message
+    await deleteGroupDiscussionMessage(
+      token,
+      testGroup.slug,
+      discussionMessage.id,
+    );
+    expect(discussionMessage.id).toBeDefined();
 
     // Clean up by deleting the groups
     const deleteGroupResponse = await request(TESTING_APP_URL)

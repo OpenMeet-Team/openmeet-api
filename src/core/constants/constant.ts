@@ -82,6 +82,7 @@ export enum EventAttendeePermission {
   AttendEvent = 'ATTEND_EVENT',
   MessageAttendees = 'MESSAGE_ATTENDEES',
   CreateDiscussion = 'CREATE_DISCUSSION',
+  ViewDiscussion = 'VIEW_DISCUSSION',
 }
 
 export enum EventVisibility {
@@ -142,3 +143,16 @@ export enum PostgisSrid {
 
 // By default zulip creates a topic called channel events, we don't want to show this in the UI
 export const ZULIP_DEFAULT_CHANNEL_TOPIC = 'channel events';
+
+export interface TenantConfig {
+  id: string; // tenant id, ex: asdf2jkl
+  name: string; // tenant name, ex: Openmeet
+  frontendDomain: string; // frontend domain, ex: platform.openmeet.com
+  logoUrl: string; // logo url, ex: https://openmeet.com/logo.png
+  companyDomain: string; // company domain, ex: openmeet.com
+  confirmEmail: boolean; // confirm email, ex: true
+  mailDefaultEmail: string; // mail default email, ex: hello@openmeet.com
+  mailDefaultName: string; // mail default name, ex: Openmeet
+  googleClientId: string; // google client id, ex: 1234567890
+  googleClientSecret: string; // google client secret, ex: 0987654321
+}

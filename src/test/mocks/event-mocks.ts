@@ -46,6 +46,7 @@ export const mockEventAttendeeService = {
   leaveEvent: jest.fn().mockResolvedValue(mockEventAttendee),
   findEventDetailsAttendees: jest.fn().mockResolvedValue(mockEventAttendees),
   create: jest.fn().mockResolvedValue(mockEventAttendee),
+  showEventAttendeesCount: jest.fn().mockResolvedValue(1),
 };
 
 export const mockEventRoleService = {
@@ -96,4 +97,5 @@ export const mockEventService = {
   showRandomEvents: jest.fn().mockResolvedValue(mockEvents),
   searchAllEvents: jest.fn().mockResolvedValue(mockEvents),
   showDashboardEvents: jest.fn().mockResolvedValue(mockEvents),
+  getEventAttendeesCount: jest.fn().mockResolvedValue(1),
 };
