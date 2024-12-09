@@ -136,7 +136,7 @@ describe('GroupService', () => {
       jest
         .spyOn(service['groupMembersRepository'], 'find')
         .mockResolvedValue([mockGroupMember]);
-      const result = await service.getGroupMembers(mockUser.id, mockGroup.id);
+      const result = await service.getGroupMembers(mockGroup.id);
       expect(result).toEqual([mockGroupMember]);
     });
   });

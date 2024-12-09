@@ -641,8 +641,20 @@ export class AuthService {
     };
   }
 
-  getUserPermissions(userId: number) {
-    return this.userService.getUserPermissions(userId);
+  async getUserPermissions(userId: number) {
+    const user = await this.userService.findById(userId);
+    if (!user || !user.role) {
+      return [];
+    }
+
+    // Get permissions from user's role
+    const rolePermissions = user.role.permissions || [];
+
+    // Get any additional user-specific permissions
+    const userPermissions = await this.userService.getUserPermissions(userId);
+
+    // Combine and deduplicate permissions
+    return [...new Set([...rolePermissions, ...userPermissions])];
   }
 
   async getEventAttendees(userId: number, eventId: number) {
@@ -661,7 +673,7 @@ export class AuthService {
     userId: number,
     groupId: number,
   ): Promise<GroupMemberEntity[]> {
-    return this.groupService.getGroupMembers(userId, groupId);
+    return this.groupService.getGroupMembers(groupId);
   }
 
   async getGroupMemberPermissions(
@@ -673,5 +685,28 @@ export class AuthService {
 
   async getAttendeePermissions(id: number): Promise<any[]> {
     return this.eventAttendeeService.getEventAttendeePermissions(id);
+  }
+
+  async getUserWithRolePermissions(userId: number) {
+    return this.userService.findById(userId);
+  }
+
+  async getEventAttendeeBySlug(userId: number, eventSlug: string) {
+    const event = await this.eventService.findEventBySlug(eventSlug);
+    if (!event) return null;
+
+    const eventAttendee =
+      await this.eventAttendeeService.findEventAttendeeByUserId(
+        event.id,
+        userId,
+      );
+    return eventAttendee;
+  }
+
+  async getGroupMembersBySlug(userId: number, groupSlug: string) {
+    const group = await this.groupService.findGroupBySlug(groupSlug);
+    if (!group) return null;
+
+    return this.groupService.getGroupMembers(group.id);
   }
 }

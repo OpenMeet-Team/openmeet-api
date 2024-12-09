@@ -38,10 +38,12 @@ import { UserService } from '../user/user.service';
 import { UpdateEventAttendeeDto } from 'src/event-attendee/dto/update-eventAttendee.dto';
 import { ZulipTopic } from 'zulip-js';
 import { HomeQuery } from '../home/dto/home-query.dto';
+import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
   private eventRepository: Repository<EventEntity>;
+  private eventAttendeesRepository: Repository<EventAttendeesEntity>;
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
@@ -63,6 +65,8 @@ export class EventService {
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
     this.eventRepository = dataSource.getRepository(EventEntity);
+    this.eventAttendeesRepository =
+      dataSource.getRepository(EventAttendeesEntity);
   }
 
   async getTenantSpecificEventRepository() {
@@ -70,6 +74,8 @@ export class EventService {
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
     this.eventRepository = dataSource.getRepository(EventEntity);
+    this.eventAttendeesRepository =
+      dataSource.getRepository(EventAttendeesEntity);
   }
 
   async findEventBySlug(slug: string): Promise<EventEntity> {
@@ -95,7 +101,6 @@ export class EventService {
         createEventDto.categories,
       );
     } catch (error) {
-      console.error('Error finding categories:', error);
       throw new NotFoundException(`Error finding categories: ${error.message}`);
     }
 
@@ -129,14 +134,13 @@ export class EventService {
       throw new NotFoundException('Host role not found');
     }
 
-    const eventAttendeeDto: CreateEventAttendeeDto = {
+    // Create event attendee record for creator as host with proper permissions
+    await this.eventAttendeesRepository.save({
+      event: createdEvent,
+      user: { id: userId },
       role: hostRole,
       status: EventAttendeeStatus.Confirmed,
-      user: user as UserEntity,
-      event: createdEvent,
-    };
-
-    await this.eventAttendeeService.create(eventAttendeeDto);
+    });
 
     this.eventEmitter.emit('event.created', createdEvent);
     return createdEvent;
@@ -714,7 +718,6 @@ export class EventService {
 
   async showEventAttendees(slug: string, pagination: PaginationDto) {
     await this.getTenantSpecificEventRepository();
-
     const event = await this.eventRepository.findOne({ where: { slug } });
     if (!event) {
       throw new NotFoundException('Event not found');

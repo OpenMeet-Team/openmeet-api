@@ -3,6 +3,7 @@ import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import { EventStatus, EventType } from '../../src/core/constants/constant';
 import {
   loginAsTester,
+  loginAsAdmin,
   createEvent,
   getRecommendedEvents,
   createCategory,
@@ -11,6 +12,7 @@ import {
 
 describe('EventController Recommendations (e2e)', () => {
   let token;
+  let adminToken;
   let testEvent;
   let testEvent2;
   let testEvent3;
@@ -21,17 +23,18 @@ describe('EventController Recommendations (e2e)', () => {
 
   beforeAll(async () => {
     token = await loginAsTester();
+    adminToken = await loginAsAdmin();
 
     // Create categories
-    category1 = await createCategory(TESTING_APP_URL, token, {
+    category1 = await createCategory(TESTING_APP_URL, adminToken, {
       name: 'Category 1',
       slug: 'category-1',
     });
-    category2 = await createCategory(TESTING_APP_URL, token, {
+    category2 = await createCategory(TESTING_APP_URL, adminToken, {
       name: 'Category 2',
       slug: 'category-2',
     });
-    categoryUnrelated = await createCategory(TESTING_APP_URL, token, {
+    categoryUnrelated = await createCategory(TESTING_APP_URL, adminToken, {
       name: 'Category Unrelated',
       slug: 'category-unrelated',
     });
@@ -86,10 +89,12 @@ describe('EventController Recommendations (e2e)', () => {
   afterAll(async () => {
     //  delete test events
     for (const event of [testEvent, testEvent2, testEvent3, testEvent4]) {
-      await request(TESTING_APP_URL)
-        .delete(`/api/events/${event.slug}`)
-        .set('Authorization', `Bearer ${token}`)
-        .set('x-tenant-id', TESTING_TENANT_ID);
+      if (event) {
+        await request(TESTING_APP_URL)
+          .delete(`/api/events/${event.slug}`)
+          .set('Authorization', `Bearer ${token}`)
+          .set('x-tenant-id', TESTING_TENANT_ID);
+      }
     }
 
     // delete categories
