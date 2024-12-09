@@ -111,7 +111,7 @@ describe('GroupController (e2e)', () => {
     // );
     // expect(discussionMessage.id).toBeDefined();
 
-    // // Delete the discussion message
+    // Delete the discussion message
     // await deleteGroupDiscussionMessage(
     //   token,
     //   testGroup.slug,

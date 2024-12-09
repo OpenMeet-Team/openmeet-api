@@ -15,12 +15,12 @@ export class UserListener {
 
   @OnEvent('user.created')
   handleUserCreatedEvent(user: UserEntity) {
-    console.log('user.created', user);
+    console.log('user.created', user.id);
   }
 
   @OnEvent('user.updated')
   async handleUserUpdatedEvent(user: UserEntity) {
-    console.log('user.updated', user);
+    console.log('user.updated', user.id);
 
     if (user.zulipUsername && user.zulipApiKey) {
       try {

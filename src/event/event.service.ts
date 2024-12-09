@@ -223,6 +223,7 @@ export class EventService {
       .leftJoin('event.user', 'user')
       .leftJoin('user.photo', 'photo')
       .addSelect(['user.name', 'user.slug', 'photo.path'])
+
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.group', 'group')
       .loadRelationCountAndMap(
@@ -342,11 +343,13 @@ export class EventService {
       throw new NotFoundException('Event not found');
     }
 
-    event.attendees =
-      await this.eventAttendeeService.showConfirmedEventAttendeesByEventId(
+    event.attendees = (
+      await this.eventAttendeeService.showEventAttendees(
         event.id,
-        5,
-      );
+        { page: 1, limit: 5 },
+        EventAttendeeStatus.Confirmed,
+      )
+    ).data;
 
     if (event.group && userId) {
       event.groupMember = await this.groupMemberService.findGroupMemberByUserId(
@@ -409,12 +412,19 @@ export class EventService {
 
   async showRandomEvents(limit: number): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
-    return this.eventRepository.find({
+    const events = await this.eventRepository.find({
       where: { status: EventStatus.Published },
-      relations: ['attendees', 'categories'],
+      relations: ['categories'],
       order: { createdAt: 'DESC' },
       take: limit,
     });
+
+    return (await Promise.all(
+      events.map(async (event) => ({
+        ...event,
+        attendeesCount: await this.getEventAttendeesCount(event.id),
+      })),
+    )) as EventEntity[];
   }
 
   async showRecommendedEventsByEventSlug(slug: string): Promise<EventEntity[]> {
@@ -441,7 +451,7 @@ export class EventService {
   ): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
 
-    return this.eventRepository
+    const events = await this.eventRepository
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.categories', 'categories')
       .where('event.status = :status', { status: EventStatus.Published })
@@ -451,6 +461,13 @@ export class EventService {
       .orderBy('RANDOM()')
       .limit(limit)
       .getMany();
+
+    return (await Promise.all(
+      events.map(async (event) => ({
+        ...event,
+        attendeesCount: await this.getEventAttendeesCount(event.id),
+      })),
+    )) as EventEntity[];
   }
 
   async findRecommendedEventsForGroup(
@@ -468,7 +485,6 @@ export class EventService {
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.group', 'group')
       .leftJoinAndSelect('event.categories', 'categories')
-      .leftJoinAndSelect('event.attendees', 'attendees')
       .where('event.status = :status', { status: EventStatus.Published })
       .andWhere('event.group.id != :groupId', { groupId })
       .orderBy('RANDOM()')
@@ -479,7 +495,14 @@ export class EventService {
         categoryIds: categories || [],
       });
     }
-    return await query.getMany();
+    const events = await query.getMany();
+
+    return (await Promise.all(
+      events.map(async (event) => ({
+        ...event,
+        attendeesCount: await this.getEventAttendeesCount(event.id),
+      })),
+    )) as EventEntity[];
   }
 
   async findRandomEventsForGroup(
@@ -492,16 +515,22 @@ export class EventService {
     }
     await this.getTenantSpecificEventRepository();
 
-    return await this.eventRepository
+    const events = await this.eventRepository
       .createQueryBuilder('event')
       .leftJoin('event.group', 'group')
-      .leftJoin('event.attendees', 'attendees')
       .leftJoin('event.categories', 'categories')
       .where('event.status = :status', { status: EventStatus.Published })
       .andWhere('(group.id != :groupId OR group.id IS NULL)', { groupId })
       .orderBy('RANDOM()')
       .limit(maxEvents)
       .getMany();
+
+    return (await Promise.all(
+      events.map(async (event) => ({
+        ...event,
+        attendeesCount: await this.getEventAttendeesCount(event.id),
+      })),
+    )) as EventEntity[];
   }
 
   async update(
@@ -833,5 +862,10 @@ export class EventService {
         ),
       })),
     )) as EventEntity[];
+  }
+
+  async getEventAttendeesCount(eventId: number): Promise<number> {
+    await this.getTenantSpecificEventRepository();
+    return await this.eventAttendeeService.showEventAttendeesCount(eventId);
   }
 }

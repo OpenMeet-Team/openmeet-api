@@ -57,7 +57,7 @@ export class AuthService {
       throw new UnprocessableEntityException({
         status: HttpStatus.UNPROCESSABLE_ENTITY,
         errors: {
-          email: 'notFound',
+          email: 'User not found',
         },
       });
     }
@@ -66,7 +66,7 @@ export class AuthService {
       throw new UnprocessableEntityException({
         status: HttpStatus.UNPROCESSABLE_ENTITY,
         errors: {
-          email: `needLoginViaProvider:${user.provider}`,
+          email: `Login via ${user.provider}`,
         },
       });
     }
@@ -75,7 +75,7 @@ export class AuthService {
       throw new UnprocessableEntityException({
         status: HttpStatus.UNPROCESSABLE_ENTITY,
         errors: {
-          password: 'incorrectPassword',
+          password: 'Incorrect password',
         },
       });
     }
@@ -89,7 +89,7 @@ export class AuthService {
       throw new UnprocessableEntityException({
         status: HttpStatus.UNPROCESSABLE_ENTITY,
         errors: {
-          password: 'incorrectPassword',
+          password: 'Incorrect password',
         },
       });
     }
@@ -474,7 +474,7 @@ export class AuthService {
         throw new UnprocessableEntityException({
           status: HttpStatus.UNPROCESSABLE_ENTITY,
           errors: {
-            oldPassword: 'incorrectOldPassword',
+            oldPassword: 'Incorrect current password',
           },
         });
       }
@@ -488,7 +488,7 @@ export class AuthService {
         throw new UnprocessableEntityException({
           status: HttpStatus.UNPROCESSABLE_ENTITY,
           errors: {
-            oldPassword: 'incorrectOldPassword',
+            oldPassword: 'Incorrect current password',
           },
         });
       } else {

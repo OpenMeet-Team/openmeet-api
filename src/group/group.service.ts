@@ -265,9 +265,22 @@ export class GroupService {
     const groupQuery = this.groupRepository
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.categories', 'categories')
-      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
-      .leftJoinAndSelect('groupMembers.user', 'user')
-      .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
+
+      .leftJoin('group.createdBy', 'user')
+      .leftJoin('user.photo', 'photo')
+      .addSelect(['user.name', 'user.slug', 'photo.path'])
+
+      .loadRelationCountAndMap(
+        'group.groupMembersCount',
+        'group.groupMembers',
+        'groupMembers',
+        (qb) =>
+          qb
+            .innerJoin('groupMembers.groupRole', 'role')
+            .where('role.name != :roleName', {
+              roleName: GroupRole.Guest,
+            }),
+      )
       .where('group.status = :status', { status: GroupStatus.Published });
 
     if (userId) {
@@ -582,12 +595,20 @@ export class GroupService {
     take: number = 0,
   ): Promise<GroupEntity[]> {
     await this.getTenantSpecificGroupRepository();
-    return await this.groupRepository.find({
+    const groups = await this.groupRepository.find({
       where: { createdBy: { id: userId } },
       take,
-      relations: ['createdBy', 'groupMembers'],
+      relations: ['createdBy'],
       order: { createdAt: 'DESC' },
     });
+
+    return await Promise.all(
+      groups.map(async (group) => {
+        group.groupMembersCount =
+          await this.groupMemberService.getGroupMembersCount(group.id);
+        return group;
+      }),
+    );
   }
 
   async getHomePageUserParticipatedGroups(

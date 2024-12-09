@@ -19,7 +19,7 @@ export const eventSeedData = [
     lat: 37.7749,
     lon: -122.4194,
     user: {
-      id: 2,
+      id: 1,
     },
     status: EventStatus.Draft,
     visibility: EventVisibility.Public,
@@ -38,7 +38,7 @@ export const eventSeedData = [
     lat: 40.7128,
     lon: -74.006,
     user: {
-      id: 2,
+      id: 1,
     },
     status: EventStatus.Pending,
     visibility: EventVisibility.Authenticated,
@@ -55,7 +55,7 @@ export const eventSeedData = [
     endDate: new Date('2024-06-20T21:00:00'),
     maxAttendees: 50,
     user: {
-      id: 2,
+      id: 1,
     },
     status: EventStatus.Published,
     visibility: EventVisibility.Private,
@@ -75,7 +75,7 @@ export const eventSeedData = [
       id: 1,
     },
     user: {
-      id: 2,
+      id: 1,
     },
     lat: 51.5074,
     lon: -0.1278,
@@ -97,13 +97,12 @@ export const eventSeedData = [
     lat: 37.3382,
     lon: -121.8863,
     user: {
-      id: 2,
+      id: 1,
     },
     status: EventStatus.Pending,
     visibility: EventVisibility.Private,
     approvalQuestion: 'Are you a startup?',
   },
-
   {
     name: '[admin][Published][Public][In-Person][Upcoming][allowWaitlist] Annual Food Festival',
     slug: 'annual-food-festival',
@@ -117,7 +116,7 @@ export const eventSeedData = [
     lat: 48.8566,
     lon: 2.3522,
     user: {
-      id: 2,
+      id: 1,
     },
     status: EventStatus.Published,
     visibility: EventVisibility.Public,
@@ -138,7 +137,7 @@ export const eventSeedData = [
       id: 1,
     },
     user: {
-      id: 2,
+      id: 1,
     },
     lat: 37.4419,
     lon: -122.143,
@@ -159,7 +158,7 @@ export const eventSeedData = [
     lat: 34.0522,
     lon: -118.2437,
     user: {
-      id: 2,
+      id: 1,
     },
     status: EventStatus.Pending,
     visibility: EventVisibility.Private,
@@ -177,7 +176,7 @@ export const eventSeedData = [
     endDate: new Date('2024-11-05T21:00:00'),
     maxAttendees: 100,
     user: {
-      id: 2,
+      id: 1,
     },
     status: EventStatus.Published,
     visibility: EventVisibility.Public,
@@ -199,7 +198,7 @@ export const eventSeedData = [
     lat: 52.3676,
     lon: 4.9041,
     user: {
-      id: 2,
+      id: 1,
     },
     status: EventStatus.Published,
     visibility: EventVisibility.Public,
