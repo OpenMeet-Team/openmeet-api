@@ -155,4 +155,6 @@ export interface TenantConfig {
   mailDefaultName: string; // mail default name, ex: Openmeet
   googleClientId: string; // google client id, ex: 1234567890
   googleClientSecret: string; // google client secret, ex: 0987654321
+  githubClientId: string; // github client id, ex: 1234567890
+  githubClientSecret: string; // github client secret, ex: 0987654321
 }
