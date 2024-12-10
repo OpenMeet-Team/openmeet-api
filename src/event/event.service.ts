@@ -109,28 +109,27 @@ export class EventService {
         createEventDto.categories,
       );
     } catch (error) {
-        console.error('Error finding categories:', error);
-        throw new NotFoundException(`Error finding categories: ${error.message}`);
+      throw new NotFoundException(`Error finding categories: ${error.message}`);
     }
 
     // Handle location
     let locationPoint;
     if (createEventDto.lat && createEventDto.lon) {
-        const { lat, lon } = createEventDto;
-        if (isNaN(lat) || isNaN(lon)) {
-            throw new BadRequestException('Invalid latitude or longitude');
-        }
-        locationPoint = {
-            type: 'Point',
-            coordinates: [lon, lat],
-        };
+      const { lat, lon } = createEventDto;
+      if (isNaN(lat) || isNaN(lon)) {
+        throw new BadRequestException('Invalid latitude or longitude');
+      }
+      locationPoint = {
+        type: 'Point',
+        coordinates: [lon, lat],
+      };
     }
 
     // Create and save the event
     const event = this.eventRepository.create({
-        ...eventData,
-        categories,
-        locationPoint,
+      ...eventData,
+      categories,
+      locationPoint,
     } as EventEntity);
 
     const createdEvent = await this.eventRepository.save(event);
@@ -144,10 +143,10 @@ export class EventService {
     }
 
     await this.eventAttendeeService.create({
-        role: hostRole,
-        status: EventAttendeeStatus.Confirmed,
-        user: { id: userId } as UserEntity,
-        event: createdEvent,
+      role: hostRole,
+      status: EventAttendeeStatus.Confirmed,
+      user: { id: userId } as UserEntity,
+      event: createdEvent,
     });
 
     this.eventEmitter.emit('event.created', createdEvent);
