@@ -806,15 +806,19 @@ export class GroupService {
   ): Promise<{ id: number }> {
     await this.getTenantSpecificGroupRepository();
 
+    console.log('sendGroupDiscussionMessage', slug, userId, body);
+
     const group = await this.groupRepository.findOne({
       where: { slug },
     });
     if (!group) {
+      console.log('Group not found');
       throw new NotFoundException('Group not found');
     }
 
     const user = await this.userService.findOne(userId);
     if (!user) {
+      console.log('User not found');
       throw new NotFoundException('User not found');
     }
 
@@ -828,16 +832,20 @@ export class GroupService {
           },
         ],
       });
+      console.log('subscribedAdminToChannel');
       const stream = await this.zulipService.getAdminStreamId(groupChannelName);
+      console.log('stream', stream);
 
       group.zulipChannelId = stream.id;
-      await this.groupRepository.save(group);
+      const savedGroup = await this.groupRepository.save(group);
+      console.log('savedGroup', savedGroup);
     }
 
     await this.zulipService.getInitialisedClient(user);
 
     const updatedUser = await this.userService.findOne(user.id);
     if (!updatedUser) {
+      console.log('User not found after reload');
       throw new Error('User not found after reload');
     }
 
@@ -848,7 +856,9 @@ export class GroupService {
       content: body.message,
     };
 
-    return await this.zulipService.sendUserMessage(updatedUser, params);
+    const message = await this.zulipService.sendUserMessage(updatedUser, params);
+    console.log('message', message);
+    return message;
   }
 
   async updateGroupDiscussionMessage(

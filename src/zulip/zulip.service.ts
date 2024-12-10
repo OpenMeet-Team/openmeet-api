@@ -75,7 +75,9 @@ export class ZulipService {
 
   async getAdminStreamId(streamName: string): Promise<{ id: number }> {
     const client = await getAdminClient();
+    console.log('getAdminStreamId', streamName);
     const channelResponse = await client.streams.getStreamId(streamName);
+    console.log('channelResponse', channelResponse);
     if (channelResponse.result === 'success') {
       return { id: channelResponse.stream_id };
     }
@@ -214,11 +216,15 @@ export class ZulipService {
   }
 
   async subscribeAdminToChannel(params: ZulipSubscriptionParams) {
+    console.log('subscribeAdminToChannel', params);
     const client = await getAdminClient();
+    console.log('client', client);
     const response = await client.users.me.subscriptions.add(params);
     if (response.result === 'success') {
+      console.log('subscribeAdminToChannel success', response);
       return response;
     }
+    console.log('subscribeAdminToChannel error', response);
     throw new Error(`subscribeAdminToChannel: ${response.msg}`);
   }
 

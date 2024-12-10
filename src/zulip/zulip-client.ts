@@ -11,7 +11,7 @@ let zulipAdminClient: ZulipClient;
 
 export const getClient = async (user: UserEntity) => {
   if (!user.zulipUsername || !user.zulipApiKey || !user.zulipUserId) {
-    console.log(user);
+    console.log('user', user);
     throw new Error('Zulip username, api key or user id not found');
   }
   return await zulipInit({
@@ -22,11 +22,13 @@ export const getClient = async (user: UserEntity) => {
 };
 
 export const getAdminClient = async () => {
+  console.log('getAdminClient', adminConfig);
   if (!zulipAdminClient) {
+    console.log('zulipAdminClient not found, initializing');
     zulipAdminClient = await zulipInit(
       adminConfig as Partial<ZulipInitialConfig>,
     );
   }
-
+  console.log('zulipAdminClient', zulipAdminClient);
   return zulipAdminClient;
 };
