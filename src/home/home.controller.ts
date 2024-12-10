@@ -24,7 +24,7 @@ export class HomeController {
 
   @Public()
   @Get('version')
-  @ApiOperation({ summary: 'Get API information' })
+  @ApiOperation({ summary: 'Get API version information' })
   getApiInfo() {
     return this.service.getAppInfo();
   }
