@@ -9,6 +9,7 @@ import mailConfig from './mail/config/mail.config';
 import fileConfig from './file/config/file.config';
 import facebookConfig from './auth-facebook/config/facebook.config';
 import googleConfig from './auth-google/config/google.config';
+import githubConfig from './auth-github/config/github.config';
 import path from 'path';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -43,6 +44,7 @@ import { RoleModule } from './role/role.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ZulipModule } from './zulip/zulip.module';
 import { ChatModule } from './chat/chat.module';
+import { AuthGithubModule } from './auth-github/auth-github.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -63,6 +65,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
         fileConfig,
         facebookConfig,
         googleConfig,
+        githubConfig,
       ],
       envFilePath: ['.env'],
     }),
@@ -97,6 +100,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     AuthModule,
     AuthFacebookModule,
     AuthGoogleModule,
+    AuthGithubModule,
     SessionModule,
     MailModule,
     MailerModule,

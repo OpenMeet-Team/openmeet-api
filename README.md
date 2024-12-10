@@ -60,7 +60,16 @@ Additionally, you may place a file  at `./config/tenants.json` to configure tena
   },
   {
     "id": "1",
-    "name": "OpenMeet"
+    "name": "OpenMeet",
+    "companyDomain": "https://openmeet.net",
+    "frontendDomain": "https://dev.openmeet.net",
+    "logoUrl": "https://dev.openmeet.net/src/assets/openmeet/logo.png",
+    "mailDefaultEmail": "no-reply@openmeet.net",
+    "mailDefaultName": "OpenMeet",
+    "googleClientId": "",
+    "googleClientSecret": "",
+    "githubClientId": "",
+    "githubClientSecret": ""
   },
   {
     "id": "2",

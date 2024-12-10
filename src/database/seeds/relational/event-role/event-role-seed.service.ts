@@ -2,10 +2,10 @@ import { Injectable } from '@nestjs/common';
 import {
   EventAttendeeRole,
   EventAttendeePermission,
-} from 'src/core/constants/constant';
-import { EventPermissionEntity } from 'src/event-permission/infrastructure/persistence/relational/entities/event-permission.entity';
-import { EventRoleEntity } from 'src/event-role/infrastructure/persistence/relational/entities/event-role.entity';
-import { TenantConnectionService } from 'src/tenant/tenant.service';
+} from '../../../../core/constants/constant';
+import { EventPermissionEntity } from '../../../../event-permission/infrastructure/persistence/relational/entities/event-permission.entity';
+import { EventRoleEntity } from '../../../../event-role/infrastructure/persistence/relational/entities/event-role.entity';
+import { TenantConnectionService } from '../../../../tenant/tenant.service';
 import { Repository } from 'typeorm';
 
 @Injectable()

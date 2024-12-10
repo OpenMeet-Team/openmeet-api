@@ -1,14 +1,14 @@
 import { Module } from '@nestjs/common';
-import { AuthGoogleService } from './auth-google.service';
 import { ConfigModule } from '@nestjs/config';
-import { AuthGoogleController } from './auth-google.controller';
 import { AuthModule } from '../auth/auth.module';
 import { TenantModule } from 'src/tenant/tenant.module';
+import { AuthGithubController } from './auth-github.controller';
+import { AuthGithubService } from './auth-github.service';
 
 @Module({
   imports: [ConfigModule, AuthModule, TenantModule],
-  providers: [AuthGoogleService],
-  exports: [AuthGoogleService],
-  controllers: [AuthGoogleController],
+  providers: [AuthGithubService],
+  exports: [AuthGithubService],
+  controllers: [AuthGithubController],
 })
-export class AuthGoogleModule {}
+export class AuthGithubModule {}

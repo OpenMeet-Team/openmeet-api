@@ -11,6 +11,7 @@ const tenants = new Map<string, ContextId>();
 export class AggregateByTenantContextIdStrategy implements ContextIdStrategy {
   attach(contextId: ContextId, request: Request) {
     const tenantId = request.headers['x-tenant-id'] as string;
+
     let tenantSubTreeId: any;
 
     if (tenants.has(tenantId)) {
