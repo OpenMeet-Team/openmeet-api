@@ -172,6 +172,7 @@ export class ZulipService {
   }
 
   async createUser(params: ZulipCreateUserParams) {
+    console.log(params);
     const client = await getAdminClient();
 
     const response = await client.users.create(params);

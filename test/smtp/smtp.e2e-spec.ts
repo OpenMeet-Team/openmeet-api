@@ -61,7 +61,7 @@ describe.skip('SMTP (e2e)', () => {
       subject: 'Test Email',
       text: 'This is a test email',
     };
-    console.log(mailOptions);
+
     const transporter = nodemailer.createTransport(smtpConfig);
 
     await expect(transporter.sendMail(mailOptions)).resolves.toEqual(

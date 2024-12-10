@@ -12,11 +12,11 @@ import { CategorySeedService } from './category/category-seed.service';
 import { PermissionSeedService } from './permission/permission-seed.service';
 import { UserPermissionSeedService } from './user-permission/user-permission-seed.service';
 import { GroupRoleSeedService } from './group-role/group-role.service';
-import { fetchTenants, Tenant } from '../../../utils/tenant-config';
+import { fetchTenants } from '../../../utils/tenant-config';
 import { env } from 'process';
-
+import { TenantConfig } from 'src/core/constants/constant';
 const runSeed = async () => {
-  const tenants: Tenant[] = fetchTenants();
+  const tenants: TenantConfig[] = fetchTenants();
   const tenantIds = tenants.map((t) => t.id).filter((id) => !!id); // filter out 'public'
 
   const app = await NestFactory.create(SeedModule);

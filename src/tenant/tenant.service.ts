@@ -1,6 +1,8 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { AppDataSource } from '../database/data-source';
+import { getTenantConfig } from '../utils/tenant-config';
+import { TenantConfig } from '../core/constants/constant';
 @Injectable()
 export class TenantConnectionService implements OnModuleInit {
   private connections: Map<string, DataSource> = new Map();
@@ -46,5 +48,9 @@ export class TenantConnectionService implements OnModuleInit {
     } else {
       throw new Error(`Connection for tenant ${tenantId} does not exist.`);
     }
+  }
+
+  getTenantConfig(tenantId: string): TenantConfig {
+    return getTenantConfig(tenantId);
   }
 }

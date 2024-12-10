@@ -211,6 +211,7 @@ export class UserService {
 
   async findByUlid(ulid: User['ulid']): Promise<NullableType<UserEntity>> {
     await this.getTenantSpecificRepository();
+
     return this.usersRepository.findOne({
       where: { ulid },
     });
