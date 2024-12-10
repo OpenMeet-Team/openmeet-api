@@ -92,41 +92,50 @@ export class EventService {
     userId: number,
   ): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
-    const user = { id: userId };
-    const group = createEventDto.group ? { id: createEventDto.group } : null;
 
+    // Set default values and prepare base event data
+    const eventData = {
+      ...createEventDto,
+      status: EventStatus.Draft, // Default status
+      visibility: EventVisibility.Public, // Default visibility
+      user: { id: userId },
+      group: createEventDto.group ? { id: createEventDto.group } : null,
+    };
+
+    // Handle categories
     let categories: CategoryEntity[] = [];
     try {
       categories = await this.categoryService.findByIds(
         createEventDto.categories,
       );
     } catch (error) {
+      console.error('Error finding categories:', error);
       throw new NotFoundException(`Error finding categories: ${error.message}`);
     }
 
+    // Handle location
     let locationPoint;
     if (createEventDto.lat && createEventDto.lon) {
       const { lat, lon } = createEventDto;
       if (isNaN(lat) || isNaN(lon)) {
         throw new BadRequestException('Invalid latitude or longitude');
       }
-      // Construct GeoJSON
       locationPoint = {
         type: 'Point',
         coordinates: [lon, lat],
       };
     }
 
-    const mappedDto = {
-      ...createEventDto,
-      user,
-      group,
+    // Create and save the event
+    const event = this.eventRepository.create({
+      ...eventData,
       categories,
       locationPoint,
-    };
-    const event = this.eventRepository.create(mappedDto as EventEntity);
+    } as EventEntity);
+
     const createdEvent = await this.eventRepository.save(event);
 
+    // Add host as first attendee
     const hostRole = await this.eventRoleService.findByName(
       EventAttendeeRole.Host,
     );
@@ -134,12 +143,11 @@ export class EventService {
       throw new NotFoundException('Host role not found');
     }
 
-    // Create event attendee record for creator as host with proper permissions
-    await this.eventAttendeesRepository.save({
-      event: createdEvent,
-      user: { id: userId },
+    await this.eventAttendeeService.create({
       role: hostRole,
       status: EventAttendeeStatus.Confirmed,
+      user: { id: userId } as UserEntity,
+      event: createdEvent,
     });
 
     this.eventEmitter.emit('event.created', createdEvent);
