@@ -96,7 +96,7 @@ export class EventService {
     // Set default values and prepare base event data
     const eventData = {
       ...createEventDto,
-      status: createEventDto.status || EventStatus.Draft,
+      status: createEventDto.status || EventStatus.Published,
       visibility: createEventDto.visibility || EventVisibility.Public,
       user: { id: userId },
       group: createEventDto.group ? { id: createEventDto.group } : null,
