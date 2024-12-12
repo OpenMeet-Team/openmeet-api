@@ -17,6 +17,7 @@ import {
   mockEventAttendeeService,
   mockEventService,
   mockGroup,
+  mockGroupMemberService,
   mockGroupService,
   mockUser,
   mockZulipMessage,
@@ -29,6 +30,8 @@ import { EventAttendeeStatus } from '../core/constants/constant';
 import { PermissionsGuard } from '../shared/guard/permissions.guard';
 import { ExecutionContext } from '@nestjs/common';
 import { PERMISSIONS_KEY } from '../shared/guard/permissions.decorator';
+import { GroupMemberService } from '../group-member/group-member.service';
+import { VisibilityGuard } from '../shared/guard/visibility.guard';
 
 const createEventDto: CreateEventDto = {
   name: 'Test Event',
@@ -104,7 +107,12 @@ describe('EventController', () => {
           provide: EventAttendeeService,
           useValue: mockEventAttendeeService,
         },
+        {
+          provide: GroupMemberService,
+          useValue: mockGroupMemberService,
+        },
         PermissionsGuard,
+        VisibilityGuard,
       ],
     }).compile();
 

@@ -23,14 +23,12 @@ export class PermissionsGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    console.log('PermissionsGuard: canActivate');
     // get permissions as decorated on the controller function
     const requirements = this.reflector.get<PermissionRequirement[]>(
       PERMISSIONS_KEY,
       context.getHandler(),
     );
-
-    // temporary bypass for testing
-    return true;
 
     // if no permissions are required, allow access
     if (!requirements) {

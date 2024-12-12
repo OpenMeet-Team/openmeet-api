@@ -29,6 +29,7 @@ import { UpdateEventAttendeeDto } from '../event-attendee/dto/update-eventAttend
 import { QueryEventAttendeeDto } from '../event-attendee/dto/query-eventAttendee.dto';
 import { Permissions } from '../shared/guard/permissions.decorator';
 import { PermissionsGuard } from '../shared/guard/permissions.guard';
+import { VisibilityGuard } from '../shared/guard/visibility.guard';
 import {
   EventAttendeePermission,
   UserPermission,
@@ -90,10 +91,10 @@ export class EventController {
   }
 
   @Permissions({
-    context: 'event',
-    permissions: [EventAttendeePermission.ViewEvent],
+    context: 'user',
+    permissions: [UserPermission.ViewEvents],
   })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @UseGuards(JWTAuthGuard, VisibilityGuard, PermissionsGuard)
   @Get(':slug')
   @ApiOperation({ summary: 'Show event details by ID' })
   async showEvent(
