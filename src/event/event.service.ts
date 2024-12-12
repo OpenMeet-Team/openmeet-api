@@ -39,6 +39,7 @@ import { UpdateEventAttendeeDto } from 'src/event-attendee/dto/update-eventAtten
 import { ZulipTopic } from 'zulip-js';
 import { HomeQuery } from '../home/dto/home-query.dto';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
+import { Brackets } from 'typeorm';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -208,29 +209,27 @@ export class EventService {
   async showAllEvents(
     pagination: PaginationDto,
     query: QueryEventDto,
+    user?: any,
   ): Promise<any> {
     await this.getTenantSpecificEventRepository();
 
-    const { page, limit } = pagination;
     const {
       search,
+      lat,
+      lon,
+      radius,
+      type,
+      location,
       fromDate,
       toDate,
       categories,
-      location,
-      type,
-      radius,
-      lat,
-      lon,
     } = query;
 
     const eventQuery = this.eventRepository
       .createQueryBuilder('event')
-
       .leftJoin('event.user', 'user')
       .leftJoin('user.photo', 'photo')
       .addSelect(['user.name', 'user.slug', 'photo.path'])
-
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.group', 'group')
       .loadRelationCountAndMap(
@@ -243,6 +242,43 @@ export class EventService {
           }),
       )
       .where('event.status = :status', { status: EventStatus.Published });
+
+    if (!user) {
+      eventQuery.andWhere('event.visibility = :visibility', {
+        visibility: EventVisibility.Public,
+      });
+    } else if (user.roles?.includes('admin')) {
+      // For admin users, we don't need any visibility filters
+      // Remove any visibility conditions to show all events
+    } else {
+      // Get all event IDs this user is attending
+      const attendedEventIds =
+        await this.eventAttendeeService.findEventIdsByUserId(user.id);
+
+      eventQuery.andWhere(
+        new Brackets((qb) => {
+          qb.where('event.visibility = :publicVisibility', {
+            publicVisibility: EventVisibility.Public,
+          })
+            .orWhere('event.visibility = :authVisibility', {
+              authVisibility: EventVisibility.Authenticated,
+            })
+            .orWhere(
+              'event.visibility = :privateVisibility AND event.id IN (:...attendedEventIds)',
+              {
+                privateVisibility: EventVisibility.Private,
+                attendedEventIds: attendedEventIds.length
+                  ? attendedEventIds
+                  : [0],
+              },
+            );
+        }),
+      );
+    }
+
+    // Log the generated SQL for debugging
+    console.log('Generated SQL:', eventQuery.getSql());
+    console.log('Query parameters:', eventQuery.getParameters());
 
     if (search) {
       eventQuery.andWhere('event.name ILIKE :search', {
@@ -305,7 +341,10 @@ export class EventService {
       eventQuery.andWhere(`(${likeConditions})`, likeParameters);
     }
 
-    return paginate(eventQuery, { page, limit });
+    return paginate(eventQuery, {
+      page: pagination.page,
+      limit: pagination.limit,
+    });
   }
 
   async searchAllEvents(
@@ -706,10 +745,12 @@ export class EventService {
   ) {
     await this.getTenantSpecificEventRepository();
 
+    console.log('attend event userId', userId, slug, createEventAttendeeDto);
     const event = await this.eventRepository.findOne({ where: { slug } });
     if (!event) {
       throw new NotFoundException('Event not found');
     }
+
     const participantRole = await this.eventRoleService.findByName(
       EventAttendeeRole.Participant,
     );
@@ -718,38 +759,39 @@ export class EventService {
       throw new NotFoundException('Participant role not found');
     }
 
+    // Create the attendee with appropriate status based on event settings
+    let attendeeStatus = EventAttendeeStatus.Confirmed;
     if (event.allowWaitlist) {
       const count = await this.eventAttendeeService.showEventAttendeesCount(
         event.id,
       );
       if (count >= event.maxAttendees) {
-        return this.eventAttendeeService.create({
-          ...createEventAttendeeDto,
-          event,
-          user: { id: userId } as UserEntity,
-          status: EventAttendeeStatus.Waitlist,
-          role: participantRole,
-        });
+        attendeeStatus = EventAttendeeStatus.Waitlist;
       }
     }
-
     if (event.requireApproval) {
-      return this.eventAttendeeService.create({
-        ...createEventAttendeeDto,
-        event,
-        user: { id: userId } as UserEntity,
-        status: EventAttendeeStatus.Pending,
-        role: participantRole,
-      });
+      attendeeStatus = EventAttendeeStatus.Pending;
     }
 
-    return this.eventAttendeeService.create({
+    // Create the attendee
+    const attendee = await this.eventAttendeeService.create({
       ...createEventAttendeeDto,
       event,
       user: { id: userId } as UserEntity,
-      status: EventAttendeeStatus.Confirmed,
+      status: attendeeStatus,
       role: participantRole,
     });
+
+    console.log('attend event: attendee', attendee);
+
+    // Emit event for other parts of the system
+    this.eventEmitter.emit('event.attendee.added', {
+      eventId: event.id,
+      userId,
+      status: attendeeStatus,
+    });
+
+    return attendee;
   }
 
   async showEventAttendees(slug: string, pagination: PaginationDto) {

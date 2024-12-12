@@ -66,7 +66,7 @@ export class VisibilityGuard implements CanActivate {
               event.id,
               user.id,
             );
-          console.log('eventAttendee', eventAttendee);
+          console.log('eventAttendee Tom', eventAttendee);
           if (!eventAttendee) {
             throw new ForbiddenException(
               'VisibilityGuard: You do not have permission to view this private event',

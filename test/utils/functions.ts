@@ -37,7 +37,6 @@ async function createGroup(
     .set('x-tenant-id', TESTING_TENANT_ID)
     .set('Authorization', `Bearer ${authToken}`)
     .send(groupData);
-  // console.log('createGroup response.body', response.body);
   return response.body;
 }
 
@@ -123,7 +122,6 @@ async function createCategory(app, token, categoryData) {
     .set('Authorization', `Bearer ${token}`)
     .set('x-tenant-id', TESTING_TENANT_ID)
     .send(categoryData);
-  // console.log('createCategory response.body', response.body);
   expect(response.status).toBe(201);
   return response.body;
 }

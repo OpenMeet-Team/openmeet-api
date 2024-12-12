@@ -153,7 +153,11 @@ describe('EventController', () => {
         type: 'conference',
         categories: ['Technology'],
       };
-      const result = await controller.showAllEvents(pagination, queryEventDto);
+      const result = await controller.showAllEvents(
+        pagination,
+        queryEventDto,
+        mockUser,
+      );
       expect(result).toEqual(events);
       expect(eventService.showAllEvents).toHaveBeenCalled();
     });
