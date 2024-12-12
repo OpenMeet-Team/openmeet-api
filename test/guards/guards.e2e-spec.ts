@@ -59,7 +59,6 @@ describe('Guards (e2e)', () => {
       maxAttendees: 100,
       type: EventType.Hybrid,
       categories: [1],
-
     });
     // Add test user as attendee to private event
     await request(app)
@@ -126,7 +125,7 @@ describe('Guards (e2e)', () => {
         ).toBe(false);
       });
 
-      // this one fails to return the last private event, but does return private events.  
+      // this one fails to return the last private event, but does return private events.
       it.skip('should show public and authenticated events to authenticated users', async () => {
         let allEvents: any[] = [];
         let currentPage = 1;
