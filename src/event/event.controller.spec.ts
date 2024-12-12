@@ -447,6 +447,7 @@ describe('EventController', () => {
             type: 'conference',
             categories: ['Technology'],
           },
+          mockUser,
         );
         expect(result).toEqual(events);
       });
