@@ -43,6 +43,7 @@ import { UserService } from '../user/user.service';
 import { HomeQuery } from '../home/dto/home-query.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupRoleEntity } from '../group-role/infrastructure/persistence/relational/entities/group-role.entity';
+import { GroupMailService } from '../group-mail/group-mail.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -63,6 +64,7 @@ export class GroupService {
     private readonly zulipService: ZulipService,
     private readonly userService: UserService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly groupMailService: GroupMailService,
   ) {}
 
   async getTenantSpecificGroupRepository() {
@@ -95,7 +97,7 @@ export class GroupService {
 
   async getGroupsByCreator(userId: number): Promise<GroupEntity[]> {
     await this.getTenantSpecificGroupRepository();
-    // find where groupMembers user id == userid
+
     const groups = await this.groupRepository.find({
       where: {
         groupMembers: { user: { id: userId } },
@@ -652,35 +654,18 @@ export class GroupService {
 
   async joinGroup(slug: string, userId: number) {
     await this.getTenantSpecificGroupRepository();
-
-    const groupEntity = await this.groupRepository.findOne({
-      where: { slug },
-      relations: ['createdBy'],
-    });
-
-    if (!groupEntity) {
-      throw new NotFoundException('Group not found');
-    }
+    const groupEntity = await this.getGroupBySlug(slug);
 
     if (
       groupEntity?.requireApproval ||
       groupEntity?.visibility === GroupVisibility.Private
     ) {
-      await this.groupMemberService.createGroupMember(
+      const groupMember = await this.groupMemberService.createGroupMember(
         { userId, groupId: groupEntity.id },
         GroupRole.Guest,
       );
 
-      // TODO: uncomment this when we have a mail service
-      // if (groupEntity.createdBy.email) {
-      //   await this.mailService.groupMemberJoined({
-      //     to: groupEntity.createdBy.email,
-      //     data: {
-      //       group: groupEntity,
-      //       user: groupEntity.createdBy,
-      //     },
-      //   });
-      // }
+      await this.groupMailService.sendGroupGuestJoined(groupMember.id);
     } else {
       await this.groupMemberService.createGroupMember(
         { userId, groupId: groupEntity.id },
@@ -725,27 +710,22 @@ export class GroupService {
     updateDto: UpdateGroupMemberRoleDto,
   ) {
     await this.getTenantSpecificGroupRepository();
-    const group = await this.groupRepository.findOne({
-      where: { slug },
-    });
-    if (!group) {
-      throw new NotFoundException('Group not found');
-    }
-    return await this.groupMemberService.updateGroupMemberRole(
+
+    await this.groupMemberService.updateGroupMemberRole(
       groupMemberId,
       updateDto,
     );
+
+    const showGroupMember =
+      await this.groupMemberService.showGroupDetailsMember(groupMemberId);
+
+    await this.groupMailService.sendGroupMemberRoleUpdated(groupMemberId);
+    return showGroupMember;
   }
 
   async showGroupMembers(slug: string): Promise<GroupMemberEntity[]> {
     await this.getTenantSpecificGroupRepository();
-    const group = await this.groupRepository.findOne({
-      where: { slug },
-    });
-    if (!group) {
-      throw new NotFoundException('Group not found');
-    }
-
+    const group = await this.getGroupBySlug(slug);
     return await this.groupMemberService.findGroupDetailsMembers(group.id, 0);
   }
 
@@ -856,7 +836,10 @@ export class GroupService {
       content: body.message,
     };
 
-    const message = await this.zulipService.sendUserMessage(updatedUser, params);
+    const message = await this.zulipService.sendUserMessage(
+      updatedUser,
+      params,
+    );
     console.log('message', message);
     return message;
   }
@@ -925,5 +908,16 @@ export class GroupService {
       },
       relations: ['groupPermission'],
     });
+  }
+
+  async getGroupBySlug(slug: string): Promise<GroupEntity> {
+    await this.getTenantSpecificGroupRepository();
+    const group = await this.groupRepository.findOne({
+      where: { slug },
+    });
+    if (!group) {
+      throw new NotFoundException('Group by slug not found');
+    }
+    return group;
   }
 }

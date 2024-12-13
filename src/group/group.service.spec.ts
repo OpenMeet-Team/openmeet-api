@@ -17,6 +17,7 @@ import {
   mockFilesS3PresignedService,
   mockGroup,
   mockGroupAboutResponse,
+  mockGroupMailService,
   mockGroupMember,
   mockGroupMemberService,
   mockGroupRoleService,
@@ -42,6 +43,7 @@ import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember
 import { ZulipService } from '../zulip/zulip.service';
 import { UserService } from '../user/user.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { GroupMailService } from '../group-mail/group-mail.service';
 
 describe('GroupService', () => {
   let service: GroupService;
@@ -99,6 +101,10 @@ describe('GroupService', () => {
           useValue: {
             emit: jest.fn(),
           },
+        },
+        {
+          provide: GroupMailService,
+          useValue: mockGroupMailService,
         },
       ],
     }).compile();
