@@ -17,6 +17,7 @@ import {
   mockGroupAboutResponse,
   mockZulipMessageResponse,
   mockDiscussions,
+  mockEventAttendeeService,
 } from '../test/mocks';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { CreateGroupDto } from './dto/create-group.dto';
@@ -26,6 +27,7 @@ import { EventService } from '../event/event.service';
 import { Repository } from 'typeorm';
 import { PermissionsGuard } from '../shared/guard/permissions.guard';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
+import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 
 describe('GroupController', () => {
   let controller: GroupController;
@@ -58,6 +60,10 @@ describe('GroupController', () => {
               .fn()
               .mockResolvedValue(['READ_PERMISSION']),
           },
+        },
+        {
+          provide: EventAttendeeService,
+          useValue: mockEventAttendeeService,
         },
         // Mock Reflector
         {

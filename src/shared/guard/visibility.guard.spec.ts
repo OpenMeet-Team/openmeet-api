@@ -78,7 +78,7 @@ describe('VisibilityGuard', () => {
       eventService.findEventBySlug.mockResolvedValue(mockEvent);
 
       const context = mockContext({
-        params: { slug: 'test-event' },
+        headers: { 'x-event-slug': 'test-event' },
       });
 
       await expect(guard.canActivate(context)).resolves.toBe(true);
@@ -90,7 +90,7 @@ describe('VisibilityGuard', () => {
       );
 
       const context = mockContext({
-        params: { slug: 'non-existent-event' },
+        headers: { 'x-event-slug': 'non-existent-event' },
       });
 
       await expect(guard.canActivate(context)).rejects.toThrow(
@@ -105,7 +105,7 @@ describe('VisibilityGuard', () => {
       eventService.findEventBySlug.mockResolvedValue(mockEvent);
 
       const context = mockContext({
-        params: { slug: 'private-event' },
+        headers: { 'x-event-slug': 'private-event' },
       });
 
       await expect(guard.canActivate(context)).rejects.toThrow(
@@ -136,7 +136,7 @@ describe('VisibilityGuard', () => {
       groupService.findGroupBySlug.mockResolvedValue(mockGroup);
 
       const context = mockContext({
-        params: { groupSlug: 'test-group' },
+        headers: { 'x-group-slug': 'test-group' },
       });
 
       await expect(guard.canActivate(context)).resolves.toBe(true);
@@ -148,7 +148,7 @@ describe('VisibilityGuard', () => {
       );
 
       const context = mockContext({
-        params: { groupSlug: 'non-existent-group' },
+        headers: { 'x-group-slug': 'non-existent-group' },
       });
 
       await expect(guard.canActivate(context)).rejects.toThrow(
@@ -163,7 +163,7 @@ describe('VisibilityGuard', () => {
       groupService.findGroupBySlug.mockResolvedValue(mockGroup);
 
       const context = mockContext({
-        params: { groupSlug: 'private-group' },
+        headers: { 'x-group-slug': 'private-group' },
       });
 
       await expect(guard.canActivate(context)).rejects.toThrow(
@@ -187,7 +187,7 @@ describe('VisibilityGuard', () => {
   });
 
   describe('canActivate - Authentication Required', () => {
-    it('should require authentication for private events with authenticated visibility', async () => {
+    it('should require authentication for events with authenticated visibility', async () => {
       const mockEvent = {
         visibility: EventVisibility.Authenticated,
       } as unknown as EventEntity;
@@ -195,6 +195,7 @@ describe('VisibilityGuard', () => {
 
       const context = mockContext({
         params: { slug: 'auth-event' },
+        headers: { 'x-event-slug': 'auth-event' },
       });
 
       await expect(guard.canActivate(context)).rejects.toThrow(
@@ -209,7 +210,7 @@ describe('VisibilityGuard', () => {
       eventService.findEventBySlug.mockResolvedValue(mockEvent);
 
       const context = mockContext({
-        params: { slug: 'auth-event' },
+        headers: { 'x-event-slug': 'auth-event' },
         user: { id: 1 },
       });
 

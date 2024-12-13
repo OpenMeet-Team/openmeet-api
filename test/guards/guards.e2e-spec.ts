@@ -238,7 +238,8 @@ describe('Guards (e2e)', () => {
       it('should deny access to authenticated event without authentication', async () => {
         const response = await request(app)
           .get(`/api/events/${authenticatedEvent.slug}`)
-          .set('x-tenant-id', TESTING_TENANT_ID);
+          .set('x-tenant-id', TESTING_TENANT_ID)
+          .set('x-event-slug', authenticatedEvent.slug);
 
         expect(response.status).toBe(403);
       });
@@ -282,7 +283,8 @@ describe('Guards (e2e)', () => {
         const response = await request(app)
           .get(`/api/events/${privateEvent.slug}`)
           .set('Authorization', `Bearer ${newUserToken}`)
-          .set('x-tenant-id', TESTING_TENANT_ID);
+          .set('x-tenant-id', TESTING_TENANT_ID)
+          .set('x-event-slug', privateEvent.slug);
 
         expect(response.status).toBe(403);
       });
