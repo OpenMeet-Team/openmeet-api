@@ -23,6 +23,7 @@ import { AuthModule } from '../auth/auth.module';
 import { GroupListener } from './group.listener';
 import { GroupMailService } from '../group-mail/group-mail.service';
 import { GroupMailModule } from 'src/group-mail/group-mail.module';
+import { EventModule } from '../event/event.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { GroupMailModule } from 'src/group-mail/group-mail.module';
     ZulipModule,
     forwardRef(() => AuthModule),
     GroupMailModule,
+    forwardRef(() => EventModule),
   ],
   controllers: [GroupController],
   providers: [

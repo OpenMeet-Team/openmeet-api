@@ -40,7 +40,7 @@ export class PermissionsGuard implements CanActivate {
     const user = request.user;
 
     if (!user) {
-      throw new ForbiddenException('User not authenticated');
+      throw new ForbiddenException('PermissionsGuard: User not authenticated');
     }
 
     // Check each requirement - ALL must pass
@@ -69,7 +69,9 @@ export class PermissionsGuard implements CanActivate {
           eventSlug,
         );
         if (!eventAttendee) {
-          throw new ForbiddenException('Insufficient permissions');
+          throw new ForbiddenException(
+            'PermissionsGuard: Insufficient permissions',
+          );
         }
 
         const hasPermissions = this.hasRequiredPermissions(
@@ -77,7 +79,9 @@ export class PermissionsGuard implements CanActivate {
           permissions,
         );
         if (!hasPermissions) {
-          throw new ForbiddenException('Insufficient permissions');
+          throw new ForbiddenException(
+            'PermissionsGuard: Insufficient permissions',
+          );
         }
         break;
       }

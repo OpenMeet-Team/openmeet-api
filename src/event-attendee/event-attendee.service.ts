@@ -131,10 +131,12 @@ export class EventAttendeeService {
     userId: number,
   ): Promise<EventAttendeesEntity | null> {
     await this.getTenantSpecificEventRepository();
-    return await this.eventAttendeesRepository.findOne({
+
+    const attendee = await this.eventAttendeesRepository.findOne({
       where: { event: { id: eventId }, user: { id: userId } },
       relations: ['user', 'role', 'role.permissions'],
     });
+    return attendee;
   }
 
   async updateEventAttendee(
@@ -236,5 +238,14 @@ export class EventAttendeeService {
     return await this.eventAttendeesRepository.count({
       where: { event: { id: eventId }, status: EventAttendeeStatus.Confirmed },
     });
+  }
+
+  async findEventIdsByUserId(userId: number): Promise<number[]> {
+    await this.getTenantSpecificEventRepository();
+    const attendees = await this.eventAttendeesRepository.find({
+      where: { user: { id: userId } },
+      select: ['event'],
+    });
+    return attendees.map((a) => a.id);
   }
 }
