@@ -26,7 +26,7 @@ import { GroupModule } from '../group/group.module';
     EventAttendeeModule,
     FileModule,
     UserModule,
-    GroupModule,
+    forwardRef(() => GroupModule),
   ],
   controllers: [EventController],
   providers: [

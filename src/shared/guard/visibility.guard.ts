@@ -28,10 +28,10 @@ export class VisibilityGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
 
-    const eventSlug = (request.headers['x-event-slug']) as string;
-      console.log('eventSlug', eventSlug);
-    const groupSlug = (request.headers['x-group-slug'] ) as string;
-      console.log('groupSlug', groupSlug);
+    const eventSlug = request.headers['x-event-slug'] as string;
+    console.log('eventSlug', eventSlug);
+    const groupSlug = request.headers['x-group-slug'] as string;
+    console.log('groupSlug', groupSlug);
 
     const user = request.user;
 

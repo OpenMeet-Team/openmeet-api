@@ -132,7 +132,6 @@ export class GroupController {
     return this.groupService.remove(slug);
   }
 
-
   @Public()
   @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Get(':slug/about')
@@ -287,7 +286,6 @@ export class GroupController {
   ): Promise<GroupMemberEntity> {
     return this.groupService.rejectMember(slug, groupMemberId);
   }
-
 
   @UseGuards(JWTAuthGuard)
   @Public()

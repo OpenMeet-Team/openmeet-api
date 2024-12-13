@@ -13,12 +13,14 @@ import { GroupModule } from '../group/group.module';
 import { RoleModule } from '../role/role.module';
 import { EventModule } from '../event/event.module';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
+import { CategoryModule } from '../category/category.module';
 
 @Module({
   imports: [
     UserModule,
     forwardRef(() => GroupModule),
     forwardRef(() => EventModule),
+    forwardRef(() => CategoryModule),
     EventAttendeeModule,
     SessionModule,
     PassportModule,
