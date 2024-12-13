@@ -24,18 +24,18 @@ export class VisibilityGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     console.log('VisibilityGuard');
-    // console.log('context', context);
+    console.log('context', context);
 
     const request = context.switchToHttp().getRequest();
 
-    const eventSlug = (request.headers['x-event-slug'] ||
-      request.params.slug) as string;
-    const groupSlug = (request.headers['x-group-slug'] ||
-      request.params.groupSlug) as string;
+    const eventSlug = (request.headers['x-event-slug']) as string;
+      console.log('eventSlug', eventSlug);
+    const groupSlug = (request.headers['x-group-slug'] ) as string;
+      console.log('groupSlug', groupSlug);
+
     const user = request.user;
 
     if (eventSlug) {
-      console.log('eventSlug', eventSlug);
       const event = await this.eventService.findEventBySlug(eventSlug);
       if (!event) {
         throw new NotFoundException('VisibilityGuard: Event not found');
@@ -81,7 +81,6 @@ export class VisibilityGuard implements CanActivate {
     }
 
     if (groupSlug) {
-      console.log('groupSlug', groupSlug);
       const group = await this.groupService.findGroupBySlug(groupSlug);
       if (!group) {
         throw new NotFoundException('VisibilityGuard: Group not found');

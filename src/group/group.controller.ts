@@ -10,6 +10,7 @@ import {
   UseGuards,
   Optional,
 } from '@nestjs/common';
+import { VisibilityGuard } from '../shared/guard/visibility.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
@@ -50,11 +51,7 @@ export class GroupController {
     return this.groupService.create(createGroupDto, user.id);
   }
 
-  @Permissions({
-    context: 'user',
-    permissions: [UserPermission.ViewGroups],
-  })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Public()
   @Get()
   @ApiOperation({
@@ -97,17 +94,8 @@ export class GroupController {
     return await this.groupService.editGroup(slug);
   }
 
-  @Permissions(
-    {
-      context: 'user',
-      permissions: [UserPermission.ViewGroups],
-    },
-    {
-      context: 'group',
-      permissions: [GroupPermission.SeeMembers, GroupPermission.SeeGroup],
-    },
-  )
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Public()
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Get(':slug')
   @ApiOperation({
     summary: 'Get group by group slug and authenticated user',
@@ -144,11 +132,9 @@ export class GroupController {
     return this.groupService.remove(slug);
   }
 
-  @Permissions({
-    context: 'group',
-    permissions: [GroupPermission.SeeGroup],
-  })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+
+  @Public()
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Get(':slug/about')
   @ApiOperation({ summary: 'Get group about' })
   async showGroupAbout(@Param('slug') slug: string): Promise<{
@@ -160,22 +146,16 @@ export class GroupController {
     return await this.groupService.showGroupAbout(slug);
   }
 
-  @Permissions({
-    context: 'group',
-    permissions: [GroupPermission.SeeGroup],
-  })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Public()
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Get(':slug/events')
   @ApiOperation({ summary: 'Get all group events' })
   async showGroupEvents(@Param('slug') slug: string): Promise<EventEntity[]> {
     return await this.groupService.showGroupEvents(slug);
   }
 
-  @Permissions({
-    context: 'group',
-    permissions: [GroupPermission.SeeMembers],
-  })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Public()
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Get(':slug/members')
   @ApiOperation({ summary: 'Get all group members' })
   async showGroupMembers(
@@ -184,11 +164,8 @@ export class GroupController {
     return this.groupService.showGroupMembers(slug);
   }
 
-  @Permissions({
-    context: 'group',
-    permissions: [GroupPermission.SeeDiscussions],
-  })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Public()
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Get(':slug/discussions')
   @ApiOperation({ summary: 'Get all group discussions' })
   async showGroupDiscussions(
@@ -197,11 +174,8 @@ export class GroupController {
     return this.groupService.showGroupDiscussions(slug);
   }
 
-  @Permissions({
-    context: 'group',
-    permissions: [GroupPermission.ManageDiscussions],
-  })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Public()
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Post(':slug/discussions')
   @ApiOperation({ summary: 'Send a message to a group discussion' })
   async sendGroupDiscussionMessage(
@@ -212,11 +186,8 @@ export class GroupController {
     return this.groupService.sendGroupDiscussionMessage(slug, user.id, body);
   }
 
-  @Permissions({
-    context: 'group',
-    permissions: [GroupPermission.ManageDiscussions],
-  })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Public()
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Patch(':slug/discussions/:messageId')
   @ApiOperation({ summary: 'Update a group discussion message' })
   async updateGroupDiscussionMessage(
@@ -232,11 +203,8 @@ export class GroupController {
     );
   }
 
-  @Permissions({
-    context: 'group',
-    permissions: [GroupPermission.ManageDiscussions],
-  })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Public()
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Delete(':slug/discussions/:messageId')
   @ApiOperation({ summary: 'Delete a group discussion message' })
   async deleteGroupDiscussionMessage(
@@ -246,33 +214,24 @@ export class GroupController {
     return this.groupService.deleteGroupDiscussionMessage(messageId);
   }
 
-  @Permissions({
-    context: 'user',
-    permissions: [UserPermission.JoinGroups],
-  })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Public()
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Post(':slug/join')
   @ApiOperation({ summary: 'Joining a group through link' })
   async joinGroup(@AuthUser() user: User, @Param('slug') slug: string) {
     return this.groupService.joinGroup(slug, user.id);
   }
 
-  @Permissions({
-    context: 'user',
-    permissions: [UserPermission.AttendEvents],
-  })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Public()
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Delete(':slug/leave')
   @ApiOperation({ summary: 'Leave a group' })
   async leaveGroup(@AuthUser() user: User, @Param('slug') slug: string) {
     return this.groupService.leaveGroup(slug, user.id);
   }
 
-  @Permissions({
-    context: 'group',
-    permissions: [GroupPermission.ManageGroup, GroupPermission.ManageMembers],
-  })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Public()
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Delete(':slug/members/:groupMemberId')
   @ApiOperation({ summary: 'Remove a group member' })
   async removeGroupMember(
@@ -329,11 +288,8 @@ export class GroupController {
     return this.groupService.rejectMember(slug, groupMemberId);
   }
 
-  @Permissions({
-    context: 'user',
-    permissions: [UserPermission.ViewEvents],
-  })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+
+  @UseGuards(JWTAuthGuard)
   @Public()
   @Get(':slug/recommended-events')
   @ApiOperation({ summary: 'Get similar events for the group' })

@@ -262,8 +262,8 @@ export class EventController {
   //   return await this.eventService.showTopics(id);
   // }
 
-  @UseGuards(JWTAuthGuard)
   @Public()
+  @UseGuards(JWTAuthGuard)
   @Get(':slug/recommended-events')
   @ApiOperation({
     summary: 'Get similar events',
