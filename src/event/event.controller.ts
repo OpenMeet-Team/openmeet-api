@@ -10,6 +10,7 @@ import {
   Req,
   Query,
 } from '@nestjs/common';
+
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Request } from 'express';
 import { CreateEventDto } from './dto/create-event.dto';
@@ -29,6 +30,7 @@ import { UpdateEventAttendeeDto } from '../event-attendee/dto/update-eventAttend
 import { QueryEventAttendeeDto } from '../event-attendee/dto/query-eventAttendee.dto';
 import { Permissions } from '../shared/guard/permissions.decorator';
 import { PermissionsGuard } from '../shared/guard/permissions.guard';
+import { VisibilityGuard } from '../shared/guard/visibility.guard';
 import {
   EventAttendeePermission,
   UserPermission,
@@ -44,16 +46,23 @@ export class EventController {
     private readonly eventAttendeeService: EventAttendeeService,
   ) {}
 
-  @Public()
   @Get()
   @ApiOperation({
-    summary: 'Get all events. Public endpoint with search and pagination',
+    summary:
+      'Get all events. Public endpoint with search and pagination. Results depend on the visibility of the event and permission of the user.',
   })
+  @Public()
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
   async showAllEvents(
     @Query() pagination: PaginationDto,
     @Query() query: QueryEventDto,
+    @Req() req,
   ): Promise<EventEntity[]> {
-    return this.eventService.showAllEvents(pagination, query);
+    return this.eventService.showAllEvents(
+      pagination,
+      query,
+      req.user as UserEntity,
+    );
   }
 
   @Get('dashboard')
@@ -93,7 +102,8 @@ export class EventController {
     context: 'event',
     permissions: [EventAttendeePermission.ViewEvent],
   })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Public()
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Get(':slug')
   @ApiOperation({ summary: 'Show event details by ID' })
   async showEvent(
@@ -137,6 +147,7 @@ export class EventController {
     context: 'user',
     permissions: [UserPermission.AttendEvents],
   })
+  @Public()
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/attend')
   @ApiOperation({ summary: 'Attending an event' })
@@ -145,19 +156,14 @@ export class EventController {
     @Body() createEventAttendeeDto: CreateEventAttendeeDto,
     @Param('slug') slug: string,
   ) {
+    console.log('attend event: createEventAttendeeDto', createEventAttendeeDto);
     return this.eventService.attendEvent(slug, user.id, createEventAttendeeDto);
   }
 
-  @Permissions(
-    {
-      context: 'user',
-      permissions: [UserPermission.AttendEvents],
-    },
-    {
-      context: 'event',
-      permissions: [EventAttendeePermission.AttendEvent],
-    },
-  )
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.AttendEvent],
+  })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/cancel-attending')
   @ApiOperation({ summary: 'Cancel attending an event' })
@@ -256,8 +262,8 @@ export class EventController {
   //   return await this.eventService.showTopics(id);
   // }
 
-  @UseGuards(JWTAuthGuard)
   @Public()
+  @UseGuards(JWTAuthGuard)
   @Get(':slug/recommended-events')
   @ApiOperation({
     summary: 'Get similar events',

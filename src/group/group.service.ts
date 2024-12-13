@@ -856,7 +856,10 @@ export class GroupService {
       content: body.message,
     };
 
-    const message = await this.zulipService.sendUserMessage(updatedUser, params);
+    const message = await this.zulipService.sendUserMessage(
+      updatedUser,
+      params,
+    );
     console.log('message', message);
     return message;
   }
