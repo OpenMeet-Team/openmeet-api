@@ -497,16 +497,19 @@ export class EventService {
   ): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
 
-    const events = await this.eventRepository
+    const query = this.eventRepository
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.categories', 'categories')
       .where('event.status = :status', { status: EventStatus.Published })
-      .andWhere('categories.id IN (:...categoryIds)', {
-        categoryIds: categoryIds || [],
-      })
       .orderBy('RANDOM()')
-      .limit(limit)
-      .getMany();
+      .limit(limit);
+
+    if (categoryIds && categoryIds.length) {
+      query.andWhere('categories.id IN (:...categoryIds)', {
+        categoryIds: categoryIds || [],
+      });
+    }
+    const events = await query.getMany();
 
     return (await Promise.all(
       events.map(async (event) => ({

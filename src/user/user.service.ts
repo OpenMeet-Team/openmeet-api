@@ -177,18 +177,6 @@ export class UserService {
   async showProfile(slug: User['slug']): Promise<NullableType<User>> {
     await this.getTenantSpecificRepository();
 
-    // const user = await this.usersRepository
-    //   .createQueryBuilder('user')
-    //   .leftJoinAndSelect('user.photo', 'photo')
-    //   .select([
-    //     'user.id', // Required for entity
-    //     'user.firstName', // Required for virtual 'name'
-    //     'user.lastName', // Required for virtual 'name'
-    //     'photo.path', // Only path from photo
-    //   ])
-    //   .where('user.slug = :slug', { slug })
-    //   .getOne();
-
     const user = await this.usersRepository.findOne({
       where: {
         slug,
@@ -198,6 +186,7 @@ export class UserService {
         firstName: true,
         lastName: true,
         name: true,
+        bio: true,
         photo: {
           path: true,
         },

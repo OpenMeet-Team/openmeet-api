@@ -92,7 +92,7 @@ export class EventController {
     permissions: [EventAttendeePermission.ManageEvent],
   })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
-  @Get('me/:slug')
+  @Get(':slug/edit')
   @ApiOperation({ summary: 'Edit event by ID' })
   async editEvent(@Param('slug') slug: string): Promise<EventEntity | null> {
     return await this.eventService.editEvent(slug);
