@@ -8,6 +8,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { HomeQuery } from './dto/home-query.dto';
+import { TenantPublic } from 'src/tenant/tenant-public.decorator';
 
 @ApiTags('Home')
 @Controller()
@@ -23,6 +24,7 @@ export class HomeController {
   }
 
   @Public()
+  @TenantPublic()
   @Get('version')
   @ApiOperation({ summary: 'Get API version information' })
   getApiInfo() {
