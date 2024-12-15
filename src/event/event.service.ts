@@ -229,7 +229,8 @@ export class EventService {
       .createQueryBuilder('event')
       .leftJoin('event.user', 'user')
       .leftJoin('user.photo', 'photo')
-      .addSelect(['user.name', 'user.slug', 'photo.path'])
+      .leftJoin('event.image', 'eventPhoto')
+      .addSelect(['user.name', 'user.slug', 'photo.path', 'eventPhoto.path'])
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.group', 'group')
       .loadRelationCountAndMap(
@@ -275,10 +276,6 @@ export class EventService {
         }),
       );
     }
-
-    // Log the generated SQL for debugging
-    console.log('Generated SQL:', eventQuery.getSql());
-    console.log('Query parameters:', eventQuery.getParameters());
 
     if (search) {
       eventQuery.andWhere('event.name ILIKE :search', {
@@ -341,10 +338,11 @@ export class EventService {
       eventQuery.andWhere(`(${likeConditions})`, likeParameters);
     }
 
-    return paginate(eventQuery, {
+    const paginatedEvents = await paginate(eventQuery, {
       page: pagination.page,
       limit: pagination.limit,
     });
+    return paginatedEvents;
   }
 
   async searchAllEvents(
@@ -745,7 +743,6 @@ export class EventService {
   ) {
     await this.getTenantSpecificEventRepository();
 
-    console.log('attend event userId', userId, slug, createEventAttendeeDto);
     const event = await this.eventRepository.findOne({ where: { slug } });
     if (!event) {
       throw new NotFoundException('Event not found');
@@ -781,8 +778,6 @@ export class EventService {
       status: attendeeStatus,
       role: participantRole,
     });
-
-    console.log('attend event: attendee', attendee);
 
     // Emit event for other parts of the system
     this.eventEmitter.emit('event.attendee.added', {
