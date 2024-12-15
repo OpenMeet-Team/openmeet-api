@@ -45,7 +45,12 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ZulipModule } from './zulip/zulip.module';
 import { ChatModule } from './chat/chat.module';
 import { AuthGithubModule } from './auth-github/auth-github.module';
+<<<<<<< HEAD
 import { GroupMailModule } from './group-mail/group-mail.module';
+import { BlueskyModule } from './bluesky/bluesky.module';
+=======
+import { BlueskyModule } from './bluesky/bluesky.module';
+>>>>>>> f13223d (tidy)
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -119,6 +124,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     ZulipModule,
     ChatModule,
     GroupMailModule,
+    BlueskyModule,
   ],
   providers: [
     TenantConnectionService,
