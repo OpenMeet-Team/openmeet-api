@@ -268,7 +268,8 @@ export class GroupService {
 
       .leftJoin('group.createdBy', 'user')
       .leftJoin('user.photo', 'photo')
-      .addSelect(['user.name', 'user.slug', 'photo.path'])
+      .leftJoin('group.image', 'groupImage')
+      .addSelect(['user.name', 'user.slug', 'photo.path', 'groupImage.path'])
 
       .loadRelationCountAndMap(
         'group.groupMembersCount',
