@@ -63,7 +63,7 @@ Additionally, you may place a file  at `./config/tenants.json` to configure tena
     "name": "OpenMeet",
     "companyDomain": "https://openmeet.net",
     "frontendDomain": "https://dev.openmeet.net",
-    "logoUrl": "https://dev.openmeet.net/src/assets/openmeet/logo.png",
+    "logoUrl": "https://dev.openmeet.net/openmeet-logo.png",
     "mailDefaultEmail": "no-reply@openmeet.net",
     "mailDefaultName": "OpenMeet",
     "googleClientId": "",

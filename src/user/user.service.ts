@@ -178,15 +178,77 @@ export class UserService {
     await this.getTenantSpecificRepository();
 
     const user = await this.usersRepository.findOne({
-      where: { slug },
-      relations: [
-        'subCategory',
-        'groups',
-        'events',
-        'groupMembers.group',
-        'groupMembers.groupRole',
-      ],
+      where: {
+        slug,
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        name: true,
+        bio: true,
+        photo: {
+          path: true,
+        },
+        subCategory: {
+          id: true,
+          title: true,
+        },
+        groups: {
+          id: true,
+          name: true,
+          slug: true,
+          image: {
+            path: true,
+          },
+        },
+        events: {
+          id: true,
+          name: true,
+          slug: true,
+          image: {
+            path: true,
+          },
+        },
+        groupMembers: {
+          id: true,
+          group: {
+            id: true,
+            name: true,
+            slug: true,
+            image: {
+              path: true,
+            },
+          },
+          groupRole: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      relations: {
+        photo: true,
+        subCategory: true,
+        groups: true,
+        events: true,
+        groupMembers: {
+          group: true,
+          groupRole: true,
+        },
+      },
     });
+
+    // const user = await this.usersRepository.findOne({
+    //   where: { slug },
+    //   relations: [
+    //     'subCategory',
+    //     'groups',
+    //     'events',
+    //     'groupMembers.group',
+    //     'groupMembers.groupRole',
+    //     'photo',
+    //   ],
+    // });
 
     return user;
   }
@@ -359,5 +421,26 @@ export class UserService {
 
   async remove(id: User['id']): Promise<void> {
     await this.usersRepository.softDelete(id);
+  }
+
+  async getMailServiceUserById(id: number): Promise<UserEntity> {
+    await this.getTenantSpecificRepository();
+    const user = await this.usersRepository.findOne({
+      where: { id },
+      relations: ['photo'],
+      select: {
+        firstName: true,
+        lastName: true,
+        name: true,
+        email: true,
+        photo: {
+          path: true,
+        },
+      },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user;
   }
 }

@@ -6,7 +6,7 @@ import {
   mockGroupMemberService,
   mockUser,
 } from '../test/mocks';
-import { GroupRole } from '../core/constants/constant';
+import { GroupPermission, GroupRole } from '../core/constants/constant';
 
 describe('GroupMemberService', () => {
   let service: GroupMemberService;
@@ -95,6 +95,16 @@ describe('GroupMemberService', () => {
     it('should get group members count', async () => {
       const result = await service.getGroupMembersCount(mockGroup.id);
       expect(result).toBe(1);
+    });
+  });
+
+  describe('getMailServiceGroupMembersByPermission', () => {
+    it('should get group members by permission', async () => {
+      const result = await service.getMailServiceGroupMembersByPermission(
+        mockGroup.id,
+        GroupPermission.ManageMembers,
+      );
+      expect(result).toEqual([mockGroupMember]);
     });
   });
 });

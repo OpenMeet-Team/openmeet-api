@@ -57,6 +57,11 @@ export const mockGroupMemberService = {
   updateGroupMemberRole: jest.fn().mockResolvedValue(mockGroupMember),
   createGroupMember: jest.fn().mockResolvedValue(mockGroupMember),
   getGroupMembersCount: jest.fn().mockResolvedValue(1),
+  getMailServiceGroupMembersByPermission: jest
+    .fn()
+    .mockResolvedValue(mockGroupMembers),
+  getMailServiceGroupMember: jest.fn().mockResolvedValue(mockGroupMember),
+  showGroupDetailsMember: jest.fn().mockResolvedValue(mockGroupMember),
 };
 
 export const mockGroupService = {
@@ -98,4 +103,9 @@ export const mockGroupService = {
   showGroupDiscussions: jest.fn().mockResolvedValue(mockDiscussions),
   searchAllGroups: jest.fn().mockResolvedValue(mockGroups),
   showDashboardGroups: jest.fn().mockResolvedValue(mockGroups),
+};
+
+export const mockGroupMailService = {
+  sendGroupGuestJoined: jest.fn().mockResolvedValue(mockGroupMember),
+  sendGroupMemberRoleUpdated: jest.fn().mockResolvedValue(mockGroupMember),
 };

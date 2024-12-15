@@ -55,7 +55,9 @@ export const mockGroupAboutResponse = {
 };
 
 export const mockMailService = {
-  groupMemberJoined: jest.fn().mockResolvedValue(undefined),
+  renderTemplate: jest.fn().mockResolvedValue('test'),
+  groupMemberRoleUpdated: jest.fn().mockResolvedValue(undefined),
+  groupGuestJoined: jest.fn().mockResolvedValue(undefined),
 };
 
 export const mockChatService = {

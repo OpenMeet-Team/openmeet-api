@@ -21,6 +21,8 @@ import { EventRoleService } from 'src/event-role/event-role.service';
 import { ZulipModule } from 'src/zulip/zulip.module';
 import { AuthModule } from '../auth/auth.module';
 import { GroupListener } from './group.listener';
+import { GroupMailService } from '../group-mail/group-mail.service';
+import { GroupMailModule } from 'src/group-mail/group-mail.module';
 import { EventModule } from '../event/event.module';
 
 @Module({
@@ -37,6 +39,7 @@ import { EventModule } from '../event/event.module';
     EventAttendeeModule,
     ZulipModule,
     forwardRef(() => AuthModule),
+    GroupMailModule,
     forwardRef(() => EventModule),
   ],
   controllers: [GroupController],
@@ -51,6 +54,7 @@ import { EventModule } from '../event/event.module';
     ZulipService,
     EventRoleService,
     GroupListener,
+    GroupMailService,
   ],
   exports: [GroupService],
 })

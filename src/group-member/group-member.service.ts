@@ -8,7 +8,8 @@ import {
 } from './dto/create-groupMember.dto';
 import { REQUEST } from '@nestjs/core';
 import { GroupRoleService } from '../group-role/group-role.service';
-import { GroupRole } from '../core/constants/constant';
+import { GroupPermission, GroupRole } from '../core/constants/constant';
+import { UserEntity } from 'src/user/infrastructure/persistence/relational/entities/user.entity';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupMemberService {
@@ -127,7 +128,7 @@ export class GroupMemberService {
     return await this.groupMemberRepository.find({
       where: {
         group: { id: groupId },
-        groupRole: { name: Not(GroupRole.Guest) },
+        // groupRole: { name: Not(GroupRole.Guest) }, // TODO for users allowed manage members display guests
       },
       take: limit,
       relations: ['user.photo', 'groupRole'],
@@ -193,6 +194,71 @@ export class GroupMemberService {
       where: {
         group: { id: groupId },
         groupRole: { name: Not(GroupRole.Guest) },
+      },
+    });
+  }
+
+  async getMailServiceGroupMember(groupMemberId: number) {
+    await this.getTenantSpecificEventRepository();
+    const groupMember = await this.groupMemberRepository.findOne({
+      where: { id: groupMemberId },
+      relations: ['user', 'group', 'groupRole', 'groupRole.groupPermissions'],
+    });
+
+    if (!groupMember) {
+      throw new NotFoundException('Group member not found');
+    }
+    return groupMember;
+  }
+
+  async getMailServiceGroupMembersByPermission(
+    groupId: number,
+    permission: GroupPermission,
+  ): Promise<UserEntity[]> {
+    await this.getTenantSpecificEventRepository();
+    const groupMembers = await this.groupMemberRepository.find({
+      where: {
+        group: { id: groupId },
+        groupRole: {
+          groupPermissions: {
+            name: permission,
+          },
+        },
+      },
+      relations: ['user'],
+      select: {
+        user: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          name: true,
+          email: true,
+        },
+      },
+    });
+    return groupMembers.map((member) => member.user);
+  }
+
+  async showGroupDetailsMember(groupMemberId: number): Promise<any> {
+    await this.getTenantSpecificEventRepository();
+    return await this.groupMemberRepository.findOne({
+      where: {
+        id: groupMemberId,
+      },
+      relations: ['user.photo', 'groupRole'],
+      select: {
+        id: false,
+        groupRole: {
+          name: true,
+        },
+        user: {
+          slug: true,
+          name: true,
+          photo: {
+            path: true,
+            fileName: false,
+          },
+        },
       },
     });
   }

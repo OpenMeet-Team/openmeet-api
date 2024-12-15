@@ -7,18 +7,13 @@ import { MaybeType } from '../utils/types/maybe.type';
 import { MailerService } from '../mailer/mailer.service';
 import path from 'path';
 import { AllConfigType } from '../config/config.type';
-import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
-import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
-import { getTenantConfig } from '../utils/tenant-config';
 import { REQUEST } from '@nestjs/core';
-import fs from 'fs';
-import handlebars from 'handlebars';
 import { TenantConfig } from '../core/constants/constant';
 import { TenantConnectionService } from '../tenant/tenant.service';
+import { GroupMemberEntity } from 'src/group-member/infrastructure/persistence/relational/entities/group-member.entity';
 
 @Injectable()
 export class MailService {
-  private partials: { [key: string]: string } = {};
   private tenantConfig: TenantConfig;
 
   constructor(
@@ -26,34 +21,11 @@ export class MailService {
     private readonly mailerService: MailerService,
     private readonly configService: ConfigService<AllConfigType>,
     private readonly tenantService: TenantConnectionService,
-  ) {
-    this.registerPartials();
-  }
+  ) {}
 
   getTenantConfig() {
     const tenantId = this.request.tenantId;
     this.tenantConfig = this.tenantService.getTenantConfig(tenantId);
-  }
-
-  private registerPartials() {
-    // Load and register partial templates
-    const partialsDir = path.join(
-      this.configService.getOrThrow('app.workingDirectory', { infer: true }),
-      'src',
-      'mail',
-      'mail-templates',
-      'partials',
-    );
-
-    fs.readdirSync(partialsDir).forEach((file) => {
-      const partialName = file.replace('.hbs', '');
-      const partialContent = fs.readFileSync(
-        path.join(partialsDir, file),
-        'utf8',
-      );
-      handlebars.registerPartial(partialName, partialContent);
-      this.partials[partialName] = partialContent;
-    });
   }
 
   async userSignUp(mailData: MailData<{ hash: string }>): Promise<void> {
@@ -93,6 +65,7 @@ export class MailService {
         'src',
         'mail',
         'mail-templates',
+        'auth',
         'activation.hbs',
       ),
       context: {
@@ -149,6 +122,7 @@ export class MailService {
         'src',
         'mail',
         'mail-templates',
+        'auth',
         'reset-password.hbs',
       ),
       context: {
@@ -201,6 +175,7 @@ export class MailService {
         'src',
         'mail',
         'mail-templates',
+        'auth',
         'confirm-new-email.hbs',
       ),
       context: {
@@ -215,42 +190,42 @@ export class MailService {
     });
   }
 
-  async groupMemberJoined(
-    mailData: MailData<{ group: GroupEntity; user: UserEntity }>,
+  async groupGuestJoined(
+    mailData: MailData<{
+      groupMember: GroupMemberEntity;
+    }>,
   ): Promise<void> {
     this.getTenantConfig();
 
-    const tenantConfig = getTenantConfig(this.request.tenantId);
-    const url = tenantConfig.frontendDomain + '/auth/confirm-email';
-
-    await this.mailerService.sendMail({
+    await this.mailerService.sendMjmlMail({
       tenantConfig: this.tenantConfig,
       to: mailData.to,
-      title: 'New member has joined your group',
-      subject: 'New member has joined your group',
-      text: `${url.toString()} New member has joined your group`,
-      templatePath: path.join(
-        this.configService.getOrThrow('app.workingDirectory', {
-          infer: true,
-        }),
-        'src',
-        'mail',
-        'mail-templates',
-        'partials',
-        'layout.hbs',
-      ),
+      subject: 'New member applied to join your group',
+      templateName: 'group/group-guest-joined',
       context: {
-        title: 'Title. New member has joined your group',
-        subject: 'Subject. New member has joined your group',
-        body: `Group member ${mailData.data.user.name} joined ${mailData.data.group.name}.`,
-        memberName: mailData.data.user.name,
-        groupName: mailData.data.group.name,
-        tenantFrontendDomain: tenantConfig.frontendDomain,
-        tenantLogoUrl: tenantConfig.logoUrl,
-        tenantName: tenantConfig.name,
-        tenantCompanyDomain: tenantConfig.companyDomain,
-        tenantEmail: tenantConfig.mailDefaultEmail,
+        tenantConfig: this.tenantConfig,
+        groupMember: mailData.data.groupMember,
       },
     });
+  }
+
+  async groupMemberRoleUpdated(
+    mailData: MailData<{ groupMember: GroupMemberEntity }>,
+  ): Promise<void> {
+    this.getTenantConfig();
+    await this.mailerService.sendMjmlMail({
+      tenantConfig: this.tenantConfig,
+      to: mailData.to,
+      subject: 'Your role in the group has been updated',
+      templateName: 'group/group-member-role-updated',
+      context: {
+        tenantConfig: this.tenantConfig,
+        groupMember: mailData.data.groupMember,
+      },
+    });
+  }
+
+  async renderTemplate(template: string, data: Record<string, any>) {
+    return this.mailerService.renderTemplate(template, data);
   }
 }

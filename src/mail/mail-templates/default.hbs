@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{title}}</title>
+  <style>
+    :root {
+      /* Primary Colors */
+      --q-primary: #1E1A43;
+      --q-primary-light: #2E2A53;
+      --q-primary-dark: #0E0A33;
+      
+      /* Secondary Colors */
+      --q-secondary: #F6F6F6;
+      --q-secondary-light: #FFFFFF;
+      --q-secondary-dark: #E6E6E6;
+      
+      /* Accent Colors */
+      --q-accent: #FF385C;
+      --q-accent-light: #FF586C;
+      --q-accent-dark: #EF184C;
+      
+      /* UI Colors */
+      --q-dark: #1D1D1D;
+      --q-positive: #21BA45;
+      --q-negative: #C10015;
+      --q-info: #31CCEC;
+      --q-warning: #F2C037;
+      
+      /* Greys */
+      --q-grey-1: #fafafa;
+      --q-grey-2: #f5f5f5;
+      --q-grey-3: #eeeeee;
+      --q-grey-4: #8b8b8b;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      line-height: 1.5;
+      color: var(--q-dark);
+      margin: 0;
+      padding: 0;
+      background: var(--q-grey-2);
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .header {
+      background: var(--q-primary);
+      color: white;
+      padding: 20px;
+      text-align: center;
+      border-radius: 8px 8px 0 0;
+    }
+
+    .content {
+      background: white;
+      padding: 30px;
+      border-radius: 0 0 8px 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .footer {
+      text-align: center;
+      padding: 20px;
+      color: var(--q-grey-4);
+      font-size: 0.9em;
+    }
+
+     .btn {
+      display: inline-block;
+      padding: 12px 24px;
+      background: var(--q-accent);  /* Changed to accent color */
+      color: white;
+      text-decoration: none;
+      border-radius: 4px;
+      font-weight: 500;
+      margin: 16px 0;
+    }
+
+    .btn:hover {
+      background: var(--q-accent-dark);  /* Added hover state */
+    }
+
+    /* Additional utility classes */
+    .bg-primary { background: var(--q-primary); }
+    .bg-secondary { background: var(--q-secondary); }
+    .bg-accent { background: var(--q-accent); }
+    
+    .text-primary { color: var(--q-primary); }
+    .text-secondary { color: var(--q-secondary); }
+    .text-accent { color: var(--q-accent); }
+    .text-positive { color: var(--q-positive); }
+    .text-negative { color: var(--q-negative); }
+    .text-info { color: var(--q-info); }
+    .text-warning { color: var(--q-warning); }
+
+    /* Links */
+    a {
+      color: var(--q-accent);
+      text-decoration: none;
+    }
+
+    a:hover {
+      color: var(--q-accent-dark);
+    }
+
+    /* Footer links */
+    .footer a {
+      color: var(--q-dark);
+    }
+
+    .footer a:hover {
+      color: var(--q-accent);
+    }
+
+    hr {
+      border: 0;
+      border-top: 1px solid var(--q-grey-3);
+      margin: 20px 0;
+    }
+
+    @media (max-width: 600px) {
+      .container {
+        padding: 10px;
+      }
+      
+      .content {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <pre>
+      {{{tenantConfig}}}
+    </pre>
+    <div class="header">
+      <img src="{{tenantConfig.logoUrl}}" alt="{{tenantConfig.name}}" height="40">
+    </div>
+
+    <div class="content">
+      {{{body}}}
+    </div>
+
+    <div class="footer">
+      <p>© 2024 {{tenantConfig.name}}. All rights reserved.</p>
+      <p>
+        <a href="{{tenantConfig.companyDomain}}/privacy" style="color: var(--q-grey-4)">Privacy Policy</a> |
+        <a href="{{tenantConfig.companyDomain}}/terms" style="color: var(--q-grey-4)">Terms of Service</a>
+      </p>
+      <p style="color: var(--q-grey-4)">
+        You're receiving this email because you have an account with {{tenantConfig.name}}.
+        If you'd like to stop receiving emails, you can 
+        <a href="{{tenantConfig.companyDomain}}/unsubscribe" style="color: var(--q-grey-4)">unsubscribe here</a>.
+      </p>
+    </div>
+  </div>
+</body>
+</html>

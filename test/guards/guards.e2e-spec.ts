@@ -102,7 +102,6 @@ describe('Guards (e2e)', () => {
             })
             .set('x-tenant-id', TESTING_TENANT_ID);
 
-          console.log('response.body', response.body);
           expect(response.status).toBe(200);
           expect(response.body.data).toBeDefined();
 
