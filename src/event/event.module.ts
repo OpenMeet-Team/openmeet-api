@@ -15,6 +15,7 @@ import { ZulipService } from '../zulip/zulip.service';
 import { EventRoleService } from 'src/event-role/event-role.service';
 import { UserModule } from 'src/user/user.module';
 import { GroupModule } from '../group/group.module';
+import { EventMailModule } from 'src/event-mail/event-mail.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { GroupModule } from '../group/group.module';
     FileModule,
     UserModule,
     forwardRef(() => GroupModule),
+    EventMailModule,
   ],
   controllers: [EventController],
   providers: [

@@ -11,6 +11,7 @@ import { REQUEST } from '@nestjs/core';
 import { TenantConfig } from '../core/constants/constant';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { GroupMemberEntity } from 'src/group-member/infrastructure/persistence/relational/entities/group-member.entity';
+import { EventAttendeesEntity } from 'src/event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 
 @Injectable()
 export class MailService {
@@ -227,5 +228,36 @@ export class MailService {
 
   async renderTemplate(template: string, data: Record<string, any>) {
     return this.mailerService.renderTemplate(template, data);
+  }
+
+  async sendMailAttendeeGuestJoined(
+    mailData: MailData<{ eventAttendee: EventAttendeesEntity }>,
+  ) {
+    this.getTenantConfig();
+
+    await this.mailerService.sendMjmlMail({
+      tenantConfig: this.tenantConfig,
+      to: mailData.to,
+      subject: 'New member applied to join your group',
+      templateName: 'event/attendee-guest-joined',
+      context: {
+        eventAttendee: mailData.data.eventAttendee,
+      },
+    });
+  }
+
+  async sendMailAttendeeStatusChanged(
+    mailData: MailData<{ eventAttendee: EventAttendeesEntity }>,
+  ) {
+    this.getTenantConfig();
+    await this.mailerService.sendMjmlMail({
+      tenantConfig: this.tenantConfig,
+      to: mailData.to,
+      subject: 'Attendee status in the event has been updated',
+      templateName: 'event/attendee-status-changed',
+      context: {
+        eventAttendee: mailData.data.eventAttendee,
+      },
+    });
   }
 }

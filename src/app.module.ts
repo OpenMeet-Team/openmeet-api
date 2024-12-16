@@ -46,6 +46,7 @@ import { ZulipModule } from './zulip/zulip.module';
 import { ChatModule } from './chat/chat.module';
 import { AuthGithubModule } from './auth-github/auth-github.module';
 import { GroupMailModule } from './group-mail/group-mail.module';
+import { EventMailModule } from './event-mail/event-mail.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -119,6 +120,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     ZulipModule,
     ChatModule,
     GroupMailModule,
+    EventMailModule,
   ],
   providers: [
     TenantConnectionService,

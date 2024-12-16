@@ -156,7 +156,6 @@ export class EventController {
     @Body() createEventAttendeeDto: CreateEventAttendeeDto,
     @Param('slug') slug: string,
   ) {
-    console.log('attend event: createEventAttendeeDto', createEventAttendeeDto);
     return this.eventService.attendEvent(slug, user.id, createEventAttendeeDto);
   }
 
@@ -210,57 +209,6 @@ export class EventController {
     query.userId = userId;
     return this.eventService.showEventAttendees(slug, pagination);
   }
-
-  @Permissions({
-    context: 'event',
-    permissions: [
-      EventAttendeePermission.MessageAttendees,
-      EventAttendeePermission.CreateDiscussion,
-    ],
-  })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
-  @Post(':ulid/comments')
-  @ApiOperation({ summary: 'Create a new comment' })
-  async createComment(
-    @Body() body: { content: string; topic?: string },
-    @Param('ulid') ulid: string,
-    @AuthUser() user: User,
-  ): Promise<{ id: number }> {
-    return await this.eventService.postComment(ulid, user.id, body);
-  }
-
-  // @Post(':id/topics/:commentId')
-  // @ApiOperation({ summary: 'Update a comment' })
-  // async updateComment(
-  //   @Body() body: CommentDto,
-  //   @Param('commentId') commentId: number,
-  // ): Promise<EventTopicMessageEntity> {
-  //   return await this.eventService.updateComment(body, commentId);
-  // }
-
-  // @Delete(':id/topics/:commentId')
-  // async deleteComment(
-  //   @Param('commentId') commentId: number,
-  // ): Promise<EventTopicMessageEntity> {
-  //   return await this.eventService.deleteComment(commentId);
-  // }
-
-  // @Patch(':id/topics/:commentId')
-  // @ApiOperation({ summary: 'reply to comment' })
-  // async commentReply(
-  //   @Body() body: CommentDto,
-  //   @Param('commentId') commentId: number,
-  //   @Param('id') id: number,
-  // ): Promise<EventTopicMessageEntity> {
-  //   return await this.eventService.postCommentOnTopic(body, commentId, id);
-  // }
-
-  // @Public()
-  // @Get(':id/topics')
-  // @ApiOperation({ summary: 'Show Topics' })
-  // async showTopics(@Param('id') id: number): Promise<EventTopicEntity[]> {
-  //   return await this.eventService.showTopics(id);
-  // }
 
   @Public()
   @UseGuards(JWTAuthGuard)
