@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { BlueskyService } from './bluesky.service';
-import { BlueskyController } from './bluesky.controller';
+import { ConfigModule } from '@nestjs/config';
+import { EventIngestionModule } from '../event-ingestion/event-ingestion.module';
 
 @Module({
-  imports: [],
-  controllers: [BlueskyController],
+  imports: [ConfigModule, EventIngestionModule],
   providers: [BlueskyService],
   exports: [BlueskyService],
 })
