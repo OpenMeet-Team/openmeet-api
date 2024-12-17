@@ -294,4 +294,11 @@ export class EventAttendeeService {
     }
     return eventAttendee;
   }
+
+  async deleteEventAttendee(attendeeId: number) {
+    await this.getTenantSpecificEventRepository();
+    return await this.eventAttendeesRepository.delete({
+      id: attendeeId,
+    });
+  }
 }

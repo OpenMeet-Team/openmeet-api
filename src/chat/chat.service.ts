@@ -6,6 +6,7 @@ import { ChatEntity } from './infrastructure/persistence/relational/entities/cha
 import { In, Repository } from 'typeorm';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { ChatMailService } from 'src/chat-mail/chat-mail.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class ChatService {
@@ -16,6 +17,7 @@ export class ChatService {
     private readonly userService: UserService,
     private readonly zulipService: ZulipService,
     private readonly tenantConnectionService: TenantConnectionService,
+    private readonly chatMailService: ChatMailService,
   ) {}
 
   async getTenantSpecificChatRepository() {
@@ -50,6 +52,19 @@ export class ChatService {
     chats = await this.chatRepository.find({
       relations: ['participants'],
       where: { id: In(foundChats.map((chat) => chat.id)) },
+      select: {
+        id: true,
+        ulid: true,
+        participants: {
+          slug: true,
+          firstName: true,
+          lastName: true,
+          name: true,
+          photo: {
+            path: true,
+          },
+        },
+      },
     });
 
     chats.forEach((chat) => {
@@ -138,10 +153,10 @@ export class ChatService {
     return chat;
   }
 
-  async getChatByParticipantUlid(participantUlid: string, userId: number) {
+  async getChatByParticipantUlid(participantSlug: string, userId: number) {
     await this.getTenantSpecificChatRepository();
 
-    const participant = await this.userService.findByUlid(participantUlid);
+    const participant = await this.userService.getUserBySlug(participantSlug);
 
     if (!participant || participant.id === userId) {
       return null;
@@ -211,6 +226,8 @@ export class ChatService {
       to: [participant.zulipUserId as number],
       content: content,
     });
+
+    await this.chatMailService.sendMailNewMessage(participant);
 
     return messageResponse;
   }

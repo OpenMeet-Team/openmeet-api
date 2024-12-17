@@ -443,4 +443,13 @@ export class UserService {
     }
     return user;
   }
+
+  async getUserBySlug(slug: User['slug']): Promise<NullableType<UserEntity>> {
+    await this.getTenantSpecificRepository();
+    const user = await this.usersRepository.findOne({ where: { slug } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user;
+  }
 }

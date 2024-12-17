@@ -194,6 +194,20 @@ export class EventController {
 
   @Permissions({
     context: 'event',
+    permissions: [EventAttendeePermission.ManageAttendees],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Delete(':slug/attendees/:attendeeId')
+  @ApiOperation({ summary: 'Delete event attendee' })
+  async deleteEventAttendee(
+    @Param('slug') slug: string,
+    @Param('attendeeId') attendeeId: number,
+  ) {
+    return this.eventAttendeeService.deleteEventAttendee(attendeeId);
+  }
+
+  @Permissions({
+    context: 'event',
     permissions: [EventAttendeePermission.ViewEvent],
   })
   @UseGuards(JWTAuthGuard, PermissionsGuard)

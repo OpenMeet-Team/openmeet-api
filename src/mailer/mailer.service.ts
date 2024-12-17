@@ -107,7 +107,7 @@ export class MailerService {
         html,
       });
     } catch (error) {
-      console.error('Failed to send email:', error);
+      console.error('Failed to send mjml email:', error);
       throw error;
     }
   }

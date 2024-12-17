@@ -602,24 +602,32 @@ export class EventService {
     const events =
       (await this.eventRepository.find({
         where: { user: { id: userId } },
-        relations: ['user', 'attendees'],
       })) || [];
-    return events.map((event) => ({
-      ...event,
-      attendeesCount: event.attendees ? event.attendees.length : 0,
-    }));
+    return (await Promise.all(
+      events.map(async (event) => ({
+        ...event,
+        attendeesCount:
+          await this.eventAttendeeService.showConfirmedEventAttendeesCount(
+            event.id,
+          ),
+      })),
+    )) as EventEntity[];
   }
 
   async getEventsByAttendee(userId: number) {
     await this.getTenantSpecificEventRepository();
     const events = await this.eventRepository.find({
       where: { attendees: { user: { id: userId } } },
-      relations: ['user', 'attendees'],
     });
-    return events.map((event) => ({
-      ...event,
-      attendeesCount: event.attendees ? event.attendees.length : 0,
-    }));
+    return (await Promise.all(
+      events.map(async (event) => ({
+        ...event,
+        attendeesCount:
+          await this.eventAttendeeService.showConfirmedEventAttendeesCount(
+            event.id,
+          ),
+      })),
+    )) as EventEntity[];
   }
 
   async getHomePageFeaturedEvents(): Promise<EventEntity[]> {
@@ -833,6 +841,7 @@ export class EventService {
 
     // Combine and deduplicate events
     const allEvents = [...createdEvents, ...attendingEvents];
+    console.log('allEvents', allEvents);
     const uniqueEvents = Array.from(
       new Map(allEvents.map((event) => [event.id, event])).values(),
     );
