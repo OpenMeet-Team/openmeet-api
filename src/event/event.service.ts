@@ -40,7 +40,7 @@ import { ZulipTopic } from 'zulip-js';
 import { HomeQuery } from '../home/dto/home-query.dto';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { Brackets } from 'typeorm';
-import { EventMailService } from 'src/event-mail/event-mail.service';
+import { EventMailService } from '../event-mail/event-mail.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -704,6 +704,16 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
 
     const event = await this.findEventBySlug(slug);
+    const user = await this.userService.getUserById(userId);
+    const eventAttendee =
+      await this.eventAttendeeService.findEventAttendeeByUserId(
+        event.id,
+        user.id,
+      );
+
+    if (eventAttendee) {
+      return eventAttendee;
+    }
 
     const participantRole = await this.eventRoleService.findByName(
       EventAttendeeRole.Participant,
@@ -731,7 +741,7 @@ export class EventService {
     const attendee = await this.eventAttendeeService.create({
       ...createEventAttendeeDto,
       event,
-      user: { id: userId } as UserEntity,
+      user: user,
       status: attendeeStatus,
       role: participantRole,
     });
@@ -741,7 +751,7 @@ export class EventService {
     // Emit event for other parts of the system
     this.eventEmitter.emit('event.attendee.added', {
       eventId: event.id,
-      userId,
+      userId: user.id,
       status: attendeeStatus,
     });
 
@@ -779,10 +789,7 @@ export class EventService {
 
     const event = await this.findEventBySlug(slug);
 
-    const user = await this.userService.findOne(userId);
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
+    const user = await this.userService.getUserById(userId);
 
     const eventChannelName = `tenant_${this.request.tenantId}__event_${event.ulid}`;
 
@@ -819,10 +826,7 @@ export class EventService {
     message: string,
     userId: number,
   ): Promise<{ id: number }> {
-    const user = await this.userService.findOne(userId);
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
+    const user = await this.userService.getUserById(userId);
     return await this.zulipService.updateUserMessage(user, messageId, message);
     // return await this.zulipService.updateAdminMessage(messageId, message);
   }

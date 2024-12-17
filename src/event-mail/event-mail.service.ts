@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { EventAttendeePermission } from 'src/core/constants/constant';
-import { EventAttendeeService } from 'src/event-attendee/event-attendee.service';
-import { EventAttendeesEntity } from 'src/event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
-import { MailService } from 'src/mail/mail.service';
+import { EventAttendeePermission } from '../core/constants/constant';
+import { EventAttendeeService } from '../event-attendee/event-attendee.service';
+import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class EventMailService {

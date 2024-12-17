@@ -452,4 +452,13 @@ export class UserService {
     }
     return user;
   }
+
+  async getUserById(id: number): Promise<UserEntity> {
+    await this.getTenantSpecificRepository();
+    const user = await this.usersRepository.findOne({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user;
+  }
 }

@@ -58,6 +58,7 @@ export const mockMailService = {
   renderTemplate: jest.fn().mockResolvedValue('test'),
   groupMemberRoleUpdated: jest.fn().mockResolvedValue(undefined),
   groupGuestJoined: jest.fn().mockResolvedValue(undefined),
+  sendMailChatNewMessage: jest.fn().mockResolvedValue(undefined),
 };
 
 export const mockChatService = {
@@ -83,6 +84,7 @@ export const mockSubCategoryService = {
     .fn()
     .mockResolvedValue(mockSubCategories),
   getHomePageUserInterests: jest.fn().mockResolvedValue(mockSubCategories),
+  findOne: jest.fn().mockResolvedValue(mockSubCategory),
 };
 
 export const mockConfigService = {
@@ -124,6 +126,7 @@ export const mockRepository = {
   leftJoin: jest.fn().mockReturnThis(),
   select: jest.fn().mockReturnThis(),
   getRawMany: jest.fn(),
+  softDelete: jest.fn(),
 };
 
 export const mockDashboardService = {
@@ -160,4 +163,12 @@ export const mockHomeQuery = {
   userId: 1,
   location: '',
   categories: [],
+};
+
+export const mockChatMailService = {
+  sendMailNewMessage: jest.fn().mockResolvedValue(undefined),
+};
+
+export const mockMailerService = {
+  sendMjmlMail: jest.fn().mockResolvedValue(undefined),
 };

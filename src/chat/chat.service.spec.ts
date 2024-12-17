@@ -1,5 +1,6 @@
 import {
   mockChat,
+  mockChatMailService,
   mockTenantConnectionService,
   mockUser,
   mockUserService,
@@ -14,6 +15,7 @@ import { UserService } from '../user/user.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import { TESTING_TENANT_ID } from '../../test/utils/constants';
+import { ChatMailService } from '../chat-mail/chat-mail.service';
 
 describe('ChatService', () => {
   let service: ChatService;
@@ -41,6 +43,10 @@ describe('ChatService', () => {
         {
           provide: TenantConnectionService,
           useValue: mockTenantConnectionService,
+        },
+        {
+          provide: ChatMailService,
+          useValue: mockChatMailService,
         },
       ],
     }).compile();

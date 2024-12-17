@@ -6,7 +6,7 @@ import { ChatEntity } from './infrastructure/persistence/relational/entities/cha
 import { In, Repository } from 'typeorm';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
-import { ChatMailService } from 'src/chat-mail/chat-mail.service';
+import { ChatMailService } from '../chat-mail/chat-mail.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class ChatService {

@@ -57,6 +57,7 @@ export class GroupMemberService {
           slug: true,
           firstName: true,
           lastName: true,
+          name: true,
           photo: {
             path: true,
           },
@@ -140,6 +141,8 @@ export class GroupMemberService {
         user: {
           slug: true,
           name: true,
+          firstName: true,
+          lastName: true,
           photo: {
             path: true,
             fileName: false,

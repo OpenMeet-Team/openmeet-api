@@ -656,27 +656,37 @@ export class GroupService {
   async joinGroup(slug: string, userId: number) {
     await this.getTenantSpecificGroupRepository();
     const groupEntity = await this.getGroupBySlug(slug);
+    const userEntity = await this.userService.getUserById(userId);
+
+    const groupMember = await this.groupMemberService.findGroupMemberByUserId(
+      groupEntity.id,
+      userEntity.id,
+    );
+
+    if (groupMember) {
+      return groupMember;
+    }
 
     if (
       groupEntity?.requireApproval ||
       groupEntity?.visibility === GroupVisibility.Private
     ) {
       const groupMember = await this.groupMemberService.createGroupMember(
-        { userId, groupId: groupEntity.id },
+        { userId: userEntity.id, groupId: groupEntity.id },
         GroupRole.Guest,
       );
 
       await this.groupMailService.sendGroupGuestJoined(groupMember.id);
     } else {
       await this.groupMemberService.createGroupMember(
-        { userId, groupId: groupEntity.id },
+        { userId: userEntity.id, groupId: groupEntity.id },
         GroupRole.Member,
       );
     }
 
     return await this.groupMemberService.findGroupMemberByUserId(
       groupEntity.id,
-      userId,
+      userEntity.id,
     );
   }
 

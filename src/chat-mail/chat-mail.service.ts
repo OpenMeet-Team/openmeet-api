@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { MailService } from 'src/mail/mail.service';
-import { UserEntity } from 'src/user/infrastructure/persistence/relational/entities/user.entity';
+import { MailService } from '../mail/mail.service';
+import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 
 @Injectable()
 export class ChatMailService {
