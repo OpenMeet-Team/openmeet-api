@@ -34,7 +34,7 @@ export class ChatService {
     let chats: ChatEntity[] = [];
 
     if (query.user) {
-      chat = await this.getChatByParticipantUlid(query.user, userId);
+      chat = await this.getChatByParticipantSlug(query.user, userId);
     }
 
     if (query.chat) {
@@ -153,7 +153,7 @@ export class ChatService {
     return chat;
   }
 
-  async getChatByParticipantUlid(participantSlug: string, userId: number) {
+  async getChatByParticipantSlug(participantSlug: string, userId: number) {
     await this.getTenantSpecificChatRepository();
 
     const participant = await this.userService.getUserBySlug(participantSlug);
