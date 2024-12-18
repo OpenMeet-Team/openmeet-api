@@ -678,8 +678,10 @@ export class EventService {
   async getHomePageFeaturedEvents(): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
 
-    return this.eventRepository
+    const events = await this.eventRepository
       .createQueryBuilder('event')
+      .select(['event'])
+      .leftJoinAndSelect('event.image', 'image')
       .where({
         visibility: EventVisibility.Public,
         status: EventStatus.Published,
@@ -687,6 +689,9 @@ export class EventService {
       .orderBy('RANDOM()')
       .limit(5)
       .getMany(); // TODO: later provide featured flag or configuration object
+
+    console.log('events', events);
+    return events;
   }
 
   async getHomePageUserUpcomingEvents(userId: number) {

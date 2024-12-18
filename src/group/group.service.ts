@@ -580,17 +580,23 @@ export class GroupService {
   async getHomePageFeaturedGroups(): Promise<GroupEntity[]> {
     await this.getTenantSpecificGroupRepository();
 
-    return this.groupRepository
+    const groups = await this.groupRepository
       .createQueryBuilder('group')
+      .select(['group'])
       .leftJoinAndSelect('group.groupMembers', 'groupMembers')
       .leftJoinAndSelect('group.categories', 'categories')
+      .leftJoinAndSelect('group.image', 'image')
       .where({
         visibility: GroupVisibility.Public,
         status: GroupStatus.Published,
       })
       .orderBy('RANDOM()')
       .limit(5)
-      .getMany(); // TODO: later provide featured flag or configuration object
+      .getMany();
+
+    console.log('groups', groups);
+
+    return groups;
   }
 
   async getHomePageUserCreatedGroups(
