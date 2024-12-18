@@ -190,7 +190,7 @@ export class UserService {
         photo: {
           path: true,
         },
-        subCategory: {
+        interests: {
           id: true,
           title: true,
         },
@@ -228,7 +228,7 @@ export class UserService {
       },
       relations: {
         photo: true,
-        subCategory: true,
+        interests: true,
         groups: true,
         events: true,
         groupMembers: {
@@ -258,7 +258,7 @@ export class UserService {
 
     return this.usersRepository.findOne({
       where: { id },
-      relations: ['role', 'role.permissions'],
+      relations: ['role', 'role.permissions', 'interests'],
     });
   }
 
@@ -355,6 +355,14 @@ export class UserService {
       }
     }
 
+    if (clonedPayload.interests) {
+      clonedPayload.interests = await this.subCategoryService.findMany(
+        clonedPayload.interests.map((interest) => interest.id),
+      );
+    } else {
+      clonedPayload.interests = [];
+    }
+
     if (clonedPayload.photo?.id === 0) {
       if (clonedPayload.photo) {
         await this.fileService.delete(clonedPayload.photo.id);
@@ -412,7 +420,8 @@ export class UserService {
         });
       }
     }
-    await this.usersRepository.save({ id, ...clonedPayload } as UserEntity); // FIXME:
+
+    await this.usersRepository.save({ id, ...clonedPayload }); // FIXME:
 
     const user = await this.findById(id);
     this.eventEmitter.emit('user.updated', user);

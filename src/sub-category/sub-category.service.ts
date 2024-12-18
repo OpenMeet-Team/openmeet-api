@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, Inject, Scope } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { CreateSubCategoryDto } from './dto/create-subcategory.dto';
@@ -37,9 +37,7 @@ export class SubCategoryService {
 
   async findAll(): Promise<SubCategoryEntity[]> {
     await this.getTenantSpecificSubCategoryRepository();
-    return this.subCategoryRepository.find({
-      relations: ['category', 'users'],
-    });
+    return this.subCategoryRepository.find();
   }
 
   async findOne(id: number): Promise<SubCategoryEntity> {
@@ -97,5 +95,10 @@ export class SubCategoryService {
       where: { users: { id: userId } },
       relations: ['users'],
     }); // TODO: check if this is correct. Should return list of user interests
+  }
+
+  async findMany(ids: number[]): Promise<SubCategoryEntity[]> {
+    await this.getTenantSpecificSubCategoryRepository();
+    return this.subCategoryRepository.find({ where: { id: In(ids) } });
   }
 }

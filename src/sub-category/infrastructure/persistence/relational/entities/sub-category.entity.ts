@@ -41,6 +41,6 @@ export class SubCategoryEntity extends EntityRelationalHelper {
   @JoinColumn({ name: 'categoryId' })
   category: CategoryEntity;
 
-  @ManyToMany(() => UserEntity, (user) => user.subCategory)
+  @ManyToMany(() => UserEntity, (user) => user.interests)
   users: UserEntity[];
 }
