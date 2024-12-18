@@ -10,7 +10,7 @@
 
           <mj-text>
             A new event attendee <strong>
-              <a href="<%= tenantConfig?.frontendDomain + '/members/' + eventAttendee?.user?.slug %>"><%= eventAttendee?.user?.name %></a>
+              <a href="<%= tenantConfig?.frontendDomain + '/members/' + eventAttendee?.user?.slug %>"><%= eventAttendee?.user?.firstName %> <%= eventAttendee?.user?.lastName %></a>
             </strong>, has requested to join your event <strong>
               <a href="<%= tenantConfig?.frontendDomain + '/events/' + eventAttendee?.event?.slug %>"><%= eventAttendee?.event?.name %></a>
             </strong>.

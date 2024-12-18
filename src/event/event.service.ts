@@ -671,10 +671,16 @@ export class EventService {
 
   async findEventsForGroup(groupId: number, limit: number) {
     await this.getTenantSpecificEventRepository();
-    return this.eventRepository.find({
+    const events = await this.eventRepository.find({
       where: { group: { id: groupId } },
       take: limit,
     });
+    return (await Promise.all(
+      events.map(async (event) => ({
+        ...event,
+        attendeesCount: await this.getEventAttendeesCount(event.id),
+      })),
+    )) as EventEntity[];
   }
 
   async editEvent(slug: string) {
