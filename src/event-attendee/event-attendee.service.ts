@@ -8,7 +8,10 @@ import { CreateEventAttendeeDto } from './dto/create-eventAttendee.dto';
 import { QueryEventAttendeeDto } from './dto/query-eventAttendee.dto';
 import { paginate } from '../utils/generic-pagination';
 import { UpdateEventAttendeeDto } from './dto/update-eventAttendee.dto';
-import { EventAttendeeStatus, EventAttendeeRole } from '../core/constants/constant';
+import {
+  EventAttendeeStatus,
+  EventAttendeeRole,
+} from '../core/constants/constant';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventRoleService } from '../event-role/event-role.service';
