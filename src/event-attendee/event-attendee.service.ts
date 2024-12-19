@@ -8,7 +8,11 @@ import { CreateEventAttendeeDto } from './dto/create-eventAttendee.dto';
 import { QueryEventAttendeeDto } from './dto/query-eventAttendee.dto';
 import { paginate } from '../utils/generic-pagination';
 import { UpdateEventAttendeeDto } from './dto/update-eventAttendee.dto';
-import { EventAttendeeStatus } from '../core/constants/constant';
+import { EventAttendeeStatus, EventAttendeeRole } from '../core/constants/constant';
+import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
+import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { EventRoleService } from '../event-role/event-role.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventAttendeeService {
@@ -17,6 +21,8 @@ export class EventAttendeeService {
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
+    private readonly eventRoleService: EventRoleService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   private async getTenantSpecificEventRepository() {
@@ -247,5 +253,46 @@ export class EventAttendeeService {
       select: ['event'],
     });
     return attendees.map((a) => a.id);
+  }
+
+  async attendEvent(
+    event: EventEntity,
+    userId: number,
+    createEventAttendeeDto: CreateEventAttendeeDto,
+  ): Promise<EventAttendeesEntity> {
+    const participantRole = await this.eventRoleService.findByName(
+      EventAttendeeRole.Participant,
+    );
+
+    if (!participantRole) {
+      throw new NotFoundException('Participant role not found');
+    }
+
+    let attendeeStatus = EventAttendeeStatus.Confirmed;
+    if (event.allowWaitlist) {
+      const count = await this.showEventAttendeesCount(event.id);
+      if (count >= event.maxAttendees) {
+        attendeeStatus = EventAttendeeStatus.Waitlist;
+      }
+    }
+    if (event.requireApproval) {
+      attendeeStatus = EventAttendeeStatus.Pending;
+    }
+
+    const attendee = await this.create({
+      ...createEventAttendeeDto,
+      event,
+      user: { id: userId } as UserEntity,
+      status: attendeeStatus,
+      role: participantRole,
+    });
+
+    this.eventEmitter.emit('event.attendee.added', {
+      eventId: event.id,
+      userId,
+      status: attendeeStatus,
+    });
+
+    return attendee;
   }
 }

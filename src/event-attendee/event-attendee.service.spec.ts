@@ -13,6 +13,8 @@ import { CreateEventAttendeeDto } from './dto/create-eventAttendee.dto';
 import { UpdateEventAttendeeDto } from './dto/update-eventAttendee.dto';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ForbiddenException } from '@nestjs/common';
+import { EventRoleService } from '../event-role/event-role.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 describe('EventAttendeeService', () => {
   let service: EventAttendeeService;
@@ -81,6 +83,8 @@ describe('EventAttendeeService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventAttendeeService,
+        EventRoleService,
+        EventEmitter2,
         {
           provide: TenantConnectionService,
           useValue: mockTenantService,

@@ -748,53 +748,17 @@ export class EventService {
     slug: string,
     userId: number,
     createEventAttendeeDto: CreateEventAttendeeDto,
-  ) {
-    await this.getTenantSpecificEventRepository();
-
-    const event = await this.eventRepository.findOne({ where: { slug } });
+  ): Promise<EventAttendeesEntity> {
+    const event = await this.findEventBySlug(slug);
     if (!event) {
       throw new NotFoundException('Event not found');
     }
 
-    const participantRole = await this.eventRoleService.findByName(
-      EventAttendeeRole.Participant,
-    );
-
-    if (!participantRole) {
-      throw new NotFoundException('Participant role not found');
-    }
-
-    // Create the attendee with appropriate status based on event settings
-    let attendeeStatus = EventAttendeeStatus.Confirmed;
-    if (event.allowWaitlist) {
-      const count = await this.eventAttendeeService.showEventAttendeesCount(
-        event.id,
-      );
-      if (count >= event.maxAttendees) {
-        attendeeStatus = EventAttendeeStatus.Waitlist;
-      }
-    }
-    if (event.requireApproval) {
-      attendeeStatus = EventAttendeeStatus.Pending;
-    }
-
-    // Create the attendee
-    const attendee = await this.eventAttendeeService.create({
-      ...createEventAttendeeDto,
+    return this.eventAttendeeService.attendEvent(
       event,
-      user: { id: userId } as UserEntity,
-      status: attendeeStatus,
-      role: participantRole,
-    });
-
-    // Emit event for other parts of the system
-    this.eventEmitter.emit('event.attendee.added', {
-      eventId: event.id,
       userId,
-      status: attendeeStatus,
-    });
-
-    return attendee;
+      createEventAttendeeDto,
+    );
   }
 
   async showEventAttendees(slug: string, pagination: PaginationDto) {
