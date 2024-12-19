@@ -40,6 +40,7 @@ import { ZulipTopic } from 'zulip-js';
 import { HomeQuery } from '../home/dto/home-query.dto';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { Brackets } from 'typeorm';
+import { EventRecommendationService } from './event-recommendation.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -57,6 +58,7 @@ export class EventService {
     private readonly zulipService: ZulipService,
     private readonly eventRoleService: EventRoleService,
     private readonly userService: UserService,
+    private readonly eventRecommendationService: EventRecommendationService,
   ) {
     void this.initializeRepository();
   }
@@ -520,64 +522,44 @@ export class EventService {
   async findRecommendedEventsForGroup(
     groupId: number,
     categories: number[],
-    minEvents: number = 0,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
-    if (maxEvents < minEvents || minEvents < 0 || maxEvents < 0) {
-      return [];
-    }
-    await this.getTenantSpecificEventRepository();
+    const events =
+      await this.eventRecommendationService.findRecommendedEventsForGroup(
+        groupId,
+        maxEvents,
+      );
 
-    const query = this.eventRepository
-      .createQueryBuilder('event')
-      .leftJoinAndSelect('event.group', 'group')
-      .leftJoinAndSelect('event.categories', 'categories')
-      .where('event.status = :status', { status: EventStatus.Published })
-      .andWhere('event.group.id != :groupId', { groupId })
-      .orderBy('RANDOM()')
-      .limit(maxEvents);
-
-    if (categories && categories.length) {
-      query.andWhere('categories.id IN (:...categoryIds)', {
-        categoryIds: categories || [],
-      });
-    }
-    const events = await query.getMany();
-
-    return (await Promise.all(
-      events.map(async (event) => ({
-        ...event,
-        attendeesCount: await this.getEventAttendeesCount(event.id),
-      })),
-    )) as EventEntity[];
+    return Promise.all(
+      events.map(async (event) => {
+        const eventWithCount = this.eventRepository.create({
+          ...event,
+          attendeesCount: await this.getEventAttendeesCount(event.id),
+        });
+        return eventWithCount;
+      }),
+    );
   }
 
   async findRandomEventsForGroup(
     groupId: number,
-    minEvents: number = 0,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
-    if (maxEvents < minEvents || minEvents < 0 || maxEvents < 0) {
-      return [];
-    }
-    await this.getTenantSpecificEventRepository();
+    const events =
+      await this.eventRecommendationService.findRandomEventsForGroup(
+        groupId,
+        maxEvents,
+      );
 
-    const events = await this.eventRepository
-      .createQueryBuilder('event')
-      .leftJoin('event.group', 'group')
-      .leftJoin('event.categories', 'categories')
-      .where('event.status = :status', { status: EventStatus.Published })
-      .andWhere('(group.id != :groupId OR group.id IS NULL)', { groupId })
-      .orderBy('RANDOM()')
-      .limit(maxEvents)
-      .getMany();
-
-    return (await Promise.all(
-      events.map(async (event) => ({
-        ...event,
-        attendeesCount: await this.getEventAttendeesCount(event.id),
-      })),
-    )) as EventEntity[];
+    return Promise.all(
+      events.map(async (event) => {
+        const eventWithCount = this.eventRepository.create({
+          ...event,
+          attendeesCount: await this.getEventAttendeesCount(event.id),
+        });
+        return eventWithCount;
+      }),
+    );
   }
 
   async update(
@@ -790,71 +772,37 @@ export class EventService {
   }
 
   async sendEventDiscussionMessage(
-    slug: string,
+    eventSlug: string,
     userId: number,
-    body: { message: string; topicName: string },
-  ): Promise<{ id: number }> {
-    await this.getTenantSpecificEventRepository();
-
-    const event = await this.eventRepository.findOne({
-      where: { slug },
-    });
+    messageData: { message: string; topicName: string },
+  ) {
+    // Validate event exists
+    const event = await this.findEventBySlug(eventSlug);
     if (!event) {
-      throw new NotFoundException('Event not found');
+      throw new NotFoundException(`Event with slug ${eventSlug} not found`);
     }
 
-    const user = await this.userService.findOne(userId);
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    const eventChannelName = `tenant_${this.request.tenantId}__event_${event.ulid}`;
-
-    if (!event.zulipChannelId) {
-      // create channel
-      await this.zulipService.subscribeAdminToChannel({
-        subscriptions: [
-          {
-            name: eventChannelName,
-          },
-        ],
-      });
-      const stream = await this.zulipService.getAdminStreamId(eventChannelName);
-
-      event.zulipChannelId = stream.id;
-      await this.eventRepository.save(event);
-    }
-
-    await this.zulipService.getInitialisedClient(user);
-    await user.reload();
-
-    const params = {
-      to: event.zulipChannelId,
-      type: 'channel' as const,
-      topic: body.topicName,
-      content: body.message,
-    };
-
-    return await this.zulipService.sendUserMessage(user, params);
+    return this.zulipService.sendEventDiscussionMessage(
+      eventSlug,
+      userId,
+      messageData,
+    );
   }
 
   async updateEventDiscussionMessage(
     messageId: number,
-    message: string,
+    content: string,
     userId: number,
-  ): Promise<{ id: number }> {
-    const user = await this.userService.findOne(userId);
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-    return await this.zulipService.updateUserMessage(user, messageId, message);
-    // return await this.zulipService.updateAdminMessage(messageId, message);
+  ) {
+    return this.zulipService.updateEventDiscussionMessage(
+      messageId,
+      content,
+      userId,
+    );
   }
 
-  async deleteEventDiscussionMessage(
-    messageId: number,
-  ): Promise<{ id: number }> {
-    return await this.zulipService.deleteAdminMessage(messageId);
+  async deleteEventDiscussionMessage(messageId: number, userId: number) {
+    return this.zulipService.deleteEventDiscussionMessage(messageId, userId);
   }
 
   async showDashboardEvents(userId: number): Promise<EventEntity[]> {

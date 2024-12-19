@@ -11,10 +11,11 @@ import { EventListener } from './event.listener';
 import { GroupMemberModule } from '../group-member/group-member.module';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { FileModule } from '../file/file.module';
-import { ZulipService } from '../zulip/zulip.service';
 import { EventRoleService } from 'src/event-role/event-role.service';
 import { UserModule } from 'src/user/user.module';
 import { GroupModule } from '../group/group.module';
+import { ZulipModule } from '../zulip/zulip.module';
+import { EventRecommendationService } from './event-recommendation.service';
 
 @Module({
   imports: [
@@ -26,16 +27,17 @@ import { GroupModule } from '../group/group.module';
     EventAttendeeModule,
     FileModule,
     UserModule,
+    ZulipModule,
     forwardRef(() => GroupModule),
   ],
   controllers: [EventController],
   providers: [
     EventService,
+      EventRecommendationService,
     FilesS3PresignedService,
     EventListener,
-    ZulipService,
     EventRoleService,
   ],
-  exports: [EventService],
+  exports: [EventService, EventRecommendationService],
 })
 export class EventModule {}

@@ -120,7 +120,6 @@ export class GroupService {
 
   async showGroupRecommendedEvents(
     slug?: string,
-    minEvents: number = 3,
     maxEvents: number = 5,
   ): Promise<EventEntity[]> {
     await this.getTenantSpecificGroupRepository();
@@ -141,7 +140,6 @@ export class GroupService {
           (await this.eventService.findRecommendedEventsForGroup(
             group.id,
             categoryIds,
-            minEvents,
             maxEvents,
           )) || ([] as EventEntity[]);
       } catch (error) {
@@ -156,7 +154,6 @@ export class GroupService {
         try {
           randomEvents = await this.eventService.findRandomEventsForGroup(
             group.id,
-            remainingEventsToFetch,
             remainingEventsToFetch,
           );
         } catch (error) {

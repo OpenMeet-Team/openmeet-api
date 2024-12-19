@@ -40,6 +40,9 @@ export const mockEventAttendees = [mockEventAttendee];
 
 export const mockEvents = [mockEvent];
 
+export const mockEventRecommendationService = {
+  getRecommendations: jest.fn(),
+};
 export const mockEventAttendeeService = {
   attendEvent: jest.fn().mockResolvedValue(mockEventAttendee),
   getEventAttendees: jest.fn().mockResolvedValue(mockEventAttendees),

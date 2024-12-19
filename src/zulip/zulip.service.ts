@@ -357,4 +357,49 @@ export class ZulipService {
     }
     throw new Error(`deleteAdminStreamTopic: ${deleteResponse.msg}`);
   }
+
+  async sendEventDiscussionMessage(
+    eventSlug: string,
+    userId: number,
+    messageData: { message: string; topicName: string },
+  ) {
+    const user = await this.userService.findById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Assuming events are discussed in a stream named after the event slug
+    const streamName = `event-${eventSlug}`;
+
+    const params: ZulipChannelMessageParams = {
+      to: streamName,
+      topic: messageData.topicName,
+      content: messageData.message,
+      type: 'stream',
+    };
+
+    return this.sendUserMessage(user, params);
+  }
+
+  async updateEventDiscussionMessage(
+    messageId: number,
+    content: string,
+    userId: number,
+  ) {
+    const user = await this.userService.findById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    return this.updateUserMessage(user, messageId, content);
+  }
+
+  async deleteEventDiscussionMessage(messageId: number, userId: number) {
+    const user = await this.userService.findById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    return this.deleteUserMessage(user, messageId);
+  }
 }

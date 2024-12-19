@@ -318,9 +318,13 @@ export class EventController {
   @Delete(':slug/discussions/:messageId')
   @ApiOperation({ summary: 'Delete a group discussion message' })
   async deleteEventDiscussionMessage(
+    @Req() req: Request,
     @Param('slug') slug: string,
     @Param('messageId') messageId: number,
   ): Promise<{ id: number }> {
-    return this.eventService.deleteEventDiscussionMessage(messageId);
+    return this.eventService.deleteEventDiscussionMessage(
+      messageId,
+      req.user?.id as number,
+    );
   }
 }

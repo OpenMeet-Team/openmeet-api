@@ -1,8 +1,6 @@
 import {
   mockGetZulipAdminClient,
   mockGetZulipClient,
-  mockUser,
-  mockUserService,
   mockZulipClient,
   mockZulipFetchApiKeyResponse,
   mockZulipMessage,
@@ -15,6 +13,7 @@ import { ZulipService } from './zulip.service';
 import { Test } from '@nestjs/testing';
 import { UserService } from '../user/user.service';
 import { REQUEST } from '@nestjs/core';
+import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 
 jest.mock('./zulip-client', () => ({
   getClient: mockGetZulipClient,
@@ -23,16 +22,60 @@ jest.mock('./zulip-client', () => ({
 
 describe('ZulipService', () => {
   let zulipService: ZulipService;
+  let userService: UserService;
+
+  const mockUser: UserEntity = {
+    id: 1,
+    slug: 'test-user',
+    ulid: 'test-ulid',
+    email: 'test@example.com',
+    password: 'hashedpassword',
+    name: 'Test User',
+    firstName: 'Test',
+    lastName: 'User',
+    provider: 'local',
+    zulipUserId: 'zulip123',
+    zulipUsername: 'testuser',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    deletedAt: null,
+    isActive: true,
+    isVerified: true,
+    roles: [],
+    events: [],
+    attendances: [],
+    groups: [],
+    groupMemberships: [],
+    notifications: [],
+    notificationSettings: [],
+    preferences: [],
+    loadPreviousPassword: jest.fn(),
+    hashPassword: jest.fn(),
+    validatePassword: jest.fn(),
+    comparePassword: jest.fn(),
+    toJSON: jest.fn(),
+  } as unknown as UserEntity;
+
+  const mockMessageResponse = {
+    id: 123,
+    result: 'success',
+  };
 
   beforeEach(async () => {
     const module = await Test.createTestingModule({
       providers: [
         ZulipService,
-        { provide: UserService, useValue: mockUserService },
+        {
+          provide: UserService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue(mockUser),
+          },
+        },
         { provide: REQUEST, useValue: {} },
       ],
     }).compile();
     zulipService = module.get<ZulipService>(ZulipService);
+    userService = module.get<UserService>(UserService);
   });
 
   it('should be defined', () => {
@@ -131,15 +174,15 @@ describe('ZulipService', () => {
 
   describe('createUser', () => {
     it('should return created user', async () => {
-      jest
-        .spyOn(zulipService, 'createUser')
-        .mockResolvedValue({ id: mockZulipUser.user_id });
+      jest.spyOn(zulipService, 'createUser').mockResolvedValue({ id: 5 });
+
       const user = await zulipService.createUser({
         email: mockUser.email as string,
         password: mockUser.password as string,
         full_name: mockUser.name as string,
       });
-      expect(user).toMatchObject({ id: mockUser.zulipUserId });
+
+      expect(user).toMatchObject({ id: 5 });
     });
   });
 
@@ -234,4 +277,47 @@ describe('ZulipService', () => {
       expect(message).toBeDefined();
     });
   });
+
+  describe('sendEventDiscussionMessage', () => {
+    it('should send a message to the event stream', async () => {
+      const messageData = {
+        message: 'Test message',
+        topicName: 'Test topic',
+      };
+
+      jest
+        .spyOn(zulipService, 'sendUserMessage')
+        .mockResolvedValue(mockMessageResponse);
+
+      const result = await zulipService.sendEventDiscussionMessage(
+        'event-slug',
+        1,
+        messageData,
+      );
+
+      expect(result).toEqual(mockMessageResponse);
+      expect(zulipService.sendUserMessage).toHaveBeenCalledWith(
+        mockUser,
+        expect.objectContaining({
+          to: 'event-event-slug',
+          topic: messageData.topicName,
+          content: messageData.message,
+          type: 'stream',
+        }),
+      );
+    });
+
+    it('should throw error if user not found', async () => {
+      jest.spyOn(userService, 'findById').mockResolvedValue(null);
+
+      await expect(
+        zulipService.sendEventDiscussionMessage('event-slug', 1, {
+          message: 'test',
+          topicName: 'test',
+        }),
+      ).rejects.toThrow('User not found');
+    });
+  });
+
+  // Similar tests for update and delete...
 });

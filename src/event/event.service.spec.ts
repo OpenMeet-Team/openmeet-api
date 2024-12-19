@@ -9,6 +9,7 @@ import { TESTING_USER_ID } from '../../test/utils/constants';
 import {
   EventAttendeeRole,
   EventAttendeeStatus,
+  EventType,
 } from '../../src/core/constants/constant';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { TESTING_TENANT_ID } from '../../test/utils/constants';
@@ -21,7 +22,6 @@ import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-pres
 import { ZulipService } from '../zulip/zulip.service';
 import {
   mockCategoryService,
-  mockEvent,
   mockEventAttendeeService,
   mockGroup,
   mockGroupMembers,
@@ -31,7 +31,6 @@ import {
   mockEventAttendee,
   mockEventRoleService,
   mockUserService,
-  mockZulipService,
   mockUser,
   mockZulipMessageResponse,
   mockZulipMessage,
@@ -41,15 +40,42 @@ import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UserService } from '../user/user.service';
 import { EventRoleService } from '../event-role/event-role.service';
+import { EventRecommendationService } from './event-recommendation.service';
+import { mockEventRecommendationService } from '../test/mocks/event-mocks';
+import { NotFoundException } from '@nestjs/common';
 
 describe('EventService', () => {
   let service: EventService;
   let eventAttendeeService: EventAttendeeService;
   let eventRepository: Repository<EventEntity>;
+  let zulipService: ZulipService;
+
+  const mockEvent: EventEntity = {
+    id: 1,
+    slug: 'test-event',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ulid: 'test-ulid',
+    name: 'Test Event',
+    description: 'Test Description',
+    startDate: new Date(),
+    endDate: new Date(),
+    type: EventType.InPerson,
+    location: 'Test Location',
+    locationOnline: 'Test Location Online',
+    maxAttendees: 100,
+    categories: [],
+    lat: 0,
+    lon: 0,
+  } as unknown as EventEntity;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        {
+          provide: EventRecommendationService,
+          useValue: mockEventRecommendationService,
+        },
         EventService,
         {
           provide: EventAttendeeService,
@@ -93,7 +119,17 @@ describe('EventService', () => {
         },
         {
           provide: ZulipService,
-          useValue: mockZulipService,
+          useValue: {
+            sendEventDiscussionMessage: jest
+              .fn()
+              .mockResolvedValue({ id: 123 }),
+            updateEventDiscussionMessage: jest
+              .fn()
+              .mockResolvedValue({ id: 123 }),
+            deleteEventDiscussionMessage: jest
+              .fn()
+              .mockResolvedValue({ id: 123 }),
+          },
         },
         {
           provide: EventRoleService,
@@ -114,6 +150,10 @@ describe('EventService', () => {
     eventAttendeeService =
       await module.resolve<EventAttendeeService>(EventAttendeeService);
     await service.getTenantSpecificEventRepository();
+    zulipService = module.get<ZulipService>(ZulipService);
+
+    // Mock findOne to return null by default
+    jest.spyOn(service['eventRepository'], 'findOne').mockResolvedValue(null);
   });
 
   it('should be defined', () => {
@@ -220,7 +260,7 @@ describe('EventService', () => {
       jest
         .spyOn(service, 'findRandomEventsForGroup')
         .mockResolvedValue(mockEvents);
-      const result = await service.findRandomEventsForGroup(mockGroup.id, 3, 5);
+      const result = await service.findRandomEventsForGroup(mockGroup.id, 5);
       expect(result).toEqual(mockEvents);
     });
   });
@@ -275,16 +315,40 @@ describe('EventService', () => {
   });
 
   describe('sendEventDiscussionMessage', () => {
-    it('should send an event discussion message', async () => {
+    it('should delegate to zulipService when event exists', async () => {
+      // Mock findOne to return an event for this test
       jest
-        .spyOn(service, 'sendEventDiscussionMessage')
-        .mockResolvedValue(mockZulipMessageResponse);
+        .spyOn(service['eventRepository'], 'findOne')
+        .mockResolvedValueOnce(mockEvent);
+
+      const messageData = {
+        message: 'Test message',
+        topicName: 'Test topic',
+      };
+
       const result = await service.sendEventDiscussionMessage(
         mockEvent.slug,
-        mockUser.id,
-        { message: 'Test Message', topicName: 'Test Topic' },
+        1,
+        messageData,
       );
-      expect(result).toEqual(mockZulipMessageResponse);
+
+      expect(zulipService.sendEventDiscussionMessage).toHaveBeenCalledWith(
+        mockEvent.slug,
+        1,
+        messageData,
+      );
+      expect(result).toEqual({ id: 123 });
+    });
+
+    it('should throw NotFoundException when event not found', async () => {
+      // findOne is already mocked to return null by default
+
+      await expect(
+        service.sendEventDiscussionMessage('invalid-slug', 1, {
+          message: 'test',
+          topicName: 'test',
+        }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -304,11 +368,21 @@ describe('EventService', () => {
 
   describe('deleteEventDiscussionMessage', () => {
     it('should delete an event discussion message', async () => {
+      const messageId = 123;
+      const userId = 1;
+
       jest
-        .spyOn(service, 'deleteEventDiscussionMessage')
+        .spyOn(zulipService, 'deleteEventDiscussionMessage')
         .mockResolvedValue(mockZulipMessageResponse);
+
       const result = await service.deleteEventDiscussionMessage(
-        mockZulipMessage.id,
+        messageId,
+        userId,
+      );
+
+      expect(zulipService.deleteEventDiscussionMessage).toHaveBeenCalledWith(
+        messageId,
+        userId,
       );
       expect(result).toEqual(mockZulipMessageResponse);
     });

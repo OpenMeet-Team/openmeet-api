@@ -324,7 +324,6 @@ describe('GroupService', () => {
         .mockResolvedValue(mockGroup as GroupEntity);
       const result = await service.showGroupRecommendedEvents(
         mockGroup.slug,
-        3,
         5,
       );
       expect(result).toEqual([mockEvent]);

@@ -339,7 +339,13 @@ describe('EventController', () => {
       jest
         .spyOn(eventService, 'deleteEventDiscussionMessage')
         .mockResolvedValue(mockZulipMessageResponse);
+      const req = {
+        user: {
+          id: mockUser.id,
+        },
+      } as unknown as Request;
       const result = await controller.deleteEventDiscussionMessage(
+        req,
         mockEvent.slug,
         mockZulipMessage.id,
       );
