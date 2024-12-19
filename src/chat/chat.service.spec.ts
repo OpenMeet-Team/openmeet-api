@@ -76,13 +76,13 @@ describe('ChatService', () => {
     });
   });
 
-  describe('getChatByParticipantUlid', () => {
+  describe('getChatByParticipantSlug', () => {
     it('should return chat', async () => {
       jest
-        .spyOn(service, 'getChatByParticipantUlid')
+        .spyOn(service, 'getChatByParticipantSlug')
         .mockResolvedValue(mockChat);
-      const result = await service.getChatByParticipantUlid(
-        mockUser.ulid,
+      const result = await service.getChatByParticipantSlug(
+        mockUser.slug,
         mockUser.id,
       );
       expect(result).toEqual(mockChat);
