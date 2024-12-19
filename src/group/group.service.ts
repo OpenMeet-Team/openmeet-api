@@ -450,13 +450,7 @@ export class GroupService {
     topics: ZulipTopic[];
   }> {
     await this.getTenantSpecificGroupRepository();
-    const group = await this.groupRepository.findOne({
-      where: { slug },
-    });
-
-    if (!group) {
-      throw new NotFoundException('Group not found');
-    }
+    const group = await this.getGroupBySlug(slug);
 
     group.events = await this.eventService.findEventsForGroup(group.id, 5);
 
@@ -510,11 +504,7 @@ export class GroupService {
     updateGroupDto: UpdateGroupDto,
   ): Promise<GroupEntity> {
     await this.getTenantSpecificGroupRepository();
-    const group = await this.groupRepository.findOneBy({ slug });
-
-    if (!group) {
-      throw new NotFoundException('Group not found');
-    }
+    const group = await this.getGroupBySlug(slug);
 
     let categoryEntities: any[] = [];
     const categoryIds = updateGroupDto.categories;
@@ -563,11 +553,7 @@ export class GroupService {
 
   async remove(slug: string): Promise<void> {
     await this.getTenantSpecificGroupRepository();
-    const group = await this.groupRepository.findOneBy({ slug });
-
-    if (!group) {
-      throw new NotFoundException('Group not found');
-    }
+    const group = await this.getGroupBySlug(slug);
 
     // First, delete all group members associated with the group
     await this.groupMembersRepository.delete({ group: { id: group.id } });
@@ -639,72 +625,62 @@ export class GroupService {
 
   async approveMember(slug: string, groupMemberId: number) {
     await this.getTenantSpecificGroupRepository();
-    const group = await this.groupRepository.findOne({
-      where: { slug },
-    });
-    if (!group) {
-      throw new NotFoundException('Group not found');
-    }
+    await this.getGroupBySlug(slug);
     return await this.groupMemberService.approveMember(groupMemberId);
   }
 
   async rejectMember(slug: string, groupMemberId: number) {
     await this.getTenantSpecificGroupRepository();
-    const group = await this.groupRepository.findOne({
-      where: { slug },
-    });
-    if (!group) {
-      throw new NotFoundException('Group not found');
-    }
+    await this.getGroupBySlug(slug);
     return await this.groupMemberService.rejectMember(groupMemberId);
   }
 
   async joinGroup(slug: string, userId: number) {
     await this.getTenantSpecificGroupRepository();
     const groupEntity = await this.getGroupBySlug(slug);
+    const userEntity = await this.userService.getUserById(userId);
+
+    const groupMember = await this.groupMemberService.findGroupMemberByUserId(
+      groupEntity.id,
+      userEntity.id,
+    );
+
+    if (groupMember) {
+      return groupMember;
+    }
 
     if (
       groupEntity?.requireApproval ||
       groupEntity?.visibility === GroupVisibility.Private
     ) {
       const groupMember = await this.groupMemberService.createGroupMember(
-        { userId, groupId: groupEntity.id },
+        { userId: userEntity.id, groupId: groupEntity.id },
         GroupRole.Guest,
       );
 
       await this.groupMailService.sendGroupGuestJoined(groupMember.id);
     } else {
       await this.groupMemberService.createGroupMember(
-        { userId, groupId: groupEntity.id },
+        { userId: userEntity.id, groupId: groupEntity.id },
         GroupRole.Member,
       );
     }
 
     return await this.groupMemberService.findGroupMemberByUserId(
       groupEntity.id,
-      userId,
+      userEntity.id,
     );
   }
 
   async leaveGroup(slug: string, userId: number) {
     await this.getTenantSpecificGroupRepository();
-    const group = await this.groupRepository.findOne({
-      where: { slug },
-    });
-    if (!group) {
-      throw new NotFoundException('Group not found');
-    }
+    const group = await this.getGroupBySlug(slug);
     return await this.groupMemberService.leaveGroup(userId, group.id);
   }
 
   async removeGroupMember(slug: string, groupMemberId: number) {
     await this.getTenantSpecificGroupRepository();
-    const group = await this.groupRepository.findOne({
-      where: { slug },
-    });
-    if (!group) {
-      throw new NotFoundException('Group not found');
-    }
+    const group = await this.getGroupBySlug(slug);
     return await this.groupMemberService.removeGroupMember(
       group.id,
       groupMemberId,
@@ -738,13 +714,8 @@ export class GroupService {
 
   async showGroupEvents(slug: string): Promise<EventEntity[]> {
     await this.getTenantSpecificGroupRepository();
-    const group = await this.groupRepository.findOne({
-      where: { slug },
-    });
 
-    if (!group) {
-      throw new NotFoundException('Group not found');
-    }
+    const group = await this.getGroupBySlug(slug);
 
     return await this.eventService.findEventsForGroup(group.id, 0);
   }
@@ -793,21 +764,8 @@ export class GroupService {
   ): Promise<{ id: number }> {
     await this.getTenantSpecificGroupRepository();
 
-    console.log('sendGroupDiscussionMessage', slug, userId, body);
-
-    const group = await this.groupRepository.findOne({
-      where: { slug },
-    });
-    if (!group) {
-      console.log('Group not found');
-      throw new NotFoundException('Group not found');
-    }
-
-    const user = await this.userService.findOne(userId);
-    if (!user) {
-      console.log('User not found');
-      throw new NotFoundException('User not found');
-    }
+    const group = await this.getGroupBySlug(slug);
+    const user = await this.userService.getUserById(userId);
 
     const groupChannelName = `tenant_${this.request.tenantId}__group_${group.ulid}`;
     if (!group.zulipChannelId) {
@@ -819,9 +777,8 @@ export class GroupService {
           },
         ],
       });
-      console.log('subscribedAdminToChannel');
+
       const stream = await this.zulipService.getAdminStreamId(groupChannelName);
-      console.log('stream', stream);
 
       group.zulipChannelId = stream.id;
       const savedGroup = await this.groupRepository.save(group);
@@ -856,10 +813,7 @@ export class GroupService {
     message: string,
     userId: number,
   ): Promise<{ id: number }> {
-    const user = await this.userService.findOne(userId);
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
+    const user = await this.userService.getUserById(userId);
     return await this.zulipService.updateUserMessage(user, messageId, message);
     // return await this.zulipService.updateAdminMessage(messageId, message);
   }

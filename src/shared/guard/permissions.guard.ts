@@ -4,6 +4,7 @@ import {
   ExecutionContext,
   Injectable,
   ForbiddenException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthService } from '../../auth/auth.service';
@@ -40,7 +41,10 @@ export class PermissionsGuard implements CanActivate {
     const user = request.user;
 
     if (!user) {
-      throw new ForbiddenException('PermissionsGuard: User not authenticated');
+      // throw new ForbiddenException('PermissionsGuard: User not authenticated');
+      throw new UnauthorizedException(
+        'PermissionsGuard: User not authenticated',
+      );
     }
 
     // Check each requirement - ALL must pass

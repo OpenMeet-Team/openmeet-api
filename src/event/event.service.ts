@@ -8,7 +8,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { Repository } from 'typeorm';
-import { CreateEventDto, EventTopicCommentDto } from './dto/create-event.dto';
+import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { REQUEST } from '@nestjs/core';
@@ -40,6 +40,7 @@ import { ZulipTopic } from 'zulip-js';
 import { HomeQuery } from '../home/dto/home-query.dto';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { Brackets } from 'typeorm';
+import { EventMailService } from '../event-mail/event-mail.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -57,6 +58,7 @@ export class EventService {
     private readonly zulipService: ZulipService,
     private readonly eventRoleService: EventRoleService,
     private readonly userService: UserService,
+    private readonly eventMailService: EventMailService,
   ) {
     void this.initializeRepository();
   }
@@ -152,58 +154,6 @@ export class EventService {
 
     this.eventEmitter.emit('event.created', createdEvent);
     return createdEvent;
-  }
-
-  async postComment(
-    eventUlid: string,
-    userId: number,
-    body: EventTopicCommentDto,
-  ): Promise<{ id: number }> {
-    await this.getTenantSpecificEventRepository();
-
-    const { content, topic } = body;
-
-    const event = await this.eventRepository.findOne({
-      where: { ulid: eventUlid },
-    });
-
-    if (!event) {
-      throw new NotFoundException('Event not found');
-    }
-
-    const user = await this.userService.findById(userId);
-    if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
-    }
-
-    // First make sure the user has a zulip client
-    await this.zulipService.getInitialisedClient(user);
-    await user.reload();
-
-    const eventChannelName = `tenant_${this.request.tenantId}__event_${event.ulid}`;
-
-    // check if zulip channels exists
-    const stream = await this.zulipService.getAdminStreamId(eventChannelName);
-
-    if (!stream.id) {
-      // create channel
-      await this.zulipService.subscribeAdminToChannel({
-        subscriptions: [
-          {
-            name: eventChannelName,
-          },
-        ],
-      });
-    }
-
-    const params = {
-      to: eventChannelName,
-      type: 'channel' as const,
-      topic: topic || `event_${event.ulid}`,
-      content: content,
-    };
-
-    return await this.zulipService.sendUserMessage(user, params);
   }
 
   async showAllEvents(
@@ -631,10 +581,7 @@ export class EventService {
 
   async remove(slug: string): Promise<void> {
     await this.getTenantSpecificEventRepository();
-    const event = await this.eventRepository.findOne({ where: { slug } });
-    if (!event) {
-      throw new NotFoundException('Event not found');
-    }
+    const event = await this.findEventBySlug(slug);
     const eventCopy = { ...event };
 
     // Delete related event attendees first
@@ -655,24 +602,32 @@ export class EventService {
     const events =
       (await this.eventRepository.find({
         where: { user: { id: userId } },
-        relations: ['user', 'attendees'],
       })) || [];
-    return events.map((event) => ({
-      ...event,
-      attendeesCount: event.attendees ? event.attendees.length : 0,
-    }));
+    return (await Promise.all(
+      events.map(async (event) => ({
+        ...event,
+        attendeesCount:
+          await this.eventAttendeeService.showConfirmedEventAttendeesCount(
+            event.id,
+          ),
+      })),
+    )) as EventEntity[];
   }
 
   async getEventsByAttendee(userId: number) {
     await this.getTenantSpecificEventRepository();
     const events = await this.eventRepository.find({
       where: { attendees: { user: { id: userId } } },
-      relations: ['user', 'attendees'],
     });
-    return events.map((event) => ({
-      ...event,
-      attendeesCount: event.attendees ? event.attendees.length : 0,
-    }));
+    return (await Promise.all(
+      events.map(async (event) => ({
+        ...event,
+        attendeesCount:
+          await this.eventAttendeeService.showConfirmedEventAttendeesCount(
+            event.id,
+          ),
+      })),
+    )) as EventEntity[];
   }
 
   async getHomePageFeaturedEvents(): Promise<EventEntity[]> {
@@ -721,10 +676,16 @@ export class EventService {
 
   async findEventsForGroup(groupId: number, limit: number) {
     await this.getTenantSpecificEventRepository();
-    return this.eventRepository.find({
+    const events = await this.eventRepository.find({
       where: { group: { id: groupId } },
       take: limit,
     });
+    return (await Promise.all(
+      events.map(async (event) => ({
+        ...event,
+        attendeesCount: await this.getEventAttendeesCount(event.id),
+      })),
+    )) as EventEntity[];
   }
 
   async editEvent(slug: string) {
@@ -737,11 +698,13 @@ export class EventService {
 
   async cancelAttendingEvent(slug: string, userId: number) {
     await this.getTenantSpecificEventRepository();
-    const event = await this.eventRepository.findOne({ where: { slug } });
-    if (!event) {
-      throw new NotFoundException('Event not found');
-    }
-    return this.eventAttendeeService.cancelAttendingEvent(event.id, userId);
+    const event = await this.findEventBySlug(slug);
+    const eventAttendee = await this.eventAttendeeService.cancelAttendingEvent(
+      event.id,
+      userId,
+    );
+    await this.eventMailService.sendMailAttendeeStatusChanged(eventAttendee.id);
+    return eventAttendee;
   }
 
   async attendEvent(
@@ -751,9 +714,16 @@ export class EventService {
   ) {
     await this.getTenantSpecificEventRepository();
 
-    const event = await this.eventRepository.findOne({ where: { slug } });
-    if (!event) {
-      throw new NotFoundException('Event not found');
+    const event = await this.findEventBySlug(slug);
+    const user = await this.userService.getUserById(userId);
+    const eventAttendee =
+      await this.eventAttendeeService.findEventAttendeeByUserId(
+        event.id,
+        user.id,
+      );
+
+    if (eventAttendee) {
+      return eventAttendee;
     }
 
     const participantRole = await this.eventRoleService.findByName(
@@ -782,15 +752,17 @@ export class EventService {
     const attendee = await this.eventAttendeeService.create({
       ...createEventAttendeeDto,
       event,
-      user: { id: userId } as UserEntity,
+      user: user,
       status: attendeeStatus,
       role: participantRole,
     });
 
+    await this.eventMailService.sendMailAttendeeGuestJoined(attendee);
+
     // Emit event for other parts of the system
     this.eventEmitter.emit('event.attendee.added', {
       eventId: event.id,
-      userId,
+      userId: user.id,
       status: attendeeStatus,
     });
 
@@ -799,10 +771,7 @@ export class EventService {
 
   async showEventAttendees(slug: string, pagination: PaginationDto) {
     await this.getTenantSpecificEventRepository();
-    const event = await this.eventRepository.findOne({ where: { slug } });
-    if (!event) {
-      throw new NotFoundException('Event not found');
-    }
+    const event = await this.findEventBySlug(slug);
     return this.eventAttendeeService.showEventAttendees(event.id, pagination); // TODO if admin role return all attendees otherwise only confirmed
   }
 
@@ -813,10 +782,7 @@ export class EventService {
   ) {
     await this.getTenantSpecificEventRepository();
 
-    const event = await this.eventRepository.findOne({ where: { slug } });
-    if (!event) {
-      throw new NotFoundException('Event not found');
-    }
+    const event = await this.findEventBySlug(slug);
 
     return this.eventAttendeeService.updateEventAttendee(
       event.id,
@@ -832,17 +798,9 @@ export class EventService {
   ): Promise<{ id: number }> {
     await this.getTenantSpecificEventRepository();
 
-    const event = await this.eventRepository.findOne({
-      where: { slug },
-    });
-    if (!event) {
-      throw new NotFoundException('Event not found');
-    }
+    const event = await this.findEventBySlug(slug);
 
-    const user = await this.userService.findOne(userId);
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
+    const user = await this.userService.getUserById(userId);
 
     const eventChannelName = `tenant_${this.request.tenantId}__event_${event.ulid}`;
 
@@ -879,10 +837,7 @@ export class EventService {
     message: string,
     userId: number,
   ): Promise<{ id: number }> {
-    const user = await this.userService.findOne(userId);
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
+    const user = await this.userService.getUserById(userId);
     return await this.zulipService.updateUserMessage(user, messageId, message);
     // return await this.zulipService.updateAdminMessage(messageId, message);
   }
@@ -901,6 +856,7 @@ export class EventService {
 
     // Combine and deduplicate events
     const allEvents = [...createdEvents, ...attendingEvents];
+    console.log('allEvents', allEvents);
     const uniqueEvents = Array.from(
       new Map(allEvents.map((event) => [event.id, event])).values(),
     );

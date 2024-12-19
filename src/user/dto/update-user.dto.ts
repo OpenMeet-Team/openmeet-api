@@ -6,6 +6,7 @@ import { IsEmail, IsOptional, MinLength } from 'class-validator';
 import { FileDto } from '../../file/dto/file.dto';
 import { StatusDto } from '../../status/dto/status.dto';
 import { lowerCaseTransformer } from '../../utils/transformers/lower-case.transformer';
+import { SubCategoryEntity } from 'src/sub-category/infrastructure/persistence/relational/entities/sub-category.entity';
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {
   @ApiPropertyOptional({ example: 'test1@openmeet.net', type: String })
@@ -53,4 +54,6 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   status?: StatusDto;
 
   hash?: string | null;
+
+  interests?: SubCategoryEntity[];
 }

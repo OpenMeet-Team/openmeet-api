@@ -195,7 +195,7 @@ export class UserEntity extends EntityRelationalHelper {
 
   @ManyToMany(() => SubCategoryEntity, (SC) => SC.users)
   @JoinTable({ name: 'userInterests' })
-  subCategory: SubCategoryEntity[];
+  interests: SubCategoryEntity[];
 
   @Column({
     type: 'varchar',
