@@ -107,7 +107,7 @@ export class MailerService {
         html,
       });
     } catch (error) {
-      console.error('Failed to send email:', error);
+      console.error('Failed to send mjml email:', error);
       throw error;
     }
   }
@@ -144,8 +144,12 @@ export class MailerService {
 
       await this.transporter.sendMail({
         from: {
-          name: tenantConfig.mailDefaultName,
-          address: tenantConfig.mailDefaultEmail,
+          name:
+            tenantConfig.mailDefaultName ||
+            this.configService.get('mail.defaultName', { infer: true }),
+          address:
+            tenantConfig.mailDefaultEmail ||
+            this.configService.get('mail.defaultEmail', { infer: true }),
         },
         to,
         subject,

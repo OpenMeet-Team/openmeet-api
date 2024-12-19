@@ -24,6 +24,7 @@ import { GroupListener } from './group.listener';
 import { GroupMailService } from '../group-mail/group-mail.service';
 import { GroupMailModule } from 'src/group-mail/group-mail.module';
 import { EventModule } from '../event/event.module';
+import { EventMailModule } from 'src/event-mail/event-mail.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { EventModule } from '../event/event.module';
     forwardRef(() => AuthModule),
     GroupMailModule,
     forwardRef(() => EventModule),
+    EventMailModule,
   ],
   controllers: [GroupController],
   providers: [

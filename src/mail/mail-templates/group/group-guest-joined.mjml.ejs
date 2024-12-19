@@ -1,7 +1,7 @@
 <%- include('./../layouts/header.mjml.ejs') %>
 
       <!-- Main Content -->
-      <mj-section padding="20px">
+      <mj-section>
         <mj-column>
 
           <mj-text>
@@ -10,7 +10,7 @@
 
           <mj-text>
             A new group member <strong>
-              <a href="<%= tenantConfig?.frontendDomain + '/members/' + groupMember?.user?.slug %>"><%= groupMember?.user?.name %></a>
+              <a href="<%= tenantConfig?.frontendDomain + '/members/' + groupMember?.user?.slug %>"><%= groupMember?.user?.firstName %> <%= groupMember?.user?.lastName %></a>
             </strong>, has requested to join your group <strong>
               <a href="<%= tenantConfig?.frontendDomain + '/groups/' + groupMember?.group?.slug %>"><%= groupMember?.group?.name %></a>
             </strong>.

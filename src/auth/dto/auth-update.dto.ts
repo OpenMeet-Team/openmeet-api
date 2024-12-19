@@ -40,4 +40,8 @@ export class AuthUpdateDto {
   @IsOptional()
   @IsNotEmpty({ message: 'Please enter your current password' })
   oldPassword?: string;
+
+  @ApiPropertyOptional({ type: () => [Number] })
+  @IsOptional()
+  interests?: number[];
 }

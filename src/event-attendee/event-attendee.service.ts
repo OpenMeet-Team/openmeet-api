@@ -8,7 +8,11 @@ import { CreateEventAttendeeDto } from './dto/create-eventAttendee.dto';
 import { QueryEventAttendeeDto } from './dto/query-eventAttendee.dto';
 import { paginate } from '../utils/generic-pagination';
 import { UpdateEventAttendeeDto } from './dto/update-eventAttendee.dto';
-import { EventAttendeeStatus } from '../core/constants/constant';
+import {
+  EventAttendeePermission,
+  EventAttendeeStatus,
+} from '../core/constants/constant';
+import { UserEntity } from 'src/user/infrastructure/persistence/relational/entities/user.entity';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventAttendeeService {
@@ -186,6 +190,7 @@ export class EventAttendeeService {
       throw new NotFoundException(`Attendee with ID ${userId} not found`);
     }
     attendee.status = EventAttendeeStatus.Cancelled;
+
     return this.eventAttendeesRepository.save(attendee);
   }
 
@@ -247,5 +252,53 @@ export class EventAttendeeService {
       select: ['event'],
     });
     return attendees.map((a) => a.id);
+  }
+
+  async getMailServiceEventAttendeesByPermission(
+    eventId: number,
+    permission: EventAttendeePermission,
+  ): Promise<UserEntity[]> {
+    await this.getTenantSpecificEventRepository();
+    const eventAttendees = await this.eventAttendeesRepository.find({
+      where: {
+        event: { id: eventId },
+        role: {
+          permissions: {
+            name: permission,
+          },
+        },
+      },
+      relations: ['user'],
+      select: {
+        user: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          name: true,
+          email: true,
+        },
+      },
+    });
+    return eventAttendees.map((member) => member.user);
+  }
+
+  async getMailServiceEventAttendee(eventAttendeeId: number) {
+    await this.getTenantSpecificEventRepository();
+    const eventAttendee = await this.eventAttendeesRepository.findOne({
+      where: { id: eventAttendeeId },
+      relations: ['user', 'event', 'role', 'role.permissions'],
+    });
+
+    if (!eventAttendee) {
+      throw new NotFoundException('Event attendee not found');
+    }
+    return eventAttendee;
+  }
+
+  async deleteEventAttendee(attendeeId: number) {
+    await this.getTenantSpecificEventRepository();
+    return await this.eventAttendeesRepository.delete({
+      id: attendeeId,
+    });
   }
 }

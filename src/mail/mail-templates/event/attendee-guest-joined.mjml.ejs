@@ -1,0 +1,34 @@
+<%- include('./../layouts/header.mjml.ejs') %>
+
+      <!-- Main Content -->
+      <mj-section>
+        <mj-column>
+
+          <mj-text>
+            Hello,
+          </mj-text>
+
+          <mj-text>
+            A new event attendee <strong>
+              <a href="<%= tenantConfig?.frontendDomain + '/members/' + eventAttendee?.user?.slug %>"><%= eventAttendee?.user?.firstName %> <%= eventAttendee?.user?.lastName %></a>
+            </strong>, has requested to join your event <strong>
+              <a href="<%= tenantConfig?.frontendDomain + '/events/' + eventAttendee?.event?.slug %>"><%= eventAttendee?.event?.name %></a>
+            </strong>.
+          </mj-text>
+
+          <mj-text>
+            Please review their request and change their status or role on the event.
+          </mj-text>
+        </mj-column>
+      </mj-section>
+
+      <!-- Button -->
+      <mj-section padding="20px">
+        <mj-column>
+          <mj-button href="<%= tenantConfig?.frontendDomain + '/events/' + eventAttendee?.event?.slug %>" background-color="#7B71DA" color="#FFFFFF" font-size="16px">
+            View Event
+          </mj-button>
+        </mj-column>
+      </mj-section>
+
+<%- include('./../layouts/footer.mjml.ejs') %>

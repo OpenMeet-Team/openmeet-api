@@ -26,7 +26,7 @@ export class TenantGuard implements CanActivate {
 
     const path = request.route.path;
     // Allow access to the metrics endpoint
-    if (path === '/metrics' || path === '/api/version') {
+    if (path === '/metrics') {
       return true;
     }
     // Check for tenant ID in the headers

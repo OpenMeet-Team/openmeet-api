@@ -4,8 +4,8 @@ import { RoleEntity } from '../../../../role/infrastructure/persistence/relation
 import { TenantConnectionService } from '../../../../tenant/tenant.service';
 import { RoleEnum } from '../../../../role/role.enum';
 import { PermissionEntity } from '../../../../permission/infrastructure/persistence/relational/entities/permission.entity';
-import { UserPermission } from 'src/core/constants/constant';
-import { PermissionRequirement } from 'src/shared/guard/permissions.guard';
+import { UserPermission } from '../../../../core/constants/constant';
+import { PermissionRequirement } from '../../../../shared/guard/permissions.guard';
 
 @Injectable()
 export class RoleSeedService {

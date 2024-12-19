@@ -10,7 +10,7 @@ import { SocialInterface } from '../social/interfaces/social.interface';
 import { AuthGithubLoginDto } from './dto/auth-github-login.dto';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
-import { TenantConfig } from 'src/core/constants/constant';
+import { TenantConfig } from '../core/constants/constant';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class AuthGithubService {

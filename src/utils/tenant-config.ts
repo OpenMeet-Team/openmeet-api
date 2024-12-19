@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { TenantConfig } from 'src/core/constants/constant';
+import { TenantConfig } from '../core/constants/constant';
 
 export function fetchTenants(): TenantConfig[] {
   try {

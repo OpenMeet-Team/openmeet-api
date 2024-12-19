@@ -99,3 +99,8 @@ export const mockEventService = {
   showDashboardEvents: jest.fn().mockResolvedValue(mockEvents),
   getEventAttendeesCount: jest.fn().mockResolvedValue(1),
 };
+
+export const mockEventMailService = {
+  sendMailAttendeeGuestJoined: jest.fn().mockResolvedValue(undefined),
+  sendMailAttendeeStatusChanged: jest.fn().mockResolvedValue(undefined),
+};

@@ -275,7 +275,7 @@ export class CategorySeedService {
     ];
 
     for (const categoryData of seedData) {
-      const existingCategory = await this.categoryRepository
+      let existingCategory = await this.categoryRepository
         .createQueryBuilder('category')
         .where('category.name = :name', { name: categoryData.category })
         .getOne();
@@ -285,7 +285,7 @@ export class CategorySeedService {
           name: categoryData.category,
           slug: categoryData.category.toLowerCase().replace(/ /g, '-'),
         });
-        await this.categoryRepository.save(newCategory);
+        existingCategory = await this.categoryRepository.save(newCategory);
       }
 
       for (const subcategoryData of categoryData.subcategories) {
@@ -303,6 +303,8 @@ export class CategorySeedService {
             type: subcategoryData.type,
             category: existingCategory,
           });
+
+          console.log('subcategory', subcategory);
 
           await this.subCategoryRepository.save(subcategory);
         }

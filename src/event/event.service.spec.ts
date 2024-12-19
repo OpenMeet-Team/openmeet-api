@@ -35,12 +35,14 @@ import {
   mockUser,
   mockZulipMessageResponse,
   mockZulipMessage,
+  mockEventMailService,
 } from '../test/mocks';
 import { mockEvents } from '../test/mocks';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UserService } from '../user/user.service';
 import { EventRoleService } from '../event-role/event-role.service';
+import { EventMailService } from '../event-mail/event-mail.service';
 
 describe('EventService', () => {
   let service: EventService;
@@ -102,6 +104,10 @@ describe('EventService', () => {
         {
           provide: UserService,
           useValue: mockUserService,
+        },
+        {
+          provide: EventMailService,
+          useValue: mockEventMailService,
         },
       ],
     }).compile();

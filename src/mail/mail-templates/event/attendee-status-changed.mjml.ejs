@@ -1,0 +1,34 @@
+<%- include('./../layouts/header.mjml.ejs') %>
+
+      <!-- Main Content -->
+      <mj-section>
+        <mj-column>
+
+          <mj-text>
+            Hello,
+          </mj-text>
+
+          <mj-text>
+            The status of attendee <strong>
+              <a href="<%= tenantConfig?.frontendDomain + '/members/' + groupMember?.user?.slug %>"><%= groupMember?.user?.name %></a>
+            </strong>, has been updated to <strong>
+              <%= eventAttendee?.status %>
+            </strong>.
+          </mj-text>
+
+          <mj-text>
+            Please review their request and change their status or role on the event.
+          </mj-text>
+        </mj-column>
+      </mj-section>
+
+      <!-- Button -->
+      <mj-section padding="20px">
+        <mj-column>
+          <mj-button href="<%= tenantConfig?.frontendDomain + '/events/' + eventAttendee?.event?.slug %>" background-color="#7B71DA" color="#FFFFFF" font-size="16px">
+            View Event
+          </mj-button>
+        </mj-column>
+      </mj-section>
+
+<%- include('./../layouts/footer.mjml.ejs') %>

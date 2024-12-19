@@ -6,14 +6,14 @@ import {
 
 export const eventSeedData = [
   {
-    name: '[admin][Draft][Public][Hybrid][Past][approvalQuestion] Tech Conference 2024',
-    slug: 'tech-conference-2024',
+    name: '[admin][Draft][Public][Hybrid][Past][approvalQuestion] Tech Conference 2025',
+    slug: 'tech-conference-2025',
     type: EventType.Hybrid,
     locationOnline: 'https://zoom.us/j/123456789',
     description:
       'Annual technology conference featuring the latest innovations in AI, blockchain, and IoT.',
-    startDate: new Date('2024-09-15T09:00:00'),
-    endDate: new Date('2024-09-17T18:00:00'),
+    startDate: new Date('2025-01-15T09:00:00'),
+    endDate: new Date('2025-01-17T18:00:00'),
     maxAttendees: 1000,
     location: 'Convention Center, Tech City',
     lat: 37.7749,
@@ -31,8 +31,8 @@ export const eventSeedData = [
     type: EventType.InPerson,
     description:
       'Showcasing works from local artists across various mediums including painting, sculpture, and photography.',
-    startDate: new Date('2024-07-01T10:00:00'),
-    endDate: new Date('2024-07-14T20:00:00'),
+    startDate: new Date('2025-01-01T10:00:00'),
+    endDate: new Date('2025-01-14T20:00:00'),
     maxAttendees: 200,
     location: 'City Art Gallery',
     lat: 40.7128,
@@ -51,8 +51,8 @@ export const eventSeedData = [
     locationOnline: 'https://meet.google.com/abc-defg-hij',
     description:
       "Monthly online gathering to discuss our latest book: '1984' by George Orwell.",
-    startDate: new Date('2024-06-20T19:00:00'),
-    endDate: new Date('2024-06-20T21:00:00'),
+    startDate: new Date('2025-01-20T19:00:00'),
+    endDate: new Date('2025-01-20T21:00:00'),
     maxAttendees: 50,
     user: {
       id: 1,
@@ -67,8 +67,8 @@ export const eventSeedData = [
     type: EventType.InPerson,
     description:
       "Annual charity run to raise funds for local children's hospital. 5K, 10K, and half-marathon options available.",
-    startDate: new Date('2024-10-01T07:00:00'),
-    endDate: new Date('2024-10-01T13:00:00'),
+    startDate: new Date('2025-01-01T07:00:00'),
+    endDate: new Date('2025-01-01T13:00:00'),
     maxAttendees: 5000,
     location: 'City Park',
     group: {
@@ -90,8 +90,8 @@ export const eventSeedData = [
     locationOnline: 'https://twitch.tv/startup-pitch',
     description:
       'Ten promising startups pitch their ideas to a panel of venture capitalists and angel investors.',
-    startDate: new Date('2024-12-05T18:00:00'),
-    endDate: new Date('2024-12-05T22:00:00'),
+    startDate: new Date('2025-01-05T18:00:00'),
+    endDate: new Date('2025-01-05T22:00:00'),
     maxAttendees: 300,
     location: 'Innovation Hub',
     lat: 37.3382,
@@ -109,8 +109,8 @@ export const eventSeedData = [
     type: EventType.InPerson,
     description:
       'A celebration of local and international cuisines. Features food stalls, cooking demonstrations, and eating contests.',
-    startDate: new Date('2025-07-22T11:00:00'),
-    endDate: new Date('2025-07-24T22:00:00'),
+    startDate: new Date('2025-01-22T11:00:00'),
+    endDate: new Date('2025-01-24T22:00:00'),
     maxAttendees: 1,
     location: 'City Square',
     lat: 48.8566,
@@ -129,8 +129,8 @@ export const eventSeedData = [
     locationOnline: 'https://twitch.tv/vr-tournament',
     description:
       'Competitive VR gaming event featuring the latest in virtual reality technology. Both in-person and online participation available.',
-    startDate: new Date('2024-12-10T09:00:00'),
-    endDate: new Date('2024-12-12T18:00:00'),
+    startDate: new Date('2025-01-10T09:00:00'),
+    endDate: new Date('2025-01-12T18:00:00'),
     maxAttendees: 500,
     location: 'Tech Arena',
     group: {
@@ -151,8 +151,8 @@ export const eventSeedData = [
     type: EventType.InPerson,
     description:
       'A weekend of guided meditation, yoga, and mindfulness practices in a serene natural setting.',
-    startDate: new Date('2024-08-18T14:00:00'),
-    endDate: new Date('2024-08-20T12:00:00'),
+    startDate: new Date('2025-01-18T14:00:00'),
+    endDate: new Date('2025-01-20T12:00:00'),
     maxAttendees: 50,
     location: 'Tranquil Gardens Retreat Center',
     lat: 34.0522,
@@ -172,8 +172,8 @@ export const eventSeedData = [
     locationOnline: 'https://zoom.us/j/987654321',
     description:
       'Learn the basics of photography from professional photographers. Covers composition, lighting, and post-processing techniques.',
-    startDate: new Date('2024-11-05T18:00:00'),
-    endDate: new Date('2024-11-05T21:00:00'),
+    startDate: new Date('2025-01-05T18:00:00'),
+    endDate: new Date('2025-01-05T21:00:00'),
     maxAttendees: 100,
     user: {
       id: 1,
@@ -191,8 +191,8 @@ export const eventSeedData = [
     type: EventType.InPerson,
     description:
       'Explore eco-friendly products, attend workshops on sustainable practices, and learn about renewable energy solutions.',
-    startDate: new Date('2024-10-15T10:00:00'),
-    endDate: new Date('2024-10-17T18:00:00'),
+    startDate: new Date('2025-01-15T10:00:00'),
+    endDate: new Date('2025-01-17T18:00:00'),
     maxAttendees: 3000,
     location: 'Green Living Convention Center',
     lat: 52.3676,

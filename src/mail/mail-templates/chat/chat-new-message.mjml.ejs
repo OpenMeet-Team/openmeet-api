@@ -1,0 +1,32 @@
+<%- include('./../layouts/header.mjml.ejs') %>
+
+      <!-- Main Content -->
+      <mj-section>
+        <mj-column>
+
+          <mj-text>
+            Hello,
+          </mj-text>
+
+          <mj-text>
+            You have a new message from <strong>
+              <a href="<%= tenantConfig?.frontendDomain + '/members/' + participant?.slug %>"><%= participant?.firstName %> <%= participant?.lastName %></a>
+            </strong>.
+          </mj-text>
+
+          <mj-text>
+            Please review the message and reply to the participant.
+          </mj-text>
+        </mj-column>
+      </mj-section>
+
+      <!-- Button -->
+      <mj-section padding="20px">
+        <mj-column>
+          <mj-button href="<%= tenantConfig?.frontendDomain + '/messages?user=' + participant?.slug %>" background-color="#7B71DA" color="#FFFFFF" font-size="16px">
+            View Message
+          </mj-button>
+        </mj-column>
+      </mj-section>
+
+<%- include('./../layouts/footer.mjml.ejs') %>

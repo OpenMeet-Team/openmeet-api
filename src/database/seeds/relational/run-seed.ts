@@ -14,7 +14,7 @@ import { UserPermissionSeedService } from './user-permission/user-permission-see
 import { GroupRoleSeedService } from './group-role/group-role.service';
 import { fetchTenants } from '../../../utils/tenant-config';
 import { env } from 'process';
-import { TenantConfig } from 'src/core/constants/constant';
+import { TenantConfig } from '../../../core/constants/constant';
 const runSeed = async () => {
   const tenants: TenantConfig[] = fetchTenants();
   const tenantIds = tenants.map((t) => t.id).filter((id) => !!id); // filter out 'public'
