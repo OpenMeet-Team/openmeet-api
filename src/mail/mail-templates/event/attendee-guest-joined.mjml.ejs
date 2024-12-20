@@ -16,9 +16,18 @@
             </strong>.
           </mj-text>
 
+          <!-- Approval question -->
+          <% if (eventAttendee?.approvalAnswer) { %>
+            <mj-text>Applied with the following answer:</mj-text>
+            <mj-text>
+              <%= eventAttendee?.approvalAnswer %>
+            </mj-text>
+          <% } %>
+
           <mj-text>
             Please review their request and change their status or role on the event.
           </mj-text>
+
         </mj-column>
       </mj-section>
 

@@ -112,7 +112,6 @@ describe('Guards (e2e)', () => {
           currentPage++;
         }
 
-        console.log('allEvents', allEvents.length);
         expect(allEvents.some((event) => event.slug === publicEvent.slug)).toBe(
           true,
         );
@@ -151,7 +150,6 @@ describe('Guards (e2e)', () => {
           currentPage++;
         }
 
-        console.log('allEvents', allEvents.length);
         expect(allEvents.some((event) => event.slug === publicEvent.slug)).toBe(
           true,
         );
