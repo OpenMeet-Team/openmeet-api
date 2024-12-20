@@ -27,6 +27,9 @@ export class MailService {
 
   getTenantConfig() {
     const tenantId = this.request.tenantId;
+    if (!tenantId) {
+      throw new Error('Tenant ID is required');
+    }
     this.tenantConfig = this.tenantService.getTenantConfig(tenantId);
   }
 

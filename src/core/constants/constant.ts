@@ -147,11 +147,11 @@ export const ZULIP_DEFAULT_CHANNEL_TOPIC = 'channel events';
 export interface TenantConfig {
   id: string; // tenant id, ex: asdf2jkl
   name: string; // tenant name, ex: Openmeet
-  frontendDomain: string; // frontend domain, ex: platform.openmeet.com
-  logoUrl: string; // logo url, ex: https://openmeet.com/logo.png
-  companyDomain: string; // company domain, ex: openmeet.com
+  frontendDomain: string; // frontend domain, ex: platform.openmeet.net
+  logoUrl: string; // logo url, ex: https://openmeet.net/logo.png
+  companyDomain: string; // company domain, ex: openmeet.net
   confirmEmail: boolean; // confirm email, ex: true
-  mailDefaultEmail: string; // mail default email, ex: hello@openmeet.com
+  mailDefaultEmail: string; // mail default email, ex: hello@openmeet.net
   mailDefaultName: string; // mail default name, ex: Openmeet
   googleClientId: string; // google client id, ex: 1234567890
   googleClientSecret: string; // google client secret, ex: 0987654321
