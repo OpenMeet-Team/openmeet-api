@@ -25,6 +25,7 @@ import { GroupMailService } from '../group-mail/group-mail.service';
 import { GroupMailModule } from '../group-mail/group-mail.module';
 import { EventModule } from '../event/event.module';
 import { EventMailModule } from '../event-mail/event-mail.module';
+import { JsonLogger } from '../logger/json.logger';
 
 @Module({
   imports: [
@@ -57,6 +58,10 @@ import { EventMailModule } from '../event-mail/event-mail.module';
     EventRoleService,
     GroupListener,
     GroupMailService,
+    {
+      provide: 'Logger',
+      useClass: JsonLogger,
+    },
   ],
   exports: [GroupService],
 })

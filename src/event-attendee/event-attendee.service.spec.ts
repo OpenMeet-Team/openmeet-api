@@ -14,6 +14,7 @@ import { UpdateEventAttendeeDto } from './dto/update-eventAttendee.dto';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ForbiddenException } from '@nestjs/common';
 import { EventRoleService } from '../event-role/event-role.service';
+import { JsonLogger } from '../logger/json.logger';
 import {
   mockEventAttendee,
   mockEventRoleService,
@@ -90,6 +91,10 @@ describe('EventAttendeeService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventAttendeeService,
+        {
+          provide: 'Logger',
+          useClass: JsonLogger,
+        },
         {
           provide: TenantConnectionService,
           useValue: mockTenantService,

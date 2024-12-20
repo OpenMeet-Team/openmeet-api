@@ -10,7 +10,7 @@ import { REQUEST } from '@nestjs/core';
 import { GroupRoleService } from '../group-role/group-role.service';
 import { GroupPermission, GroupRole } from '../core/constants/constant';
 import { UserEntity } from 'src/user/infrastructure/persistence/relational/entities/user.entity';
-
+import { JsonLogger } from '../logger/json.logger';
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupMemberService {
   private groupMemberRepository: Repository<GroupMemberEntity>;
@@ -18,7 +18,10 @@ export class GroupMemberService {
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly groupRoleService: GroupRoleService,
-  ) {}
+    @Inject('Logger') private readonly auditLogger: JsonLogger,
+  ) {
+    this.auditLogger.setContext('GroupMemberService');
+  }
 
   async getTenantSpecificEventRepository() {
     const tenantId = this.request.tenantId;
@@ -121,7 +124,16 @@ export class GroupMemberService {
       throw new NotFoundException('User is not a member of this group');
     }
 
-    return await this.groupMemberRepository.remove(groupMember);
+    const removedGroupMember =
+      await this.groupMemberRepository.remove(groupMember);
+
+    this.auditLogger.log({
+      type: 'audit',
+      action: 'group_member_removed',
+      groupMember: removedGroupMember,
+    });
+
+    return removedGroupMember;
   }
 
   async findGroupDetailsMembers(groupId: number, limit: number): Promise<any> {
@@ -187,7 +199,15 @@ export class GroupMemberService {
       groupRole: role,
     } as GroupMemberEntity;
     const groupMember = this.groupMemberRepository.create(mappedDto);
-    return await this.groupMemberRepository.save(groupMember);
+    const savedGroupMember = await this.groupMemberRepository.save(groupMember);
+
+    this.auditLogger.log({
+      type: 'audit',
+      action: 'group_member_created',
+      groupMember: savedGroupMember,
+    });
+
+    return savedGroupMember;
   }
 
   async getGroupMembersCount(groupId: number): Promise<number> {
