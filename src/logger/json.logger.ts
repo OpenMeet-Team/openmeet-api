@@ -2,6 +2,21 @@ import { ConsoleLogger, LogLevel } from '@nestjs/common';
 import { LoggingContextStorage } from './logging.context';
 
 export class JsonLogger extends ConsoleLogger {
+  private cleanCircularReferences(obj: any): any {
+    const seen = new WeakSet();
+    return JSON.parse(
+      JSON.stringify(obj, (key, value) => {
+        if (typeof value === 'object' && value !== null) {
+          if (seen.has(value)) {
+            return '[Circular]';
+          }
+          seen.add(value);
+        }
+        return value;
+      }),
+    );
+  }
+
   protected formatMessage(
     logLevel: LogLevel,
     message: unknown,
@@ -18,8 +33,8 @@ export class JsonLogger extends ConsoleLogger {
       level: logLevel,
       message:
         typeof message === 'object'
-          ? message
-          : this.stringifyMessage(message, logLevel),
+          ? this.cleanCircularReferences(message)
+          : message,
       context: context || undefined,
       pid: pid || undefined,
       ms: timestampDiff
@@ -27,10 +42,6 @@ export class JsonLogger extends ConsoleLogger {
         : undefined,
       ...LoggingContextStorage.get(),
     };
-
-    Object.keys(logEntry).forEach(
-      (key) => logEntry[key] === undefined && delete logEntry[key],
-    );
 
     return JSON.stringify(logEntry) + '\n';
   }
