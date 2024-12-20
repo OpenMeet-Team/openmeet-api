@@ -1,6 +1,6 @@
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { Inject, Injectable, NotFoundException, Scope } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { Repository, UpdateResult } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { EventAttendeesEntity } from './infrastructure/persistence/relational/entities/event-attendee.entity';
@@ -12,7 +12,8 @@ import {
   EventAttendeePermission,
   EventAttendeeStatus,
 } from '../core/constants/constant';
-import { UserEntity } from 'src/user/infrastructure/persistence/relational/entities/user.entity';
+import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { EventRoleService } from '../event-role/event-role.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventAttendeeService {
@@ -21,6 +22,7 @@ export class EventAttendeeService {
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
+    private readonly eventRoleService: EventRoleService,
   ) {}
 
   private async getTenantSpecificEventRepository() {
@@ -144,24 +146,18 @@ export class EventAttendeeService {
   }
 
   async updateEventAttendee(
-    eventId: number,
     attendeeId: number,
     body: UpdateEventAttendeeDto,
-  ): Promise<any> {
+  ): Promise<UpdateResult> {
     await this.getTenantSpecificEventRepository();
 
-    const attendee = await this.eventAttendeesRepository.findOne({
-      where: { id: attendeeId },
+    await this.getAttendeeById(attendeeId);
+    const attendeeRole = await this.eventRoleService.getRoleByName(body.role);
+
+    return await this.eventAttendeesRepository.update(attendeeId, {
+      status: body.status,
+      role: attendeeRole,
     });
-
-    if (!attendee) {
-      throw new NotFoundException(`Attendee with ID ${attendeeId} not found`);
-    }
-
-    const updatedAttendee = { ...attendee, ...body };
-    await this.eventAttendeesRepository.save(updatedAttendee);
-
-    return updatedAttendee;
   }
 
   async findEventAttendees(eventId: number): Promise<any> {
@@ -300,5 +296,33 @@ export class EventAttendeeService {
     return await this.eventAttendeesRepository.delete({
       id: attendeeId,
     });
+  }
+
+  async getAttendeeById(attendeeId: number) {
+    await this.getTenantSpecificEventRepository();
+    const attendee = await this.eventAttendeesRepository.findOne({
+      where: { id: attendeeId },
+    });
+
+    if (!attendee) {
+      throw new NotFoundException(`Attendee with ID ${attendeeId} not found`);
+    }
+
+    return attendee;
+  }
+
+  async showEventAttendee(attendeeId: number) {
+    await this.getTenantSpecificEventRepository();
+
+    return await this.eventAttendeesRepository
+      .createQueryBuilder('eventAttendee')
+      .leftJoinAndSelect('eventAttendee.role', 'role')
+
+      .leftJoin('eventAttendee.user', 'user')
+      .leftJoin('user.photo', 'photo')
+      .addSelect(['user.name', 'user.slug', 'photo.path'])
+
+      .where('eventAttendee.id = :attendeeId', { attendeeId })
+      .getOne();
   }
 }

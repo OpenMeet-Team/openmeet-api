@@ -138,12 +138,9 @@ export class EventService {
     const createdEvent = await this.eventRepository.save(event);
 
     // Add host as first attendee
-    const hostRole = await this.eventRoleService.findByName(
+    const hostRole = await this.eventRoleService.getRoleByName(
       EventAttendeeRole.Host,
     );
-    if (!hostRole) {
-      throw new NotFoundException('Host role not found');
-    }
 
     await this.eventAttendeeService.create({
       role: hostRole,
@@ -703,7 +700,7 @@ export class EventService {
       event.id,
       userId,
     );
-    await this.eventMailService.sendMailAttendeeStatusChanged(eventAttendee.id);
+
     return eventAttendee;
   }
 
@@ -726,13 +723,9 @@ export class EventService {
       return eventAttendee;
     }
 
-    const participantRole = await this.eventRoleService.findByName(
+    const participantRole = await this.eventRoleService.getRoleByName(
       EventAttendeeRole.Participant,
     );
-
-    if (!participantRole) {
-      throw new NotFoundException('Participant role not found');
-    }
 
     // Create the attendee with appropriate status based on event settings
     let attendeeStatus = EventAttendeeStatus.Confirmed;
@@ -782,13 +775,17 @@ export class EventService {
   ) {
     await this.getTenantSpecificEventRepository();
 
-    const event = await this.findEventBySlug(slug);
+    await this.findEventBySlug(slug);
 
-    return this.eventAttendeeService.updateEventAttendee(
-      event.id,
+    await this.eventAttendeeService.updateEventAttendee(
       attendeeId,
       updateEventAttendeeDto,
     );
+
+    // TODO enable this
+    await this.eventMailService.sendMailAttendeeStatusChanged(attendeeId);
+
+    return await this.eventAttendeeService.showEventAttendee(attendeeId);
   }
 
   async sendEventDiscussionMessage(

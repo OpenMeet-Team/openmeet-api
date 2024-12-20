@@ -181,14 +181,14 @@ export class EventController {
   @Patch(':slug/attendees/:attendeeId')
   @ApiOperation({ summary: 'Update event attendee' })
   async updateEventAttendee(
-    @Body() updateEventAttendeeDto: UpdateEventAttendeeDto,
+    @Req() req: Request,
     @Param('slug') slug: string,
     @Param('attendeeId') attendeeId: number,
   ) {
     return this.eventService.updateEventAttendee(
       slug,
       attendeeId,
-      updateEventAttendeeDto,
+      req.body as UpdateEventAttendeeDto,
     );
   }
 

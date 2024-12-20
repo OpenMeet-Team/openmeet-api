@@ -239,7 +239,7 @@ export class MailService {
     await this.mailerService.sendMjmlMail({
       tenantConfig: this.tenantConfig,
       to: mailData.to,
-      subject: 'New member applied to join your group',
+      subject: 'New attendee applied to attend your event',
       templateName: 'event/attendee-guest-joined',
       context: {
         eventAttendee: mailData.data.eventAttendee,

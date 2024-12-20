@@ -17,14 +17,14 @@ import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-pres
 import { GroupRoleService } from '../group-role/group-role.service';
 import { ZulipService } from '../zulip/zulip.service';
 import { MailModule } from '../mail/mail.module';
-import { EventRoleService } from 'src/event-role/event-role.service';
-import { ZulipModule } from 'src/zulip/zulip.module';
+import { EventRoleService } from '../event-role/event-role.service';
+import { ZulipModule } from '../zulip/zulip.module';
 import { AuthModule } from '../auth/auth.module';
 import { GroupListener } from './group.listener';
 import { GroupMailService } from '../group-mail/group-mail.service';
-import { GroupMailModule } from 'src/group-mail/group-mail.module';
+import { GroupMailModule } from '../group-mail/group-mail.module';
 import { EventModule } from '../event/event.module';
-import { EventMailModule } from 'src/event-mail/event-mail.module';
+import { EventMailModule } from '../event-mail/event-mail.module';
 
 @Module({
   imports: [

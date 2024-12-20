@@ -1,6 +1,19 @@
-import { PartialType } from '@nestjs/swagger';
-import { CreateEventAttendeeDto } from './create-eventAttendee.dto';
+import { ApiProperty } from '@nestjs/swagger';
+import {
+  EventAttendeeRole,
+  EventAttendeeStatus,
+} from 'src/core/constants/constant';
 
-export class UpdateEventAttendeeDto extends PartialType(
-  CreateEventAttendeeDto,
-) {}
+export class UpdateEventAttendeeDto {
+  @ApiProperty({
+    description: 'The role of the Event Attendee',
+    enum: EventAttendeeRole,
+  })
+  role: EventAttendeeRole;
+
+  @ApiProperty({
+    description: 'The status of the Event Attendee',
+    enum: EventAttendeeStatus,
+  })
+  status: EventAttendeeStatus;
+}
