@@ -95,7 +95,6 @@ export class EventService {
     userId: number,
   ): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
-
     // Set default values and prepare base event data
     const eventData = {
       ...createEventDto,
@@ -853,7 +852,7 @@ export class EventService {
 
     // Combine and deduplicate events
     const allEvents = [...createdEvents, ...attendingEvents];
-    console.log('allEvents', allEvents);
+
     const uniqueEvents = Array.from(
       new Map(allEvents.map((event) => [event.id, event])).values(),
     );
