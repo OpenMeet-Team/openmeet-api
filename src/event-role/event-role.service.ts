@@ -1,4 +1,4 @@
-import { Inject, Injectable, Scope } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, Scope } from '@nestjs/common';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { Repository } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
@@ -29,10 +29,16 @@ export class EventRoleService {
 
   async findByName(name: EventAttendeeRole) {
     await this.getTenantSpecificEventRepository();
-    return await this.eventRoleRepository.findOne({
+    const eventRole = await this.eventRoleRepository.findOne({
       where: { name },
       relations: ['permissions'],
     });
+
+    if (!eventRole) {
+      throw new NotFoundException('Role not found');
+    }
+
+    return eventRole;
   }
 
   async findOne(name: string): Promise<any> {
@@ -41,5 +47,18 @@ export class EventRoleService {
       where: { name: name as EventAttendeeRole },
       relations: ['permissions'],
     });
+  }
+
+  async getRoleByName(name: EventAttendeeRole) {
+    await this.getTenantSpecificEventRepository();
+    const eventRole = await this.eventRoleRepository.findOne({
+      where: { name },
+    });
+
+    if (!eventRole) {
+      throw new NotFoundException('Role not found');
+    }
+
+    return eventRole;
   }
 }

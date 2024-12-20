@@ -47,11 +47,14 @@ export const mockEventAttendeeService = {
   findEventDetailsAttendees: jest.fn().mockResolvedValue(mockEventAttendees),
   create: jest.fn().mockResolvedValue(mockEventAttendee),
   showEventAttendeesCount: jest.fn().mockResolvedValue(1),
+  getRoleByName: jest.fn().mockResolvedValue(mockEventRole),
+  showEventAttendee: jest.fn().mockResolvedValue(mockEventAttendee),
 };
 
 export const mockEventRoleService = {
   findOne: jest.fn().mockResolvedValue(mockEventRole),
   findByName: jest.fn().mockResolvedValue(mockEventRole),
+  getRoleByName: jest.fn().mockResolvedValue(mockEventRole),
 };
 
 export const mockEventService = {

@@ -580,8 +580,6 @@ export class GroupService {
       .limit(5)
       .getMany();
 
-    console.log('groups', groups);
-
     return groups;
   }
 
@@ -781,8 +779,7 @@ export class GroupService {
       const stream = await this.zulipService.getAdminStreamId(groupChannelName);
 
       group.zulipChannelId = stream.id;
-      const savedGroup = await this.groupRepository.save(group);
-      console.log('savedGroup', savedGroup);
+      await this.groupRepository.save(group);
     }
 
     await this.zulipService.getInitialisedClient(user);

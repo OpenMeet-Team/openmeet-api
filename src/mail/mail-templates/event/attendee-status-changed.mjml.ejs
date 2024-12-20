@@ -9,16 +9,19 @@
           </mj-text>
 
           <mj-text>
-            The status of attendee <strong>
-              <a href="<%= tenantConfig?.frontendDomain + '/members/' + groupMember?.user?.slug %>"><%= groupMember?.user?.name %></a>
+            Your status for the event <strong>
+              <a href="<%= tenantConfig?.frontendDomain + '/events/' + eventAttendee?.event?.slug %>"><%= eventAttendee?.event?.name %></a>
             </strong>, has been updated to <strong>
               <%= eventAttendee?.status %>
             </strong>.
           </mj-text>
 
           <mj-text>
-            Please review their request and change their status or role on the event.
+            Your role is <strong>
+              <%= eventAttendee?.role?.name %>
+            </strong>.
           </mj-text>
+
         </mj-column>
       </mj-section>
 

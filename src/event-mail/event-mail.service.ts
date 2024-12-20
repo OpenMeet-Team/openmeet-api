@@ -29,24 +29,16 @@ export class EventMailService {
   }
 
   async sendMailAttendeeStatusChanged(eventAttendeeId: number) {
-    const admins =
-      await this.eventAttendeeService.getMailServiceEventAttendeesByPermission(
-        eventAttendeeId,
-        EventAttendeePermission.ManageAttendees,
-      );
-
     const eventAttendee =
       await this.eventAttendeeService.getMailServiceEventAttendee(
         eventAttendeeId,
       );
 
-    for (const admin of admins) {
-      if (admin.email) {
-        await this.mailService.sendMailAttendeeStatusChanged({
-          to: admin.email,
-          data: { eventAttendee },
-        });
-      }
+    if (eventAttendee.user.email) {
+      await this.mailService.sendMailAttendeeStatusChanged({
+        to: eventAttendee.user.email,
+        data: { eventAttendee },
+      });
     }
   }
 }

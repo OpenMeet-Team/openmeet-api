@@ -12,8 +12,8 @@ import { GroupMemberModule } from '../group-member/group-member.module';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { FileModule } from '../file/file.module';
 import { ZulipService } from '../zulip/zulip.service';
-import { EventRoleService } from 'src/event-role/event-role.service';
-import { UserModule } from 'src/user/user.module';
+import { EventRoleService } from '../event-role/event-role.service';
+import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
 import { EventMailModule } from 'src/event-mail/event-mail.module';
 

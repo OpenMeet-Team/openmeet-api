@@ -38,10 +38,8 @@ export class VisibilityGuard implements CanActivate {
 
       switch (event.visibility) {
         case EventVisibility.Public:
-          console.log('EventVisibility.Public');
           return true;
         case EventVisibility.Authenticated:
-          console.log('EventVisibility.Authenticated');
           if (!user) {
             throw new ForbiddenException(
               'VisibilityGuard: This event is not public',
@@ -49,7 +47,6 @@ export class VisibilityGuard implements CanActivate {
           }
           break;
         case EventVisibility.Private:
-          console.log('EventVisibility.Private');
           if (!user) {
             throw new ForbiddenException(
               'VisibilityGuard: This event is not public',
@@ -61,7 +58,6 @@ export class VisibilityGuard implements CanActivate {
               event.id,
               user.id,
             );
-          console.log('eventAttendee Tom', eventAttendee);
           if (!eventAttendee) {
             throw new ForbiddenException(
               'VisibilityGuard: You do not have permission to view this private event',
@@ -99,7 +95,6 @@ export class VisibilityGuard implements CanActivate {
       }
     }
 
-    console.log('VisibilityGuard: allowed');
     return true;
   }
 }

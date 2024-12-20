@@ -6,7 +6,7 @@ import {
 
 export const eventSeedData = [
   {
-    name: '[admin][Draft][Public][Hybrid][Past][approvalQuestion] Tech Conference 2025',
+    name: '[admin][Public][Hybrid][Past][approvalQuestion] Tech Conference 2025',
     slug: 'tech-conference-2025',
     type: EventType.Hybrid,
     locationOnline: 'https://zoom.us/j/123456789',
@@ -21,12 +21,12 @@ export const eventSeedData = [
     user: {
       id: 1,
     },
-    status: EventStatus.Draft,
+    status: EventStatus.Published,
     visibility: EventVisibility.Public,
     approvalQuestion: 'Are you a developer?',
   },
   {
-    name: '[admin][Pending][Authenticated][In-Person][Past][allowWaitlist] Local Art Exhibition',
+    name: '[admin][Authenticated][In-Person][Past][allowWaitlist] Local Art Exhibition',
     slug: 'local-art-exhibition',
     type: EventType.InPerson,
     description:
@@ -40,7 +40,7 @@ export const eventSeedData = [
     user: {
       id: 1,
     },
-    status: EventStatus.Pending,
+    status: EventStatus.Published,
     visibility: EventVisibility.Authenticated,
     allowWaitlist: true,
   },
@@ -62,7 +62,7 @@ export const eventSeedData = [
     requireApproval: true,
   },
   {
-    name: '[admin][Draft][Public][In-Person][Past][requireGroupMembership] Charity Marathon',
+    name: '[admin][Public][In-Person][Past][requireGroupMembership] Charity Marathon',
     slug: 'charity-marathon',
     type: EventType.InPerson,
     description:
@@ -79,12 +79,12 @@ export const eventSeedData = [
     },
     lat: 51.5074,
     lon: -0.1278,
-    status: EventStatus.Draft,
+    status: EventStatus.Published,
     visibility: EventVisibility.Public,
     requireGroupMembership: true,
   },
   {
-    name: '[admin][Pending][Private][Hybrid][Upcoming][approvalQuestion] Startup Pitch Night',
+    name: '[admin][Private][Hybrid][Upcoming][approvalQuestion] Startup Pitch Night',
     slug: 'startup-pitch-night',
     type: EventType.Hybrid,
     locationOnline: 'https://twitch.tv/startup-pitch',
@@ -99,7 +99,7 @@ export const eventSeedData = [
     user: {
       id: 1,
     },
-    status: EventStatus.Pending,
+    status: EventStatus.Published,
     visibility: EventVisibility.Private,
     approvalQuestion: 'Are you a startup?',
   },
@@ -123,7 +123,7 @@ export const eventSeedData = [
     allowWaitlist: true,
   },
   {
-    name: '[admin][Draft][Public][Hybrid][Upcoming][requireGroupMembership] Virtual Reality Gaming Tournament',
+    name: '[admin][Public][Hybrid][Upcoming][requireGroupMembership] Virtual Reality Gaming Tournament',
     slug: 'vr-gaming-tournament',
     type: EventType.Hybrid,
     locationOnline: 'https://twitch.tv/vr-tournament',
@@ -141,12 +141,12 @@ export const eventSeedData = [
     },
     lat: 37.4419,
     lon: -122.143,
-    status: EventStatus.Draft,
+    status: EventStatus.Published,
     visibility: EventVisibility.Public,
     requireGroupMembership: true,
   },
   {
-    name: '[admin][Pending][Private][In-Person][Upcoming][approvalQuestion][requireApproval] Mindfulness and Meditation Retreat',
+    name: '[admin][Private][In-Person][Upcoming][approvalQuestion][requireApproval] Mindfulness and Meditation Retreat',
     slug: 'mindfulness-meditation-retreat',
     type: EventType.InPerson,
     description:
@@ -160,7 +160,7 @@ export const eventSeedData = [
     user: {
       id: 1,
     },
-    status: EventStatus.Pending,
+    status: EventStatus.Published,
     visibility: EventVisibility.Private,
     approvalQuestion: 'Are you a mindfulness practitioner?',
     requireApproval: true,
