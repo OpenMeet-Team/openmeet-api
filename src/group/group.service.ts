@@ -17,6 +17,7 @@ import { CategoryService } from '../category/category.service';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupUserPermissionEntity } from './infrastructure/persistence/relational/entities/group-user-permission.entity';
 import {
+  DEFAULT_RADIUS,
   GroupPermission,
   GroupRole,
   GroupStatus,
@@ -320,8 +321,7 @@ export class GroupService {
         );
       }
 
-      // Default radius to 5 kilometers if not provided
-      const searchRadius = radius ?? 500;
+      const searchRadius = radius ?? DEFAULT_RADIUS;
       // Find events within the radius using ST_DWithin
       groupQuery.andWhere(
         `ST_DWithin(

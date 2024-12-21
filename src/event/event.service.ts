@@ -24,6 +24,7 @@ import {
   EventAttendeeRole,
   PostgisSrid,
   ZULIP_DEFAULT_CHANNEL_TOPIC,
+  DEFAULT_RADIUS,
 } from '../core/constants/constant';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -247,8 +248,7 @@ export class EventService {
         );
       }
 
-      // Default radius to 5 kilometers if not provided
-      const searchRadius = radius ?? 200;
+      const searchRadius = radius ?? DEFAULT_RADIUS;
 
       // Find events within the radius using ST_DWithin
       eventQuery.andWhere(
