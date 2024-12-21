@@ -248,7 +248,7 @@ export class EventService {
       }
 
       // Default radius to 5 kilometers if not provided
-      const searchRadius = radius ?? 5;
+      const searchRadius = radius ?? 200;
 
       // Find events within the radius using ST_DWithin
       eventQuery.andWhere(
@@ -265,11 +265,11 @@ export class EventService {
       eventQuery.andWhere('event.type = :type', { type });
     }
 
-    if (location) {
-      eventQuery.andWhere('event.location ILIKE :location', {
-        location: `%${location}%`,
-      });
-    }
+    // if (location) {
+    //   eventQuery.andWhere('event.location ILIKE :location', {
+    //     location: `%${location}%`,
+    //   });
+    // }
 
     if (fromDate && toDate) {
       eventQuery.andWhere('event.createdAt BETWEEN :fromDate AND :toDate', {

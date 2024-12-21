@@ -300,12 +300,6 @@ export class GroupService {
       groupQuery.andWhere('user.id = :userId', { userId });
     }
 
-    if (location) {
-      groupQuery.andWhere('group.location ILIKE :location', {
-        location: `%${location}%`,
-      });
-    }
-
     if (categories && categories.length > 0) {
       const likeConditions = categories
         .map((_, index) => `categories.name LIKE :category${index}`)
@@ -327,7 +321,7 @@ export class GroupService {
       }
 
       // Default radius to 5 kilometers if not provided
-      const searchRadius = radius ?? 5;
+      const searchRadius = radius ?? 500;
       // Find events within the radius using ST_DWithin
       groupQuery.andWhere(
         `ST_DWithin(
