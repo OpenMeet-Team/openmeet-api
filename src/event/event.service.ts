@@ -279,7 +279,7 @@ export class EventService {
     } else if (fromDate) {
       eventQuery.andWhere('event.createdAt >= :fromDate', { fromDate });
     } else if (toDate) {
-      eventQuery.andWhere('event.createdAt <= :toDate', { toDate: new Date() });
+      eventQuery.andWhere('event.createdAt <= :toDate', { toDate });
     }
 
     if (categories && categories.length > 0) {
