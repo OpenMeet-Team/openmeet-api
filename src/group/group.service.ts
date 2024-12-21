@@ -17,6 +17,7 @@ import { CategoryService } from '../category/category.service';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupUserPermissionEntity } from './infrastructure/persistence/relational/entities/group-user-permission.entity';
 import {
+  DEFAULT_RADIUS,
   GroupPermission,
   GroupRole,
   GroupStatus,
@@ -300,12 +301,6 @@ export class GroupService {
       groupQuery.andWhere('user.id = :userId', { userId });
     }
 
-    if (location) {
-      groupQuery.andWhere('group.location ILIKE :location', {
-        location: `%${location}%`,
-      });
-    }
-
     if (categories && categories.length > 0) {
       const likeConditions = categories
         .map((_, index) => `categories.name LIKE :category${index}`)
@@ -326,8 +321,7 @@ export class GroupService {
         );
       }
 
-      // Default radius to 5 kilometers if not provided
-      const searchRadius = radius ?? 5;
+      const searchRadius = radius ?? DEFAULT_RADIUS;
       // Find events within the radius using ST_DWithin
       groupQuery.andWhere(
         `ST_DWithin(

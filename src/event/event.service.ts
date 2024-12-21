@@ -24,6 +24,7 @@ import {
   EventAttendeeRole,
   PostgisSrid,
   ZULIP_DEFAULT_CHANNEL_TOPIC,
+  DEFAULT_RADIUS,
 } from '../core/constants/constant';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -247,8 +248,7 @@ export class EventService {
         );
       }
 
-      // Default radius to 5 kilometers if not provided
-      const searchRadius = radius ?? 5;
+      const searchRadius = radius ?? DEFAULT_RADIUS;
 
       // Find events within the radius using ST_DWithin
       eventQuery.andWhere(
@@ -265,11 +265,11 @@ export class EventService {
       eventQuery.andWhere('event.type = :type', { type });
     }
 
-    if (location) {
-      eventQuery.andWhere('event.location ILIKE :location', {
-        location: `%${location}%`,
-      });
-    }
+    // if (location) {
+    //   eventQuery.andWhere('event.location ILIKE :location', {
+    //     location: `%${location}%`,
+    //   });
+    // }
 
     if (fromDate && toDate) {
       eventQuery.andWhere('event.createdAt BETWEEN :fromDate AND :toDate', {
@@ -279,7 +279,7 @@ export class EventService {
     } else if (fromDate) {
       eventQuery.andWhere('event.createdAt >= :fromDate', { fromDate });
     } else if (toDate) {
-      eventQuery.andWhere('event.createdAt <= :toDate', { toDate: new Date() });
+      eventQuery.andWhere('event.createdAt <= :toDate', { toDate });
     }
 
     if (categories && categories.length > 0) {

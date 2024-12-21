@@ -141,6 +141,8 @@ export enum PostgisSrid {
   SRID = 4326,
 }
 
+export const DEFAULT_RADIUS = 200; // default radius in KM for location searching
+
 // By default zulip creates a topic called channel events, we don't want to show this in the UI
 export const ZULIP_DEFAULT_CHANNEL_TOPIC = 'channel events';
 
