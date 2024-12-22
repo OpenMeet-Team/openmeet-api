@@ -319,4 +319,14 @@ describe('EventService', () => {
       expect(result).toEqual(mockZulipMessageResponse);
     });
   });
+
+  describe('findUpcomingEventsForGroup', () => {
+    it('should return upcoming events for a group', async () => {
+      jest
+        .spyOn(service, 'findUpcomingEventsForGroup')
+        .mockResolvedValue(mockEvents);
+      const result = await service.findUpcomingEventsForGroup(mockGroup.id, 3);
+      expect(result).toEqual(mockEvents);
+    });
+  });
 });
