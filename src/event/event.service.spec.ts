@@ -139,7 +139,7 @@ describe('EventService', () => {
         categories: [1, 2],
         lat: 1,
         lon: 1,
-        group: 1,
+        group: mockGroup,
       };
 
       const mockAttendees = [

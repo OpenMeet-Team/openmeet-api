@@ -157,7 +157,7 @@ export class CreateEventDto {
     description: 'Group entity',
   })
   @IsOptional()
-  group?: GroupEntity;
+  group?: { id: number } | GroupEntity;
 }
 
 export class CommentDto {
