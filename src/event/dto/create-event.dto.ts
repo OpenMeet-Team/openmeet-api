@@ -12,6 +12,7 @@ import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EventStatus, EventVisibility } from '../../core/constants/constant';
 import { FileEntity } from '../../file/infrastructure/persistence/relational/entities/file.entity';
+import { GroupEntity } from 'src/group/infrastructure/persistence/relational/entities/group.entity';
 
 export class CreateEventDto {
   @ApiProperty({
@@ -152,12 +153,11 @@ export class CreateEventDto {
   @IsEnum(EventVisibility)
   visibility?: EventVisibility;
 
-  @ApiProperty({
-    description: 'The ID of the user organizing the event',
+  @ApiPropertyOptional({
+    description: 'Group entity',
   })
   @IsOptional()
-  @Type(() => Number)
-  group?: number;
+  group?: { id: number } | GroupEntity;
 }
 
 export class CommentDto {

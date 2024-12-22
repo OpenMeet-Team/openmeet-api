@@ -7,7 +7,7 @@ import {
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { MoreThan, Repository } from 'typeorm';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
@@ -99,14 +99,13 @@ export class EventService {
     userId: number,
   ): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
-
     // Set default values and prepare base event data
     const eventData = {
       ...createEventDto,
       status: createEventDto.status || EventStatus.Published,
       visibility: createEventDto.visibility || EventVisibility.Public,
       user: { id: userId },
-      group: createEventDto.group ? { id: createEventDto.group } : null,
+      group: createEventDto.group ? { id: createEventDto.group.id } : null,
     };
 
     // Handle categories
@@ -691,7 +690,7 @@ export class EventService {
   async findEventsForGroup(groupId: number, limit: number) {
     await this.getTenantSpecificEventRepository();
     const events = await this.eventRepository.find({
-      where: { group: { id: groupId } },
+      where: { group: { id: groupId }, status: EventStatus.Published },
       take: limit,
     });
     return (await Promise.all(
@@ -870,7 +869,7 @@ export class EventService {
 
     // Combine and deduplicate events
     const allEvents = [...createdEvents, ...attendingEvents];
-    console.log('allEvents', allEvents);
+
     const uniqueEvents = Array.from(
       new Map(allEvents.map((event) => [event.id, event])).values(),
     );
@@ -889,5 +888,23 @@ export class EventService {
   async getEventAttendeesCount(eventId: number): Promise<number> {
     await this.getTenantSpecificEventRepository();
     return await this.eventAttendeeService.showEventAttendeesCount(eventId);
+  }
+
+  async findUpcomingEventsForGroup(groupId: number, limit: number) {
+    await this.getTenantSpecificEventRepository();
+    const events = await this.eventRepository.find({
+      where: {
+        group: { id: groupId },
+        status: EventStatus.Published,
+        startDate: MoreThan(new Date()),
+      },
+      take: limit,
+    });
+    return (await Promise.all(
+      events.map(async (event) => ({
+        ...event,
+        attendeesCount: await this.getEventAttendeesCount(event.id),
+      })),
+    )) as EventEntity[];
   }
 }

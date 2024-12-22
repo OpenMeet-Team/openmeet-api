@@ -456,7 +456,10 @@ export class GroupService {
     await this.getTenantSpecificGroupRepository();
     const group = await this.getGroupBySlug(slug);
 
-    group.events = await this.eventService.findEventsForGroup(group.id, 5);
+    group.events = await this.eventService.findUpcomingEventsForGroup(
+      group.id,
+      5,
+    );
 
     group.groupMembers = await this.groupMemberService.findGroupDetailsMembers(
       group.id,
