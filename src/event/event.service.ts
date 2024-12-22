@@ -101,7 +101,7 @@ export class EventService {
       status: createEventDto.status || EventStatus.Published,
       visibility: createEventDto.visibility || EventVisibility.Public,
       user: { id: userId },
-      group: createEventDto.group ? { id: createEventDto.group } : null,
+      group: createEventDto.group ? { id: createEventDto.group.id } : null,
     };
 
     // Handle categories
