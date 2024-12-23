@@ -256,7 +256,7 @@ export class EventService {
           ST_SetSRID(ST_MakePoint(:lon, :lat), ${PostgisSrid.SRID}),
           :radius
         )`,
-        { lon, lat, radius: searchRadius * 1000 }, // Convert kilometers to meters
+        { lon, lat, radius: searchRadius * 1609.34 }, // Convert Miles to meters
       );
     }
 
