@@ -705,4 +705,20 @@ export class AuthService {
 
     return this.groupService.getGroupMembers(group.id);
   }
+
+  async loginWithBluesky(handle: string) {
+    const response = await fetch(
+      `${process.env.APP_API_URL}/auth-bluesky/login?handle=${handle}`,
+    );
+    const data = await response.json();
+    return data.url;
+  }
+
+  async handleBlueskyCallback(params: URLSearchParams) {
+    const response = await fetch(
+      `${process.env.APP_API_URL}/auth-bluesky/callback?${params.toString()}`,
+    );
+    const data = await response.json();
+    return data;
+  }
 }

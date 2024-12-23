@@ -3,5 +3,4 @@ export interface SocialInterface {
   firstName?: string;
   lastName?: string;
   email?: string;
-  accessToken?: string; // Add optional accessToken field for bluesky authentication
 }

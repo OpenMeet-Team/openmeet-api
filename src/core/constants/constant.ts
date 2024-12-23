@@ -1,4 +1,4 @@
-import { BlueskyConfig } from "../../auth-bluesky/config/bluesky-config.type";
+import { BlueskyConfig } from '../../auth-bluesky/config/bluesky-config.type';
 
 export enum SubCategoryType {
   EVENT = 'EVENT',
