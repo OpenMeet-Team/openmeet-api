@@ -1,3 +1,5 @@
+import { BlueskyConfig } from "../../auth-bluesky/config/bluesky-config.type";
+
 export enum SubCategoryType {
   EVENT = 'EVENT',
   GROUP = 'GROUP',
@@ -159,4 +161,5 @@ export interface TenantConfig {
   googleClientSecret: string; // google client secret, ex: 0987654321
   githubClientId: string; // github client id, ex: 1234567890
   githubClientSecret: string; // github client secret, ex: 0987654321
+  blueskyConfig?: BlueskyConfig;
 }
