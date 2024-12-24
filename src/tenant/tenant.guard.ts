@@ -31,7 +31,8 @@ export class TenantGuard implements CanActivate {
     }
     // Check for tenant ID in the headers
     const tenantId =
-      request.headers['x-tenant-id'] || request.query['tenantId'];
+      request.headers['x-tenant-id'] ||
+      (request.query && request.query['tenantId']);
     if (!tenantId) {
       throw new UnauthorizedException('Tenant ID is required');
     }
