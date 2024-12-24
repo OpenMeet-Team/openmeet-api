@@ -3,10 +3,6 @@
 /node_modules
 /config/
 
-# SSL
-key.pem
-cert.pem
-
 # Logs
 logs
 *.log

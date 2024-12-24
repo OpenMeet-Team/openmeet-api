@@ -16,19 +16,9 @@ import { AggregateByTenantContextIdStrategy } from './strategy/tenant.strategy';
 import { TenantGuard } from './tenant/tenant.guard';
 import { RequestCounterInterceptor } from './interceptors/request-counter.interceptor';
 import { getBuildInfo } from './utils/version';
-import { readFileSync } from 'fs';
 
 async function bootstrap() {
-  // Create HTTPS options using the same certs as frontend
-  const httpsOptions = {
-    key: readFileSync('./key.pem'), // Adjust path as needed
-    cert: readFileSync('./cert.pem'), // Adjust path as needed
-  };
-  console.log('env:', process.env.NODE_ENV);
-  const app = await NestFactory.create(AppModule, {
-    httpsOptions:
-      process.env.NODE_ENV === 'development' ? httpsOptions : undefined,
-  });
+  const app = await NestFactory.create(AppModule, { cors: true });
   ContextIdFactory.apply(new AggregateByTenantContextIdStrategy());
   useContainer(app.select(AppModule), { fallbackOnErrors: true });
   const configService = app.get(ConfigService<AllConfigType>);
@@ -51,15 +41,6 @@ async function bootstrap() {
     new ResolvePromisesInterceptor(),
     new ClassSerializerInterceptor(app.get(Reflector)),
   );
-  app.enableCors({
-    origin: 'https://local.openmeet.net:9005', // Exact origin of your UI
-    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id'],
-    credentials: true,
-  });
-
-  // // If you're using global prefix, make sure it's after CORS
-  // app.setGlobalPrefix('api');
 
   const buildInfo = getBuildInfo();
 
@@ -122,9 +103,6 @@ async function bootstrap() {
   const requestCounterInterceptor = app.get(RequestCounterInterceptor);
   app.useGlobalInterceptors(requestCounterInterceptor);
 
-  await app.listen(
-    configService.getOrThrow('app.port', { infer: true }),
-    '0.0.0.0',
-  );
+  await app.listen(configService.getOrThrow('app.port', { infer: true }));
 }
 void bootstrap();

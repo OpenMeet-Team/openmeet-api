@@ -41,11 +41,10 @@ export class AuthBlueskyController {
       const url = await this.authBlueskyService.authorize(handle);
       res.redirect(url.toString());
     } catch (error) {
-      res.redirect('/auth/error?message=' + error.message);
+      res.redirect('/api/v1/auth/error?message=' + error.message);
     }
   }
 
-  @Public()
   @Get('callback')
   async callback(@Query() query: any, @Res() res: Response) {
     try {
@@ -67,13 +66,12 @@ export class AuthBlueskyController {
       res.redirect('/api/v1/auth/error?message=' + error.message);
     }
   }
-  @Public()
+
   @Get('client-metadata.json')
   getClientMetadata() {
     return this.authBlueskyService.getClient().clientMetadata;
   }
 
-  @Public()
   @Get('jwks.json')
   getJwks() {
     return this.authBlueskyService.getClient().jwks;

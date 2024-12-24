@@ -95,13 +95,13 @@ export class AuthBlueskyService {
     const baseUrl = this.configService.get('BACKEND_DOMAIN', {
       infer: true,
     }) as string;
-    console.log('Initializing client');
-
     if (!baseUrl) throw new Error('BACKEND_DOMAIN not configured');
 
-    // Use the same client ID format as bsky-oauth-example
-    const clientId = baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')
-      ? `http://localhost?redirect_uri=${encodeURIComponent(`${baseUrl}/api/v1/auth/bluesky/callback`)}&scope=${encodeURIComponent('atproto transition:generic')}`
+    // Fix the URLs to use 127.0.0.1 instead of localhost and ensure https
+    const isLocal =
+      baseUrl.includes('127.0.0.1') || baseUrl.includes('localhost');
+    const clientId = isLocal
+      ? `http://127.0.0.1/client-metadata.json?redirect_uri=${encodeURIComponent(`${baseUrl}/api/v1/auth/bluesky/callback`)}&scope=${encodeURIComponent('atproto transition:generic')}`
       : `${baseUrl}/api/v1/auth/bluesky/client-metadata.json`;
 
     const keyset = await Promise.all([
@@ -168,9 +168,6 @@ export class AuthBlueskyService {
   }
 
   async authorize(handle: string) {
-    if (!this.client) {
-      await this.initializeClient();
-    }
     return this.client.authorize(handle);
   }
 }
