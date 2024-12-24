@@ -41,7 +41,7 @@ export class AuthBlueskyController {
       const url = await this.authBlueskyService.authorize(handle);
       res.redirect(url.toString());
     } catch (error) {
-      res.redirect('/api/v1/auth/error?message=' + error.message);
+      res.redirect('/auth/error?message=' + error.message);
     }
   }
 
