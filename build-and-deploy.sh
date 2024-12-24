@@ -34,6 +34,7 @@ aws eks update-kubeconfig --name openmeet-dev --region $AWS_REGION
 # Deploy to EKS
 echo "Deploying to EKS..."
 kubectl set image --namespace $DEPLOYMENT_NAMESPACE deployment/openmeet-api openmeet-api=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+kubectl rollout restart --namespace $DEPLOYMENT_NAMESPACE deployment/openmeet-api
 kubectl rollout status --namespace $DEPLOYMENT_NAMESPACE deployment/openmeet-api
 
 echo "Deployment complete!"
