@@ -75,29 +75,29 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       envFilePath: ['.env'],
     }),
     infrastructureDatabaseModule,
-    // I18nModule.forRootAsync({
-    //   useFactory: (configService: ConfigService<AllConfigType>) => ({
-    //     fallbackLanguage: configService.getOrThrow('app.fallbackLanguage', {
-    //       infer: true,
-    //     }),
-    //     loaderOptions: { path: path.join(__dirname, '/i18n/'), watch: true },
-    //   }),
-    //   resolvers: [
-    //     {
-    //       use: HeaderResolver,
-    //       useFactory: (configService: ConfigService<AllConfigType>) => {
-    //         return [
-    //           configService.get('app.headerLanguage', {
-    //             infer: true,
-    //           }),
-    //         ];
-    //       },
-    //       inject: [ConfigService],
-    //     },
-    //   ],
-    //   imports: [ConfigModule],
-    //   inject: [ConfigService],
-    // }),
+    I18nModule.forRootAsync({
+      useFactory: (configService: ConfigService<AllConfigType>) => ({
+        fallbackLanguage: configService.getOrThrow('app.fallbackLanguage', {
+          infer: true,
+        }),
+        loaderOptions: { path: path.join(__dirname, '/i18n/'), watch: true },
+      }),
+      resolvers: [
+        {
+          use: HeaderResolver,
+          useFactory: (configService: ConfigService<AllConfigType>) => {
+            return [
+              configService.get('app.headerLanguage', {
+                infer: true,
+              }),
+            ];
+          },
+          inject: [ConfigService],
+        },
+      ],
+      imports: [ConfigModule],
+      inject: [ConfigService],
+    }),
     EventEmitterModule.forRoot(),
     PrometheusModule.register(),
     UserModule,

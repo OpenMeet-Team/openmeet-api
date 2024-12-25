@@ -274,7 +274,7 @@ export class GroupService {
   async showAll(pagination: PaginationDto, query: QueryGroupDto): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     const { page, limit } = pagination;
-    const { search, userId, categories, radius, location, lat, lon } = query;
+    const { search, userId, categories, radius, lat, lon } = query;
     const groupQuery = this.groupRepository
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.categories', 'categories')

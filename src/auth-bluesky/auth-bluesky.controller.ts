@@ -1,4 +1,10 @@
-import { Controller, Get, Post, Query, Res } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Query,
+  Res,
+  Header,
+} from '@nestjs/common';
 import { AuthBlueskyService } from './auth-bluesky.service';
 import { Response } from 'express';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
@@ -7,6 +13,8 @@ import { LoginResponseDto } from '../auth/dto/login-response.dto';
 import { TenantConfig } from '../core/constants/constant';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { Public } from '../core/decorators/public.decorator';
+import { ConfigService } from '@nestjs/config';
+import { TenantPublic } from '../tenant/tenant-public.decorator';
 @ApiTags('Auth')
 @Controller({
   path: 'auth/bluesky',
@@ -18,6 +26,7 @@ export class AuthBlueskyController {
     private readonly authBlueskyService: AuthBlueskyService,
     private readonly jwtService: JwtService,
     private readonly tenantConnectionService: TenantConnectionService,
+    private readonly configService: ConfigService,
   ) {}
 
   @ApiOkResponse({
@@ -30,50 +39,55 @@ export class AuthBlueskyController {
     @Query('tenantId') tenantId: string,
     @Res() res: Response,
   ) {
+    const tenantConfig: TenantConfig =
+      await this.tenantConnectionService.getTenantConfig(tenantId);
     try {
-      console.log('tenantId', tenantId);
-      this.tenantConfig =
-        this.tenantConnectionService.getTenantConfig(tenantId);
-    } catch (error) {
-      throw new Error(error.message);
-    }
-    try {
-      const url = await this.authBlueskyService.authorize(handle);
+      console.log('going to initialize client');
+      await this.authBlueskyService.initializeClient(tenantId);
+      console.log('client initialized');
+      console.log('going to initiate login');
+      const { url } = await this.authBlueskyService.initiateLogin(
+        handle,
+        tenantId,
+      );
+      console.log('login initiated:', url);
       res.redirect(url.toString());
     } catch (error) {
-      res.redirect('/auth/error?message=' + error.message);
+      console.error('Login error:', error);
+      const frontendUrl = tenantConfig.frontendDomain;
+      res.redirect(
+        `${frontendUrl}/auth/error?message=${encodeURIComponent(error.message)}`,
+      );
     }
   }
 
+  @Public()
+  @TenantPublic()
   @Get('callback')
   async callback(@Query() query: any, @Res() res: Response) {
-    try {
-      const profile = await this.authBlueskyService.handleCallback(
-        new URLSearchParams(query),
-      );
-
-      // Generate JWT token for the authenticated user
-      const token = this.jwtService.sign({
-        did: profile.did,
-        handle: profile.handle,
-        displayName: profile.displayName,
-      });
-
-      res.redirect(
-        `/api/v1/auth/success?token=${token}&profile=${JSON.stringify(profile)}`,
-      );
-    } catch (error) {
-      res.redirect('/api/v1/auth/error?message=' + error.message);
-    }
+    const redirectUrl = await this.authBlueskyService.handleAuthCallback(query);
+    res.redirect(redirectUrl);
   }
 
+  @Public()
+  @TenantPublic()
   @Get('client-metadata.json')
-  getClientMetadata() {
+  @Header('Content-Type', 'application/json')
+  async getClientMetadata(@Query('tenantId') tenantId: string) {
+    if (!this.authBlueskyService.getClient()) {
+      await this.authBlueskyService.initializeClient(tenantId);
+    }
     return this.authBlueskyService.getClient().clientMetadata;
   }
 
+  @Public()
+  @TenantPublic()
   @Get('jwks.json')
-  getJwks() {
+  @Header('Content-Type', 'application/json')
+  async getJwks(@Query('tenantId') tenantId: string) {
+    if (!this.authBlueskyService.getClient()) {
+      await this.authBlueskyService.initializeClient(tenantId);
+    }
     return this.authBlueskyService.getClient().jwks;
   }
 }

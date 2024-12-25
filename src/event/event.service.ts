@@ -176,7 +176,7 @@ export class EventService {
       lon,
       radius,
       type,
-      location,
+      // location,
       fromDate,
       toDate,
       categories,

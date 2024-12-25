@@ -1,19 +1,18 @@
-import {
-  Inject,
-  Injectable,
-  Scope,
-  UnprocessableEntityException,
-} from '@nestjs/common';
-import { BskyAgent } from '@atproto/api';
-import { SocialInterface } from '../social/interfaces/social.interface';
-import { AuthBlueskyLoginDto } from './dto/auth-bluesky-login.dto';
+import { BadRequestException, Inject, Injectable, Scope } from '@nestjs/common';
+
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { TenantConfig } from '../core/constants/constant';
 import { ConfigService } from '@nestjs/config';
-import { NodeOAuthClient } from '@atproto/oauth-client-node';
+import {
+  NodeOAuthClient,
+  NodeOAuthClientOptions,
+} from '@atproto/oauth-client-node';
 import { Agent } from '@atproto/api';
 import { JoseKey } from '@atproto/jwk-jose';
+import crypto from 'crypto';
+import { JwtService } from '@nestjs/jwt';
+import { AuthService } from '../auth/auth.service';
 
 class InMemoryStore {
   private storeData = {};
@@ -42,111 +41,86 @@ export class AuthBlueskyService {
     @Inject(REQUEST) private readonly request: any,
     private tenantService: TenantConnectionService,
     private configService: ConfigService,
-  ) {
-    this.initializeClient().catch((error) => {
-      console.error('Failed to initialize Bluesky OAuth client', error);
-    });
-  }
+    private jwtService: JwtService,
+    private authService: AuthService,
+  ) {}
 
-  getAuthorizationUrl(): string {
-    const baseUrl =
-      this.tenantConfig.blueskyConfig?.serviceUrl || 'https://bsky.social';
-    return `${baseUrl}/authorize?client_id=${this.tenantConfig.blueskyConfig?.clientId}&scope=read write&response_type=code`;
-  }
-
-  async getProfileByToken(
-    loginDto: AuthBlueskyLoginDto,
-  ): Promise<SocialInterface> {
-    try {
-      const agent = new BskyAgent({
-        service:
-          this.tenantConfig.blueskyConfig?.serviceUrl || 'https://bsky.social',
-      });
-
-      // TODO: Implement token exchange once AT Protocol OAuth is fully available
-      // For now, we'll use the temporary app password flow
-      await agent.login({
-        identifier: loginDto.code,
-        password: loginDto.code,
-      });
-
-      const profile = await agent.getProfile({
-        actor: agent.session?.did || '',
-      });
-
-      if (!profile.data.handle) {
-        throw new UnprocessableEntityException('Profile not found');
-      }
-
-      return {
-        id: profile.data.did,
-        email: `${profile.data.handle}@bsky.social`,
-        firstName: profile.data.displayName?.split(' ')[0] || '',
-        lastName: profile.data.displayName?.split(' ').slice(1).join(' ') || '',
-      };
-    } catch (error) {
-      throw new UnprocessableEntityException(
-        error.response?.data?.message || 'Invalid Bluesky credentials',
-      );
-    }
-  }
-
-  private async initializeClient() {
+  public async initializeClient(tenantId: string) {
+    this.tenantConfig = this.tenantService.getTenantConfig(tenantId);
     const baseUrl = this.configService.get('BACKEND_DOMAIN', {
       infer: true,
     }) as string;
-    if (!baseUrl) throw new Error('BACKEND_DOMAIN not configured');
 
-    // Fix the URLs to use 127.0.0.1 instead of localhost and ensure https
-    const isLocal =
-      baseUrl.includes('127.0.0.1') || baseUrl.includes('localhost');
-    const clientId = isLocal
-      ? `http://127.0.0.1/client-metadata.json?redirect_uri=${encodeURIComponent(`${baseUrl}/api/v1/auth/bluesky/callback`)}&scope=${encodeURIComponent('atproto transition:generic')}`
-      : `${baseUrl}/api/v1/auth/bluesky/client-metadata.json`;
+    if (!baseUrl) {
+      throw new Error('BACKEND_DOMAIN not configured');
+    }
 
-    const keyset = await Promise.all([
-      JoseKey.fromImportable(
-        this.configService.get('BLUESKY_PRIVATE_KEY_1', { infer: true })!,
-        'key1',
-      ),
-      JoseKey.fromImportable(
-        this.configService.get('BLUESKY_PRIVATE_KEY_2', { infer: true })!,
-        'key2',
-      ),
-      JoseKey.fromImportable(
-        this.configService.get('BLUESKY_PRIVATE_KEY_3', { infer: true })!,
-        'key3',
-      ),
-    ]);
+    const keyset = await this.loadKeys();
+    if (keyset.length === 0) {
+      throw new Error('No valid keys found in environment variables');
+    }
 
-    console.log('keyset', keyset);
-    console.log('clientId', clientId);
-    console.log('baseUrl', baseUrl);
-
-    this.client = new NodeOAuthClient({
+    const clientConfig: NodeOAuthClientOptions = {
       clientMetadata: {
-        client_id: clientId,
+        client_id: `${baseUrl}/api/v1/auth/bluesky/client-metadata.json?tenantId=${tenantId}`,
         client_name: 'OpenMeet',
         client_uri: baseUrl,
         logo_uri: `${baseUrl}/logo.png`,
         tos_uri: `${baseUrl}/terms`,
         policy_uri: `${baseUrl}/policy`,
         redirect_uris: [
-          `${baseUrl.replace('localhost', '127.0.0.1')}/api/v1/auth/bluesky/callback`,
+          `${baseUrl}/api/v1/auth/bluesky/callback?tenantId=${tenantId}`,
         ],
         grant_types: ['authorization_code', 'refresh_token'],
         response_types: ['code'],
         scope: 'atproto transition:generic',
         application_type: 'web',
         token_endpoint_auth_method: 'private_key_jwt',
-        token_endpoint_auth_signing_alg: 'RS256',
+        token_endpoint_auth_signing_alg: 'ES256',
         dpop_bound_access_tokens: true,
-        jwks_uri: `${baseUrl}/api/v1/auth/bluesky/jwks.json`,
+        jwks_uri: `${baseUrl}/api/v1/auth/bluesky/jwks.json?tenantId=${tenantId}`,
       },
       keyset,
       stateStore: this.stateStore,
       sessionStore: this.sessionStore,
-    });
+    };
+    console.log('clientConfig', clientConfig);
+    this.client = new NodeOAuthClient(clientConfig);
+
+    return this.client;
+  }
+
+  private async loadKeys(): Promise<JoseKey[]> {
+    const keys: JoseKey[] = [];
+
+    for (let i = 1; i <= 3; i++) {
+      const encodedKeyData: string =
+        this.configService.get(`BLUESKY_KEY_${i}`, {
+          infer: true,
+        }) || '';
+      if (!encodedKeyData) {
+        console.warn(`BLUESKY_KEY_${i} not found in environment variables`);
+        continue;
+      }
+
+      try {
+        // Decode base64 string to UTF-8 string
+        const keyData = Buffer.from(encodedKeyData, 'base64').toString('utf-8');
+
+        // Validate PKCS#8 format
+        if (!keyData.includes('-----BEGIN PRIVATE KEY-----')) {
+          console.error(`BLUESKY_KEY_${i} is not in PKCS#8 format`);
+          continue;
+        }
+
+        const key = await JoseKey.fromImportable(keyData.trim(), `key${i}`);
+        keys.push(key);
+      } catch (error) {
+        console.error(`Failed to load BLUESKY_KEY_${i}:`, error);
+      }
+    }
+
+    return keys;
   }
 
   async handleCallback(params: URLSearchParams) {
@@ -168,6 +142,57 @@ export class AuthBlueskyService {
   }
 
   async authorize(handle: string) {
-    return this.client.authorize(handle);
+    const state = crypto.randomBytes(16).toString('hex');
+
+    const url = await this.client.authorize(handle, { state });
+    console.log('url', url);
+    return url;
+  }
+
+  async initiateLogin(
+    handle: string,
+    tenantId: string,
+  ): Promise<{ url: URL; tenantConfig: TenantConfig }> {
+    if (!handle || !handle.match(/^[a-zA-Z0-9._-]+$/)) {
+      throw new BadRequestException(
+        'Handle must not be empty and contain only letters, numbers, dots, hyphens, and underscores',
+      );
+    }
+
+    // Initialize client if not already initialized
+    if (!this.client) {
+      await this.initializeClient(tenantId);
+    }
+
+    if (!this.client) {
+      throw new Error('Failed to initialize Bluesky OAuth client');
+    }
+
+    console.log('going to authorize');
+    const authUrl = await this.authorize(handle);
+    console.log('authUrl', authUrl);
+
+    return {
+      url: authUrl,
+      tenantConfig: this.tenantConfig,
+    };
+  }
+
+  async handleAuthCallback(query: any): Promise<string> {
+    const profile = await this.handleCallback(new URLSearchParams(query));
+
+    // Use the common auth service to create/update user and generate token
+    const loginResponse = await this.authService.validateSocialLogin(
+      'bluesky',
+      {
+        id: profile.did,
+        email: `${profile.handle}@bsky.social`, // or null if email not needed
+        firstName: profile.displayName || profile.handle,
+        lastName: '',
+      },
+    );
+
+    // Redirect to frontend with token
+    return `${this.tenantConfig.frontendDomain}/?token=${loginResponse.token}`;
   }
 }
