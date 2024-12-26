@@ -20,7 +20,6 @@ import { Public } from '../core/decorators/public.decorator';
 import { ConfigService } from '@nestjs/config';
 import { TenantPublic } from '../tenant/tenant-public.decorator';
 import { AuthBlueskyLoginDto } from './dto/auth-bluesky-login.dto';
-import { AuthBlueskyAuthorizeDto } from './dto/auth-bluesky-authorize.dto';
 import { AuthService } from '../auth/auth.service';
 
 @ApiTags('Auth')
@@ -38,43 +37,16 @@ export class AuthBlueskyController {
     private readonly authService: AuthService,
   ) {}
 
-  // @ApiOkResponse({
-  //   type: LoginResponseDto,
-  // })
-  // @Public()
-  // @Get('login')
-  // async login(
-  //   @Query('handle') handle: string,
-  //   @Query('tenantId') tenantId: string,
-  //   @Res() res: Response,
-  // ) {
-  //   const tenantConfig: TenantConfig =
-  //     await this.tenantConnectionService.getTenantConfig(tenantId);
-  //   try {
-  //     console.log('going to initialize client');
-  //     await this.authBlueskyService.initializeClient(tenantId);
-  //     console.log('client initialized');
-  //     console.log('going to initiate login');
-  //     const { url } = await this.authBlueskyService.initiateLogin(
-  //       handle,
-  //       tenantId,
-  //     );
-  //     console.log('login initiated:', url);
-  //     res.redirect(url.toString());
-  //   } catch (error) {
-  //     console.error('Login error:', error);
-  //     const frontendUrl = tenantConfig.frontendDomain;
-  //     res.redirect(
-  //       `${frontendUrl}/auth/error?message=${encodeURIComponent(error.message)}`,
-  //     );
-  //   }
-  // }
-
   @Public()
   @TenantPublic()
   @Get('callback')
   async callback(@Query() query: any, @Res() res: Response) {
-    const redirectUrl = await this.authBlueskyService.handleAuthCallback(query);
+    const effectiveTenantId = query.tenantId;
+
+    const redirectUrl = await this.authBlueskyService.handleAuthCallback(
+      query,
+      effectiveTenantId,
+    );
     res.redirect(redirectUrl);
   }
 
@@ -100,30 +72,34 @@ export class AuthBlueskyController {
     return this.authBlueskyService.getClient().jwks;
   }
 
-  @Post('authorize')
+  @Get('authorize')
   @Public()
   @TenantPublic()
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({ type: String })
-  async getAuthUrl(@Body() authorizeDto: AuthBlueskyAuthorizeDto) {
-    const url = await this.authBlueskyService.createAuthUrl(
-      authorizeDto.handle,
-      authorizeDto.tenantId,
-    );
+  async getAuthUrl(
+    @Query('handle') handle: string,
+    @Query('tenantId') tenantId: string,
+  ) {
+    const url = await this.authBlueskyService.createAuthUrl(handle, tenantId);
     return { url };
   }
 
-  @Post('login')
-  @Public()
-  @TenantPublic()
-  @HttpCode(HttpStatus.OK)
-  @ApiOkResponse({ type: LoginResponseDto })
-  async login(
-    @Body() loginDto: AuthBlueskyLoginDto,
-  ): Promise<LoginResponseDto> {
-    const socialData =
-      await this.authBlueskyService.getProfileByToken(loginDto);
+  // @Post('login')
+  // @Public()
+  // @TenantPublic()
+  // @HttpCode(HttpStatus.OK)
+  // @ApiOkResponse({ type: LoginResponseDto })
+  // async login(
+  //   @Body() loginDto: AuthBlueskyLoginDto,
+  // ): Promise<LoginResponseDto> {
+  //   const socialData =
+  //     await this.authBlueskyService.getProfileByToken(loginDto);
 
-    return this.authService.validateSocialLogin('bluesky', socialData);
-  }
+  //   return this.authService.validateSocialLogin(
+  //     'bluesky',
+  //     socialData,
+  //     loginDto.tenantId,
+  //   );
+  // }
 }

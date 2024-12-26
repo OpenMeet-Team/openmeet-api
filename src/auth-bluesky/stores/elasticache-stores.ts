@@ -2,26 +2,30 @@ import { ElastiCacheService } from '../../elasticache/elasticache.service';
 import type {
   NodeSavedStateStore,
   NodeSavedSessionStore,
-  NodeSavedState,
   NodeSavedSession,
 } from '@atproto/oauth-client-node';
 
 export class ElastiCacheStateStore implements NodeSavedStateStore {
   constructor(private elasticache: ElastiCacheService) {}
 
-  async set(state: string, data: NodeSavedState) {
-    await this.elasticache.set(`bluesky:state:${state}`, data, 600);
+  async set(state: string, value: any): Promise<void> {
+    const key = `auth:bluesky:state:${state}`;
+    console.log('Setting state in Redis:', { key, value });
+    await this.elasticache.set(key, value, 600); // 10 minute TTL
   }
 
-  async get(state: string): Promise<NodeSavedState | undefined> {
-    const result = await this.elasticache.get<NodeSavedState>(
-      `bluesky:state:${state}`,
-    );
-    return result ?? undefined;
+  async get(state: string): Promise<any> {
+    const key = `auth:bluesky:state:${state}`;
+    console.log('Getting state from Redis:', key);
+    const value = await this.elasticache.get(key);
+    console.log('Retrieved state value:', value);
+    return value;
   }
 
-  async del(state: string) {
-    await this.elasticache.del(`bluesky:state:${state}`);
+  async del(state: string): Promise<void> {
+    const key = `auth:bluesky:state:${state}`;
+    console.log('Deleting state from Redis:', key);
+    await this.elasticache.del(key);
   }
 }
 

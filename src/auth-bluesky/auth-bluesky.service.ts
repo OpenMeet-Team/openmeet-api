@@ -120,20 +120,39 @@ export class AuthBlueskyService {
 
   async handleCallback(params: URLSearchParams) {
     console.log('Doing callback, params', params);
-    const { session, state } = await this.client.callback(params);
-    console.log('state in handleCallback', state);
-    console.log('session in handleCallback', session);
 
-    const agent = new Agent(session);
-    if (!agent.did) throw new Error('DID not found in session');
+    // Debug: Check if we can access Redis
+    const stateKey = `auth:bluesky:state:${params.get('state')}`;
+    console.log('Checking state in Redis with key:', stateKey);
 
-    const profile = await agent.getProfile({ actor: agent.did });
-    return {
-      did: profile.data.did,
-      handle: profile.data.handle,
-      displayName: profile.data.displayName,
-      avatar: profile.data.avatar,
-    };
+    try {
+      // Check if state exists in Redis directly
+      const stateExists = await this.elasticacheService.get(stateKey);
+      console.log('State in Redis:', stateExists);
+
+      const { session, state } = await this.client.callback(params);
+      console.log('state in handleCallback', state);
+      console.log('session in handleCallback', session);
+
+      const agent = new Agent(session);
+      if (!agent.did) throw new Error('DID not found in session');
+
+      const profile = await agent.getProfile({ actor: agent.did });
+      return {
+        did: profile.data.did,
+        handle: profile.data.handle,
+        displayName: profile.data.displayName,
+        avatar: profile.data.avatar,
+      };
+    } catch (error) {
+      console.error('Callback error:', error);
+      console.error('Full error details:', {
+        message: error.message,
+        stack: error.stack,
+        params: Object.fromEntries(params.entries()),
+      });
+      throw error;
+    }
   }
 
   getClient() {
@@ -153,6 +172,11 @@ export class AuthBlueskyService {
           state: loginDto.state,
         }),
       );
+
+      // does state match?
+      // if (state !== loginDto.state) {
+      //   throw new UnprocessableEntityException('State mismatch');
+      // }
 
       // Get user profile
       const agent = new Agent(session);
@@ -176,8 +200,14 @@ export class AuthBlueskyService {
   }
 
   async authorize(handle: string) {
-    const state = crypto.randomBytes(16).toString('hex');
-    console.log('state', state);
+    const state = crypto.randomBytes(16).toString('base64url');
+    console.log('Generated state:', state);
+
+    // Debug: Store state in Redis directly
+    const stateKey = `auth:bluesky:state:${state}`;
+    await this.elasticacheService.set(stateKey, { handle }, 600); // 10 minute TTL
+    console.log('Stored state in Redis with key:', stateKey);
+
     console.log('handle', handle);
     console.log('going to authorize');
     const url = await this.client.authorize(handle, { state });
@@ -206,16 +236,27 @@ export class AuthBlueskyService {
     }
 
     console.log('going to authorize in initiateLogin');
-    const authUrl = await this.authorize(handle);
-    console.log('after authorize in initiateLogin', authUrl);
+    try {
+      const authUrl = await this.authorize(handle);
+      console.log('after authorize in initiateLogin', authUrl);
 
-    return {
-      url: authUrl,
-      tenantConfig: this.tenantConfig,
-    };
+      return {
+        url: authUrl,
+        tenantConfig: this.tenantConfig,
+      };
+    } catch (error) {
+      console.error('Authorization error:', error);
+      console.error('Full error details:', {
+        message: error.message,
+        stack: error.stack,
+        handle,
+        tenantId,
+      });
+      throw error;
+    }
   }
 
-  async handleAuthCallback(query: any): Promise<string> {
+  async handleAuthCallback(query: any, tenantId?: string): Promise<string> {
     const profile = await this.handleCallback(new URLSearchParams(query));
 
     // Use the common auth service to create/update user and generate token
@@ -227,6 +268,7 @@ export class AuthBlueskyService {
         firstName: profile.displayName || profile.handle,
         lastName: '',
       },
+      tenantId,
     );
 
     // Redirect to frontend with token

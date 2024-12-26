@@ -39,10 +39,13 @@ export class UserService {
     private readonly fileService: FilesS3PresignedService,
   ) {}
 
-  async getTenantSpecificRepository() {
-    const tenantId = this.request.tenantId;
+  async getTenantSpecificRepository(tenantId?: string) {
+    const effectiveTenantId = tenantId || this.request?.tenantId;
+    if (!effectiveTenantId) {
+      throw new Error('Tenant ID is required');
+    }
     const dataSource =
-      await this.tenantConnectionService.getTenantConnection(tenantId);
+      await this.tenantConnectionService.getTenantConnection(effectiveTenantId);
     this.usersRepository = dataSource.getRepository(UserEntity);
     this.userPermissionRepository =
       dataSource.getRepository(UserPermissionEntity);
@@ -58,8 +61,15 @@ export class UserService {
     return userPermissions;
   }
 
-  async create(createProfileDto: CreateUserDto): Promise<User> {
-    await this.getTenantSpecificRepository();
+  async create(
+    createProfileDto: CreateUserDto,
+    tenantId?: string,
+  ): Promise<User> {
+    const effectiveTenantId = tenantId || this.request?.tenantId;
+    if (!effectiveTenantId) {
+      throw new Error('Tenant ID is required');
+    }
+    await this.getTenantSpecificRepository(effectiveTenantId);
     let subCategoriesEntities: any = [];
     const subCategoriesIds = createProfileDto.subCategories;
     if (subCategoriesIds && subCategoriesIds.length > 0) {
@@ -77,7 +87,7 @@ export class UserService {
       );
     }
 
-    const role = await this.roleService.findByName(RoleEnum.User);
+    const role = await this.roleService.findByName(RoleEnum.User, tenantId);
     if (!role) {
       throw new Error(`Role not found: ${RoleEnum.User}`);
     }
@@ -253,8 +263,11 @@ export class UserService {
     return user;
   }
 
-  async findById(id: User['id']): Promise<NullableType<UserEntity>> {
-    await this.getTenantSpecificRepository();
+  async findById(
+    id: User['id'],
+    tenantId?: string,
+  ): Promise<NullableType<UserEntity>> {
+    await this.getTenantSpecificRepository(tenantId);
 
     return this.usersRepository.findOne({
       where: { id },
@@ -279,10 +292,13 @@ export class UserService {
     });
   }
 
-  async findByEmail(email: User['email']): Promise<NullableType<UserEntity>> {
+  async findByEmail(
+    email: User['email'],
+    tenantId?: string,
+  ): Promise<NullableType<UserEntity>> {
     if (!email) return null;
 
-    await this.getTenantSpecificRepository();
+    await this.getTenantSpecificRepository(tenantId);
     return this.usersRepository.findOne({
       where: { email },
     });
@@ -294,10 +310,12 @@ export class UserService {
   }: {
     socialId: User['socialId'];
     provider: User['provider'];
-  }): Promise<NullableType<User>> {
+  },
+    tenantId?: string,
+  ): Promise<NullableType<User>> {
     if (!socialId || !provider) return null;
 
-    await this.getTenantSpecificRepository();
+    await this.getTenantSpecificRepository(tenantId);
 
     return this.usersRepository.findOne({
       where: { socialId, provider },
@@ -329,8 +347,12 @@ export class UserService {
     return this.usersRepository.save(user as UserEntity);
   }
 
-  async update(id: User['id'], payload: any): Promise<User | null> {
-    await this.getTenantSpecificRepository();
+  async update(
+    id: User['id'],
+    payload: any,
+    tenantId?: string,
+  ): Promise<User | null> {
+    await this.getTenantSpecificRepository(tenantId);
 
     const clonedPayload = { ...payload };
 
