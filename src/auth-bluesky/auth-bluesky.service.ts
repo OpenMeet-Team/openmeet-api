@@ -271,8 +271,15 @@ export class AuthBlueskyService {
       tenantId,
     );
 
-    // Redirect to frontend with token
-    return `${this.tenantConfig.frontendDomain}/?token=${loginResponse.token}`;
+    // Redirect to frontend with full login response
+    const params = new URLSearchParams({
+      token: loginResponse.token,
+      refreshToken: loginResponse.refreshToken,
+      tokenExpires: loginResponse.tokenExpires.toString(),
+      user: JSON.stringify(loginResponse.user)
+    });
+
+    return `${this.tenantConfig.frontendDomain}/auth/bluesky/callback?${params.toString()}`;
   }
 
   async createAuthUrl(handle: string, tenantId: string): Promise<string> {
