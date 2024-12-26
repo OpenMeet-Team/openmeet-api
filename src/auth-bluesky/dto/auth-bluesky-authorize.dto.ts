@@ -1,15 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsString } from 'class-validator';
 
-export class AuthBlueskyLoginDto {
-  @ApiProperty({
-    example: 'abc123xyz',
-    description: 'The OAuth authorization code',
-  })
-  @IsString()
-  @IsNotEmpty()
-  code: string;
-
+export class AuthBlueskyAuthorizeDto {
   @ApiProperty({
     example: 'user.bsky.social',
     description: 'The Bluesky handle',
@@ -19,13 +11,10 @@ export class AuthBlueskyLoginDto {
   handle: string;
 
   @ApiProperty({
-    example: 'state123',
-    description: 'The OAuth state for verification',
+    example: 'tenant123',
+    description: 'The tenant ID',
   })
   @IsString()
   @IsNotEmpty()
-  state: string;
-
-  @IsString()
   tenantId: string;
 }

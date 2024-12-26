@@ -3,4 +3,5 @@ export interface SocialInterface {
   firstName?: string;
   lastName?: string;
   email?: string;
+  avatar?: string;
 }

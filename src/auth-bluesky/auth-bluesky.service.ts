@@ -1,5 +1,14 @@
-import { BadRequestException, Inject, Injectable, Scope } from '@nestjs/common';
-
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Scope,
+  UnprocessableEntityException,
+} from '@nestjs/common';
+import {
+  ElastiCacheStateStore,
+  ElastiCacheSessionStore,
+} from './stores/elasticache-stores';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { TenantConfig } from '../core/constants/constant';
@@ -13,29 +22,14 @@ import { JoseKey } from '@atproto/jwk-jose';
 import crypto from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from '../auth/auth.service';
-
-class InMemoryStore {
-  private storeData = {};
-
-  set(key: string, value: any) {
-    this.storeData[key] = value;
-  }
-
-  get(key: string) {
-    return this.storeData[key];
-  }
-
-  del(key: string) {
-    delete this.storeData[key];
-  }
-}
+import { AuthBlueskyLoginDto } from './dto/auth-bluesky-login.dto';
+import { SocialInterface } from '../social/interfaces/social.interface';
+import { ElastiCacheService } from '../elasticache/elasticache.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class AuthBlueskyService {
   private tenantConfig: TenantConfig;
   private client: NodeOAuthClient;
-  private readonly stateStore = new InMemoryStore();
-  private readonly sessionStore = new InMemoryStore();
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
@@ -43,6 +37,7 @@ export class AuthBlueskyService {
     private configService: ConfigService,
     private jwtService: JwtService,
     private authService: AuthService,
+    private elasticacheService: ElastiCacheService,
   ) {}
 
   public async initializeClient(tenantId: string) {
@@ -81,8 +76,8 @@ export class AuthBlueskyService {
         jwks_uri: `${baseUrl}/api/v1/auth/bluesky/jwks.json?tenantId=${tenantId}`,
       },
       keyset,
-      stateStore: this.stateStore,
-      sessionStore: this.sessionStore,
+      stateStore: new ElastiCacheStateStore(this.elasticacheService),
+      sessionStore: new ElastiCacheSessionStore(this.elasticacheService),
     };
     console.log('clientConfig', clientConfig);
     this.client = new NodeOAuthClient(clientConfig);
@@ -124,7 +119,11 @@ export class AuthBlueskyService {
   }
 
   async handleCallback(params: URLSearchParams) {
-    const { session } = await this.client.callback(params);
+    console.log('Doing callback, params', params);
+    const { session, state } = await this.client.callback(params);
+    console.log('state in handleCallback', state);
+    console.log('session in handleCallback', session);
+
     const agent = new Agent(session);
     if (!agent.did) throw new Error('DID not found in session');
 
@@ -141,11 +140,49 @@ export class AuthBlueskyService {
     return this.client;
   }
 
+  async getProfileByToken(
+    loginDto: AuthBlueskyLoginDto,
+  ): Promise<SocialInterface> {
+    try {
+      const client = await this.initializeClient(loginDto.tenantId);
+
+      // Exchange code for session
+      const { session, state } = await client.callback(
+        new URLSearchParams({
+          code: loginDto.code,
+          state: loginDto.state,
+        }),
+      );
+
+      // Get user profile
+      const agent = new Agent(session);
+      if (!agent.did) throw new Error('DID not found in session');
+      const profile = await agent.getProfile({ actor: agent.did });
+
+      if (!profile.data) {
+        throw new UnprocessableEntityException('Invalid profile data');
+      }
+
+      return {
+        id: profile.data.did,
+        email: `${profile.data.handle}@bsky.social`,
+        firstName: profile.data.displayName || profile.data.handle,
+        lastName: '',
+        avatar: profile.data.avatar,
+      };
+    } catch (error) {
+      throw new UnprocessableEntityException(error.message);
+    }
+  }
+
   async authorize(handle: string) {
     const state = crypto.randomBytes(16).toString('hex');
-
+    console.log('state', state);
+    console.log('handle', handle);
+    console.log('going to authorize');
     const url = await this.client.authorize(handle, { state });
-    console.log('url', url);
+    console.log('after authorize url', url);
+
     return url;
   }
 
@@ -168,9 +205,9 @@ export class AuthBlueskyService {
       throw new Error('Failed to initialize Bluesky OAuth client');
     }
 
-    console.log('going to authorize');
+    console.log('going to authorize in initiateLogin');
     const authUrl = await this.authorize(handle);
-    console.log('authUrl', authUrl);
+    console.log('after authorize in initiateLogin', authUrl);
 
     return {
       url: authUrl,
@@ -194,5 +231,20 @@ export class AuthBlueskyService {
 
     // Redirect to frontend with token
     return `${this.tenantConfig.frontendDomain}/?token=${loginResponse.token}`;
+  }
+
+  async createAuthUrl(handle: string, tenantId: string): Promise<string> {
+    await this.initializeClient(tenantId);
+
+    const url = await this.client.authorize(handle, {
+      // scope: 'atproto transition:generic',
+      state: crypto.randomBytes(16).toString('base64url'),
+    });
+
+    if (!url) {
+      throw new Error(`Failed to create authorization URL ${url}`);
+    }
+
+    return url.toString();
   }
 }

@@ -49,10 +49,10 @@ services:
 
   # Uncomment to use redis
   redis:
-    image: redis:6.2
+    image: redis:7-alpine
     container_name: openmeet_redis
     ports:
-      - "6379:6379"
+      - "39889:6379"
     restart: always
     networks:
       - api-network
