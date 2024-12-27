@@ -257,6 +257,10 @@ export class AuthBlueskyService {
   }
 
   async handleAuthCallback(query: any, tenantId?: string): Promise<string> {
+    if (!tenantId) {
+      throw new BadRequestException('Tenant ID is required');
+    }
+    await this.initializeClient(tenantId);
     const profile = await this.handleCallback(new URLSearchParams(query));
 
     // Use the common auth service to create/update user and generate token
