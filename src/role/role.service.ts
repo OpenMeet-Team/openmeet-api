@@ -13,15 +13,23 @@ export class RoleService {
     private readonly tenantConnectionService: TenantConnectionService,
   ) {}
 
-  async getTenantSpecificEventRepository() {
-    const tenantId = this.request.tenantId;
+  private async getTenantSpecificRepository(tenantId?: string) {
+    // Use provided tenantId or fall back to request context
+    const effectiveTenantId = tenantId || this.request?.tenantId;
+
+    if (!effectiveTenantId) {
+      throw new Error(
+        'Tenant ID is required (either from request or parameter)',
+      );
+    }
+
     const dataSource =
-      await this.tenantConnectionService.getTenantConnection(tenantId);
+      await this.tenantConnectionService.getTenantConnection(effectiveTenantId);
     this.roleRepository = dataSource.getRepository(RoleEntity);
   }
 
-  async findByName(name: RoleEnum) {
-    await this.getTenantSpecificEventRepository();
+  async findByName(name: RoleEnum, tenantId?: string) {
+    await this.getTenantSpecificRepository(tenantId);
     const role = await this.roleRepository.findOne({ where: { name } });
     return role;
   }

@@ -49,6 +49,7 @@ import { GroupMailModule } from './group-mail/group-mail.module';
 import { EventMailModule } from './event-mail/event-mail.module';
 import { ChatMailModule } from './chat-mail/chat-mail.module';
 import { JsonLogger } from './logger/json.logger';
+import { AuthBlueskyModule } from './auth-bluesky/auth-bluesky.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -124,6 +125,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     GroupMailModule,
     EventMailModule,
     ChatMailModule,
+    AuthBlueskyModule,
   ],
   providers: [
     TenantConnectionService,

@@ -3,8 +3,8 @@ import { ChatController } from './chat.controller';
 import { ChatService } from './chat.service';
 import { UserModule } from '../user/user.module';
 import { ZulipService } from '../zulip/zulip.service';
-import { TenantModule } from 'src/tenant/tenant.module';
-import { ChatMailModule } from 'src/chat-mail/chat-mail.module';
+import { TenantModule } from '../tenant/tenant.module';
+import { ChatMailModule } from '../chat-mail/chat-mail.module';
 
 @Module({
   imports: [UserModule, TenantModule, ChatMailModule],

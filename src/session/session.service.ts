@@ -17,10 +17,13 @@ export class SessionService {
     private readonly tenantConnectionService: TenantConnectionService,
   ) {}
 
-  async getTenantSpecificRepository() {
-    const tenantId = this.request.tenantId;
+  async getTenantSpecificRepository(tenantId?: string) {
+    const effectiveTenantId = tenantId || this.request?.tenantId;
+    if (!effectiveTenantId) {
+      throw new Error('Tenant ID is required');
+    }
     const dataSource =
-      await this.tenantConnectionService.getTenantConnection(tenantId);
+      await this.tenantConnectionService.getTenantConnection(effectiveTenantId);
     this.sessionRepository = dataSource.getRepository(SessionEntity);
   }
 
@@ -34,8 +37,9 @@ export class SessionService {
 
   async create(
     data: Omit<Session, 'id' | 'createdAt' | 'updatedAt' | 'deletedAt'>,
+    tenantId?: string,
   ): Promise<Session> {
-    await this.getTenantSpecificRepository();
+    await this.getTenantSpecificRepository(tenantId);
 
     // Create a new session entity from the provided data
     const newSessionEntity = this.sessionRepository.create(

@@ -51,9 +51,6 @@ export class TenantConnectionService implements OnModuleInit {
   }
 
   getTenantConfig(tenantId: string): TenantConfig {
-    if (!tenantId) {
-      throw new Error('Tenant ID is required');
-    }
     return getTenantConfig(tenantId);
   }
 }

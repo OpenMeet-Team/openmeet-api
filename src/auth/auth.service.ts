@@ -121,27 +121,33 @@ export class AuthService {
   async validateSocialLogin(
     authProvider: string,
     socialData: SocialInterface,
+    tenantId?: string,
   ): Promise<LoginResponseDto> {
+    console.log('validateSocialLogin', authProvider, socialData, tenantId);
+
     let user: NullableType<User> = null;
     const socialEmail = socialData.email?.toLowerCase();
     let userByEmail: NullableType<User> = null;
 
     if (socialEmail) {
-      userByEmail = await this.userService.findByEmail(socialEmail);
+      userByEmail = await this.userService.findByEmail(socialEmail, tenantId);
     }
 
     if (socialData.id) {
-      user = await this.userService.findBySocialIdAndProvider({
-        socialId: socialData.id,
-        provider: authProvider,
-      });
+      user = await this.userService.findBySocialIdAndProvider(
+        {
+          socialId: socialData.id,
+          provider: authProvider,
+        },
+        tenantId,
+      );
     }
 
     if (user) {
       if (socialEmail && !userByEmail) {
         user.email = socialEmail;
       }
-      await this.userService.update(user.id, user);
+      await this.userService.update(user.id, user, tenantId);
     } else if (userByEmail) {
       user = userByEmail;
     } else if (socialData.id) {
@@ -152,22 +158,25 @@ export class AuthService {
         id: StatusEnum.active,
       };
 
-      const role = await this.roleService.findByName(RoleEnum.User);
+      const role = await this.roleService.findByName(RoleEnum.User, tenantId);
       if (!role) {
         throw new Error(`Role not found: ${RoleEnum.User}`);
       }
 
-      user = await this.userService.create({
-        email: socialEmail ?? null,
-        firstName: socialData.firstName ?? null,
-        lastName: socialData.lastName ?? null,
-        socialId: socialData.id,
-        provider: authProvider,
-        role: role.id,
-        status,
-      });
+      user = await this.userService.create(
+        {
+          email: socialEmail ?? null,
+          firstName: socialData.firstName ?? null,
+          lastName: socialData.lastName ?? null,
+          socialId: socialData.id,
+          provider: authProvider,
+          role: role.id,
+          status: status,
+        },
+        tenantId,
+      );
 
-      user = await this.userService.findById(user.id);
+      user = await this.userService.findById(user.id, tenantId);
     }
 
     if (!user) {
@@ -187,7 +196,7 @@ export class AuthService {
     const session = await this.sessionService.create({
       user,
       hash,
-    });
+    }, tenantId);
 
     const {
       token: jwtToken,
@@ -704,5 +713,21 @@ export class AuthService {
     if (!group) return null;
 
     return this.groupService.getGroupMembers(group.id);
+  }
+
+  async loginWithBluesky(handle: string) {
+    const response = await fetch(
+      `${process.env.APP_API_URL}/auth-bluesky/?handle=${handle}`,
+    );
+    const data = await response.json();
+    return data.url;
+  }
+
+  async handleBlueskyCallback(params: URLSearchParams) {
+    const response = await fetch(
+      `${process.env.APP_API_URL}/auth-bluesky/callback?${params.toString()}`,
+    );
+    const data = await response.json();
+    return data;
   }
 }

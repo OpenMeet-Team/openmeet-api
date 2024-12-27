@@ -15,7 +15,7 @@ import { ZulipService } from '../zulip/zulip.service';
 import { EventRoleService } from '../event-role/event-role.service';
 import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
-import { EventMailModule } from 'src/event-mail/event-mail.module';
+import { EventMailModule } from '../event-mail/event-mail.module';
 import { JsonLogger } from '../logger/json.logger';
 
 @Module({
