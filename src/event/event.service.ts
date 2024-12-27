@@ -271,14 +271,14 @@ export class EventService {
     // }
 
     if (fromDate && toDate) {
-      eventQuery.andWhere('event.createdAt BETWEEN :fromDate AND :toDate', {
+      eventQuery.andWhere('event.startDate BETWEEN :fromDate AND :toDate', {
         fromDate,
         toDate,
       });
     } else if (fromDate) {
-      eventQuery.andWhere('event.createdAt >= :fromDate', { fromDate });
+      eventQuery.andWhere('event.startDate >= :fromDate', { fromDate });
     } else if (toDate) {
-      eventQuery.andWhere('event.createdAt <= :toDate', { toDate });
+      eventQuery.andWhere('event.startDate <= :toDate', { toDate });
     }
 
     if (categories && categories.length > 0) {
