@@ -303,9 +303,6 @@ export class CategorySeedService {
             type: subcategoryData.type,
             category: existingCategory,
           });
-
-          console.log('subcategory', subcategory);
-
           await this.subCategoryRepository.save(subcategory);
         }
       }
