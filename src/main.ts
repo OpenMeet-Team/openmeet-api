@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import {
   ClassSerializerInterceptor,
+  ConsoleLogger,
   ValidationPipe,
   VersioningType,
 } from '@nestjs/common';
@@ -16,9 +17,30 @@ import { AggregateByTenantContextIdStrategy } from './strategy/tenant.strategy';
 import { TenantGuard } from './tenant/tenant.guard';
 import { RequestCounterInterceptor } from './interceptors/request-counter.interceptor';
 import { getBuildInfo } from './utils/version';
+import { SimpleLogger } from './logger/simple.logger';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { cors: true });
+  const app = await NestFactory.create(AppModule, {
+    cors: true,
+    bufferLogs: true,
+  });
+
+  // Choose logger based on environment
+  const logger =
+    process.env.NODE_ENV === 'production'
+      ? new SimpleLogger() // Use our simple logger in production
+      : new ConsoleLogger(); // Use built-in logger in development
+
+  // Set log levels
+  logger.setLogLevels(
+    process.env.NODE_ENV === 'production'
+      ? ['error', 'warn', 'log']
+      : ['error', 'warn', 'log', 'debug', 'verbose'],
+  );
+
+  // Set the logger as the global logger
+  app.useLogger(logger);
+
   ContextIdFactory.apply(new AggregateByTenantContextIdStrategy());
   useContainer(app.select(AppModule), { fallbackOnErrors: true });
   const configService = app.get(ConfigService<AllConfigType>);

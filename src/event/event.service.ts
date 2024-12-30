@@ -6,6 +6,7 @@ import {
   UnprocessableEntityException,
   HttpStatus,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { MoreThan, Repository } from 'typeorm';
 import { CreateEventDto } from './dto/create-event.dto';
@@ -42,9 +43,13 @@ import { HomeQuery } from '../home/dto/home-query.dto';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { Brackets } from 'typeorm';
 import { EventMailService } from '../event-mail/event-mail.service';
+import { AuditLoggerService } from '../logger/audit-logger.provider';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
+  private readonly auditLogger = AuditLoggerService.getInstance();
+  private readonly logger = new Logger(EventService.name);
+
   private eventRepository: Repository<EventEntity>;
   private eventAttendeesRepository: Repository<EventAttendeesEntity>;
 
@@ -62,6 +67,7 @@ export class EventService {
     private readonly eventMailService: EventMailService,
   ) {
     void this.initializeRepository();
+    this.logger.log('EventService Constructed');
   }
 
   private async initializeRepository() {
@@ -149,6 +155,9 @@ export class EventService {
       event: createdEvent,
     });
 
+    this.auditLogger.log('event created', {
+      createdEvent,
+    });
     this.eventEmitter.emit('event.created', createdEvent);
     return createdEvent;
   }
@@ -571,6 +580,10 @@ export class EventService {
       mappedDto.image = fileObject;
     }
 
+    this.auditLogger.log('event updated', {
+      event,
+      mappedDto,
+    });
     const updatedEvent = this.eventRepository.merge(event, mappedDto);
     return this.eventRepository.save(updatedEvent);
   }
@@ -586,11 +599,17 @@ export class EventService {
     // Now delete the event
     await this.eventRepository.remove(event);
     this.eventEmitter.emit('event.deleted', eventCopy);
+    this.auditLogger.log('event deleted', {
+      event,
+    });
   }
 
   async deleteEventsByGroup(groupId: number): Promise<void> {
     await this.getTenantSpecificEventRepository();
     await this.eventRepository.delete({ group: { id: groupId } });
+    this.auditLogger.log('events deleted by group', {
+      groupId,
+    });
   }
 
   async getEventsByCreator(userId: number) {
@@ -686,10 +705,14 @@ export class EventService {
 
   async editEvent(slug: string) {
     await this.getTenantSpecificEventRepository();
-    return this.eventRepository.findOne({
+    const event = await this.eventRepository.findOne({
       where: { slug },
       relations: ['group', 'categories'],
     });
+    this.auditLogger.log('event edited', {
+      event,
+    });
+    return event;
   }
 
   async cancelAttendingEvent(slug: string, userId: number) {

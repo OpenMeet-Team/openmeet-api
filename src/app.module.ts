@@ -48,6 +48,7 @@ import { GroupMailModule } from './group-mail/group-mail.module';
 import { EventMailModule } from './event-mail/event-mail.module';
 import { ChatMailModule } from './chat-mail/chat-mail.module';
 import { AuthBlueskyModule } from './auth-bluesky/auth-bluesky.module';
+import { AuditLoggerService } from './logger/audit-logger.provider';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -131,18 +132,17 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       provide: APP_GUARD,
       useClass: TenantGuard,
     },
-    // {
-    // provide: APP_GUARD,
-    // useClass: PermissionsGuard,
-    // scope: Scope.REQUEST,
-    // durable: true,
-    // },
+    {
+      provide: 'AUDIT_LOGGER',
+      useValue: AuditLoggerService.getInstance(),
+    },
     RequestCounterInterceptor,
     makeCounterProvider({
       name: 'http_requests_total',
       help: 'Total number of HTTP requests',
     }),
   ],
+  exports: ['AUDIT_LOGGER'],
 })
 export class AppModule {
   constructor(

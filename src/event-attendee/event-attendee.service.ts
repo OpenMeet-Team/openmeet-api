@@ -1,5 +1,11 @@
 import { PaginationDto } from '../utils/dto/pagination.dto';
-import { Inject, Injectable, NotFoundException, Scope } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Scope,
+} from '@nestjs/common';
 import { Repository, UpdateResult } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
@@ -14,16 +20,22 @@ import {
 } from '../core/constants/constant';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventRoleService } from '../event-role/event-role.service';
+import { AuditLoggerService } from '../logger/audit-logger.provider';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventAttendeeService {
+  private readonly auditLogger = AuditLoggerService.getInstance();
+  private readonly logger = new Logger(EventAttendeeService.name);
+
   private eventAttendeesRepository: Repository<EventAttendeesEntity>;
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly eventRoleService: EventRoleService,
-  ) {}
+  ) {
+    this.logger.log('EventAttendeeService Constructed');
+  }
 
   private async getTenantSpecificEventRepository() {
     const tenantId = this.request.tenantId;
@@ -43,7 +55,11 @@ export class EventAttendeeService {
         createEventAttendeeDto,
       );
 
-      return await this.eventAttendeesRepository.save(attendee);
+      const saved = await this.eventAttendeesRepository.save(attendee);
+      this.auditLogger.log('event attendee created', {
+        saved,
+      });
+      return saved;
     } catch (error) {
       // Handle database save errors
       throw new Error(
@@ -293,9 +309,13 @@ export class EventAttendeeService {
 
   async deleteEventAttendee(attendeeId: number) {
     await this.getTenantSpecificEventRepository();
-    return await this.eventAttendeesRepository.delete({
+    const deleted = await this.eventAttendeesRepository.delete({
       id: attendeeId,
     });
+    this.auditLogger.log('event attendee deleted', {
+      deleted,
+    });
+    return deleted;
   }
 
   async getAttendeeById(attendeeId: number) {
