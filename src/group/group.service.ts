@@ -6,6 +6,7 @@ import {
   UnprocessableEntityException,
   HttpStatus,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
@@ -45,10 +46,13 @@ import { HomeQuery } from '../home/dto/home-query.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupRoleEntity } from '../group-role/infrastructure/persistence/relational/entities/group-role.entity';
 import { GroupMailService } from '../group-mail/group-mail.service';
-import { JsonLogger } from '../logger/json.logger';
+import { AuditLoggerService } from '../logger/audit-logger.provider';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
+  private readonly auditLogger = AuditLoggerService.getInstance();
+  private readonly logger = new Logger(GroupService.name);
+
   private groupMembersRepository: Repository<GroupMemberEntity>;
   private groupRepository: Repository<GroupEntity>;
   private groupMemberPermissionsRepository: Repository<GroupUserPermissionEntity>;
@@ -67,10 +71,7 @@ export class GroupService {
     private readonly userService: UserService,
     private readonly eventEmitter: EventEmitter2,
     private readonly groupMailService: GroupMailService,
-    @Inject('Logger') private readonly auditLogger: JsonLogger,
-  ) {
-    this.auditLogger.setContext('GroupService');
-  }
+  ) {}
 
   async getTenantSpecificGroupRepository() {
     const tenantId = this.request.tenantId;
@@ -151,7 +152,7 @@ export class GroupService {
           )) || ([] as EventEntity[]);
       } catch (error) {
         recommendedEvents = [] as EventEntity[];
-        console.error('Error fetching recommended events:', error);
+        this.logger.error('Error fetching recommended events:', error);
       }
 
       const remainingEventsToFetch = maxEvents - recommendedEvents.length;
@@ -165,7 +166,7 @@ export class GroupService {
             remainingEventsToFetch,
           );
         } catch (error) {
-          console.error('Error fetching random events:', error);
+          this.logger.error('Error fetching random events:', error);
         }
 
         recommendedEvents = [...recommendedEvents, ...(randomEvents || [])];
@@ -245,6 +246,7 @@ export class GroupService {
 
     const group = this.groupRepository.create(mappedGroupDto);
     const savedGroup = await this.groupRepository.save(group);
+    this.eventEmitter.emit('group.created', savedGroup);
 
     // Get the owner role
     const ownerRole = await this.groupRoleService.findOne(GroupRole.Owner);
@@ -259,14 +261,9 @@ export class GroupService {
       groupRole: ownerRole,
     });
 
-    this.eventEmitter.emit('group.created', savedGroup);
-
-    this.auditLogger.log({
-      type: 'audit',
-      action: 'group_created',
-      group: savedGroup,
+    this.auditLogger.log('group created', {
+      savedGroup,
     });
-
     return savedGroup;
   }
 
@@ -554,6 +551,9 @@ export class GroupService {
 
     const updatedGroup = this.groupRepository.merge(group, mappedGroupDto);
     const savedGroup = await this.groupRepository.save(updatedGroup);
+    this.auditLogger.log('group updated', {
+      savedGroup,
+    });
     this.eventEmitter.emit('group.updated', savedGroup);
     return savedGroup;
   }
@@ -568,11 +568,8 @@ export class GroupService {
 
     const deletedGroup = await this.groupRepository.remove(group);
     this.eventEmitter.emit('group.deleted', deletedGroup);
-
-    this.auditLogger.log({
-      type: 'audit',
-      action: 'group_deleted',
-      group: deletedGroup,
+    this.auditLogger.log('group deleted', {
+      deletedGroup,
     });
   }
 

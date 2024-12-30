@@ -193,10 +193,13 @@ export class AuthService {
       .update(randomStringGenerator())
       .digest('hex');
 
-    const session = await this.sessionService.create({
-      user,
-      hash,
-    }, tenantId);
+    const session = await this.sessionService.create(
+      {
+        user,
+        hash,
+      },
+      tenantId,
+    );
 
     const {
       token: jwtToken,

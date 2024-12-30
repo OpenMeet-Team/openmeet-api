@@ -1,13 +1,19 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, RedisClientType } from 'redis';
 
 @Injectable()
 export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(ElastiCacheService.name);
   private redis: RedisClientType;
   private readonly MAX_RETRIES = 5;
-  private readonly RETRY_DELAY = 5000; // 5 seconds
-  private readonly CONNECTION_TIMEOUT = 10000; // 10 seconds
+  private readonly RETRY_DELAY = 5000;
+  private readonly CONNECTION_TIMEOUT = 10000;
 
   constructor(private configService: ConfigService) {}
 
@@ -51,36 +57,36 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
 
   private async connectWithRetry(attempt = 1): Promise<void> {
     try {
-      console.log(
-        `Attempting to connect to Redis [${this.configService.get('ELASTICACHE_HOST', { infer: true })}:${this.configService.get('ELASTICACHE_PORT', { infer: true })}] (attempt ${attempt}/${this.MAX_RETRIES})...`,
+      this.logger.log(
+        `Attempting to connect to Redis [${this.configService.get('ELASTICACHE_HOST', { infer: true })}:${this.configService.get('ELASTICACHE_PORT', { infer: true })}] (attempt ${attempt}/${this.MAX_RETRIES})`,
       );
 
-      // Create a new client instance for each attempt
       if (this.redis) {
         await this.redis
           .quit()
           .catch((err) =>
-            console.error('Error closing previous connection:', err),
+            this.logger.error('Error closing previous connection:', err),
           );
       }
       this.redis = this.createRedisClient();
 
-      // Set up error handler
       this.redis.on('error', (error) => {
-        console.error('Redis client error:', error);
+        this.logger.error('Redis client error:', error);
       });
 
       await this.connectWithTimeout(this.redis);
-      console.log('Redis client connected successfully');
+      this.logger.log('Redis client connected successfully');
 
-      // Test the connection
       const pingResult = await this.redis.ping();
-      console.log('Redis PING result:', pingResult);
+      this.logger.debug('Redis PING result:', pingResult);
     } catch (error) {
-      console.error(`Failed to connect to Redis (attempt ${attempt}):`, error);
+      this.logger.error(
+        `Failed to connect to Redis (attempt ${attempt}):`,
+        error.stack,
+      );
 
       if (attempt < this.MAX_RETRIES) {
-        console.log(`Retrying in ${this.RETRY_DELAY / 1000} seconds...`);
+        this.logger.log(`Retrying in ${this.RETRY_DELAY / 1000} seconds...`);
         await new Promise((resolve) => setTimeout(resolve, this.RETRY_DELAY));
         return this.connectWithRetry(attempt + 1);
       }
@@ -92,13 +98,14 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit() {
+    this.logger.log('Initializing Redis connection...');
     await this.connectWithRetry();
   }
 
   async onModuleDestroy() {
     if (this.redis) {
       await this.redis.quit();
-      console.log('Redis client disconnected');
+      this.logger.log('Redis client disconnected');
     }
   }
 

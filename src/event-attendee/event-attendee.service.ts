@@ -1,5 +1,11 @@
 import { PaginationDto } from '../utils/dto/pagination.dto';
-import { Inject, Injectable, NotFoundException, Scope } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Scope,
+} from '@nestjs/common';
 import { Repository, UpdateResult } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
@@ -14,19 +20,21 @@ import {
 } from '../core/constants/constant';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventRoleService } from '../event-role/event-role.service';
-import { JsonLogger } from '../logger/json.logger';
+import { AuditLoggerService } from '../logger/audit-logger.provider';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventAttendeeService {
+  private readonly auditLogger = AuditLoggerService.getInstance();
+  private readonly logger = new Logger(EventAttendeeService.name);
+
   private eventAttendeesRepository: Repository<EventAttendeesEntity>;
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly eventRoleService: EventRoleService,
-    @Inject('Logger') private readonly logger: JsonLogger,
   ) {
-    this.logger.setContext('EventAttendeeService');
+    this.logger.log('EventAttendeeService Constructed');
   }
 
   private async getTenantSpecificEventRepository() {
@@ -46,18 +54,11 @@ export class EventAttendeeService {
       const attendee = this.eventAttendeesRepository.create(
         createEventAttendeeDto,
       );
+
       const saved = await this.eventAttendeesRepository.save(attendee);
-
-      this.logger.log({
-        type: 'audit',
-        action: 'event_attendee_created',
-        eventId: saved.event?.id,
-        userId: saved.user?.id,
-        attendeeId: saved.id,
-        status: saved.status,
-        role: saved.role?.name,
+      this.auditLogger.log('event attendee created', {
+        saved,
       });
-
       return saved;
     } catch (error) {
       // Handle database save errors
@@ -244,16 +245,9 @@ export class EventAttendeeService {
 
   async deleteEventAttendees(eventId: number): Promise<any> {
     await this.getTenantSpecificEventRepository();
-    const deleted = await this.eventAttendeesRepository.delete({
+    return await this.eventAttendeesRepository.delete({
       event: { id: eventId },
     });
-
-    this.logger.log({
-      type: 'audit',
-      action: 'event_attendees_deleted',
-      eventId: eventId,
-    });
-    return deleted;
   }
 
   async showConfirmedEventAttendeesCount(eventId: number): Promise<number> {
@@ -315,9 +309,13 @@ export class EventAttendeeService {
 
   async deleteEventAttendee(attendeeId: number) {
     await this.getTenantSpecificEventRepository();
-    return await this.eventAttendeesRepository.delete({
+    const deleted = await this.eventAttendeesRepository.delete({
       id: attendeeId,
     });
+    this.auditLogger.log('event attendee deleted', {
+      deleted,
+    });
+    return deleted;
   }
 
   async getAttendeeById(attendeeId: number) {

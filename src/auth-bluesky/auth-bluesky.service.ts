@@ -166,7 +166,7 @@ export class AuthBlueskyService {
       const client = await this.initializeClient(loginDto.tenantId);
 
       // Exchange code for session
-      const { session, state } = await client.callback(
+      const { session } = await client.callback(
         new URLSearchParams({
           code: loginDto.code,
           state: loginDto.state,
@@ -280,7 +280,7 @@ export class AuthBlueskyService {
       token: loginResponse.token,
       refreshToken: loginResponse.refreshToken,
       tokenExpires: loginResponse.tokenExpires.toString(),
-      user: JSON.stringify(loginResponse.user)
+      user: JSON.stringify(loginResponse.user),
     });
 
     return `${this.tenantConfig.frontendDomain}/auth/bluesky/callback?${params.toString()}`;

@@ -32,7 +32,6 @@ import { TenantGuard } from './tenant/tenant.guard';
 import { CategoryModule } from './category/category.module';
 import { GroupModule } from './group/group.module';
 import { SubCategoryModule } from './sub-category/sub-category.module';
-// import { PermissionsGuard } from './shared/guard/permissions.guard';
 import { GroupMemberModule } from './group-member/group-member.module';
 import { EventAttendeeModule } from './event-attendee/event-attendee.module';
 import { HealthModule } from './health/health.module';
@@ -48,8 +47,8 @@ import { AuthGithubModule } from './auth-github/auth-github.module';
 import { GroupMailModule } from './group-mail/group-mail.module';
 import { EventMailModule } from './event-mail/event-mail.module';
 import { ChatMailModule } from './chat-mail/chat-mail.module';
-import { JsonLogger } from './logger/json.logger';
 import { AuthBlueskyModule } from './auth-bluesky/auth-bluesky.module';
+import { AuditLoggerService } from './logger/audit-logger.provider';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -134,8 +133,8 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       useClass: TenantGuard,
     },
     {
-      provide: 'Logger',
-      useClass: JsonLogger,
+      provide: 'AUDIT_LOGGER',
+      useValue: AuditLoggerService.getInstance(),
     },
     RequestCounterInterceptor,
     makeCounterProvider({
@@ -143,7 +142,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       help: 'Total number of HTTP requests',
     }),
   ],
-  exports: ['Logger'],
+  exports: ['AUDIT_LOGGER'],
 })
 export class AppModule {
   constructor(

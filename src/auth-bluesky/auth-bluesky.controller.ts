@@ -6,20 +6,16 @@ import {
   Header,
   HttpStatus,
   HttpCode,
-  Post,
-  Body,
 } from '@nestjs/common';
 import { AuthBlueskyService } from './auth-bluesky.service';
 import { Response } from 'express';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { JwtService } from '@nestjs/jwt';
-import { LoginResponseDto } from '../auth/dto/login-response.dto';
 import { TenantConfig } from '../core/constants/constant';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { Public } from '../core/decorators/public.decorator';
 import { ConfigService } from '@nestjs/config';
 import { TenantPublic } from '../tenant/tenant-public.decorator';
-import { AuthBlueskyLoginDto } from './dto/auth-bluesky-login.dto';
 import { AuthService } from '../auth/auth.service';
 
 @ApiTags('Auth')
