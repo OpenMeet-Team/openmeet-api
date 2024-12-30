@@ -152,7 +152,7 @@ export class GroupService {
           )) || ([] as EventEntity[]);
       } catch (error) {
         recommendedEvents = [] as EventEntity[];
-        console.error('Error fetching recommended events:', error);
+        this.logger.error('Error fetching recommended events:', error);
       }
 
       const remainingEventsToFetch = maxEvents - recommendedEvents.length;
@@ -166,7 +166,7 @@ export class GroupService {
             remainingEventsToFetch,
           );
         } catch (error) {
-          console.error('Error fetching random events:', error);
+          this.logger.error('Error fetching random events:', error);
         }
 
         recommendedEvents = [...recommendedEvents, ...(randomEvents || [])];

@@ -660,7 +660,9 @@ export class EventService {
       .limit(5)
       .getMany(); // TODO: later provide featured flag or configuration object
 
-    console.log('events', events);
+    this.logger.log('getHomePageFeaturedEvents', {
+      events,
+    });
     return events;
   }
 

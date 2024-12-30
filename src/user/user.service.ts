@@ -5,6 +5,7 @@ import {
   Scope,
   Inject,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { NullableType } from '../utils/types/nullable.type';
@@ -24,9 +25,13 @@ import { UserPermissionEntity } from './infrastructure/persistence/relational/en
 import { RoleService } from '../role/role.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
+import { AuditLoggerService } from '../logger/audit-logger.provider';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UserService {
+  private readonly auditLogger = AuditLoggerService.getInstance();
+  private readonly logger = new Logger(UserService.name);
+
   private usersRepository: Repository<UserEntity>;
   private userPermissionRepository: Repository<UserPermissionEntity>;
 
@@ -37,11 +42,16 @@ export class UserService {
     private readonly roleService: RoleService,
     private eventEmitter: EventEmitter2,
     private readonly fileService: FilesS3PresignedService,
-  ) {}
+  ) {
+    this.logger.log('UserService constructed');
+  }
 
   async getTenantSpecificRepository(tenantId?: string) {
     const effectiveTenantId = tenantId || this.request?.tenantId;
     if (!effectiveTenantId) {
+      this.logger.error('getTenantSpecificRepository: Tenant ID is required', {
+        effectiveTenantId,
+      });
       throw new Error('Tenant ID is required');
     }
     const dataSource =
@@ -151,6 +161,9 @@ export class UserService {
     );
     this.eventEmitter.emit('user.created', userCreated);
 
+    this.auditLogger.log('user created', {
+      userCreated,
+    });
     return userCreated;
   }
 
@@ -168,7 +181,7 @@ export class UserService {
     sortOptions?: SortUserDto[] | null;
     paginationOptions: IPaginationOptions;
   }): Promise<User[]> {
-    console.log(
+    this.logger.debug(
       'TODO: this keeps ci from passing ',
       filterOptions,
       sortOptions,
@@ -177,11 +190,6 @@ export class UserService {
     await this.getTenantSpecificRepository();
 
     return [];
-    // this.usersRepository.findManyWithPagination({
-    //   filterOptions,
-    //   sortOptions,
-    //   paginationOptions,
-    // });
   }
 
   async showProfile(slug: User['slug']): Promise<NullableType<User>> {
@@ -314,13 +322,22 @@ export class UserService {
     },
     tenantId?: string,
   ): Promise<NullableType<User>> {
+    this.logger.debug('findBySocialIdAndProvider', {
+      socialId,
+      provider,
+      tenantId,
+    });
     if (!socialId || !provider) return null;
 
     await this.getTenantSpecificRepository(tenantId);
 
-    return this.usersRepository.findOne({
+    const user = await this.usersRepository.findOne({
       where: { socialId, provider },
     });
+    this.logger.debug('findBySocialIdAndProvider result', {
+      user,
+    });
+    return user;
   }
 
   async addZulipCredentialsToUser(
@@ -448,14 +465,23 @@ export class UserService {
 
     const user = await this.findById(id);
     this.eventEmitter.emit('user.updated', user);
+    this.auditLogger.log('user updated', {
+      user,
+    });
     return user;
   }
 
   async remove(id: User['id']): Promise<void> {
     await this.usersRepository.softDelete(id);
+    this.auditLogger.log('user deleted', {
+      id,
+    });
   }
 
   async getMailServiceUserById(id: number): Promise<UserEntity> {
+    this.logger.debug('getMailServiceUserById', {
+      id,
+    });
     await this.getTenantSpecificRepository();
     const user = await this.usersRepository.findOne({
       where: { id },
@@ -470,6 +496,9 @@ export class UserService {
         },
       },
     });
+    this.logger.debug('getMailServiceUserById result', {
+      user,
+    });
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -478,10 +507,16 @@ export class UserService {
 
   async getUserBySlug(slug: User['slug']): Promise<NullableType<UserEntity>> {
     await this.getTenantSpecificRepository();
+    this.logger.debug('getUserBySlug', {
+      slug,
+    });
     const user = await this.usersRepository.findOne({ where: { slug } });
     if (!user) {
       throw new NotFoundException('User not found');
     }
+    this.logger.debug('getUserBySlug result', {
+      user,
+    });
     return user;
   }
 
