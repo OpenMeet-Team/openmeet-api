@@ -42,7 +42,6 @@ import { HomeQuery } from '../home/dto/home-query.dto';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { Brackets } from 'typeorm';
 import { EventMailService } from '../event-mail/event-mail.service';
-import { JsonLogger } from '../logger/json.logger';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -61,9 +60,7 @@ export class EventService {
     private readonly eventRoleService: EventRoleService,
     private readonly userService: UserService,
     private readonly eventMailService: EventMailService,
-    @Inject('Logger') private readonly auditLogger: JsonLogger,
   ) {
-    this.auditLogger.setContext('EventService');
     void this.initializeRepository();
   }
 
@@ -153,13 +150,6 @@ export class EventService {
     });
 
     this.eventEmitter.emit('event.created', createdEvent);
-
-    this.auditLogger.log({
-      type: 'audit',
-      action: 'event_created',
-      userId: userId.toString(),
-      createdEvent: createdEvent,
-    });
     return createdEvent;
   }
 
@@ -590,13 +580,6 @@ export class EventService {
     const event = await this.findEventBySlug(slug);
     const eventCopy = { ...event };
 
-    this.auditLogger.log({
-      type: 'audit',
-      action: 'event_deleted',
-      eventId: event.id,
-      name: event.name,
-      slug: event.slug,
-    });
     // Delete related event attendees first
     await this.eventAttendeeService.deleteEventAttendees(event.id);
 

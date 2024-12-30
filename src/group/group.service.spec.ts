@@ -44,7 +44,6 @@ import { ZulipService } from '../zulip/zulip.service';
 import { UserService } from '../user/user.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupMailService } from '../group-mail/group-mail.service';
-import { JsonLogger } from '../logger/json.logger';
 
 describe('GroupService', () => {
   let service: GroupService;
@@ -52,10 +51,6 @@ describe('GroupService', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        {
-          provide: 'Logger',
-          useClass: JsonLogger,
-        },
         GroupService,
         {
           provide: Repository,

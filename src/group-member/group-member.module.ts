@@ -5,7 +5,6 @@ import { GroupMemberEntity } from './infrastructure/persistence/relational/entit
 import { GroupMemberService } from './group-member.service';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { GroupRoleModule } from '../group-role/group-role.module';
-import { JsonLogger } from '../logger/json.logger';
 
 @Module({
   imports: [
@@ -13,14 +12,7 @@ import { JsonLogger } from '../logger/json.logger';
     GroupRoleModule,
   ],
   controllers: [],
-  providers: [
-    GroupMemberService,
-    TenantConnectionService,
-    {
-      provide: 'Logger',
-      useClass: JsonLogger,
-    },
-  ],
+  providers: [GroupMemberService, TenantConnectionService],
   exports: [GroupMemberService],
 })
 export class GroupMemberModule {}

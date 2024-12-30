@@ -14,7 +14,6 @@ import {
 } from '../core/constants/constant';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventRoleService } from '../event-role/event-role.service';
-import { JsonLogger } from '../logger/json.logger';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventAttendeeService {
@@ -24,10 +23,7 @@ export class EventAttendeeService {
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly eventRoleService: EventRoleService,
-    @Inject('Logger') private readonly logger: JsonLogger,
-  ) {
-    this.logger.setContext('EventAttendeeService');
-  }
+  ) {}
 
   private async getTenantSpecificEventRepository() {
     const tenantId = this.request.tenantId;
@@ -46,19 +42,8 @@ export class EventAttendeeService {
       const attendee = this.eventAttendeesRepository.create(
         createEventAttendeeDto,
       );
-      const saved = await this.eventAttendeesRepository.save(attendee);
 
-      this.logger.log({
-        type: 'audit',
-        action: 'event_attendee_created',
-        eventId: saved.event?.id,
-        userId: saved.user?.id,
-        attendeeId: saved.id,
-        status: saved.status,
-        role: saved.role?.name,
-      });
-
-      return saved;
+      return await this.eventAttendeesRepository.save(attendee);
     } catch (error) {
       // Handle database save errors
       throw new Error(
@@ -244,16 +229,9 @@ export class EventAttendeeService {
 
   async deleteEventAttendees(eventId: number): Promise<any> {
     await this.getTenantSpecificEventRepository();
-    const deleted = await this.eventAttendeesRepository.delete({
+    return await this.eventAttendeesRepository.delete({
       event: { id: eventId },
     });
-
-    this.logger.log({
-      type: 'audit',
-      action: 'event_attendees_deleted',
-      eventId: eventId,
-    });
-    return deleted;
   }
 
   async showConfirmedEventAttendeesCount(eventId: number): Promise<number> {

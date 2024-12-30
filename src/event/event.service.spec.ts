@@ -43,7 +43,6 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { UserService } from '../user/user.service';
 import { EventRoleService } from '../event-role/event-role.service';
 import { EventMailService } from '../event-mail/event-mail.service';
-import { JsonLogger } from '../logger/json.logger';
 
 describe('EventService', () => {
   let service: EventService;
@@ -53,10 +52,6 @@ describe('EventService', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        {
-          provide: 'Logger',
-          useClass: JsonLogger,
-        },
         EventService,
         {
           provide: EventAttendeeService,

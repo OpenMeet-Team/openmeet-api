@@ -45,7 +45,6 @@ import { HomeQuery } from '../home/dto/home-query.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupRoleEntity } from '../group-role/infrastructure/persistence/relational/entities/group-role.entity';
 import { GroupMailService } from '../group-mail/group-mail.service';
-import { JsonLogger } from '../logger/json.logger';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -67,10 +66,7 @@ export class GroupService {
     private readonly userService: UserService,
     private readonly eventEmitter: EventEmitter2,
     private readonly groupMailService: GroupMailService,
-    @Inject('Logger') private readonly auditLogger: JsonLogger,
-  ) {
-    this.auditLogger.setContext('GroupService');
-  }
+  ) {}
 
   async getTenantSpecificGroupRepository() {
     const tenantId = this.request.tenantId;
@@ -260,12 +256,6 @@ export class GroupService {
     });
 
     this.eventEmitter.emit('group.created', savedGroup);
-
-    this.auditLogger.log({
-      type: 'audit',
-      action: 'group_created',
-      group: savedGroup,
-    });
 
     return savedGroup;
   }
@@ -568,12 +558,6 @@ export class GroupService {
 
     const deletedGroup = await this.groupRepository.remove(group);
     this.eventEmitter.emit('group.deleted', deletedGroup);
-
-    this.auditLogger.log({
-      type: 'audit',
-      action: 'group_deleted',
-      group: deletedGroup,
-    });
   }
 
   async getHomePageFeaturedGroups(): Promise<GroupEntity[]> {
