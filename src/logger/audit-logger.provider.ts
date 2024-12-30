@@ -1,4 +1,6 @@
 import { Injectable, LoggerService } from '@nestjs/common';
+import { stringify } from 'safe-stable-stringify';
+
 
 @Injectable()
 export class AuditLoggerService implements LoggerService {
@@ -14,7 +16,7 @@ export class AuditLoggerService implements LoggerService {
   // take a message, and an context opbject, and an optional metadata object
   log(message: string, context?: any, metadata?: any) {
     console.log(
-      JSON.stringify({
+      stringify({
         type: 'audit',
         level: 'info',
         message,
@@ -27,7 +29,7 @@ export class AuditLoggerService implements LoggerService {
 
   error(message: string, trace?: string, context?: string, metadata?: any) {
     console.error(
-      JSON.stringify({
+      stringify({
         type: 'audit',
         level: 'error',
         message,
@@ -41,7 +43,7 @@ export class AuditLoggerService implements LoggerService {
 
   warn(message: string, context?: string, metadata?: any) {
     console.warn(
-      JSON.stringify({
+      stringify({
         type: 'audit',
         level: 'warn',
         message,
@@ -54,7 +56,7 @@ export class AuditLoggerService implements LoggerService {
 
   debug(message: string, context?: string, metadata?: any) {
     console.debug(
-      JSON.stringify({
+      stringify({
         type: 'audit',
         level: 'debug',
         message,
@@ -67,7 +69,7 @@ export class AuditLoggerService implements LoggerService {
 
   verbose(message: string, context?: string, metadata?: any) {
     console.log(
-      JSON.stringify({
+      stringify({
         type: 'audit',
         level: 'verbose',
         message,
@@ -77,9 +79,4 @@ export class AuditLoggerService implements LoggerService {
       }),
     );
   }
-}
-
-// Create a decorator for easy access
-export function AuditLog() {
-  return new AuditLoggerService();
 }
