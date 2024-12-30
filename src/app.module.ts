@@ -32,7 +32,6 @@ import { TenantGuard } from './tenant/tenant.guard';
 import { CategoryModule } from './category/category.module';
 import { GroupModule } from './group/group.module';
 import { SubCategoryModule } from './sub-category/sub-category.module';
-// import { PermissionsGuard } from './shared/guard/permissions.guard';
 import { GroupMemberModule } from './group-member/group-member.module';
 import { EventAttendeeModule } from './event-attendee/event-attendee.module';
 import { HealthModule } from './health/health.module';

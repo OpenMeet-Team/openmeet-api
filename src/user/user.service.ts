@@ -304,13 +304,14 @@ export class UserService {
     });
   }
 
-  async findBySocialIdAndProvider({
-    socialId,
-    provider,
-  }: {
-    socialId: User['socialId'];
-    provider: User['provider'];
-  },
+  async findBySocialIdAndProvider(
+    {
+      socialId,
+      provider,
+    }: {
+      socialId: User['socialId'];
+      provider: User['provider'];
+    },
     tenantId?: string,
   ): Promise<NullableType<User>> {
     if (!socialId || !provider) return null;
