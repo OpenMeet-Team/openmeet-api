@@ -15,32 +15,36 @@ export class JWTAuthGuard extends PassportAuthGuard('jwt') {
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest();
+    const hasAuthHeader = !!request.headers.authorization;
+
+    // If there's an auth token, validate it regardless of route publicity
+    if (hasAuthHeader) {
+      try {
+        const canActivate = await super.canActivate(context);
+        return canActivate as boolean;
+      } catch (error) {
+        if (error instanceof TokenExpiredError) {
+          // Clear the invalid token
+          request.headers.authorization = undefined;
+          // Let the client know to refresh the token
+          throw new UnauthorizedException('Token has expired');
+        }
+        throw error;
+      }
+    }
+
+    // If no auth token, check if route is public
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
 
-    try {
-      const canActivate = await super.canActivate(context);
-
-      // For public routes, we don't care about the authentication result
-      if (isPublic) {
-        return true;
-      }
-
-      return canActivate as boolean;
-    } catch (error) {
-      // For public routes, allow access even if auth fails
-      if (isPublic) {
-        return true;
-      }
-
-      if (error instanceof TokenExpiredError) {
-        throw new UnauthorizedException('Token has expired');
-      }
-
-      throw error;
+    if (isPublic) {
+      return true;
     }
+
+    throw new UnauthorizedException('Authentication required');
   }
 
   handleRequest<TUser = any>(
@@ -55,23 +59,19 @@ export class JWTAuthGuard extends PassportAuthGuard('jwt') {
       context.getClass(),
     ]);
 
-    // For public routes, we still want to attach the user if available
-    if (isPublic) {
-      request.user = user || null;
-      return user as TUser;
+    // If there's an error but the route is public, clear the auth header
+    if (err && isPublic) {
+      request.headers.authorization = undefined;
+      request.user = null;
+      return null as TUser;
     }
 
-    // Handle specific token errors
-    if (info instanceof TokenExpiredError) {
-      throw new UnauthorizedException('Token expired');
-    }
-
-    // For protected routes, we require valid authentication
-    if (err || !user) {
+    // For protected routes or valid tokens, proceed as normal
+    if (err || (!user && !isPublic)) {
       throw new UnauthorizedException(err?.message || 'Invalid token');
     }
 
-    request.user = user;
-    return user;
+    request.user = user || null;
+    return user as TUser;
   }
 }
