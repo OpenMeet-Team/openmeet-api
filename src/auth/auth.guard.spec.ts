@@ -22,6 +22,7 @@ describe('JWTAuthGuard', () => {
   } as ExecutionContext;
 
   beforeEach(async () => {
+    jest.clearAllMocks();
     const moduleRef = await Test.createTestingModule({
       providers: [
         JWTAuthGuard,
@@ -48,23 +49,43 @@ describe('JWTAuthGuard', () => {
     });
 
     it('should pass through authentication result for protected routes', async () => {
+      const contextWithAuth = {
+        ...mockContext,
+        switchToHttp: () => ({
+          getRequest: () => ({
+            headers: { authorization: 'Bearer token' },
+            user: null,
+          }),
+        }),
+      } as ExecutionContext;
+
       jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
+      jest
+        .spyOn(AuthGuard('jwt').prototype, 'canActivate')
+        .mockResolvedValue(true);
 
-      jest.spyOn(guard, 'canActivate').mockResolvedValue(true);
-
-      const result = await guard.canActivate(mockContext);
-
+      const result = await guard.canActivate(contextWithAuth);
       expect(result).toBe(true);
     });
 
     it('should handle token expiration for protected routes', async () => {
+      const contextWithAuth = {
+        ...mockContext,
+        switchToHttp: () => ({
+          getRequest: () => ({
+            headers: { authorization: 'Bearer expired-token' },
+            user: null,
+          }),
+        }),
+      } as ExecutionContext;
+
       jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
+      jest
+        .spyOn(AuthGuard('jwt').prototype, 'canActivate')
+        .mockRejectedValue(new TokenExpiredError('jwt expired', new Date()));
 
-      const error = new TokenExpiredError('jwt expired', new Date());
-      jest.spyOn(guard, 'canActivate').mockRejectedValue(error);
-
-      await expect(guard.canActivate(mockContext)).rejects.toThrow(
-        TokenExpiredError,
+      await expect(guard.canActivate(contextWithAuth)).rejects.toThrow(
+        UnauthorizedException,
       );
     });
 
@@ -130,12 +151,15 @@ describe('JWTAuthGuard', () => {
       } as ExecutionContext;
 
       jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(true);
-      const superCanActivateSpy = jest.spyOn(guard, 'canActivate');
+      const superCanActivateSpy = jest.spyOn(
+        AuthGuard('jwt').prototype,
+        'canActivate',
+      );
 
       const result = await guard.canActivate(contextWithoutAuth);
 
       expect(result).toBe(true);
-      expect(superCanActivateSpy).toHaveBeenCalledTimes(1); // Only called once by our test
+      expect(superCanActivateSpy).not.toHaveBeenCalled();
     });
   });
 
