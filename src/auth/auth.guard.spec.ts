@@ -2,10 +2,9 @@
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { TokenExpiredError } from '@nestjs/jwt';
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test } from '@nestjs/testing';
 import { JWTAuthGuard } from './auth.guard';
 import { AuthGuard } from '@nestjs/passport';
-import { IS_PUBLIC_KEY } from '../core/constants/constant';
 
 describe('JWTAuthGuard', () => {
   let guard: JWTAuthGuard;
@@ -69,7 +68,7 @@ describe('JWTAuthGuard', () => {
       );
     });
 
-    it('should attempt token validation when auth header exists, regardless of public route', async () => {
+    it('should attempt token validation when auth header exists, for public route', async () => {
       const contextWithAuth = {
         ...mockContext,
         switchToHttp: () => ({
@@ -80,8 +79,12 @@ describe('JWTAuthGuard', () => {
         }),
       } as ExecutionContext;
 
-      jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(true); // public route
-      const superCanActivateSpy = jest.spyOn(guard, 'canActivate').mockResolvedValue(true);
+      jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(true); // mocking public route
+
+      // Mock the parent class's canActivate
+      const superCanActivateSpy = jest
+        .spyOn(AuthGuard('jwt').prototype, 'canActivate')
+        .mockResolvedValue(true);
 
       await guard.canActivate(contextWithAuth);
 
@@ -101,14 +104,16 @@ describe('JWTAuthGuard', () => {
       } as ExecutionContext;
 
       jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(true); // public route
-      
+
       // Mock the parent class's canActivate method
-      jest.spyOn(AuthGuard('jwt').prototype, 'canActivate').mockRejectedValueOnce(
-        new TokenExpiredError('jwt expired', new Date())
-      );
+      jest
+        .spyOn(AuthGuard('jwt').prototype, 'canActivate')
+        .mockRejectedValueOnce(
+          new TokenExpiredError('jwt expired', new Date()),
+        );
 
       await expect(guard.canActivate(contextWithExpiredToken)).rejects.toThrow(
-        UnauthorizedException
+        UnauthorizedException,
       );
       expect(request.headers.authorization).toBeUndefined();
     });
@@ -178,7 +183,12 @@ describe('JWTAuthGuard', () => {
 
       jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(true);
 
-      const result = guard.handleRequest(new Error(), null, null, contextWithInvalidToken);
+      const result = guard.handleRequest(
+        new Error(),
+        null,
+        null,
+        contextWithInvalidToken,
+      );
 
       expect(result).toBeNull();
       expect(request.headers.authorization).toBeUndefined();
@@ -200,7 +210,12 @@ describe('JWTAuthGuard', () => {
 
       jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(true);
 
-      const result = guard.handleRequest(null, user, null, contextWithValidToken);
+      const result = guard.handleRequest(
+        null,
+        user,
+        null,
+        contextWithValidToken,
+      );
 
       expect(result).toBe(user);
       expect(request.headers.authorization).toBe('Bearer valid-token');

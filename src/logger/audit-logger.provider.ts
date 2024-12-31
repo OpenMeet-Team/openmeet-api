@@ -1,7 +1,6 @@
 import { Injectable, LoggerService } from '@nestjs/common';
 import { stringify } from 'safe-stable-stringify';
 
-
 @Injectable()
 export class AuditLoggerService implements LoggerService {
   private static instance: AuditLoggerService;

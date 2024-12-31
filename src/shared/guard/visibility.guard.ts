@@ -4,6 +4,7 @@ import {
   Injectable,
   ForbiddenException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { EventService } from '../../event/event.service';
 import {
@@ -12,14 +13,14 @@ import {
 } from '../../core/constants/constant';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { GroupService } from '../../group/group.service';
-import { GroupMemberService } from '../../group-member/group-member.service';
+
 @Injectable()
 export class VisibilityGuard implements CanActivate {
+  private readonly logger = new Logger(VisibilityGuard.name);
   constructor(
     private readonly eventService: EventService,
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly groupService: GroupService,
-    private readonly groupMemberService: GroupMemberService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
