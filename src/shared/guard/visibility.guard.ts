@@ -24,16 +24,11 @@ export class VisibilityGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
+
     const eventSlug = request.headers['x-event-slug'] as string;
     const groupSlug = request.headers['x-group-slug'] as string;
-    const user = request.user;
-    const token = request.headers.authorization?.split(' ')[1];
 
-    // If there's a token but no user, it means token is expired and refresh failed
-    // We should treat this as an unauthenticated request
-    if (token && !user) {
-      request.headers.authorization = undefined;
-    }
+    const user = request.user;
 
     if (eventSlug) {
       const event = await this.eventService.findEventBySlug(eventSlug);
@@ -45,22 +40,28 @@ export class VisibilityGuard implements CanActivate {
         case EventVisibility.Public:
           return true;
         case EventVisibility.Authenticated:
+          if (!user) {
+            throw new ForbiddenException(
+              'VisibilityGuard: This event is not public',
+            );
+          }
+          break;
         case EventVisibility.Private:
           if (!user) {
             throw new ForbiddenException(
               'VisibilityGuard: This event is not public',
             );
           }
-          if (event.visibility === EventVisibility.Private) {
-            const eventAttendee = await this.eventAttendeeService.findEventAttendeeByUserId(
+          // Check if user is an attendee of the private event
+          const eventAttendee =
+            await this.eventAttendeeService.findEventAttendeeByUserId(
               event.id,
               user.id,
             );
-            if (!eventAttendee) {
-              throw new ForbiddenException(
-                'VisibilityGuard: You do not have permission to view this private event',
-              );
-            }
+          if (!eventAttendee) {
+            throw new ForbiddenException(
+              'VisibilityGuard: You do not have permission to view this private event',
+            );
           }
           break;
         default:

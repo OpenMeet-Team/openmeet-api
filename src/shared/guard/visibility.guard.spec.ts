@@ -126,46 +126,6 @@ describe('VisibilityGuard', () => {
       await expect(guard.canActivate(context)).resolves.toBe(true);
       expect(eventService.findEventBySlug).toHaveBeenCalledWith('header-event');
     });
-
-    it('should clear authorization header when token exists but user is null', async () => {
-      const context = mockContext({
-        headers: {
-          'x-event-slug': 'test-event',
-          authorization: 'Bearer some-token',
-        },
-        user: null,
-      });
-
-      jest.spyOn(eventService, 'findEventBySlug').mockResolvedValue({
-        id: 1,
-        visibility: EventVisibility.Public,
-      } as unknown as EventEntity);
-
-      await guard.canActivate(context);
-      expect(
-        context.switchToHttp().getRequest().headers.authorization,
-      ).toBeUndefined();
-    });
-
-    it('should preserve authorization header when both token and user exist', async () => {
-      const context = mockContext({
-        headers: {
-          'x-event-slug': 'test-event',
-          authorization: 'Bearer valid-token',
-        },
-        user: { id: 1 },
-      });
-
-      jest.spyOn(eventService, 'findEventBySlug').mockResolvedValue({
-        id: 1,
-        visibility: EventVisibility.Public,
-      } as unknown as EventEntity);
-
-      await guard.canActivate(context);
-      expect(context.switchToHttp().getRequest().headers.authorization).toBe(
-        'Bearer valid-token',
-      );
-    });
   });
 
   describe('canActivate - Groups', () => {
