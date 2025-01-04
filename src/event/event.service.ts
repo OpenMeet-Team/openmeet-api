@@ -278,6 +278,8 @@ export class EventService {
       eventQuery.andWhere('event.startDate >= :fromDate', { fromDate });
     } else if (toDate) {
       eventQuery.andWhere('event.startDate <= :toDate', { toDate });
+    } else {
+      eventQuery.andWhere('event.startDate > :now', { now: new Date() });
     }
 
     if (categories && categories.length > 0) {
@@ -412,7 +414,10 @@ export class EventService {
   async showRandomEvents(limit: number): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
     const events = await this.eventRepository.find({
-      where: { status: EventStatus.Published },
+      where: {
+        status: EventStatus.Published,
+        startDate: MoreThan(new Date()),
+      },
       relations: ['categories'],
       order: { createdAt: 'DESC' },
       take: limit,
@@ -430,7 +435,10 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
 
     const event = await this.eventRepository.findOne({
-      where: { slug },
+      where: {
+        slug,
+        startDate: MoreThan(new Date()),
+      },
       relations: ['categories'],
     });
 
@@ -454,6 +462,7 @@ export class EventService {
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.categories', 'categories')
       .where('event.status = :status', { status: EventStatus.Published })
+      .andWhere('event.startDate > :now', { now: new Date() })
       .orderBy('RANDOM()')
       .limit(limit);
 
@@ -655,6 +664,7 @@ export class EventService {
       .where({
         visibility: EventVisibility.Public,
         status: EventStatus.Published,
+        startDate: MoreThan(new Date()),
       })
       .orderBy('RANDOM()')
       .limit(5)
