@@ -200,35 +200,38 @@ export class EventService {
       )
       .where('event.status = :status', { status: EventStatus.Published });
 
+    // Visibility filters based on authentication status
     if (!user) {
+      // Unauthenticated users can only see public events
       eventQuery.andWhere('event.visibility = :visibility', {
         visibility: EventVisibility.Public,
       });
     } else if (user.roles?.includes('admin')) {
-      // For admin users, we don't need any visibility filters
-      // Remove any visibility conditions to show all events
+      // Admins can see all events
     } else {
       // Get all event IDs this user is attending
-      const attendedEventIds =
-        await this.eventAttendeeService.findEventIdsByUserId(user.id);
+      const attendedEventIds = await this.eventAttendeeService.findEventIdsByUserId(user.id);
 
       eventQuery.andWhere(
         new Brackets((qb) => {
+          // Public events
           qb.where('event.visibility = :publicVisibility', {
             publicVisibility: EventVisibility.Public,
-          })
-            .orWhere('event.visibility = :authVisibility', {
-              authVisibility: EventVisibility.Authenticated,
-            })
-            .orWhere(
+          });
+          // Authenticated events (only for logged-in users)
+          qb.orWhere('event.visibility = :authVisibility', {
+            authVisibility: EventVisibility.Authenticated,
+          });
+          // Private events only if attending
+          if (attendedEventIds.length > 0) {
+            qb.orWhere(
               'event.visibility = :privateVisibility AND event.id IN (:...attendedEventIds)',
               {
                 privateVisibility: EventVisibility.Private,
-                attendedEventIds: attendedEventIds.length
-                  ? attendedEventIds
-                  : [0],
+                attendedEventIds,
               },
             );
+          }
         }),
       );
     }
@@ -278,6 +281,8 @@ export class EventService {
       eventQuery.andWhere('event.startDate >= :fromDate', { fromDate });
     } else if (toDate) {
       eventQuery.andWhere('event.startDate <= :toDate', { toDate });
+    } else {
+      eventQuery.andWhere('event.startDate > :now', { now: new Date() });
     }
 
     if (categories && categories.length > 0) {
@@ -412,7 +417,10 @@ export class EventService {
   async showRandomEvents(limit: number): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
     const events = await this.eventRepository.find({
-      where: { status: EventStatus.Published },
+      where: {
+        status: EventStatus.Published,
+        startDate: MoreThan(new Date()),
+      },
       relations: ['categories'],
       order: { createdAt: 'DESC' },
       take: limit,
@@ -430,7 +438,10 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
 
     const event = await this.eventRepository.findOne({
-      where: { slug },
+      where: {
+        slug,
+        startDate: MoreThan(new Date()),
+      },
       relations: ['categories'],
     });
 
@@ -454,6 +465,7 @@ export class EventService {
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.categories', 'categories')
       .where('event.status = :status', { status: EventStatus.Published })
+      .andWhere('event.startDate > :now', { now: new Date() })
       .orderBy('RANDOM()')
       .limit(limit);
 
@@ -655,6 +667,7 @@ export class EventService {
       .where({
         visibility: EventVisibility.Public,
         status: EventStatus.Published,
+        startDate: MoreThan(new Date()),
       })
       .orderBy('RANDOM()')
       .limit(5)

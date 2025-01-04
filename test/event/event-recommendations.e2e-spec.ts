@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
-import { EventStatus, EventType } from '../../src/core/constants/constant';
+import { EventStatus, EventType, EventVisibility } from '../../src/core/constants/constant';
 import {
   loginAsTester,
   loginAsAdmin,
@@ -40,12 +40,16 @@ describe('EventController Recommendations (e2e)', () => {
     });
 
     // Create a main event
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 7); // 7 days in the future
+
     testEvent = await createEvent(TESTING_APP_URL, token, {
       name: 'Main Event',
       description: 'Main event description',
       status: EventStatus.Published,
+      visibility: EventVisibility.Public,
       categories: [category1.id, category2.id],
-      startDate: new Date().toISOString(),
+      startDate: futureDate.toISOString(),
       maxAttendees: 100,
       type: EventType.Hybrid,
     });
@@ -55,7 +59,8 @@ describe('EventController Recommendations (e2e)', () => {
       name: 'Recommended Event 1',
       description: 'Recommended event 1 description',
       status: EventStatus.Published,
-      startDate: new Date().toISOString(),
+      visibility: EventVisibility.Authenticated,
+      startDate: new Date(futureDate.getTime() + 24 * 60 * 60 * 1000).toISOString(), // +1 day
       categories: [category1.id],
       type: EventType.Hybrid,
       maxAttendees: 100,
@@ -65,7 +70,8 @@ describe('EventController Recommendations (e2e)', () => {
       name: 'Recommended Event 2',
       description: 'Recommended event 2 description',
       status: EventStatus.Published,
-      startDate: new Date().toISOString(),
+      visibility: EventVisibility.Private,
+      startDate: new Date(futureDate.getTime() + 48 * 60 * 60 * 1000).toISOString(), // +2 days
       categories: [category2.id],
       type: 'hybrid',
       maxAttendees: 100,
@@ -75,8 +81,9 @@ describe('EventController Recommendations (e2e)', () => {
       name: 'Unrelated Event',
       description: 'Unrelated event description',
       status: EventStatus.Published,
+      visibility: EventVisibility.Public,
       categories: [categoryUnrelated.id],
-      startDate: new Date().toISOString(),
+      startDate: new Date(futureDate.getTime() + 72 * 60 * 60 * 1000).toISOString(), // +3 days
       type: 'hybrid',
       maxAttendees: 100,
     });
