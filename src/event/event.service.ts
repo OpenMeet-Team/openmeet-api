@@ -464,8 +464,12 @@ export class EventService {
     const query = this.eventRepository
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.categories', 'categories')
+      .leftJoinAndSelect('event.image', 'image')
       .where('event.status = :status', { status: EventStatus.Published })
       .andWhere('event.startDate > :now', { now: new Date() })
+      .andWhere('event.visibility = :visibility', {
+        visibility: EventVisibility.Public,
+      })
       .orderBy('RANDOM()')
       .limit(limit);
 
