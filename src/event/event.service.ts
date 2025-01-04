@@ -200,35 +200,38 @@ export class EventService {
       )
       .where('event.status = :status', { status: EventStatus.Published });
 
+    // Visibility filters based on authentication status
     if (!user) {
+      // Unauthenticated users can only see public events
       eventQuery.andWhere('event.visibility = :visibility', {
         visibility: EventVisibility.Public,
       });
     } else if (user.roles?.includes('admin')) {
-      // For admin users, we don't need any visibility filters
-      // Remove any visibility conditions to show all events
+      // Admins can see all events
     } else {
       // Get all event IDs this user is attending
-      const attendedEventIds =
-        await this.eventAttendeeService.findEventIdsByUserId(user.id);
+      const attendedEventIds = await this.eventAttendeeService.findEventIdsByUserId(user.id);
 
       eventQuery.andWhere(
         new Brackets((qb) => {
+          // Public events
           qb.where('event.visibility = :publicVisibility', {
             publicVisibility: EventVisibility.Public,
-          })
-            .orWhere('event.visibility = :authVisibility', {
-              authVisibility: EventVisibility.Authenticated,
-            })
-            .orWhere(
+          });
+          // Authenticated events (only for logged-in users)
+          qb.orWhere('event.visibility = :authVisibility', {
+            authVisibility: EventVisibility.Authenticated,
+          });
+          // Private events only if attending
+          if (attendedEventIds.length > 0) {
+            qb.orWhere(
               'event.visibility = :privateVisibility AND event.id IN (:...attendedEventIds)',
               {
                 privateVisibility: EventVisibility.Private,
-                attendedEventIds: attendedEventIds.length
-                  ? attendedEventIds
-                  : [0],
+                attendedEventIds,
               },
             );
+          }
         }),
       );
     }
