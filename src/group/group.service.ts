@@ -136,7 +136,6 @@ export class GroupService {
       relations: ['categories'],
     });
 
-    this.logger.debug('showGroupRecommendedEvents group', group?.slug);
     if (!group) {
       return await this.eventService.showRandomEvents(4);
     } else {
@@ -155,10 +154,6 @@ export class GroupService {
         recommendedEvents = [] as EventEntity[];
         this.logger.error('Error fetching recommended events:', error);
       }
-      this.logger.debug(
-        'showGroupRecommendedEvents after findRecommendedEventsForGroup',
-        recommendedEvents.length,
-      );
       const remainingEventsToFetch = maxEvents - recommendedEvents.length;
 
       if (remainingEventsToFetch > 0) {
@@ -173,16 +168,7 @@ export class GroupService {
           this.logger.error('Error fetching random events:', error);
         }
 
-        this.logger.debug(
-          'showGroupRecommendedEvents after findRandomEventsForGroup',
-          randomEvents.length,
-        );
-
         recommendedEvents = [...recommendedEvents, ...(randomEvents || [])];
-        this.logger.debug(
-          'showGroupRecommendedEvents after deduplication',
-          recommendedEvents.length,
-        );
         return recommendedEvents;
       }
 
