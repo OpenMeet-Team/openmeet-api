@@ -464,8 +464,12 @@ export class EventService {
     const query = this.eventRepository
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.categories', 'categories')
+      .leftJoinAndSelect('event.image', 'image')
       .where('event.status = :status', { status: EventStatus.Published })
       .andWhere('event.startDate > :now', { now: new Date() })
+      .andWhere('event.visibility = :visibility', {
+        visibility: EventVisibility.Public,
+      })
       .orderBy('RANDOM()')
       .limit(limit);
 
@@ -499,8 +503,13 @@ export class EventService {
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.group', 'group')
       .leftJoinAndSelect('event.categories', 'categories')
+      .leftJoinAndSelect('event.image', 'image')
       .where('event.status = :status', { status: EventStatus.Published })
+      .andWhere('event.visibility = :visibility', {
+        visibility: EventVisibility.Public,
+      })
       .andWhere('event.group.id != :groupId', { groupId })
+      .andWhere('event.startDate > :now', { now: new Date() })
       .orderBy('RANDOM()')
       .limit(maxEvents);
 
@@ -510,6 +519,8 @@ export class EventService {
       });
     }
     const events = await query.getMany();
+
+    this.logger.verbose('findRecommendedEventsForGroup events', events);
 
     return (await Promise.all(
       events.map(async (event) => ({
@@ -533,7 +544,12 @@ export class EventService {
       .createQueryBuilder('event')
       .leftJoin('event.group', 'group')
       .leftJoin('event.categories', 'categories')
+      .leftJoinAndSelect('event.image', 'image')
       .where('event.status = :status', { status: EventStatus.Published })
+      .andWhere('event.visibility = :visibility', {
+        visibility: EventVisibility.Public,
+      })
+      .andWhere('event.startDate > :now', { now: new Date() })
       .andWhere('(group.id != :groupId OR group.id IS NULL)', { groupId })
       .orderBy('RANDOM()')
       .limit(maxEvents)
