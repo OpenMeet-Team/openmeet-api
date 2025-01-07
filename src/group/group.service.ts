@@ -137,49 +137,36 @@ export class GroupService {
     });
 
     if (!group) {
-      return await this.eventService.showRandomEvents(4);
-    } else {
-      const categoryIds = group.categories?.map((c) => c && c.id);
-
-      let recommendedEvents: EventEntity[] = [];
-      try {
-        recommendedEvents =
-          (await this.eventService.findRecommendedEventsForGroup(
-            group.id,
-            categoryIds,
-            minEvents,
-            maxEvents,
-          )) || ([] as EventEntity[]);
-      } catch (error) {
-        recommendedEvents = [] as EventEntity[];
-        this.logger.error('Error fetching recommended events:', error);
-      }
-
-      const remainingEventsToFetch = maxEvents - recommendedEvents.length;
-
-      if (remainingEventsToFetch > 0) {
-        let randomEvents: EventEntity[] = [];
-        try {
-          randomEvents = await this.eventService.findRandomEventsForGroup(
-            group.id,
-            remainingEventsToFetch,
-            remainingEventsToFetch,
-          );
-        } catch (error) {
-          this.logger.error('Error fetching random events:', error);
-        }
-
-        recommendedEvents = [...recommendedEvents, ...(randomEvents || [])];
-      }
-
-      // Deduplicate events
-      const uniqueEvents = recommendedEvents.filter(
-        (event, index, self) =>
-          index === self.findIndex((t) => t.id === event.id),
-      );
-
-      return uniqueEvents;
+      return this.eventService.showRandomEvents(4);
     }
+
+    const categoryIds = group.categories?.map(c => c?.id);
+    let events: EventEntity[] = [];
+
+    try {
+      // Get recommended events
+      events = await this.eventService.findRecommendedEventsForGroup(
+        group.id,
+        categoryIds,
+        minEvents,
+        maxEvents,
+      ) || [];
+
+      // If we need more events, get random ones
+      if (events.length < maxEvents) {
+        const randomEvents = await this.eventService.findRandomEventsForGroup(
+          group.id,
+          maxEvents - events.length,
+          maxEvents - events.length,
+        );
+        events = [...events, ...randomEvents];
+      }
+    } catch (error) {
+      this.logger.error('Error fetching events:', error);
+    }
+
+    // Return unique events
+    return Array.from(new Map(events.map(event => [event.id, event])).values());
   }
 
   async create(createGroupDto: CreateGroupDto, userId: number): Promise<any> {
