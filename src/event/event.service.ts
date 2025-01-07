@@ -503,7 +503,12 @@ export class EventService {
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.group', 'group')
       .leftJoinAndSelect('event.categories', 'categories')
+      .leftJoinAndSelect('event.image', 'image')
       .where('event.status = :status', { status: EventStatus.Published })
+      .andWhere('event.startDate > :now', { now: new Date() })
+      .andWhere('event.visibility = :visibility', {
+        visibility: EventVisibility.Public,
+      })
       .andWhere('event.group.id != :groupId', { groupId })
       .orderBy('RANDOM()')
       .limit(maxEvents);
@@ -537,8 +542,13 @@ export class EventService {
       .createQueryBuilder('event')
       .leftJoin('event.group', 'group')
       .leftJoin('event.categories', 'categories')
+      .leftJoinAndSelect('event.image', 'image')
       .where('event.status = :status', { status: EventStatus.Published })
       .andWhere('(group.id != :groupId OR group.id IS NULL)', { groupId })
+      .andWhere('event.startDate > :now', { now: new Date() })
+      .andWhere('event.visibility = :visibility', {
+        visibility: EventVisibility.Public,
+      })
       .orderBy('RANDOM()')
       .limit(maxEvents)
       .getMany();
