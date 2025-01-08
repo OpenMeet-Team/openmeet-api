@@ -258,16 +258,25 @@ export class GroupService {
   async showAll(pagination: PaginationDto, query: QueryGroupDto): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     const { page, limit } = pagination;
-    const { search, userId, categories, radius, lat, lon } = query;
+    const { search, categories, radius, lat, lon } = query;
+    
+    // Get userId from request context
+    const userId = this.request?.user?.id;
+    
+    this.logger.debug('showAll() Auth context:', {
+      userId,
+      requestUser: this.request?.user,
+      hasRequest: !!this.request,
+      authHeader: this.request?.headers?.authorization,
+    });
+
     const groupQuery = this.groupRepository
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.categories', 'categories')
-
       .leftJoin('group.createdBy', 'user')
       .leftJoin('user.photo', 'photo')
       .leftJoin('group.image', 'groupImage')
       .addSelect(['user.name', 'user.slug', 'photo.path', 'groupImage.path'])
-
       .loadRelationCountAndMap(
         'group.groupMembersCount',
         'group.groupMembers',
@@ -281,10 +290,29 @@ export class GroupService {
       )
       .where('group.status = :status', { status: GroupStatus.Published });
 
+    // Build visibility conditions
     if (userId) {
-      groupQuery.andWhere('user.id = :userId', { userId });
+      // For authenticated users: show public, authenticated, and private groups they're members of
+      groupQuery
+        .leftJoin('group.groupMembers', 'members', 'members.userId = :userId', { userId })
+        .andWhere(
+          '(group.visibility = :publicVisibility OR ' +
+          'group.visibility = :authenticatedVisibility OR ' +
+          '(group.visibility = :privateVisibility AND members.id IS NOT NULL))',
+          {
+            publicVisibility: GroupVisibility.Public,
+            authenticatedVisibility: GroupVisibility.Authenticated,
+            privateVisibility: GroupVisibility.Private,
+          }
+        );
+    } else {
+      // For anonymous users: show only public groups
+      groupQuery.andWhere('group.visibility = :publicVisibility', {
+        publicVisibility: GroupVisibility.Public,
+      });
     }
 
+    // Add existing query conditions
     if (categories && categories.length > 0) {
       const likeConditions = categories
         .map((_, index) => `categories.name LIKE :category${index}`)
@@ -306,14 +334,13 @@ export class GroupService {
       }
 
       const searchRadius = radius ?? DEFAULT_RADIUS;
-      // Find events within the radius using ST_DWithin
       groupQuery.andWhere(
         `ST_DWithin(
           group.locationPoint,
           ST_SetSRID(ST_MakePoint(:lon, :lat), ${PostgisSrid.SRID}),
           :radius
         )`,
-        { lon, lat, radius: searchRadius * 1000 }, // Convert kilometers to meters
+        { lon, lat, radius: searchRadius * 1000 },
       );
     }
 

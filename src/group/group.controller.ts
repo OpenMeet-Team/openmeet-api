@@ -52,14 +52,14 @@ export class GroupController {
   }
 
   @UseGuards(JWTAuthGuard, VisibilityGuard)
-  @Public()
   @Get()
   @ApiOperation({
-    summary: 'Get all groups, public endpoint with search and pagination',
+    summary: 'Get all groups, optionally authenticated for more visibility',
   })
   async showAll(
     @Query() pagination: PaginationDto,
     @Query() query: QueryGroupDto,
+    @Optional() @AuthUser() user?: User,
   ): Promise<GroupEntity[]> {
     return this.groupService.showAll(pagination, query);
   }
