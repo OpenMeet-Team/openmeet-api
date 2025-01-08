@@ -258,19 +258,18 @@ export class GroupService {
   }
 
   // Find all groups with relations
-  async showAll(pagination: PaginationDto, query: QueryGroupDto): Promise<any> {
+  async showAll(
+    pagination: PaginationDto,
+    query: QueryGroupDto,
+    userId?: number,
+  ): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     const { page, limit } = pagination;
     const { search, categories, radius, lat, lon } = query;
 
-    // Get userId from request context
-    const userId = this.request?.user?.id;
-
     this.logger.debug('showAll() Auth context:', {
       userId,
-      requestUser: this.request?.user,
-      hasRequest: !!this.request,
-      authHeader: this.request?.headers?.authorization,
+      hasUserId: !!userId,
     });
 
     const groupQuery = this.groupRepository
@@ -297,13 +296,11 @@ export class GroupService {
     if (userId) {
       // For authenticated users: show public, authenticated, and private groups they're members of
       groupQuery
-        .leftJoin('group.groupMembers', 'members', 'members.userId = :userId', {
-          userId,
-        })
+        .leftJoin('group.groupMembers', 'members', 'members.userId = :userId', { userId })
         .andWhere(
           '(group.visibility = :publicVisibility OR ' +
-            'group.visibility = :authenticatedVisibility OR ' +
-            '(group.visibility = :privateVisibility AND members.id IS NOT NULL))',
+          'group.visibility = :authenticatedVisibility OR ' +
+          '(group.visibility = :privateVisibility AND members.id IS NOT NULL))',
           {
             publicVisibility: GroupVisibility.Public,
             authenticatedVisibility: GroupVisibility.Authenticated,
