@@ -1,6 +1,10 @@
 import request from 'supertest';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
-import { EventStatus, EventType, EventVisibility } from '../../src/core/constants/constant';
+import {
+  EventStatus,
+  EventType,
+  EventVisibility,
+} from '../../src/core/constants/constant';
 import {
   loginAsTester,
   loginAsAdmin,
@@ -60,7 +64,9 @@ describe('EventController Recommendations (e2e)', () => {
       description: 'Recommended event 1 description',
       status: EventStatus.Published,
       visibility: EventVisibility.Authenticated,
-      startDate: new Date(futureDate.getTime() + 24 * 60 * 60 * 1000).toISOString(), // +1 day
+      startDate: new Date(
+        futureDate.getTime() + 24 * 60 * 60 * 1000,
+      ).toISOString(), // +1 day
       categories: [category1.id],
       type: EventType.Hybrid,
       maxAttendees: 100,
@@ -71,7 +77,9 @@ describe('EventController Recommendations (e2e)', () => {
       description: 'Recommended event 2 description',
       status: EventStatus.Published,
       visibility: EventVisibility.Private,
-      startDate: new Date(futureDate.getTime() + 48 * 60 * 60 * 1000).toISOString(), // +2 days
+      startDate: new Date(
+        futureDate.getTime() + 48 * 60 * 60 * 1000,
+      ).toISOString(), // +2 days
       categories: [category2.id],
       type: 'hybrid',
       maxAttendees: 100,
@@ -83,7 +91,9 @@ describe('EventController Recommendations (e2e)', () => {
       status: EventStatus.Published,
       visibility: EventVisibility.Public,
       categories: [categoryUnrelated.id],
-      startDate: new Date(futureDate.getTime() + 72 * 60 * 60 * 1000).toISOString(), // +3 days
+      startDate: new Date(
+        futureDate.getTime() + 72 * 60 * 60 * 1000,
+      ).toISOString(), // +3 days
       type: 'hybrid',
       maxAttendees: 100,
     });

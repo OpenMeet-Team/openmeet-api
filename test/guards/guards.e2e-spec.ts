@@ -31,7 +31,9 @@ describe('Guards (e2e)', () => {
       description: 'Public event description',
       visibility: EventVisibility.Public,
       status: EventStatus.Published,
-      startDate: new Date(new Date().getTime() + 1000 * 60 * 60 * 24).toISOString(),
+      startDate: new Date(
+        new Date().getTime() + 1000 * 60 * 60 * 24,
+      ).toISOString(),
       maxAttendees: 100,
       type: EventType.Hybrid,
       categories: [1],
@@ -43,7 +45,9 @@ describe('Guards (e2e)', () => {
       description: 'Authenticated event description',
       visibility: EventVisibility.Authenticated,
       status: EventStatus.Published,
-      startDate: new Date(new Date().getTime() + 1000 * 60 * 60 * 24).toISOString(),
+      startDate: new Date(
+        new Date().getTime() + 1000 * 60 * 60 * 24,
+      ).toISOString(),
       maxAttendees: 100,
       type: EventType.Hybrid,
       categories: [1],
@@ -55,7 +59,9 @@ describe('Guards (e2e)', () => {
       description: 'Private event description',
       visibility: EventVisibility.Private,
       status: EventStatus.Published,
-      startDate: new Date(new Date().getTime() + 1000 * 60 * 60 * 24).toISOString(),
+      startDate: new Date(
+        new Date().getTime() + 1000 * 60 * 60 * 24,
+      ).toISOString(),
       maxAttendees: 100,
       type: EventType.Hybrid,
       categories: [1],
