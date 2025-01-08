@@ -210,7 +210,8 @@ export class EventService {
       // Admins can see all events
     } else {
       // Get all event IDs this user is attending
-      const attendedEventIds = await this.eventAttendeeService.findEventIdsByUserId(user.id);
+      const attendedEventIds =
+        await this.eventAttendeeService.findEventIdsByUserId(user.id);
 
       eventQuery.andWhere(
         new Brackets((qb) => {

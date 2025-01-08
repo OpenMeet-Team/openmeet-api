@@ -140,17 +140,18 @@ export class GroupService {
       return this.eventService.showRandomEvents(4);
     }
 
-    const categoryIds = group.categories?.map(c => c?.id);
+    const categoryIds = group.categories?.map((c) => c?.id);
     let events: EventEntity[] = [];
 
     try {
       // Get recommended events
-      events = await this.eventService.findRecommendedEventsForGroup(
-        group.id,
-        categoryIds,
-        minEvents,
-        maxEvents,
-      ) || [];
+      events =
+        (await this.eventService.findRecommendedEventsForGroup(
+          group.id,
+          categoryIds,
+          minEvents,
+          maxEvents,
+        )) || [];
 
       // If we need more events, get random ones
       if (events.length < maxEvents) {
@@ -166,7 +167,9 @@ export class GroupService {
     }
 
     // Return unique events
-    return Array.from(new Map(events.map(event => [event.id, event])).values());
+    return Array.from(
+      new Map(events.map((event) => [event.id, event])).values(),
+    );
   }
 
   async create(createGroupDto: CreateGroupDto, userId: number): Promise<any> {
@@ -259,10 +262,10 @@ export class GroupService {
     await this.getTenantSpecificGroupRepository();
     const { page, limit } = pagination;
     const { search, categories, radius, lat, lon } = query;
-    
+
     // Get userId from request context
     const userId = this.request?.user?.id;
-    
+
     this.logger.debug('showAll() Auth context:', {
       userId,
       requestUser: this.request?.user,
@@ -294,16 +297,18 @@ export class GroupService {
     if (userId) {
       // For authenticated users: show public, authenticated, and private groups they're members of
       groupQuery
-        .leftJoin('group.groupMembers', 'members', 'members.userId = :userId', { userId })
+        .leftJoin('group.groupMembers', 'members', 'members.userId = :userId', {
+          userId,
+        })
         .andWhere(
           '(group.visibility = :publicVisibility OR ' +
-          'group.visibility = :authenticatedVisibility OR ' +
-          '(group.visibility = :privateVisibility AND members.id IS NOT NULL))',
+            'group.visibility = :authenticatedVisibility OR ' +
+            '(group.visibility = :privateVisibility AND members.id IS NOT NULL))',
           {
             publicVisibility: GroupVisibility.Public,
             authenticatedVisibility: GroupVisibility.Authenticated,
             privateVisibility: GroupVisibility.Private,
-          }
+          },
         );
     } else {
       // For anonymous users: show only public groups

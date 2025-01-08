@@ -59,7 +59,6 @@ export class GroupController {
   async showAll(
     @Query() pagination: PaginationDto,
     @Query() query: QueryGroupDto,
-    @Optional() @AuthUser() user?: User,
   ): Promise<GroupEntity[]> {
     return this.groupService.showAll(pagination, query);
   }
