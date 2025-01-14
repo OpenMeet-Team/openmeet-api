@@ -296,11 +296,13 @@ export class GroupService {
     if (userId) {
       // For authenticated users: show public, authenticated, and private groups they're members of
       groupQuery
-        .leftJoin('group.groupMembers', 'members', 'members.userId = :userId', { userId })
+        .leftJoin('group.groupMembers', 'members', 'members.userId = :userId', {
+          userId,
+        })
         .andWhere(
           '(group.visibility = :publicVisibility OR ' +
-          'group.visibility = :authenticatedVisibility OR ' +
-          '(group.visibility = :privateVisibility AND members.id IS NOT NULL))',
+            'group.visibility = :authenticatedVisibility OR ' +
+            '(group.visibility = :privateVisibility AND members.id IS NOT NULL))',
           {
             publicVisibility: GroupVisibility.Public,
             authenticatedVisibility: GroupVisibility.Authenticated,

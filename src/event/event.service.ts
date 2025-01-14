@@ -765,53 +765,81 @@ export class EventService {
 
     const event = await this.findEventBySlug(slug);
     const user = await this.userService.getUserById(userId);
-    const eventAttendee =
-      await this.eventAttendeeService.findEventAttendeeByUserId(
-        event.id,
-        user.id,
-      );
+    
+    let attendee = await this.eventAttendeeService.findEventAttendeeByUserId(event.id, userId);
+    
+    try {
+        if (!attendee || attendee.status === EventAttendeeStatus.Cancelled) {
+            const roleEntity = await this.eventRoleService.getRoleByName(
+                (createEventAttendeeDto.role ?? EventAttendeeRole.Participant) as EventAttendeeRole
+            );
+            
+            let status = createEventAttendeeDto.status || EventAttendeeStatus.Confirmed;
+            if (event.requireApproval) status = EventAttendeeStatus.Pending;
+            else if (event.allowWaitlist && status === EventAttendeeStatus.Confirmed) {
+                const count = await this.eventAttendeeService.showEventAttendeesCount(event.id);
+                if (count >= event.maxAttendees) status = EventAttendeeStatus.Waitlist;
+            }
 
-    if (eventAttendee) {
-      return eventAttendee;
+            const attendeeData = {
+                event,
+                user,
+                status,
+                role: roleEntity,
+            };
+
+            this.logger.debug('Creating/updating attendee with data:', JSON.stringify(attendeeData, null, 2));
+
+            let savedAttendee;
+            if (!attendee) {
+                savedAttendee = await this.eventAttendeeService.create(attendeeData);
+                this.logger.debug('Created new attendee:', JSON.stringify(savedAttendee, null, 2));
+            } else {
+                // For cancelled records, update and reload
+                await this.eventAttendeeService.updateEventAttendee(attendee.id, {
+                    status,
+                    role: roleEntity.name,
+                });
+                savedAttendee = await this.eventAttendeeService.findEventAttendeeByUserId(event.id, userId);
+                this.logger.debug('Updated existing attendee:', JSON.stringify(savedAttendee, null, 2));
+            }
+
+            if (!savedAttendee?.id) {
+                throw new Error('Invalid attendee record after create/update');
+            }
+
+            // Get a fully loaded record with all relations
+            const completeAttendee = await this.eventAttendeesRepository.findOne({
+                where: { id: savedAttendee.id },
+                relations: ['event', 'user', 'role'],
+            });
+
+            if (!completeAttendee) {
+                throw new Error(`Failed to load complete attendee record ${savedAttendee.id}`);
+            }
+
+            await this.eventMailService.sendMailAttendeeGuestJoined(completeAttendee);
+            this.eventEmitter.emit('event.attendee.added', { 
+                eventId: event.id, 
+                userId, 
+                status 
+            });
+
+            attendee = completeAttendee;
+        }
+
+        if (!attendee) {
+            throw new Error('No valid attendee record found');
+        }
+
+        return attendee;
+    } catch (error) {
+        this.logger.error('Error in attendEvent:', error);
+        this.logger.error('Current attendee state:', JSON.stringify(attendee, null, 2));
+        throw new UnprocessableEntityException(
+            error instanceof Error ? error.message : 'Failed to process event attendance'
+        );
     }
-
-    const participantRole = await this.eventRoleService.getRoleByName(
-      EventAttendeeRole.Participant,
-    );
-
-    // Create the attendee with appropriate status based on event settings
-    let attendeeStatus = EventAttendeeStatus.Confirmed;
-    if (event.allowWaitlist) {
-      const count = await this.eventAttendeeService.showEventAttendeesCount(
-        event.id,
-      );
-      if (count >= event.maxAttendees) {
-        attendeeStatus = EventAttendeeStatus.Waitlist;
-      }
-    }
-    if (event.requireApproval) {
-      attendeeStatus = EventAttendeeStatus.Pending;
-    }
-
-    // Create the attendee
-    const attendee = await this.eventAttendeeService.create({
-      ...createEventAttendeeDto,
-      event,
-      user: user,
-      status: attendeeStatus,
-      role: participantRole,
-    });
-
-    await this.eventMailService.sendMailAttendeeGuestJoined(attendee);
-
-    // Emit event for other parts of the system
-    this.eventEmitter.emit('event.attendee.added', {
-      eventId: event.id,
-      userId: user.id,
-      status: attendeeStatus,
-    });
-
-    return attendee;
   }
 
   async showEventAttendees(slug: string, pagination: PaginationDto) {
