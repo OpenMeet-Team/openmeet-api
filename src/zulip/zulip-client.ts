@@ -22,13 +22,13 @@ export const getClient = async (user: UserEntity) => {
 };
 
 export const getAdminClient = async () => {
-  console.log('getAdminClient', adminConfig);
+  // console.log('getAdminClient', adminConfig);
   if (!zulipAdminClient) {
-    console.log('zulipAdminClient not found, initializing');
+    // console.log('zulipAdminClient not found, initializing');
     zulipAdminClient = await zulipInit(
       adminConfig as Partial<ZulipInitialConfig>,
     );
   }
-  console.log('zulipAdminClient', zulipAdminClient);
+  // console.log('zulipAdminClient', zulipAdminClient);
   return zulipAdminClient;
 };

@@ -175,7 +175,6 @@ export class EventService {
       lon,
       radius,
       type,
-      // location,
       fromDate,
       toDate,
       categories,
@@ -189,6 +188,16 @@ export class EventService {
       .addSelect(['user.name', 'user.slug', 'photo.path', 'eventPhoto.path'])
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.group', 'group')
+      .leftJoinAndSelect(
+        'event.attendees',
+        'currentAttendee',
+        user ? 'currentAttendee.userId = :currentUserId AND currentAttendee.status != :cancelledStatus' : '1=0',
+        { 
+          currentUserId: user?.id,
+          cancelledStatus: EventAttendeeStatus.Cancelled,
+        },
+      )
+      .leftJoinAndSelect('currentAttendee.role', 'currentAttendeeRole')
       .loadRelationCountAndMap(
         'event.attendeesCount',
         'event.attendees',
