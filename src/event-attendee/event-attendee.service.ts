@@ -21,6 +21,7 @@ import {
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventRoleService } from '../event-role/event-role.service';
 import { AuditLoggerService } from '../logger/audit-logger.provider';
+import { In } from 'typeorm';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventAttendeeService {
@@ -154,10 +155,24 @@ export class EventAttendeeService {
   ): Promise<EventAttendeesEntity | null> {
     await this.getTenantSpecificEventRepository();
 
-    const attendee = await this.eventAttendeesRepository.findOne({
-      where: { event: { id: eventId }, user: { id: userId } },
-      relations: ['user', 'role', 'role.permissions'],
-    });
+    this.logger.debug(
+      `[findEventAttendeeByUserId] Finding most recent attendance for event ${eventId} and user ${userId}`,
+    );
+
+    const attendee = await this.eventAttendeesRepository
+      .createQueryBuilder('attendee')
+      .leftJoinAndSelect('attendee.user', 'user')
+      .leftJoinAndSelect('attendee.role', 'role')
+      .leftJoinAndSelect('role.permissions', 'permissions')
+      .where('attendee.event.id = :eventId', { eventId })
+      .andWhere('attendee.user.id = :userId', { userId })
+      .orderBy('attendee.updatedAt', 'DESC')
+      .getOne();
+
+    this.logger.debug(
+      `[findEventAttendeeByUserId] Found attendee: ${JSON.stringify(attendee)}`,
+    );
+
     return attendee;
   }
 
@@ -192,18 +207,47 @@ export class EventAttendeeService {
     });
   }
 
-  async cancelAttendingEvent(id: number, userId: number) {
+  async cancelEventAttendance(
+    eventId: number,
+    userId: number,
+  ): Promise<EventAttendeesEntity> {
     await this.getTenantSpecificEventRepository();
-    const attendee = await this.eventAttendeesRepository.findOne({
-      where: { user: { id: userId }, event: { id } },
-      relations: ['user', 'role.permissions'],
-    });
-    if (!attendee) {
-      throw new NotFoundException(`Attendee with ID ${userId} not found`);
-    }
-    attendee.status = EventAttendeeStatus.Cancelled;
 
-    return this.eventAttendeesRepository.save(attendee);
+    this.logger.debug(
+      `[cancelEventAttendance] Finding active attendance for event ${eventId} and user ${userId}`,
+    );
+
+    // Find the most recent active attendance record
+    const attendee = await this.eventAttendeesRepository.findOne({
+      where: {
+        event: { id: eventId },
+        user: { id: userId },
+        status: In([
+          EventAttendeeStatus.Confirmed,
+          EventAttendeeStatus.Pending,
+        ]),
+      },
+      relations: ['user', 'role', 'role.permissions'],
+      order: { createdAt: 'DESC' },
+    });
+
+    if (!attendee) {
+      throw new NotFoundException('Active attendance record not found');
+    }
+
+    this.logger.debug(
+      `[cancelEventAttendance] Found attendee: ${JSON.stringify(attendee)}`,
+    );
+
+    // Update the status to cancelled
+    attendee.status = EventAttendeeStatus.Cancelled;
+    const updatedAttendee = await this.eventAttendeesRepository.save(attendee);
+
+    this.logger.debug(
+      `[cancelEventAttendance] Updated attendee status: ${updatedAttendee.status}`,
+    );
+
+    return updatedAttendee;
   }
 
   async showConfirmedEventAttendeesByEventId(

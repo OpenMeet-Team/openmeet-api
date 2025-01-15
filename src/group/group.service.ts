@@ -47,6 +47,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupRoleEntity } from '../group-role/infrastructure/persistence/relational/entities/group-role.entity';
 import { GroupMailService } from '../group-mail/group-mail.service';
 import { AuditLoggerService } from '../logger/audit-logger.provider';
+import { Trace } from '../utils/trace.decorator';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -258,6 +259,7 @@ export class GroupService {
   }
 
   // Find all groups with relations
+  @Trace()
   async showAll(
     pagination: PaginationDto,
     query: QueryGroupDto,
@@ -296,11 +298,13 @@ export class GroupService {
     if (userId) {
       // For authenticated users: show public, authenticated, and private groups they're members of
       groupQuery
-        .leftJoin('group.groupMembers', 'members', 'members.userId = :userId', { userId })
+        .leftJoin('group.groupMembers', 'members', 'members.userId = :userId', {
+          userId,
+        })
         .andWhere(
           '(group.visibility = :publicVisibility OR ' +
-          'group.visibility = :authenticatedVisibility OR ' +
-          '(group.visibility = :privateVisibility AND members.id IS NOT NULL))',
+            'group.visibility = :authenticatedVisibility OR ' +
+            '(group.visibility = :privateVisibility AND members.id IS NOT NULL))',
           {
             publicVisibility: GroupVisibility.Public,
             authenticatedVisibility: GroupVisibility.Authenticated,
