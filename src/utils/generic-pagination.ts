@@ -63,6 +63,7 @@ export async function paginate<T extends ObjectLiteral>(
     } catch (error) {
       span.recordException(error);
       span.setStatus({ code: SpanStatusCode.ERROR });
+      console.error('Error in paginate', error);
       throw error;
     } finally {
       span.end();
