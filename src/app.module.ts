@@ -49,6 +49,7 @@ import { EventMailModule } from './event-mail/event-mail.module';
 import { ChatMailModule } from './chat-mail/chat-mail.module';
 import { AuthBlueskyModule } from './auth-bluesky/auth-bluesky.module';
 import { AuditLoggerService } from './logger/audit-logger.provider';
+import { TracingModule } from './tracing/tracing.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -125,6 +126,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     EventMailModule,
     ChatMailModule,
     AuthBlueskyModule,
+    TracingModule,
   ],
   providers: [
     TenantConnectionService,

@@ -44,6 +44,7 @@ import { EventAttendeesEntity } from '../event-attendee/infrastructure/persisten
 import { Brackets } from 'typeorm';
 import { EventMailService } from '../event-mail/event-mail.service';
 import { AuditLoggerService } from '../logger/audit-logger.provider';
+import { Trace } from '../utils/trace.decorator';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -90,10 +91,43 @@ export class EventService {
 
   async findEventBySlug(slug: string): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
-    const event = await this.eventRepository.findOne({ where: { slug } });
+
+    this.logger.debug(`[findEventBySlug] Finding event for slug: ${slug}`);
+    this.logger.debug(
+      `[findEventBySlug] Current user: ${this.request.user?.id}`,
+    );
+
+    const event = await this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.attendees', 'attendee')
+      .leftJoinAndSelect('attendee.user', 'user')
+      .leftJoinAndSelect('attendee.role', 'role')
+      .where('event.slug = :slug', { slug })
+      .getOne();
+
     if (!event) {
       throw new NotFoundException(`Event with slug ${slug} not found`);
     }
+
+    // If there's a user in the request context, find their attendance
+    if (this.request.user) {
+      this.logger.debug(
+        `[findEventBySlug] Finding attendance for user: ${this.request.user.id}`,
+      );
+      const attendee =
+        await this.eventAttendeeService.findEventAttendeeByUserId(
+          event.id,
+          this.request.user.id,
+        );
+      this.logger.debug(
+        `[findEventBySlug] Found attendee: ${JSON.stringify(attendee)}`,
+      );
+      this.logger.debug(
+        `[findEventBySlug] Attendee status: ${attendee?.status}`,
+      );
+      event.attendee = attendee;
+    }
+
     return event;
   }
 
@@ -162,6 +196,7 @@ export class EventService {
     return createdEvent;
   }
 
+  @Trace('event.showAllEvents')
   async showAllEvents(
     pagination: PaginationDto,
     query: QueryEventDto,
@@ -399,6 +434,7 @@ export class EventService {
     return await this.zulipService.getAdminStreamTopics(zulipChannelId);
   }
 
+  @Trace('event.findRandom')
   async findRandom(): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
 
@@ -748,7 +784,8 @@ export class EventService {
   async cancelAttendingEvent(slug: string, userId: number) {
     await this.getTenantSpecificEventRepository();
     const event = await this.findEventBySlug(slug);
-    const eventAttendee = await this.eventAttendeeService.cancelAttendingEvent(
+
+    const eventAttendee = await this.eventAttendeeService.cancelEventAttendance(
       event.id,
       userId,
     );
@@ -771,7 +808,10 @@ export class EventService {
         user.id,
       );
 
-    if (eventAttendee) {
+    if (
+      eventAttendee &&
+      eventAttendee.status !== EventAttendeeStatus.Cancelled
+    ) {
       return eventAttendee;
     }
 
