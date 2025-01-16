@@ -82,7 +82,7 @@ export class EventService {
       dataSource.getRepository(EventAttendeesEntity);
   }
 
-  private async getTenantSpecificEventRepository() {
+  async getTenantSpecificEventRepository() {
     const span = this.tracer.startSpan('getTenantSpecificEventRepository');
     try {
       const tenantId = this.request.tenantId;
