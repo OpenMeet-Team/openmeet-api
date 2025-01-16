@@ -32,8 +32,7 @@ export class TenantGuard implements CanActivate {
     }
 
     const tenantId = String(
-      request.headers['x-tenant-id'] ||
-        request.query?.tenantId || ''
+      request.headers['x-tenant-id'] || request.query?.tenantId || '',
     ).trim();
 
     if (!tenantId) {

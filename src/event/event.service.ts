@@ -45,11 +45,13 @@ import { Brackets } from 'typeorm';
 import { EventMailService } from '../event-mail/event-mail.service';
 import { AuditLoggerService } from '../logger/audit-logger.provider';
 import { Trace } from '../utils/trace.decorator';
+import { trace } from '@opentelemetry/api';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
   private readonly auditLogger = AuditLoggerService.getInstance();
   private readonly logger = new Logger(EventService.name);
+  private readonly tracer = trace.getTracer('event-service');
 
   private eventRepository: Repository<EventEntity>;
   private eventAttendeesRepository: Repository<EventAttendeesEntity>;
@@ -80,13 +82,22 @@ export class EventService {
       dataSource.getRepository(EventAttendeesEntity);
   }
 
-  async getTenantSpecificEventRepository() {
-    const tenantId = this.request.tenantId;
-    const dataSource =
-      await this.tenantConnectionService.getTenantConnection(tenantId);
-    this.eventRepository = dataSource.getRepository(EventEntity);
-    this.eventAttendeesRepository =
-      dataSource.getRepository(EventAttendeesEntity);
+  private async getTenantSpecificEventRepository() {
+    const span = this.tracer.startSpan('getTenantSpecificEventRepository');
+    try {
+      const tenantId = this.request.tenantId;
+      span.setAttribute('tenantId', tenantId);
+
+      const dataSource = await this.tenantConnectionService.getTenantConnection(tenantId);
+      this.eventRepository = dataSource.getRepository(EventEntity);
+      this.eventAttendeesRepository = dataSource.getRepository(EventAttendeesEntity);
+    } catch (error) {
+      span.recordException(error);
+      this.logger.error('Failed to get tenant connection', error);
+      throw error;
+    } finally {
+      span.end();
+    }
   }
 
   async findEventBySlug(slug: string): Promise<EventEntity> {
@@ -202,143 +213,158 @@ export class EventService {
     query: QueryEventDto,
     user?: any,
   ): Promise<any> {
-    await this.getTenantSpecificEventRepository();
+    const span = this.tracer.startSpan('showAllEvents');
+    try {
+      span.setAttribute('pagination', JSON.stringify(pagination));
+      span.setAttribute('query', JSON.stringify(query));
+      span.setAttribute('user', JSON.stringify(user));
 
-    const {
-      search,
-      lat,
-      lon,
-      radius,
-      type,
-      // location,
-      fromDate,
-      toDate,
-      categories,
-    } = query;
+      const repoSpan = this.tracer.startSpan('initRepository');
+      await this.getTenantSpecificEventRepository();
+      repoSpan.end();
 
-    const eventQuery = this.eventRepository
-      .createQueryBuilder('event')
-      .leftJoin('event.user', 'user')
-      .leftJoin('user.photo', 'photo')
-      .leftJoin('event.image', 'eventPhoto')
-      .addSelect(['user.name', 'user.slug', 'photo.path', 'eventPhoto.path'])
-      .leftJoinAndSelect('event.categories', 'categories')
-      .leftJoinAndSelect('event.group', 'group')
-      .loadRelationCountAndMap(
-        'event.attendeesCount',
-        'event.attendees',
-        'attendees',
-        (qb) =>
-          qb.where('attendees.status = :status', {
-            status: EventAttendeeStatus.Confirmed,
+      const querySpan = this.tracer.startSpan('executeQuery');
+      const {
+        search,
+        lat,
+        lon,
+        radius,
+        type,
+        // location,
+        fromDate,
+        toDate,
+        categories,
+      } = query;
+
+      const eventQuery = this.eventRepository
+        .createQueryBuilder('event')
+        .leftJoin('event.user', 'user')
+        .leftJoin('user.photo', 'photo')
+        .leftJoin('event.image', 'eventPhoto')
+        .addSelect(['user.name', 'user.slug', 'photo.path', 'eventPhoto.path'])
+        .leftJoinAndSelect('event.categories', 'categories')
+        .leftJoinAndSelect('event.group', 'group')
+        .loadRelationCountAndMap(
+          'event.attendeesCount',
+          'event.attendees',
+          'attendees',
+          (qb) =>
+            qb.where('attendees.status = :status', {
+              status: EventAttendeeStatus.Confirmed,
+            }),
+        )
+        .where('event.status = :status', { status: EventStatus.Published });
+
+      // Visibility filters based on authentication status
+      if (!user) {
+        // Unauthenticated users can only see public events
+        eventQuery.andWhere('event.visibility = :visibility', {
+          visibility: EventVisibility.Public,
+        });
+      } else if (user.roles?.includes('admin')) {
+        // Admins can see all events
+      } else {
+        // Get all event IDs this user is attending
+        const attendedEventIds =
+          await this.eventAttendeeService.findEventIdsByUserId(user.id);
+
+        eventQuery.andWhere(
+          new Brackets((qb) => {
+            // Public events
+            qb.where('event.visibility = :publicVisibility', {
+              publicVisibility: EventVisibility.Public,
+            });
+            // Authenticated events (only for logged-in users)
+            qb.orWhere('event.visibility = :authVisibility', {
+              authVisibility: EventVisibility.Authenticated,
+            });
+            // Private events only if attending
+            if (attendedEventIds.length > 0) {
+              qb.orWhere(
+                'event.visibility = :privateVisibility AND event.id IN (:...attendedEventIds)',
+                {
+                  privateVisibility: EventVisibility.Private,
+                  attendedEventIds,
+                },
+              );
+            }
           }),
-      )
-      .where('event.status = :status', { status: EventStatus.Published });
-
-    // Visibility filters based on authentication status
-    if (!user) {
-      // Unauthenticated users can only see public events
-      eventQuery.andWhere('event.visibility = :visibility', {
-        visibility: EventVisibility.Public,
-      });
-    } else if (user.roles?.includes('admin')) {
-      // Admins can see all events
-    } else {
-      // Get all event IDs this user is attending
-      const attendedEventIds =
-        await this.eventAttendeeService.findEventIdsByUserId(user.id);
-
-      eventQuery.andWhere(
-        new Brackets((qb) => {
-          // Public events
-          qb.where('event.visibility = :publicVisibility', {
-            publicVisibility: EventVisibility.Public,
-          });
-          // Authenticated events (only for logged-in users)
-          qb.orWhere('event.visibility = :authVisibility', {
-            authVisibility: EventVisibility.Authenticated,
-          });
-          // Private events only if attending
-          if (attendedEventIds.length > 0) {
-            qb.orWhere(
-              'event.visibility = :privateVisibility AND event.id IN (:...attendedEventIds)',
-              {
-                privateVisibility: EventVisibility.Private,
-                attendedEventIds,
-              },
-            );
-          }
-        }),
-      );
-    }
-
-    if (search) {
-      eventQuery.andWhere('event.name ILIKE :search', {
-        search: `%${search}%`,
-      });
-    }
-
-    if (lat && lon) {
-      if (isNaN(lon) || isNaN(lat)) {
-        throw new BadRequestException(
-          'Invalid location format. Expected "lon,lat".',
         );
       }
 
-      const searchRadius = radius ?? DEFAULT_RADIUS;
+      if (search) {
+        eventQuery.andWhere('event.name ILIKE :search', {
+          search: `%${search}%`,
+        });
+      }
 
-      // Find events within the radius using ST_DWithin
-      eventQuery.andWhere(
-        `ST_DWithin(
-          event.locationPoint,
-          ST_SetSRID(ST_MakePoint(:lon, :lat), ${PostgisSrid.SRID}),
-          :radius
-        )`,
-        { lon, lat, radius: searchRadius * 1609.34 }, // Convert Miles to meters
-      );
-    }
+      if (lat && lon) {
+        if (isNaN(lon) || isNaN(lat)) {
+          throw new BadRequestException(
+            'Invalid location format. Expected "lon,lat".',
+          );
+        }
 
-    if (type) {
-      eventQuery.andWhere('event.type = :type', { type });
-    }
+        const searchRadius = radius ?? DEFAULT_RADIUS;
 
-    // if (location) {
-    //   eventQuery.andWhere('event.location ILIKE :location', {
-    //     location: `%${location}%`,
-    //   });
-    // }
+        // Find events within the radius using ST_DWithin
+        eventQuery.andWhere(
+          `ST_DWithin(
+            event.locationPoint,
+            ST_SetSRID(ST_MakePoint(:lon, :lat), ${PostgisSrid.SRID}),
+            :radius
+          )`,
+          { lon, lat, radius: searchRadius * 1609.34 }, // Convert Miles to meters
+        );
+      }
 
-    if (fromDate && toDate) {
-      eventQuery.andWhere('event.startDate BETWEEN :fromDate AND :toDate', {
-        fromDate,
-        toDate,
+      if (type) {
+        eventQuery.andWhere('event.type = :type', { type });
+      }
+
+      // if (location) {
+      //   eventQuery.andWhere('event.location ILIKE :location', {
+      //     location: `%${location}%`,
+      //   });
+      // }
+
+      if (fromDate && toDate) {
+        eventQuery.andWhere('event.startDate BETWEEN :fromDate AND :toDate', {
+          fromDate,
+          toDate,
+        });
+      } else if (fromDate) {
+        eventQuery.andWhere('event.startDate >= :fromDate', { fromDate });
+      } else if (toDate) {
+        eventQuery.andWhere('event.startDate <= :toDate', { toDate });
+      } else {
+        eventQuery.andWhere('event.startDate > :now', { now: new Date() });
+      }
+
+      if (categories && categories.length > 0) {
+        const likeConditions = categories
+          .map((_, index) => `categories.name LIKE :category${index}`)
+          .join(' OR ');
+
+        const likeParameters = categories.reduce((acc, category, index) => {
+          acc[`category${index}`] = `%${category}%`;
+          return acc;
+        }, {});
+
+        eventQuery.andWhere(`(${likeConditions})`, likeParameters);
+      }
+
+      const paginatedEvents = await paginate(eventQuery, {
+        page: pagination.page,
+        limit: pagination.limit,
       });
-    } else if (fromDate) {
-      eventQuery.andWhere('event.startDate >= :fromDate', { fromDate });
-    } else if (toDate) {
-      eventQuery.andWhere('event.startDate <= :toDate', { toDate });
-    } else {
-      eventQuery.andWhere('event.startDate > :now', { now: new Date() });
+      querySpan.end();
+
+      span.setAttribute('events.count', paginatedEvents.data.length);
+      return paginatedEvents;
+    } finally {
+      span.end();
     }
-
-    if (categories && categories.length > 0) {
-      const likeConditions = categories
-        .map((_, index) => `categories.name LIKE :category${index}`)
-        .join(' OR ');
-
-      const likeParameters = categories.reduce((acc, category, index) => {
-        acc[`category${index}`] = `%${category}%`;
-        return acc;
-      }, {});
-
-      eventQuery.andWhere(`(${likeConditions})`, likeParameters);
-    }
-
-    const paginatedEvents = await paginate(eventQuery, {
-      page: pagination.page,
-      limit: pagination.limit,
-    });
-    return paginatedEvents;
   }
 
   async searchAllEvents(
@@ -724,9 +750,6 @@ export class EventService {
       .limit(5)
       .getMany(); // TODO: later provide featured flag or configuration object
 
-    this.logger.debug('getHomePageFeaturedEvents', {
-      events,
-    });
     return events;
   }
 

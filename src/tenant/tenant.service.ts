@@ -3,30 +3,44 @@ import { DataSource } from 'typeorm';
 import { AppDataSource } from '../database/data-source';
 import { getTenantConfig } from '../utils/tenant-config';
 import { TenantConfig } from '../core/constants/constant';
+import { trace } from '@opentelemetry/api';
+
 @Injectable()
 export class TenantConnectionService implements OnModuleInit {
+  private readonly tracer = trace.getTracer('tenant-service');
   private connections: Map<string, DataSource> = new Map();
+
   async onModuleInit() {}
+
   async getTenantConnection(tenantId: string): Promise<DataSource> {
-    const connection = this.connections.get(tenantId);
-    if (connection && connection.isInitialized) {
-      return connection;
-    }
+    const span = this.tracer.startSpan('getTenantConnection');
+    try {
+      span.setAttribute('tenantId', tenantId);
+      
+      const connection = this.connections.get(tenantId);
+      if (connection && connection.isInitialized) {
+        span.setAttribute('connection.cached', true);
+        return connection;
+      }
 
-    // Create a DataSource and initialize the connection
-    const dataSource = AppDataSource(tenantId);
-    await dataSource.initialize();
-    if (!tenantId) {
+      span.setAttribute('connection.cached', false);
+      const initSpan = this.tracer.startSpan('initializeDataSource');
+      const dataSource = AppDataSource(tenantId);
+      await dataSource.initialize();
+      initSpan.end();
+
+      if (tenantId) {
+        const schemaSpan = this.tracer.startSpan('createSchema');
+        const schemaName = `tenant_${tenantId}`;
+        await dataSource.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
+        schemaSpan.end();
+      }
+
+      this.connections.set(tenantId, dataSource);
       return dataSource;
+    } finally {
+      span.end();
     }
-
-    const schemaName = `tenant_${tenantId}`;
-
-    // Create schema if it does not exist
-    await dataSource.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
-    // Cache the connection for reuse
-    this.connections.set(tenantId, dataSource);
-    return dataSource;
   }
 
   async closeDatabaseConnection(tenantId: string) {
