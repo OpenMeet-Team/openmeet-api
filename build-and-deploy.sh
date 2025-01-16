@@ -7,7 +7,7 @@ ECR_REPOSITORY="openmeet-ecr/openmeet-api"
 DEPLOYMENT_NAMESPACE="openmeet-api-dev"
 GIT_REVISION=$(git rev-parse HEAD)
 GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-IMAGE_TAG=$GIT_REVISION
+IMAGE_TAG="test"
 
 echo "Logging into AWS ECR..."
 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin "$(aws sts get-caller-identity --query Account --output text).dkr.ecr.$AWS_REGION.amazonaws.com"
@@ -24,12 +24,6 @@ docker build --build-arg GIT_REVISION=$GIT_REVISION \
 
 echo "Pushing images to ECR..."
 docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
-docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-
-# Update EKS configuration
-echo "Updating kubeconfig..."
-aws eks update-kubeconfig --name openmeet-dev --region $AWS_REGION
 
 # Deploy to EKS
 echo "Deploying to EKS..."
