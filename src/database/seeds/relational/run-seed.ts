@@ -17,30 +17,46 @@ import { env } from 'process';
 import { TenantConfig } from '../../../core/constants/constant';
 const runSeed = async () => {
   const tenants: TenantConfig[] = fetchTenants();
-  const tenantIds = tenants.map((t) => t.id).filter((id) => !!id); // filter out 'public'
+  const tenantIds = tenants.map((t) => t.id).filter((id) => !!id);
+  let app;
 
-  const app = await NestFactory.create(SeedModule);
-  for (const tenantId of tenantIds) {
-    console.log('Running seeds for tenant:', tenantId);
+  try {
+    app = await NestFactory.create(SeedModule);
+    
+    for (const tenantId of tenantIds) {
+      console.log('Running seeds for tenant:', tenantId);
+      try {
+        await app.get(StatusSeedService).run(tenantId);
+        await app.get(PermissionSeedService).run(tenantId);
+        await app.get(UserPermissionSeedService).run(tenantId);
+        await app.get(RoleSeedService).run(tenantId);
+        await app.get(GroupPermissionSeedService).run(tenantId);
+        await app.get(GroupRoleSeedService).run(tenantId);
+        await app.get(EventPermissionSeedService).run(tenantId);
+        await app.get(EventRoleSeedService).run(tenantId);
+        await app.get(UserSeedService).run(tenantId);
+        await app.get(CategorySeedService).run(tenantId);
 
-    await app.get(StatusSeedService).run(tenantId);
-    await app.get(PermissionSeedService).run(tenantId);
-    await app.get(UserPermissionSeedService).run(tenantId);
-    await app.get(RoleSeedService).run(tenantId);
-    await app.get(GroupPermissionSeedService).run(tenantId);
-    await app.get(GroupRoleSeedService).run(tenantId);
-    await app.get(EventPermissionSeedService).run(tenantId);
-    await app.get(EventRoleSeedService).run(tenantId);
-    await app.get(UserSeedService).run(tenantId);
-    await app.get(CategorySeedService).run(tenantId);
-
-    if (env.NODE_ENV !== 'production') {
-      await app.get(GroupSeedService).run(tenantId);
-      await app.get(EventSeedService).run(tenantId);
+        if (env.NODE_ENV !== 'production') {
+          await app.get(GroupSeedService).run(tenantId);
+          await app.get(EventSeedService).run(tenantId);
+        }
+        console.log('Completed seeds for tenant:', tenantId);
+      } catch (error) {
+        console.error(`Error seeding tenant ${tenantId}:`, error);
+      }
     }
+  } finally {
+    if (app) {
+      console.log('Closing NestJS application...');
+      await app.close();
+      console.log('Application closed');
+    }
+    process.exit(0);
   }
-
-  await app.close();
 };
 
-void runSeed();
+runSeed().catch(error => {
+  console.error('Fatal error during seeding:', error);
+  process.exit(1);
+});
