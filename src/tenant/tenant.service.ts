@@ -16,7 +16,7 @@ export class TenantConnectionService implements OnModuleInit {
     const span = this.tracer.startSpan('getTenantConnection');
     try {
       span.setAttribute('tenantId', tenantId);
-      
+
       const connection = this.connections.get(tenantId);
       if (connection && connection.isInitialized) {
         span.setAttribute('connection.cached', true);

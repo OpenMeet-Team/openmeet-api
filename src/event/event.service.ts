@@ -88,9 +88,11 @@ export class EventService {
       const tenantId = this.request.tenantId;
       span.setAttribute('tenantId', tenantId);
 
-      const dataSource = await this.tenantConnectionService.getTenantConnection(tenantId);
+      const dataSource =
+        await this.tenantConnectionService.getTenantConnection(tenantId);
       this.eventRepository = dataSource.getRepository(EventEntity);
-      this.eventAttendeesRepository = dataSource.getRepository(EventAttendeesEntity);
+      this.eventAttendeesRepository =
+        dataSource.getRepository(EventAttendeesEntity);
     } catch (error) {
       span.recordException(error);
       this.logger.error('Failed to get tenant connection', error);
