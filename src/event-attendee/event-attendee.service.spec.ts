@@ -3,7 +3,7 @@ import { EventAttendeeService } from './event-attendee.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import { EventRoleService } from '../event-role/event-role.service';
-
+import { stopCleanupInterval } from '../database/data-source';
 describe('EventAttendeeService', () => {
   let service: EventAttendeeService;
   let module: TestingModule;
@@ -73,5 +73,8 @@ describe('EventAttendeeService', () => {
   afterEach(async () => {
     await module.close();
     jest.clearAllMocks();
+  });
+  afterAll(() => {
+    stopCleanupInterval();
   });
 });

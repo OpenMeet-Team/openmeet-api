@@ -4,6 +4,7 @@ import { AppDataSource } from '../database/data-source';
 import { getTenantConfig } from '../utils/tenant-config';
 import { TenantConfig } from '../core/constants/constant';
 import { trace } from '@opentelemetry/api';
+import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 
 @Injectable()
 export class TenantConnectionService implements OnModuleInit {
@@ -12,30 +13,39 @@ export class TenantConnectionService implements OnModuleInit {
   async onModuleInit() {}
 
   async getTenantConnection(tenantId: string): Promise<DataSource> {
-    const span = this.tracer.startSpan('getTenantConnection');
-    try {
-      span.setAttribute('tenantId', tenantId);
-
-      const dataSource = AppDataSource(tenantId);
-
-      // Initialize if needed (AppDataSource handles caching internally)
-      if (!dataSource.isInitialized) {
+    return this.tracer.startActiveSpan('getTenantConnection', { kind: SpanKind.CLIENT }, async (span) => {
+      try {
+        span.setAttribute('tenantId', tenantId);
+        span.setAttribute('cache.lookup', true);
+        
+        const dataSource = AppDataSource(tenantId);
+        
+        // Add cache hit/miss tracking
+        if (dataSource.isInitialized) {
+          span.setAttribute('cache.hit', true);
+          return dataSource;
+        }
+        
+        span.setAttribute('cache.hit', false);
         const initSpan = this.tracer.startSpan('initializeDataSource');
         await dataSource.initialize();
         initSpan.end();
 
         if (tenantId) {
           const schemaSpan = this.tracer.startSpan('createSchema');
-          const schemaName = `tenant_${tenantId}`;
-          await dataSource.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
+          await dataSource.query(`CREATE SCHEMA IF NOT EXISTS "tenant_${tenantId}"`);
           schemaSpan.end();
         }
-      }
 
-      return dataSource;
-    } finally {
-      span.end();
-    }
+        return dataSource;
+      } catch (error) {
+        span.recordException(error);
+        span.setStatus({ code: SpanStatusCode.ERROR });
+        throw error;
+      } finally {
+        span.end();
+      }
+    });
   }
 
   async closeDatabaseConnection(tenantId: string) {

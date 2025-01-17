@@ -14,9 +14,14 @@ const connectionCache = new Map<
 const CONNECTION_TIMEOUT = 60 * 60 * 1000; // 1 hour
 const MAX_CONNECTIONS = 100;
 
-// Add cleanup interval
-setInterval(
-  () => {
+// Store interval reference so we can clear it
+let cleanupInterval: NodeJS.Timeout | null = null;
+
+// Add cleanup interval with proper handling for tests
+export function startCleanupInterval() {
+  if (cleanupInterval) return; // Prevent multiple intervals
+
+  cleanupInterval = setInterval(() => {
     const now = Date.now();
     for (const [key, value] of connectionCache.entries()) {
       if (now - value.lastUsed > CONNECTION_TIMEOUT) {
@@ -24,9 +29,29 @@ setInterval(
         connectionCache.delete(key);
       }
     }
-  },
-  15 * 60 * 1000,
-); // Clean every 15 minutes
+  }, 15 * 60 * 1000); // Clean every 15 minutes
+
+  // Ensure cleanup on process exit
+  process.on('beforeExit', () => {
+    if (cleanupInterval) {
+      clearInterval(cleanupInterval);
+      cleanupInterval = null;
+    }
+  });
+}
+
+// Add function to stop cleanup for tests
+export function stopCleanupInterval() {
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
+  }
+}
+
+// Start cleanup interval in non-test environment
+if (process.env.NODE_ENV !== 'test') {
+  startCleanupInterval();
+}
 
 export const AppDataSource = (tenantId: string) => {
   const tracer = trace.getTracer('database');

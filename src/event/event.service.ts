@@ -37,7 +37,7 @@ import { CreateEventAttendeeDto } from '../event-attendee/dto/create-eventAttend
 import { EventRoleService } from '../event-role/event-role.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { UserService } from '../user/user.service';
-import { UpdateEventAttendeeDto } from 'src/event-attendee/dto/update-eventAttendee.dto';
+import { UpdateEventAttendeeDto } from '../event-attendee/dto/update-eventAttendee.dto';
 import { ZulipTopic } from 'zulip-js';
 import { HomeQuery } from '../home/dto/home-query.dto';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
