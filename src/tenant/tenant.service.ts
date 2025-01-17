@@ -8,7 +8,6 @@ import { trace } from '@opentelemetry/api';
 @Injectable()
 export class TenantConnectionService implements OnModuleInit {
   private readonly tracer = trace.getTracer('tenant-service');
-  private connections: Map<string, DataSource> = new Map();
 
   async onModuleInit() {}
 
@@ -17,26 +16,22 @@ export class TenantConnectionService implements OnModuleInit {
     try {
       span.setAttribute('tenantId', tenantId);
 
-      const connection = this.connections.get(tenantId);
-      if (connection && connection.isInitialized) {
-        span.setAttribute('connection.cached', true);
-        return connection;
-      }
-
-      span.setAttribute('connection.cached', false);
-      const initSpan = this.tracer.startSpan('initializeDataSource');
       const dataSource = AppDataSource(tenantId);
-      await dataSource.initialize();
-      initSpan.end();
 
-      if (tenantId) {
-        const schemaSpan = this.tracer.startSpan('createSchema');
-        const schemaName = `tenant_${tenantId}`;
-        await dataSource.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
-        schemaSpan.end();
+      // Initialize if needed (AppDataSource handles caching internally)
+      if (!dataSource.isInitialized) {
+        const initSpan = this.tracer.startSpan('initializeDataSource');
+        await dataSource.initialize();
+        initSpan.end();
+
+        if (tenantId) {
+          const schemaSpan = this.tracer.startSpan('createSchema');
+          const schemaName = `tenant_${tenantId}`;
+          await dataSource.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
+          schemaSpan.end();
+        }
       }
 
-      this.connections.set(tenantId, dataSource);
       return dataSource;
     } finally {
       span.end();
@@ -44,21 +39,18 @@ export class TenantConnectionService implements OnModuleInit {
   }
 
   async closeDatabaseConnection(tenantId: string) {
-    const connection = this.connections.get(tenantId);
-    if (connection) {
-      await connection.destroy();
-      this.connections.delete(tenantId);
+    const dataSource = AppDataSource(tenantId);
+    if (dataSource.isInitialized) {
+      await dataSource.destroy();
     }
   }
 
   async removeTenantSchema(tenantId: string): Promise<void> {
-    const connection = this.connections.get(tenantId);
-    if (connection) {
+    const dataSource = AppDataSource(tenantId);
+    if (dataSource.isInitialized) {
       const schemaName = `tenant_${tenantId}`;
-      await connection.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-      // Remove the connection from the map
-      await connection.destroy();
-      this.connections.delete(tenantId);
+      await dataSource.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      await dataSource.destroy();
     } else {
       throw new Error(`Connection for tenant ${tenantId} does not exist.`);
     }

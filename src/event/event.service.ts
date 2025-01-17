@@ -73,6 +73,7 @@ export class EventService {
     this.logger.log('EventService Constructed');
   }
 
+  @Trace('event.initializeRepository')
   private async initializeRepository() {
     const tenantId = this.request.tenantId;
     const dataSource =
@@ -82,6 +83,7 @@ export class EventService {
       dataSource.getRepository(EventAttendeesEntity);
   }
 
+  @Trace('event.getTenantSpecificEventRepository')
   async getTenantSpecificEventRepository() {
     const span = this.tracer.startSpan('getTenantSpecificEventRepository');
     try {
@@ -102,6 +104,7 @@ export class EventService {
     }
   }
 
+  @Trace('event.findEventBySlug')
   async findEventBySlug(slug: string): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
 
@@ -144,6 +147,7 @@ export class EventService {
     return event;
   }
 
+  @Trace('event.create')
   async create(
     createEventDto: CreateEventDto,
     userId: number,
@@ -369,6 +373,7 @@ export class EventService {
     }
   }
 
+  @Trace('event.searchAllEvents')
   async searchAllEvents(
     pagination: PaginationDto,
     query: HomeQuery,
@@ -390,6 +395,7 @@ export class EventService {
     return paginate(eventQuery, { page, limit });
   }
 
+  @Trace('event.showEvent')
   async showEvent(slug: string, userId?: number): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
     const event = await this.eventRepository.findOne({
@@ -456,6 +462,7 @@ export class EventService {
     return event;
   }
 
+  @Trace('event.findEventTopicsByEventId')
   async findEventTopicsByEventId(
     zulipChannelId: number,
   ): Promise<ZulipTopic[]> {
@@ -479,6 +486,7 @@ export class EventService {
     return randomEvents;
   }
 
+  @Trace('event.showRandomEvents')
   async showRandomEvents(limit: number): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
     const events = await this.eventRepository.find({
@@ -499,6 +507,7 @@ export class EventService {
     )) as EventEntity[];
   }
 
+  @Trace('event.showRecommendedEventsByEventSlug')
   async showRecommendedEventsByEventSlug(slug: string): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
 
@@ -519,6 +528,7 @@ export class EventService {
     }
   }
 
+  @Trace('event.findRecommendedEventsForEvent')
   async findRecommendedEventsForEvent(
     eventId: number,
     categoryIds: number[],
@@ -553,6 +563,7 @@ export class EventService {
     )) as EventEntity[];
   }
 
+  @Trace('event.findRecommendedEventsForGroup')
   async findRecommendedEventsForGroup(
     groupId: number,
     categories: number[],
@@ -593,6 +604,7 @@ export class EventService {
     )) as EventEntity[];
   }
 
+  @Trace('event.findRandomEventsForGroup')
   async findRandomEventsForGroup(
     groupId: number,
     minEvents: number = 0,
@@ -626,6 +638,7 @@ export class EventService {
     )) as EventEntity[];
   }
 
+  @Trace('event.update')
   async update(
     slug: string,
     updateEventDto: UpdateEventDto,
@@ -679,6 +692,7 @@ export class EventService {
     return this.eventRepository.save(updatedEvent);
   }
 
+  @Trace('event.remove')
   async remove(slug: string): Promise<void> {
     await this.getTenantSpecificEventRepository();
     const event = await this.findEventBySlug(slug);
@@ -695,6 +709,7 @@ export class EventService {
     });
   }
 
+  @Trace('event.deleteEventsByGroup')
   async deleteEventsByGroup(groupId: number): Promise<void> {
     await this.getTenantSpecificEventRepository();
     await this.eventRepository.delete({ group: { id: groupId } });
@@ -703,6 +718,7 @@ export class EventService {
     });
   }
 
+  @Trace('event.getEventsByCreator')
   async getEventsByCreator(userId: number) {
     await this.getTenantSpecificEventRepository();
     const events =
@@ -720,6 +736,7 @@ export class EventService {
     )) as EventEntity[];
   }
 
+  @Trace('event.getEventsByAttendee')
   async getEventsByAttendee(userId: number) {
     await this.getTenantSpecificEventRepository();
     const events = await this.eventRepository.find({
@@ -736,6 +753,7 @@ export class EventService {
     )) as EventEntity[];
   }
 
+  @Trace('event.getHomePageFeaturedEvents')
   async getHomePageFeaturedEvents(): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
 
@@ -755,6 +773,7 @@ export class EventService {
     return events;
   }
 
+  @Trace('event.getHomePageUserUpcomingEvents')
   async getHomePageUserUpcomingEvents(userId: number) {
     await this.getTenantSpecificEventRepository();
     return this.eventRepository.find({
@@ -763,6 +782,7 @@ export class EventService {
     }); // TODO: check if this is correct. Should return list of user upcoming events (Home Page)
   }
 
+  @Trace('event.getHomePageUserRecentEventDrafts')
   async getHomePageUserRecentEventDrafts(userId: number) {
     await this.getTenantSpecificEventRepository();
     return this.eventRepository.find({
@@ -770,16 +790,19 @@ export class EventService {
     }); // TODO: check if this is correct. Should return list of user recent event drafts (Home Page)
   }
 
+  @Trace('event.getHomePageUserNextHostedEvent')
   async getHomePageUserNextHostedEvent(userId: number) {
     await this.getTenantSpecificEventRepository();
     return this.eventRepository.findOne({ where: { user: { id: userId } } });
   }
 
+  @Trace('event.findEventDetailsAttendees')
   async findEventDetailsAttendees(eventId: number) {
     await this.getTenantSpecificEventRepository();
     return this.eventAttendeeService.findEventAttendees(eventId);
   }
 
+  @Trace('event.findEventsForGroup')
   async findEventsForGroup(groupId: number, limit: number) {
     await this.getTenantSpecificEventRepository();
     const events = await this.eventRepository.find({
@@ -794,6 +817,7 @@ export class EventService {
     )) as EventEntity[];
   }
 
+  @Trace('event.editEvent')
   async editEvent(slug: string) {
     await this.getTenantSpecificEventRepository();
     const event = await this.eventRepository.findOne({
@@ -806,6 +830,7 @@ export class EventService {
     return event;
   }
 
+  @Trace('event.cancelAttendingEvent')
   async cancelAttendingEvent(slug: string, userId: number) {
     await this.getTenantSpecificEventRepository();
     const event = await this.findEventBySlug(slug);
@@ -818,6 +843,7 @@ export class EventService {
     return eventAttendee;
   }
 
+  @Trace('event.attendEvent')
   async attendEvent(
     slug: string,
     userId: number,
@@ -879,12 +905,14 @@ export class EventService {
     return attendee;
   }
 
+  @Trace('event.showEventAttendees')
   async showEventAttendees(slug: string, pagination: PaginationDto) {
     await this.getTenantSpecificEventRepository();
     const event = await this.findEventBySlug(slug);
     return this.eventAttendeeService.showEventAttendees(event.id, pagination); // TODO if admin role return all attendees otherwise only confirmed
   }
 
+  @Trace('event.updateEventAttendee')
   async updateEventAttendee(
     slug: string,
     attendeeId: number,
@@ -905,6 +933,7 @@ export class EventService {
     return await this.eventAttendeeService.showEventAttendee(attendeeId);
   }
 
+  @Trace('event.sendEventDiscussionMessage')
   async sendEventDiscussionMessage(
     slug: string,
     userId: number,
@@ -946,6 +975,7 @@ export class EventService {
     return await this.zulipService.sendUserMessage(user, params);
   }
 
+  @Trace('event.updateEventDiscussionMessage')
   async updateEventDiscussionMessage(
     messageId: number,
     message: string,
@@ -986,11 +1016,13 @@ export class EventService {
     )) as EventEntity[];
   }
 
+  @Trace('event.getEventAttendeesCount')
   async getEventAttendeesCount(eventId: number): Promise<number> {
     await this.getTenantSpecificEventRepository();
     return await this.eventAttendeeService.showEventAttendeesCount(eventId);
   }
 
+  @Trace('event.findUpcomingEventsForGroup')
   async findUpcomingEventsForGroup(groupId: number, limit: number) {
     await this.getTenantSpecificEventRepository();
     const events = await this.eventRepository.find({

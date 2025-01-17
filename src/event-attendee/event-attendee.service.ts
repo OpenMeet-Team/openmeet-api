@@ -22,6 +22,7 @@ import { UserEntity } from '../user/infrastructure/persistence/relational/entiti
 import { EventRoleService } from '../event-role/event-role.service';
 import { AuditLoggerService } from '../logger/audit-logger.provider';
 import { In } from 'typeorm';
+import { Trace } from '../utils/trace.decorator';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventAttendeeService {
@@ -38,6 +39,7 @@ export class EventAttendeeService {
     this.logger.log('EventAttendeeService Constructed');
   }
 
+  @Trace('event-attendee.getTenantSpecificEventRepository')
   private async getTenantSpecificEventRepository() {
     const tenantId = this.request.tenantId;
     const dataSource =
@@ -46,6 +48,7 @@ export class EventAttendeeService {
       dataSource.getRepository(EventAttendeesEntity);
   }
 
+  @Trace('event-attendee.create')
   async create(
     createEventAttendeeDto: CreateEventAttendeeDto,
   ): Promise<EventAttendeesEntity> {
@@ -69,6 +72,7 @@ export class EventAttendeeService {
     }
   }
 
+  @Trace('event-attendee.findAll')
   async findAll(
     pagination: PaginationDto,
     query: QueryEventAttendeeDto,
@@ -101,6 +105,7 @@ export class EventAttendeeService {
     return paginate(eventAttendeeQuery, { page, limit });
   }
 
+  @Trace('event-attendee.leaveEvent')
   async leaveEvent(
     userId: number,
     eventId: number,
@@ -124,6 +129,7 @@ export class EventAttendeeService {
     return { message: 'User has successfully left the event' };
   }
 
+  @Trace('event-attendee.showEventAttendees')
   async showEventAttendees(
     eventId: number,
     pagination: PaginationDto,
@@ -149,6 +155,7 @@ export class EventAttendeeService {
     return paginate(eventAttendee, { page, limit });
   }
 
+  @Trace('event-attendee.findEventAttendeeByUserId')
   async findEventAttendeeByUserId(
     eventId: number,
     userId: number,
@@ -176,6 +183,7 @@ export class EventAttendeeService {
     return attendee;
   }
 
+  @Trace('event-attendee.updateEventAttendee')
   async updateEventAttendee(
     attendeeId: number,
     body: UpdateEventAttendeeDto,
@@ -191,6 +199,7 @@ export class EventAttendeeService {
     });
   }
 
+  @Trace('event-attendee.findEventAttendees')
   async findEventAttendees(eventId: number): Promise<any> {
     await this.getTenantSpecificEventRepository();
     return await this.eventAttendeesRepository.find({
@@ -199,6 +208,7 @@ export class EventAttendeeService {
     });
   }
 
+  @Trace('event-attendee.getEventAttendeePermissions')
   async getEventAttendeePermissions(id: number) {
     await this.getTenantSpecificEventRepository();
     return await this.eventAttendeesRepository.find({
@@ -207,6 +217,7 @@ export class EventAttendeeService {
     });
   }
 
+  @Trace('event-attendee.cancelEventAttendance')
   async cancelEventAttendance(
     eventId: number,
     userId: number,
@@ -250,6 +261,7 @@ export class EventAttendeeService {
     return updatedAttendee;
   }
 
+  @Trace('event-attendee.showConfirmedEventAttendeesByEventId')
   async showConfirmedEventAttendeesByEventId(
     eventId: number,
     limit: number = 0,
@@ -274,6 +286,7 @@ export class EventAttendeeService {
     });
   }
 
+  @Trace('event-attendee.showEventAttendeesCount')
   async showEventAttendeesCount(
     eventId: number,
     status?: EventAttendeeStatus,
@@ -287,6 +300,7 @@ export class EventAttendeeService {
     });
   }
 
+  @Trace('event-attendee.deleteEventAttendees')
   async deleteEventAttendees(eventId: number): Promise<any> {
     await this.getTenantSpecificEventRepository();
     return await this.eventAttendeesRepository.delete({
@@ -294,6 +308,7 @@ export class EventAttendeeService {
     });
   }
 
+  @Trace('event-attendee.showConfirmedEventAttendeesCount')
   async showConfirmedEventAttendeesCount(eventId: number): Promise<number> {
     await this.getTenantSpecificEventRepository();
     return await this.eventAttendeesRepository.count({
@@ -301,6 +316,7 @@ export class EventAttendeeService {
     });
   }
 
+  @Trace('event-attendee.findEventIdsByUserId')
   async findEventIdsByUserId(userId: number): Promise<number[]> {
     await this.getTenantSpecificEventRepository();
     const attendees = await this.eventAttendeesRepository.find({
@@ -310,6 +326,7 @@ export class EventAttendeeService {
     return attendees.map((a) => a.id);
   }
 
+  @Trace('event-attendee.getMailServiceEventAttendeesByPermission')
   async getMailServiceEventAttendeesByPermission(
     eventId: number,
     permission: EventAttendeePermission,
@@ -338,6 +355,7 @@ export class EventAttendeeService {
     return eventAttendees.map((member) => member.user);
   }
 
+  @Trace('event-attendee.getMailServiceEventAttendee')
   async getMailServiceEventAttendee(eventAttendeeId: number) {
     await this.getTenantSpecificEventRepository();
     const eventAttendee = await this.eventAttendeesRepository.findOne({
@@ -351,6 +369,7 @@ export class EventAttendeeService {
     return eventAttendee;
   }
 
+  @Trace('event-attendee.deleteEventAttendee')
   async deleteEventAttendee(attendeeId: number) {
     await this.getTenantSpecificEventRepository();
     const deleted = await this.eventAttendeesRepository.delete({
@@ -362,6 +381,7 @@ export class EventAttendeeService {
     return deleted;
   }
 
+  @Trace('event-attendee.getAttendeeById')
   async getAttendeeById(attendeeId: number) {
     await this.getTenantSpecificEventRepository();
     const attendee = await this.eventAttendeesRepository.findOne({
@@ -375,6 +395,7 @@ export class EventAttendeeService {
     return attendee;
   }
 
+  @Trace('event-attendee.showEventAttendee')
   async showEventAttendee(attendeeId: number) {
     await this.getTenantSpecificEventRepository();
 

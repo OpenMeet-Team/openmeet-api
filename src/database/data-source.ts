@@ -2,20 +2,82 @@ import 'reflect-metadata';
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { SpanStatusCode, trace, context, SpanKind } from '@opentelemetry/api';
 
+// Add connection cache at module level
+const connectionCache = new Map<
+  string,
+  {
+    connection: DataSource;
+    lastUsed: number;
+  }
+>();
+
+const CONNECTION_TIMEOUT = 60 * 60 * 1000; // 1 hour
+const MAX_CONNECTIONS = 100;
+
+// Add cleanup interval
+setInterval(
+  () => {
+    const now = Date.now();
+    for (const [key, value] of connectionCache.entries()) {
+      if (now - value.lastUsed > CONNECTION_TIMEOUT) {
+        value.connection.destroy().catch(console.error);
+        connectionCache.delete(key);
+      }
+    }
+  },
+  15 * 60 * 1000,
+); // Clean every 15 minutes
+
 export const AppDataSource = (tenantId: string) => {
   const tracer = trace.getTracer('database');
   const schemaName = tenantId ? `tenant_${tenantId}` : '';
 
-  // Create a span for DataSource creation
+  // Check cache first
+  const cacheKey = `${process.env.DATABASE_URL}_${schemaName}`;
+  const cached = connectionCache.get(cacheKey);
+
+  if (cached?.connection.isInitialized) {
+    cached.lastUsed = Date.now();
+    return cached.connection;
+  }
+
+  // Clean up old connection if it exists
+  if (cached) {
+    cached.connection.destroy().catch(console.error);
+    connectionCache.delete(cacheKey);
+  }
+
+  // Check connection limit
+  if (connectionCache.size >= MAX_CONNECTIONS) {
+    // Remove oldest connection
+    let oldestKey: string | undefined = undefined;
+    let oldestTime = Date.now();
+
+    for (const [key, value] of connectionCache.entries()) {
+      if (value.lastUsed < oldestTime) {
+        oldestTime = value.lastUsed;
+        oldestKey = key;
+      }
+    }
+
+    if (oldestKey) {
+      const old = connectionCache.get(oldestKey);
+      if (old) {
+        old.connection.destroy().catch(console.error);
+        connectionCache.delete(oldestKey);
+      }
+    }
+  }
+
   const span = tracer.startSpan('create-data-source', {
     kind: SpanKind.CLIENT,
     attributes: {
       'tenant.id': tenantId,
       'schema.name': schemaName,
+      'cache.hit': false,
     },
   });
 
-  // Create the DataSource within the context of our span
   const dataSource = context.with(trace.setSpan(context.active(), span), () => {
     return new DataSource({
       name: schemaName,
@@ -30,6 +92,7 @@ export const AppDataSource = (tenantId: string) => {
       schema: schemaName,
       database: process.env.DATABASE_NAME,
       synchronize: process.env.DATABASE_SYNCHRONIZE === 'true',
+      entitySkipConstructor: true,
       dropSchema: false,
       keepConnectionAlive: true,
       logging:
@@ -53,6 +116,11 @@ export const AppDataSource = (tenantId: string) => {
           : 100,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 2000,
+        min: 2, // Minimum connections to maintain
+        maxUses: 7500, // Maximum number of times to use a connection before releasing it
+        statement_timeout: 60000, // Timeout SQL statements after 60s
+        query_timeout: 60000, // Timeout entire queries after 60s
+        application_name: `openmeet_${process.env.NODE_ENV}_${tenantId}`,
         ssl:
           process.env.DATABASE_SSL_ENABLED === 'true'
             ? {
@@ -69,43 +137,50 @@ export const AppDataSource = (tenantId: string) => {
 
   span.end();
 
-  // Store the original initialize method
+  // Enhance initialize method with retry logic
   const originalInitialize = dataSource.initialize.bind(dataSource);
-
-  // Replace with traced version
-  dataSource.initialize = async () => {
+  dataSource.initialize = async (): Promise<DataSource> => {
     return tracer.startActiveSpan(
       'initialize-data-source',
-      {
-        kind: SpanKind.CLIENT,
-      },
+      { kind: SpanKind.CLIENT },
       async (span) => {
-        try {
-          span.setAttribute('tenant.id', tenantId);
-          span.setAttribute('schema.name', schemaName);
-          span.setAttribute('database.operation', 'initialize');
+        const maxRetries = 3;
+        let retryCount = 0;
 
-          const startTime = Date.now();
-          await originalInitialize();
-          const duration = Date.now() - startTime;
+        while (retryCount < maxRetries) {
+          try {
+            span.setAttribute('tenant.id', tenantId);
+            span.setAttribute('schema.name', schemaName);
+            span.setAttribute('retry.count', retryCount);
 
-          span.setAttribute('database.connection_time_ms', duration);
+            const startTime = Date.now();
+            await originalInitialize();
+            const duration = Date.now() - startTime;
 
-          // Use optional chaining and type checking for attributes
-          const dbName = dataSource.options?.database;
-          const dbType = dataSource.options?.type;
+            span.setAttribute('database.connection_time_ms', duration);
 
-          if (dbName) span.setAttribute('database.name', String(dbName));
-          if (dbType) span.setAttribute('database.type', String(dbType));
+            // Cache successful connection
+            connectionCache.set(cacheKey, {
+              connection: dataSource,
+              lastUsed: Date.now(),
+            });
 
-          return dataSource;
-        } catch (error) {
-          span.recordException(error);
-          span.setStatus({ code: SpanStatusCode.ERROR });
-          throw error;
-        } finally {
-          span.end();
+            return dataSource;
+          } catch (error) {
+            retryCount++;
+            if (retryCount === maxRetries) {
+              span.recordException(error);
+              span.setStatus({ code: SpanStatusCode.ERROR });
+              throw error;
+            }
+            // Exponential backoff
+            await new Promise((resolve) =>
+              setTimeout(resolve, Math.pow(2, retryCount) * 1000),
+            );
+          }
         }
+        // This should never be reached due to the throw in the catch block
+        throw new Error('Failed to initialize connection after max retries');
       },
     );
   };
