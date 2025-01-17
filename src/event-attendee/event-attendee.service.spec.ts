@@ -3,7 +3,6 @@ import { EventAttendeeService } from './event-attendee.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import { EventRoleService } from '../event-role/event-role.service';
-import { NotFoundException } from '@nestjs/common';
 
 describe('EventAttendeeService', () => {
   let service: EventAttendeeService;
