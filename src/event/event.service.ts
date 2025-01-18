@@ -259,7 +259,9 @@ export class EventService {
               status: EventAttendeeStatus.Confirmed,
             }),
         )
-        .where('event.status = :status', { status: EventStatus.Published });
+        .where('event.status = :status', { status: EventStatus.Published })
+        .orderBy('event.startDate', 'ASC')
+        .addOrderBy('event.id', 'ASC');
 
       // Visibility filters based on authentication status
       if (!user) {
@@ -359,6 +361,9 @@ export class EventService {
 
         eventQuery.andWhere(`(${likeConditions})`, likeParameters);
       }
+
+      this.logger.debug('Event query SQL:', eventQuery.getSql());
+      this.logger.debug('Event query parameters:', eventQuery.getParameters());
 
       const paginatedEvents = await paginate(eventQuery, {
         page: pagination.page,
