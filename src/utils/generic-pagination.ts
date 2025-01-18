@@ -76,7 +76,10 @@ export async function paginate<T extends ObjectLiteral>(
             resultsSpan.setAttribute('records_retrieved', data.length);
             resultsSpan.setAttribute('query.duration_ms', duration);
             resultsSpan.setAttribute('query.sql', query.getQuery());
-            resultsSpan.setAttribute('query.parameters', JSON.stringify(query.getParameters()));
+            resultsSpan.setAttribute(
+              'query.parameters',
+              JSON.stringify(query.getParameters()),
+            );
             resultsSpan.end();
             return data;
           },
@@ -100,7 +103,10 @@ export async function paginate<T extends ObjectLiteral>(
         span.recordException(error);
         span.setStatus({
           code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : 'Unknown error in pagination',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Unknown error in pagination',
         });
         throw error;
       } finally {

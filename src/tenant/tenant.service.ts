@@ -13,39 +13,45 @@ export class TenantConnectionService implements OnModuleInit {
   async onModuleInit() {}
 
   async getTenantConnection(tenantId: string): Promise<DataSource> {
-    return this.tracer.startActiveSpan('getTenantConnection', { kind: SpanKind.CLIENT }, async (span) => {
-      try {
-        span.setAttribute('tenantId', tenantId);
-        span.setAttribute('cache.lookup', true);
-        
-        const dataSource = AppDataSource(tenantId);
-        
-        // Add cache hit/miss tracking
-        if (dataSource.isInitialized) {
-          span.setAttribute('cache.hit', true);
+    return this.tracer.startActiveSpan(
+      'getTenantConnection',
+      { kind: SpanKind.CLIENT },
+      async (span) => {
+        try {
+          span.setAttribute('tenantId', tenantId);
+          span.setAttribute('cache.lookup', true);
+
+          const dataSource = AppDataSource(tenantId);
+
+          // Add cache hit/miss tracking
+          if (dataSource.isInitialized) {
+            span.setAttribute('cache.hit', true);
+            return dataSource;
+          }
+
+          span.setAttribute('cache.hit', false);
+          const initSpan = this.tracer.startSpan('initializeDataSource');
+          await dataSource.initialize();
+          initSpan.end();
+
+          if (tenantId) {
+            const schemaSpan = this.tracer.startSpan('createSchema');
+            await dataSource.query(
+              `CREATE SCHEMA IF NOT EXISTS "tenant_${tenantId}"`,
+            );
+            schemaSpan.end();
+          }
+
           return dataSource;
+        } catch (error) {
+          span.recordException(error);
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw error;
+        } finally {
+          span.end();
         }
-        
-        span.setAttribute('cache.hit', false);
-        const initSpan = this.tracer.startSpan('initializeDataSource');
-        await dataSource.initialize();
-        initSpan.end();
-
-        if (tenantId) {
-          const schemaSpan = this.tracer.startSpan('createSchema');
-          await dataSource.query(`CREATE SCHEMA IF NOT EXISTS "tenant_${tenantId}"`);
-          schemaSpan.end();
-        }
-
-        return dataSource;
-      } catch (error) {
-        span.recordException(error);
-        span.setStatus({ code: SpanStatusCode.ERROR });
-        throw error;
-      } finally {
-        span.end();
-      }
-    });
+      },
+    );
   }
 
   async closeDatabaseConnection(tenantId: string) {

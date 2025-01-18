@@ -21,15 +21,18 @@ let cleanupInterval: NodeJS.Timeout | null = null;
 export function startCleanupInterval() {
   if (cleanupInterval) return; // Prevent multiple intervals
 
-  cleanupInterval = setInterval(() => {
-    const now = Date.now();
-    for (const [key, value] of connectionCache.entries()) {
-      if (now - value.lastUsed > CONNECTION_TIMEOUT) {
-        value.connection.destroy().catch(console.error);
-        connectionCache.delete(key);
+  cleanupInterval = setInterval(
+    () => {
+      const now = Date.now();
+      for (const [key, value] of connectionCache.entries()) {
+        if (now - value.lastUsed > CONNECTION_TIMEOUT) {
+          value.connection.destroy().catch(console.error);
+          connectionCache.delete(key);
+        }
       }
-    }
-  }, 15 * 60 * 1000); // Clean every 15 minutes
+    },
+    15 * 60 * 1000,
+  ); // Clean every 15 minutes
 
   // Ensure cleanup on process exit
   process.on('beforeExit', () => {
@@ -156,6 +159,15 @@ export const AppDataSource = (tenantId: string) => {
                 cert: process.env.DATABASE_CERT ?? undefined,
               }
             : undefined,
+        // Connection pool settings
+        poolSize: process.env.DATABASE_POOL_SIZE
+          ? parseInt(process.env.DATABASE_POOL_SIZE, 10)
+          : 10,
+        maxPoolSize: process.env.DATABASE_MAX_POOL_SIZE
+          ? parseInt(process.env.DATABASE_MAX_POOL_SIZE, 10)
+          : 20,
+        // Cleanup idle connections
+        allowExitOnIdle: true,
       },
     } as DataSourceOptions);
   });

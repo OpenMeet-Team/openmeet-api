@@ -22,7 +22,7 @@ const runSeed = async () => {
 
   try {
     app = await NestFactory.create(SeedModule);
-    
+
     for (const tenantId of tenantIds) {
       console.log('Running seeds for tenant:', tenantId);
       try {
@@ -56,7 +56,7 @@ const runSeed = async () => {
   }
 };
 
-runSeed().catch(error => {
+runSeed().catch((error) => {
   console.error('Fatal error during seeding:', error);
   process.exit(1);
 });
