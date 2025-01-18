@@ -55,7 +55,8 @@ export class GroupController {
   @UseGuards(VisibilityGuard)
   @Get()
   @ApiOperation({
-    summary: 'Get all groups, public endpoint with optional auth for more visibility',
+    summary:
+      'Get all groups, public endpoint with optional auth for more visibility',
   })
   async showAll(
     @Query() pagination: PaginationDto,

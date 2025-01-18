@@ -37,18 +37,21 @@ import { CreateEventAttendeeDto } from '../event-attendee/dto/create-eventAttend
 import { EventRoleService } from '../event-role/event-role.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { UserService } from '../user/user.service';
-import { UpdateEventAttendeeDto } from 'src/event-attendee/dto/update-eventAttendee.dto';
+import { UpdateEventAttendeeDto } from '../event-attendee/dto/update-eventAttendee.dto';
 import { ZulipTopic } from 'zulip-js';
 import { HomeQuery } from '../home/dto/home-query.dto';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { Brackets } from 'typeorm';
 import { EventMailService } from '../event-mail/event-mail.service';
 import { AuditLoggerService } from '../logger/audit-logger.provider';
+import { Trace } from '../utils/trace.decorator';
+import { trace } from '@opentelemetry/api';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
   private readonly auditLogger = AuditLoggerService.getInstance();
   private readonly logger = new Logger(EventService.name);
+  private readonly tracer = trace.getTracer('event-service');
 
   private eventRepository: Repository<EventEntity>;
   private eventAttendeesRepository: Repository<EventAttendeesEntity>;
@@ -70,6 +73,7 @@ export class EventService {
     this.logger.log('EventService Constructed');
   }
 
+  @Trace('event.initializeRepository')
   private async initializeRepository() {
     const tenantId = this.request.tenantId;
     const dataSource =
@@ -79,24 +83,71 @@ export class EventService {
       dataSource.getRepository(EventAttendeesEntity);
   }
 
+  @Trace('event.getTenantSpecificEventRepository')
   async getTenantSpecificEventRepository() {
-    const tenantId = this.request.tenantId;
-    const dataSource =
-      await this.tenantConnectionService.getTenantConnection(tenantId);
-    this.eventRepository = dataSource.getRepository(EventEntity);
-    this.eventAttendeesRepository =
-      dataSource.getRepository(EventAttendeesEntity);
+    const span = this.tracer.startSpan('getTenantSpecificEventRepository');
+    try {
+      const tenantId = this.request.tenantId;
+      span.setAttribute('tenantId', tenantId);
+
+      const dataSource =
+        await this.tenantConnectionService.getTenantConnection(tenantId);
+      this.eventRepository = dataSource.getRepository(EventEntity);
+      this.eventAttendeesRepository =
+        dataSource.getRepository(EventAttendeesEntity);
+    } catch (error) {
+      span.recordException(error);
+      this.logger.error('Failed to get tenant connection', error);
+      throw error;
+    } finally {
+      span.end();
+    }
   }
 
+  @Trace('event.findEventBySlug')
   async findEventBySlug(slug: string): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
-    const event = await this.eventRepository.findOne({ where: { slug } });
+
+    this.logger.debug(`[findEventBySlug] Finding event for slug: ${slug}`);
+    this.logger.debug(
+      `[findEventBySlug] Current user: ${this.request.user?.id}`,
+    );
+
+    const event = await this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.attendees', 'attendee')
+      .leftJoinAndSelect('attendee.user', 'user')
+      .leftJoinAndSelect('attendee.role', 'role')
+      .where('event.slug = :slug', { slug })
+      .getOne();
+
     if (!event) {
       throw new NotFoundException(`Event with slug ${slug} not found`);
     }
+
+    // If there's a user in the request context, find their attendance
+    if (this.request.user) {
+      this.logger.debug(
+        `[findEventBySlug] Finding attendance for user: ${this.request.user.id}`,
+      );
+      const attendee =
+        await this.eventAttendeeService.findEventAttendeeByUserId(
+          event.id,
+          this.request.user.id,
+        );
+      this.logger.debug(
+        `[findEventBySlug] Found attendee: ${JSON.stringify(attendee)}`,
+      );
+      this.logger.debug(
+        `[findEventBySlug] Attendee status: ${attendee?.status}`,
+      );
+      event.attendee = attendee;
+    }
+
     return event;
   }
 
+  @Trace('event.create')
   async create(
     createEventDto: CreateEventDto,
     userId: number,
@@ -162,150 +213,167 @@ export class EventService {
     return createdEvent;
   }
 
+  @Trace('event.showAllEvents')
   async showAllEvents(
     pagination: PaginationDto,
     query: QueryEventDto,
     user?: any,
   ): Promise<any> {
-    await this.getTenantSpecificEventRepository();
+    const span = this.tracer.startSpan('showAllEvents');
+    try {
+      span.setAttribute('pagination', JSON.stringify(pagination));
+      span.setAttribute('query', JSON.stringify(query));
+      span.setAttribute('user', JSON.stringify(user));
 
-    const {
-      search,
-      lat,
-      lon,
-      radius,
-      type,
-      // location,
-      fromDate,
-      toDate,
-      categories,
-    } = query;
+      const repoSpan = this.tracer.startSpan('initRepository');
+      await this.getTenantSpecificEventRepository();
+      repoSpan.end();
 
-    const eventQuery = this.eventRepository
-      .createQueryBuilder('event')
-      .leftJoin('event.user', 'user')
-      .leftJoin('user.photo', 'photo')
-      .leftJoin('event.image', 'eventPhoto')
-      .addSelect(['user.name', 'user.slug', 'photo.path', 'eventPhoto.path'])
-      .leftJoinAndSelect('event.categories', 'categories')
-      .leftJoinAndSelect('event.group', 'group')
-      .loadRelationCountAndMap(
-        'event.attendeesCount',
-        'event.attendees',
-        'attendees',
-        (qb) =>
-          qb.where('attendees.status = :status', {
-            status: EventAttendeeStatus.Confirmed,
+      const querySpan = this.tracer.startSpan('executeQuery');
+      const {
+        search,
+        lat,
+        lon,
+        radius,
+        type,
+        // location,
+        fromDate,
+        toDate,
+        categories,
+      } = query;
+
+      const eventQuery = this.eventRepository
+        .createQueryBuilder('event')
+        .leftJoin('event.user', 'user')
+        .leftJoin('user.photo', 'photo')
+        .leftJoin('event.image', 'eventPhoto')
+        .addSelect(['user.name', 'user.slug', 'photo.path', 'eventPhoto.path'])
+        .leftJoinAndSelect('event.categories', 'categories')
+        .leftJoinAndSelect('event.group', 'group')
+        .loadRelationCountAndMap(
+          'event.attendeesCount',
+          'event.attendees',
+          'attendees',
+          (qb) =>
+            qb.where('attendees.status = :status', {
+              status: EventAttendeeStatus.Confirmed,
+            }),
+        )
+        .where('event.status = :status', { status: EventStatus.Published });
+
+      // Visibility filters based on authentication status
+      if (!user) {
+        // Unauthenticated users can only see public events
+        eventQuery.andWhere('event.visibility = :visibility', {
+          visibility: EventVisibility.Public,
+        });
+      } else if (user.roles?.includes('admin')) {
+        // Admins can see all events
+      } else {
+        // Get all event IDs this user is attending
+        const attendedEventIds =
+          await this.eventAttendeeService.findEventIdsByUserId(user.id);
+
+        eventQuery.andWhere(
+          new Brackets((qb) => {
+            // Public events
+            qb.where('event.visibility = :publicVisibility', {
+              publicVisibility: EventVisibility.Public,
+            });
+            // Authenticated events (only for logged-in users)
+            qb.orWhere('event.visibility = :authVisibility', {
+              authVisibility: EventVisibility.Authenticated,
+            });
+            // Private events only if attending
+            if (attendedEventIds.length > 0) {
+              qb.orWhere(
+                'event.visibility = :privateVisibility AND event.id IN (:...attendedEventIds)',
+                {
+                  privateVisibility: EventVisibility.Private,
+                  attendedEventIds,
+                },
+              );
+            }
           }),
-      )
-      .where('event.status = :status', { status: EventStatus.Published });
-
-    // Visibility filters based on authentication status
-    if (!user) {
-      // Unauthenticated users can only see public events
-      eventQuery.andWhere('event.visibility = :visibility', {
-        visibility: EventVisibility.Public,
-      });
-    } else if (user.roles?.includes('admin')) {
-      // Admins can see all events
-    } else {
-      // Get all event IDs this user is attending
-      const attendedEventIds =
-        await this.eventAttendeeService.findEventIdsByUserId(user.id);
-
-      eventQuery.andWhere(
-        new Brackets((qb) => {
-          // Public events
-          qb.where('event.visibility = :publicVisibility', {
-            publicVisibility: EventVisibility.Public,
-          });
-          // Authenticated events (only for logged-in users)
-          qb.orWhere('event.visibility = :authVisibility', {
-            authVisibility: EventVisibility.Authenticated,
-          });
-          // Private events only if attending
-          if (attendedEventIds.length > 0) {
-            qb.orWhere(
-              'event.visibility = :privateVisibility AND event.id IN (:...attendedEventIds)',
-              {
-                privateVisibility: EventVisibility.Private,
-                attendedEventIds,
-              },
-            );
-          }
-        }),
-      );
-    }
-
-    if (search) {
-      eventQuery.andWhere('event.name ILIKE :search', {
-        search: `%${search}%`,
-      });
-    }
-
-    if (lat && lon) {
-      if (isNaN(lon) || isNaN(lat)) {
-        throw new BadRequestException(
-          'Invalid location format. Expected "lon,lat".',
         );
       }
 
-      const searchRadius = radius ?? DEFAULT_RADIUS;
+      if (search) {
+        eventQuery.andWhere('event.name ILIKE :search', {
+          search: `%${search}%`,
+        });
+      }
 
-      // Find events within the radius using ST_DWithin
-      eventQuery.andWhere(
-        `ST_DWithin(
-          event.locationPoint,
-          ST_SetSRID(ST_MakePoint(:lon, :lat), ${PostgisSrid.SRID}),
-          :radius
-        )`,
-        { lon, lat, radius: searchRadius * 1609.34 }, // Convert Miles to meters
-      );
-    }
+      if (lat && lon) {
+        if (isNaN(lon) || isNaN(lat)) {
+          throw new BadRequestException(
+            'Invalid location format. Expected "lon,lat".',
+          );
+        }
 
-    if (type) {
-      eventQuery.andWhere('event.type = :type', { type });
-    }
+        const searchRadius = radius ?? DEFAULT_RADIUS;
 
-    // if (location) {
-    //   eventQuery.andWhere('event.location ILIKE :location', {
-    //     location: `%${location}%`,
-    //   });
-    // }
+        // Find events within the radius using ST_DWithin
+        eventQuery.andWhere(
+          `ST_DWithin(
+            event.locationPoint,
+            ST_SetSRID(ST_MakePoint(:lon, :lat), ${PostgisSrid.SRID}),
+            :radius
+          )`,
+          { lon, lat, radius: searchRadius * 1609.34 }, // Convert Miles to meters
+        );
+      }
 
-    if (fromDate && toDate) {
-      eventQuery.andWhere('event.startDate BETWEEN :fromDate AND :toDate', {
-        fromDate,
-        toDate,
+      if (type) {
+        eventQuery.andWhere('event.type = :type', { type });
+      }
+
+      // if (location) {
+      //   eventQuery.andWhere('event.location ILIKE :location', {
+      //     location: `%${location}%`,
+      //   });
+      // }
+
+      if (fromDate && toDate) {
+        eventQuery.andWhere('event.startDate BETWEEN :fromDate AND :toDate', {
+          fromDate,
+          toDate,
+        });
+      } else if (fromDate) {
+        eventQuery.andWhere('event.startDate >= :fromDate', { fromDate });
+      } else if (toDate) {
+        eventQuery.andWhere('event.startDate <= :toDate', { toDate });
+      } else {
+        eventQuery.andWhere('event.startDate > :now', { now: new Date() });
+      }
+
+      if (categories && categories.length > 0) {
+        const likeConditions = categories
+          .map((_, index) => `categories.name LIKE :category${index}`)
+          .join(' OR ');
+
+        const likeParameters = categories.reduce((acc, category, index) => {
+          acc[`category${index}`] = `%${category}%`;
+          return acc;
+        }, {});
+
+        eventQuery.andWhere(`(${likeConditions})`, likeParameters);
+      }
+
+      const paginatedEvents = await paginate(eventQuery, {
+        page: pagination.page,
+        limit: pagination.limit,
       });
-    } else if (fromDate) {
-      eventQuery.andWhere('event.startDate >= :fromDate', { fromDate });
-    } else if (toDate) {
-      eventQuery.andWhere('event.startDate <= :toDate', { toDate });
-    } else {
-      eventQuery.andWhere('event.startDate > :now', { now: new Date() });
+      querySpan.end();
+
+      span.setAttribute('events.count', paginatedEvents.data.length);
+      return paginatedEvents;
+    } finally {
+      span.end();
     }
-
-    if (categories && categories.length > 0) {
-      const likeConditions = categories
-        .map((_, index) => `categories.name LIKE :category${index}`)
-        .join(' OR ');
-
-      const likeParameters = categories.reduce((acc, category, index) => {
-        acc[`category${index}`] = `%${category}%`;
-        return acc;
-      }, {});
-
-      eventQuery.andWhere(`(${likeConditions})`, likeParameters);
-    }
-
-    const paginatedEvents = await paginate(eventQuery, {
-      page: pagination.page,
-      limit: pagination.limit,
-    });
-    return paginatedEvents;
   }
 
+  @Trace('event.searchAllEvents')
   async searchAllEvents(
     pagination: PaginationDto,
     query: HomeQuery,
@@ -327,6 +395,7 @@ export class EventService {
     return paginate(eventQuery, { page, limit });
   }
 
+  @Trace('event.showEvent')
   async showEvent(slug: string, userId?: number): Promise<EventEntity> {
     await this.getTenantSpecificEventRepository();
     const event = await this.eventRepository.findOne({
@@ -393,12 +462,14 @@ export class EventService {
     return event;
   }
 
+  @Trace('event.findEventTopicsByEventId')
   async findEventTopicsByEventId(
     zulipChannelId: number,
   ): Promise<ZulipTopic[]> {
     return await this.zulipService.getAdminStreamTopics(zulipChannelId);
   }
 
+  @Trace('event.findRandom')
   async findRandom(): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
 
@@ -415,6 +486,7 @@ export class EventService {
     return randomEvents;
   }
 
+  @Trace('event.showRandomEvents')
   async showRandomEvents(limit: number): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
     const events = await this.eventRepository.find({
@@ -435,6 +507,7 @@ export class EventService {
     )) as EventEntity[];
   }
 
+  @Trace('event.showRecommendedEventsByEventSlug')
   async showRecommendedEventsByEventSlug(slug: string): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
 
@@ -455,6 +528,7 @@ export class EventService {
     }
   }
 
+  @Trace('event.findRecommendedEventsForEvent')
   async findRecommendedEventsForEvent(
     eventId: number,
     categoryIds: number[],
@@ -489,6 +563,7 @@ export class EventService {
     )) as EventEntity[];
   }
 
+  @Trace('event.findRecommendedEventsForGroup')
   async findRecommendedEventsForGroup(
     groupId: number,
     categories: number[],
@@ -529,6 +604,7 @@ export class EventService {
     )) as EventEntity[];
   }
 
+  @Trace('event.findRandomEventsForGroup')
   async findRandomEventsForGroup(
     groupId: number,
     minEvents: number = 0,
@@ -562,6 +638,7 @@ export class EventService {
     )) as EventEntity[];
   }
 
+  @Trace('event.update')
   async update(
     slug: string,
     updateEventDto: UpdateEventDto,
@@ -615,6 +692,7 @@ export class EventService {
     return this.eventRepository.save(updatedEvent);
   }
 
+  @Trace('event.remove')
   async remove(slug: string): Promise<void> {
     await this.getTenantSpecificEventRepository();
     const event = await this.findEventBySlug(slug);
@@ -631,6 +709,7 @@ export class EventService {
     });
   }
 
+  @Trace('event.deleteEventsByGroup')
   async deleteEventsByGroup(groupId: number): Promise<void> {
     await this.getTenantSpecificEventRepository();
     await this.eventRepository.delete({ group: { id: groupId } });
@@ -639,6 +718,7 @@ export class EventService {
     });
   }
 
+  @Trace('event.getEventsByCreator')
   async getEventsByCreator(userId: number) {
     await this.getTenantSpecificEventRepository();
     const events =
@@ -656,6 +736,7 @@ export class EventService {
     )) as EventEntity[];
   }
 
+  @Trace('event.getEventsByAttendee')
   async getEventsByAttendee(userId: number) {
     await this.getTenantSpecificEventRepository();
     const events = await this.eventRepository.find({
@@ -672,6 +753,7 @@ export class EventService {
     )) as EventEntity[];
   }
 
+  @Trace('event.getHomePageFeaturedEvents')
   async getHomePageFeaturedEvents(): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
 
@@ -688,12 +770,10 @@ export class EventService {
       .limit(5)
       .getMany(); // TODO: later provide featured flag or configuration object
 
-    this.logger.debug('getHomePageFeaturedEvents', {
-      events,
-    });
     return events;
   }
 
+  @Trace('event.getHomePageUserUpcomingEvents')
   async getHomePageUserUpcomingEvents(userId: number) {
     await this.getTenantSpecificEventRepository();
     return this.eventRepository.find({
@@ -702,6 +782,7 @@ export class EventService {
     }); // TODO: check if this is correct. Should return list of user upcoming events (Home Page)
   }
 
+  @Trace('event.getHomePageUserRecentEventDrafts')
   async getHomePageUserRecentEventDrafts(userId: number) {
     await this.getTenantSpecificEventRepository();
     return this.eventRepository.find({
@@ -709,16 +790,19 @@ export class EventService {
     }); // TODO: check if this is correct. Should return list of user recent event drafts (Home Page)
   }
 
+  @Trace('event.getHomePageUserNextHostedEvent')
   async getHomePageUserNextHostedEvent(userId: number) {
     await this.getTenantSpecificEventRepository();
     return this.eventRepository.findOne({ where: { user: { id: userId } } });
   }
 
+  @Trace('event.findEventDetailsAttendees')
   async findEventDetailsAttendees(eventId: number) {
     await this.getTenantSpecificEventRepository();
     return this.eventAttendeeService.findEventAttendees(eventId);
   }
 
+  @Trace('event.findEventsForGroup')
   async findEventsForGroup(groupId: number, limit: number) {
     await this.getTenantSpecificEventRepository();
     const events = await this.eventRepository.find({
@@ -733,6 +817,7 @@ export class EventService {
     )) as EventEntity[];
   }
 
+  @Trace('event.editEvent')
   async editEvent(slug: string) {
     await this.getTenantSpecificEventRepository();
     const event = await this.eventRepository.findOne({
@@ -745,10 +830,12 @@ export class EventService {
     return event;
   }
 
+  @Trace('event.cancelAttendingEvent')
   async cancelAttendingEvent(slug: string, userId: number) {
     await this.getTenantSpecificEventRepository();
     const event = await this.findEventBySlug(slug);
-    const eventAttendee = await this.eventAttendeeService.cancelAttendingEvent(
+
+    const eventAttendee = await this.eventAttendeeService.cancelEventAttendance(
       event.id,
       userId,
     );
@@ -756,6 +843,7 @@ export class EventService {
     return eventAttendee;
   }
 
+  @Trace('event.attendEvent')
   async attendEvent(
     slug: string,
     userId: number,
@@ -771,7 +859,10 @@ export class EventService {
         user.id,
       );
 
-    if (eventAttendee) {
+    if (
+      eventAttendee &&
+      eventAttendee.status !== EventAttendeeStatus.Cancelled
+    ) {
       return eventAttendee;
     }
 
@@ -814,12 +905,14 @@ export class EventService {
     return attendee;
   }
 
+  @Trace('event.showEventAttendees')
   async showEventAttendees(slug: string, pagination: PaginationDto) {
     await this.getTenantSpecificEventRepository();
     const event = await this.findEventBySlug(slug);
     return this.eventAttendeeService.showEventAttendees(event.id, pagination); // TODO if admin role return all attendees otherwise only confirmed
   }
 
+  @Trace('event.updateEventAttendee')
   async updateEventAttendee(
     slug: string,
     attendeeId: number,
@@ -840,6 +933,7 @@ export class EventService {
     return await this.eventAttendeeService.showEventAttendee(attendeeId);
   }
 
+  @Trace('event.sendEventDiscussionMessage')
   async sendEventDiscussionMessage(
     slug: string,
     userId: number,
@@ -881,6 +975,7 @@ export class EventService {
     return await this.zulipService.sendUserMessage(user, params);
   }
 
+  @Trace('event.updateEventDiscussionMessage')
   async updateEventDiscussionMessage(
     messageId: number,
     message: string,
@@ -921,11 +1016,13 @@ export class EventService {
     )) as EventEntity[];
   }
 
+  @Trace('event.getEventAttendeesCount')
   async getEventAttendeesCount(eventId: number): Promise<number> {
     await this.getTenantSpecificEventRepository();
     return await this.eventAttendeeService.showEventAttendeesCount(eventId);
   }
 
+  @Trace('event.findUpcomingEventsForGroup')
   async findUpcomingEventsForGroup(groupId: number, limit: number) {
     await this.getTenantSpecificEventRepository();
     const events = await this.eventRepository.find({

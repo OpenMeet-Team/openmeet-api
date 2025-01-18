@@ -35,6 +35,7 @@ import {
   EventAttendeePermission,
   UserPermission,
 } from '../core/constants/constant';
+import { Trace } from '../utils/trace.decorator';
 
 @ApiTags('Events')
 @Controller('events')
@@ -53,6 +54,7 @@ export class EventController {
   })
   @Public()
   @UseGuards(JWTAuthGuard, VisibilityGuard)
+  @Trace('event.showAllEvents')
   async showAllEvents(
     @Query() pagination: PaginationDto,
     @Query() query: QueryEventDto,
@@ -69,6 +71,7 @@ export class EventController {
   @ApiOperation({
     summary: 'Get all events for the dashboard.',
   })
+  @Trace('event.showDashboardEvents')
   async showDashboardEvents(@AuthUser() user: User): Promise<EventEntity[]> {
     return this.eventService.showDashboardEvents(user.id);
   }
@@ -80,6 +83,7 @@ export class EventController {
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post()
   @ApiOperation({ summary: 'Create a new event' })
+  @Trace('event.create')
   async create(
     @Body() createEventDto: CreateEventDto,
     @AuthUser() user: User,
@@ -94,6 +98,7 @@ export class EventController {
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Get(':slug/edit')
   @ApiOperation({ summary: 'Edit event by ID' })
+  @Trace('event.editEvent')
   async editEvent(@Param('slug') slug: string): Promise<EventEntity | null> {
     return await this.eventService.editEvent(slug);
   }
@@ -106,6 +111,7 @@ export class EventController {
   @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Get(':slug')
   @ApiOperation({ summary: 'Show event details by ID' })
+  @Trace('event.showEvent')
   async showEvent(
     @Param('slug') slug: string,
     @AuthUser() user: User,

@@ -3,48 +3,70 @@ import { DataSource } from 'typeorm';
 import { AppDataSource } from '../database/data-source';
 import { getTenantConfig } from '../utils/tenant-config';
 import { TenantConfig } from '../core/constants/constant';
+import { trace } from '@opentelemetry/api';
+import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
+
 @Injectable()
 export class TenantConnectionService implements OnModuleInit {
-  private connections: Map<string, DataSource> = new Map();
+  private readonly tracer = trace.getTracer('tenant-service');
+
   async onModuleInit() {}
+
   async getTenantConnection(tenantId: string): Promise<DataSource> {
-    const connection = this.connections.get(tenantId);
-    if (connection && connection.isInitialized) {
-      return connection;
-    }
+    return this.tracer.startActiveSpan(
+      'getTenantConnection',
+      { kind: SpanKind.CLIENT },
+      async (span) => {
+        try {
+          span.setAttribute('tenantId', tenantId);
+          span.setAttribute('cache.lookup', true);
 
-    // Create a DataSource and initialize the connection
-    const dataSource = AppDataSource(tenantId);
-    await dataSource.initialize();
-    if (!tenantId) {
-      return dataSource;
-    }
+          const dataSource = AppDataSource(tenantId);
 
-    const schemaName = `tenant_${tenantId}`;
+          // Add cache hit/miss tracking
+          if (dataSource.isInitialized) {
+            span.setAttribute('cache.hit', true);
+            return dataSource;
+          }
 
-    // Create schema if it does not exist
-    await dataSource.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
-    // Cache the connection for reuse
-    this.connections.set(tenantId, dataSource);
-    return dataSource;
+          span.setAttribute('cache.hit', false);
+          const initSpan = this.tracer.startSpan('initializeDataSource');
+          await dataSource.initialize();
+          initSpan.end();
+
+          if (tenantId) {
+            const schemaSpan = this.tracer.startSpan('createSchema');
+            await dataSource.query(
+              `CREATE SCHEMA IF NOT EXISTS "tenant_${tenantId}"`,
+            );
+            schemaSpan.end();
+          }
+
+          return dataSource;
+        } catch (error) {
+          span.recordException(error);
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw error;
+        } finally {
+          span.end();
+        }
+      },
+    );
   }
 
   async closeDatabaseConnection(tenantId: string) {
-    const connection = this.connections.get(tenantId);
-    if (connection) {
-      await connection.destroy();
-      this.connections.delete(tenantId);
+    const dataSource = AppDataSource(tenantId);
+    if (dataSource.isInitialized) {
+      await dataSource.destroy();
     }
   }
 
   async removeTenantSchema(tenantId: string): Promise<void> {
-    const connection = this.connections.get(tenantId);
-    if (connection) {
+    const dataSource = AppDataSource(tenantId);
+    if (dataSource.isInitialized) {
       const schemaName = `tenant_${tenantId}`;
-      await connection.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-      // Remove the connection from the map
-      await connection.destroy();
-      this.connections.delete(tenantId);
+      await dataSource.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      await dataSource.destroy();
     } else {
       throw new Error(`Connection for tenant ${tenantId} does not exist.`);
     }

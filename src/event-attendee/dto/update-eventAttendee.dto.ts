@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   EventAttendeeRole,
   EventAttendeeStatus,
-} from 'src/core/constants/constant';
+} from '../../core/constants/constant';
 
 export class UpdateEventAttendeeDto {
   @ApiProperty({

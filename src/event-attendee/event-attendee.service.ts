@@ -21,6 +21,8 @@ import {
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventRoleService } from '../event-role/event-role.service';
 import { AuditLoggerService } from '../logger/audit-logger.provider';
+import { In } from 'typeorm';
+import { Trace } from '../utils/trace.decorator';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventAttendeeService {
@@ -37,6 +39,7 @@ export class EventAttendeeService {
     this.logger.log('EventAttendeeService Constructed');
   }
 
+  @Trace('event-attendee.getTenantSpecificEventRepository')
   private async getTenantSpecificEventRepository() {
     const tenantId = this.request.tenantId;
     const dataSource =
@@ -45,6 +48,7 @@ export class EventAttendeeService {
       dataSource.getRepository(EventAttendeesEntity);
   }
 
+  @Trace('event-attendee.create')
   async create(
     createEventAttendeeDto: CreateEventAttendeeDto,
   ): Promise<EventAttendeesEntity> {
@@ -68,6 +72,7 @@ export class EventAttendeeService {
     }
   }
 
+  @Trace('event-attendee.findAll')
   async findAll(
     pagination: PaginationDto,
     query: QueryEventAttendeeDto,
@@ -100,6 +105,7 @@ export class EventAttendeeService {
     return paginate(eventAttendeeQuery, { page, limit });
   }
 
+  @Trace('event-attendee.leaveEvent')
   async leaveEvent(
     userId: number,
     eventId: number,
@@ -123,6 +129,7 @@ export class EventAttendeeService {
     return { message: 'User has successfully left the event' };
   }
 
+  @Trace('event-attendee.showEventAttendees')
   async showEventAttendees(
     eventId: number,
     pagination: PaginationDto,
@@ -148,19 +155,35 @@ export class EventAttendeeService {
     return paginate(eventAttendee, { page, limit });
   }
 
+  @Trace('event-attendee.findEventAttendeeByUserId')
   async findEventAttendeeByUserId(
     eventId: number,
     userId: number,
   ): Promise<EventAttendeesEntity | null> {
     await this.getTenantSpecificEventRepository();
 
-    const attendee = await this.eventAttendeesRepository.findOne({
-      where: { event: { id: eventId }, user: { id: userId } },
-      relations: ['user', 'role', 'role.permissions'],
-    });
+    this.logger.debug(
+      `[findEventAttendeeByUserId] Finding most recent attendance for event ${eventId} and user ${userId}`,
+    );
+
+    const attendee = await this.eventAttendeesRepository
+      .createQueryBuilder('attendee')
+      .leftJoinAndSelect('attendee.user', 'user')
+      .leftJoinAndSelect('attendee.role', 'role')
+      .leftJoinAndSelect('role.permissions', 'permissions')
+      .where('attendee.event.id = :eventId', { eventId })
+      .andWhere('attendee.user.id = :userId', { userId })
+      .orderBy('attendee.updatedAt', 'DESC')
+      .getOne();
+
+    this.logger.debug(
+      `[findEventAttendeeByUserId] Found attendee: ${JSON.stringify(attendee)}`,
+    );
+
     return attendee;
   }
 
+  @Trace('event-attendee.updateEventAttendee')
   async updateEventAttendee(
     attendeeId: number,
     body: UpdateEventAttendeeDto,
@@ -176,6 +199,7 @@ export class EventAttendeeService {
     });
   }
 
+  @Trace('event-attendee.findEventAttendees')
   async findEventAttendees(eventId: number): Promise<any> {
     await this.getTenantSpecificEventRepository();
     return await this.eventAttendeesRepository.find({
@@ -184,6 +208,7 @@ export class EventAttendeeService {
     });
   }
 
+  @Trace('event-attendee.getEventAttendeePermissions')
   async getEventAttendeePermissions(id: number) {
     await this.getTenantSpecificEventRepository();
     return await this.eventAttendeesRepository.find({
@@ -192,20 +217,51 @@ export class EventAttendeeService {
     });
   }
 
-  async cancelAttendingEvent(id: number, userId: number) {
+  @Trace('event-attendee.cancelEventAttendance')
+  async cancelEventAttendance(
+    eventId: number,
+    userId: number,
+  ): Promise<EventAttendeesEntity> {
     await this.getTenantSpecificEventRepository();
-    const attendee = await this.eventAttendeesRepository.findOne({
-      where: { user: { id: userId }, event: { id } },
-      relations: ['user', 'role.permissions'],
-    });
-    if (!attendee) {
-      throw new NotFoundException(`Attendee with ID ${userId} not found`);
-    }
-    attendee.status = EventAttendeeStatus.Cancelled;
 
-    return this.eventAttendeesRepository.save(attendee);
+    this.logger.debug(
+      `[cancelEventAttendance] Finding active attendance for event ${eventId} and user ${userId}`,
+    );
+
+    // Find the most recent active attendance record
+    const attendee = await this.eventAttendeesRepository.findOne({
+      where: {
+        event: { id: eventId },
+        user: { id: userId },
+        status: In([
+          EventAttendeeStatus.Confirmed,
+          EventAttendeeStatus.Pending,
+        ]),
+      },
+      relations: ['user', 'role', 'role.permissions'],
+      order: { createdAt: 'DESC' },
+    });
+
+    if (!attendee) {
+      throw new NotFoundException('Active attendance record not found');
+    }
+
+    this.logger.debug(
+      `[cancelEventAttendance] Found attendee: ${JSON.stringify(attendee)}`,
+    );
+
+    // Update the status to cancelled
+    attendee.status = EventAttendeeStatus.Cancelled;
+    const updatedAttendee = await this.eventAttendeesRepository.save(attendee);
+
+    this.logger.debug(
+      `[cancelEventAttendance] Updated attendee status: ${updatedAttendee.status}`,
+    );
+
+    return updatedAttendee;
   }
 
+  @Trace('event-attendee.showConfirmedEventAttendeesByEventId')
   async showConfirmedEventAttendeesByEventId(
     eventId: number,
     limit: number = 0,
@@ -230,6 +286,7 @@ export class EventAttendeeService {
     });
   }
 
+  @Trace('event-attendee.showEventAttendeesCount')
   async showEventAttendeesCount(
     eventId: number,
     status?: EventAttendeeStatus,
@@ -243,6 +300,7 @@ export class EventAttendeeService {
     });
   }
 
+  @Trace('event-attendee.deleteEventAttendees')
   async deleteEventAttendees(eventId: number): Promise<any> {
     await this.getTenantSpecificEventRepository();
     return await this.eventAttendeesRepository.delete({
@@ -250,6 +308,7 @@ export class EventAttendeeService {
     });
   }
 
+  @Trace('event-attendee.showConfirmedEventAttendeesCount')
   async showConfirmedEventAttendeesCount(eventId: number): Promise<number> {
     await this.getTenantSpecificEventRepository();
     return await this.eventAttendeesRepository.count({
@@ -257,6 +316,7 @@ export class EventAttendeeService {
     });
   }
 
+  @Trace('event-attendee.findEventIdsByUserId')
   async findEventIdsByUserId(userId: number): Promise<number[]> {
     await this.getTenantSpecificEventRepository();
     const attendees = await this.eventAttendeesRepository.find({
@@ -266,6 +326,7 @@ export class EventAttendeeService {
     return attendees.map((a) => a.id);
   }
 
+  @Trace('event-attendee.getMailServiceEventAttendeesByPermission')
   async getMailServiceEventAttendeesByPermission(
     eventId: number,
     permission: EventAttendeePermission,
@@ -294,6 +355,7 @@ export class EventAttendeeService {
     return eventAttendees.map((member) => member.user);
   }
 
+  @Trace('event-attendee.getMailServiceEventAttendee')
   async getMailServiceEventAttendee(eventAttendeeId: number) {
     await this.getTenantSpecificEventRepository();
     const eventAttendee = await this.eventAttendeesRepository.findOne({
@@ -307,6 +369,7 @@ export class EventAttendeeService {
     return eventAttendee;
   }
 
+  @Trace('event-attendee.deleteEventAttendee')
   async deleteEventAttendee(attendeeId: number) {
     await this.getTenantSpecificEventRepository();
     const deleted = await this.eventAttendeesRepository.delete({
@@ -318,6 +381,7 @@ export class EventAttendeeService {
     return deleted;
   }
 
+  @Trace('event-attendee.getAttendeeById')
   async getAttendeeById(attendeeId: number) {
     await this.getTenantSpecificEventRepository();
     const attendee = await this.eventAttendeesRepository.findOne({
@@ -331,6 +395,7 @@ export class EventAttendeeService {
     return attendee;
   }
 
+  @Trace('event-attendee.showEventAttendee')
   async showEventAttendee(attendeeId: number) {
     await this.getTenantSpecificEventRepository();
 

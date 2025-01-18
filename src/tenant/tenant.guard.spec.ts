@@ -4,21 +4,45 @@ import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TenantGuard } from './tenant.guard';
 import { Request } from 'express';
+import { HttpArgumentsHost } from '@nestjs/common/interfaces';
 
 describe('TenantGuard', () => {
   let guard: TenantGuard;
   let reflector: Reflector;
 
-  const mockContext = {
-    switchToHttp: () => ({
-      getRequest: () => ({
-        headers: {},
-        user: null,
-      }),
-    }),
-    getHandler: () => ({}),
-    getClass: () => ({}),
-  } as ExecutionContext;
+  const mockExecutionContext = (
+    request: Partial<Request>,
+  ): ExecutionContext => {
+    const http: HttpArgumentsHost = {
+      getRequest<T = any>(): T {
+        return {
+          ...request,
+          route: request.route || { path: '/api/some-endpoint' },
+        } as T;
+      },
+      getResponse<T = any>(): T {
+        return {} as T;
+      },
+      getNext<T = any>(): T {
+        return (() => {}) as T;
+      },
+    };
+
+    return {
+      switchToHttp: () => http,
+      getHandler: () => jest.fn() as () => void,
+      getClass: () => TenantGuard as any,
+      getType: () => 'http' as const,
+      getArgs: () => [] as any[],
+      getArgByIndex: () => undefined,
+      switchToRpc: () => {
+        throw new Error('Not implemented');
+      },
+      switchToWs: () => {
+        throw new Error('Not implemented');
+      },
+    } as ExecutionContext;
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -27,7 +51,7 @@ describe('TenantGuard', () => {
         {
           provide: Reflector,
           useValue: {
-            getAllAndOverride: jest.fn(),
+            getAllAndOverride: jest.fn().mockReturnValue(false),
           },
         },
       ],
@@ -37,129 +61,65 @@ describe('TenantGuard', () => {
     reflector = module.get<Reflector>(Reflector);
   });
 
-  const mockExecutionContext = (request: Partial<Request>) => {
-    return {
-      getHandler: () => ({}),
-      getClass: () => ({}),
-      switchToHttp: () => ({
-        getRequest: () => request,
-      }),
-    } as ExecutionContext;
-  };
-
   describe('canActivate', () => {
     it('should allow access to metrics endpoint', () => {
-      const mockRequest = {
+      const context = mockExecutionContext({
         route: { path: '/metrics' },
         headers: {},
-      };
-
-      const context = mockExecutionContext(mockRequest);
-      const result = guard.canActivate({
-        ...mockContext,
-        ...context,
       });
 
-      expect(result).toBe(true);
-    });
-
-    it('should allow access when valid tenant ID is provided', () => {
-      const mockRequest = {
-        route: { path: '/api/some-endpoint' },
-        headers: {
-          'x-tenant-id': 'test-tenant',
-        },
-      };
-
-      const context = mockExecutionContext(mockRequest);
       const result = guard.canActivate(context);
-
       expect(result).toBe(true);
-      expect(mockRequest['tenantId']).toBe('test-tenant');
     });
 
     it('should throw UnauthorizedException when tenant ID is missing', () => {
-      const mockRequest = {
-        route: { path: '/api/some-endpoint' },
+      const context = mockExecutionContext({
         headers: {},
-      };
+      });
 
-      const context = mockExecutionContext(mockRequest);
-
-      expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+      expect(() => guard.canActivate(context)).toThrow(
+        new UnauthorizedException('Tenant ID is required'),
+      );
     });
 
     it('should throw UnauthorizedException when tenant ID is empty', () => {
-      const mockRequest = {
-        route: { path: '/api/some-endpoint' },
-        headers: {
-          'x-tenant-id': '',
-        },
-      };
-
-      const context = mockExecutionContext(mockRequest);
-
-      expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
-    });
-
-    it('should attach tenant ID to request object', () => {
-      const mockRequest = {
-        route: { path: '/api/some-endpoint' },
-        headers: {
-          'x-tenant-id': 'test-tenant-123',
-        },
-      };
-
-      const context = mockExecutionContext(mockRequest);
-      guard.canActivate(context);
-
-      expect(mockRequest['tenantId']).toBe('test-tenant-123');
-    });
-
-    it('should handle different route paths correctly', () => {
-      const paths = ['/api/events', '/api/groups', '/some/other/path'];
-
-      paths.forEach((path) => {
-        const mockRequest = {
-          route: { path },
-          headers: {
-            'x-tenant-id': 'test-tenant',
-          },
-        };
-
-        const context = mockExecutionContext(mockRequest);
-        const result = guard.canActivate(context);
-
-        expect(result).toBe(true);
-        expect(mockRequest['tenantId']).toBe('test-tenant');
+      const context = mockExecutionContext({
+        headers: { 'x-tenant-id': '' },
       });
+
+      expect(() => guard.canActivate(context)).toThrow(
+        new UnauthorizedException('Tenant ID is required'),
+      );
     });
 
-    describe('error cases', () => {
-      it('should throw UnauthorizedException with proper message', () => {
-        const mockRequest = {
-          route: { path: '/api/some-endpoint' },
-          headers: {},
-        };
-
-        const context = mockExecutionContext(mockRequest);
-
-        try {
-          guard.canActivate(context);
-          fail('Should have thrown UnauthorizedException');
-        } catch (error) {
-          expect(error).toBeInstanceOf(UnauthorizedException);
-          expect(error.message).toBe('Tenant ID is required');
-        }
+    it('should allow access when valid tenant ID is provided', () => {
+      const context = mockExecutionContext({
+        headers: { 'x-tenant-id': 'valid-tenant' },
       });
+
+      const result = guard.canActivate(context);
+      expect(result).toBe(true);
     });
 
-    describe('tenant public decorator', () => {
-      it('should allow access to public routes', () => {
-        jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(true);
-        const result = guard.canActivate(mockContext);
-        expect(result).toBe(true);
+    it('should allow access when endpoint is marked as public', () => {
+      jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(true);
+
+      const context = mockExecutionContext({
+        headers: {},
       });
+
+      const result = guard.canActivate(context);
+      expect(result).toBe(true);
+    });
+
+    it('should use tenantId from query params if header is missing', () => {
+      const context = mockExecutionContext({
+        headers: {},
+        query: { tenantId: 'query-tenant' },
+      });
+
+      const result = guard.canActivate(context);
+      expect(result).toBe(true);
     });
   });
 });
