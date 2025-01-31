@@ -4,6 +4,7 @@ import {
   Injectable,
   Scope,
   UnprocessableEntityException,
+  Logger,
 } from '@nestjs/common';
 import {
   ElastiCacheStateStore,
@@ -28,6 +29,7 @@ import { ElastiCacheService } from '../elasticache/elasticache.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class AuthBlueskyService {
+  private logger = new Logger(AuthBlueskyService.name);
   private tenantConfig: TenantConfig;
   private client: NodeOAuthClient;
 
@@ -119,20 +121,20 @@ export class AuthBlueskyService {
   }
 
   async handleCallback(params: URLSearchParams) {
-    console.log('Doing callback, params', params);
+    this.logger.debug('handleCallback', { params });
 
     // Debug: Check if we can access Redis
     const stateKey = `auth:bluesky:state:${params.get('state')}`;
-    console.log('Checking state in Redis with key:', stateKey);
+    this.logger.debug('Checking state in Redis with key:', stateKey);
 
     try {
       // Check if state exists in Redis directly
       const stateExists = await this.elasticacheService.get(stateKey);
-      console.log('State in Redis:', stateExists);
+      this.logger.debug('State in Redis:', stateExists);
 
       const { session, state } = await this.client.callback(params);
-      console.log('state in handleCallback', state);
-      console.log('session in handleCallback', session);
+      this.logger.debug('state in handleCallback', state);
+      this.logger.debug('session in handleCallback', session);
 
       const agent = new Agent(session);
       if (!agent.did) throw new Error('DID not found in session');
@@ -145,8 +147,8 @@ export class AuthBlueskyService {
         avatar: profile.data.avatar,
       };
     } catch (error) {
-      console.error('Callback error:', error);
-      console.error('Full error details:', {
+      this.logger.error('Callback error:', error);
+      this.logger.error('Full error details:', {
         message: error.message,
         stack: error.stack,
         params: Object.fromEntries(params.entries()),

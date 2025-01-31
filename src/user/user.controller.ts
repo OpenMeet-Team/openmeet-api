@@ -125,6 +125,9 @@ export class UserController {
   @Public()
   @Get(':slug/profile')
   @ApiOperation({ summary: 'Get user profile' })
+  @SerializeOptions({
+    groups: ['me', 'admin', 'user', '*'],
+  })
   showProfile(@Param('slug') slug: User['slug']): Promise<NullableType<User>> {
     return this.userService.showProfile(slug);
   }

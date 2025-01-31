@@ -50,7 +50,7 @@
     "release": "release-it"
   },
   "dependencies": {
-    "@atproto/api": "^0.13.22",
+    "@atproto/api": "^0.13.31",
     "@atproto/jwk-jose": "^0.1.2",
     "@atproto/oauth-client-node": "^0.2.3",
     "@aws-sdk/client-s3": "3.651.1",
