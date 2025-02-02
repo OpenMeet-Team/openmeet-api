@@ -6,14 +6,14 @@ import {
   Inject,
   NotFoundException,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { NullableType } from '../utils/types/nullable.type';
 import { FilterUserDto, SortUserDto } from './dto/query-user.dto';
 import bcrypt from 'bcryptjs';
-import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { RoleEnum } from '../role/role.enum';
-import { StatusEnum } from '../status/status.enum';
+import { getStatusEnumValue, StatusEnum } from '../status/status.enum';
 import { IPaginationOptions } from '../utils/types/pagination-options';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
@@ -26,6 +26,8 @@ import { RoleService } from '../role/role.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { AuditLoggerService } from '../logger/audit-logger.provider';
+import { SocialInterface } from '../social/interfaces/social.interface';
+import { StatusDto } from '../status/dto/status.dto';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UserService {
@@ -80,6 +82,7 @@ export class UserService {
       throw new Error('Tenant ID is required');
     }
     await this.getTenantSpecificRepository(effectiveTenantId);
+
     let subCategoriesEntities: any = [];
     const subCategoriesIds = createProfileDto.subCategories;
     if (subCategoriesIds && subCategoriesIds.length > 0) {
@@ -104,7 +107,6 @@ export class UserService {
 
     const clonedPayload = {
       ...createProfileDto,
-      provider: AuthProvidersEnum.email,
       role,
       subCategory: subCategoriesEntities,
     };
@@ -155,7 +157,9 @@ export class UserService {
         });
       }
     }
-
+    this.logger.debug('create: clonedPayload', {
+      clonedPayload,
+    });
     const userCreated = await this.usersRepository.save(
       this.usersRepository.create(clonedPayload),
     );
@@ -205,6 +209,8 @@ export class UserService {
         lastName: true,
         name: true,
         bio: true,
+        provider: true,
+        socialId: true,
         photo: {
           path: true,
         },
@@ -256,18 +262,10 @@ export class UserService {
       },
     });
 
-    // const user = await this.usersRepository.findOne({
-    //   where: { slug },
-    //   relations: [
-    //     'subCategory',
-    //     'groups',
-    //     'events',
-    //     'groupMembers.group',
-    //     'groupMembers.groupRole',
-    //     'photo',
-    //   ],
-    // });
-
+    this.logger.debug('showProfile raw user:', {
+      provider: user?.provider,
+      user: user,
+    });
     return user;
   }
 
@@ -340,6 +338,63 @@ export class UserService {
     return user;
   }
 
+  async findOrCreateUser(
+    profile: SocialInterface,
+    provider: string,
+    tenantId: string,
+  ): Promise<UserEntity> {
+    this.logger.debug(
+      `[UserService] Finding or creating user for provider: ${provider}, tenantId: ${tenantId}`,
+    );
+
+    if (!tenantId) {
+      throw new BadRequestException('Tenant ID is required');
+    }
+
+    await this.getTenantSpecificRepository(tenantId);
+
+    // Attempt to find the user by socialId and provider
+    const existingUser = await this.findBySocialIdAndProvider(
+      {
+        socialId: profile.id,
+        provider: provider,
+      },
+      tenantId,
+    );
+
+    if (existingUser) {
+      return existingUser as UserEntity;
+    }
+
+    // If user doesn't exist, create a new one
+    const roleEntity = await this.roleService.findByName(
+      RoleEnum.User,
+      tenantId,
+    );
+    if (!roleEntity) {
+      throw new NotFoundException('Role not found');
+    }
+
+    const statusDto = new StatusDto();
+    statusDto.id = getStatusEnumValue('active');
+
+    // Create new user
+    const newUser = (await this.create(
+      {
+        socialId: profile.id,
+        provider: provider,
+        email: profile.email || null,
+        firstName: profile.firstName || null,
+        lastName: profile.lastName || null,
+        role: roleEntity.id,
+        status: statusDto,
+      },
+      tenantId,
+    )) as unknown as UserEntity;
+
+    return newUser;
+  }
+
   async addZulipCredentialsToUser(
     userId: number,
     {
@@ -370,6 +425,9 @@ export class UserService {
     payload: any,
     tenantId?: string,
   ): Promise<User | null> {
+    this.logger.debug(
+      `[UserService] Updating user with ID: ${id}, tenantId: ${tenantId}`,
+    );
     await this.getTenantSpecificRepository(tenantId);
 
     const clonedPayload = { ...payload };
@@ -383,7 +441,7 @@ export class UserService {
     }
 
     if (clonedPayload.email) {
-      const userObject = await this.findByEmail(clonedPayload.email);
+      const userObject = await this.findByEmail(clonedPayload.email, tenantId);
 
       if (userObject && userObject.id !== id) {
         throw new UnprocessableEntityException({

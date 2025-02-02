@@ -4,6 +4,7 @@ import {
   NotFoundException,
   UnauthorizedException,
   UnprocessableEntityException,
+  Logger,
 } from '@nestjs/common';
 import ms from 'ms';
 import crypto from 'crypto';
@@ -37,6 +38,7 @@ import { EventService } from '../event/event.service';
 
 @Injectable()
 export class AuthService {
+  private logger = new Logger(AuthService.name);
   constructor(
     private jwtService: JwtService,
     private userService: UserService,
@@ -121,65 +123,26 @@ export class AuthService {
   async validateSocialLogin(
     authProvider: string,
     socialData: SocialInterface,
-    tenantId?: string,
+    tenantId: string,
   ): Promise<LoginResponseDto> {
-    console.log('validateSocialLogin', authProvider, socialData, tenantId);
+    this.logger.debug('validateSocialLogin', {
+      authProvider,
+      socialData,
+      tenantId,
+    });
 
-    let user: NullableType<User> = null;
-    const socialEmail = socialData.email?.toLowerCase();
-    let userByEmail: NullableType<User> = null;
-
-    if (socialEmail) {
-      userByEmail = await this.userService.findByEmail(socialEmail, tenantId);
-    }
-
-    if (socialData.id) {
-      user = await this.userService.findBySocialIdAndProvider(
-        {
-          socialId: socialData.id,
-          provider: authProvider,
-        },
-        tenantId,
-      );
-    }
-
-    if (user) {
-      if (socialEmail && !userByEmail) {
-        user.email = socialEmail;
-      }
-      await this.userService.update(user.id, user, tenantId);
-    } else if (userByEmail) {
-      user = userByEmail;
-    } else if (socialData.id) {
-      // const role = {
-      //   id: RoleEnum.user,
-      // };
-      const status = {
-        id: StatusEnum.active,
-      };
-
-      const role = await this.roleService.findByName(RoleEnum.User, tenantId);
-      if (!role) {
-        throw new Error(`Role not found: ${RoleEnum.User}`);
-      }
-
-      user = await this.userService.create(
-        {
-          email: socialEmail ?? null,
-          firstName: socialData.firstName ?? null,
-          lastName: socialData.lastName ?? null,
-          socialId: socialData.id,
-          provider: authProvider,
-          role: role.id,
-          status: status,
-        },
-        tenantId,
-      );
-
-      user = await this.userService.findById(user.id, tenantId);
-    }
+    const user = await this.userService.findOrCreateUser(
+      socialData,
+      authProvider,
+      tenantId,
+    );
 
     if (!user) {
+      this.logger.error('User not found', {
+        socialData,
+        authProvider,
+        tenantId,
+      });
       throw new UnprocessableEntityException({
         status: HttpStatus.UNPROCESSABLE_ENTITY,
         errors: {

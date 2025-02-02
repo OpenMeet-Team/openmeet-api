@@ -5,12 +5,14 @@ import {
   HttpStatus,
   Post,
   SerializeOptions,
+  Req,
 } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthService } from '../auth/auth.service';
 import { AuthGoogleService } from './auth-google.service';
 import { AuthGoogleLoginDto } from './dto/auth-google-login.dto';
 import { LoginResponseDto } from '../auth/dto/login-response.dto';
+import { Request } from 'express';
 
 @ApiTags('Auth')
 @Controller({
@@ -31,9 +33,13 @@ export class AuthGoogleController {
   })
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  async login(@Body() loginDto: AuthGoogleLoginDto): Promise<LoginResponseDto> {
+  async login(
+    @Body() loginDto: AuthGoogleLoginDto,
+    @Req() request: Request,
+  ): Promise<LoginResponseDto> {
+    const tenantId = request.headers['x-tenant-id'] as string;
     const socialData = await this.authGoogleService.getProfileByToken(loginDto);
 
-    return this.authService.validateSocialLogin('google', socialData);
+    return this.authService.validateSocialLogin('google', socialData, tenantId);
   }
 }

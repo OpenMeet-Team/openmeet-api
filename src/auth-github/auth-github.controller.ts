@@ -4,6 +4,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Req,
   SerializeOptions,
 } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
@@ -31,9 +32,13 @@ export class AuthGithubController {
   })
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  async login(@Body() loginDto: AuthGithubLoginDto): Promise<LoginResponseDto> {
+  async login(
+    @Body() loginDto: AuthGithubLoginDto,
+    @Req() request: Request,
+  ): Promise<LoginResponseDto> {
+    const tenantId = request.headers['x-tenant-id'] as string;
     const socialData = await this.authGithubService.getProfileByToken(loginDto);
 
-    return this.authService.validateSocialLogin('github', socialData);
+    return this.authService.validateSocialLogin('github', socialData, tenantId);
   }
 }
