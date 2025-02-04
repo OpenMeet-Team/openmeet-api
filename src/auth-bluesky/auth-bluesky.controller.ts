@@ -10,13 +10,9 @@ import {
 import { AuthBlueskyService } from './auth-bluesky.service';
 import { Response } from 'express';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { JwtService } from '@nestjs/jwt';
 import { TenantConfig } from '../core/constants/constant';
-import { TenantConnectionService } from '../tenant/tenant.service';
 import { Public } from '../core/decorators/public.decorator';
-import { ConfigService } from '@nestjs/config';
 import { TenantPublic } from '../tenant/tenant-public.decorator';
-import { AuthService } from '../auth/auth.service';
 
 @ApiTags('Auth')
 @Controller({
@@ -25,13 +21,20 @@ import { AuthService } from '../auth/auth.service';
 })
 export class AuthBlueskyController {
   private tenantConfig: TenantConfig;
-  constructor(
-    private readonly authBlueskyService: AuthBlueskyService,
-    private readonly jwtService: JwtService,
-    private readonly tenantConnectionService: TenantConnectionService,
-    private readonly configService: ConfigService,
-    private readonly authService: AuthService,
-  ) {}
+  constructor(private readonly authBlueskyService: AuthBlueskyService) {}
+
+  @Get('authorize')
+  @Public()
+  @TenantPublic()
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ type: String })
+  async getAuthUrl(
+    @Query('handle') handle: string,
+    @Query('tenantId') tenantId: string,
+  ) {
+    const url = await this.authBlueskyService.createAuthUrl(handle, tenantId);
+    return { url };
+  }
 
   @Public()
   @TenantPublic()
@@ -67,35 +70,4 @@ export class AuthBlueskyController {
     }
     return this.authBlueskyService.getClient().jwks;
   }
-
-  @Get('authorize')
-  @Public()
-  @TenantPublic()
-  @HttpCode(HttpStatus.OK)
-  @ApiOkResponse({ type: String })
-  async getAuthUrl(
-    @Query('handle') handle: string,
-    @Query('tenantId') tenantId: string,
-  ) {
-    const url = await this.authBlueskyService.createAuthUrl(handle, tenantId);
-    return { url };
-  }
-
-  // @Post('login')
-  // @Public()
-  // @TenantPublic()
-  // @HttpCode(HttpStatus.OK)
-  // @ApiOkResponse({ type: LoginResponseDto })
-  // async login(
-  //   @Body() loginDto: AuthBlueskyLoginDto,
-  // ): Promise<LoginResponseDto> {
-  //   const socialData =
-  //     await this.authBlueskyService.getProfileByToken(loginDto);
-
-  //   return this.authService.validateSocialLogin(
-  //     'bluesky',
-  //     socialData,
-  //     loginDto.tenantId,
-  //   );
-  // }
 }
