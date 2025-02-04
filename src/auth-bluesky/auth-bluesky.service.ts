@@ -3,7 +3,6 @@ import {
   Inject,
   Injectable,
   Scope,
-  UnprocessableEntityException,
   Logger,
 } from '@nestjs/common';
 import {
@@ -21,10 +20,7 @@ import {
 import { Agent } from '@atproto/api';
 import { JoseKey } from '@atproto/jwk-jose';
 import crypto from 'crypto';
-import { JwtService } from '@nestjs/jwt';
 import { AuthService } from '../auth/auth.service';
-import { AuthBlueskyLoginDto } from './dto/auth-bluesky-login.dto';
-import { SocialInterface } from '../social/interfaces/social.interface';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
@@ -37,7 +33,6 @@ export class AuthBlueskyService {
     @Inject(REQUEST) private readonly request: any,
     private tenantService: TenantConnectionService,
     private configService: ConfigService,
-    private jwtService: JwtService,
     private authService: AuthService,
     private elasticacheService: ElastiCacheService,
   ) {}
@@ -119,12 +114,12 @@ export class AuthBlueskyService {
     return keys;
   }
 
-  async handleCallback(params: URLSearchParams) {
-    this.logger.debug('handleCallback', { params });
+  async getProfileFromParams(params: URLSearchParams) {
+    this.logger.debug('getProfileFromParams', { params });
 
     try {
       const { session, state } = await this.client.callback(params);
-      this.logger.debug('handleCallback', { state, session });
+      this.logger.debug('getProfileFromParams', { state, session });
 
       const agent = new Agent(session);
       if (!agent.did) throw new Error('DID not found in session');
@@ -151,18 +146,12 @@ export class AuthBlueskyService {
     return this.client;
   }
 
-  async authorize(handle: string) {
-    const state = crypto.randomBytes(16).toString('base64url');
-    const url = await this.client.authorize(handle, { state });
-    return url;
-  }
-
-  async handleAuthCallback(query: any, tenantId?: string): Promise<string> {
+  async handleAuthCallback(query: any, tenantId: string): Promise<string> {
     if (!tenantId) {
       throw new BadRequestException('Tenant ID is required');
     }
     await this.initializeClient(tenantId);
-    const profile = await this.handleCallback(new URLSearchParams(query));
+    const profile = await this.getProfileFromParams(new URLSearchParams(query));
 
     // Use the common auth service to create/update user and generate token
     const loginResponse = await this.authService.validateSocialLogin(
@@ -181,7 +170,10 @@ export class AuthBlueskyService {
       token: loginResponse.token,
       refreshToken: loginResponse.refreshToken,
       tokenExpires: loginResponse.tokenExpires.toString(),
-      user: JSON.stringify(loginResponse.user),
+      user: Buffer.from(JSON.stringify(loginResponse.user || {})).toString(
+        'base64',
+      ),
+      profile: Buffer.from(JSON.stringify(profile || {})).toString('base64'),
     });
 
     return `${this.tenantConfig.frontendDomain}/auth/bluesky/callback?${params.toString()}`;
