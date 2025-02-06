@@ -22,6 +22,8 @@ import {
   EventVisibility,
   EventStatus,
   PostgisSrid,
+  ExternalEventSource,
+  ExternalEventData,
 } from '../../../../../core/constants/constant';
 import { GroupMemberEntity } from '../../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { FileEntity } from '../../../../../file/infrastructure/persistence/relational/entities/file.entity';
@@ -152,6 +154,12 @@ export class EventEntity extends EntityRelationalHelper {
   zulipChannelId: number;
 
   attendeesCount: number;
+
+  @Column({ type: 'enum', enum: ExternalEventSource, nullable: true })
+  externalSource?: ExternalEventSource;
+
+  @Column({ type: 'jsonb', nullable: true })
+  externalData?: ExternalEventData;
 
   // @Expose()
   // get attendeesCount(): number {
