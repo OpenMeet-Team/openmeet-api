@@ -6,7 +6,34 @@ async function runMigrationsForAllTenants() {
   const tenants = fetchTenants();
   console.log('Starting migrations for all tenants:', tenants.length);
 
+  // First do a dry run to check if migrations would succeed
   try {
+    console.log('Starting dry run of migrations...');
+    for (const tenant of tenants) {
+      console.log(`Dry run for tenant ${tenant.id}`);
+      const dataSource = AppDataSource(tenant.id);
+      try {
+        await dataSource.initialize();
+        const pendingMigrations = await dataSource.showMigrations();
+        if (pendingMigrations) {
+          console.log(
+            `Tenant ${tenant.id} has pending migrations that would run`,
+          );
+        }
+        await dataSource.destroy();
+      } catch (error) {
+        console.error(`Dry run failed for tenant ${tenant.id}:`, error);
+        throw new Error(
+          `Dry run failed for tenant ${tenant.id}. Aborting all migrations.`,
+        );
+      }
+    }
+    console.log('Dry run successful. Proceeding with actual migrations...');
+
+    // Keep track of migrated tenants for potential rollback
+    const migratedTenants: string[] = [];
+
+    // Actual migration run
     for (const tenant of tenants) {
       console.log(`Starting migration for tenant ${tenant.id}`);
       const dataSource = AppDataSource(tenant.id);
@@ -23,30 +50,43 @@ async function runMigrationsForAllTenants() {
         await queryRunner.query(`SET search_path TO "${schemaName}"`);
         console.log(`Starting migrations for ${schemaName}`);
         await dataSource.runMigrations();
+        migratedTenants.push(tenant.id);
         console.log(`Migrations successfully applied to schema: ${schemaName}`);
 
         await queryRunner.query(`SET search_path TO public`);
-        console.log(`Reset search path for ${schemaName}`);
-
         await queryRunner.release();
-        console.log(`Released query runner for ${schemaName}`);
-
         await dataSource.destroy();
-        console.log(`Destroyed connection for ${schemaName}`);
       } catch (error) {
         console.error(`Error with tenant ${tenant.id}:`, error);
+
+        // Attempt to rollback all previously successful migrations
+        console.log(
+          'Rolling back migrations for previously migrated tenants...',
+        );
+        for (const migratedTenantId of migratedTenants) {
+          try {
+            const rollbackDataSource = AppDataSource(migratedTenantId);
+            await rollbackDataSource.initialize();
+            await rollbackDataSource.undoLastMigration();
+            await rollbackDataSource.destroy();
+            console.log(`Rolled back migration for tenant ${migratedTenantId}`);
+          } catch (rollbackError) {
+            console.error(
+              `Failed to rollback tenant ${migratedTenantId}:`,
+              rollbackError,
+            );
+          }
+        }
+
         if (dataSource.isInitialized) {
           await dataSource.destroy();
-          console.log(`Destroyed connection after error for ${schemaName}`);
         }
+        throw new Error(
+          'Migration failed. All successful migrations have been rolled back.',
+        );
       }
     }
-    console.log('All tenant migrations complete.');
-    console.log('Active handles:', (process as any)._getActiveHandles().length);
-    console.log(
-      'Active requests:',
-      (process as any)._getActiveRequests().length,
-    );
+    console.log('All tenant migrations complete successfully.');
     process.exit(0);
   } catch (error) {
     console.error('Fatal error:', error);
