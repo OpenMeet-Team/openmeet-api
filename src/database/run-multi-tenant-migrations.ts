@@ -17,21 +17,26 @@ async function runMigrationsForAllTenants() {
 
       try {
         await dataSource.initialize();
-
-        // Create schema if it doesn't exist
         const queryRunner = dataSource.createQueryRunner();
-        await queryRunner.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
-        await queryRunner.query(`SET search_path TO "${schemaName}"`);
-
-        const pendingMigrations = await dataSource.showMigrations();
-        if (pendingMigrations) {
-          console.log(
-            `Tenant ${tenant.id} has pending migrations that would run`,
+        try {
+          // Create schema if it doesn't exist
+          await queryRunner.query(
+            `CREATE SCHEMA IF NOT EXISTS "${schemaName}"`,
           );
-        }
+          await queryRunner.query(`SET search_path TO "${schemaName}"`);
 
-        await queryRunner.release();
-        await dataSource.destroy();
+          const pendingMigrations = await dataSource.showMigrations();
+          if (pendingMigrations) {
+            console.log(
+              `Tenant ${tenant.id} has pending migrations that would run`,
+            );
+          }
+
+          await queryRunner.query(`SET search_path TO public`);
+        } finally {
+          await queryRunner.release();
+          await dataSource.destroy(); // Make sure we destroy the connection after dry run
+        }
       } catch (error) {
         console.error(`Dry run failed for tenant ${tenant.id}:`, error);
         if (dataSource?.isInitialized) {
@@ -84,7 +89,19 @@ async function runMigrationsForAllTenants() {
             const rollbackDataSource = AppDataSource(migratedTenantId);
             try {
               await rollbackDataSource.initialize();
-              await rollbackDataSource.undoLastMigration();
+              const rollbackSchemaName = migratedTenantId
+                ? `tenant_${migratedTenantId}`
+                : 'public';
+              const rollbackRunner = rollbackDataSource.createQueryRunner();
+              try {
+                await rollbackRunner.query(
+                  `SET search_path TO "${rollbackSchemaName}"`,
+                );
+                await rollbackDataSource.undoLastMigration();
+                await rollbackRunner.query(`SET search_path TO public`);
+              } finally {
+                await rollbackRunner.release();
+              }
             } catch (rollbackError) {
               console.error(
                 `Failed to rollback tenant ${migratedTenantId}:`,
