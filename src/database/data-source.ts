@@ -64,14 +64,11 @@ export const AppDataSource = (tenantId: string) => {
   const cacheKey = `${process.env.DATABASE_URL}_${schemaName}`;
   const cached = connectionCache.get(cacheKey);
 
-  if (cached?.connection.isInitialized) {
+  if (cached?.connection?.isInitialized) {
     cached.lastUsed = Date.now();
     return cached.connection;
-  }
-
-  // Clean up old connection if it exists
-  if (cached) {
-    cached.connection.destroy().catch(console.error);
+  } else if (cached) {
+    // Only remove from cache if connection exists but isn't initialized
     connectionCache.delete(cacheKey);
   }
 
