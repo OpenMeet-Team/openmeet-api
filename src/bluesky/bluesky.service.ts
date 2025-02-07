@@ -3,6 +3,25 @@ import { BskyAgent } from '@atproto/api';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { ConfigService } from '@nestjs/config';
 
+interface BlueskyLocation {
+  type: string;
+  lat?: number;
+  lon?: number;
+  description?: string;
+  uri?: string;
+  name?: string;
+}
+
+export enum EventSourceType {
+  BLUESKY = 'bluesky',
+  EVENTBRITE = 'eventbrite',
+  FACEBOOK = 'facebook',
+  LUMA = 'luma',
+  MEETUP = 'meetup',
+  OTHER = 'other',
+  WEB = 'web',
+}
+
 @Injectable()
 export class BlueskyService {
   private readonly logger = new Logger(BlueskyService.name);
@@ -33,7 +52,7 @@ export class BlueskyService {
         cancelled: 'community.lexicon.calendar.event#cancelled',
       };
 
-      const locations = [];
+      const locations: BlueskyLocation[] = [];
 
       // Add physical location if exists
       if (event.location && event.lat && event.lon) {
@@ -65,6 +84,10 @@ export class BlueskyService {
         status: statusMap[event.status] || statusMap['published'],
         locations,
       };
+
+      // Set the source type to bluesky
+      event.sourceType = EventSourceType.BLUESKY;
+      event.lastSyncedAt = new Date();
 
       await agent.com.atproto.repo.putRecord({
         repo: did,

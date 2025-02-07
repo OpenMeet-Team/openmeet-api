@@ -204,8 +204,8 @@ export class EventService {
       try {
         await this.blueskyService.createEventRecord(
           createdEvent,
-          createEventDto.sourceId, // This should be the Bluesky DID
-          createEventDto.sourceData?.handle, // This should be the Bluesky handle
+          createEventDto.sourceId ?? '', // Default to empty string if null/undefined
+          createEventDto.sourceData?.handle ?? '', // Default to empty string if null/undefined
         );
       } catch (error) {
         this.logger.error(`Failed to post event to Bluesky: ${error.message}`);
@@ -723,8 +723,8 @@ export class EventService {
       try {
         await this.blueskyService.createEventRecord(
           updatedEvent,
-          updateEventDto.sourceId,
-          updateEventDto.sourceData?.handle,
+          updateEventDto.sourceId || '',
+          updateEventDto.sourceData?.handle || '',
         );
       } catch (error) {
         this.logger.error(

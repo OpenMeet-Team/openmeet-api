@@ -30,9 +30,14 @@ import { ulid } from 'ulid';
 import slugify from 'slugify';
 import { generateShortCode } from '../../../../../utils/short-code';
 import { ZulipMessage, ZulipTopic } from 'zulip-js';
+import { SourceFields } from '../../../../../core/interfaces/source-data.interface';
+import { EventSourceType } from '../../../../../core/constants/source-type.constant';
 
 @Entity({ name: 'events' })
-export class EventEntity extends EntityRelationalHelper {
+export class EventEntity
+  extends EntityRelationalHelper
+  implements SourceFields
+{
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -154,15 +159,7 @@ export class EventEntity extends EntityRelationalHelper {
   attendeesCount: number;
 
   @Column({ type: 'enum', enum: 'event_source_type', nullable: true })
-  sourceType:
-    | 'bluesky'
-    | 'eventbrite'
-    | 'facebook'
-    | 'luma'
-    | 'meetup'
-    | 'other'
-    | 'web'
-    | null;
+  sourceType: EventSourceType | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   sourceId: string | null;
@@ -170,11 +167,11 @@ export class EventEntity extends EntityRelationalHelper {
   @Column({ type: 'varchar', length: 255, nullable: true })
   sourceUrl: string | null;
 
-  @Column({ type: 'timestamp', nullable: true })
-  lastSyncedAt: Date | null;
-
   @Column({ type: 'jsonb', nullable: true })
   sourceData: Record<string, unknown> | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastSyncedAt: Date | null;
 
   // @Expose()
   // get attendeesCount(): number {

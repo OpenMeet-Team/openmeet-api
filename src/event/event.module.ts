@@ -16,7 +16,7 @@ import { EventRoleService } from '../event-role/event-role.service';
 import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
 import { EventMailModule } from '../event-mail/event-mail.module';
-
+import { BlueskyModule } from '../bluesky/bluesky.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([EventEntity]),
@@ -29,6 +29,7 @@ import { EventMailModule } from '../event-mail/event-mail.module';
     UserModule,
     forwardRef(() => GroupModule),
     EventMailModule,
+    BlueskyModule,
   ],
   controllers: [EventController],
   providers: [

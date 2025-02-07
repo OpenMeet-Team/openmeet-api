@@ -43,6 +43,8 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { UserService } from '../user/user.service';
 import { EventRoleService } from '../event-role/event-role.service';
 import { EventMailService } from '../event-mail/event-mail.service';
+import { BlueskyModule } from '../bluesky/bluesky.module';
+import { stopCleanupInterval } from '../database/data-source';
 
 describe('EventService', () => {
   let service: EventService;
@@ -51,6 +53,7 @@ describe('EventService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
+      imports: [BlueskyModule],
       providers: [
         EventService,
         {
@@ -328,5 +331,9 @@ describe('EventService', () => {
       const result = await service.findUpcomingEventsForGroup(mockGroup.id, 3);
       expect(result).toEqual(mockEvents);
     });
+  });
+
+  afterAll(() => {
+    stopCleanupInterval();
   });
 });

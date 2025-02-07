@@ -13,8 +13,9 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EventStatus, EventVisibility } from '../../core/constants/constant';
 import { FileEntity } from '../../file/infrastructure/persistence/relational/entities/file.entity';
 import { GroupEntity } from 'src/group/infrastructure/persistence/relational/entities/group.entity';
+import { SourceFields } from '../../core/interfaces/source-data.interface';
 
-export class CreateEventDto {
+export class CreateEventDto implements SourceFields {
   @ApiProperty({
     description: 'The name of the event',
   })
@@ -158,6 +159,50 @@ export class CreateEventDto {
   })
   @IsOptional()
   group?: { id: number } | GroupEntity;
+
+  @ApiPropertyOptional({
+    enum: [
+      'bluesky',
+      'eventbrite',
+      'facebook',
+      'luma',
+      'meetup',
+      'other',
+      'web',
+    ],
+  })
+  @IsOptional()
+  @IsEnum([
+    'bluesky',
+    'eventbrite',
+    'facebook',
+    'luma',
+    'meetup',
+    'other',
+    'web',
+  ])
+  sourceType?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sourceId?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sourceUrl?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  sourceData?: {
+    handle?: string;
+    [key: string]: any;
+  } | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  lastSyncedAt?: Date | null;
 }
 
 export class CommentDto {

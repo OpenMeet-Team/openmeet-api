@@ -17,9 +17,10 @@ const MAX_CONNECTIONS = 100;
 // Store interval reference so we can clear it
 let cleanupInterval: NodeJS.Timeout | null = null;
 
-// Add cleanup interval with proper handling for tests
 export function startCleanupInterval() {
-  if (cleanupInterval) return; // Prevent multiple intervals
+  if (cleanupInterval) {
+    return cleanupInterval; // Return existing interval
+  }
 
   cleanupInterval = setInterval(
     () => {
@@ -32,18 +33,11 @@ export function startCleanupInterval() {
       }
     },
     15 * 60 * 1000,
-  ); // Clean every 15 minutes
+  );
 
-  // Ensure cleanup on process exit
-  process.on('beforeExit', () => {
-    if (cleanupInterval) {
-      clearInterval(cleanupInterval);
-      cleanupInterval = null;
-    }
-  });
+  return cleanupInterval;
 }
 
-// Add function to stop cleanup for tests
 export function stopCleanupInterval() {
   if (cleanupInterval) {
     clearInterval(cleanupInterval);
@@ -51,9 +45,14 @@ export function stopCleanupInterval() {
   }
 }
 
-// Start cleanup interval in non-test environment
+// Only start cleanup interval in production/development
 if (process.env.NODE_ENV !== 'test') {
   startCleanupInterval();
+}
+
+// Add cleanup on module unload for tests
+if (process.env.NODE_ENV === 'test') {
+  process.on('beforeExit', stopCleanupInterval);
 }
 
 export const AppDataSource = (tenantId: string) => {
