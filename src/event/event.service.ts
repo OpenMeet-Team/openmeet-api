@@ -46,6 +46,7 @@ import { EventMailService } from '../event-mail/event-mail.service';
 import { AuditLoggerService } from '../logger/audit-logger.provider';
 import { Trace } from '../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
+import { BlueskyService } from '../bluesky/bluesky.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -68,6 +69,7 @@ export class EventService {
     private readonly eventRoleService: EventRoleService,
     private readonly userService: UserService,
     private readonly eventMailService: EventMailService,
+    private readonly blueskyService: BlueskyService,
   ) {
     void this.initializeRepository();
     this.logger.log('EventService Constructed');
@@ -193,6 +195,23 @@ export class EventService {
     } as EventEntity);
 
     const createdEvent = await this.eventRepository.save(event);
+
+    // If user has Bluesky credentials and event is published, post to Bluesky
+    if (
+      createEventDto.sourceType === 'bluesky' &&
+      event.status === EventStatus.Published
+    ) {
+      try {
+        await this.blueskyService.createEventRecord(
+          createdEvent,
+          createEventDto.sourceId, // This should be the Bluesky DID
+          createEventDto.sourceData?.handle, // This should be the Bluesky handle
+        );
+      } catch (error) {
+        this.logger.error(`Failed to post event to Bluesky: ${error.message}`);
+        // Don't throw error - we still want to create the event in our system
+      }
+    }
 
     // Add host as first attendee
     const hostRole = await this.eventRoleService.getRoleByName(
@@ -694,7 +713,27 @@ export class EventService {
       mappedDto,
     });
     const updatedEvent = this.eventRepository.merge(event, mappedDto);
-    return this.eventRepository.save(updatedEvent);
+    const savedEvent = await this.eventRepository.save(updatedEvent);
+
+    // If user has Bluesky credentials and event is published, update on Bluesky
+    if (
+      updateEventDto.sourceType === 'bluesky' &&
+      updatedEvent.status === EventStatus.Published
+    ) {
+      try {
+        await this.blueskyService.createEventRecord(
+          updatedEvent,
+          updateEventDto.sourceId,
+          updateEventDto.sourceData?.handle,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to update event on Bluesky: ${error.message}`,
+        );
+      }
+    }
+
+    return savedEvent;
   }
 
   @Trace('event.remove')

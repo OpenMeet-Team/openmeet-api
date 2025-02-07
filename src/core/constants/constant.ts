@@ -164,7 +164,7 @@ export interface TenantConfig {
   blueskyConfig?: BlueskyConfig;
 }
 
-export enum ExternalEventSource {
+export enum ExternalEventSourceType {
   BLUESKY = 'bluesky',
   EVENTBRITE = 'eventbrite',
   FACEBOOK = 'facebook',
@@ -172,11 +172,4 @@ export enum ExternalEventSource {
   MEETUP = 'meetup',
   OTHER = 'other',
   WEB = 'web',
-}
-
-export interface ExternalEventData {
-  sourceId: string;
-  sourceUrl: string;
-  sourceData?: Record<string, any>;
-  lastSyncedAt?: Date;
 }

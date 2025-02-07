@@ -158,7 +158,7 @@ export class AuthBlueskyService {
       'bluesky',
       {
         id: profile.did,
-        email: `${profile.handle}@bsky.social`, // or null if email not needed
+        email: '',
         firstName: profile.displayName || profile.handle,
         lastName: '',
       },

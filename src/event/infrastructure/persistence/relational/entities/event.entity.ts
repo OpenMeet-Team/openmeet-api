@@ -22,8 +22,6 @@ import {
   EventVisibility,
   EventStatus,
   PostgisSrid,
-  ExternalEventSource,
-  ExternalEventData,
 } from '../../../../../core/constants/constant';
 import { GroupMemberEntity } from '../../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { FileEntity } from '../../../../../file/infrastructure/persistence/relational/entities/file.entity';
@@ -155,11 +153,28 @@ export class EventEntity extends EntityRelationalHelper {
 
   attendeesCount: number;
 
-  @Column({ type: 'enum', enum: ExternalEventSource, nullable: true })
-  externalSource?: ExternalEventSource;
+  @Column({ type: 'enum', enum: 'event_source_type', nullable: true })
+  sourceType:
+    | 'bluesky'
+    | 'eventbrite'
+    | 'facebook'
+    | 'luma'
+    | 'meetup'
+    | 'other'
+    | 'web'
+    | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  sourceId: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  sourceUrl: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastSyncedAt: Date | null;
 
   @Column({ type: 'jsonb', nullable: true })
-  externalData?: ExternalEventData;
+  sourceData: Record<string, unknown> | null;
 
   // @Expose()
   // get attendeesCount(): number {

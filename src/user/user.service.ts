@@ -261,11 +261,6 @@ export class UserService {
         },
       },
     });
-
-    this.logger.debug('showProfile raw user:', {
-      provider: user?.provider,
-      user: user,
-    });
     return user;
   }
 
