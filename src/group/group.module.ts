@@ -25,7 +25,7 @@ import { GroupMailService } from '../group-mail/group-mail.service';
 import { GroupMailModule } from '../group-mail/group-mail.module';
 import { EventModule } from '../event/event.module';
 import { EventMailModule } from '../event-mail/event-mail.module';
-
+import { BlueskyModule } from '../bluesky/bluesky.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -43,6 +43,7 @@ import { EventMailModule } from '../event-mail/event-mail.module';
     GroupMailModule,
     forwardRef(() => EventModule),
     EventMailModule,
+    BlueskyModule,
   ],
   controllers: [GroupController],
   providers: [
