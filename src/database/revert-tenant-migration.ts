@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 async function revertLastMigrationForTenant(tenantId: string) {
-  if (!tenantId) {
+  if (tenantId === undefined) {
     console.error('Error: Tenant ID is required');
     console.log(
       'Usage: npm run migration:revert:tenant -- --tenant=<tenantId>',
@@ -121,13 +121,14 @@ async function revertLastMigrationForTenant(tenantId: string) {
 // Parse command line arguments
 const args = process.argv.slice(2);
 const tenantArg = args.find((arg) => arg.startsWith('--tenant='));
-const tenantId = tenantArg ? tenantArg.split('=')[1] : null;
-
-if (!tenantId) {
-  console.error('Error: Tenant ID is required');
+if (tenantArg === undefined) {
+  console.error('Error: Tenant flag (--tenant=<tenantId>) is required');
   console.log('Usage: npm run migration:revert:tenant -- --tenant=<tenantId>');
   process.exit(1);
 }
+
+// Handle empty string case by checking for --tenant= exactly
+const tenantId = tenantArg === '--tenant=' ? '' : tenantArg.split('=')[1];
 
 revertLastMigrationForTenant(tenantId).catch((error) => {
   console.error('Fatal error:', error);
