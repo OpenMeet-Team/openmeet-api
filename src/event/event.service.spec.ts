@@ -38,12 +38,12 @@ import {
   mockEventMailService,
 } from '../test/mocks';
 import { mockEvents } from '../test/mocks';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UserService } from '../user/user.service';
 import { EventRoleService } from '../event-role/event-role.service';
 import { EventMailService } from '../event-mail/event-mail.service';
-import { BlueskyModule } from '../bluesky/bluesky.module';
+import { BlueskyService } from '../bluesky/bluesky.service';
 import { stopCleanupInterval } from '../database/data-source';
 
 describe('EventService', () => {
@@ -53,7 +53,7 @@ describe('EventService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      imports: [BlueskyModule],
+      imports: [],
       providers: [
         EventService,
         {
@@ -111,6 +111,23 @@ describe('EventService', () => {
         {
           provide: EventMailService,
           useValue: mockEventMailService,
+        },
+        {
+          provide: DataSource,
+          useValue: {
+            createEntityManager: jest.fn(),
+            getRepository: jest.fn(),
+          },
+        },
+        {
+          provide: BlueskyService,
+          useValue: {
+            createEventRecord: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(UserEntity),
+          useValue: mockRepository,
         },
       ],
     }).compile();

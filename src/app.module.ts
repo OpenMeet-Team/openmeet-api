@@ -50,7 +50,7 @@ import { ChatMailModule } from './chat-mail/chat-mail.module';
 import { AuthBlueskyModule } from './auth-bluesky/auth-bluesky.module';
 import { AuditLoggerService } from './logger/audit-logger.provider';
 import { TracingModule } from './tracing/tracing.module';
-import { BlueskyService } from './bluesky/bluesky.service';
+import { BlueskyModule } from './bluesky/bluesky.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -127,6 +127,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     EventMailModule,
     ChatMailModule,
     AuthBlueskyModule,
+    BlueskyModule,
     TracingModule,
   ],
   providers: [
@@ -144,7 +145,6 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       name: 'http_requests_total',
       help: 'Total number of HTTP requests',
     }),
-    BlueskyService,
   ],
   exports: ['AUDIT_LOGGER'],
 })
