@@ -187,31 +187,40 @@ export class EventService {
       };
     }
 
-    // Create and save the event
+    // Create the event entity but don't save yet
     const event = this.eventRepository.create({
       ...eventData,
       categories,
       locationPoint,
     } as EventEntity);
 
-    const createdEvent = await this.eventRepository.save(event);
-
-    // If user has Bluesky credentials and event is published, post to Bluesky
+    // If this is a Bluesky event and it's being published, create it in Bluesky first
     if (
       createEventDto.sourceType === 'bluesky' &&
       event.status === EventStatus.Published
     ) {
       try {
+        // Create in Bluesky first
         await this.blueskyService.createEventRecord(
-          createdEvent,
-          createEventDto.sourceId ?? '', // Default to empty string if null/undefined
-          createEventDto.sourceData?.handle ?? '', // Default to empty string if null/undefined
+          event,
+          createEventDto.sourceId ?? '',
+          createEventDto.sourceData?.handle ?? '',
         );
+
+        // Set the last synced timestamp
+        event.lastSyncedAt = new Date();
       } catch (error) {
-        this.logger.error(`Failed to post event to Bluesky: ${error.message}`);
-        // Don't throw error - we still want to create the event in our system
+        this.logger.error(
+          `Failed to create event in Bluesky: ${error.message}`,
+        );
+        throw new UnprocessableEntityException(
+          'Failed to create event in Bluesky. Please try again.',
+        );
       }
     }
+
+    // Now save the event in our database
+    const createdEvent = await this.eventRepository.save(event);
 
     // Add host as first attendee
     const hostRole = await this.eventRoleService.getRoleByName(
@@ -227,7 +236,9 @@ export class EventService {
 
     this.auditLogger.log('event created', {
       createdEvent,
+      source: createEventDto.sourceType,
     });
+
     this.eventEmitter.emit('event.created', createdEvent);
     return createdEvent;
   }
