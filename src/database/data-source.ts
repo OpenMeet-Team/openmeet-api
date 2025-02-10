@@ -121,7 +121,7 @@ export const AppDataSource = (tenantId: string) => {
       keepConnectionAlive: true,
       logging:
         process.env.NODE_ENV === 'development'
-          ? ['error', 'schema', 'warn', 'log', 'query']
+          ? ['error', 'schema', 'warn', 'log', 'debug']
           : ['error', 'warn'],
       logger: process.env.NODE_ENV === 'development' ? 'advanced-console' : '',
       entities: [__dirname + '/../**/*.entity{.ts,.js}'],

@@ -11,4 +11,9 @@ export class ConnectBlueskyDto {
   @IsString()
   @IsNotEmpty()
   password: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  tenantId: string;
 }

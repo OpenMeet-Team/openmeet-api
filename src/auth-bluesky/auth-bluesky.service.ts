@@ -17,28 +17,33 @@ import {
   NodeOAuthClient,
   NodeOAuthClientOptions,
 } from '@atproto/oauth-client-node';
-import { Agent } from '@atproto/api';
+import { Agent, AtpSessionData } from '@atproto/api';
 import { JoseKey } from '@atproto/jwk-jose';
 import crypto from 'crypto';
 import { AuthService } from '../auth/auth.service';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
+import { ConnectBlueskyDto } from './dto/auth-bluesky-connect.dto';
+import { BlueskyService } from '../bluesky/bluesky.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class AuthBlueskyService {
-  private logger = new Logger(AuthBlueskyService.name);
+  private readonly logger = new Logger(AuthBlueskyService.name);
   private tenantConfig: TenantConfig;
   private client: NodeOAuthClient;
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
-    private tenantService: TenantConnectionService,
+    private readonly tenantConnectionService: TenantConnectionService,
     private configService: ConfigService,
     private authService: AuthService,
     private elasticacheService: ElastiCacheService,
-  ) {}
+    private blueskyService: BlueskyService,
+  ) {
+    this.logger.log('AuthBlueskyService constructed');
+  }
 
   public async initializeClient(tenantId: string) {
-    this.tenantConfig = this.tenantService.getTenantConfig(tenantId);
+    this.tenantConfig = this.tenantConnectionService.getTenantConfig(tenantId);
     const baseUrl = this.configService.get('BACKEND_DOMAIN', {
       infer: true,
     }) as string;
@@ -147,11 +152,32 @@ export class AuthBlueskyService {
   }
 
   async handleAuthCallback(query: any, tenantId: string): Promise<string> {
+    this.logger.log('Starting OAuth callback handling');
     if (!tenantId) {
       throw new BadRequestException('Tenant ID is required');
     }
     await this.initializeClient(tenantId);
+
+    // Get the session from the callback
+    this.logger.warn('oauth query:', query);
+    const { session } = await this.client.callback(new URLSearchParams(query));
     const profile = await this.getProfileFromParams(new URLSearchParams(query));
+
+    this.logger.warn('oauth session:', session);
+    this.logger.warn('oauth session type:', typeof session);
+    this.logger.warn('oauth session keys:', Object.keys(session));
+
+    // Store the session
+    if (session?.did) {
+      const atpSession: AtpSessionData = {
+        did: session.did,
+        handle: profile.handle,
+        accessJwt: 'test', // Try using the method if it exists
+        refreshJwt: 'test',
+        active: true,
+      };
+      await this.blueskyService.storeSession(tenantId, atpSession);
+    }
 
     // Use the common auth service to create/update user and generate token
     const loginResponse = await this.authService.validateSocialLogin(
@@ -192,5 +218,68 @@ export class AuthBlueskyService {
     }
 
     return url.toString();
+  }
+
+  async handleDevLogin(connectDto: ConnectBlueskyDto) {
+    // Only allow in development
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('This endpoint is only available in development');
+    }
+
+    this.logger.debug('handleDevLogin', {
+      identifier: connectDto.identifier,
+      tenantId: connectDto.tenantId,
+    });
+
+    // Connect and store session
+    const agent = await this.blueskyService.connectAccount(
+      connectDto.identifier,
+      connectDto.password,
+      connectDto.tenantId,
+      undefined,
+    );
+
+    if (!agent.session?.did) {
+      throw new Error('Failed to get DID from Bluesky session');
+    }
+
+    // Get the profile info
+    const profile = await agent.getProfile({ actor: agent.session.did });
+    const profileData = {
+      did: profile.data.did,
+      handle: profile.data.handle,
+      displayName: profile.data.displayName,
+      avatar: profile.data.avatar,
+    };
+
+    this.logger.debug('Profile data:', profileData);
+
+    // Use the common auth service directly instead of OAuth flow
+    const loginResponse = await this.authService.validateSocialLogin(
+      'bluesky',
+      {
+        id: profileData.did,
+        email: '',
+        firstName: profileData.displayName || profileData.handle,
+        lastName: '',
+      },
+      connectDto.tenantId,
+    );
+
+    this.logger.debug('Login response:', loginResponse);
+
+    // Add socialId to user object in response
+    const responseWithSocialId = {
+      ...loginResponse,
+      user: {
+        ...loginResponse.user,
+        socialId: profileData.did, // Add the DID as socialId
+      },
+      profile: profileData,
+    };
+
+    this.logger.debug('Final response:', responseWithSocialId);
+
+    return responseWithSocialId;
   }
 }

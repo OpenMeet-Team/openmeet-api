@@ -1,10 +1,11 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
-import { BskyAgent } from '@atproto/api';
+import { Injectable, Logger } from '@nestjs/common';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { AtpAgent, AtpSessionData } from '@atproto/api';
+import { ElastiCacheService } from '../elasticache/elasticache.service';
 
 interface BlueskyLocation {
   type: string;
@@ -33,41 +34,94 @@ export class BlueskyService {
     private readonly configService: ConfigService,
     @InjectRepository(UserEntity)
     private readonly userRepository: Repository<UserEntity>,
+    private readonly elasticacheService: ElastiCacheService,
   ) {}
 
-  async connectAccount(identifier: string, password: string, user: UserEntity) {
+  private getSessionKey(tenantId: string, did: string): string {
+    return `bluesky:session:${tenantId}:${did}`;
+  }
+
+  private async getStoredSession(
+    tenantId: string,
+    did: string,
+  ): Promise<AtpSessionData | null> {
     try {
-      const agent = new BskyAgent({
-        service: 'https://bsky.social',
-      });
-
-      // Verify credentials and get session
-      await agent.login({ identifier, password });
-
-      // Store connection info in user preferences
-      user.preferences = {
-        ...user.preferences,
-        bluesky: {
-          did: agent.session?.did,
-          handle: identifier,
-          connected: true,
-          autoPost: true, // Default to auto-posting enabled
-          connectedAt: new Date(),
-        },
-      };
-
-      await this.userRepository.save(user);
-
-      return {
-        success: true,
-        handle: identifier,
-        autoPost: true,
-        message:
-          'Successfully connected Bluesky account. New events will be automatically posted.',
-      };
+      const sessionStr = await this.elasticacheService.get(
+        this.getSessionKey(tenantId, did),
+      );
+      return sessionStr ? JSON.parse(sessionStr as string) : null;
     } catch (error) {
-      this.logger.error(`Failed to connect Bluesky account: ${error.message}`);
-      throw new UnauthorizedException('Invalid Bluesky credentials');
+      this.logger.error(
+        `Failed to get stored session for DID ${did} in tenant ${tenantId}:`,
+        error,
+      );
+      return null;
+    }
+  }
+
+  async storeSession(tenantId: string, session: AtpSessionData): Promise<void> {
+    try {
+      await this.elasticacheService.set(
+        this.getSessionKey(tenantId, session.did),
+        JSON.stringify(session),
+        60 * 60 * 24 * 1,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to store session for DID ${session.did} in tenant ${tenantId}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async connectAccount(
+    identifier: string,
+    password: string,
+    tenantId: string,
+    session?: AtpSessionData,
+  ): Promise<AtpAgent> {
+    this.logger.debug('connectAccount agent login', { identifier, tenantId });
+
+    const agent = new AtpAgent({
+      service: `https://${identifier.split('.').slice(1).join('.')}`,
+    });
+
+    try {
+      // If we have a session, try to resume it first
+      if (session) {
+        try {
+          await agent.resumeSession(session);
+          this.logger.debug('Resumed existing session');
+        } catch (error) {
+          this.logger.debug(
+            'Failed to resume session (error)',
+            error,
+            'will create new one',
+          );
+        }
+      }
+
+      // If no session or resume failed, create new session
+      if (!agent.session) {
+        const response = await agent.login({
+          identifier,
+          password,
+        });
+        this.logger.debug('connectAccount agent session', {
+          session: response,
+        });
+
+        if (agent.session) {
+          await this.storeSession(tenantId, agent.session as AtpSessionData);
+          this.logger.debug('Stored new session');
+        }
+      }
+
+      return agent;
+    } catch (error) {
+      this.logger.error('Failed to connect account:', error);
+      throw error;
     }
   }
 
@@ -120,11 +174,55 @@ export class BlueskyService {
     event: EventEntity,
     did: string,
     handle: string,
+    tenantId: string,
   ): Promise<void> {
+    this.logger.debug('Creating Bluesky event record:', {
+      eventName: event.name,
+      did,
+      handle,
+      tenantId,
+    });
+
     try {
-      const agent = new BskyAgent({
-        service: `https://${handle.split('.').slice(1).join('.')}`,
+      // Get stored session
+      const session = await this.getStoredSession(tenantId, did);
+      this.logger.debug('Retrieved session:', {
+        hasSesssion: !!session,
+        did: session?.did,
       });
+
+      if (!session) {
+        throw new Error('Bluesky session not found');
+      }
+
+      // Create new agent with session
+      const agent = new AtpAgent({
+        service: `https://${handle.split('.').slice(1).join('.')}`,
+        session: {
+          did: session.did,
+          handle: session.handle,
+          accessJwt: session.accessJwt,
+          refreshJwt: session.refreshJwt,
+          active: true,
+        },
+      });
+
+      // Add logging to check agent and session state
+      this.logger.debug('Agent created with session:', {
+        agentService: agent.service,
+        sessionActive: agent.session?.active,
+        accessJwtPresent: !!session.accessJwt,
+        refreshJwtPresent: !!session.refreshJwt,
+      });
+
+      // Try to refresh the session if needed
+      try {
+        await agent.resumeSession(session);
+        this.logger.debug('Session resumed successfully');
+      } catch (error) {
+        this.logger.error('Failed to resume session:', error);
+        throw new Error('Failed to authenticate with Bluesky');
+      }
 
       // Convert event type to Bluesky mode
       const modeMap = {
@@ -161,37 +259,62 @@ export class BlueskyService {
         });
       }
 
-      const record = {
-        $type: 'community.lexicon.calendar.event',
-        name: event.name,
-        description: event.description,
-        createdAt: event.createdAt.toISOString(),
-        startsAt: event.startDate,
-        endsAt: event.endDate,
-        mode: modeMap[event.type] || modeMap['in-person'],
-        status: statusMap[event.status] || statusMap['published'],
-        locations,
-      };
-
-      // Set the source type to bluesky
-      event.sourceType = EventSourceType.BLUESKY;
-      event.lastSyncedAt = new Date();
-
-      await agent.com.atproto.repo.putRecord({
+      const result = await agent.com.atproto.repo.putRecord({
         repo: did,
         collection: 'community.lexicon.calendar.event',
-        rkey: event.ulid, // Use the event ULID as the record key
-        record,
+        rkey: event.ulid || `${Date.now()}`,
+        record: {
+          $type: 'community.lexicon.calendar.event',
+          name: event.name,
+          description: event.description,
+          createdAt: event.createdAt,
+          startsAt: event.startDate,
+          endsAt: event.endDate,
+          mode: modeMap[event.type] || modeMap['in-person'],
+          status: statusMap[event.status] || statusMap['published'],
+          locations,
+        },
       });
-
+      this.logger.debug(result);
       this.logger.log(
         `Event ${event.name} posted to Bluesky for user ${handle}`,
       );
     } catch (error) {
-      this.logger.error(
-        `Failed to post event to Bluesky: ${error.message}`,
-        error.stack,
-      );
+      this.logger.error('Failed to create Bluesky event:', {
+        error: error.message,
+        stack: error.stack,
+      });
+      throw error;
+    }
+  }
+
+  async listEvents(did: string, tenantId: string): Promise<any[]> {
+    try {
+      const session = await this.getStoredSession(tenantId, did);
+      if (!session) {
+        throw new Error('Bluesky session not found');
+      }
+
+      const agent = new AtpAgent({
+        service: 'https://bsky.social',
+        session: {
+          did: session.did,
+          handle: session.handle,
+          accessJwt: session.accessJwt,
+          refreshJwt: session.refreshJwt,
+          active: true,
+        },
+      });
+
+      // List records of type community.lexicon.calendar.event
+      const response = await agent.com.atproto.repo.listRecords({
+        repo: did,
+        collection: 'community.lexicon.calendar.event',
+      });
+
+      return response.data.records;
+    } catch (error) {
+      this.logger.error('Failed to list Bluesky events:', error);
       throw error;
     }
   }

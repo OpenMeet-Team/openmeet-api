@@ -154,6 +154,12 @@ export class EventService {
     createEventDto: CreateEventDto,
     userId: number,
   ): Promise<EventEntity> {
+    this.logger.debug('Creating event with dto:', {
+      sourceType: createEventDto.sourceType,
+      sourceId: createEventDto.sourceId,
+      sourceData: createEventDto.sourceData,
+    });
+
     await this.getTenantSpecificEventRepository();
     // Set default values and prepare base event data
     const eventData = {
@@ -163,6 +169,8 @@ export class EventService {
       user: { id: userId },
       group: createEventDto.group ? { id: createEventDto.group.id } : null,
     };
+
+    this.logger.debug('Prepared event data:', eventData);
 
     // Handle categories
     let categories: CategoryEntity[] = [];
@@ -194,25 +202,34 @@ export class EventService {
       locationPoint,
     } as EventEntity);
 
+    this.logger.debug('Created event entity:', {
+      sourceType: event.sourceType,
+      status: event.status,
+    });
+
     // If this is a Bluesky event and it's being published, create it in Bluesky first
     if (
       createEventDto.sourceType === 'bluesky' &&
       event.status === EventStatus.Published
     ) {
+      this.logger.debug('Attempting to create Bluesky event');
       try {
         // Create in Bluesky first
         await this.blueskyService.createEventRecord(
           event,
           createEventDto.sourceId ?? '',
           createEventDto.sourceData?.handle ?? '',
+          this.request.tenantId,
         );
 
+        this.logger.debug('Successfully created Bluesky event');
         // Set the last synced timestamp
         event.lastSyncedAt = new Date();
       } catch (error) {
-        this.logger.error(
-          `Failed to create event in Bluesky: ${error.message}`,
-        );
+        this.logger.error('Failed to create event in Bluesky:', {
+          error: error.message,
+          stack: error.stack,
+        });
         throw new UnprocessableEntityException(
           'Failed to create event in Bluesky. Please try again.',
         );
@@ -221,6 +238,10 @@ export class EventService {
 
     // Now save the event in our database
     const createdEvent = await this.eventRepository.save(event);
+    this.logger.debug('Saved event in database:', {
+      id: createdEvent.id,
+      sourceType: createdEvent.sourceType,
+    });
 
     // Add host as first attendee
     const hostRole = await this.eventRoleService.getRoleByName(
@@ -736,6 +757,7 @@ export class EventService {
           updatedEvent,
           updateEventDto.sourceId || '',
           updateEventDto.sourceData?.handle || '',
+          this.request.tenantId,
         );
       } catch (error) {
         this.logger.error(
