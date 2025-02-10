@@ -166,7 +166,8 @@
     "testEnvironment": "node",
     "setupFiles": [
       "dotenv/config"
-    ]
+    ],
+    "setupFilesAfterEnv": ["<rootDir>/../test/jest-setup.ts"]
   },
   "engines": {
     "node": ">=16.0.0",

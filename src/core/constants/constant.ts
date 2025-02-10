@@ -163,3 +163,13 @@ export interface TenantConfig {
   githubClientSecret: string; // github client secret, ex: 0987654321
   blueskyConfig?: BlueskyConfig;
 }
+
+export enum ExternalEventSourceType {
+  BLUESKY = 'bluesky',
+  EVENTBRITE = 'eventbrite',
+  FACEBOOK = 'facebook',
+  LUMA = 'luma',
+  MEETUP = 'meetup',
+  OTHER = 'other',
+  WEB = 'web',
+}

@@ -195,7 +195,7 @@ export class EventAttendeeService {
 
     return await this.eventAttendeesRepository.update(attendeeId, {
       status: body.status,
-      role: attendeeRole,
+      role: { id: attendeeRole.id },
     });
   }
 
