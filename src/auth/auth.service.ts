@@ -138,7 +138,7 @@ export class AuthService {
     );
 
     if (!user) {
-      this.logger.error('User not found', {
+      this.logger.error('User not found or created', {
         socialData,
         authProvider,
         tenantId,
@@ -164,11 +164,7 @@ export class AuthService {
       tenantId,
     );
 
-    const {
-      token: jwtToken,
-      refreshToken,
-      tokenExpires,
-    } = await this.getTokensData({
+    const { token, refreshToken, tokenExpires } = await this.getTokensData({
       id: user.id,
       role: user.role,
       sessionId: session.id,
@@ -177,7 +173,7 @@ export class AuthService {
 
     return {
       refreshToken,
-      token: jwtToken,
+      token,
       tokenExpires,
       user,
     };

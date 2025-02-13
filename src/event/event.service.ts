@@ -154,11 +154,7 @@ export class EventService {
     createEventDto: CreateEventDto,
     userId: number,
   ): Promise<EventEntity> {
-    this.logger.debug('Creating event with dto:', {
-      sourceType: createEventDto.sourceType,
-      sourceId: createEventDto.sourceId,
-      sourceData: createEventDto.sourceData,
-    });
+    this.logger.debug('Creating event with dto:', createEventDto);
 
     await this.getTenantSpecificEventRepository();
     // Set default values and prepare base event data
@@ -201,11 +197,7 @@ export class EventService {
       categories,
       locationPoint,
     } as EventEntity);
-
-    this.logger.debug('Created event entity:', {
-      sourceType: event.sourceType,
-      status: event.status,
-    });
+    this.logger.debug('created event :', event);
 
     // If this is a Bluesky event and it's being published, create it in Bluesky first
     if (

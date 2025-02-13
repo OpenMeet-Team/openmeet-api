@@ -8,11 +8,11 @@ import {
   HttpCode,
   Post,
   Body,
+  Logger,
 } from '@nestjs/common';
 import { AuthBlueskyService } from './auth-bluesky.service';
 import { Response } from 'express';
 import { ApiOkResponse, ApiTags, ApiOperation } from '@nestjs/swagger';
-import { TenantConfig } from '../core/constants/constant';
 import { Public } from '../core/decorators/public.decorator';
 import { TenantPublic } from '../tenant/tenant-public.decorator';
 import { ConnectBlueskyDto } from './dto/auth-bluesky-connect.dto';
@@ -23,7 +23,8 @@ import { ConnectBlueskyDto } from './dto/auth-bluesky-connect.dto';
   version: '1',
 })
 export class AuthBlueskyController {
-  private tenantConfig: TenantConfig;
+  private readonly logger = new Logger(AuthBlueskyController.name);
+
   constructor(private readonly authBlueskyService: AuthBlueskyService) {}
 
   @Get('authorize')
@@ -35,8 +36,7 @@ export class AuthBlueskyController {
     @Query('handle') handle: string,
     @Query('tenantId') tenantId: string,
   ) {
-    const url = await this.authBlueskyService.createAuthUrl(handle, tenantId);
-    return { url };
+    return await this.authBlueskyService.createAuthUrl(handle, tenantId);
   }
 
   @Public()
@@ -44,7 +44,6 @@ export class AuthBlueskyController {
   @Get('callback')
   async callback(@Query() query: any, @Res() res: Response) {
     const effectiveTenantId = query.tenantId;
-
     const redirectUrl = await this.authBlueskyService.handleAuthCallback(
       query,
       effectiveTenantId,
@@ -57,10 +56,8 @@ export class AuthBlueskyController {
   @Get('client-metadata.json')
   @Header('Content-Type', 'application/json')
   async getClientMetadata(@Query('tenantId') tenantId: string) {
-    if (!this.authBlueskyService.getClient()) {
-      await this.authBlueskyService.initializeClient(tenantId);
-    }
-    return this.authBlueskyService.getClient().clientMetadata;
+    const client = await this.authBlueskyService.initializeClient(tenantId);
+    return client.clientMetadata;
   }
 
   @Public()
@@ -68,10 +65,8 @@ export class AuthBlueskyController {
   @Get('jwks.json')
   @Header('Content-Type', 'application/json')
   async getJwks(@Query('tenantId') tenantId: string) {
-    if (!this.authBlueskyService.getClient()) {
-      await this.authBlueskyService.initializeClient(tenantId);
-    }
-    return this.authBlueskyService.getClient().jwks;
+    const client = await this.authBlueskyService.initializeClient(tenantId);
+    return client.jwks;
   }
 
   @Post('dev-login')

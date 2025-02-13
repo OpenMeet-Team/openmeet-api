@@ -6,7 +6,6 @@ import {
   Body,
   UseGuards,
   Param,
-  UnprocessableEntityException,
   Req,
 } from '@nestjs/common';
 import { BlueskyService } from './bluesky.service';
@@ -15,20 +14,13 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { ConnectBlueskyDto } from '../auth-bluesky/dto/auth-bluesky-connect.dto';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
-import { AuthBlueskyService } from '../auth-bluesky/auth-bluesky.service';
-import { Logger } from '@nestjs/common';
 
 @ApiTags('Bluesky')
 @Controller('bluesky')
 @UseGuards(JWTAuthGuard)
 @ApiBearerAuth()
 export class BlueskyController {
-  private readonly logger = new Logger(BlueskyController.name);
-
-  constructor(
-    private readonly blueskyService: BlueskyService,
-    private readonly authBlueskyService: AuthBlueskyService,
-  ) {}
+  constructor(private readonly blueskyService: BlueskyService) {}
 
   @Post('connect')
   @ApiOperation({ summary: 'Connect Bluesky account' })
@@ -56,14 +48,6 @@ export class BlueskyController {
   @ApiOperation({ summary: 'List Bluesky events' })
   @UseGuards(JWTAuthGuard)
   async listEvents(@Req() req, @Param('did') did: string) {
-    try {
-      const events = await this.blueskyService.listEvents(did, req.tenantId);
-      return { events };
-    } catch (error) {
-      this.logger.error('Failed to list Bluesky events:', error);
-      throw new UnprocessableEntityException(
-        'Failed to list Bluesky events. Please try again.',
-      );
-    }
+    return await this.blueskyService.listEvents(did, req.tenantId);
   }
 }

@@ -339,7 +339,7 @@ export class UserService {
     tenantId: string,
   ): Promise<UserEntity> {
     this.logger.debug(
-      `[UserService] Finding or creating user for provider: ${provider}, tenantId: ${tenantId}`,
+      `Finding or creating user for provider: ${provider}, tenantId: ${tenantId}`,
     );
 
     if (!tenantId) {
@@ -358,6 +358,9 @@ export class UserService {
     );
 
     if (existingUser) {
+      this.logger.debug('findOrCreateUser: found existing user', {
+        existingUser,
+      });
       return existingUser as UserEntity;
     }
 
@@ -387,6 +390,9 @@ export class UserService {
       tenantId,
     )) as unknown as UserEntity;
 
+    this.logger.debug('findOrCreateUser: created user', {
+      newUser,
+    });
     return newUser;
   }
 

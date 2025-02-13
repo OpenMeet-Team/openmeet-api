@@ -5,31 +5,22 @@ import {
   Scope,
   Logger,
 } from '@nestjs/common';
-import {
-  ElastiCacheStateStore,
-  ElastiCacheSessionStore,
-} from './stores/elasticache-stores';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { TenantConfig } from '../core/constants/constant';
 import { ConfigService } from '@nestjs/config';
-import {
-  NodeOAuthClient,
-  NodeOAuthClientOptions,
-} from '@atproto/oauth-client-node';
-import { Agent, AtpSessionData } from '@atproto/api';
-import { JoseKey } from '@atproto/jwk-jose';
+import { Agent } from '@atproto/api';
 import crypto from 'crypto';
 import { AuthService } from '../auth/auth.service';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { ConnectBlueskyDto } from './dto/auth-bluesky-connect.dto';
 import { BlueskyService } from '../bluesky/bluesky.service';
+import { initializeOAuthClient } from '../utils/bluesky';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class AuthBlueskyService {
   private readonly logger = new Logger(AuthBlueskyService.name);
   private tenantConfig: TenantConfig;
-  private client: NodeOAuthClient;
 
   constructor(
     @Inject(REQUEST) private readonly request: any,
@@ -43,87 +34,19 @@ export class AuthBlueskyService {
   }
 
   public async initializeClient(tenantId: string) {
-    this.tenantConfig = this.tenantConnectionService.getTenantConfig(tenantId);
-    const baseUrl = this.configService.get('BACKEND_DOMAIN', {
-      infer: true,
-    }) as string;
-
-    if (!baseUrl) {
-      throw new Error('BACKEND_DOMAIN not configured');
-    }
-
-    const keyset = await this.loadKeys();
-    if (keyset.length === 0) {
-      throw new Error('No valid keys found in environment variables');
-    }
-
-    const clientConfig: NodeOAuthClientOptions = {
-      clientMetadata: {
-        client_id: `${baseUrl}/api/v1/auth/bluesky/client-metadata.json?tenantId=${tenantId}`,
-        client_name: 'OpenMeet',
-        client_uri: baseUrl,
-        logo_uri: `${baseUrl}/logo.png`,
-        tos_uri: `${baseUrl}/terms`,
-        policy_uri: `${baseUrl}/policy`,
-        redirect_uris: [
-          `${baseUrl}/api/v1/auth/bluesky/callback?tenantId=${tenantId}`,
-        ],
-        grant_types: ['authorization_code', 'refresh_token'],
-        response_types: ['code'],
-        scope: 'atproto transition:generic',
-        application_type: 'web',
-        token_endpoint_auth_method: 'private_key_jwt',
-        token_endpoint_auth_signing_alg: 'ES256',
-        dpop_bound_access_tokens: true,
-        jwks_uri: `${baseUrl}/api/v1/auth/bluesky/jwks.json?tenantId=${tenantId}`,
-      },
-      keyset,
-      stateStore: new ElastiCacheStateStore(this.elasticacheService),
-      sessionStore: new ElastiCacheSessionStore(this.elasticacheService),
-    };
-    this.client = new NodeOAuthClient(clientConfig);
-
-    return this.client;
+    return await initializeOAuthClient(
+      tenantId,
+      this.configService,
+      this.elasticacheService,
+    );
   }
 
-  private async loadKeys(): Promise<JoseKey[]> {
-    const keys: JoseKey[] = [];
-
-    for (let i = 1; i <= 3; i++) {
-      const encodedKeyData: string =
-        this.configService.get(`BLUESKY_KEY_${i}`, {
-          infer: true,
-        }) || '';
-      if (!encodedKeyData) {
-        console.warn(`BLUESKY_KEY_${i} not found in environment variables`);
-        continue;
-      }
-
-      try {
-        // Decode base64 string to UTF-8 string
-        const keyData = Buffer.from(encodedKeyData, 'base64').toString('utf-8');
-
-        // Validate PKCS#8 format
-        if (!keyData.includes('-----BEGIN PRIVATE KEY-----')) {
-          console.error(`BLUESKY_KEY_${i} is not in PKCS#8 format`);
-          continue;
-        }
-
-        const key = await JoseKey.fromImportable(keyData.trim(), `key${i}`);
-        keys.push(key);
-      } catch (error) {
-        console.error(`Failed to load BLUESKY_KEY_${i}:`, error);
-      }
-    }
-
-    return keys;
-  }
-
-  async getProfileFromParams(params: URLSearchParams) {
+  async getProfileFromParams(params: URLSearchParams, tenantId: string) {
     this.logger.debug('getProfileFromParams', { params });
 
     try {
-      const { session, state } = await this.client.callback(params);
+      const client = await this.initializeClient(tenantId);
+      const { session, state } = await client.callback(params);
       this.logger.debug('getProfileFromParams', { state, session });
 
       const agent = new Agent(session);
@@ -138,78 +61,85 @@ export class AuthBlueskyService {
       };
     } catch (error) {
       this.logger.error('Callback error:', error);
-      this.logger.error('Full error details:', {
-        message: error.message,
-        stack: error.stack,
-        params: Object.fromEntries(params.entries()),
-      });
       throw error;
     }
   }
 
-  getClient() {
-    return this.client;
-  }
-
   async handleAuthCallback(query: any, tenantId: string): Promise<string> {
-    this.logger.log('Starting OAuth callback handling');
+    this.logger.debug('handleAuthCallback', { query, tenantId });
     if (!tenantId) {
       throw new BadRequestException('Tenant ID is required');
     }
-    await this.initializeClient(tenantId);
 
-    // Get the session from the callback
-    this.logger.warn('oauth query:', query);
-    const { session } = await this.client.callback(new URLSearchParams(query));
-    const profile = await this.getProfileFromParams(new URLSearchParams(query));
+    const client = await this.initializeClient(tenantId);
+    const tenantConfig = this.tenantConnectionService.getTenantConfig(tenantId);
+    this.logger.debug('tenantConfig', { tenantConfig });
 
-    this.logger.warn('oauth session:', session);
-    this.logger.warn('oauth session type:', typeof session);
-    this.logger.warn('oauth session keys:', Object.keys(session));
+    const callbackParams = new URLSearchParams(query);
+    const { session: oauthSession } = await client.callback(callbackParams);
+    this.logger.debug('Obtained OAuth session from callback');
 
-    // Store the session
-    if (session?.did) {
-      const atpSession: AtpSessionData = {
-        did: session.did,
-        handle: profile.handle,
-        accessJwt: 'test', // Try using the method if it exists
-        refreshJwt: 'test',
-        active: true,
-      };
-      await this.blueskyService.storeSession(tenantId, atpSession);
-    }
+    const restoredSession = await client.restore(oauthSession.did);
+    this.logger.debug('Restored session with tokens');
 
-    // Use the common auth service to create/update user and generate token
+    const agent = new Agent(restoredSession);
+
+    const profile = await agent.getProfile({ actor: oauthSession.did });
+    const profileData = {
+      did: profile.data.did,
+      handle: profile.data.handle,
+      displayName: profile.data.displayName,
+      avatar: profile.data.avatar,
+    };
+
+    // const atpSession: AtpSessionData = {
+    //   did: a
+    //   handle: agent.session?.handle as string,
+    //   accessJwt: agent.session?.accessJwt as string,
+    //   refreshJwt: agent.session?.refreshJwt as string,
+    //   email: '',
+    //   active: true,
+    // };
+    // await this.blueskyService.storeSession(tenantId, atpSession);
+
     const loginResponse = await this.authService.validateSocialLogin(
       'bluesky',
       {
-        id: profile.did,
+        id: profileData.did,
         email: '',
-        firstName: profile.displayName || profile.handle,
+        firstName: profileData.displayName || profileData.handle,
         lastName: '',
       },
       tenantId,
     );
 
-    // Redirect to frontend with full login response
-    const params = new URLSearchParams({
+    loginResponse.user = {
+      ...loginResponse.user,
+      socialId: profileData.did,
+    };
+
+    this.logger.debug('login Response', { loginResponse });
+
+    const newParams = new URLSearchParams({
       token: loginResponse.token,
       refreshToken: loginResponse.refreshToken,
       tokenExpires: loginResponse.tokenExpires.toString(),
       user: Buffer.from(JSON.stringify(loginResponse.user || {})).toString(
         'base64',
       ),
-      profile: Buffer.from(JSON.stringify(profile || {})).toString('base64'),
+      profile: Buffer.from(JSON.stringify(profileData)).toString('base64'),
     });
 
-    return `${this.tenantConfig.frontendDomain}/auth/bluesky/callback?${params.toString()}`;
+    this.logger.debug(
+      'calling redirect to ',
+      `${tenantConfig.frontendDomain}/auth/bluesky/callback?${newParams.toString()}`,
+    );
+    return `${tenantConfig.frontendDomain}/auth/bluesky/callback?${newParams.toString()}`;
   }
 
   async createAuthUrl(handle: string, tenantId: string): Promise<string> {
-    await this.initializeClient(tenantId);
-
-    const url = await this.client.authorize(handle, {
-      // scope: 'atproto transition:generic',
+    const client = await this.initializeClient(tenantId);
+    const url = await client.authorize(handle, {
       state: crypto.randomBytes(16).toString('base64url'),
     });
 
@@ -221,7 +151,6 @@ export class AuthBlueskyService {
   }
 
   async handleDevLogin(connectDto: ConnectBlueskyDto) {
-    // Only allow in development
     if (process.env.NODE_ENV === 'production') {
       throw new Error('This endpoint is only available in development');
     }
@@ -231,20 +160,14 @@ export class AuthBlueskyService {
       tenantId: connectDto.tenantId,
     });
 
-    // Connect and store session
     const agent = await this.blueskyService.connectAccount(
       connectDto.identifier,
       connectDto.password,
       connectDto.tenantId,
-      undefined,
     );
-
-    if (!agent.session?.did) {
-      throw new Error('Failed to get DID from Bluesky session');
-    }
-
-    // Get the profile info
-    const profile = await agent.getProfile({ actor: agent.session.did });
+    const profile = await agent.getProfile({
+      actor: agent.session?.did as string,
+    });
     const profileData = {
       did: profile.data.did,
       handle: profile.data.handle,
@@ -254,7 +177,6 @@ export class AuthBlueskyService {
 
     this.logger.debug('Profile data:', profileData);
 
-    // Use the common auth service directly instead of OAuth flow
     const loginResponse = await this.authService.validateSocialLogin(
       'bluesky',
       {
@@ -266,14 +188,11 @@ export class AuthBlueskyService {
       connectDto.tenantId,
     );
 
-    this.logger.debug('Login response:', loginResponse);
-
-    // Add socialId to user object in response
     const responseWithSocialId = {
       ...loginResponse,
       user: {
         ...loginResponse.user,
-        socialId: profileData.did, // Add the DID as socialId
+        socialId: profileData.did,
       },
       profile: profileData,
     };
@@ -281,5 +200,9 @@ export class AuthBlueskyService {
     this.logger.debug('Final response:', responseWithSocialId);
 
     return responseWithSocialId;
+  }
+
+  async resumeSession(tenantId: string, did: string) {
+    return await this.blueskyService.resumeSession(tenantId, did);
   }
 }
