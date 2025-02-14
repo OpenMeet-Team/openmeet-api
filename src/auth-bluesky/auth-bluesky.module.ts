@@ -6,6 +6,7 @@ import { TenantModule } from '../tenant/tenant.module';
 import { AuthModule } from '../auth/auth.module';
 import { ElastiCacheModule } from '../elasticache/elasticache.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
+import { UserModule } from '../user/user.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { BlueskyModule } from '../bluesky/bluesky.module';
     forwardRef(() => AuthModule),
     ElastiCacheModule,
     forwardRef(() => BlueskyModule),
+    UserModule,
   ],
   controllers: [AuthBlueskyController],
   providers: [AuthBlueskyService],

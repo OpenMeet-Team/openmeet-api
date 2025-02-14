@@ -3,16 +3,15 @@ import {
   Post,
   Get,
   Delete,
-  Body,
   UseGuards,
   Param,
   Req,
+  Logger,
 } from '@nestjs/common';
 import { BlueskyService } from './bluesky.service';
 import { JWTAuthGuard } from '../auth/auth.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
-import { ConnectBlueskyDto } from '../auth-bluesky/dto/auth-bluesky-connect.dto';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 
 @ApiTags('Bluesky')
@@ -20,31 +19,20 @@ import { AuthUser } from '../core/decorators/auth-user.decorator';
 @UseGuards(JWTAuthGuard)
 @ApiBearerAuth()
 export class BlueskyController {
+  private readonly logger = new Logger(BlueskyController.name);
+
   constructor(private readonly blueskyService: BlueskyService) {}
 
   @Post('connect')
-  @ApiOperation({ summary: 'Connect Bluesky account' })
-  async connect(@Body() connectDto: ConnectBlueskyDto) {
-    return this.blueskyService.connectAccount(
-      connectDto.identifier,
-      connectDto.password,
-      connectDto.tenantId,
-    );
+  @ApiOperation({ summary: 'Enable Bluesky event source' })
+  async connect(@AuthUser() user: UserEntity, @Req() req) {
+    return this.blueskyService.connectAccount(user, req.tenantId);
   }
 
   @Delete('disconnect')
   @ApiOperation({ summary: 'Disconnect Bluesky account' })
-  async disconnect(@AuthUser() user: UserEntity) {
-    return this.blueskyService.disconnectAccount(user);
-  }
-
-  @Post('auto-post')
-  @ApiOperation({ summary: 'Toggle auto-post setting' })
-  async toggleAutoPost(
-    @AuthUser() user: UserEntity,
-    @Body() body: { enabled: boolean },
-  ) {
-    return this.blueskyService.toggleAutoPost(user, body.enabled);
+  async disconnect(@AuthUser() user: UserEntity, @Req() req) {
+    return this.blueskyService.disconnectAccount(user, req.tenantId);
   }
 
   @Get('status')
@@ -68,10 +56,37 @@ export class BlueskyController {
     @Param('did') did: string,
     @Param('rkey') rkey: string,
   ) {
-    return await this.blueskyService.deleteEventRecord(
-      { ulid: rkey } as any,
+    this.logger.debug('Deleting Bluesky event:', {
       did,
-      req.tenantId,
-    );
+      rkey,
+      tenantId: req.tenantId,
+    });
+
+    // Create a minimal event entity with the required fields for deletion
+    const event = {
+      slug: rkey,
+      sourceType: 'bluesky',
+      sourceId: did,
+      sourceData: {
+        rkey: rkey,
+        handle: null, // handle is optional for deletion
+      },
+    };
+
+    try {
+      await this.blueskyService.deleteEventRecord(
+        event as any,
+        did,
+        req.tenantId,
+      );
+      return { success: true, message: 'Event deleted successfully' };
+    } catch (error) {
+      this.logger.error('Failed to delete Bluesky event:', {
+        error: error.message,
+        did,
+        rkey,
+      });
+      throw error;
+    }
   }
 }

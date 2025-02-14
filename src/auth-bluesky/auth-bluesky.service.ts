@@ -13,9 +13,10 @@ import { Agent } from '@atproto/api';
 import crypto from 'crypto';
 import { AuthService } from '../auth/auth.service';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
-import { ConnectBlueskyDto } from './dto/auth-bluesky-connect.dto';
 import { BlueskyService } from '../bluesky/bluesky.service';
+import { UserService } from '../user/user.service';
 import { initializeOAuthClient } from '../utils/bluesky';
+import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class AuthBlueskyService {
@@ -29,6 +30,7 @@ export class AuthBlueskyService {
     private authService: AuthService,
     private elasticacheService: ElastiCacheService,
     private blueskyService: BlueskyService,
+    private userService: UserService,
   ) {
     this.logger.log('AuthBlueskyService constructed');
   }
@@ -102,6 +104,15 @@ export class AuthBlueskyService {
     // };
     // await this.blueskyService.storeSession(tenantId, atpSession);
 
+    // Get existing user if any to preserve preferences
+    const existingUser = await this.userService.findBySocialIdAndProvider(
+      {
+        socialId: profileData.did,
+        provider: 'bluesky',
+      },
+      tenantId,
+    );
+
     const loginResponse = await this.authService.validateSocialLogin(
       'bluesky',
       {
@@ -113,6 +124,90 @@ export class AuthBlueskyService {
       tenantId,
     );
 
+    // Get the full user entity to update preferences
+    const userEntity = await this.userService.findById(
+      loginResponse.user.id,
+      tenantId,
+    );
+
+    if (!userEntity) {
+      throw new BadRequestException('User not found');
+    }
+
+    // Preserve existing Bluesky preferences if they exist
+    const existingPreferences =
+      (existingUser as UserEntity)?.preferences?.bluesky || {};
+
+    this.logger.debug('Existing Bluesky preferences:', { existingPreferences });
+
+    // For new users or existing users without preferences, set initial state
+    const isNewUser = !existingUser || !existingPreferences.did;
+    const now = new Date();
+
+    const updatedPreferences = {
+      ...existingPreferences,
+      did: profileData.did,
+      handle: profileData.handle,
+      // For new users, set connected to true and record the time
+      // For existing users, preserve their connection state
+      connected: isNewUser ? true : existingPreferences.connected,
+      connectedAt: isNewUser ? now : existingPreferences.connectedAt,
+      disconnectedAt: isNewUser ? null : existingPreferences.disconnectedAt,
+      autoPost: existingPreferences.autoPost || false,
+    };
+
+    this.logger.debug('Updated Bluesky preferences:', {
+      updatedPreferences,
+      isNewUser,
+      existingUserId: existingUser?.id,
+    });
+
+    // Prepare the update payload, excluding photo to avoid validation
+    const updatePayload: any = {
+      socialId: profileData.did,
+      preferences: {
+        ...userEntity.preferences,
+        bluesky: updatedPreferences,
+      },
+    };
+
+    // Log existing photo info for debugging
+    if (userEntity.photo?.id) {
+      this.logger.debug('User has existing photo:', {
+        photoId: userEntity.photo.id,
+        photoPath: userEntity.photo.path,
+      });
+    }
+
+    // Save the updated user and verify the update
+    await this.userService.update(
+      loginResponse.user.id,
+      updatePayload,
+      tenantId,
+    );
+
+    // Verify preferences were saved correctly
+    const verifiedUser = await this.userService.findById(
+      loginResponse.user.id,
+      tenantId,
+    );
+
+    this.logger.debug('Verified user preferences after update:', {
+      blueskyPreferences: verifiedUser?.preferences?.bluesky,
+      userId: verifiedUser?.id,
+    });
+
+    if (!verifiedUser?.preferences?.bluesky?.connected && isNewUser) {
+      this.logger.warn(
+        'Bluesky preferences not properly persisted for new user',
+        {
+          userId: verifiedUser?.id,
+          preferences: verifiedUser?.preferences,
+        },
+      );
+    }
+
+    // Update the login response with the updated user entity
     loginResponse.user = {
       ...loginResponse.user,
       socialId: profileData.did,
@@ -148,58 +243,6 @@ export class AuthBlueskyService {
     }
 
     return url.toString();
-  }
-
-  async handleDevLogin(connectDto: ConnectBlueskyDto) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('This endpoint is only available in development');
-    }
-
-    this.logger.debug('handleDevLogin', {
-      identifier: connectDto.identifier,
-      tenantId: connectDto.tenantId,
-    });
-
-    const agent = await this.blueskyService.connectAccount(
-      connectDto.identifier,
-      connectDto.password,
-      connectDto.tenantId,
-    );
-    const profile = await agent.getProfile({
-      actor: agent.session?.did as string,
-    });
-    const profileData = {
-      did: profile.data.did,
-      handle: profile.data.handle,
-      displayName: profile.data.displayName,
-      avatar: profile.data.avatar,
-    };
-
-    this.logger.debug('Profile data:', profileData);
-
-    const loginResponse = await this.authService.validateSocialLogin(
-      'bluesky',
-      {
-        id: profileData.did,
-        email: '',
-        firstName: profileData.displayName || profileData.handle,
-        lastName: '',
-      },
-      connectDto.tenantId,
-    );
-
-    const responseWithSocialId = {
-      ...loginResponse,
-      user: {
-        ...loginResponse.user,
-        socialId: profileData.did,
-      },
-      profile: profileData,
-    };
-
-    this.logger.debug('Final response:', responseWithSocialId);
-
-    return responseWithSocialId;
   }
 
   async resumeSession(tenantId: string, did: string) {

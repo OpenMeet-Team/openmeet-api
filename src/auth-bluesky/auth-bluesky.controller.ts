@@ -6,17 +6,13 @@ import {
   Header,
   HttpStatus,
   HttpCode,
-  Post,
-  Body,
   Logger,
 } from '@nestjs/common';
 import { AuthBlueskyService } from './auth-bluesky.service';
 import { Response } from 'express';
-import { ApiOkResponse, ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from '../core/decorators/public.decorator';
 import { TenantPublic } from '../tenant/tenant-public.decorator';
-import { ConnectBlueskyDto } from './dto/auth-bluesky-connect.dto';
-
 @ApiTags('Auth')
 @Controller({
   path: 'auth/bluesky',
@@ -67,20 +63,5 @@ export class AuthBlueskyController {
   async getJwks(@Query('tenantId') tenantId: string) {
     const client = await this.authBlueskyService.initializeClient(tenantId);
     return client.jwks;
-  }
-
-  @Post('dev-login')
-  @Public()
-  @TenantPublic()
-  @ApiOperation({
-    summary: '[DEV ONLY] Login with Bluesky credentials directly',
-  })
-  async devLogin(@Body() connectDto: ConnectBlueskyDto) {
-    // Only allow in development
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('This endpoint is only available in development');
-    }
-
-    return this.authBlueskyService.handleDevLogin(connectDto);
   }
 }

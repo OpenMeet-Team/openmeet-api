@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
 import { BlueskyController } from './bluesky.controller';
 import { BlueskyService } from './bluesky.service';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { UserModule } from '../user/user.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([UserEntity])],
+  imports: [UserModule],
   controllers: [BlueskyController],
   providers: [BlueskyService],
   exports: [BlueskyService],

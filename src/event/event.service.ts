@@ -46,7 +46,8 @@ import { EventMailService } from '../event-mail/event-mail.service';
 import { AuditLoggerService } from '../logger/audit-logger.provider';
 import { Trace } from '../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
-import { BlueskyService, EventSourceType } from '../bluesky/bluesky.service';
+import { BlueskyService } from '../bluesky/bluesky.service';
+import { EventSourceType } from '../core/constants/source-type.constant';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -191,23 +192,28 @@ export class EventService {
       };
     }
 
-    // Create the event entity but don't save yet
-    const event = this.eventRepository.create({
-      ...eventData,
-      categories,
-      locationPoint,
-    } as EventEntity);
-    this.logger.debug('created event :', event);
+    let createdEvent;
 
     // If this is a Bluesky event and it's being published, create it in Bluesky first
     if (
       createEventDto.sourceType === 'bluesky' &&
-      event.status === EventStatus.Published
+      eventData.status === EventStatus.Published
     ) {
       this.logger.debug('Attempting to create Bluesky event');
       try {
-        // Create in Bluesky first
-        await this.blueskyService.createEventRecord(
+        // Create the event entity
+        const event = this.eventRepository.create({
+          ...eventData,
+          categories,
+          locationPoint,
+        } as EventEntity);
+
+        // Generate ULID and slug before Bluesky creation
+        event.generateUlid();
+        event.generateSlug();
+
+        // Create in Bluesky first to get the rkey
+        const { rkey } = await this.blueskyService.createEventRecord(
           event,
           createEventDto.sourceId ?? '',
           createEventDto.sourceData?.handle ?? '',
@@ -215,8 +221,19 @@ export class EventService {
         );
 
         this.logger.debug('Successfully created Bluesky event');
-        // Set the last synced timestamp
+
+        // Store Bluesky-specific data in source fields
+        event.sourceType = EventSourceType.BLUESKY;
+        event.sourceId = createEventDto.sourceId ?? '';
+        event.sourceUrl = `https://bsky.app/profile/${createEventDto.sourceData?.handle}/post/${rkey}`;
+        event.sourceData = {
+          rkey,
+          handle: createEventDto.sourceData?.handle,
+        };
         event.lastSyncedAt = new Date();
+
+        // Save the event with Bluesky metadata
+        createdEvent = await this.eventRepository.save(event);
       } catch (error) {
         this.logger.error('Failed to create event in Bluesky:', {
           error: error.message,
@@ -226,10 +243,15 @@ export class EventService {
           'Failed to create event in Bluesky. Please try again.',
         );
       }
+    } else {
+      // For non-Bluesky events, just save directly to database
+      const event = this.eventRepository.create({
+        ...eventData,
+        categories,
+        locationPoint,
+      } as EventEntity);
+      createdEvent = await this.eventRepository.save(event);
     }
-
-    // Now save the event in our database
-    const createdEvent = await this.eventRepository.save(event);
     this.logger.debug('Saved event in database:', {
       id: createdEvent.id,
       sourceType: createdEvent.sourceType,
@@ -767,6 +789,13 @@ export class EventService {
     const event = await this.findEventBySlug(slug);
     const eventCopy = { ...event };
 
+    // Check if we have a valid authenticated user
+    if (!this.request.user?.id) {
+      throw new UnprocessableEntityException(
+        'User must be authenticated to delete an event',
+      );
+    }
+
     this.logger.debug('Starting event removal:', {
       eventId: event.id,
       name: event.name,
@@ -774,43 +803,79 @@ export class EventService {
       sourceId: event.sourceId,
       userBlueskyConnected:
         !!this.request.user?.preferences?.bluesky?.connected,
+      requestUser: this.request.user,
     });
 
-    // If the event is a Bluesky event and the user is logged in via Bluesky, attempt to delete it there, too.
+    // Get latest user data to ensure we have current Bluesky connection state
+    const currentUser = await this.userService.findById(
+      this.request.user.id,
+      this.request.tenantId,
+    );
+
+    if (!currentUser) {
+      throw new UnprocessableEntityException(
+        'Failed to retrieve current user data',
+      );
+    }
+
+    this.logger.debug('Current user data:', {
+      id: currentUser?.id,
+      socialId: currentUser?.socialId,
+      blueskyPreferences: currentUser?.preferences?.bluesky,
+    });
+
+    // If the event is a Bluesky event and the user is connected to Bluesky, attempt to delete it there
     this.logger.debug('Checking Bluesky deletion conditions:', {
       isBlueskyEvent: event.sourceType === EventSourceType.BLUESKY,
-      hasSourceId: !!event.sourceId,
-      userConnected: !!this.request.user?.preferences?.bluesky?.connected,
-      userPreferences: this.request.user?.preferences,
-      requestUser: this.request.user,
+      userConnected: !!currentUser?.preferences?.bluesky?.connected,
+      userDid: currentUser?.socialId, // DID is stored in socialId
+      sourceType: event.sourceType,
+      eventSourceId: event.sourceId,
+      eventSourceData: event.sourceData,
     });
 
     if (
       event.sourceType === EventSourceType.BLUESKY && // check if event came from Bluesky
-      event.sourceId && // ensure we have the creator's Bluesky DID
-      this.request.user?.preferences?.bluesky?.connected // and confirm the current user is connected via Bluesky
+      currentUser?.preferences?.bluesky?.connected && // confirm user is connected to Bluesky
+      currentUser?.socialId && // ensure we have user's DID
+      event.sourceId && // ensure we have event creator's DID
+      event.sourceData?.rkey // ensure we have the Bluesky record key
     ) {
       this.logger.debug('Attempting Bluesky deletion with:', {
-        event: event.name,
-        sourceId: event.sourceId,
+        eventName: event.name,
+        eventSlug: event.slug,
+        eventSourceId: event.sourceId, // creator's DID
+        eventRkey: event.sourceData.rkey,
+        userDid: currentUser.socialId,
         tenantId: this.request.tenantId,
       });
 
       try {
         await this.blueskyService.deleteEventRecord(
           event,
-          event.sourceId, // pass the Bluesky DID stored in event.sourceId
+          event.sourceId, // Use creator's DID from sourceId
           this.request.tenantId,
         );
-        this.logger.debug(
-          `Deleted Bluesky event record for event ${event.name}`,
-        );
+        this.logger.debug('Successfully deleted Bluesky event record:', {
+          eventName: event.name,
+          eventRkey: event.sourceData.rkey,
+          creatorDid: event.sourceId,
+        });
       } catch (error) {
-        this.logger.error(
-          `Failed to delete Bluesky event record for event ${event.name}: ${error.message}`,
+        this.logger.error('Failed to delete Bluesky event record:', {
+          error: error.message,
+          stack: error.stack,
+          eventId: event.id,
+          eventSlug: event.slug,
+          eventName: event.name,
+          eventRkey: event.sourceData.rkey,
+          creatorDid: event.sourceId,
+          userDid: currentUser.socialId,
+        });
+        // Continue with local deletion even if Bluesky deletion fails
+        this.logger.warn(
+          'Proceeding with local event deletion despite Bluesky deletion failure',
         );
-        // Optionally, if you want to block deletion when the Bluesky deletion fails,
-        // you could rethrow the error here.
       }
     }
 
@@ -833,29 +898,13 @@ export class EventService {
   }
 
   @Trace('event.getEventsByCreator')
-  async getEventsByCreator(userId: number) {
+  async getEventsByCreator(userId: number): Promise<EventEntity[]> {
     await this.getTenantSpecificEventRepository();
     const events =
       (await this.eventRepository.find({
         where: { user: { id: userId } },
       })) || [];
-    return (await Promise.all(
-      events.map(async (event) => ({
-        ...event,
-        attendeesCount:
-          await this.eventAttendeeService.showConfirmedEventAttendeesCount(
-            event.id,
-          ),
-      })),
-    )) as EventEntity[];
-  }
 
-  @Trace('event.getEventsByAttendee')
-  async getEventsByAttendee(userId: number) {
-    await this.getTenantSpecificEventRepository();
-    const events = await this.eventRepository.find({
-      where: { attendees: { user: { id: userId } } },
-    });
     return (await Promise.all(
       events.map(async (event) => ({
         ...event,
@@ -1104,6 +1153,18 @@ export class EventService {
     messageId: number,
   ): Promise<{ id: number }> {
     return await this.zulipService.deleteAdminMessage(messageId);
+  }
+
+  @Trace('event.getEventsByAttendee')
+  async getEventsByAttendee(userId: number): Promise<EventEntity[]> {
+    await this.getTenantSpecificEventRepository();
+    const attendees = await this.eventAttendeesRepository
+      .createQueryBuilder('eventAttendee')
+      .leftJoinAndSelect('eventAttendee.event', 'event')
+      .where('eventAttendee.user.id = :userId', { userId })
+      .getMany();
+
+    return attendees.map((attendee) => attendee.event);
   }
 
   async showDashboardEvents(userId: number): Promise<EventEntity[]> {

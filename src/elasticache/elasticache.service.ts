@@ -154,8 +154,10 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
     return {
       host: this.configService.get('ELASTICACHE_HOST', { infer: true }),
       port: this.configService.get('ELASTICACHE_PORT', { infer: true }),
-      tls: this.configService.get('ELASTICACHE_TLS', { infer: true }) === 'true',
-      ...(this.configService.get('ELASTICACHE_AUTH', { infer: true }) === 'true' && {
+      tls:
+        this.configService.get('ELASTICACHE_TLS', { infer: true }) === 'true',
+      ...(this.configService.get('ELASTICACHE_AUTH', { infer: true }) ===
+        'true' && {
         password: this.configService.get('ELASTICACHE_TOKEN', { infer: true }),
       }),
     };

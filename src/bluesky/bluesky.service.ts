@@ -1,10 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { UserService } from '../user/user.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
-import { Agent, AtpAgent, AtpSessionData } from '@atproto/api';
+import { Agent } from '@atproto/api';
 import { NodeOAuthClient } from '@atproto/oauth-client-node';
 import { initializeOAuthClient } from '../utils/bluesky';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
@@ -34,11 +33,11 @@ export class BlueskyService {
   private readonly logger = new Logger(BlueskyService.name);
   private readonly MAX_RETRIES = 3;
   private readonly RETRY_DELAY = 1000; // 1 second
+  private readonly MAX_RKEY_ATTEMPTS = 100; // Maximum number of attempts for generating unique rkey
 
   constructor(
     private readonly configService: ConfigService,
-    @InjectRepository(UserEntity)
-    private readonly userRepository: Repository<UserEntity>,
+    private readonly userService: UserService,
     private readonly elasticacheService: ElastiCacheService,
   ) {}
 
@@ -85,92 +84,188 @@ export class BlueskyService {
     throw new Error('Failed to resume session');
   }
 
-  async connectAccount(
-    identifier: string,
-    password: string,
-    tenantId: string,
-    session?: AtpSessionData,
-  ): Promise<AtpAgent> {
-    this.logger.debug('connectAccount agent login', { identifier, tenantId });
-
-    const agent = new AtpAgent({
-      service: `https://${identifier.split('.').slice(1).join('.')}`,
-    });
-
-    try {
-      // If we have a session, try to resume it first
-      if (session) {
-        try {
-          await agent.resumeSession(session);
-          this.logger.debug('Resumed existing session');
-        } catch (error) {
-          this.logger.debug(
-            'Failed to resume session (error)',
-            error,
-            'will create new one',
-          );
-        }
-      }
-
-      // If no session or resume failed, create new session
-      if (!agent.session) {
-        const response = await agent.login({
-          identifier,
-          password,
-        });
-        this.logger.debug('connectAccount agent session', {
-          session: response,
-        });
-
-        if (agent.session) {
-          this.logger.debug(
-            'Session persisted with OAuth client built-in mechanism',
-          );
-        }
-      }
-
-      return agent;
-    } catch (error) {
-      this.logger.error('Failed to connect account:', error);
-      throw error;
-    }
+  private generateBaseName(name: string): string {
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, '') // Remove special characters
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
+      .substring(0, 640); // AT Protocol has a max length for rkeys
   }
 
-  async disconnectAccount(user: UserEntity) {
-    if (user.preferences?.bluesky) {
-      // Keep the connection info but mark as disconnected
-      user.preferences.bluesky = {
-        ...user.preferences.bluesky,
-        connected: false,
-        autoPost: false,
-        disconnectedAt: new Date(),
-      };
-      await this.userRepository.save(user);
+  private async generateUniqueRkey(
+    agent: Agent,
+    did: string,
+    baseName: string,
+  ): Promise<string> {
+    let attempt = 0;
+    let rkey = baseName;
+
+    while (attempt < this.MAX_RKEY_ATTEMPTS) {
+      try {
+        this.logger.debug('generateUniqueRKey: Checking rkey availability:', {
+          rkey,
+          attempt,
+          did,
+        });
+
+        // Check if record exists
+        await agent.com.atproto.repo.getRecord({
+          repo: did,
+          collection: 'community.lexicon.calendar.event',
+          rkey,
+        });
+
+        // Record exists, try next number
+        attempt++;
+        rkey = `${baseName}-${attempt}`;
+        this.logger.debug(
+          'generateUniqueRKey: Record exists, trying next rkey:',
+          {
+            newRkey: rkey,
+            attempt,
+          },
+        );
+      } catch (error: any) {
+        // Check various 404 error formats from AT Protocol
+        const is404 =
+          error.error?.statusCode === 404 ||
+          error.status === 404 ||
+          error.message?.includes('Could not locate record');
+
+        if (is404) {
+          this.logger.debug('generateUniqueRKey: Found available rkey:', {
+            rkey,
+            attempt,
+          });
+          return rkey;
+        }
+
+        // Log unexpected errors
+        this.logger.error(
+          'generateUniqueRKey: Error checking rkey availability:',
+          {
+            error: error.message,
+            errorObject: error,
+            rkey,
+            attempt,
+          },
+        );
+        throw error;
+      }
     }
+
+    const error = new Error(
+      `Could not generate unique rkey after ${this.MAX_RKEY_ATTEMPTS} attempts. Base name: ${baseName}`,
+    );
+    this.logger.error('Max rkey attempts exceeded:', {
+      error: error.message,
+      baseName,
+      lastAttempt: attempt,
+      lastRkey: rkey,
+    });
+    throw error;
+  }
+
+  async connectAccount(user: UserEntity, tenantId: string) {
+    // First find the existing user to ensure we update rather than insert
+    const existingUser = await this.userService.findById(user.id, tenantId);
+
+    if (!existingUser) {
+      throw new Error(`User with id ${user.id} not found`);
+    }
+
+    this.logger.debug('Connecting Bluesky account:', {
+      userId: user.id,
+      existingPreferences: existingUser.preferences?.bluesky,
+      socialId: user.socialId,
+    });
+
+    // Prepare updated preferences while preserving existing data
+    const updatedUser = {
+      ...existingUser,
+      preferences: {
+        ...existingUser.preferences,
+        bluesky: {
+          ...existingUser.preferences?.bluesky, // Preserve all existing Bluesky preferences
+          did: user.socialId, // Ensure DID is set from socialId
+          connected: true,
+          connectedAt: new Date(),
+        },
+      },
+    };
+
+    this.logger.debug('Updated user preferences:', {
+      blueskyPreferences: updatedUser.preferences.bluesky,
+    });
+
+    await this.userService.update(user.id, updatedUser, tenantId);
+
+    // Verify the update
+    const verifiedUser = await this.userService.findById(user.id, tenantId);
+    if (!verifiedUser) {
+      this.logger.warn('Could not verify user update - user not found');
+    } else {
+      this.logger.debug('Verified user after update:', {
+        blueskyPreferences: verifiedUser.preferences?.bluesky,
+      });
+    }
+
+    return {
+      success: true,
+      message: 'Successfully connected to Bluesky. Events will now sync.',
+    };
+  }
+
+  async disconnectAccount(user: UserEntity, tenantId: string) {
+    // First find the existing user to ensure we update rather than insert
+    const existingUser = await this.userService.findById(user.id, tenantId);
+
+    if (!existingUser) {
+      throw new Error(`User with id ${user.id} not found`);
+    }
+
+    this.logger.debug('Disconnecting Bluesky account:', {
+      userId: user.id,
+      existingPreferences: existingUser.preferences?.bluesky,
+      socialId: user.socialId,
+    });
+
+    // Prepare updated preferences while preserving existing data
+    const updatedUser = {
+      ...existingUser,
+      preferences: {
+        ...existingUser.preferences,
+        bluesky: {
+          ...existingUser.preferences?.bluesky, // Preserve all existing Bluesky preferences
+          did: user.socialId, // Ensure DID is preserved from socialId
+          connected: false,
+          disconnectedAt: new Date(),
+        },
+      },
+    };
+
+    this.logger.debug('Updated user preferences:', {
+      blueskyPreferences: updatedUser.preferences.bluesky,
+    });
+
+    await this.userService.update(user.id, updatedUser, tenantId);
+
+    // Verify the update
+    const verifiedUser = await this.userService.findById(user.id, tenantId);
+    if (!verifiedUser) {
+      this.logger.warn('Could not verify user update - user not found');
+    } else {
+      this.logger.debug('Verified user after update:', {
+        blueskyPreferences: verifiedUser.preferences?.bluesky,
+      });
+    }
+
     return {
       success: true,
       message:
-        'Successfully disconnected Bluesky account. Events will no longer be posted automatically.',
-    };
-  }
-
-  async toggleAutoPost(user: UserEntity, enabled: boolean) {
-    if (!user.preferences?.bluesky?.connected) {
-      throw new Error('Bluesky account not connected');
-    }
-
-    user.preferences.bluesky = {
-      ...user.preferences.bluesky,
-      autoPost: enabled,
-    };
-    await this.userRepository.save(user);
-
-    return {
-      success: true,
-      autoPost: enabled,
-      message: enabled
-        ? 'Events will be automatically posted to Bluesky'
-        : 'Events will not be automatically posted to Bluesky',
+        'Successfully disconnected from Bluesky. Events will no longer sync.',
     };
   }
 
@@ -186,7 +281,7 @@ export class BlueskyService {
     did: string,
     handle: string,
     tenantId: string,
-  ): Promise<void> {
+  ): Promise<{ rkey: string }> {
     this.logger.debug('Creating Bluesky event record:', {
       eventName: event.name,
       did,
@@ -242,10 +337,14 @@ export class BlueskyService {
         });
       }
 
+      // Generate a unique rkey from the event name
+      const baseName = this.generateBaseName(event.name);
+      const rkey = await this.generateUniqueRkey(agent, did, baseName);
+
       const result = await agent.com.atproto.repo.putRecord({
         repo: did,
         collection: 'community.lexicon.calendar.event',
-        rkey: event.ulid || `${Date.now()}`,
+        rkey,
         record: {
           $type: 'community.lexicon.calendar.event',
           name: event.name,
@@ -262,12 +361,22 @@ export class BlueskyService {
       this.logger.log(
         `Event ${event.name} posted to Bluesky for user ${handle}`,
       );
-    } catch (error) {
+      return { rkey };
+    } catch (error: any) {
       this.logger.error('Failed to create Bluesky event:', {
         error: error.message,
         stack: error.stack,
+        eventName: event.name,
+        did,
+        errorObject: error,
       });
-      throw error;
+
+      // Enhance error message for debugging
+      const enhancedError = new Error(
+        `Failed to create Bluesky event "${event.name}": ${error.message}`,
+      );
+      enhancedError.stack = error.stack;
+      throw enhancedError;
     }
   }
 
@@ -299,22 +408,38 @@ export class BlueskyService {
     did: string,
     tenantId: string,
   ): Promise<void> {
-    this.logger.debug(`Deleting Bluesky event record for event: ${event.name}`);
+    this.logger.debug('Deleting Bluesky event record:', {
+      event,
+      did,
+      tenantId,
+    });
 
-    // Ensure we have an identifier (ulid) for the event record in Bluesky
-    if (!event.ulid) {
-      throw new Error('Bluesky event identifier (ulid) is missing');
+    // Get the rkey from sourceData
+    const rkey = event.sourceData?.rkey as string | undefined;
+    if (!rkey) {
+      throw new Error('No Bluesky record key found in event sourceData');
     }
 
     try {
       // Use the same retry/resume process to get an agent
       const agent = await this.tryResumeSession(tenantId, did);
+
+      this.logger.debug('Attempting to delete record:', {
+        repo: did,
+        collection: 'community.lexicon.calendar.event',
+        rkey,
+      });
+
       await agent.com.atproto.repo.deleteRecord({
         repo: did,
         collection: 'community.lexicon.calendar.event',
-        rkey: event.ulid,
+        rkey,
       });
-      this.logger.log(`Deleted Bluesky event record for event ${event.name}`);
+
+      this.logger.log('Successfully deleted Bluesky event record:', {
+        rkey,
+        did,
+      });
     } catch (error) {
       this.logger.error(
         'Failed to delete Bluesky event record:',
