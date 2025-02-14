@@ -20,12 +20,20 @@ import { ElastiCacheService } from '../elasticache/elasticache.service';
  * @param elasticacheService - The caching service for state/session persistence.
  * @returns A Promise resolving to a new NodeOAuthClient.
  */
+import { createRequestLock } from '../auth-bluesky/stores/redlock';
+
 export async function initializeOAuthClient(
   tenantId: string,
   configService: ConfigService,
   elasticacheService: ElastiCacheService,
 ): Promise<NodeOAuthClient> {
-  // Get tenant config (if needed by your application logic)
+  const redisConfig = elasticacheService.getRedisConfig();
+  const requestLock = createRequestLock({
+    host: redisConfig.host as string,
+    port: Number(redisConfig.port),
+    tls: redisConfig.tls,
+    password: redisConfig.password as string | undefined,
+  });
 
   const baseUrl = configService.get('BACKEND_DOMAIN', {
     infer: true,
@@ -62,6 +70,7 @@ export async function initializeOAuthClient(
     keyset,
     stateStore: new ElastiCacheStateStore(elasticacheService),
     sessionStore: new ElastiCacheSessionStore(elasticacheService),
+    requestLock,
   };
 
   return new NodeOAuthClient(clientConfig);

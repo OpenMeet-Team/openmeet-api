@@ -292,4 +292,35 @@ export class BlueskyService {
   async resumeSession(tenantId: string, did: string): Promise<Agent> {
     return this.tryResumeSession(tenantId, did);
   }
+
+  // Add a new method to delete an event from Bluesky
+  async deleteEventRecord(
+    event: EventEntity,
+    did: string,
+    tenantId: string,
+  ): Promise<void> {
+    this.logger.debug(`Deleting Bluesky event record for event: ${event.name}`);
+
+    // Ensure we have an identifier (ulid) for the event record in Bluesky
+    if (!event.ulid) {
+      throw new Error('Bluesky event identifier (ulid) is missing');
+    }
+
+    try {
+      // Use the same retry/resume process to get an agent
+      const agent = await this.tryResumeSession(tenantId, did);
+      await agent.com.atproto.repo.deleteRecord({
+        repo: did,
+        collection: 'community.lexicon.calendar.event',
+        rkey: event.ulid,
+      });
+      this.logger.log(`Deleted Bluesky event record for event ${event.name}`);
+    } catch (error) {
+      this.logger.error(
+        'Failed to delete Bluesky event record:',
+        error.message,
+      );
+      throw error;
+    }
+  }
 }

@@ -376,17 +376,32 @@ export class UserService {
     const statusDto = new StatusDto();
     statusDto.id = getStatusEnumValue('active');
 
-    // Create new user
+    // Create new user with Bluesky preferences if applicable
+    const createUserData: any = {
+      socialId: profile.id,
+      provider: provider,
+      email: profile.email || null,
+      firstName: profile.firstName || null,
+      lastName: profile.lastName || null,
+      role: roleEntity.id,
+      status: statusDto,
+    };
+
+    // Set Bluesky preferences if user is logging in via Bluesky
+    if (provider === 'bluesky') {
+      createUserData.preferences = {
+        bluesky: {
+          did: profile.id,
+          handle: profile.firstName,
+          connected: true,
+          autoPost: false,
+          connectedAt: new Date(),
+        },
+      };
+    }
+
     const newUser = (await this.create(
-      {
-        socialId: profile.id,
-        provider: provider,
-        email: profile.email || null,
-        firstName: profile.firstName || null,
-        lastName: profile.lastName || null,
-        role: roleEntity.id,
-        status: statusDto,
-      },
+      createUserData,
       tenantId,
     )) as unknown as UserEntity;
 

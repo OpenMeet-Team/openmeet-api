@@ -11,6 +11,13 @@ import { createClient, RedisClientType } from 'redis';
 export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ElastiCacheService.name);
   private redis: RedisClientType;
+
+  getRedis(): RedisClientType {
+    if (!this.redis?.isOpen) {
+      throw new Error('Redis client is not connected');
+    }
+    return this.redis;
+  }
   private readonly MAX_RETRIES = 5;
   private readonly RETRY_DELAY = 5000;
   private readonly CONNECTION_TIMEOUT = 10000;
@@ -141,5 +148,16 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
   // Helper method to check connection status
   isConnected(): boolean {
     return this.redis?.isOpen ?? false;
+  }
+
+  getRedisConfig() {
+    return {
+      host: this.configService.get('ELASTICACHE_HOST', { infer: true }),
+      port: this.configService.get('ELASTICACHE_PORT', { infer: true }),
+      tls: this.configService.get('ELASTICACHE_TLS', { infer: true }) === 'true',
+      ...(this.configService.get('ELASTICACHE_AUTH', { infer: true }) === 'true' && {
+        password: this.configService.get('ELASTICACHE_TOKEN', { infer: true }),
+      }),
+    };
   }
 }

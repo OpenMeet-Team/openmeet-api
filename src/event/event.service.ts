@@ -46,7 +46,7 @@ import { EventMailService } from '../event-mail/event-mail.service';
 import { AuditLoggerService } from '../logger/audit-logger.provider';
 import { Trace } from '../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
-import { BlueskyService } from '../bluesky/bluesky.service';
+import { BlueskyService, EventSourceType } from '../bluesky/bluesky.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventService {
@@ -767,15 +767,60 @@ export class EventService {
     const event = await this.findEventBySlug(slug);
     const eventCopy = { ...event };
 
+    this.logger.debug('Starting event removal:', {
+      eventId: event.id,
+      name: event.name,
+      sourceType: event.sourceType,
+      sourceId: event.sourceId,
+      userBlueskyConnected:
+        !!this.request.user?.preferences?.bluesky?.connected,
+    });
+
+    // If the event is a Bluesky event and the user is logged in via Bluesky, attempt to delete it there, too.
+    this.logger.debug('Checking Bluesky deletion conditions:', {
+      isBlueskyEvent: event.sourceType === EventSourceType.BLUESKY,
+      hasSourceId: !!event.sourceId,
+      userConnected: !!this.request.user?.preferences?.bluesky?.connected,
+      userPreferences: this.request.user?.preferences,
+      requestUser: this.request.user,
+    });
+
+    if (
+      event.sourceType === EventSourceType.BLUESKY && // check if event came from Bluesky
+      event.sourceId && // ensure we have the creator's Bluesky DID
+      this.request.user?.preferences?.bluesky?.connected // and confirm the current user is connected via Bluesky
+    ) {
+      this.logger.debug('Attempting Bluesky deletion with:', {
+        event: event.name,
+        sourceId: event.sourceId,
+        tenantId: this.request.tenantId,
+      });
+
+      try {
+        await this.blueskyService.deleteEventRecord(
+          event,
+          event.sourceId, // pass the Bluesky DID stored in event.sourceId
+          this.request.tenantId,
+        );
+        this.logger.debug(
+          `Deleted Bluesky event record for event ${event.name}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to delete Bluesky event record for event ${event.name}: ${error.message}`,
+        );
+        // Optionally, if you want to block deletion when the Bluesky deletion fails,
+        // you could rethrow the error here.
+      }
+    }
+
     // Delete related event attendees first
     await this.eventAttendeeService.deleteEventAttendees(event.id);
 
-    // Now delete the event
+    // Now delete the event from our database
     await this.eventRepository.remove(event);
     this.eventEmitter.emit('event.deleted', eventCopy);
-    this.auditLogger.log('event deleted', {
-      event,
-    });
+    this.auditLogger.log('event deleted', { event });
   }
 
   @Trace('event.deleteEventsByGroup')

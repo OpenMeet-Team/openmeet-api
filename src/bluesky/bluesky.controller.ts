@@ -38,6 +38,15 @@ export class BlueskyController {
     return this.blueskyService.disconnectAccount(user);
   }
 
+  @Post('auto-post')
+  @ApiOperation({ summary: 'Toggle auto-post setting' })
+  async toggleAutoPost(
+    @AuthUser() user: UserEntity,
+    @Body() body: { enabled: boolean },
+  ) {
+    return this.blueskyService.toggleAutoPost(user, body.enabled);
+  }
+
   @Get('status')
   @ApiOperation({ summary: 'Get Bluesky connection status' })
   getStatus(@AuthUser() user: UserEntity) {
@@ -49,5 +58,20 @@ export class BlueskyController {
   @UseGuards(JWTAuthGuard)
   async listEvents(@Req() req, @Param('did') did: string) {
     return await this.blueskyService.listEvents(did, req.tenantId);
+  }
+
+  @Delete('events/:did/:rkey')
+  @ApiOperation({ summary: 'Delete Bluesky event' })
+  @UseGuards(JWTAuthGuard)
+  async deleteEvent(
+    @Req() req,
+    @Param('did') did: string,
+    @Param('rkey') rkey: string,
+  ) {
+    return await this.blueskyService.deleteEventRecord(
+      { ulid: rkey } as any,
+      did,
+      req.tenantId,
+    );
   }
 }
