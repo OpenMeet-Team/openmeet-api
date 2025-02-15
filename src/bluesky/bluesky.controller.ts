@@ -50,43 +50,15 @@ export class BlueskyController {
 
   @Delete('events/:did/:rkey')
   @ApiOperation({ summary: 'Delete Bluesky event' })
-  @UseGuards(JWTAuthGuard)
   async deleteEvent(
     @Req() req,
     @Param('did') did: string,
     @Param('rkey') rkey: string,
   ) {
-    this.logger.debug('Deleting Bluesky event:', {
+    return this.blueskyService.deleteEventRecord(
+      { sourceType: 'bluesky', sourceId: did, sourceData: { rkey } } as any,
       did,
-      rkey,
-      tenantId: req.tenantId,
-    });
-
-    // Create a minimal event entity with the required fields for deletion
-    const event = {
-      slug: rkey,
-      sourceType: 'bluesky',
-      sourceId: did,
-      sourceData: {
-        rkey: rkey,
-        handle: null, // handle is optional for deletion
-      },
-    };
-
-    try {
-      await this.blueskyService.deleteEventRecord(
-        event as any,
-        did,
-        req.tenantId,
-      );
-      return { success: true, message: 'Event deleted successfully' };
-    } catch (error) {
-      this.logger.error('Failed to delete Bluesky event:', {
-        error: error.message,
-        did,
-        rkey,
-      });
-      throw error;
-    }
+      req.tenantId,
+    );
   }
 }

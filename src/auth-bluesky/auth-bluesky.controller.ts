@@ -7,12 +7,15 @@ import {
   HttpStatus,
   HttpCode,
   Logger,
+  Inject,
 } from '@nestjs/common';
 import { AuthBlueskyService } from './auth-bluesky.service';
 import { Response } from 'express';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from '../core/decorators/public.decorator';
 import { TenantPublic } from '../tenant/tenant-public.decorator';
+import { REQUEST } from '@nestjs/core';
+
 @ApiTags('Auth')
 @Controller({
   path: 'auth/bluesky',
@@ -21,7 +24,10 @@ import { TenantPublic } from '../tenant/tenant-public.decorator';
 export class AuthBlueskyController {
   private readonly logger = new Logger(AuthBlueskyController.name);
 
-  constructor(private readonly authBlueskyService: AuthBlueskyService) {}
+  constructor(
+    private readonly authBlueskyService: AuthBlueskyService,
+    @Inject(REQUEST) private readonly request: any,
+  ) {}
 
   @Get('authorize')
   @Public()
@@ -39,11 +45,24 @@ export class AuthBlueskyController {
   @TenantPublic()
   @Get('callback')
   async callback(@Query() query: any, @Res() res: Response) {
-    const effectiveTenantId = query.tenantId;
+    const effectiveTenantId = query.tenantId || this.request?.tenantId;
+    if (!effectiveTenantId) {
+      this.logger.error('Missing tenant ID in callback');
+      throw new Error('Tenant ID is required');
+    }
+
+    this.logger.debug('Handling Bluesky callback:', {
+      tenantId: effectiveTenantId,
+      state: query.state,
+      code: query.code,
+    });
+
     const redirectUrl = await this.authBlueskyService.handleAuthCallback(
       query,
       effectiveTenantId,
     );
+
+    this.logger.debug('Redirecting to:', redirectUrl);
     res.redirect(redirectUrl);
   }
 

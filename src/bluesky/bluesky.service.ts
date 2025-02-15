@@ -407,45 +407,23 @@ export class BlueskyService {
     event: EventEntity,
     did: string,
     tenantId: string,
-  ): Promise<void> {
-    this.logger.debug('Deleting Bluesky event record:', {
-      event,
-      did,
-      tenantId,
-    });
-
-    // Get the rkey from sourceData
+  ): Promise<{ success: boolean; message: string }> {
     const rkey = event.sourceData?.rkey as string | undefined;
     if (!rkey) {
       throw new Error('No Bluesky record key found in event sourceData');
     }
 
-    try {
-      // Use the same retry/resume process to get an agent
-      const agent = await this.tryResumeSession(tenantId, did);
+    const agent = await this.tryResumeSession(tenantId, did);
+    const response = await agent.com.atproto.repo.deleteRecord({
+      repo: did,
+      collection: 'community.lexicon.calendar.event',
+      rkey,
+    });
+    this.logger.debug('Bluesky event delete response:', response);
 
-      this.logger.debug('Attempting to delete record:', {
-        repo: did,
-        collection: 'community.lexicon.calendar.event',
-        rkey,
-      });
-
-      await agent.com.atproto.repo.deleteRecord({
-        repo: did,
-        collection: 'community.lexicon.calendar.event',
-        rkey,
-      });
-
-      this.logger.log('Successfully deleted Bluesky event record:', {
-        rkey,
-        did,
-      });
-    } catch (error) {
-      this.logger.error(
-        'Failed to delete Bluesky event record:',
-        error.message,
-      );
-      throw error;
-    }
+    return {
+      success: true,
+      message: 'Event deleted successfully',
+    };
   }
 }

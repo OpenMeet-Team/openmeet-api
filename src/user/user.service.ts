@@ -49,6 +49,7 @@ export class UserService {
   }
 
   async getTenantSpecificRepository(tenantId?: string) {
+    this.logger.debug('getTenantSpecificRepo:', tenantId);
     const effectiveTenantId = tenantId || this.request?.tenantId;
     if (!effectiveTenantId) {
       this.logger.error('getTenantSpecificRepository: Tenant ID is required', {
@@ -276,6 +277,19 @@ export class UserService {
     });
   }
 
+  async findByIdWithPreferences(
+    id: User['id'],
+    tenantId?: string,
+  ): Promise<NullableType<UserEntity>> {
+    await this.getTenantSpecificRepository(tenantId);
+
+    return this.usersRepository.findOne({
+      where: { id },
+      relations: ['role', 'role.permissions'],
+      select: ['id', 'socialId', 'preferences'],
+    });
+  }
+
   async findOne(id: User['id']): Promise<NullableType<UserEntity>> {
     await this.getTenantSpecificRepository();
 
@@ -422,9 +436,10 @@ export class UserService {
       zulipApiKey: string;
       zulipUserId: number;
     },
+    tenantId?: string,
   ) {
-    await this.getTenantSpecificRepository();
-    const user = await this.findById(userId);
+    await this.getTenantSpecificRepository(tenantId);
+    const user = await this.findById(userId, tenantId);
 
     if (!user) {
       return null;
@@ -441,9 +456,7 @@ export class UserService {
     payload: any,
     tenantId?: string,
   ): Promise<User | null> {
-    this.logger.debug(
-      `[UserService] Updating user with ID: ${id}, tenantId: ${tenantId}`,
-    );
+    this.logger.debug(`Updating user with ID: ${id}, tenantId: ${tenantId}`);
     await this.getTenantSpecificRepository(tenantId);
 
     const clonedPayload = { ...payload };
@@ -537,7 +550,7 @@ export class UserService {
 
     await this.usersRepository.save({ id, ...clonedPayload }); // FIXME:
 
-    const user = await this.findById(id);
+    const user = await this.findById(id, tenantId);
     this.eventEmitter.emit('user.updated', user);
     this.auditLogger.log('user updated', {
       user,
@@ -594,8 +607,8 @@ export class UserService {
     return user;
   }
 
-  async getUserById(id: number): Promise<UserEntity> {
-    await this.getTenantSpecificRepository();
+  async getUserById(id: number, tenantId?: string): Promise<UserEntity> {
+    await this.getTenantSpecificRepository(tenantId);
     const user = await this.usersRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException('User not found');

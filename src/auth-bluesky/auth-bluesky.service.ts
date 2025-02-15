@@ -70,7 +70,14 @@ export class AuthBlueskyService {
   async handleAuthCallback(query: any, tenantId: string): Promise<string> {
     this.logger.debug('handleAuthCallback', { query, tenantId });
     if (!tenantId) {
-      throw new BadRequestException('Tenant ID is required');
+      // Check if tenantId is in the request object
+      const requestTenantId = this.request?.tenantId;
+      if (!requestTenantId) {
+        this.logger.error('No tenant ID found in request or parameters');
+        throw new BadRequestException('Tenant ID is required');
+      }
+      tenantId = requestTenantId;
+      this.logger.debug('Using tenant ID from request:', { tenantId });
     }
 
     const client = await this.initializeClient(tenantId);
@@ -104,6 +111,12 @@ export class AuthBlueskyService {
     // };
     // await this.blueskyService.storeSession(tenantId, atpSession);
 
+    this.logger.debug('Finding existing user:', {
+      socialId: profileData.did,
+      provider: 'bluesky',
+      tenantId,
+    });
+
     // Get existing user if any to preserve preferences
     const existingUser = await this.userService.findBySocialIdAndProvider(
       {
@@ -113,6 +126,14 @@ export class AuthBlueskyService {
       tenantId,
     );
 
+    this.logger.debug('Validating social login:', {
+      did: profileData.did,
+      displayName: profileData.displayName,
+      handle: profileData.handle,
+      tenantId,
+    });
+
+    this.logger.debug('Validating social login with tenant ID:', { tenantId });
     const loginResponse = await this.authService.validateSocialLogin(
       'bluesky',
       {
@@ -123,12 +144,26 @@ export class AuthBlueskyService {
       },
       tenantId,
     );
+    this.logger.debug('Social login validated:', { loginResponse, tenantId });
+
+    this.logger.debug('Getting user entity:', {
+      userId: loginResponse.user.id,
+      tenantId,
+    });
 
     // Get the full user entity to update preferences
     const userEntity = await this.userService.findById(
       loginResponse.user.id,
       tenantId,
     );
+
+    if (!userEntity) {
+      this.logger.error('User entity not found:', {
+        userId: loginResponse.user.id,
+        tenantId,
+      });
+      throw new BadRequestException('User not found');
+    }
 
     if (!userEntity) {
       throw new BadRequestException('User not found');
@@ -148,6 +183,7 @@ export class AuthBlueskyService {
       ...existingPreferences,
       did: profileData.did,
       handle: profileData.handle,
+      avatar: profileData.avatar,
       // For new users, set connected to true and record the time
       // For existing users, preserve their connection state
       connected: isNewUser ? true : existingPreferences.connected,
@@ -179,32 +215,51 @@ export class AuthBlueskyService {
       });
     }
 
-    // Save the updated user and verify the update
-    await this.userService.update(
-      loginResponse.user.id,
-      updatePayload,
-      tenantId,
-    );
-
-    // Verify preferences were saved correctly
-    const verifiedUser = await this.userService.findById(
-      loginResponse.user.id,
-      tenantId,
-    );
-
-    this.logger.debug('Verified user preferences after update:', {
-      blueskyPreferences: verifiedUser?.preferences?.bluesky,
-      userId: verifiedUser?.id,
-    });
-
-    if (!verifiedUser?.preferences?.bluesky?.connected && isNewUser) {
-      this.logger.warn(
-        'Bluesky preferences not properly persisted for new user',
-        {
-          userId: verifiedUser?.id,
-          preferences: verifiedUser?.preferences,
-        },
+    let verifiedUser;
+    try {
+      // Save the updated user and verify the update
+      await this.userService.update(
+        loginResponse.user.id,
+        updatePayload,
+        tenantId,
       );
+
+      // Verify preferences were saved correctly
+      verifiedUser = await this.userService.findById(
+        loginResponse.user.id,
+        tenantId,
+      );
+
+      if (!verifiedUser) {
+        this.logger.error('Failed to verify user update - user not found', {
+          userId: loginResponse.user.id,
+          tenantId,
+        });
+        throw new Error('Failed to verify user update');
+      }
+
+      this.logger.debug('Verified user preferences after update:', {
+        blueskyPreferences: verifiedUser.preferences?.bluesky,
+        userId: verifiedUser.id,
+        tenantId,
+      });
+
+      if (!verifiedUser.preferences?.bluesky?.connected && isNewUser) {
+        this.logger.warn(
+          'Bluesky preferences not properly persisted for new user',
+          {
+            userId: verifiedUser.id,
+            preferences: verifiedUser.preferences,
+          },
+        );
+      }
+    } catch (error) {
+      this.logger.error('Failed to update user preferences:', {
+        error: error.message,
+        userId: loginResponse.user.id,
+        tenantId,
+      });
+      throw new BadRequestException('Failed to update user preferences');
     }
 
     // Update the login response with the updated user entity

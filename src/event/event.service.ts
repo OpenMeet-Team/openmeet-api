@@ -112,39 +112,48 @@ export class EventService {
     await this.getTenantSpecificEventRepository();
 
     this.logger.debug(`[findEventBySlug] Finding event for slug: ${slug}`);
-    this.logger.debug(
-      `[findEventBySlug] Current user: ${this.request.user?.id}`,
-    );
+    const userId = this.request.user?.id;
+    const authState = userId ? 'authenticated' : 'public access';
+    this.logger.debug(`[findEventBySlug] Request type: ${authState}`);
 
-    const event = await this.eventRepository
+    // Build base query
+    const queryBuilder = this.eventRepository
       .createQueryBuilder('event')
-      .leftJoinAndSelect('event.attendees', 'attendee')
-      .leftJoinAndSelect('attendee.user', 'user')
-      .leftJoinAndSelect('attendee.role', 'role')
-      .where('event.slug = :slug', { slug })
-      .getOne();
+      .where('event.slug = :slug', { slug });
+
+    // Only load attendee data if authenticated
+    if (userId) {
+      queryBuilder
+        .leftJoinAndSelect('event.attendees', 'attendee')
+        .leftJoinAndSelect('attendee.user', 'user')
+        .leftJoinAndSelect('attendee.role', 'role');
+    }
+
+    const event = await queryBuilder.getOne();
 
     if (!event) {
       throw new NotFoundException(`Event with slug ${slug} not found`);
     }
 
-    // If there's a user in the request context, find their attendance
-    if (this.request.user) {
+    // Only check attendance for authenticated users
+    if (userId) {
       this.logger.debug(
-        `[findEventBySlug] Finding attendance for user: ${this.request.user.id}`,
+        `[findEventBySlug] Checking attendance for user: ${userId}`,
       );
       const attendee =
         await this.eventAttendeeService.findEventAttendeeByUserId(
           event.id,
-          this.request.user.id,
+          userId,
         );
-      this.logger.debug(
-        `[findEventBySlug] Found attendee: ${JSON.stringify(attendee)}`,
-      );
-      this.logger.debug(
-        `[findEventBySlug] Attendee status: ${attendee?.status}`,
-      );
-      event.attendee = attendee;
+
+      if (attendee) {
+        this.logger.debug(
+          `[findEventBySlug] Found attendee with status: ${attendee.status}`,
+        );
+        event.attendee = attendee;
+      } else {
+        this.logger.debug('[findEventBySlug] User has not attended this event');
+      }
     }
 
     return event;
@@ -806,8 +815,8 @@ export class EventService {
       requestUser: this.request.user,
     });
 
-    // Get latest user data to ensure we have current Bluesky connection state
-    const currentUser = await this.userService.findById(
+    // Get latest user data with preferences to check Bluesky connection state
+    const currentUser = await this.userService.findByIdWithPreferences(
       this.request.user.id,
       this.request.tenantId,
     );
