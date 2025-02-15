@@ -49,7 +49,10 @@ export class UserService {
   }
 
   async getTenantSpecificRepository(tenantId?: string) {
-    this.logger.debug('getTenantSpecificRepo:', tenantId);
+    this.logger.debug('getTenantSpecificRepo:', {
+      tenantId,
+    });
+
     const effectiveTenantId = tenantId || this.request?.tenantId;
     if (!effectiveTenantId) {
       this.logger.error('getTenantSpecificRepository: Tenant ID is required', {

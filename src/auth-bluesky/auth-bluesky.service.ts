@@ -198,31 +198,71 @@ export class AuthBlueskyService {
       existingUserId: existingUser?.id,
     });
 
-    // Prepare the update payload, excluding photo to avoid validation
+    // Prepare the update payload
     const updatePayload: any = {
       socialId: profileData.did,
-      preferences: {
-        ...userEntity.preferences,
-        bluesky: updatedPreferences,
-      },
     };
 
-    // Log existing photo info for debugging
-    if (userEntity.photo?.id) {
-      this.logger.debug('User has existing photo:', {
-        photoId: userEntity.photo.id,
-        photoPath: userEntity.photo.path,
-      });
+    // Compare the values to see if anything has actually changed
+    const hasPreferencesChanged = 
+      userEntity.preferences?.bluesky?.did !== profileData.did ||
+      userEntity.preferences?.bluesky?.handle !== profileData.handle ||
+      userEntity.preferences?.bluesky?.avatar !== profileData.avatar;
+
+    this.logger.debug('Checking for changes:', {
+      currentDid: userEntity.preferences?.bluesky?.did,
+      newDid: profileData.did,
+      currentHandle: userEntity.preferences?.bluesky?.handle,
+      newHandle: profileData.handle,
+      currentAvatar: userEntity.preferences?.bluesky?.avatar,
+      newAvatar: profileData.avatar,
+      hasPreferencesChanged
+    });
+
+    // Only update if something has changed
+    if (hasPreferencesChanged) {
+      updatePayload.preferences = {
+        ...userEntity.preferences,
+        bluesky: {
+          ...userEntity.preferences?.bluesky,  // Keep existing preferences
+          did: profileData.did,
+          handle: profileData.handle,
+          avatar: profileData.avatar,
+        }
+      };
     }
+
+    // Only include photo if it has changed
+    const hasPhotoChanged = userEntity.photo?.id !== loginResponse.user.photo?.id;
+    if (hasPhotoChanged && userEntity.photo?.id) {
+      updatePayload.photo = { id: userEntity.photo.id };
+    }
+
+    this.logger.debug('Update decision:', {
+      hasPreferencesChanged,
+      hasPhotoChanged,
+      willUpdate: hasPreferencesChanged || hasPhotoChanged || Object.keys(updatePayload).length > 1
+    });
 
     let verifiedUser;
     try {
       // Save the updated user and verify the update
-      await this.userService.update(
-        loginResponse.user.id,
+      this.logger.debug('Attempting to update user with payload:', {
+        userId: loginResponse.user.id,
         updatePayload,
         tenantId,
-      );
+      });
+
+      // Only perform update if we have actual changes
+      if (hasPreferencesChanged || hasPhotoChanged) {
+        await this.userService.update(
+          loginResponse.user.id,
+          updatePayload,
+          tenantId,
+        );
+      } else {
+        this.logger.debug('Skipping update - no changes detected');
+      }
 
       // Verify preferences were saved correctly
       verifiedUser = await this.userService.findById(
@@ -256,10 +296,17 @@ export class AuthBlueskyService {
     } catch (error) {
       this.logger.error('Failed to update user preferences:', {
         error: error.message,
+        errorName: error.name,
+        errorStack: error.stack,
         userId: loginResponse.user.id,
+        updatePayload,
         tenantId,
       });
-      throw new BadRequestException('Failed to update user preferences');
+
+      // Rethrow with more specific error message
+      throw new BadRequestException(
+        `Failed to update user preferences: ${error.message}`,
+      );
     }
 
     // Update the login response with the updated user entity

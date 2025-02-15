@@ -235,6 +235,7 @@ export class UserEntity extends EntityRelationalHelper {
   @Column('jsonb', { nullable: true })
   preferences: {
     bluesky?: {
+      avatar?: string;
       did?: string;
       handle?: string;
       connected?: boolean;
@@ -242,6 +243,5 @@ export class UserEntity extends EntityRelationalHelper {
       disconnectedAt?: Date;
       connectedAt?: Date;
     };
-    // ... other preferences ...
   };
 }
