@@ -860,30 +860,34 @@ export class EventService {
       });
 
       try {
+        // Verify we have all required data for Bluesky deletion
+        if (!event.sourceData?.rkey) {
+          throw new Error('Missing Bluesky record key (rkey)');
+        }
+
+        // Use the current user's DID for deletion
         await this.blueskyService.deleteEventRecord(
           event,
-          event.sourceId, // Use creator's DID from sourceId
+          currentUser.socialId, // Use current user's DID
           this.request.tenantId,
         );
+
         this.logger.debug('Successfully deleted Bluesky event record:', {
           eventName: event.name,
           eventRkey: event.sourceData.rkey,
-          creatorDid: event.sourceId,
+          userDid: currentUser.socialId,
         });
       } catch (error) {
-        this.logger.error('Failed to delete Bluesky event record:', {
+        // Handle any other errors in the outer try block
+        this.logger.error('Unexpected error during Bluesky event deletion:', {
           error: error.message,
           stack: error.stack,
           eventId: event.id,
           eventSlug: event.slug,
-          eventName: event.name,
-          eventRkey: event.sourceData.rkey,
-          creatorDid: event.sourceId,
-          userDid: currentUser.socialId,
         });
-        // Continue with local deletion even if Bluesky deletion fails
+        // Continue with local deletion
         this.logger.warn(
-          'Proceeding with local event deletion despite Bluesky deletion failure',
+          'Proceeding with local event deletion despite unexpected error',
         );
       }
     }
