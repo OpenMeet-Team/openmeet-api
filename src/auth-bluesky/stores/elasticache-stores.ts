@@ -33,13 +33,17 @@ export class ElastiCacheSessionStore implements NodeSavedSessionStore {
   constructor(private elasticache: ElastiCacheService) {}
 
   async set(state: string, data: NodeSavedSession) {
-    await this.elasticache.set(`bluesky:session:${state}`, data, 600);
+    // Set session with 24 hour TTL
+    await this.elasticache.set(`bluesky:session:${state}`, data, 86400);
   }
 
   async get(state: string): Promise<NodeSavedSession | undefined> {
-    const result = await this.elasticache.get<NodeSavedSession>(
-      `bluesky:session:${state}`,
-    );
+    const key = `bluesky:session:${state}`;
+    const result = await this.elasticache.get<NodeSavedSession>(key);
+    if (result) {
+      // Refresh TTL by setting the value again
+      await this.elasticache.set(key, result, 86400);
+    }
     return result ?? undefined;
   }
 

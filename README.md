@@ -38,6 +38,21 @@ npm run start:dev
 
 In the env file you should set the `TEST_TENANT_ID` to the id of the tenant you want to use for testing, and that tenant must exist in the `TENANTS_B64` variable described below.
 
+#### Oauth
+
+For testing bluesky locally with oauth logins, we need to run ngrok to expose our local server to the internet.
+
+    ngrok http 3000
+
+This will expose your local server to the internet and provide a public url for the oauth callback.
+
+You'll need to update the `BACKEND_DOMAIN` in the `.env` file to the ngrok url.
+
+Also update  CSP in the `quasar.config.js` file to allow the ngrok url.
+
+Finally, update the `config.json` for the frontend to set frontendDomain to the localhost url for the platform.
+
+
 #### Env setup
 
 ```bash

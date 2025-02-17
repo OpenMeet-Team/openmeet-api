@@ -231,4 +231,17 @@ export class UserEntity extends EntityRelationalHelper {
       )}-${generateShortCode().toLowerCase()}`;
     }
   }
+
+  @Column('jsonb', { nullable: true })
+  preferences: {
+    bluesky?: {
+      avatar?: string;
+      did?: string;
+      handle?: string;
+      connected?: boolean;
+      autoPost?: boolean;
+      disconnectedAt?: Date;
+      connectedAt?: Date;
+    };
+  };
 }

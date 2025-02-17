@@ -6,13 +6,15 @@ import {
   Header,
   HttpStatus,
   HttpCode,
+  Logger,
+  Inject,
 } from '@nestjs/common';
 import { AuthBlueskyService } from './auth-bluesky.service';
 import { Response } from 'express';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { TenantConfig } from '../core/constants/constant';
 import { Public } from '../core/decorators/public.decorator';
 import { TenantPublic } from '../tenant/tenant-public.decorator';
+import { REQUEST } from '@nestjs/core';
 
 @ApiTags('Auth')
 @Controller({
@@ -20,8 +22,12 @@ import { TenantPublic } from '../tenant/tenant-public.decorator';
   version: '1',
 })
 export class AuthBlueskyController {
-  private tenantConfig: TenantConfig;
-  constructor(private readonly authBlueskyService: AuthBlueskyService) {}
+  private readonly logger = new Logger(AuthBlueskyController.name);
+
+  constructor(
+    private readonly authBlueskyService: AuthBlueskyService,
+    @Inject(REQUEST) private readonly request: any,
+  ) {}
 
   @Get('authorize')
   @Public()
@@ -32,20 +38,31 @@ export class AuthBlueskyController {
     @Query('handle') handle: string,
     @Query('tenantId') tenantId: string,
   ) {
-    const url = await this.authBlueskyService.createAuthUrl(handle, tenantId);
-    return { url };
+    return await this.authBlueskyService.createAuthUrl(handle, tenantId);
   }
 
   @Public()
   @TenantPublic()
   @Get('callback')
   async callback(@Query() query: any, @Res() res: Response) {
-    const effectiveTenantId = query.tenantId;
+    const effectiveTenantId = query.tenantId || this.request?.tenantId;
+    if (!effectiveTenantId) {
+      this.logger.error('Missing tenant ID in callback');
+      throw new Error('Tenant ID is required');
+    }
+
+    this.logger.debug('Handling Bluesky callback:', {
+      tenantId: effectiveTenantId,
+      state: query.state,
+      code: query.code,
+    });
 
     const redirectUrl = await this.authBlueskyService.handleAuthCallback(
       query,
       effectiveTenantId,
     );
+
+    this.logger.debug('Redirecting to:', redirectUrl);
     res.redirect(redirectUrl);
   }
 
@@ -54,10 +71,8 @@ export class AuthBlueskyController {
   @Get('client-metadata.json')
   @Header('Content-Type', 'application/json')
   async getClientMetadata(@Query('tenantId') tenantId: string) {
-    if (!this.authBlueskyService.getClient()) {
-      await this.authBlueskyService.initializeClient(tenantId);
-    }
-    return this.authBlueskyService.getClient().clientMetadata;
+    const client = await this.authBlueskyService.initializeClient(tenantId);
+    return client.clientMetadata;
   }
 
   @Public()
@@ -65,9 +80,7 @@ export class AuthBlueskyController {
   @Get('jwks.json')
   @Header('Content-Type', 'application/json')
   async getJwks(@Query('tenantId') tenantId: string) {
-    if (!this.authBlueskyService.getClient()) {
-      await this.authBlueskyService.initializeClient(tenantId);
-    }
-    return this.authBlueskyService.getClient().jwks;
+    const client = await this.authBlueskyService.initializeClient(tenantId);
+    return client.jwks;
   }
 }

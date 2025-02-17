@@ -30,9 +30,14 @@ import { ulid } from 'ulid';
 import slugify from 'slugify';
 import { generateShortCode } from '../../../../../utils/short-code';
 import { ZulipMessage, ZulipTopic } from 'zulip-js';
+import { SourceFields } from '../../../../../core/interfaces/source-data.interface';
+import { EventSourceType } from '../../../../../core/constants/source-type.constant';
 
 @Entity({ name: 'events' })
-export class EventEntity extends EntityRelationalHelper {
+export class EventEntity
+  extends EntityRelationalHelper
+  implements SourceFields
+{
   @PrimaryGeneratedColumn()
   id: number;
 
@@ -152,6 +157,21 @@ export class EventEntity extends EntityRelationalHelper {
   zulipChannelId: number;
 
   attendeesCount: number;
+
+  @Column({ type: 'enum', enum: 'event_source_type', nullable: true })
+  sourceType: EventSourceType | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  sourceId: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  sourceUrl: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  sourceData: Record<string, unknown> | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastSyncedAt: Date | null;
 
   // @Expose()
   // get attendeesCount(): number {

@@ -49,6 +49,11 @@ export class UserService {
   }
 
   async getTenantSpecificRepository(tenantId?: string) {
+    this.logger.debug('getTenantSpecificRepo:', {
+      tenantId,
+      stactTrace: new Error().stack,
+    });
+
     const effectiveTenantId = tenantId || this.request?.tenantId;
     if (!effectiveTenantId) {
       this.logger.error('getTenantSpecificRepository: Tenant ID is required', {
@@ -261,11 +266,6 @@ export class UserService {
         },
       },
     });
-
-    this.logger.debug('showProfile raw user:', {
-      provider: user?.provider,
-      user: user,
-    });
     return user;
   }
 
@@ -278,6 +278,19 @@ export class UserService {
     return this.usersRepository.findOne({
       where: { id },
       relations: ['role', 'role.permissions', 'interests'],
+    });
+  }
+
+  async findByIdWithPreferences(
+    id: User['id'],
+    tenantId?: string,
+  ): Promise<NullableType<UserEntity>> {
+    await this.getTenantSpecificRepository(tenantId);
+
+    return this.usersRepository.findOne({
+      where: { id },
+      relations: ['role', 'role.permissions'],
+      select: ['id', 'socialId', 'preferences'],
     });
   }
 
@@ -344,7 +357,7 @@ export class UserService {
     tenantId: string,
   ): Promise<UserEntity> {
     this.logger.debug(
-      `[UserService] Finding or creating user for provider: ${provider}, tenantId: ${tenantId}`,
+      `Finding or creating user for provider: ${provider}, tenantId: ${tenantId}`,
     );
 
     if (!tenantId) {
@@ -363,6 +376,9 @@ export class UserService {
     );
 
     if (existingUser) {
+      this.logger.debug('findOrCreateUser: found existing user', {
+        existingUser,
+      });
       return existingUser as UserEntity;
     }
 
@@ -378,20 +394,38 @@ export class UserService {
     const statusDto = new StatusDto();
     statusDto.id = getStatusEnumValue('active');
 
-    // Create new user
+    // Create new user with Bluesky preferences if applicable
+    const createUserData: any = {
+      socialId: profile.id,
+      provider: provider,
+      email: profile.email || null,
+      firstName: profile.firstName || null,
+      lastName: profile.lastName || null,
+      role: roleEntity.id,
+      status: statusDto,
+    };
+
+    // Set Bluesky preferences if user is logging in via Bluesky
+    if (provider === 'bluesky') {
+      createUserData.preferences = {
+        bluesky: {
+          did: profile.id,
+          handle: profile.firstName,
+          connected: true,
+          autoPost: false,
+          connectedAt: new Date(),
+        },
+      };
+    }
+
     const newUser = (await this.create(
-      {
-        socialId: profile.id,
-        provider: provider,
-        email: profile.email || null,
-        firstName: profile.firstName || null,
-        lastName: profile.lastName || null,
-        role: roleEntity.id,
-        status: statusDto,
-      },
+      createUserData,
       tenantId,
     )) as unknown as UserEntity;
 
+    this.logger.debug('findOrCreateUser: created user', {
+      newUser,
+    });
     return newUser;
   }
 
@@ -406,9 +440,10 @@ export class UserService {
       zulipApiKey: string;
       zulipUserId: number;
     },
+    tenantId?: string,
   ) {
-    await this.getTenantSpecificRepository();
-    const user = await this.findById(userId);
+    await this.getTenantSpecificRepository(tenantId);
+    const user = await this.findById(userId, tenantId);
 
     if (!user) {
       return null;
@@ -425,9 +460,7 @@ export class UserService {
     payload: any,
     tenantId?: string,
   ): Promise<User | null> {
-    this.logger.debug(
-      `[UserService] Updating user with ID: ${id}, tenantId: ${tenantId}`,
-    );
+    this.logger.debug(`Updating user with ID: ${id}, tenantId: ${tenantId}`);
     await this.getTenantSpecificRepository(tenantId);
 
     const clonedPayload = { ...payload };
@@ -521,7 +554,7 @@ export class UserService {
 
     await this.usersRepository.save({ id, ...clonedPayload }); // FIXME:
 
-    const user = await this.findById(id);
+    const user = await this.findById(id, tenantId);
     this.eventEmitter.emit('user.updated', user);
     this.auditLogger.log('user updated', {
       user,
@@ -578,8 +611,8 @@ export class UserService {
     return user;
   }
 
-  async getUserById(id: number): Promise<UserEntity> {
-    await this.getTenantSpecificRepository();
+  async getUserById(id: number, tenantId?: string): Promise<UserEntity> {
+    await this.getTenantSpecificRepository(tenantId);
     const user = await this.usersRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException('User not found');

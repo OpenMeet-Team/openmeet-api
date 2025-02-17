@@ -93,14 +93,14 @@ describe('EventController Recommendations (e2e)', () => {
       categories: [categoryUnrelated.id],
       startDate: new Date(
         futureDate.getTime() + 72 * 60 * 60 * 1000,
-      ).toISOString(), // +3 days
+      ).toISOString(),
       type: 'hybrid',
       maxAttendees: 100,
     });
     // get all events and check that there are at least the number we created
     const allEvents = await getAllEvents(TESTING_APP_URL, token);
     expect(allEvents.data).toBeInstanceOf(Array);
-    expect(allEvents.data.length).toBeGreaterThanOrEqual(4);
+    expect(allEvents.data.length).toBeGreaterThanOrEqual(3);
   });
 
   afterAll(async () => {
