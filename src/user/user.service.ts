@@ -51,6 +51,7 @@ export class UserService {
   async getTenantSpecificRepository(tenantId?: string) {
     this.logger.debug('getTenantSpecificRepo:', {
       tenantId,
+      stactTrace: new Error().stack,
     });
 
     const effectiveTenantId = tenantId || this.request?.tenantId;

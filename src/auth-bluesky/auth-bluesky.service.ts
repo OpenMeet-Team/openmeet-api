@@ -204,7 +204,7 @@ export class AuthBlueskyService {
     };
 
     // Compare the values to see if anything has actually changed
-    const hasPreferencesChanged = 
+    const hasPreferencesChanged =
       userEntity.preferences?.bluesky?.did !== profileData.did ||
       userEntity.preferences?.bluesky?.handle !== profileData.handle ||
       userEntity.preferences?.bluesky?.avatar !== profileData.avatar;
@@ -216,7 +216,7 @@ export class AuthBlueskyService {
       newHandle: profileData.handle,
       currentAvatar: userEntity.preferences?.bluesky?.avatar,
       newAvatar: profileData.avatar,
-      hasPreferencesChanged
+      hasPreferencesChanged,
     });
 
     // Only update if something has changed
@@ -224,16 +224,17 @@ export class AuthBlueskyService {
       updatePayload.preferences = {
         ...userEntity.preferences,
         bluesky: {
-          ...userEntity.preferences?.bluesky,  // Keep existing preferences
+          ...userEntity.preferences?.bluesky, // Keep existing preferences
           did: profileData.did,
           handle: profileData.handle,
           avatar: profileData.avatar,
-        }
+        },
       };
     }
 
     // Only include photo if it has changed
-    const hasPhotoChanged = userEntity.photo?.id !== loginResponse.user.photo?.id;
+    const hasPhotoChanged =
+      userEntity.photo?.id !== loginResponse.user.photo?.id;
     if (hasPhotoChanged && userEntity.photo?.id) {
       updatePayload.photo = { id: userEntity.photo.id };
     }
@@ -241,7 +242,10 @@ export class AuthBlueskyService {
     this.logger.debug('Update decision:', {
       hasPreferencesChanged,
       hasPhotoChanged,
-      willUpdate: hasPreferencesChanged || hasPhotoChanged || Object.keys(updatePayload).length > 1
+      willUpdate:
+        hasPreferencesChanged ||
+        hasPhotoChanged ||
+        Object.keys(updatePayload).length > 1,
     });
 
     let verifiedUser;

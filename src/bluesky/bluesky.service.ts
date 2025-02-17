@@ -8,25 +8,7 @@ import { NodeOAuthClient } from '@atproto/oauth-client-node';
 import { initializeOAuthClient } from '../utils/bluesky';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { delay } from '../utils/delay';
-
-interface BlueskyLocation {
-  type: string;
-  lat?: number;
-  lon?: number;
-  description?: string;
-  uri?: string;
-  name?: string;
-}
-
-export enum EventSourceType {
-  BLUESKY = 'bluesky',
-  EVENTBRITE = 'eventbrite',
-  FACEBOOK = 'facebook',
-  LUMA = 'luma',
-  MEETUP = 'meetup',
-  OTHER = 'other',
-  WEB = 'web',
-}
+import { BlueskyLocation, BlueskyEventUri } from './BlueskyTypes';
 
 @Injectable()
 export class BlueskyService {
@@ -341,6 +323,23 @@ export class BlueskyService {
       const baseName = this.generateBaseName(event.name);
       const rkey = await this.generateUniqueRkey(agent, did, baseName);
 
+      // Prepare uris array with image if it exists
+      const uris: BlueskyEventUri[] = [];
+      if (event.image?.path) {
+        uris.push({
+          uri: event.image.path,
+          name: 'Event Image',
+        });
+      }
+
+      // Add online location to uris if it exists
+      if (event.locationOnline) {
+        uris.push({
+          uri: event.locationOnline,
+          name: 'Online Meeting Link',
+        });
+      }
+
       const result = await agent.com.atproto.repo.putRecord({
         repo: did,
         collection: 'community.lexicon.calendar.event',
@@ -355,6 +354,7 @@ export class BlueskyService {
           mode: modeMap[event.type] || modeMap['in-person'],
           status: statusMap[event.status] || statusMap['published'],
           locations,
+          uris,
         },
       });
       this.logger.debug(result);
