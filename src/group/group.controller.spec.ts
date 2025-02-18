@@ -11,7 +11,6 @@ import {
   mockGroupService,
   mockGroupMemberService,
   mockGroupMember,
-  mockEventService,
   mockRepository,
   mockZulipMessage,
   mockGroupAboutResponse,
@@ -23,11 +22,13 @@ import { GroupMemberService } from '../group-member/group-member.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
-import { EventService } from '../event/event.service';
 import { Repository } from 'typeorm';
 import { PermissionsGuard } from '../shared/guard/permissions.guard';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
+import { EventQueryService } from '../event/services/event-query.service';
+import { VisibilityGuard } from '../shared/guard/visibility.guard';
+import { mockEventQueryService } from '../test/mocks';
 
 describe('GroupController', () => {
   let controller: GroupController;
@@ -46,10 +47,6 @@ describe('GroupController', () => {
           useValue: mockGroupMemberService,
         },
         {
-          provide: EventService,
-          useValue: mockEventService,
-        },
-        {
           provide: Repository,
           useValue: mockRepository,
         },
@@ -65,6 +62,10 @@ describe('GroupController', () => {
           provide: EventAttendeeService,
           useValue: mockEventAttendeeService,
         },
+        {
+          provide: EventQueryService,
+          useValue: mockEventQueryService,
+        },
         // Mock Reflector
         {
           provide: Reflector,
@@ -76,6 +77,7 @@ describe('GroupController', () => {
           },
         },
         PermissionsGuard, // Include the PermissionsGuard in providers
+        VisibilityGuard, // Include the VisibilityGuard in providers
       ],
     }).compile();
 

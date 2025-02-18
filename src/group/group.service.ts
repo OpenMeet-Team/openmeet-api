@@ -31,7 +31,6 @@ import { PaginationDto } from '../utils/dto/pagination.dto';
 import { paginate } from '../utils/generic-pagination';
 import { QueryGroupDto } from './dto/group-query.dto';
 import slugify from 'slugify';
-import { EventService } from '../event/event.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
@@ -48,6 +47,9 @@ import { GroupRoleEntity } from '../group-role/infrastructure/persistence/relati
 import { GroupMailService } from '../group-mail/group-mail.service';
 import { AuditLoggerService } from '../logger/audit-logger.provider';
 import { Trace } from '../utils/trace.decorator';
+import { EventQueryService } from '../event/services/event-query.service';
+import { EventManagementService } from '../event/services/event-management.service';
+import { EventRecommendationService } from '../event/services/event-recommendation.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -64,7 +66,9 @@ export class GroupService {
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly categoryService: CategoryService,
     private readonly groupMemberService: GroupMemberService,
-    private readonly eventService: EventService,
+    private readonly eventQueryService: EventQueryService,
+    private readonly eventManagementService: EventManagementService,
+    private readonly eventRecommendationService: EventRecommendationService,
     private readonly fileService: FilesS3PresignedService,
     private readonly groupRoleService: GroupRoleService,
     private readonly mailService: MailService,
@@ -138,7 +142,7 @@ export class GroupService {
     });
 
     if (!group) {
-      return this.eventService.showRandomEvents(4);
+      return this.eventRecommendationService.showRandomEvents(4);
     }
 
     const categoryIds = group.categories?.map((c) => c?.id);
@@ -147,7 +151,7 @@ export class GroupService {
     try {
       // Get recommended events
       events =
-        (await this.eventService.findRecommendedEventsForGroup(
+        (await this.eventRecommendationService.findRecommendedEventsForGroup(
           group.id,
           categoryIds,
           minEvents,
@@ -156,11 +160,12 @@ export class GroupService {
 
       // If we need more events, get random ones
       if (events.length < maxEvents) {
-        const randomEvents = await this.eventService.findRandomEventsForGroup(
-          group.id,
-          maxEvents - events.length,
-          maxEvents - events.length,
-        );
+        const randomEvents =
+          await this.eventRecommendationService.findRandomEventsForGroup(
+            group.id,
+            maxEvents - events.length,
+            maxEvents - events.length,
+          );
         events = [...events, ...randomEvents];
       }
     } catch (error) {
@@ -473,7 +478,7 @@ export class GroupService {
     await this.getTenantSpecificGroupRepository();
     const group = await this.getGroupBySlug(slug);
 
-    group.events = await this.eventService.findUpcomingEventsForGroup(
+    group.events = await this.eventQueryService.findUpcomingEventsForGroup(
       group.id,
       5,
     );
@@ -514,7 +519,7 @@ export class GroupService {
       throw new Error('Group not found');
     }
 
-    const events = this.eventService.findRandom();
+    const events = this.eventRecommendationService.findRandom();
     const groupWithEvents = {
       ...group,
       recommendedEvents: events,
@@ -584,7 +589,7 @@ export class GroupService {
 
     // First, delete all group members associated with the group
     await this.groupMembersRepository.delete({ group: { id: group.id } });
-    await this.eventService.deleteEventsByGroup(group.id);
+    await this.eventManagementService.deleteEventsByGroup(group.id);
 
     const deletedGroup = await this.groupRepository.remove(group);
     this.eventEmitter.emit('group.deleted', deletedGroup);
@@ -745,7 +750,7 @@ export class GroupService {
 
     const group = await this.getGroupBySlug(slug);
 
-    return await this.eventService.findEventsForGroup(group.id, 0);
+    return await this.eventQueryService.findEventsForGroup(group.id, 0);
   }
 
   async showGroupDiscussions(

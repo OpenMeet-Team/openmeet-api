@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventController } from './event.controller';
-import { EventService } from './event.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
@@ -15,7 +14,6 @@ import {
   mockEvent,
   mockEventAttendee,
   mockEventAttendeeService,
-  mockEventService,
   mockGroup,
   mockGroupMemberService,
   mockGroupService,
@@ -32,6 +30,10 @@ import { ExecutionContext } from '@nestjs/common';
 import { PERMISSIONS_KEY } from '../shared/guard/permissions.decorator';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { VisibilityGuard } from '../shared/guard/visibility.guard';
+import { EventManagementService } from './services/event-management.service';
+import { EventQueryService } from './services/event-query.service';
+import { EventRecommendationService } from './services/event-recommendation.service';
+import { EventDiscussionService } from './services/event-discussion.service';
 
 const createEventDto: CreateEventDto = {
   name: 'Test Event',
@@ -59,9 +61,42 @@ const mockAuthService = {
   getAttendeePermissions: jest.fn(),
 };
 
+const mockEventManagementService = {
+  create: jest.fn(),
+  update: jest.fn(),
+  remove: jest.fn(),
+  attendEvent: jest.fn(),
+  cancelAttendingEvent: jest.fn(),
+  updateEventAttendee: jest.fn(),
+  deleteEventsByGroup: jest.fn(),
+};
+
+const mockEventQueryService = {
+  showAllEvents: jest.fn(),
+  showEvent: jest.fn(),
+  editEvent: jest.fn(),
+  findEventBySlug: jest.fn(),
+  showDashboardEvents: jest.fn(),
+  showEventAttendees: jest.fn(),
+  getEventsByCreator: jest.fn(),
+  getEventsByAttendee: jest.fn(),
+};
+
+const mockEventRecommendationService = {
+  showRecommendedEventsByEventSlug: jest.fn(),
+};
+
+const mockEventDiscussionService = {
+  sendEventDiscussionMessage: jest.fn(),
+  updateEventDiscussionMessage: jest.fn(),
+  deleteEventDiscussionMessage: jest.fn(),
+};
+
 describe('EventController', () => {
   let controller: EventController;
-  let eventService: EventService;
+  let eventManagementService: EventManagementService;
+  let eventQueryService: EventQueryService;
+  let eventDiscussionService: EventDiscussionService;
   let guard: PermissionsGuard;
 
   const createMockExecutionContext = (
@@ -91,8 +126,20 @@ describe('EventController', () => {
       controllers: [EventController],
       providers: [
         {
-          provide: EventService,
-          useValue: mockEventService,
+          provide: EventManagementService,
+          useValue: mockEventManagementService,
+        },
+        {
+          provide: EventQueryService,
+          useValue: mockEventQueryService,
+        },
+        {
+          provide: EventRecommendationService,
+          useValue: mockEventRecommendationService,
+        },
+        {
+          provide: EventDiscussionService,
+          useValue: mockEventDiscussionService,
         },
         {
           provide: AuthService,
@@ -117,7 +164,13 @@ describe('EventController', () => {
     }).compile();
 
     controller = module.get<EventController>(EventController);
-    eventService = module.get<EventService>(EventService);
+    eventManagementService = module.get<EventManagementService>(
+      EventManagementService,
+    );
+    eventQueryService = module.get<EventQueryService>(EventQueryService);
+    eventDiscussionService = module.get<EventDiscussionService>(
+      EventDiscussionService,
+    );
     guard = module.get<PermissionsGuard>(PermissionsGuard);
   });
 
@@ -127,25 +180,25 @@ describe('EventController', () => {
 
   describe('showEvent', () => {
     it('should return event with details', async () => {
-      jest.spyOn(eventService, 'showEvent').mockResolvedValue(mockEvent);
+      jest.spyOn(eventQueryService, 'showEvent').mockResolvedValue(mockEvent);
 
       const result = await controller.showEvent(mockEvent.slug, mockUser);
 
       expect(result).toEqual(mockEvent);
-      expect(eventService.showEvent).toHaveBeenCalled();
+      expect(eventQueryService.showEvent).toHaveBeenCalled();
     });
   });
 
   describe('create', () => {
     it('should create a new event with all the data', async () => {
       jest
-        .spyOn(eventService, 'create')
+        .spyOn(eventManagementService, 'create')
         .mockResolvedValue(mockEvent as EventEntity);
 
       const result = await controller.create(createEventDto, mockUser);
 
       expect(result).toEqual(mockEvent);
-      expect(eventService.create).toHaveBeenCalledWith(
+      expect(eventManagementService.create).toHaveBeenCalledWith(
         createEventDto,
         mockUser.id,
       );
@@ -153,7 +206,7 @@ describe('EventController', () => {
 
     it('should handle service errors', async () => {
       jest
-        .spyOn(eventService, 'create')
+        .spyOn(eventManagementService, 'create')
         .mockRejectedValue(new Error('Database error'));
       await expect(controller.create(createEventDto, mockUser)).rejects.toThrow(
         'Database error',
@@ -165,7 +218,7 @@ describe('EventController', () => {
     it('should return an array of events', async () => {
       const events = [mockEvent, { ...mockEvent, id: 2 }];
       jest
-        .spyOn(eventService, 'showAllEvents')
+        .spyOn(eventQueryService, 'showAllEvents')
         .mockResolvedValue(events as EventEntity[]);
       const pagination: PaginationOptions = {
         page: 1,
@@ -186,7 +239,7 @@ describe('EventController', () => {
         mockUser,
       );
       expect(result).toEqual(events);
-      expect(eventService.showAllEvents).toHaveBeenCalled();
+      expect(eventQueryService.showAllEvents).toHaveBeenCalled();
     });
   });
 
@@ -194,13 +247,13 @@ describe('EventController', () => {
     it('should update an event', async () => {
       const updateEventDto: UpdateEventDto = { name: 'Updated Event' };
       jest
-        .spyOn(eventService, 'update')
+        .spyOn(eventManagementService, 'update')
         .mockResolvedValue({ ...mockEvent, ...updateEventDto } as EventEntity);
       const result = await controller.update(mockEvent.slug, updateEventDto, {
         user: mockUser,
       } as unknown as Request);
       expect(result).toEqual({ ...mockEvent, ...updateEventDto });
-      expect(eventService.update).toHaveBeenCalledWith(
+      expect(eventManagementService.update).toHaveBeenCalledWith(
         mockEvent.slug,
         updateEventDto,
         mockUser.id,
@@ -210,7 +263,7 @@ describe('EventController', () => {
     it('should handle service errors during update', async () => {
       const updateEventDto: UpdateEventDto = { name: 'Updated Event' };
       jest
-        .spyOn(eventService, 'update')
+        .spyOn(eventManagementService, 'update')
         .mockRejectedValue(new Error('Update failed'));
       await expect(
         controller.update(mockEvent.slug, updateEventDto, {
@@ -222,29 +275,34 @@ describe('EventController', () => {
 
   describe('Event Service Methods', () => {
     it('should get events by creator', async () => {
-      mockEventService.getEventsByCreator.mockResolvedValue([mockEvent]);
-      const events = await eventService.getEventsByCreator(mockUser.id);
+      mockEventQueryService.getEventsByCreator.mockResolvedValue([mockEvent]);
+      const events = await eventQueryService.getEventsByCreator(mockUser.id);
       expect(events).toEqual([mockEvent]);
     });
 
     it('should get events by attendee', async () => {
-      mockEventService.getEventsByAttendee.mockResolvedValue([mockEvent]);
-      const events = await eventService.getEventsByAttendee(mockUser.id);
+      mockEventQueryService.getEventsByAttendee.mockResolvedValue([mockEvent]);
+      const events = await eventQueryService.getEventsByAttendee(mockUser.id);
       expect(events).toEqual([mockEvent]);
     });
   });
 
   describe('delete', () => {
     it('should delete an event', async () => {
-      jest.spyOn(eventService, 'remove').mockResolvedValue(undefined);
+      jest.spyOn(eventManagementService, 'remove').mockResolvedValue(undefined);
       const result = await controller.remove(mockEvent.slug);
       expect(result).toBeUndefined();
-      expect(eventService.remove).toHaveBeenCalledWith(mockEvent.slug);
+      expect(eventManagementService.remove).toHaveBeenCalledWith(
+        mockEvent.slug,
+      );
     });
   });
 
   describe('getRecommendedEvents', () => {
     it('should return recommended events', async () => {
+      mockEventRecommendationService.showRecommendedEventsByEventSlug.mockResolvedValue(
+        mockEvents,
+      );
       const result = await controller.showRecommendedEvents(mockEvent.slug);
       expect(result).toEqual(mockEvents);
     });
@@ -252,7 +310,7 @@ describe('EventController', () => {
 
   describe('editEvent', () => {
     it('should return an event', async () => {
-      jest.spyOn(eventService, 'editEvent').mockResolvedValue(mockEvent);
+      jest.spyOn(eventQueryService, 'editEvent').mockResolvedValue(mockEvent);
       const result = await controller.editEvent(mockEvent.slug);
       expect(result).toEqual(mockEvent);
     });
@@ -261,7 +319,7 @@ describe('EventController', () => {
   describe('attendEvent', () => {
     it('should attend an event', async () => {
       jest
-        .spyOn(eventService, 'attendEvent')
+        .spyOn(eventManagementService, 'attendEvent')
         .mockResolvedValue(mockEventAttendee);
       const result = await controller.attendEvent(
         mockUser,
@@ -275,7 +333,7 @@ describe('EventController', () => {
   describe('cancelAttendingEvent', () => {
     it('should cancel attending an event', async () => {
       jest
-        .spyOn(eventService, 'cancelAttendingEvent')
+        .spyOn(eventManagementService, 'cancelAttendingEvent')
         .mockResolvedValue(mockEventAttendee);
       const result = await controller.cancelAttendingEvent(
         mockEvent.slug,
@@ -288,7 +346,7 @@ describe('EventController', () => {
   describe('showEventAttendees', () => {
     it('should return event attendees', async () => {
       jest
-        .spyOn(eventService, 'showEventAttendees')
+        .spyOn(eventQueryService, 'showEventAttendees')
         .mockResolvedValue([mockEventAttendee]);
       const result = await controller.showEventAttendees(
         mockEvent.slug,
@@ -308,7 +366,7 @@ describe('EventController', () => {
   describe('sendEventDiscussionMessage', () => {
     it('should send an event discussion message', async () => {
       jest
-        .spyOn(eventService, 'sendEventDiscussionMessage')
+        .spyOn(eventDiscussionService, 'sendEventDiscussionMessage')
         .mockResolvedValue(mockZulipMessageResponse);
       const result = await controller.sendEventDiscussionMessage(
         mockEvent.slug,
@@ -322,7 +380,7 @@ describe('EventController', () => {
   describe('updateEventDiscussionMessage', () => {
     it('should update an event discussion message', async () => {
       jest
-        .spyOn(eventService, 'updateEventDiscussionMessage')
+        .spyOn(eventDiscussionService, 'updateEventDiscussionMessage')
         .mockResolvedValue(mockZulipMessageResponse);
       const result = await controller.updateEventDiscussionMessage(
         mockEvent.slug,
@@ -337,7 +395,7 @@ describe('EventController', () => {
   describe('deleteEventDiscussionMessage', () => {
     it('should delete an event discussion message', async () => {
       jest
-        .spyOn(eventService, 'deleteEventDiscussionMessage')
+        .spyOn(eventDiscussionService, 'deleteEventDiscussionMessage')
         .mockResolvedValue(mockZulipMessageResponse);
       const result = await controller.deleteEventDiscussionMessage(
         mockEvent.slug,
@@ -349,6 +407,7 @@ describe('EventController', () => {
 
   describe('showDashboardEvents', () => {
     it('should return dashboard events', async () => {
+      mockEventQueryService.showDashboardEvents.mockResolvedValue(mockEvents);
       const result = await controller.showDashboardEvents(mockUser);
       expect(result).toEqual(mockEvents);
     });
@@ -389,7 +448,7 @@ describe('EventController', () => {
 
       it('should allow access with CreateEvents permission', async () => {
         const createdEvent = { id: 1, ...createEventDto };
-        mockEventService.create.mockResolvedValue(createdEvent);
+        mockEventManagementService.create.mockResolvedValue(createdEvent);
 
         // Mock the AuthService to return the proper permissions
         mockAuthService.getUserPermissions.mockResolvedValue([
@@ -426,7 +485,7 @@ describe('EventController', () => {
 
       it('should allow access with ViewEvents permission', async () => {
         const events = [{ id: 1, name: 'Test Event' }];
-        mockEventService.showAllEvents.mockResolvedValue(events);
+        mockEventQueryService.showAllEvents.mockResolvedValue(events);
         mockAuthService.getGroupMemberPermissions.mockResolvedValue([
           { groupPermission: { name: UserPermission.ViewEvents } },
         ]);

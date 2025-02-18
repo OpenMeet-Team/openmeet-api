@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { VisibilityGuard } from './visibility.guard';
-import { EventService } from '../../event/event.service';
+import { EventQueryService } from '../../event/services/event-query.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { GroupService } from '../../group/group.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
@@ -15,10 +15,11 @@ import {
 } from '../../core/constants/constant';
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
+import { mockEventQueryService } from '../../test/mocks';
 
 describe('VisibilityGuard', () => {
   let guard: VisibilityGuard;
-  let eventService: jest.Mocked<EventService>;
+  let eventQueryService: jest.Mocked<EventQueryService>;
   let groupService: jest.Mocked<GroupService>;
 
   beforeEach(async () => {
@@ -26,10 +27,8 @@ describe('VisibilityGuard', () => {
       providers: [
         VisibilityGuard,
         {
-          provide: EventService,
-          useValue: {
-            findEventBySlug: jest.fn(),
-          },
+          provide: EventQueryService,
+          useValue: mockEventQueryService,
         },
         {
           provide: EventAttendeeService,
@@ -53,7 +52,7 @@ describe('VisibilityGuard', () => {
     }).compile();
 
     guard = module.get<VisibilityGuard>(VisibilityGuard);
-    eventService = module.get(EventService);
+    eventQueryService = module.get(EventQueryService);
     groupService = module.get(GroupService);
   });
 
@@ -72,10 +71,9 @@ describe('VisibilityGuard', () => {
 
   describe('canActivate - Events', () => {
     it('should allow access to public events', async () => {
-      const mockEvent = {
+      mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
         visibility: EventVisibility.Public,
-      } as unknown as EventEntity;
-      eventService.findEventBySlug.mockResolvedValue(mockEvent);
+      } as unknown as EventEntity);
 
       const context = mockContext({
         headers: { 'x-event-slug': 'test-event' },
@@ -85,7 +83,7 @@ describe('VisibilityGuard', () => {
     });
 
     it('should throw NotFoundException when event not found', async () => {
-      eventService.findEventBySlug.mockResolvedValue(
+      mockEventQueryService.findEventBySlug.mockResolvedValueOnce(
         null as unknown as EventEntity,
       );
 
@@ -99,10 +97,9 @@ describe('VisibilityGuard', () => {
     });
 
     it('should throw ForbiddenException for private event without user', async () => {
-      const mockEvent = {
+      mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
         visibility: EventVisibility.Private,
-      } as unknown as EventEntity;
-      eventService.findEventBySlug.mockResolvedValue(mockEvent);
+      } as unknown as EventEntity);
 
       const context = mockContext({
         headers: { 'x-event-slug': 'private-event' },
@@ -114,17 +111,18 @@ describe('VisibilityGuard', () => {
     });
 
     it('should check both header and params for event slug', async () => {
-      const mockEvent = {
+      mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
         visibility: EventVisibility.Public,
-      } as unknown as EventEntity;
-      eventService.findEventBySlug.mockResolvedValue(mockEvent);
+      } as unknown as EventEntity);
 
       const context = mockContext({
         headers: { 'x-event-slug': 'header-event' },
       });
 
       await expect(guard.canActivate(context)).resolves.toBe(true);
-      expect(eventService.findEventBySlug).toHaveBeenCalledWith('header-event');
+      expect(eventQueryService.findEventBySlug).toHaveBeenCalledWith(
+        'header-event',
+      );
     });
   });
 
@@ -188,10 +186,9 @@ describe('VisibilityGuard', () => {
 
   describe('canActivate - Authentication Required', () => {
     it('should require authentication for events with authenticated visibility', async () => {
-      const mockEvent = {
+      mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
         visibility: EventVisibility.Authenticated,
-      } as unknown as EventEntity;
-      eventService.findEventBySlug.mockResolvedValue(mockEvent);
+      } as unknown as EventEntity);
 
       const context = mockContext({
         params: { slug: 'auth-event' },
@@ -204,10 +201,9 @@ describe('VisibilityGuard', () => {
     });
 
     it('should allow authenticated users to access authenticated events', async () => {
-      const mockEvent = {
+      mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
         visibility: EventVisibility.Authenticated,
-      } as unknown as EventEntity;
-      eventService.findEventBySlug.mockResolvedValue(mockEvent);
+      } as unknown as EventEntity);
 
       const context = mockContext({
         headers: { 'x-event-slug': 'auth-event' },

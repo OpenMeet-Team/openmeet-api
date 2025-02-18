@@ -2,20 +2,20 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AllConfigType } from '../config/config.type';
 import { GroupService } from '../group/group.service';
-import { EventService } from '../event/event.service';
 import { CategoryService } from '../category/category.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { getBuildInfo } from '../utils/version';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { HomeQuery } from './dto/home-query.dto';
+import { EventQueryService } from '../event/services/event-query.service';
 
 @Injectable()
 export class HomeService {
   constructor(
     private configService: ConfigService<AllConfigType>,
     private groupService: GroupService,
-    private eventService: EventService,
+    private eventQueryService: EventQueryService,
     private categoryService: CategoryService,
     private subCategoryService: SubCategoryService,
   ) {}
@@ -42,7 +42,7 @@ export class HomeService {
     const [featuredGroups, upcomingEvents, categories, interests] =
       await Promise.all([
         this.groupService.getHomePageFeaturedGroups(),
-        this.eventService.getHomePageFeaturedEvents(),
+        this.eventQueryService.getHomePageFeaturedEvents(),
         this.categoryService.getHomePageFeaturedCategories(),
         this.subCategoryService.getHomePageFeaturedSubCategories(),
       ]);
@@ -65,9 +65,9 @@ export class HomeService {
       interests,
     ] = await Promise.all([
       this.groupService.getHomePageUserCreatedGroups(user.id, 3),
-      this.eventService.getHomePageUserNextHostedEvent(user.id),
-      this.eventService.getHomePageUserRecentEventDrafts(user.id),
-      this.eventService.getHomePageUserUpcomingEvents(user.id),
+      this.eventQueryService.getHomePageUserNextHostedEvent(user.id),
+      this.eventQueryService.getHomePageUserRecentEventDrafts(user.id),
+      this.eventQueryService.getHomePageUserUpcomingEvents(user.id),
       this.groupService.getHomePageUserParticipatedGroups(user.id),
       this.subCategoryService.getHomePageUserInterests(user.id),
     ]);
@@ -84,7 +84,7 @@ export class HomeService {
 
   async globalSearch(pagination: PaginationDto, query: HomeQuery) {
     const [event, group] = await Promise.all([
-      this.eventService.searchAllEvents(pagination, query),
+      this.eventQueryService.searchAllEvents(pagination, query),
       this.groupService.searchAllGroups(pagination, query),
     ]);
 
