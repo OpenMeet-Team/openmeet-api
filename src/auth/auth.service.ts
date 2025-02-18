@@ -34,7 +34,7 @@ import { RoleService } from '../role/role.service';
 import { RoleEnum } from '../role/role.enum';
 import { StatusEntity } from 'src/status/infrastructure/persistence/relational/entities/status.entity';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
-import { EventService } from '../event/event.service';
+import { EventQueryService } from '../event/services/event-query.service';
 
 @Injectable()
 export class AuthService {
@@ -44,7 +44,7 @@ export class AuthService {
     private userService: UserService,
     private groupService: GroupService,
     private sessionService: SessionService,
-    private eventService: EventService,
+    private eventQueryService: EventQueryService,
     private eventAttendeeService: EventAttendeeService,
     private mailService: MailService,
     private readonly roleService: RoleService,
@@ -629,7 +629,7 @@ export class AuthService {
   }
 
   async getEvent(slug: string) {
-    return this.eventService.findEventBySlug(slug);
+    return this.eventQueryService.findEventBySlug(slug);
   }
 
   async getGroup(slug: string) {
@@ -659,7 +659,7 @@ export class AuthService {
   }
 
   async getEventAttendeeBySlug(userId: number, eventSlug: string) {
-    const event = await this.eventService.findEventBySlug(eventSlug);
+    const event = await this.eventQueryService.findEventBySlug(eventSlug);
     if (!event) return null;
 
     const eventAttendee =

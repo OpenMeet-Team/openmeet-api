@@ -15,7 +15,6 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Request } from 'express';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
-import { EventService } from './event.service';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { JWTAuthGuard } from '../auth/auth.guard';
 import { QueryEventDto } from './dto/query-events.dto';
@@ -36,6 +35,10 @@ import {
   UserPermission,
 } from '../core/constants/constant';
 import { Trace } from '../utils/trace.decorator';
+import { EventManagementService } from './services/event-management.service';
+import { EventQueryService } from './services/event-query.service';
+import { EventRecommendationService } from './services/event-recommendation.service';
+import { EventDiscussionService } from './services/event-discussion.service';
 
 @ApiTags('Events')
 @Controller('events')
@@ -43,7 +46,10 @@ import { Trace } from '../utils/trace.decorator';
 @UseGuards(JWTAuthGuard)
 export class EventController {
   constructor(
-    private readonly eventService: EventService,
+    private readonly eventManagementService: EventManagementService,
+    private readonly eventQueryService: EventQueryService,
+    private readonly eventRecommendationService: EventRecommendationService,
+    private readonly eventDiscussionService: EventDiscussionService,
     private readonly eventAttendeeService: EventAttendeeService,
   ) {}
 
@@ -60,7 +66,7 @@ export class EventController {
     @Query() query: QueryEventDto,
     @Req() req,
   ): Promise<EventEntity[]> {
-    return this.eventService.showAllEvents(
+    return this.eventQueryService.showAllEvents(
       pagination,
       query,
       req.user as UserEntity,
@@ -73,7 +79,7 @@ export class EventController {
   })
   @Trace('event.showDashboardEvents')
   async showDashboardEvents(@AuthUser() user: User): Promise<EventEntity[]> {
-    return this.eventService.showDashboardEvents(user.id);
+    return this.eventQueryService.showDashboardEvents(user.id);
   }
 
   @Permissions({
@@ -88,7 +94,7 @@ export class EventController {
     @Body() createEventDto: CreateEventDto,
     @AuthUser() user: User,
   ): Promise<EventEntity> {
-    return this.eventService.create(createEventDto, user.id);
+    return this.eventManagementService.create(createEventDto, user.id);
   }
 
   @Permissions({
@@ -100,7 +106,7 @@ export class EventController {
   @ApiOperation({ summary: 'Edit event by ID' })
   @Trace('event.editEvent')
   async editEvent(@Param('slug') slug: string): Promise<EventEntity | null> {
-    return await this.eventService.editEvent(slug);
+    return await this.eventQueryService.editEvent(slug);
   }
 
   @Permissions({
@@ -116,7 +122,7 @@ export class EventController {
     @Param('slug') slug: string,
     @AuthUser() user: User,
   ): Promise<EventEntity> {
-    return this.eventService.showEvent(slug, user?.id);
+    return this.eventQueryService.showEvent(slug, user?.id);
   }
 
   @Permissions({
@@ -133,7 +139,7 @@ export class EventController {
   ): Promise<EventEntity> {
     const user = req.user as UserEntity;
     const userId = user?.id;
-    return this.eventService.update(slug, updateEventDto, userId);
+    return this.eventManagementService.update(slug, updateEventDto, userId);
   }
 
   @Permissions({
@@ -146,7 +152,7 @@ export class EventController {
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Delete(':slug')
   async remove(@Param('slug') slug: string): Promise<void> {
-    return this.eventService.remove(slug);
+    return this.eventManagementService.remove(slug);
   }
 
   @Permissions({
@@ -162,7 +168,11 @@ export class EventController {
     @Body() createEventAttendeeDto: CreateEventAttendeeDto,
     @Param('slug') slug: string,
   ) {
-    return this.eventService.attendEvent(slug, user.id, createEventAttendeeDto);
+    return this.eventManagementService.attendEvent(
+      slug,
+      user.id,
+      createEventAttendeeDto,
+    );
   }
 
   @Permissions({
@@ -176,7 +186,10 @@ export class EventController {
     @Param('slug') slug: string,
     @AuthUser() user: User,
   ) {
-    return await this.eventService.cancelAttendingEvent(slug, user.id);
+    return await this.eventManagementService.cancelAttendingEvent(
+      slug,
+      user.id,
+    );
   }
 
   @Permissions({
@@ -191,7 +204,7 @@ export class EventController {
     @Param('slug') slug: string,
     @Param('attendeeId') attendeeId: number,
   ) {
-    return this.eventService.updateEventAttendee(
+    return this.eventManagementService.updateEventAttendee(
       slug,
       attendeeId,
       req.body as UpdateEventAttendeeDto,
@@ -227,7 +240,7 @@ export class EventController {
   ): Promise<any> {
     const userId = user?.id;
     query.userId = userId;
-    return this.eventService.showEventAttendees(slug, pagination);
+    return this.eventQueryService.showEventAttendees(slug, pagination);
   }
 
   @Public()
@@ -237,7 +250,9 @@ export class EventController {
     summary: 'Get similar events',
   })
   async showRecommendedEvents(@Param('slug') slug: string) {
-    return await this.eventService.showRecommendedEventsByEventSlug(slug);
+    return await this.eventRecommendationService.showRecommendedEventsByEventSlug(
+      slug,
+    );
   }
 
   @Permissions({
@@ -255,7 +270,11 @@ export class EventController {
     @AuthUser() user: User,
     @Body() body: { message: string; topicName: string },
   ): Promise<{ id: number }> {
-    return this.eventService.sendEventDiscussionMessage(slug, user.id, body);
+    return this.eventDiscussionService.sendEventDiscussionMessage(
+      slug,
+      user.id,
+      body,
+    );
   }
 
   @Permissions({
@@ -271,7 +290,7 @@ export class EventController {
     @AuthUser() user: User,
     @Body() body: { message: string },
   ): Promise<{ id: number }> {
-    return this.eventService.updateEventDiscussionMessage(
+    return this.eventDiscussionService.updateEventDiscussionMessage(
       messageId,
       body.message,
       user.id,
@@ -289,6 +308,6 @@ export class EventController {
     @Param('slug') slug: string,
     @Param('messageId') messageId: number,
   ): Promise<{ id: number }> {
-    return this.eventService.deleteEventDiscussionMessage(messageId);
+    return this.eventDiscussionService.deleteEventDiscussionMessage(messageId);
   }
 }

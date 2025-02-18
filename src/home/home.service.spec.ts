@@ -1,13 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HomeService } from './home.service';
 import { GroupService } from '../group/group.service';
-import { EventService } from '../event/event.service';
+import { EventQueryService } from '../event/services/event-query.service';
 import {
   mockCategory,
   mockCategoryService,
   mockConfigService,
   mockEvent,
-  mockEventService,
+  mockEventQueryService,
   mockGroup,
   mockGroupService,
   mockHomeQuery,
@@ -30,7 +30,7 @@ describe('HomeService', () => {
       providers: [
         HomeService,
         { provide: GroupService, useValue: mockGroupService },
-        { provide: EventService, useValue: mockEventService },
+        { provide: EventQueryService, useValue: mockEventQueryService },
         { provide: CategoryService, useValue: mockCategoryService },
         { provide: SubCategoryService, useValue: mockSubCategoryService },
         { provide: ConfigService, useValue: mockConfigService },

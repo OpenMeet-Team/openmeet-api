@@ -9,7 +9,6 @@ import { GroupMemberEntity } from '../group-member/infrastructure/persistence/re
 import { GroupUserPermissionEntity } from './infrastructure/persistence/relational/entities/group-user-permission.entity';
 import { UserModule } from '../user/user.module';
 import { GroupMemberModule } from '../group-member/group-member.module';
-import { EventService } from '../event/event.service';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
@@ -26,6 +25,7 @@ import { GroupMailModule } from '../group-mail/group-mail.module';
 import { EventModule } from '../event/event.module';
 import { EventMailModule } from '../event-mail/event-mail.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -50,7 +50,6 @@ import { BlueskyModule } from '../bluesky/bluesky.module';
     GroupService,
     TenantConnectionService,
     CategoryService,
-    EventService,
     EventEmitter2,
     FilesS3PresignedService,
     GroupRoleService,

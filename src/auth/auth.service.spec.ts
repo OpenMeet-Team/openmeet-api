@@ -8,8 +8,8 @@ import { UnauthorizedException } from '@nestjs/common';
 import { GroupService } from '../group/group.service';
 import { MailService } from '../mail/mail.service';
 import { RoleService } from '../role/role.service';
-import { EventService } from '../event/event.service';
-import { mockEventAttendeeService, mockEventService } from '../test/mocks';
+import { EventQueryService } from '../event/services/event-query.service';
+import { mockEventAttendeeService, mockEventQueryService } from '../test/mocks';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 
 describe('AuthService', () => {
@@ -55,7 +55,7 @@ describe('AuthService', () => {
         { provide: GroupService, useValue: mockGroupService },
         { provide: MailService, useValue: mockMailService },
         { provide: RoleService, useValue: mockRoleService },
-        { provide: EventService, useValue: mockEventService },
+        { provide: EventQueryService, useValue: mockEventQueryService },
         { provide: EventAttendeeService, useValue: mockEventAttendeeService },
       ],
     }).compile();

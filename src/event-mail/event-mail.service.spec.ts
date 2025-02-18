@@ -3,13 +3,11 @@ import { EventMailService } from './event-mail.service';
 import { MailService } from '../mail/mail.service';
 import {
   mockEventAttendeeService,
-  mockEventService,
   mockMailService,
   mockTenantConnectionService,
 } from '../test/mocks';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
-import { EventService } from '../event/event.service';
 
 describe('EventMailService', () => {
   let service: EventMailService;
@@ -29,10 +27,6 @@ describe('EventMailService', () => {
         {
           provide: EventAttendeeService,
           useValue: mockEventAttendeeService,
-        },
-        {
-          provide: EventService,
-          useValue: mockEventService,
         },
       ],
     }).compile();

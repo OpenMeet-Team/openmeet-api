@@ -7,9 +7,37 @@ import {
   mockZulipMessageResponse,
   mockZulipStreamTopic,
 } from './zulip-mocks';
-import { mockEvent, mockEvents } from './event-mocks';
+import {
+  mockEvent,
+  mockEvents,
+  mockEventService,
+  mockEventAttendee,
+  mockEventAttendeeService,
+  mockEventAttendees,
+  mockEventRoleService,
+  mockEventMailService,
+  mockEventRole,
+} from './event-mocks';
 import { mockUser } from './user-mocks';
 import { mockGroupMember, mockGroups } from './group-mocks';
+import { mockEventQueryService } from './event-query-mocks';
+import { mockEventManagementService } from './event-management-mocks';
+import { mockEventRecommendationService } from './event-recommendation-mocks';
+
+export {
+  mockEventQueryService,
+  mockEventManagementService,
+  mockEventRecommendationService,
+  mockEventService,
+  mockEvent,
+  mockEvents,
+  mockEventAttendee,
+  mockEventAttendeeService,
+  mockEventAttendees,
+  mockEventRoleService,
+  mockEventMailService,
+  mockEventRole,
+};
 
 export const mockCategory = {
   id: 1,

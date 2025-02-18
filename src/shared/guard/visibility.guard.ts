@@ -6,19 +6,19 @@ import {
   NotFoundException,
   Logger,
 } from '@nestjs/common';
-import { EventService } from '../../event/event.service';
 import {
   EventVisibility,
   GroupVisibility,
 } from '../../core/constants/constant';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { GroupService } from '../../group/group.service';
+import { EventQueryService } from '../../event/services/event-query.service';
 
 @Injectable()
 export class VisibilityGuard implements CanActivate {
   private readonly logger = new Logger(VisibilityGuard.name);
   constructor(
-    private readonly eventService: EventService,
+    private readonly eventQueryService: EventQueryService,
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly groupService: GroupService,
   ) {}
@@ -32,7 +32,7 @@ export class VisibilityGuard implements CanActivate {
     const user = request.user;
 
     if (eventSlug) {
-      const event = await this.eventService.findEventBySlug(eventSlug);
+      const event = await this.eventQueryService.findEventBySlug(eventSlug);
       if (!event) {
         throw new NotFoundException('VisibilityGuard: Event not found');
       }

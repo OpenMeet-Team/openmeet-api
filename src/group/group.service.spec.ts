@@ -3,7 +3,14 @@ import { GroupService } from './group.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { CategoryService } from '../category/category.service';
 import { GroupMemberService } from '../group-member/group-member.service';
-import { EventService } from '../event/event.service';
+import { EventQueryService } from '../event/services/event-query.service';
+import { EventManagementService } from '../event/services/event-management.service';
+import { EventRecommendationService } from '../event/services/event-recommendation.service';
+import {
+  mockEventQueryService,
+  mockEventManagementService,
+  mockEventRecommendationService,
+} from '../test/mocks';
 import { REQUEST } from '@nestjs/core';
 import { GroupEntity } from './infrastructure/persistence/relational/entities/group.entity';
 import { TESTING_TENANT_ID } from '../../test/utils/constants';
@@ -12,7 +19,6 @@ import {
   mockCategoryService,
   mockDiscussions,
   mockEvent,
-  mockEventService,
   mockFile,
   mockFilesS3PresignedService,
   mockGroup,
@@ -73,8 +79,20 @@ describe('GroupService', () => {
           useValue: mockGroupMemberService,
         },
         {
-          provide: EventService,
-          useValue: mockEventService,
+          provide: EventManagementService,
+          useValue: mockEventManagementService,
+        },
+        {
+          provide: EventQueryService,
+          useValue: mockEventQueryService,
+        },
+        {
+          provide: EventManagementService,
+          useValue: mockEventManagementService,
+        },
+        {
+          provide: EventRecommendationService,
+          useValue: mockEventRecommendationService,
         },
         {
           provide: FilesS3PresignedService,
@@ -275,7 +293,7 @@ describe('GroupService', () => {
         .spyOn(service['groupMembersRepository'], 'delete')
         .mockResolvedValue(new DeleteResult());
       jest
-        .spyOn(service['eventService'], 'deleteEventsByGroup')
+        .spyOn(service['eventManagementService'], 'deleteEventsByGroup')
         .mockResolvedValue(undefined);
 
       const result = await service.remove(mockGroup.slug);
