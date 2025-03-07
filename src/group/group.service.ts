@@ -649,6 +649,7 @@ export class GroupService {
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.groupMembers', 'groupMembers')
       .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
+      .leftJoinAndSelect('group.image', 'image')
       .innerJoin('group.groupMembers', 'member', 'member.userId = :userId', {
         userId,
       })
