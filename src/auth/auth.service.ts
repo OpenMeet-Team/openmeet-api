@@ -35,6 +35,8 @@ import { RoleEnum } from '../role/role.enum';
 import { StatusEntity } from 'src/status/infrastructure/persistence/relational/entities/status.entity';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventQueryService } from '../event/services/event-query.service';
+import { ElastiCacheService } from '../elasticache/elasticache.service';
+import { BlueskyService } from '../bluesky/bluesky.service';
 
 @Injectable()
 export class AuthService {
@@ -49,6 +51,8 @@ export class AuthService {
     private mailService: MailService,
     private readonly roleService: RoleService,
     private configService: ConfigService<AllConfigType>,
+    private elasticacheService: ElastiCacheService,
+    private blueskyService: BlueskyService,
   ) {}
 
   async validateLogin(loginDto: AuthEmailLoginDto): Promise<LoginResponseDto> {
@@ -558,6 +562,32 @@ export class AuthService {
   }
 
   async logout(data: Pick<JwtRefreshPayloadType, 'sessionId'>) {
+    try {
+      // Get the user associated with this session
+      const session = await this.sessionService.findById(data.sessionId);
+      if (session && session.user) {
+        // Check if the user has Bluesky preferences
+        const user = await this.userService.findById(session.user.id);
+        if (user && user.preferences?.bluesky?.did) {
+          // Clear Bluesky session from ElastiCache using the BlueskyService
+          this.logger.debug('Clearing Bluesky session for user:', {
+            userId: user.id,
+            did: user.preferences.bluesky.did,
+          });
+
+          const clearedCount = await this.blueskyService.clearSessions(
+            user.preferences.bluesky.did,
+          );
+          this.logger.debug('Bluesky session cleanup result:', {
+            clearedCount,
+          });
+        }
+      }
+    } catch (error) {
+      this.logger.error('Error during Bluesky session cleanup:', error);
+    }
+
+    // Delete the session as before
     return this.sessionService.deleteById(data.sessionId);
   }
 

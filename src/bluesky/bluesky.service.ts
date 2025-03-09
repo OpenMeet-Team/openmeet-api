@@ -402,6 +402,74 @@ export class BlueskyService {
     return this.tryResumeSession(tenantId, did);
   }
 
+  /**
+   * Clears all Bluesky sessions for a specific user DID from ElastiCache
+   * @param did The Bluesky DID to clear sessions for
+   * @returns A promise that resolves to the number of cleared session keys
+   */
+  async clearSessions(did: string): Promise<number> {
+    if (!did) {
+      this.logger.warn('Cannot clear sessions: No DID provided');
+      return 0;
+    }
+
+    try {
+      // Construct the session key pattern used by ElastiCacheSessionStore
+      // The actual key pattern is "bluesky:session:did:plc:..." without additional segments
+      const sessionKeyPattern = `bluesky:session:${did}`;
+
+      // Get Redis client
+      if (!this.elasticacheService.isConnected()) {
+        this.logger.warn('Cannot clear sessions: Redis not connected');
+        return 0;
+      }
+
+      const redis = this.elasticacheService.getRedis();
+
+      // First check if the exact key exists
+      const exists = await redis.exists(sessionKeyPattern);
+
+      if (!exists) {
+        // Also try with wildcard pattern as fallback
+        const wildcardPattern = `${sessionKeyPattern}:*`;
+        const keys = await redis.keys(wildcardPattern);
+
+        if (keys.length === 0) {
+          this.logger.debug('No Bluesky session keys found to clear', { did });
+          return 0;
+        }
+
+        await redis.del(keys);
+        this.logger.debug(
+          'Cleared Bluesky session keys with wildcard pattern',
+          {
+            did,
+            count: keys.length,
+            keys,
+          },
+        );
+
+        return keys.length;
+      }
+
+      // Delete the exact key
+      await redis.del(sessionKeyPattern);
+      this.logger.debug('Cleared Bluesky session key', {
+        did,
+        key: sessionKeyPattern,
+      });
+
+      return 1;
+    } catch (error) {
+      this.logger.error('Failed to clear Bluesky sessions from ElastiCache', {
+        did,
+        error: error.message,
+        stack: error.stack,
+      });
+      return 0;
+    }
+  }
+
   // Add a new method to delete an event from Bluesky
   async deleteEventRecord(
     event: EventEntity,
