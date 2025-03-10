@@ -51,6 +51,8 @@ import { AuthBlueskyModule } from './auth-bluesky/auth-bluesky.module';
 import { AuditLoggerService } from './logger/audit-logger.provider';
 import { TracingModule } from './tracing/tracing.module';
 import { BlueskyModule } from './bluesky/bluesky.module';
+import { MatrixModule } from './matrix/matrix.module';
+import { ChatRoomModule } from './chat-room/chat-room.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -129,6 +131,8 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     AuthBlueskyModule,
     BlueskyModule,
     TracingModule,
+    MatrixModule,
+    ChatRoomModule,
   ],
   providers: [
     TenantConnectionService,

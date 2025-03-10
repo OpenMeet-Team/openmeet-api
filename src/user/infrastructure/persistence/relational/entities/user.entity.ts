@@ -232,7 +232,19 @@ export class UserEntity extends EntityRelationalHelper {
     }
   }
 
-  @Column('jsonb', { nullable: true })
+  @Column({ type: String, nullable: true })
+  @Expose({ groups: ['me', 'admin'] })
+  matrixUserId?: string;
+
+  @Column({ type: String, nullable: true })
+  @Exclude({ toPlainOnly: true })
+  matrixAccessToken?: string;
+
+  @Column({ type: String, nullable: true })
+  @Exclude({ toPlainOnly: true })
+  matrixDeviceId?: string;
+
+@Column('jsonb', { nullable: true })
   preferences: {
     bluesky?: {
       avatar?: string;
@@ -240,6 +252,11 @@ export class UserEntity extends EntityRelationalHelper {
       handle?: string;
       connected?: boolean;
       autoPost?: boolean;
+      disconnectedAt?: Date;
+      connectedAt?: Date;
+    };
+    matrix?: {
+      connected?: boolean;
       disconnectedAt?: Date;
       connectedAt?: Date;
     };
