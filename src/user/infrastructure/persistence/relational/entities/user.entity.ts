@@ -160,6 +160,15 @@ export class UserEntity extends EntityRelationalHelper {
   @Column({ type: String, nullable: true })
   zulipUsername?: string;
 
+  @Column({ type: String, nullable: true })
+  matrixUserId?: string;
+
+  @Column({ type: String, nullable: true })
+  matrixAccessToken?: string;
+
+  @Column({ type: String, nullable: true })
+  matrixDeviceId?: string;
+
   @ManyToOne(() => RoleEntity, (role) => role.users)
   @JoinColumn({ name: 'roleId' })
   role: RoleEntity;

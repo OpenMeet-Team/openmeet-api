@@ -29,7 +29,6 @@ import { ApiProperty } from '@nestjs/swagger';
 import { ulid } from 'ulid';
 import slugify from 'slugify';
 import { generateShortCode } from '../../../../../utils/short-code';
-import { ZulipMessage, ZulipTopic } from 'zulip-js';
 import { SourceFields } from '../../../../../core/interfaces/source-data.interface';
 import { EventSourceType } from '../../../../../core/constants/source-type.constant';
 
@@ -156,6 +155,9 @@ export class EventEntity
   @Column({ type: 'integer', nullable: true })
   zulipChannelId: number;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  matrixRoomId: string;
+
   attendeesCount: number;
 
   @Column({ type: 'enum', enum: 'event_source_type', nullable: true })
@@ -172,11 +174,6 @@ export class EventEntity
 
   @Column({ type: 'timestamp', nullable: true })
   lastSyncedAt: Date | null;
-
-  // @Expose()
-  // get attendeesCount(): number {
-  //   return this.attendees ? this.attendees.length : 0;
-  // }
 
   @BeforeInsert()
   generateUlid() {
@@ -198,6 +195,6 @@ export class EventEntity
     }
   }
 
-  messages: ZulipMessage[];
-  topics: ZulipTopic[];
+  messages: any[];
+  topics: any[];
 }

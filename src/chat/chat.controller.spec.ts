@@ -7,8 +7,8 @@ import {
   mockChat,
   mockChatService,
   mockUser,
-  mockZulipMessage,
-  mockZulipMessageResponse,
+  mockMatrixMessage,
+  mockMatrixMessageResponse,
 } from '../test/mocks';
 
 describe('ChatController', () => {
@@ -40,11 +40,17 @@ describe('ChatController', () => {
 
   describe('showChats', () => {
     it('should find all chats', async () => {
+      jest
+        .spyOn(chatService, 'getChats')
+        .mockResolvedValue({ chats: [mockChat], chat: mockChat });
       const result = await controller.showChats(mockUser);
       expect(result).toEqual({ chats: [mockChat], chat: mockChat });
     });
 
     it('should return chat', async () => {
+      jest
+        .spyOn(chatService, 'getChats')
+        .mockResolvedValue({ chats: [mockChat], chat: mockChat });
       const result = await controller.showChats(mockUser, {
         chat: mockChat.ulid,
       });
@@ -53,7 +59,7 @@ describe('ChatController', () => {
 
     it('should not return own user chat', async () => {
       jest
-        .spyOn(chatService, 'showChats')
+        .spyOn(chatService, 'getChats')
         .mockResolvedValue({ chats: [mockChat], chat: null });
       const result = await controller.showChats(mockUser, {
         member: mockUser.ulid,
@@ -64,23 +70,29 @@ describe('ChatController', () => {
 
   describe('sendMessage', () => {
     it('should send a message', async () => {
+      jest
+        .spyOn(chatService, 'sendMessage')
+        .mockResolvedValue(mockMatrixMessageResponse);
       const result = await controller.sendMessage(
         mockChat.ulid,
         { content: 'test message' },
         mockUser,
       );
 
-      expect(result).toEqual(mockZulipMessageResponse);
+      expect(result).toEqual(mockMatrixMessageResponse);
     });
   });
 
   describe('setMessagesRead', () => {
     it('should set messages as read', async () => {
-      const result = await controller.setMessagesRead(
-        { messages: [mockZulipMessage.id] },
+      jest
+        .spyOn(chatService, 'markMessagesAsRead')
+        .mockResolvedValue({ messages: [mockMatrixMessage.id] });
+      const result = await controller.setMessagesAsRead(
+        { roomId: 'room123', eventId: mockMatrixMessage.id },
         mockUser,
       );
-      expect(result).toEqual({ messages: [mockZulipMessage.id] });
+      expect(result).toEqual({ messages: [mockMatrixMessage.id] });
     });
   });
 });

@@ -35,9 +35,9 @@ import {
   mockRepository,
   mockTenantConnectionService,
   mockUserService,
-  mockZulipMessage,
-  mockZulipMessageResponse,
-  mockZulipService,
+  mockMatrixMessage,
+  mockMatrixMessageResponse,
+  mockMatrixService,
 } from '../test/mocks';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { mockUser } from '../test/mocks';
@@ -46,7 +46,7 @@ import { GroupMemberEntity } from '../group-member/infrastructure/persistence/re
 import { GroupRoleService } from '../group-role/group-role.service';
 import { MailService } from '../mail/mail.service';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
-import { ZulipService } from '../zulip/zulip.service';
+import { MatrixService } from '../matrix/matrix.service';
 import { UserService } from '../user/user.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupMailService } from '../group-mail/group-mail.service';
@@ -107,8 +107,19 @@ describe('GroupService', () => {
           useValue: mockMailService,
         },
         {
-          provide: ZulipService,
-          useValue: mockZulipService,
+          provide: MatrixService,
+          useValue: mockMatrixService,
+        },
+        {
+          provide: 'ZulipService',
+          useValue: {
+            sendMessage: jest.fn(),
+            updateMessage: jest.fn(),
+            deleteMessage: jest.fn(),
+            getInitializedClient: jest.fn(),
+            createStream: jest.fn(),
+            getStreamId: jest.fn(),
+          },
         },
         {
           provide: UserService,
@@ -443,18 +454,18 @@ describe('GroupService', () => {
         mockUser.id,
         { message: 'test', topicName: 'test' },
       );
-      expect(result).toEqual(mockZulipMessageResponse);
+      expect(result).toEqual(mockMatrixMessageResponse);
     });
   });
 
   describe('updateGroupDiscussionMessage', () => {
     it('should update a group discussion message', async () => {
       const result = await service.updateGroupDiscussionMessage(
-        mockZulipMessage.id,
+        mockMatrixMessage.id,
         'test',
         mockUser.id,
       );
-      expect(result).toEqual(mockZulipMessageResponse);
+      expect(result).toEqual(mockMatrixMessageResponse);
     });
   });
 

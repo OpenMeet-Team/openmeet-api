@@ -307,7 +307,10 @@ export class EventController {
   async deleteEventDiscussionMessage(
     @Param('slug') slug: string,
     @Param('messageId') messageId: number,
-  ): Promise<{ id: number }> {
-    return this.eventDiscussionService.deleteEventDiscussionMessage(messageId);
+  ): Promise<{ id: number; eventId: string }> {
+    // We only pass messageId since the service implementation has been updated
+    return this.eventDiscussionService.deleteEventDiscussionMessage(
+      messageId.toString()
+    );
   }
 }

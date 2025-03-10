@@ -66,6 +66,8 @@ export class UserService {
     this.usersRepository = dataSource.getRepository(UserEntity);
     this.userPermissionRepository =
       dataSource.getRepository(UserPermissionEntity);
+
+    return this.usersRepository;
   }
 
   async getUserPermissions(userId: number): Promise<UserPermissionEntity[]> {
@@ -453,6 +455,42 @@ export class UserService {
     user.zulipApiKey = zulipApiKey;
     user.zulipUsername = zulipUsername;
     return this.usersRepository.save(user as UserEntity);
+  }
+
+  async addMatrixCredentialsToUser(
+    userId: number,
+    {
+      matrixUserId,
+      matrixAccessToken,
+      matrixDeviceId,
+    }: {
+      matrixUserId: string;
+      matrixAccessToken: string;
+      matrixDeviceId: string;
+    },
+    tenantId?: string,
+  ) {
+    const usersRepository = await this.getTenantSpecificRepository(tenantId);
+    const user = await usersRepository.findOneBy({ id: userId });
+
+    if (!user) {
+      throw new Error(`User with ID ${userId} not found`);
+    }
+
+    user.matrixUserId = matrixUserId;
+    user.matrixAccessToken = matrixAccessToken;
+    user.matrixDeviceId = matrixDeviceId;
+
+    await usersRepository.save(user);
+    return user;
+  }
+
+  async findOneByMatrixUserId(
+    matrixUserId: string,
+    tenantId?: string,
+  ): Promise<UserEntity | null> {
+    const usersRepository = await this.getTenantSpecificRepository(tenantId);
+    return usersRepository.findOneBy({ matrixUserId });
   }
 
   async update(

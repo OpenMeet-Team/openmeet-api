@@ -175,44 +175,61 @@ export class GroupController {
     return this.groupService.showGroupDiscussions(slug);
   }
 
-  @Public()
-  @UseGuards(JWTAuthGuard, VisibilityGuard)
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.MessageDiscussion],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/discussions')
   @ApiOperation({ summary: 'Send a message to a group discussion' })
   async sendGroupDiscussionMessage(
     @Param('slug') slug: string,
     @AuthUser() user: User,
     @Body() body: { message: string; topicName: string },
-  ): Promise<{ id: number }> {
+  ): Promise<{ id: number } | { eventId: string }> {
     return this.groupService.sendGroupDiscussionMessage(slug, user.id, body);
   }
 
-  @Public()
-  @UseGuards(JWTAuthGuard, VisibilityGuard)
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.MessageDiscussion],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Patch(':slug/discussions/:messageId')
-  @ApiOperation({ summary: 'Update a group discussion message' })
+  @ApiOperation({ summary: 'Update a message in a group discussion' })
   async updateGroupDiscussionMessage(
     @Param('slug') slug: string,
-    @Param('messageId') messageId: number,
+    @Param('messageId') messageId: string,
     @AuthUser() user: User,
     @Body() body: { message: string },
-  ): Promise<{ id: number }> {
+  ): Promise<{ id: number } | { eventId: string }> {
+    // Convert messageId to number if it's a numeric string (for Zulip)
+    const parsedMessageId = /^\d+$/.test(messageId)
+      ? parseInt(messageId, 10)
+      : messageId;
     return this.groupService.updateGroupDiscussionMessage(
-      messageId,
+      parsedMessageId,
       body.message,
       user.id,
     );
   }
 
-  @Public()
-  @UseGuards(JWTAuthGuard, VisibilityGuard)
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.ManageDiscussions],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Delete(':slug/discussions/:messageId')
-  @ApiOperation({ summary: 'Delete a group discussion message' })
+  @ApiOperation({ summary: 'Delete a message from a group discussion' })
   async deleteGroupDiscussionMessage(
     @Param('slug') slug: string,
-    @Param('messageId') messageId: number,
-  ): Promise<{ id: number }> {
-    return this.groupService.deleteGroupDiscussionMessage(messageId);
+    @Param('messageId') messageId: string,
+  ): Promise<{ id: number } | { eventId: string }> {
+    // Convert messageId to number if it's a numeric string (for Zulip)
+    const parsedMessageId = /^\d+$/.test(messageId)
+      ? parseInt(messageId, 10)
+      : messageId;
+    return this.groupService.deleteGroupDiscussionMessage(slug, parsedMessageId);
   }
 
   @Public()

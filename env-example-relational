@@ -89,6 +89,10 @@ ZULIP_USERNAME=
 ZULIP_API_KEY=
 ZULIP_REALM=
 
+# Matrix
+MATRIX_SERVER_URL=https://matrix.example.com
+MATRIX_ADMIN_USERNAME=admin
+MATRIX_ADMIN_PASSWORD=some-admin-password
 
 # ElastiCache Configuration
 ELASTICACHE_HOST=redis

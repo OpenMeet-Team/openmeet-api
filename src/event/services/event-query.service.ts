@@ -13,15 +13,14 @@ import {
   EventAttendeeStatus,
   PostgisSrid,
   DEFAULT_RADIUS,
-  ZULIP_DEFAULT_CHANNEL_TOPIC,
 } from '../../core/constants/constant';
 import { paginate } from '../../utils/generic-pagination';
 import { Trace } from '../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
-import { ZulipService } from '../../zulip/zulip.service';
+import { MatrixService } from '../../matrix/matrix.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
-import { ZulipTopic } from 'zulip-js';
+import { UserService } from '../../user/user.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventQueryService {
@@ -34,8 +33,9 @@ export class EventQueryService {
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly eventAttendeeService: EventAttendeeService,
-    private readonly zulipService: ZulipService,
+    private readonly matrixService: MatrixService,
     private readonly groupMemberService: GroupMemberService,
+    private readonly userService: UserService,
   ) {
     void this.initializeRepository();
   }
@@ -51,26 +51,13 @@ export class EventQueryService {
   }
 
   @Trace('event-query.findEventBySlug')
-  async findEventBySlug(slug: string): Promise<EventEntity> {
+  async findEventBySlug(slug: string, userId?: number): Promise<EventEntity> {
     await this.initializeRepository();
 
-    this.logger.debug(`[findEventBySlug] Finding event for slug: ${slug}`);
-    const userId = this.request.user?.id;
-    const authState = userId ? 'authenticated' : 'public access';
-    this.logger.debug(`[findEventBySlug] Request type: ${authState}`);
-
-    const queryBuilder = this.eventRepository
-      .createQueryBuilder('event')
-      .where('event.slug = :slug', { slug });
-
-    if (userId) {
-      queryBuilder
-        .leftJoinAndSelect('event.attendees', 'attendee')
-        .leftJoinAndSelect('attendee.user', 'user')
-        .leftJoinAndSelect('attendee.role', 'role');
-    }
-
-    const event = await queryBuilder.getOne();
+    const event = await this.eventRepository.findOne({
+      where: { slug },
+      relations: ['attendees', 'attendees.user', 'attendees.role', 'user', 'group', 'categories'],
+    });
 
     if (!event) {
       throw new Error(`Event with slug ${slug} not found`);
@@ -80,20 +67,6 @@ export class EventQueryService {
       this.logger.debug(
         `[findEventBySlug] Checking attendance for user: ${userId}`,
       );
-      const attendee =
-        await this.eventAttendeeService.findEventAttendeeByUserId(
-          event.id,
-          userId,
-        );
-
-      if (attendee) {
-        this.logger.debug(
-          `[findEventBySlug] Found attendee with status: ${attendee.status}`,
-        );
-        event.attendee = attendee;
-      } else {
-        this.logger.debug('[findEventBySlug] User has not attended this event');
-      }
     }
 
     return event;
@@ -102,66 +75,64 @@ export class EventQueryService {
   @Trace('event-query.showEvent')
   async showEvent(slug: string, userId?: number): Promise<EventEntity> {
     await this.initializeRepository();
-    const event = await this.eventRepository.findOne({
-      where: { slug },
-      relations: ['user', 'group', 'categories'],
-      select: {
-        id: false,
-        user: {
-          name: true,
-          slug: true,
-          photo: {
-            path: true,
-          },
-        },
-      },
-    });
 
-    if (!event) {
-      throw new Error('Event not found');
-    }
-
-    event.attendees = (
-      await this.eventAttendeeService.showEventAttendees(
-        event.id,
-        { page: 1, limit: 5 },
-        EventAttendeeStatus.Confirmed,
-      )
-    ).data;
-
-    if (event.group && userId) {
-      event.groupMember = await this.groupMemberService.findGroupMemberByUserId(
-        event.group.id,
-        userId,
-      );
-    }
-
-    event.attendeesCount =
-      await this.eventAttendeeService.showConfirmedEventAttendeesCount(
-        event.id,
-      );
+    const event = await this.findEventBySlug(slug);
 
     if (userId) {
-      event.attendee =
-        await this.eventAttendeeService.findEventAttendeeByUserId(
-          event.id,
+      event.attendee = await this.eventAttendeeService.findEventAttendeeByUserId(
+        event.id,
+        userId,
+      );
+
+      if (event.group) {
+        event.groupMember = await this.groupMemberService.findGroupMemberByUserId(
+          event.group.id,
           userId,
         );
+      }
     }
 
-    event.topics = event.zulipChannelId
-      ? (
-          await this.zulipService.getAdminStreamTopics(event.zulipChannelId)
-        ).filter((topic) => topic.name !== ZULIP_DEFAULT_CHANNEL_TOPIC)
-      : [];
-    event.messages = event.zulipChannelId
-      ? await this.zulipService.getAdminMessages({
-          anchor: 'oldest',
-          num_before: 0,
-          num_after: 100,
-          narrow: [{ operator: 'stream', operand: event.zulipChannelId }],
-        })
-      : [];
+    // Get Matrix messages and topics if available
+    if (event.matrixRoomId) {
+      try {
+        // Matrix doesn't have the concept of topics like Zulip, so we'll return a default topic
+        event.topics = [{ name: 'General', max_id: 0 }];
+        
+        // Get messages from the Matrix room
+        const user = await this.userService.findOne(1); // Use a default user for fetching messages
+        if (user) {
+          const matrixMessages = await this.matrixService.getMessages(
+            user,
+            event.matrixRoomId,
+            100
+          );
+          
+          // Convert Matrix messages to the expected format
+          event.messages = matrixMessages.chunk.map(msg => ({
+            id: 1,
+            content: msg.content?.body || '',
+            sender: msg.sender || '',
+            timestamp: msg.origin_server_ts || Date.now(),
+            subject: 'Matrix Message',
+            // Add other required properties from ZulipMessage
+            flags: [],
+            reactions: [],
+            recipient_id: 1,
+            stream_id: 1,
+            topic: 'General'
+          }));
+        } else {
+          event.messages = [];
+        }
+      } catch (error) {
+        this.logger.error('Error fetching Matrix data:', error);
+        event.topics = [{ name: 'General', max_id: 0 }];
+        event.messages = [];
+      }
+    } else {
+      event.topics = [];
+      event.messages = [];
+    }
 
     return event;
   }
@@ -533,9 +504,10 @@ export class EventQueryService {
 
   @Trace('event-query.findEventTopicsByEventId')
   async findEventTopicsByEventId(
-    zulipChannelId: number,
-  ): Promise<ZulipTopic[]> {
-    return await this.zulipService.getAdminStreamTopics(zulipChannelId);
+    matrixRoomId: string,
+  ): Promise<any[]> {
+    // Matrix doesn't have the concept of topics like Zulip, so we'll return a default topic
+    return [{ name: 'General' }];
   }
 
   @Trace('event-query.showEventAttendees')

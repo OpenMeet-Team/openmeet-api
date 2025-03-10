@@ -4,13 +4,13 @@ import {
   mockTenantConnectionService,
   mockUser,
   mockUserService,
-  mockZulipMessageResponse,
+  mockMatrixMessageResponse,
 } from '../test/mocks';
 import { ChatService } from './chat.service';
-import { mockRepository, mockZulipService } from '../test/mocks';
+import { mockRepository, mockMatrixService } from '../test/mocks';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Repository } from 'typeorm';
-import { ZulipService } from '../zulip/zulip.service';
+import { MatrixService } from '../matrix/matrix.service';
 import { UserService } from '../user/user.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
@@ -33,8 +33,8 @@ describe('ChatService', () => {
           useValue: { tenantId: TESTING_TENANT_ID },
         },
         {
-          provide: ZulipService,
-          useValue: mockZulipService,
+          provide: MatrixService,
+          useValue: mockMatrixService,
         },
         {
           provide: UserService,
@@ -101,13 +101,13 @@ describe('ChatService', () => {
     it('should return message', async () => {
       jest
         .spyOn(service, 'sendMessage')
-        .mockResolvedValue(mockZulipMessageResponse as any);
+        .mockResolvedValue(mockMatrixMessageResponse as any);
       const result = await service.sendMessage(
         mockChat.ulid,
         mockUser.id,
         'test message',
       );
-      expect(result).toEqual(mockZulipMessageResponse);
+      expect(result).toEqual(mockMatrixMessageResponse);
     });
   });
 

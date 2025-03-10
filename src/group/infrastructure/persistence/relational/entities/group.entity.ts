@@ -29,7 +29,6 @@ import { ApiProperty } from '@nestjs/swagger';
 import { ulid } from 'ulid';
 import slugify from 'slugify';
 import { generateShortCode } from '../../../../../utils/short-code';
-import { ZulipMessage, ZulipTopic } from 'zulip-js';
 
 @Entity({ name: 'groups' })
 export class GroupEntity extends EntityRelationalHelper {
@@ -134,8 +133,11 @@ export class GroupEntity extends EntityRelationalHelper {
   @Column({ type: 'integer', nullable: true })
   zulipChannelId: number;
 
-  messages: ZulipMessage[];
-  topics: ZulipTopic[];
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  matrixRoomId: string;
+
+  messages: any[];
+  topics: any[];
 
   groupMembersCount: number;
 

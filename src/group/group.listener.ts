@@ -1,18 +1,20 @@
 import { Injectable } from '@nestjs/common';
-import { ZulipService } from '../zulip/zulip.service';
+import { MatrixService } from '../matrix/matrix.service';
 import { OnEvent } from '@nestjs/event-emitter';
 import { GroupEntity } from './infrastructure/persistence/relational/entities/group.entity';
 
 @Injectable()
 export class GroupListener {
-  constructor(private readonly zulipService: ZulipService) {}
+  constructor(private readonly matrixService: MatrixService) {}
 
   @OnEvent('group.deleted')
   handleGroupDeletedEvent(group: GroupEntity) {
     console.log('group.deleted', group);
 
-    if (group.zulipChannelId) {
-      this.zulipService.deleteChannel(group.zulipChannelId);
+    if (group.matrixRoomId) {
+      // TODO: Implement room deletion in MatrixService
+      // this.matrixService.deleteRoom(group.matrixRoomId);
+      console.log(`Matrix room ${group.matrixRoomId} should be deleted`);
     }
   }
 

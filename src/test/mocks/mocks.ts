@@ -8,6 +8,10 @@ import {
   mockZulipStreamTopic,
 } from './zulip-mocks';
 import {
+  mockMatrixMessage,
+  mockMatrixMessageResponse,
+} from './matrix-mocks';
+import {
   mockEvent,
   mockEvents,
   mockEventService,
@@ -69,7 +73,7 @@ export const mockChat = {
 } as ChatEntity;
 
 export const mockDiscussions = {
-  messages: [mockZulipMessage],
+  messages: [mockMatrixMessage],
   topics: [mockZulipStreamTopic],
 };
 
@@ -78,7 +82,7 @@ export const mockSubCategories = [mockSubCategory];
 export const mockGroupAboutResponse = {
   events: [mockEvent],
   groupMembers: [mockGroupMember],
-  messages: [mockZulipMessage],
+  messages: [mockMatrixMessage],
   topics: [mockZulipStreamTopic],
 };
 
@@ -92,13 +96,13 @@ export const mockMailService = {
 export const mockChatService = {
   getChatByUlid: jest.fn().mockResolvedValue(mockChat),
   getChatByParticipantUlid: jest.fn().mockResolvedValue(mockChat),
-  sendMessage: jest.fn().mockResolvedValue(mockZulipMessageResponse),
-  showChats: jest
+  sendMessage: jest.fn().mockResolvedValue(mockMatrixMessageResponse),
+  getChats: jest
     .fn()
     .mockResolvedValue({ chats: [mockChat], chat: mockChat || null }),
-  setMessagesRead: jest
+  markMessagesAsRead: jest
     .fn()
-    .mockResolvedValue({ messages: [mockZulipMessage.id] }),
+    .mockResolvedValue({ messages: [mockMatrixMessage.id] }),
 };
 
 export const mockCategoryService = {

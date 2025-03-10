@@ -8,6 +8,7 @@ import { mockEvents } from './event-mocks';
 import { mockZulipMessageResponse } from './zulip-mocks';
 import { GroupRole } from '../../core/constants/constant';
 import { GroupRoleEntity } from '../../group-role/infrastructure/persistence/relational/entities/group-role.entity';
+import { mockMatrixMessageResponse } from './matrix-mocks';
 
 export const mockGroupRole = {
   id: 1,
@@ -92,13 +93,13 @@ export const mockGroupService = {
   updateGroupMemberRole: jest.fn().mockResolvedValue(mockGroupMember),
   deleteGroupDiscussionMessage: jest
     .fn()
-    .mockResolvedValue(mockZulipMessageResponse),
+    .mockResolvedValue(mockMatrixMessageResponse),
   updateGroupDiscussionMessage: jest
     .fn()
-    .mockResolvedValue(mockZulipMessageResponse),
+    .mockResolvedValue(mockMatrixMessageResponse),
   sendGroupDiscussionMessage: jest
     .fn()
-    .mockResolvedValue(mockZulipMessageResponse),
+    .mockResolvedValue(mockMatrixMessageResponse),
   showGroupAbout: jest.fn().mockResolvedValue(mockGroupAboutResponse),
   showGroupDiscussions: jest.fn().mockResolvedValue(mockDiscussions),
   searchAllGroups: jest.fn().mockResolvedValue(mockGroups),

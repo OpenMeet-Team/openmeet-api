@@ -18,8 +18,8 @@ import {
   mockGroupMemberService,
   mockGroupService,
   mockUser,
-  mockZulipMessage,
-  mockZulipMessageResponse,
+  mockMatrixMessage,
+  mockMatrixMessageResponse,
 } from '../test/mocks';
 import { mockEvents } from '../test/mocks';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
@@ -367,13 +367,13 @@ describe('EventController', () => {
     it('should send an event discussion message', async () => {
       jest
         .spyOn(eventDiscussionService, 'sendEventDiscussionMessage')
-        .mockResolvedValue(mockZulipMessageResponse);
+        .mockResolvedValue(mockMatrixMessageResponse);
       const result = await controller.sendEventDiscussionMessage(
         mockEvent.slug,
         mockUser,
         { message: 'Test Message', topicName: 'Test Topic' },
       );
-      expect(result).toEqual(mockZulipMessageResponse);
+      expect(result).toEqual(mockMatrixMessageResponse);
     });
   });
 
@@ -381,14 +381,14 @@ describe('EventController', () => {
     it('should update an event discussion message', async () => {
       jest
         .spyOn(eventDiscussionService, 'updateEventDiscussionMessage')
-        .mockResolvedValue(mockZulipMessageResponse);
+        .mockResolvedValue(mockMatrixMessageResponse);
       const result = await controller.updateEventDiscussionMessage(
         mockEvent.slug,
-        mockZulipMessage.id,
+        mockMatrixMessage.id,
         mockUser,
         { message: 'Updated Message' },
       );
-      expect(result).toEqual(mockZulipMessageResponse);
+      expect(result).toEqual(mockMatrixMessageResponse);
     });
   });
 
@@ -396,12 +396,12 @@ describe('EventController', () => {
     it('should delete an event discussion message', async () => {
       jest
         .spyOn(eventDiscussionService, 'deleteEventDiscussionMessage')
-        .mockResolvedValue(mockZulipMessageResponse);
+        .mockResolvedValue(mockMatrixMessageResponse);
       const result = await controller.deleteEventDiscussionMessage(
         mockEvent.slug,
-        mockZulipMessage.id,
+        mockMatrixMessage.id,
       );
-      expect(result).toEqual(mockZulipMessageResponse);
+      expect(result).toEqual(mockMatrixMessageResponse);
     });
   });
 

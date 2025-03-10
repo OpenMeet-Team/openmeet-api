@@ -10,15 +10,17 @@ import {
   mockRepository,
   mockUser,
   mockEventAttendeeService,
-  mockZulipService,
+  mockMatrixService,
   mockGroupMemberService,
+  mockUserService,
 } from '../../test/mocks';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { EventQueryService } from './event-query.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
-import { ZulipService } from '../../zulip/zulip.service';
+import { MatrixService } from '../../matrix/matrix.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
+import { UserService } from '../../user/user.service';
 import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 
 describe('EventQueryService', () => {
@@ -42,12 +44,16 @@ describe('EventQueryService', () => {
           useValue: mockEventAttendeeService,
         },
         {
-          provide: ZulipService,
-          useValue: mockZulipService,
+          provide: MatrixService,
+          useValue: mockMatrixService,
         },
         {
           provide: GroupMemberService,
           useValue: mockGroupMemberService,
+        },
+        {
+          provide: UserService,
+          useValue: mockUserService,
         },
         {
           provide: getRepositoryToken(EventEntity),
