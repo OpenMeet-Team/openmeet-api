@@ -1099,14 +1099,9 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
         content.formatted_body = formatted_body;
       }
 
-      // Do NOT add thread relation unless explicitly requested
-      // This will prevent automatic threading of messages
-      if (relationshipType && relationshipEventId) {
-        content['m.relates_to'] = {
-          rel_type: relationshipType,
-          event_id: relationshipEventId,
-        };
-      }
+      // Removing thread relations entirely for simplified message model
+      // We don't use threading in our simplified model
+      // Keeping this comment as a placeholder for future reference
 
       // If a specific sender is provided, try to send as that user
       if (

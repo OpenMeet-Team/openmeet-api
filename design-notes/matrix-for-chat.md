@@ -20,7 +20,7 @@ The transition from Zulip to Matrix will be designed to be seamless from the use
 3. **Chat Organization**
    - Clearer distinction between group chats and event chats
    - Improved notification settings per chat room
-   - Better thread support for organized conversations
+   - Simplified chronological messaging for all conversations
 
 4. **Mobile Experience**
    - More responsive interface on mobile devices
@@ -100,6 +100,135 @@ The transition from Zulip to Matrix will be designed to be seamless from the use
    - Handle image resizing and thumbnails
    - Implement media caching for performance
 
+## Client Implementation Details
+
+### Key Design Decisions
+
+#### User Registration: Admin API vs. Shared Secret
+
+We've chosen to use the Matrix Admin API exclusively for user registration instead of the shared secret registration method.
+
+**Rationale:**
+- More secure - doesn't require storing a shared secret in configuration
+- Provides better isolation from implementation details of the Matrix server
+- Works with any Matrix server implementation, not just Synapse
+- Gives us more granular control over user creation
+- Simplifies configuration by removing an environment variable
+
+**Implementation:**
+- Uses `PUT /_synapse/admin/v2/users/@username:server` endpoint
+- Sets password and admin status directly
+- Performs standard login to obtain the user's access token and device ID
+- No dependency on Synapse-specific registration endpoints
+
+#### Client Instance Management: User-Specific Instances with Lifecycle Management
+
+We've implemented a sophisticated approach for real-time Matrix client management:
+
+**Architecture:**
+- Each active user gets a dedicated Matrix client instance
+- Admin operations use a separate connection pool
+- Clients have automatic lifecycle management
+
+**How it works:**
+1. **Client Creation & Start**
+   - When a user accesses chat, a dedicated Matrix client is created
+   - Client is configured with the user's credentials (userId, accessToken, deviceId)
+   - Client starts syncing to receive real-time events
+   - Event callbacks are registered for handling messages
+
+2. **Activity Tracking**
+   - Each client tracks the last activity timestamp
+   - Activity is updated when the user interacts with chat
+
+3. **Automatic Cleanup**
+   - Inactive clients (no activity for 2 hours) are automatically cleaned up
+   - Cleanup runs periodically to prevent resource exhaustion
+   - When service is shut down, all clients are properly stopped
+
+4. **Event Handling**
+   - Real-time events are delivered through callbacks
+   - Multiple callbacks can be registered per client
+   - Callbacks can be added/removed dynamically
+
+5. **Message Retrieval**
+   - Smart message retrieval that uses synced data when available
+   - Falls back to REST API for historical messages
+   - Optimized for both real-time and historical data access
+
+### Real-time Updates Implementation
+
+#### Server-Side (NestJS API)
+
+1. **Event Sources**
+   - Matrix client instances are maintained for each active user
+   - Each Matrix client syncs with the Matrix server in real-time
+   - Events are filtered and processed server-side
+
+2. **SSE Endpoint**
+   - Endpoint: `/api/matrix/events`
+   - Authentication: Uses cookie-based auth to identify the user
+   - Response type: `text/event-stream`
+   - Implementation: NestJS SSE module with event processing
+
+3. **Event Flow**
+   - Matrix client receives events via sync API
+   - Events are filtered by type and relevance
+   - Events are sent to the browser via SSE
+   - Connection cleanup happens automatically when client disconnects
+
+#### Client-Side (Vue.js/Quasar)
+
+1. **Matrix Service**
+   - Singleton service to manage Matrix SSE connection
+   - Handles connection, error recovery, and event distribution
+   - Provides a consistent API for consuming Matrix events
+
+2. **Store Integration**
+   - Unified message store handles all real-time message events
+   - Single consistent approach for all messaging contexts
+   - Store subscribes to Matrix events via the Matrix service
+
+3. **UI Components**
+   - MessagesPage displays direct messages with real-time updates
+   - DiscussionComponent shows chronological group/event discussions
+   - All components use a consistent message display pattern
+   - All implement typing indicators and read receipts
+
+#### Event Handling
+
+Events from the server are structured with specific event types:
+
+```
+event: m.room.message
+data: {"room_id":"!room123:matrix.org","event_id":"$event456",
+  "sender":"@user:matrix.org","content":{"body":"Hello world"}}
+```
+
+The Matrix service processes these events:
+
+```typescript
+eventSource.addEventListener('m.room.message', this.handleRoomMessage.bind(this))
+eventSource.addEventListener('m.typing', this.handleTyping.bind(this))
+eventSource.addEventListener('m.receipt', this.handleReceipt.bind(this))
+```
+
+#### Error Recovery
+
+The implementation includes sophisticated error recovery:
+
+1. **Connection monitoring**
+   - Tracks connection status
+   - Detects disconnections and errors
+
+2. **Exponential backoff**
+   - Progressive delays between reconnection attempts
+   - Prevents overwhelming the server during outages
+
+3. **State restoration**
+   - Maintains connection state
+   - Resumes from last known point after reconnection
+
 ### Migration Strategy (Hard Cutover)
 
 1. **Pre-Cutover Preparation**
@@ -157,42 +286,6 @@ The transition from Zulip to Matrix will be designed to be seamless from the use
    - Challenge: Graceful handling of Matrix service disruptions
    - Solution: Implement circuit breakers, fallback mechanisms, and clear user feedback
 
-### Integration with Existing Systems
-
-1. **User System**
-   - Extend user creation process to create Matrix accounts
-   - Update user profile changes to sync with Matrix
-
-2. **Group System**
-   - Extend group creation to create Matrix rooms
-   - Update group membership changes to update Matrix room membership
-
-3. **Event System**
-   - Create Matrix rooms for events with appropriate settings
-   - Handle event lifecycle (creation, updates, cancellation) in Matrix
-
-4. **Notification System**
-   - Use Matrix to deliver chat notifications
-   - Integrate with existing notification preferences
-
-### Monitoring and Operations
-
-1. **Metrics to Track**
-   - Message delivery latency
-   - Room creation success rate
-   - User authentication success rate
-   - API response times
-
-2. **Logging Strategy**
-   - Log Matrix API interactions for troubleshooting
-   - Track error rates and types
-   - Monitor user-reported issues
-
-3. **Alerting**
-   - Set up alerts for Matrix service disruptions
-   - Monitor for unusual patterns in usage or errors
-   - Track resource utilization
-
 ## Implementation Phases
 
 ### Phase 1: Infrastructure and Core Service (1 week) - COMPLETED
@@ -216,8 +309,38 @@ The transition from Zulip to Matrix will be designed to be seamless from the use
 - Fixed issues:
   - Display names now properly use OpenMeet user names instead of Matrix IDs
   - Messages no longer show with incorrect "General" prefix
-  - Fixed message indentation/threading issues
   - Improved real-time updates when new messages arrive
+
+### Phase 1.5: Simplification of Message Model (1 week) 🔄 IN PROGRESS
+
+**Implementation Status:**
+
+**Completed:**
+- ✅ Remove thread relations support from Matrix service
+- ✅ Create unified message store to replace chat-store and discussion-store
+- ✅ Update API methods to remove topic formatting
+- ✅ Update event-discussion service to remove topic handling
+- ✅ Create standardized UI components for messaging
+
+**Remaining:**
+- ⏳ Update existing event pages to use the new unified message component
+- ⏳ Update group discussion pages to use the new unified message component
+- ⏳ Update direct message pages to use the new unified message component
+- ⏳ Handle graceful migration of any existing threaded discussions
+- ⏳ Add comprehensive tests for the unified message components
+- ⏳ Update message type definitions to remove topic-related fields
+
+**Next Steps:**
+1. Complete UI component migration to use the unified message store
+2. Update the frontend routes and pages to use the new components
+3. Add tests for the simplified message model
+4. Update documentation for developers
+
+**Benefits:**
+- Simpler, more maintainable codebase
+- More consistent user experience across the platform
+- Better alignment with Matrix's native messaging model
+- Reduced complexity in state management
 
 ### Phase 2: Feature Implementation (2 weeks)
 - Implement all chat functionality (messaging, rooms, media)
@@ -243,6 +366,36 @@ The transition from Zulip to Matrix will be designed to be seamless from the use
 - Collect user feedback
 - Optimize based on real-world usage
 
+## Simplification of Message Model
+
+As of Phase 1.5, we've made the decision to simplify our messaging model by removing topic-based threading in favor of standard chronological messaging. This simplification offers several benefits:
+
+1. **More Consistent with Matrix**
+   - Aligns with Matrix's native message timeline model
+   - Leverages Matrix's strengths without adding complex abstractions
+
+2. **Simpler Implementation**
+   - Unified message store instead of separate chat/discussion stores
+   - Reduced complexity in state management
+   - More maintainable codebase with fewer edge cases
+
+3. **Better User Experience**
+   - Consistent message display across all contexts
+   - Familiar chat experience similar to other messaging platforms
+   - Reduced learning curve for users
+
+### Implementation Changes
+
+1. **Client-Side**
+   - Removed topic metadata from messages
+   - Unified chat and discussion stores
+   - Standardized UI components for message display
+
+2. **Server-Side**
+   - Simplified message handling in Matrix service
+   - Consistent API endpoints for all messaging contexts
+   - Streamlined data model for messages
+
 ## Future Enhancements
 
 1. **End-to-End Encryption**
@@ -260,3 +413,16 @@ The transition from Zulip to Matrix will be designed to be seamless from the use
 4. **Advanced Search**
    - Implement full-text search across chat history
    - Provide advanced filtering options
+
+5. **Connection Optimization**
+   - Implement smarter connection management based on user activity patterns
+   - Potential for shared syncing for users in the same rooms
+
+6. **Performance Monitoring**
+   - Track sync performance metrics
+   - Identify and address bottlenecks
+
+7. **Offline Support**
+   - Cache messages when offline
+   - Queue outgoing messages
+   - Sync when connection is restored

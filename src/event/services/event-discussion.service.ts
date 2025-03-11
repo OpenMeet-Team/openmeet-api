@@ -88,24 +88,14 @@ export class EventDiscussionService {
     // Get or create chat room for the event
     const chatRoom = await this.ensureEventChatRoom(event.id, userId);
 
-    // Format message with topic if provided
-    let formattedMessage: string | undefined;
-    let plainMessage = body.message;
-
-    // Only use topic formatting if explicitly requested
-    if (body.topicName && body.topicName !== 'General') {
-      // Add topic as an HTML heading
-      formattedMessage = `<h4>${body.topicName}</h4><p>${body.message}</p>`;
-      // Include topic in plain text too
-      plainMessage = `${body.topicName}: ${body.message}`;
-    }
+    // Simplified approach - no topic formatting
+    const plainMessage = body.message;
 
     // Send the message to the chat room
     const messageId = await this.chatRoomService.sendMessage(
       chatRoom.id,
       userId,
       plainMessage,
-      formattedMessage,
     );
 
     return { id: messageId };
@@ -140,12 +130,49 @@ export class EventDiscussionService {
     }
 
     // Get messages from the first (main) chat room
-    return await this.chatRoomService.getMessages(
+    const messageData = await this.chatRoomService.getMessages(
       chatRooms[0].id,
       userId,
       limit,
       from,
     );
+    
+    // Enhance messages with user display names
+    const enhancedMessages = await Promise.all(
+      messageData.messages.map(async (message) => {
+        try {
+          // Get user info from our database based on Matrix ID
+          const userMatrixId = message.sender;
+          
+          // Find the OpenMeet user with this Matrix ID
+          const userWithMatrixId = await this.userService.findByMatrixUserId(userMatrixId);
+          
+          // If we found a user, add their name to the message
+          if (userWithMatrixId) {
+            const displayName = [userWithMatrixId.firstName, userWithMatrixId.lastName]
+              .filter(Boolean)
+              .join(' ') || userWithMatrixId.email?.split('@')[0] || 'OpenMeet User';
+            
+            return {
+              ...message,
+              sender_name: displayName
+            };
+          }
+          
+          return message;
+        } catch (error) {
+          this.logger.warn(
+            `Error getting display name for message sender ${message.sender}: ${error.message}`,
+          );
+          return message;
+        }
+      }),
+    );
+
+    return {
+      messages: enhancedMessages,
+      end: messageData.end,
+    };
   }
 
   /**

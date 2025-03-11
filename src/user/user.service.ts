@@ -619,4 +619,29 @@ export class UserService {
     }
     return user;
   }
+  
+  /**
+   * Find a user by their Matrix user ID
+   */
+  async findByMatrixUserId(
+    matrixUserId: string, 
+    tenantId?: string
+  ): Promise<NullableType<UserEntity>> {
+    if (!matrixUserId) return null;
+    
+    await this.getTenantSpecificRepository(tenantId);
+    
+    try {
+      return this.usersRepository.findOne({
+        where: { matrixUserId },
+        select: ['id', 'firstName', 'lastName', 'email', 'matrixUserId']
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Error finding user by Matrix ID ${matrixUserId}: ${error.message}`,
+        error.stack,
+      );
+      return null;
+    }
+  }
 }
