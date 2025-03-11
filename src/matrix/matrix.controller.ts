@@ -6,6 +6,12 @@ import {
   HttpCode,
   Logger,
   Inject,
+  Sse,
+  MessageEvent,
+  Res,
+  Req,
+  Param,
+  Body,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -16,6 +22,9 @@ import { AuthUser } from '../core/decorators/auth-user.decorator';
 // User entity is imported by the UserService
 import { UserService } from '../user/user.service';
 import * as crypto from 'crypto';
+import { Observable, map, fromEvent } from 'rxjs';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Request, Response } from 'express';
 
 @ApiTags('Matrix')
 @Controller({
@@ -27,6 +36,7 @@ export class MatrixController {
   constructor(
     private readonly matrixService: MatrixService,
     private readonly userService: UserService,
+    private readonly eventEmitter: EventEmitter2,
     @Inject(REQUEST) private readonly request: any,
   ) {}
 
@@ -95,17 +105,21 @@ export class MatrixController {
           password,
           displayName,
         });
-        
+
       // Make sure display name is set properly (sometimes it doesn't get set during creation)
       try {
         await this.matrixService.setUserDisplayNameDirect(
           matrixUserInfo.userId,
           matrixUserInfo.accessToken,
-          displayName
+          displayName,
         );
-        this.logger.log(`Set Matrix display name for ${matrixUserInfo.userId} to "${displayName}"`);
+        this.logger.log(
+          `Set Matrix display name for ${matrixUserInfo.userId} to "${displayName}"`,
+        );
       } catch (displayNameError) {
-        this.logger.warn(`Failed to set Matrix display name: ${displayNameError.message}`);
+        this.logger.warn(
+          `Failed to set Matrix display name: ${displayNameError.message}`,
+        );
         // Non-fatal error, continue
       }
 
@@ -142,6 +156,131 @@ export class MatrixController {
     } catch (error) {
       this.logger.error(
         `Error provisioning Matrix user: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Server-Sent Events endpoint for Matrix events
+   * Streams Matrix events in real-time to the client
+   */
+  @ApiOperation({
+    summary: 'Stream Matrix events as server-sent events',
+    description:
+      'Establishes a server-sent events connection for real-time Matrix updates.',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'SSE stream established.',
+  })
+  @UseGuards(JWTAuthGuard)
+  @Sse('events')
+  async streamMatrixEvents(
+    @Req() req: Request,
+    @Res() res: Response,
+    @AuthUser() user: { id: number },
+  ): Promise<Observable<MessageEvent>> {
+    this.logger.log(`Setting up SSE connection for user ID: ${user.id}`);
+
+    try {
+      // Get full user information
+      const fullUser = await this.userService.findById(user.id);
+
+      if (!fullUser || !fullUser.matrixUserId || !fullUser.matrixAccessToken) {
+        this.logger.warn(
+          `User ${user.id} doesn't have Matrix credentials, can't stream events`,
+        );
+        // Return empty observable - client will have to provision Matrix user
+        return new Observable<MessageEvent>();
+      }
+
+      // Set up headers for SSE
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      // Start Matrix client for this user if not already running
+      await this.matrixService.startClient({
+        userId: fullUser.matrixUserId,
+        accessToken: fullUser.matrixAccessToken,
+        deviceId: fullUser.matrixDeviceId,
+      });
+
+      // Create a client-specific event stream
+      const userEventStreamKey = `matrix.events.${fullUser.matrixUserId}`;
+
+      // Create an observable from the EventEmitter events
+      return fromEvent(this.eventEmitter, userEventStreamKey).pipe(
+        map((event: any): MessageEvent => {
+          // Map the event to a format expected by SSE
+          // Determine the event type
+          let eventType = 'message';
+
+          if (event.type) {
+            eventType = event.type; // Use the Matrix event type if available
+          }
+
+          return {
+            type: eventType,
+            data: JSON.stringify(event),
+          };
+        }),
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error setting up SSE for user ${user.id}: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Send typing notification to a Matrix room
+   */
+  @ApiOperation({
+    summary: 'Send typing notification to a Matrix room',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Typing notification sent successfully',
+  })
+  @UseGuards(JWTAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post(':roomId/typing')
+  async sendTypingNotification(
+    @AuthUser() user: { id: number },
+    @Req() req: Request,
+    @Param('roomId') roomId: string,
+    @Body() body: { isTyping: boolean },
+  ): Promise<{ success: boolean }> {
+    try {
+      this.logger.log(
+        `Sending typing notification for user ${user.id} in room ${roomId}, typing: ${body.isTyping}`,
+      );
+
+      // Get full user information
+      const fullUser = await this.userService.findById(user.id);
+
+      if (!fullUser || !fullUser.matrixUserId || !fullUser.matrixAccessToken) {
+        throw new Error('User does not have Matrix credentials');
+      }
+
+      // Send typing notification
+      await this.matrixService.sendTypingNotification(
+        roomId,
+        fullUser.matrixUserId,
+        fullUser.matrixAccessToken,
+        body.isTyping,
+        fullUser.matrixDeviceId,
+      );
+
+      return { success: true };
+    } catch (error) {
+      this.logger.error(
+        `Error sending typing notification: ${error.message}`,
         error.stack,
       );
       throw error;

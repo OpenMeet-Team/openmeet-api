@@ -24,10 +24,15 @@ export const matrixConfig = registerAs<MatrixConfig>('matrix', () => {
 
   // Use proper Matrix server name
   // For Matrix IDs we need the main domain, not necessarily the server hostname
-  let serverName = process.env.MATRIX_SERVER_NAME || 'openmeet.net';
-  
+  const serverName = process.env.MATRIX_SERVER_NAME || 'openmeet.net';
+
   // Log the server name extraction
-  console.log('Using Matrix server name:', serverName, 'with base URL:', baseUrl);
+  console.log(
+    'Using Matrix server name:',
+    serverName,
+    'with base URL:',
+    baseUrl,
+  );
 
   if (!adminAccessToken) {
     console.warn(

@@ -43,15 +43,21 @@ export interface RoomInfo {
 
 export interface SendMessageOptions {
   roomId: string;
-  body: string;
+  userId: string;
+  accessToken: string;
+  content: string;
+  messageType?: string;
+  deviceId?: string;
+  // Legacy properties
+  body?: string;
   msgtype?: string;
   formatted_body?: string;
   format?: string;
   senderUserId?: string;
   senderAccessToken?: string;
   senderDeviceId?: string;
-  relationshipType?: string;    // Type of relationship (e.g., 'm.thread')
-  relationshipEventId?: string; // ID of the event to relate to
+  relationshipType?: string;
+  relationshipEventId?: string;
 }
 
 export interface Message {

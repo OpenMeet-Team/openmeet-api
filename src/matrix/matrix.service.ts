@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import * as sdk from 'matrix-js-sdk';
 import * as pool from 'generic-pool';
 import axios from 'axios';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 import {
   ActiveClient,
@@ -43,7 +44,10 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
   // Interval for cleaning up inactive clients
   private cleanupInterval: NodeJS.Timeout;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {
     const matrixConfig = this.configService.get<MatrixConfig>('matrix', {
       infer: true,
     });
@@ -321,22 +325,24 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
             // Try using the register endpoint with a server admin access token
             try {
               const registerUrl = `${this.baseUrl}/_synapse/admin/v1/register`;
-              this.logger.debug(`Trying Matrix admin register endpoint: ${registerUrl}`);
-              
+              this.logger.debug(
+                `Trying Matrix admin register endpoint: ${registerUrl}`,
+              );
+
               // First, get a nonce (required for register API)
               const nonceResponse = await axios.get(registerUrl, {
                 headers: {
                   Authorization: `Bearer ${this.adminAccessToken}`,
                 },
               });
-              
+
               const nonce = nonceResponse.data?.nonce;
               this.logger.debug(`Got Matrix registration nonce: ${nonce}`);
-              
+
               if (!nonce) {
                 throw new Error('No nonce returned from Matrix server');
               }
-              
+
               // Register with the nonce
               registrationResponse = await axios.post(
                 registerUrl,
@@ -353,31 +359,36 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
                   },
                 },
               );
-              
-              this.logger.debug('Matrix user registration successful with nonce:', {
-                status: registrationResponse.status,
-                data: registrationResponse.data,
-              });
+
+              this.logger.debug(
+                'Matrix user registration successful with nonce:',
+                {
+                  status: registrationResponse.status,
+                  data: registrationResponse.data,
+                },
+              );
             } catch (nonceError) {
               // Try using the register endpoint with shared secret
               try {
                 const registerUrl = `${this.baseUrl}/_matrix/client/api/v1/register`;
-                this.logger.debug(`Trying Matrix client register endpoint: ${registerUrl}`);
-                
-                // This is the last resort - this might work if admin registration is enabled
-                registrationResponse = await axios.post(
-                  registerUrl,
-                  {
-                    user: username,
-                    password: password,
-                    type: 'm.login.password',
-                  }
+                this.logger.debug(
+                  `Trying Matrix client register endpoint: ${registerUrl}`,
                 );
-                
-                this.logger.debug('Matrix user registration successful with client API:', {
-                  status: registrationResponse.status, 
-                  data: registrationResponse.data,
+
+                // This is the last resort - this might work if admin registration is enabled
+                registrationResponse = await axios.post(registerUrl, {
+                  user: username,
+                  password: password,
+                  type: 'm.login.password',
                 });
+
+                this.logger.debug(
+                  'Matrix user registration successful with client API:',
+                  {
+                    status: registrationResponse.status,
+                    data: registrationResponse.data,
+                  },
+                );
               } catch (clientRegError) {
                 this.logger.error('All Matrix registration methods failed:', {
                   dummyAuthError: dummyAuthError.message,
@@ -391,7 +402,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
                   serverName: this.serverName,
                   baseUrl: this.baseUrl,
                 });
-                
+
                 throw new Error(
                   `Failed to create Matrix user. Please check your Matrix server configuration and ensure registration is properly set up.`,
                 );
@@ -668,19 +679,19 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       await this.clientPool.release(client);
     }
   }
-  
+
   /**
    * Join a room as a specific user
    */
   async joinRoom(
-    roomId: string, 
-    userId: string, 
-    accessToken: string, 
-    deviceId?: string
+    roomId: string,
+    userId: string,
+    accessToken: string,
+    deviceId?: string,
   ): Promise<void> {
     try {
       this.logger.debug(`User ${userId} joining room ${roomId}`);
-      
+
       // Create a temporary client for the user
       const tempClient = sdk.createClient({
         baseUrl: this.baseUrl,
@@ -689,16 +700,18 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
         deviceId: deviceId || this.defaultDeviceId,
         useAuthorizationHeader: true,
       });
-      
+
       // Join the room
       await tempClient.joinRoom(roomId);
-      
+
       // Get current display name
       try {
         // Get the profile info directly from the client
         const profile = await tempClient.getProfileInfo(userId);
-        this.logger.debug(`Current display name for ${userId}: ${profile?.displayname || 'Not set'}`);
-        
+        this.logger.debug(
+          `Current display name for ${userId}: ${profile?.displayname || 'Not set'}`,
+        );
+
         // Check if display name is the Matrix ID and clear it if it is
         // This will force the client to refresh/fetch the display name
         if (!profile?.displayname || profile.displayname.startsWith('@om_')) {
@@ -710,10 +723,12 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
           }
         }
       } catch (profileError) {
-        this.logger.warn(`Error getting profile for ${userId}: ${profileError.message}`);
+        this.logger.warn(
+          `Error getting profile for ${userId}: ${profileError.message}`,
+        );
         // Not critical, continue
       }
-      
+
       this.logger.debug(`User ${userId} successfully joined room ${roomId}`);
     } catch (error) {
       this.logger.error(
@@ -723,7 +738,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       throw new Error(`Failed to join Matrix room: ${error.message}`);
     }
   }
-  
+
   /**
    * Set a user's display name in Matrix using the SDK
    */
@@ -731,11 +746,13 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
     userId: string,
     accessToken: string,
     displayName: string,
-    deviceId?: string
+    deviceId?: string,
   ): Promise<void> {
     try {
-      this.logger.debug(`Setting display name for user ${userId} to "${displayName}"`);
-      
+      this.logger.debug(
+        `Setting display name for user ${userId} to "${displayName}"`,
+      );
+
       // Create a temporary client for the user
       const tempClient = sdk.createClient({
         baseUrl: this.baseUrl,
@@ -744,10 +761,10 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
         deviceId: deviceId || this.defaultDeviceId,
         useAuthorizationHeader: true,
       });
-      
+
       // Set the display name using the SDK
       await tempClient.setDisplayName(displayName);
-      
+
       this.logger.debug(`Successfully set display name for user ${userId}`);
     } catch (error) {
       this.logger.error(
@@ -757,20 +774,23 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       throw new Error(`Failed to set Matrix display name: ${error.message}`);
     }
   }
-  
+
   /**
    * Get a user's display name from Matrix
    */
   async getUserDisplayName(userId: string): Promise<string | null> {
     try {
       const client = await this.clientPool.acquire();
-      
+
       try {
         this.logger.debug(`Getting display name for user ${userId}`);
-        
+
         // Get the profile info
-        const response = await client.client.getProfileInfo(userId, 'displayname');
-        
+        const response = await client.client.getProfileInfo(
+          userId,
+          'displayname',
+        );
+
         return response?.displayname || null;
       } finally {
         await this.clientPool.release(client);
@@ -783,7 +803,224 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       return null;
     }
   }
-  
+
+  /**
+   * Start a client for a specific user and register for events
+   */
+  // This method is replaced by the startClient implementation at line ~1162
+  private async startClientWithEvents(
+    options: StartClientOptions,
+  ): Promise<void> {
+    const { userId, accessToken, deviceId } = options;
+
+    // Check if client is already active
+    if (this.activeClients.has(userId)) {
+      const existingClient = this.activeClients.get(userId);
+
+      if (existingClient) {
+        // Update last activity timestamp
+        existingClient.lastActivity = new Date();
+
+        // Client is already running, just update activity timestamp
+        this.logger.debug(
+          `Matrix client for user ${userId} is already active, updating activity timestamp`,
+        );
+      }
+      return;
+    }
+
+    try {
+      this.logger.log(`Starting Matrix client for user ${userId}`);
+
+      // Create a new Matrix client instance for this user
+      const client = sdk.createClient({
+        baseUrl: this.baseUrl,
+        userId,
+        accessToken,
+        deviceId: deviceId || this.defaultDeviceId,
+        useAuthorizationHeader: true,
+      });
+
+      // Set up event handlers before starting the client
+      client.on('sync' as any, (state: string, prevState: string) => {
+        this.logger.debug(
+          `Matrix sync state for user ${userId}: ${prevState} -> ${state}`,
+        );
+
+        // When the client is first synced, get initial data
+        if (state === 'PREPARED') {
+          this.logger.log(`Matrix client for user ${userId} is ready`);
+
+          // Emit a ready event
+          this.eventEmitter.emit(`matrix.events.${userId}`, {
+            type: 'ready',
+            userId,
+            timestamp: Date.now(),
+          });
+        }
+      });
+
+      // Handle room messages
+      client.on(
+        'Room.timeline' as any,
+        (event: sdk.MatrixEvent, room: sdk.Room) => {
+          // Skip events that aren't messages
+          if (event.getType() !== 'm.room.message') {
+            return;
+          }
+
+          const sender = event.getSender();
+
+          // Skip messages sent by this user (already handled by the client)
+          if (sender === userId) {
+            return;
+          }
+
+          // Get message content
+          const content = event.getContent();
+
+          // Emit a message event
+          this.eventEmitter.emit(`matrix.events.${userId}`, {
+            type: 'm.room.message',
+            room_id: room.roomId,
+            event_id: event.getId(),
+            sender,
+            content,
+            origin_server_ts: event.getTs(),
+          });
+        },
+      );
+
+      // Handle typing notifications
+      client.on(
+        'RoomMember.typing' as any,
+        (event: sdk.MatrixEvent, member: sdk.RoomMember) => {
+          const roomId = member.roomId;
+          const room = client.getRoom(roomId);
+
+          if (!room) {
+            return;
+          }
+
+          // Get typing users through API since getTypingUsers() doesn't exist
+          const typingUserIds = room
+            .getJoinedMembers()
+            .filter((m) => m.typing)
+            .map((m) => m.userId);
+
+          // Emit a typing event
+          this.eventEmitter.emit(`matrix.events.${userId}`, {
+            type: 'm.typing',
+            room_id: roomId,
+            user_ids: typingUserIds,
+          });
+        },
+      );
+
+      // Handle read receipts
+      client.on(
+        'Room.receipt' as any,
+        (event: sdk.MatrixEvent, room: sdk.Room) => {
+          // Extract read receipt data
+          const receiptData = event.getContent();
+          const roomId = room.roomId;
+
+          // Emit a receipt event
+          this.eventEmitter.emit(`matrix.events.${userId}`, {
+            type: 'm.receipt',
+            room_id: roomId,
+            content: receiptData,
+          });
+        },
+      );
+
+      // Start the client with sync enabled
+      await client.startClient({ initialSyncLimit: 10 });
+
+      // Store the client in active clients
+      this.activeClients.set(userId, {
+        client,
+        userId, // Include userId per interface
+        lastActivity: new Date(),
+        eventCallbacks: [], // Initialize empty array for callbacks
+      });
+
+      this.logger.log(`Matrix client started for user ${userId}`);
+    } catch (error) {
+      this.logger.error(
+        `Error starting Matrix client for user ${userId}: ${error.message}`,
+        error.stack,
+      );
+      throw new Error(`Failed to start Matrix client: ${error.message}`);
+    }
+  }
+
+  /**
+   * Send typing notification
+   */
+  async sendTypingNotification(
+    roomId: string,
+    userId: string,
+    accessToken: string,
+    isTyping: boolean,
+    deviceId?: string,
+  ): Promise<void> {
+    try {
+      this.logger.debug(
+        `Sending typing notification for user ${userId} in room ${roomId}, typing: ${isTyping}`,
+      );
+
+      // Check if we have an active client for this user
+      let client: sdk.MatrixClient;
+
+      if (this.activeClients.has(userId)) {
+        // Get the active client
+        const activeClient = this.activeClients.get(userId);
+
+        if (activeClient) {
+          // Use the existing client
+          client = activeClient.client;
+
+          // Update last activity timestamp
+          activeClient.lastActivity = new Date();
+        } else {
+          // If activeClient doesn't exist despite the Map saying it should, create a new one
+          client = sdk.createClient({
+            baseUrl: this.baseUrl,
+            userId,
+            accessToken,
+            deviceId: deviceId || this.defaultDeviceId,
+            useAuthorizationHeader: true,
+          });
+        }
+      } else {
+        // Create a temporary client
+        client = sdk.createClient({
+          baseUrl: this.baseUrl,
+          userId,
+          accessToken,
+          deviceId: deviceId || this.defaultDeviceId,
+          useAuthorizationHeader: true,
+        });
+      }
+
+      // Send typing notification
+      // The timeout is how long the typing indicator should be shown (in milliseconds)
+      // Use 20 seconds for active typing, or 0 for stopped typing
+      const timeout = isTyping ? 20000 : 0;
+
+      await client.sendTyping(roomId, isTyping, timeout);
+
+      this.logger.debug(`Typing notification sent successfully`);
+    } catch (error) {
+      this.logger.error(
+        `Error sending typing notification in room ${roomId}: ${error.message}`,
+        error.stack,
+      );
+      throw new Error(`Failed to send typing notification: ${error.message}`);
+    }
+  }
+
   /**
    * Set a user's display name in Matrix using direct API call
    * This is a backup method if the SDK method fails
@@ -791,17 +1028,19 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
   async setUserDisplayNameDirect(
     userId: string,
     accessToken: string,
-    displayName: string
+    displayName: string,
   ): Promise<void> {
     try {
-      this.logger.debug(`Setting display name directly for user ${userId} to "${displayName}"`);
-      
+      this.logger.debug(
+        `Setting display name directly for user ${userId} to "${displayName}"`,
+      );
+
       // Encode the user ID for the URL
       const encodedUserId = encodeURIComponent(userId);
-      
+
       // Make a direct API call to set the display name
       const url = `${this.baseUrl}/_matrix/client/v3/profile/${encodedUserId}/displayname`;
-      
+
       await axios.put(
         url,
         { displayname: displayName },
@@ -809,22 +1048,26 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
           headers: {
             Authorization: `Bearer ${accessToken}`,
           },
-        }
+        },
       );
-      
-      this.logger.debug(`Successfully set display name directly for user ${userId}`);
+
+      this.logger.debug(
+        `Successfully set display name directly for user ${userId}`,
+      );
     } catch (error) {
       this.logger.error(
         `Error setting display name directly for user ${userId}: ${error.message}`,
         error.stack,
       );
-      throw new Error(`Failed to set Matrix display name directly: ${error.message}`);
+      throw new Error(
+        `Failed to set Matrix display name directly: ${error.message}`,
+      );
     }
   }
 
   /**
    * Send a message to a room
-   * 
+   *
    * If senderUserId is provided, the message will be sent as that user.
    * If senderAccessToken is provided, it will be used instead of getting the user from activeClients.
    */
@@ -842,7 +1085,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       relationshipType,
       relationshipEventId,
     } = options;
-    
+
     try {
       // Create the basic message content
       const content: any = {
@@ -855,7 +1098,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
         content.format = format;
         content.formatted_body = formatted_body;
       }
-      
+
       // Do NOT add thread relation unless explicitly requested
       // This will prevent automatic threading of messages
       if (relationshipType && relationshipEventId) {
@@ -864,19 +1107,22 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
           event_id: relationshipEventId,
         };
       }
-      
+
       // If a specific sender is provided, try to send as that user
-      if (senderUserId && (senderAccessToken || this.activeClients.has(senderUserId))) {
+      if (
+        senderUserId &&
+        (senderAccessToken || this.activeClients.has(senderUserId))
+      ) {
         this.logger.debug(`Sending message as user ${senderUserId}`);
-        
+
         // Use the active client if it exists
         if (this.activeClients.has(senderUserId)) {
           const activeClient = this.activeClients.get(senderUserId);
-          
+
           if (activeClient) {
             // Update last activity
             activeClient.lastActivity = new Date();
-            
+
             // Send message with the user's client
             const response = await activeClient.client.sendEvent(
               roomId,
@@ -884,12 +1130,12 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
               content,
               '',
             );
-            
+
             return response.event_id;
           }
-        } 
-        
-        // If we have an access token but no active client, create a temporary client 
+        }
+
+        // If we have an access token but no active client, create a temporary client
         if (senderAccessToken) {
           const tempClient = sdk.createClient({
             baseUrl: this.baseUrl,
@@ -898,7 +1144,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
             deviceId: senderDeviceId || this.defaultDeviceId,
             useAuthorizationHeader: true,
           });
-          
+
           // Send the message
           const response = await tempClient.sendEvent(
             roomId,
@@ -906,16 +1152,16 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
             content,
             '',
           );
-          
+
           // We don't need to stop this client since it's not syncing
           return response.event_id;
         }
       }
-      
+
       // Fall back to using the admin client
       this.logger.debug(`Sending message as admin user ${this.adminUserId}`);
       const client = await this.clientPool.acquire();
-      
+
       try {
         const response = await client.client.sendEvent(
           roomId,
@@ -923,7 +1169,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
           content,
           '',
         );
-        
+
         return response.event_id;
       } finally {
         await this.clientPool.release(client);

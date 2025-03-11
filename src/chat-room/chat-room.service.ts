@@ -160,7 +160,7 @@ export class ChatRoomService {
       roomId: chatRoom.matrixRoomId,
       userId: user.matrixUserId,
     });
-    
+
     // Next, have the user join the room if they have credentials
     if (user.matrixAccessToken) {
       try {
@@ -168,11 +168,13 @@ export class ChatRoomService {
           chatRoom.matrixRoomId,
           user.matrixUserId,
           user.matrixAccessToken,
-          user.matrixDeviceId
+          user.matrixDeviceId,
         );
         this.logger.log(`User ${userId} joined room ${chatRoom.matrixRoomId}`);
       } catch (joinError) {
-        this.logger.warn(`User ${userId} failed to join room: ${joinError.message}`);
+        this.logger.warn(
+          `User ${userId} failed to join room: ${joinError.message}`,
+        );
         // Continue anyway - they can join later
       }
     }
@@ -315,7 +317,7 @@ export class ChatRoomService {
     } else {
       throw new Error(`User ${userId} does not have Matrix credentials`);
     }
-    
+
     // Make sure user is in the room
     try {
       // Check if user is already a member of the room in the database
@@ -323,29 +325,31 @@ export class ChatRoomService {
         where: { id: chatRoom.id },
         relations: ['members'],
       });
-      
+
       const isMember = roomWithMembers?.members?.some(
         (member) => member.id === userId,
       );
-      
+
       // If not a member, invite and join the room
       if (!isMember) {
-        this.logger.log(`User ${userId} not yet a member of room ${chatRoom.id}, adding them now`);
-        
+        this.logger.log(
+          `User ${userId} not yet a member of room ${chatRoom.id}, adding them now`,
+        );
+
         // First, invite the user via admin
         await this.matrixService.inviteUser({
           roomId: chatRoom.matrixRoomId,
           userId: user.matrixUserId,
         });
-        
+
         // Then have the user join the room
         await this.matrixService.joinRoom(
           chatRoom.matrixRoomId,
           user.matrixUserId,
           user.matrixAccessToken,
-          user.matrixDeviceId
+          user.matrixDeviceId,
         );
-        
+
         // Add user to the room's members in the database
         if (roomWithMembers) {
           roomWithMembers.members.push(user);
@@ -353,47 +357,63 @@ export class ChatRoomService {
         }
       }
     } catch (error) {
-      this.logger.warn(`Error ensuring user ${userId} is in room ${chatRoom.id}: ${error.message}`);
+      this.logger.warn(
+        `Error ensuring user ${userId} is in room ${chatRoom.id}: ${error.message}`,
+      );
       // Continue anyway - the message send will confirm if they're really in the room
     }
 
     // Create a proper display name
-    const displayName = [user.firstName, user.lastName]
-      .filter(Boolean)
-      .join(' ') || user.email?.split('@')[0] || 'OpenMeet User';
-    
+    const displayName =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') ||
+      user.email?.split('@')[0] ||
+      'OpenMeet User';
+
     // Set the display name if needed
     try {
-      this.logger.log(`Setting Matrix display name for user ${userId} to "${displayName}"`);
-      
+      this.logger.log(
+        `Setting Matrix display name for user ${userId} to "${displayName}"`,
+      );
+
       await this.matrixService.setUserDisplayName(
         user.matrixUserId,
         user.matrixAccessToken,
         displayName,
-        user.matrixDeviceId
+        user.matrixDeviceId,
       );
-      
+
       // Verify display name was set
-      const displayNameCheck = await this.matrixService.getUserDisplayName(user.matrixUserId);
-      this.logger.log(`Current Matrix display name for user ${userId}: "${displayNameCheck || 'Not set'}"`);
-      
+      const displayNameCheck = await this.matrixService.getUserDisplayName(
+        user.matrixUserId,
+      );
+      this.logger.log(
+        `Current Matrix display name for user ${userId}: "${displayNameCheck || 'Not set'}"`,
+      );
+
       // If display name wasn't set properly, try again with a direct API call
       if (!displayNameCheck || displayNameCheck !== displayName) {
-        this.logger.warn(`Display name not set correctly, trying direct API method`);
+        this.logger.warn(
+          `Display name not set correctly, trying direct API method`,
+        );
         await this.matrixService.setUserDisplayNameDirect(
           user.matrixUserId,
           user.matrixAccessToken,
-          displayName
+          displayName,
         );
       }
     } catch (err) {
       this.logger.warn(`Failed to set user display name: ${err.message}`);
       // Continue anyway - display name is not critical
     }
-    
+
     // Send the message using the user's Matrix credentials
     return this.matrixService.sendMessage({
       roomId: chatRoom.matrixRoomId,
+      content: message,
+      userId: user.matrixUserId,
+      accessToken: user.matrixAccessToken,
+      deviceId: user.matrixDeviceId,
+      // Legacy/alternate field support
       body: message,
       formatted_body: formattedMessage,
       format: formattedMessage ? 'org.matrix.custom.html' : undefined,
