@@ -410,4 +410,10 @@ export class EventAttendeeService {
       .where('eventAttendee.id = :attendeeId', { attendeeId })
       .getOne();
   }
+
+  @Trace('event-attendee.findOne')
+  async findOne(options: any): Promise<EventAttendeesEntity | null> {
+    await this.getTenantSpecificEventRepository();
+    return this.eventAttendeesRepository.findOne(options);
+  }
 }

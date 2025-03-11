@@ -47,6 +47,11 @@ export interface SendMessageOptions {
   msgtype?: string;
   formatted_body?: string;
   format?: string;
+  senderUserId?: string;
+  senderAccessToken?: string;
+  senderDeviceId?: string;
+  relationshipType?: string;    // Type of relationship (e.g., 'm.thread')
+  relationshipEventId?: string; // ID of the event to relate to
 }
 
 export interface Message {

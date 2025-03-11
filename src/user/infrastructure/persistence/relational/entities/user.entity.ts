@@ -244,7 +244,7 @@ export class UserEntity extends EntityRelationalHelper {
   @Exclude({ toPlainOnly: true })
   matrixDeviceId?: string;
 
-@Column('jsonb', { nullable: true })
+  @Column('jsonb', { nullable: true })
   preferences: {
     bluesky?: {
       avatar?: string;

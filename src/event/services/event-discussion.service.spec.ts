@@ -86,32 +86,28 @@ describe('EventDiscussionService', () => {
     });
   });
 
-  describe('updateEventDiscussionMessage', () => {
-    it('should update an event discussion message', async () => {
-      mockUserService.getUserById.mockResolvedValue(mockUser);
-      mockZulipService.updateUserMessage.mockResolvedValue(
-        mockZulipMessageResponse,
-      );
+  describe('getEventDiscussionMessages', () => {
+    it('should get event discussion messages', async () => {
+      jest.spyOn(mockRepository, 'findOne').mockResolvedValue(mockEvent);
 
-      const result = await service.updateEventDiscussionMessage(
-        1,
-        'Updated Message',
+      const mockMessages = { messages: [], end: '' };
+
+      // Mock required methods for the new Matrix-based implementation
+      const mockChatRoomService = {
+        getEventChatRooms: jest.fn().mockResolvedValue([{ id: 1 }]),
+        getMessages: jest.fn().mockResolvedValue(mockMessages),
+      };
+
+      // Replace the chatRoomService in the service instance
+      (service as any).chatRoomService = mockChatRoomService;
+
+      const result = await service.getEventDiscussionMessages(
+        mockEvent.slug,
         mockUser.id,
+        50,
       );
 
-      expect(result).toEqual(mockZulipMessageResponse);
-    });
-  });
-
-  describe('deleteEventDiscussionMessage', () => {
-    it('should delete an event discussion message', async () => {
-      mockZulipService.deleteAdminMessage.mockResolvedValue(
-        mockZulipMessageResponse,
-      );
-
-      const result = await service.deleteEventDiscussionMessage(1);
-
-      expect(result).toEqual(mockZulipMessageResponse);
+      expect(result).toEqual(mockMessages);
     });
   });
 });

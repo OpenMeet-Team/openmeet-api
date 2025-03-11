@@ -33,7 +33,7 @@ jest.mock('matrix-js-sdk', () => {
     getAccessToken: jest.fn().mockReturnValue('mock-access-token'),
     getRoom: jest.fn().mockReturnValue(null),
   };
-  
+
   return {
     createClient: jest.fn((_opts) => mockClient),
     __mockClient: mockClient,
@@ -82,14 +82,14 @@ describe('MatrixService', () => {
                   connectionRetryDelay: 1000,
                 },
               };
-              
+
               // Parse the key path (e.g., 'matrix.baseUrl')
               const parts = key.split('.');
               let result = config;
               for (const part of parts) {
                 result = result[part];
               }
-              
+
               return result;
             }),
           },
@@ -101,8 +101,8 @@ describe('MatrixService', () => {
     configService = module.get<ConfigService>(ConfigService);
 
     // Mock the axios responses for REST API calls
-    mockedAxios.get.mockResolvedValue({ 
-      data: { 
+    mockedAxios.get.mockResolvedValue({
+      data: {
         chunk: [
           {
             type: 'm.room.message',
@@ -111,10 +111,10 @@ describe('MatrixService', () => {
             sender: '@user:example.org',
             content: { body: 'Hello world', msgtype: 'm.text' },
             origin_server_ts: 1626200000000,
-          }
+          },
         ],
-        end: 'end-token'
-      } 
+        end: 'end-token',
+      },
     });
     mockedAxios.post.mockResolvedValue({
       data: {
@@ -123,8 +123,8 @@ describe('MatrixService', () => {
         device_id: 'test-device-id',
       },
     });
-    mockedAxios.put.mockResolvedValue({ 
-      data: { success: true } 
+    mockedAxios.put.mockResolvedValue({
+      data: { success: true },
     });
   });
 
@@ -139,15 +139,15 @@ describe('MatrixService', () => {
   describe('createUser', () => {
     it('should create a new Matrix user using Admin API', async () => {
       // Mock the put and post requests needed for Admin API user creation
-      mockedAxios.put.mockResolvedValue({ 
-        data: { success: true } 
+      mockedAxios.put.mockResolvedValue({
+        data: { success: true },
       });
       mockedAxios.post.mockResolvedValue({
         data: {
           user_id: '@test:example.org',
           access_token: 'test-access-token',
           device_id: 'test-device-id',
-        }
+        },
       });
 
       const result = await service.createUser({
@@ -165,7 +165,7 @@ describe('MatrixService', () => {
         }),
         expect.objectContaining({
           headers: expect.any(Object),
-        })
+        }),
       );
 
       // Should log in as the user to get tokens
@@ -271,9 +271,9 @@ describe('MatrixService', () => {
         expect.stringContaining('/_matrix/client/v3/rooms/room-123/messages'),
         expect.objectContaining({
           headers: expect.any(Object),
-        })
+        }),
       );
-      
+
       expect(result).toEqual({
         messages: [
           {

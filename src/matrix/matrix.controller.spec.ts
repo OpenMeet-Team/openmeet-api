@@ -1,0 +1,165 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { MatrixController } from './matrix.controller';
+import { MatrixService } from './matrix.service';
+import { UserService } from '../user/user.service';
+import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
+import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+
+describe('MatrixController', () => {
+  let controller: MatrixController;
+  let matrixService: MatrixService;
+  let userService: UserService;
+
+  // Mock data
+  const mockUser = {
+    id: 1,
+    email: 'test@example.com',
+    tenantId: 'test-tenant',
+  };
+
+  // Create a partial user entity that satisfies the required properties
+  const mockFullUser = {
+    id: 1,
+    email: 'test@example.com',
+    ulid: 'test123',
+    firstName: 'Test',
+    lastName: 'User',
+    preferences: {},
+    slug: 'test-user',
+    provider: 'email',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    loadPreviousPassword: jest.fn(),
+  } as unknown as UserEntity;
+
+  const mockMatrixUserInfo = {
+    userId: '@om_test123:matrix.example.org',
+    accessToken: 'mock_access_token',
+    deviceId: 'mock_device_id',
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [MatrixController],
+      providers: [
+        {
+          provide: MatrixService,
+          useValue: {
+            createUser: jest.fn().mockResolvedValue(mockMatrixUserInfo),
+          },
+        },
+        {
+          provide: UserService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue(mockFullUser),
+            update: jest.fn().mockResolvedValue({
+              ...mockFullUser,
+              matrixUserId: mockMatrixUserInfo.userId,
+              matrixAccessToken: mockMatrixUserInfo.accessToken,
+              matrixDeviceId: mockMatrixUserInfo.deviceId,
+            }),
+            request: {
+              tenantId: 'test-tenant',
+            },
+          },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockImplementation((key) => {
+              if (key === 'matrix') {
+                return {
+                  baseUrl: 'https://matrix.example.org',
+                  serverName: 'matrix.example.org',
+                  adminUser: 'admin',
+                  adminAccessToken: 'admin_token',
+                  defaultDeviceId: 'default_device',
+                  defaultInitialDeviceDisplayName: 'OpenMeet Matrix',
+                };
+              }
+              return null;
+            }),
+          },
+        },
+        Logger,
+      ],
+    }).compile();
+
+    controller = module.get<MatrixController>(MatrixController);
+    matrixService = module.get<MatrixService>(MatrixService);
+    userService = module.get<UserService>(UserService);
+  });
+
+  it('should be defined', () => {
+    expect(controller).toBeDefined();
+  });
+
+  describe('provisionMatrixUser', () => {
+    it('should return existing Matrix credentials if user already has them', async () => {
+      // Mock user with existing Matrix credentials
+      const mockUserWithMatrix = {
+        ...mockFullUser,
+        matrixUserId: '@existing:matrix.org',
+        matrixAccessToken: 'existing_token',
+        matrixDeviceId: 'existing_device',
+      } as UserEntity;
+
+      jest
+        .spyOn(userService, 'findById')
+        .mockResolvedValueOnce(mockUserWithMatrix);
+
+      const result = await controller.provisionMatrixUser(mockUser as any);
+
+      expect(result).toEqual({
+        matrixUserId: mockUserWithMatrix.matrixUserId,
+        matrixAccessToken: mockUserWithMatrix.matrixAccessToken,
+        matrixDeviceId: mockUserWithMatrix.matrixDeviceId,
+      });
+
+      // Should not create a new Matrix user
+      expect(matrixService.createUser).not.toHaveBeenCalled();
+    });
+
+    it('should provision a new Matrix user if user does not have Matrix credentials', async () => {
+      const result = await controller.provisionMatrixUser(mockUser as any);
+
+      expect(matrixService.createUser).toHaveBeenCalledWith({
+        username: `om_${mockFullUser.ulid}`,
+        password: expect.any(String),
+        displayName: 'Test User',
+      });
+
+      expect(userService.update).toHaveBeenCalledWith(
+        mockUser.id,
+        {
+          matrixUserId: mockMatrixUserInfo.userId,
+          matrixAccessToken: mockMatrixUserInfo.accessToken,
+          matrixDeviceId: mockMatrixUserInfo.deviceId,
+          preferences: {
+            matrix: {
+              connected: true,
+              connectedAt: expect.any(Date),
+            },
+          },
+        },
+        'test-tenant',
+      );
+
+      expect(result).toEqual({
+        matrixUserId: mockMatrixUserInfo.userId,
+        matrixAccessToken: mockMatrixUserInfo.accessToken,
+        matrixDeviceId: mockMatrixUserInfo.deviceId,
+      });
+    });
+
+    it('should propagate errors from Matrix service', async () => {
+      const error = new Error('Failed to create Matrix user');
+      jest.spyOn(matrixService, 'createUser').mockRejectedValueOnce(error);
+
+      await expect(
+        controller.provisionMatrixUser(mockUser as any),
+      ).rejects.toThrow(error);
+    });
+  });
+});

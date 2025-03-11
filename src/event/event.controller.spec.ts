@@ -80,6 +80,7 @@ const mockEventQueryService = {
   showEventAttendees: jest.fn(),
   getEventsByCreator: jest.fn(),
   getEventsByAttendee: jest.fn(),
+  showEventBySlug: jest.fn(),
 };
 
 const mockEventRecommendationService = {
@@ -88,8 +89,9 @@ const mockEventRecommendationService = {
 
 const mockEventDiscussionService = {
   sendEventDiscussionMessage: jest.fn(),
-  updateEventDiscussionMessage: jest.fn(),
-  deleteEventDiscussionMessage: jest.fn(),
+  getEventDiscussionMessages: jest.fn(),
+  addMemberToEventDiscussion: jest.fn(),
+  removeMemberFromEventDiscussion: jest.fn(),
 };
 
 describe('EventController', () => {
@@ -367,41 +369,41 @@ describe('EventController', () => {
     it('should send an event discussion message', async () => {
       jest
         .spyOn(eventDiscussionService, 'sendEventDiscussionMessage')
-        .mockResolvedValue(mockZulipMessageResponse);
+        .mockResolvedValue({ id: 'matrix-event-id-123' });
       const result = await controller.sendEventDiscussionMessage(
         mockEvent.slug,
         mockUser,
         { message: 'Test Message', topicName: 'Test Topic' },
       );
-      expect(result).toEqual(mockZulipMessageResponse);
+      expect(result).toEqual({ id: 'matrix-event-id-123' });
     });
   });
 
-  describe('updateEventDiscussionMessage', () => {
-    it('should update an event discussion message', async () => {
+  describe('getEventDiscussionMessages', () => {
+    it('should get event discussion messages', async () => {
+      const mockMessages = { messages: [], end: '' };
       jest
-        .spyOn(eventDiscussionService, 'updateEventDiscussionMessage')
-        .mockResolvedValue(mockZulipMessageResponse);
-      const result = await controller.updateEventDiscussionMessage(
+        .spyOn(eventDiscussionService, 'getEventDiscussionMessages')
+        .mockResolvedValue(mockMessages);
+      const result = await controller.getEventDiscussionMessages(
         mockEvent.slug,
-        mockZulipMessage.id,
         mockUser,
-        { message: 'Updated Message' },
+        50,
       );
-      expect(result).toEqual(mockZulipMessageResponse);
+      expect(result).toEqual(mockMessages);
     });
   });
 
-  describe('deleteEventDiscussionMessage', () => {
-    it('should delete an event discussion message', async () => {
+  describe('addMemberToEventDiscussion', () => {
+    it('should add a member to event discussion', async () => {
+      mockEventQueryService.showEventBySlug.mockResolvedValue(mockEvent);
       jest
-        .spyOn(eventDiscussionService, 'deleteEventDiscussionMessage')
-        .mockResolvedValue(mockZulipMessageResponse);
-      const result = await controller.deleteEventDiscussionMessage(
-        mockEvent.slug,
-        mockZulipMessage.id,
-      );
-      expect(result).toEqual(mockZulipMessageResponse);
+        .spyOn(eventDiscussionService, 'addMemberToEventDiscussion')
+        .mockResolvedValue(undefined);
+      await controller.addMemberToEventDiscussion(mockEvent.slug, 1);
+      expect(
+        eventDiscussionService.addMemberToEventDiscussion,
+      ).toHaveBeenCalledWith(mockEvent.id, 1);
     });
   });
 

@@ -13,15 +13,12 @@ import {
   EventAttendeeStatus,
   PostgisSrid,
   DEFAULT_RADIUS,
-  ZULIP_DEFAULT_CHANNEL_TOPIC,
 } from '../../core/constants/constant';
 import { paginate } from '../../utils/generic-pagination';
 import { Trace } from '../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
-import { ZulipService } from '../../zulip/zulip.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
-import { ZulipTopic } from 'zulip-js';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventQueryService {
@@ -34,7 +31,6 @@ export class EventQueryService {
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly eventAttendeeService: EventAttendeeService,
-    private readonly zulipService: ZulipService,
     private readonly groupMemberService: GroupMemberService,
   ) {
     void this.initializeRepository();
@@ -149,19 +145,9 @@ export class EventQueryService {
         );
     }
 
-    event.topics = event.zulipChannelId
-      ? (
-          await this.zulipService.getAdminStreamTopics(event.zulipChannelId)
-        ).filter((topic) => topic.name !== ZULIP_DEFAULT_CHANNEL_TOPIC)
-      : [];
-    event.messages = event.zulipChannelId
-      ? await this.zulipService.getAdminMessages({
-          anchor: 'oldest',
-          num_before: 0,
-          num_after: 100,
-          narrow: [{ operator: 'stream', operand: event.zulipChannelId }],
-        })
-      : [];
+    // Matrix-based discussions will be loaded from the frontend
+    event.topics = [];
+    event.messages = [];
 
     return event;
   }
@@ -173,6 +159,22 @@ export class EventQueryService {
       where: { slug },
       relations: ['group', 'categories'],
     });
+    return event;
+  }
+
+  @Trace('event-query.showEventBySlug')
+  async showEventBySlug(slug: string): Promise<EventEntity | null> {
+    await this.initializeRepository();
+
+    const event = await this.eventRepository.findOne({
+      where: { slug },
+      relations: ['user'],
+    });
+
+    if (!event) {
+      throw new Error(`Event with slug ${slug} not found`);
+    }
+
     return event;
   }
 
@@ -532,10 +534,9 @@ export class EventQueryService {
   }
 
   @Trace('event-query.findEventTopicsByEventId')
-  async findEventTopicsByEventId(
-    zulipChannelId: number,
-  ): Promise<ZulipTopic[]> {
-    return await this.zulipService.getAdminStreamTopics(zulipChannelId);
+  async findEventTopicsByEventId(zulipChannelId: number): Promise<any[]> {
+    // Matrix-based discussions don't use Zulip topics
+    return [];
   }
 
   @Trace('event-query.showEventAttendees')

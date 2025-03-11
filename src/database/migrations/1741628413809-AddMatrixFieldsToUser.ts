@@ -11,13 +11,13 @@ export class AddMatrixFieldsToUser1741628413809 implements MigrationInterface {
       ALTER TABLE "${schema}"."users" 
       ADD COLUMN IF NOT EXISTS "matrixUserId" character varying
     `);
-    
+
     // Add matrixAccessToken column
     await queryRunner.query(`
       ALTER TABLE "${schema}"."users" 
       ADD COLUMN IF NOT EXISTS "matrixAccessToken" character varying
     `);
-    
+
     // Add matrixDeviceId column
     await queryRunner.query(`
       ALTER TABLE "${schema}"."users" 
@@ -59,12 +59,12 @@ export class AddMatrixFieldsToUser1741628413809 implements MigrationInterface {
       ALTER TABLE "${schema}"."users" 
       DROP COLUMN IF EXISTS "matrixDeviceId"
     `);
-    
+
     await queryRunner.query(`
       ALTER TABLE "${schema}"."users" 
       DROP COLUMN IF EXISTS "matrixAccessToken"
     `);
-    
+
     await queryRunner.query(`
       ALTER TABLE "${schema}"."users" 
       DROP COLUMN IF EXISTS "matrixUserId"

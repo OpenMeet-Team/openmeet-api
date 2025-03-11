@@ -23,7 +23,7 @@ export enum ChatRoomType {
 }
 
 export enum ChatRoomVisibility {
-  PUBLIC = 'public',  // Visible to all members of a group or event
+  PUBLIC = 'public', // Visible to all members of a group or event
   PRIVATE = 'private', // Visible only to specific members
 }
 

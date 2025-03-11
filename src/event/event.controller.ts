@@ -9,7 +9,12 @@ import {
   UseGuards,
   Req,
   Query,
+  Res,
+  HttpStatus,
+  HttpCode,
+  StreamableFile,
 } from '@nestjs/common';
+import { Response } from 'express';
 
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Request } from 'express';
@@ -255,59 +260,164 @@ export class EventController {
     );
   }
 
-  @Permissions({
-    context: 'event',
-    permissions: [
-      EventAttendeePermission.MessageAttendees,
-      EventAttendeePermission.CreateDiscussion,
-    ],
-  })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @UseGuards(JWTAuthGuard)
   @Post(':slug/discussions')
-  @ApiOperation({ summary: 'Send a message to a group discussion' })
+  @ApiOperation({ summary: 'Send a message to the event chat room' })
   async sendEventDiscussionMessage(
     @Param('slug') slug: string,
     @AuthUser() user: User,
-    @Body() body: { message: string; topicName: string },
-  ): Promise<{ id: number }> {
-    return this.eventDiscussionService.sendEventDiscussionMessage(
+    @Body() body: { message: string; topicName?: string },
+  ): Promise<{ id: string }> {
+    const result = await this.eventDiscussionService.sendEventDiscussionMessage(
       slug,
       user.id,
       body,
     );
+    
+    // Add some delay to allow Matrix to process the message
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    return result;
   }
 
-  @Permissions({
-    context: 'event',
-    permissions: [EventAttendeePermission.ManageDiscussions],
-  })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
-  @Patch(':slug/discussions/:messageId')
-  @ApiOperation({ summary: 'Update a group discussion message' })
-  async updateEventDiscussionMessage(
+  @UseGuards(JWTAuthGuard)
+  @Get(':slug/discussions')
+  @ApiOperation({ summary: 'Get messages from the event chat room' })
+  async getEventDiscussionMessages(
     @Param('slug') slug: string,
-    @Param('messageId') messageId: number,
     @AuthUser() user: User,
-    @Body() body: { message: string },
-  ): Promise<{ id: number }> {
-    return this.eventDiscussionService.updateEventDiscussionMessage(
-      messageId,
-      body.message,
+    @Query('limit') limit?: number,
+    @Query('from') from?: string,
+  ) {
+    return this.eventDiscussionService.getEventDiscussionMessages(
+      slug,
       user.id,
+      limit,
+      from,
     );
   }
 
   @Permissions({
     context: 'event',
-    permissions: [EventAttendeePermission.ManageDiscussions],
+    permissions: [EventAttendeePermission.ManageEvent],
   })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
-  @Delete(':slug/discussions/:messageId')
-  @ApiOperation({ summary: 'Delete a group discussion message' })
-  async deleteEventDiscussionMessage(
+  @Post(':slug/discussions/members/:userId')
+  @ApiOperation({ summary: 'Add a member to the event chat room' })
+  async addMemberToEventDiscussion(
     @Param('slug') slug: string,
-    @Param('messageId') messageId: number,
-  ): Promise<{ id: number }> {
-    return this.eventDiscussionService.deleteEventDiscussionMessage(messageId);
+    @Param('userId') userId: number,
+  ): Promise<void> {
+    const event = await this.eventQueryService.showEventBySlug(slug);
+    if (!event) {
+      throw new Error(`Event with slug ${slug} not found`);
+    }
+    return this.eventDiscussionService.addMemberToEventDiscussion(
+      event.id,
+      userId,
+    );
+  }
+
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.ManageEvent],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Delete(':slug/discussions/members/:userId')
+  @ApiOperation({ summary: 'Remove a member from the event chat room' })
+  async removeMemberFromEventDiscussion(
+    @Param('slug') slug: string,
+    @Param('userId') userId: number,
+  ): Promise<void> {
+    const event = await this.eventQueryService.showEventBySlug(slug);
+    if (!event) {
+      throw new Error(`Event with slug ${slug} not found`);
+    }
+    return this.eventDiscussionService.removeMemberFromEventDiscussion(
+      event.id,
+      userId,
+    );
+  }
+  
+  @UseGuards(JWTAuthGuard)
+  @Get(':slug/discussions/stream')
+  @ApiOperation({ summary: 'Stream messages from the event chat room in real-time' })
+  async streamEventDiscussionMessages(
+    @Param('slug') slug: string,
+    @AuthUser() user: User,
+    @Res() response: Response,
+  ): Promise<void> {
+    if (!user) {
+      response.status(HttpStatus.UNAUTHORIZED).send('Unauthorized');
+      return;
+    }
+    
+    // Set headers for SSE
+    response.setHeader('Content-Type', 'text/event-stream');
+    response.setHeader('Cache-Control', 'no-cache');
+    response.setHeader('Connection', 'keep-alive');
+    response.setHeader('X-Accel-Buffering', 'no'); // Important for Nginx
+    response.flushHeaders();
+    
+    // Set up the event stream
+    const event = await this.eventQueryService.showEventBySlug(slug);
+    if (!event) {
+      response.write(`data: ${JSON.stringify({ error: 'Event not found' })}\n\n`);
+      response.end();
+      return;
+    }
+    
+    // Track the last message timestamp to avoid duplicates
+    let lastTimestamp = Date.now();
+    let lastEventId = '';
+    
+    // Function to fetch and send new messages
+    const sendUpdates = async () => {
+      try {
+        const messagesData = await this.eventDiscussionService.getEventDiscussionMessages(
+          slug,
+          user.id,
+          30, // Limit
+          lastEventId || undefined // From
+        );
+        
+        // Process new messages
+        const messages = messagesData.messages || [];
+        if (messages.length > 0) {
+          // Update the lastEventId for pagination
+          lastEventId = messagesData.end || '';
+          
+          // Filter to only include new messages
+          const newMessages = messages.filter(msg => msg.timestamp > lastTimestamp);
+          
+          if (newMessages.length > 0) {
+            // Update the timestamp to the latest message
+            lastTimestamp = Math.max(...newMessages.map(msg => msg.timestamp));
+            
+            // Send each new message
+            newMessages.forEach(message => {
+              response.write(`data: ${JSON.stringify(message)}\n\n`);
+            });
+            
+            // Sending data (response.write automatically flushes data)
+          }
+        }
+      } catch (error) {
+        // Send error to client
+        response.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+      }
+    };
+    
+    // Send initial messages
+    await sendUpdates();
+    
+    // Set up polling interval
+    const intervalId = setInterval(sendUpdates, 2000);
+    
+    // Handle client disconnect
+    response.on('close', () => {
+      clearInterval(intervalId);
+      response.end();
+    });
   }
 }
