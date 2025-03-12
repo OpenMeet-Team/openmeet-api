@@ -6,12 +6,9 @@ import {
   HttpCode,
   Logger,
   Inject,
-  Sse,
-  MessageEvent,
-  Res,
-  Req,
   Param,
   Body,
+  Req,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -22,9 +19,8 @@ import { AuthUser } from '../core/decorators/auth-user.decorator';
 // User entity is imported by the UserService
 import { UserService } from '../user/user.service';
 import * as crypto from 'crypto';
-import { Observable, map, fromEvent } from 'rxjs';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Request, Response } from 'express';
+import { Request } from 'express';
 
 @ApiTags('Matrix')
 @Controller({
@@ -49,8 +45,8 @@ export class MatrixController {
     schema: {
       properties: {
         matrixUserId: { type: 'string', example: '@john:matrix.example.org' },
-        matrixAccessToken: { type: 'string' },
-        matrixDeviceId: { type: 'string' },
+        provisioned: { type: 'boolean', example: true },
+        success: { type: 'boolean', example: true },
       },
     },
   })
@@ -59,8 +55,8 @@ export class MatrixController {
   @Post('provision-user')
   async provisionMatrixUser(@AuthUser() user: { id: number }): Promise<{
     matrixUserId: string;
-    matrixAccessToken: string;
-    matrixDeviceId: string;
+    provisioned: boolean;
+    success: boolean;
   }> {
     this.logger.log(`Provisioning Matrix user for user ID: ${user.id}`);
 
@@ -76,8 +72,8 @@ export class MatrixController {
       this.logger.log(`User ${user.id} already has Matrix credentials`);
       return {
         matrixUserId: fullUser.matrixUserId,
-        matrixAccessToken: fullUser.matrixAccessToken,
-        matrixDeviceId: fullUser.matrixDeviceId,
+        provisioned: false, // Already provisioned
+        success: true,
       };
     }
 
@@ -148,10 +144,11 @@ export class MatrixController {
         `Matrix user provisioned successfully for user ID: ${user.id}`,
       );
 
+      // Return only the Matrix user ID to the client, not the credentials
       return {
         matrixUserId: matrixUserInfo.userId,
-        matrixAccessToken: matrixUserInfo.accessToken,
-        matrixDeviceId: matrixUserInfo.deviceId,
+        provisioned: true,
+        success: true,
       };
     } catch (error) {
       this.logger.error(
@@ -163,74 +160,72 @@ export class MatrixController {
   }
 
   /**
-   * Server-Sent Events endpoint for Matrix events
-   * Streams Matrix events in real-time to the client
+   * Get information about Matrix WebSocket connection
    */
   @ApiOperation({
-    summary: 'Stream Matrix events as server-sent events',
+    summary: 'Get WebSocket connection information',
     description:
-      'Establishes a server-sent events connection for real-time Matrix updates.',
+      'Returns information about the Matrix WebSocket endpoint and authentication status.',
   })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'SSE stream established.',
+    description: 'WebSocket information returned.',
+    schema: {
+      properties: {
+        endpoint: { type: 'string', example: 'wss://api.example.com/matrix' },
+        authenticated: { type: 'boolean', example: true },
+        matrixUserId: { type: 'string', example: '@john:matrix.example.org' },
+      },
+    },
   })
   @UseGuards(JWTAuthGuard)
-  @Sse('events')
-  async streamMatrixEvents(
-    @Req() req: Request,
-    @Res() res: Response,
+  @HttpCode(HttpStatus.OK)
+  @Post('websocket-info')
+  async getWebSocketInfo(
     @AuthUser() user: { id: number },
-  ): Promise<Observable<MessageEvent>> {
-    this.logger.log(`Setting up SSE connection for user ID: ${user.id}`);
+    @Req() req: Request,
+  ): Promise<{
+    endpoint: string;
+    authenticated: boolean;
+    matrixUserId: string | null;
+  }> {
+    this.logger.log(`WebSocket info requested for user ID: ${user.id}`);
 
     try {
       // Get full user information
       const fullUser = await this.userService.findById(user.id);
 
-      if (!fullUser || !fullUser.matrixUserId || !fullUser.matrixAccessToken) {
-        this.logger.warn(
-          `User ${user.id} doesn't have Matrix credentials, can't stream events`,
-        );
-        // Return empty observable - client will have to provision Matrix user
-        return new Observable<MessageEvent>();
-      }
+      // Determine WebSocket endpoint based on configuration
+      // Get the WebSocket endpoint from environment or service
+      const apiBaseUrl =
+        process.env.API_BASE_URL || req.protocol + '://' + req.get('host');
+      const webSocketEndpoint = process.env.MATRIX_WEBSOCKET_ENDPOINT
+        ? process.env.MATRIX_WEBSOCKET_ENDPOINT
+        : apiBaseUrl;
 
-      // Set up headers for SSE
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
+      // Check if the user has valid Matrix credentials
+      const hasCredentials = !!(
+        fullUser?.matrixUserId && fullUser?.matrixAccessToken
+      );
 
-      // Start Matrix client for this user if not already running
-      await this.matrixService.startClient({
-        userId: fullUser.matrixUserId,
-        accessToken: fullUser.matrixAccessToken,
-        deviceId: fullUser.matrixDeviceId,
+      // Log detailed information for debugging
+      this.logger.debug('WebSocket endpoint info:', {
+        endpoint: webSocketEndpoint,
+        authenticated: hasCredentials,
+        userId: user.id,
+        matrixUserId: fullUser?.matrixUserId,
+        hasMatrixCredentials: hasCredentials,
       });
 
-      // Create a client-specific event stream
-      const userEventStreamKey = `matrix.events.${fullUser.matrixUserId}`;
-
-      // Create an observable from the EventEmitter events
-      return fromEvent(this.eventEmitter, userEventStreamKey).pipe(
-        map((event: any): MessageEvent => {
-          // Map the event to a format expected by SSE
-          // Determine the event type
-          let eventType = 'message';
-
-          if (event.type) {
-            eventType = event.type; // Use the Matrix event type if available
-          }
-
-          return {
-            type: eventType,
-            data: JSON.stringify(event),
-          };
-        }),
-      );
+      // Return info to client (no sensitive credentials)
+      return {
+        endpoint: webSocketEndpoint,
+        authenticated: hasCredentials,
+        matrixUserId: fullUser?.matrixUserId || null,
+      };
     } catch (error) {
       this.logger.error(
-        `Error setting up SSE for user ${user.id}: ${error.message}`,
+        `Error getting WebSocket info for user ${user.id}: ${error.message}`,
         error.stack,
       );
       throw error;
@@ -261,21 +256,44 @@ export class MatrixController {
         `Sending typing notification for user ${user.id} in room ${roomId}, typing: ${body.isTyping}`,
       );
 
-      // Get full user information
-      const fullUser = await this.userService.findById(user.id);
+      try {
+        // Get Matrix client for this user using credentials from database
+        const matrixClient = await this.matrixService.getClientForUser(user.id);
 
-      if (!fullUser || !fullUser.matrixUserId || !fullUser.matrixAccessToken) {
-        throw new Error('User does not have Matrix credentials');
+        // Send typing notification using the Matrix client
+        await matrixClient.sendTyping(roomId, body.isTyping, 30000);
+
+        this.logger.debug(
+          `Typing notification sent for user ${user.id} in room ${roomId}`,
+        );
+
+        return { success: true };
+      } catch (error) {
+        this.logger.error(`Error using Matrix client: ${error.message}`);
+
+        // Fall back to traditional credential usage method (will be deprecated)
+        this.logger.debug('Falling back to traditional credential method');
+
+        // Get full user information
+        const fullUser = await this.userService.findById(user.id);
+
+        if (
+          !fullUser ||
+          !fullUser.matrixUserId ||
+          !fullUser.matrixAccessToken
+        ) {
+          throw new Error('User does not have Matrix credentials');
+        }
+
+        // Send typing notification
+        await this.matrixService.sendTypingNotification(
+          roomId,
+          fullUser.matrixUserId,
+          fullUser.matrixAccessToken,
+          body.isTyping,
+          fullUser.matrixDeviceId,
+        );
       }
-
-      // Send typing notification
-      await this.matrixService.sendTypingNotification(
-        roomId,
-        fullUser.matrixUserId,
-        fullUser.matrixAccessToken,
-        body.isTyping,
-        fullUser.matrixDeviceId,
-      );
 
       return { success: true };
     } catch (error) {

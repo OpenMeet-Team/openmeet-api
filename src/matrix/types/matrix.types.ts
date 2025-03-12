@@ -1,4 +1,5 @@
 import * as MatrixSdk from 'matrix-js-sdk';
+import { Socket } from 'socket.io';
 
 // Add explicit type declaration for the mock used in tests
 declare module 'matrix-js-sdk' {
@@ -39,6 +40,7 @@ export interface RoomInfo {
   topic?: string;
   joinedMembers?: string[];
   invitedMembers?: string[];
+  membership?: 'join' | 'invite' | 'leave' | 'ban';
 }
 
 export interface SendMessageOptions {
@@ -79,6 +81,7 @@ export interface StartClientOptions {
   deviceId?: string;
   onEvent?: (event: any) => void;
   onSync?: (state: string, prevState: string | null) => void;
+  wsClient?: Socket; // WebSocket client to associate with this Matrix client
 }
 
 export interface ActiveClient {
@@ -86,4 +89,5 @@ export interface ActiveClient {
   userId: string;
   lastActivity: Date;
   eventCallbacks: ((event: any) => void)[];
+  wsClient?: Socket; // WebSocket client associated with this Matrix client
 }

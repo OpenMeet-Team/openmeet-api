@@ -103,6 +103,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     }),
     EventEmitterModule.forRoot(),
     PrometheusModule.register(),
+    // It's important that UserModule comes before MatrixModule to ensure it's initialized first
     UserModule,
     FileModule,
     AuthModule,
@@ -131,8 +132,8 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     AuthBlueskyModule,
     BlueskyModule,
     TracingModule,
-    MatrixModule,
     ChatRoomModule,
+    MatrixModule,
   ],
   providers: [
     TenantConnectionService,
@@ -158,5 +159,10 @@ export class AppModule {
   ) {
     // Ensure that TenantConnectionService is instantiated when the application starts
     // This ensures the onModuleInit hook is triggered
+
+    // Create global reference of key services
+    console.log(
+      'AppModule constructor initialized - registering global services',
+    );
   }
 }

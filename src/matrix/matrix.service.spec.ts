@@ -35,7 +35,7 @@ jest.mock('matrix-js-sdk', () => {
   };
 
   return {
-    createClient: jest.fn((_opts) => mockClient),
+    createClient: jest.fn(() => mockClient),
     __mockClient: mockClient,
     // Mock the necessary enums
     Visibility: {
@@ -58,7 +58,6 @@ const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('MatrixService', () => {
   let service: MatrixService;
-  let configService: ConfigService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -98,7 +97,6 @@ describe('MatrixService', () => {
     }).compile();
 
     service = module.get<MatrixService>(MatrixService);
-    configService = module.get<ConfigService>(ConfigService);
 
     // Mock the axios responses for REST API calls
     mockedAxios.get.mockResolvedValue({

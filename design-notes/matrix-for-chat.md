@@ -321,6 +321,7 @@ The implementation includes sophisticated error recovery:
 - ✅ Update API methods to remove topic formatting
 - ✅ Update event-discussion service to remove topic handling
 - ✅ Create standardized UI components for messaging
+- ✅ Implement WebSocket support for real-time messaging
 
 **Remaining:**
 - ⏳ Update existing event pages to use the new unified message component
@@ -341,6 +342,89 @@ The implementation includes sophisticated error recovery:
 - More consistent user experience across the platform
 - Better alignment with Matrix's native messaging model
 - Reduced complexity in state management
+
+### Phase 1.6: Secure Matrix Credential Management 🆕 IN PROGRESS
+
+**Current Status:**
+- Basic WebSocket integration for Matrix chat completed
+- Matrix credentials currently passed from client to server (security concern)
+
+**Implementation Goals:**
+- Implement hybrid credential management approach for Matrix authentication
+- Maintain real-time WebSocket benefits while securing Matrix credentials
+
+**Approach:**
+1. **Session-based Matrix Client:**
+   - Create a Matrix client instance when WebSocket connection is established
+   - Associate client with the user's WebSocket session
+   - Keep client in memory only for the duration of the WebSocket connection
+   - Use the client for all Matrix operations during the session
+
+2. **Server-side Credential Management:**
+   - Store Matrix credentials securely in database (encrypted)
+   - Retrieve credentials using user ID from JWT authentication
+   - Never send Matrix credentials to client
+   - Use ElastiCache for temporary credential caching, if beneficial
+
+3. **Clean Credential Lifecycle:**
+   - When WebSocket connection is established:
+     - Authenticate user via JWT
+     - Retrieve Matrix credentials from database
+     - Create Matrix client instance with these credentials
+   - During session:
+     - Use Matrix client for all operations
+     - Periodically check if tokens need refresh
+   - When WebSocket connection closes:
+     - Destroy Matrix client
+     - Clear credentials from memory
+
+4. **Multi-tenant Support:**
+   - WebSocket connections must include tenant ID for proper authentication
+   - Tenant ID can be provided in one of the following ways:
+     - As part of Socket.io auth object: `socket.handshake.auth.tenantId`
+     - As a query parameter: `socket.handshake.query.tenantId`
+     - As a header: `socket.handshake.headers['x-tenant-id']`
+   - The tenant ID must be passed to UserService methods:
+     - `userService.findById(userId, tenantId)` - Missing this parameter causes "Tenant ID is required" error
+   - Frontend must ensure tenant ID is properly included in WebSocket connection
+   - Frontend should store tenant ID in localStorage as fallback mechanism
+   - Default to 'default' tenant ID if no specific tenant is provided
+
+**Security Benefits:**
+- Matrix credentials never exposed to client
+- Credentials only in memory during active session
+- No credential transmission over network (beyond initial DB fetch)
+- Reduced attack surface
+
+**Performance Benefits:**
+- Maintains all WebSocket advantages (real-time, low latency)
+- Avoids credential lookup on every Matrix operation
+- Efficient use of resources with proper cleanup
+
+**Implementation Timeline:**
+- Backend changes (1-2 days)
+- Frontend adjustments (1 day)
+- Testing and validation (1 day)
+
+**Implementation Status:**
+- ✅ Server-side Matrix credential management
+- ✅ WebSocket tenant ID handling (auth object, query param, headers)
+- ✅ Matrix client lifecycle management with WebSocket session
+- ✅ JWT-only authentication for WebSockets (no Matrix credentials sent)
+- ✅ Secure WebSocket connection initialization
+- ⏳ Backend hotfix: Passing tenant ID to UserService.findById()
+
+**Next Steps:**
+1. Update Matrix service to implement the hybrid approach - COMPLETED
+2. Modify WebSocket gateway to securely handle Matrix credentials - COMPLETED 
+3. Update frontend to work with the new authentication pattern - COMPLETED
+4. Add backend hotfix for tenant ID handling:
+   ```typescript
+   // In matrix.gateway.ts authentication middleware:
+   const tenantId = socket.handshake.auth.tenantId;
+   // Pass both user ID and tenant ID to findById:
+   const user = await userService.findById(userId, tenantId);
+   ```
 
 ### Phase 2: Feature Implementation (2 weeks)
 - Implement all chat functionality (messaging, rooms, media)
@@ -426,3 +510,13 @@ As of Phase 1.5, we've made the decision to simplify our messaging model by remo
    - Cache messages when offline
    - Queue outgoing messages
    - Sync when connection is restored
+   
+8. **Consider WebSockets Instead of SSE**
+   - Current SSE implementation faces limitations with custom headers (authorization)
+   - WebSockets would allow proper header-based authentication
+   - Socket.io or raw WebSockets could be implemented with NestJS's WebSockets module
+   - Bidirectional communication would improve efficiency for typing indicators
+   - Better native reconnection handling
+   - AWS ELB/ALB and Kubernetes ingress controllers support WebSockets
+   - Connection pooling and lifecycle management would be similar
+   - Would require changes to both backend controller and frontend client implementation

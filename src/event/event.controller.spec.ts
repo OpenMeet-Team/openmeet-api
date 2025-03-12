@@ -18,8 +18,6 @@ import {
   mockGroupMemberService,
   mockGroupService,
   mockUser,
-  mockZulipMessage,
-  mockZulipMessageResponse,
 } from '../test/mocks';
 import { mockEvents } from '../test/mocks';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';

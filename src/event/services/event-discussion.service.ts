@@ -4,7 +4,6 @@ import {
   Inject,
   Logger,
   NotFoundException,
-  BadRequestException,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Repository } from 'typeorm';
@@ -136,29 +135,33 @@ export class EventDiscussionService {
       limit,
       from,
     );
-    
+
     // Enhance messages with user display names
     const enhancedMessages = await Promise.all(
       messageData.messages.map(async (message) => {
         try {
           // Get user info from our database based on Matrix ID
           const userMatrixId = message.sender;
-          
+
           // Find the OpenMeet user with this Matrix ID
-          const userWithMatrixId = await this.userService.findByMatrixUserId(userMatrixId);
-          
+          const userWithMatrixId =
+            await this.userService.findByMatrixUserId(userMatrixId);
+
           // If we found a user, add their name to the message
           if (userWithMatrixId) {
-            const displayName = [userWithMatrixId.firstName, userWithMatrixId.lastName]
-              .filter(Boolean)
-              .join(' ') || userWithMatrixId.email?.split('@')[0] || 'OpenMeet User';
-            
+            const displayName =
+              [userWithMatrixId.firstName, userWithMatrixId.lastName]
+                .filter(Boolean)
+                .join(' ') ||
+              userWithMatrixId.email?.split('@')[0] ||
+              'OpenMeet User';
+
             return {
               ...message,
-              sender_name: displayName
+              sender_name: displayName,
             };
           }
-          
+
           return message;
         } catch (error) {
           this.logger.warn(
@@ -194,7 +197,7 @@ export class EventDiscussionService {
     }
 
     // Ensure chat room exists
-    const chatRoom = await this.ensureEventChatRoom(eventId, event.user.id);
+    await this.ensureEventChatRoom(eventId, event.user.id);
 
     // Add the user to the chat room
     await this.chatRoomService.addUserToEventChatRoom(eventId, userId);

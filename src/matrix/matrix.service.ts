@@ -5,6 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ModuleRef, ContextIdFactory } from '@nestjs/core';
 import * as sdk from 'matrix-js-sdk';
 import * as pool from 'generic-pool';
 import axios from 'axios';
@@ -41,13 +42,28 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
   // Active client instances for real-time events/sync
   private activeClients: Map<string, ActiveClient> = new Map();
 
+  // Map to store user-specific Matrix clients
+  private userMatrixClients: Map<
+    number,
+    {
+      client: sdk.MatrixClient;
+      matrixUserId: string;
+      lastActivity: Date;
+    }
+  > = new Map();
+
   // Interval for cleaning up inactive clients
   private cleanupInterval: NodeJS.Timeout;
+
+  // Add moduleRef property
+  private readonly moduleRef: ModuleRef;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly eventEmitter: EventEmitter2,
+    moduleRef: ModuleRef,
   ) {
+    this.moduleRef = moduleRef;
     const matrixConfig = this.configService.get<MatrixConfig>('matrix', {
       infer: true,
     });
@@ -94,6 +110,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
     // Initialize connection pool
     this.clientPool = pool.createPool<MatrixClientWithContext>(
       {
+        // eslint-disable-next-line @typescript-eslint/require-await
         create: async () => {
           // Use the same userId and accessToken for consistency
           const client = sdk.createClient({
@@ -181,6 +198,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
     const now = new Date();
     const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
 
+    // Cleanup activeClients (admin operations)
     for (const [userId, activeClient] of this.activeClients.entries()) {
       if (activeClient.lastActivity < twoHoursAgo) {
         this.logger.log(
@@ -189,6 +207,137 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
         activeClient.client.stopClient();
         this.activeClients.delete(userId);
       }
+    }
+
+    // Cleanup user-specific Matrix clients
+    for (const [userId, clientInfo] of this.userMatrixClients.entries()) {
+      if (clientInfo.lastActivity < twoHoursAgo) {
+        this.logger.log(
+          `Cleaning up inactive user Matrix client for user ${userId}`,
+        );
+        try {
+          clientInfo.client.stopClient();
+        } catch (error) {
+          this.logger.warn(
+            `Error stopping client for user ${userId}: ${error.message}`,
+          );
+        }
+        this.userMatrixClients.delete(userId);
+      }
+    }
+  }
+
+  /**
+   * Get or create a Matrix client for a specific user
+   * This method fetches user credentials from the database
+   */
+  async getClientForUser(
+    userId: number,
+    userService?: any,
+    tenantId?: string,
+  ): Promise<sdk.MatrixClient> {
+    // Check if we already have an active client for this user
+    const existingClient = this.userMatrixClients.get(userId);
+    if (existingClient) {
+      // Update last activity timestamp
+      existingClient.lastActivity = new Date();
+      this.logger.debug(`Using existing Matrix client for user ${userId}`);
+      return existingClient.client;
+    }
+
+    this.logger.debug(
+      `Creating new Matrix client for user ${userId} with tenant ID: ${tenantId || 'undefined'}`,
+    );
+
+    // We need to fetch the user with Matrix credentials
+    let user;
+    try {
+      if (userService) {
+        // If userService was passed, use it (more efficient)
+        // Pass tenant ID to findById
+        user = await userService.findById(userId, tenantId);
+      } else {
+        // Otherwise, get a UserService instance through the module system
+        const contextId = ContextIdFactory.create();
+
+        // Get UserService dynamically - requires moduleRef to be properly set up
+        if (!this.moduleRef) {
+          throw new Error('ModuleRef not available in MatrixService');
+        }
+
+        // Import UserService
+        const UserServiceClass = (await import('../user/user.service'))
+          .UserService;
+        const userServiceInstance = await this.moduleRef.resolve(
+          UserServiceClass,
+          contextId,
+          { strict: false },
+        );
+
+        // Pass tenant ID to findById
+        user = await userServiceInstance.findById(userId, tenantId);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error fetching user ${userId}: ${error.message}`,
+        error.stack,
+      );
+      throw new Error(`Failed to get user data: ${error.message}`);
+    }
+
+    if (!user || !user.matrixUserId || !user.matrixAccessToken) {
+      this.logger.warn(`User ${userId} has no Matrix credentials`);
+      throw new Error('User has no Matrix credentials');
+    }
+
+    try {
+      // Create a Matrix client with the user's credentials
+      const client = sdk.createClient({
+        baseUrl: this.baseUrl,
+        userId: user.matrixUserId,
+        accessToken: user.matrixAccessToken,
+        deviceId: user.matrixDeviceId || undefined,
+        useAuthorizationHeader: true,
+      });
+
+      // Store the client
+      this.userMatrixClients.set(userId, {
+        client,
+        matrixUserId: user.matrixUserId,
+        lastActivity: new Date(),
+      });
+
+      this.logger.log(
+        `Created Matrix client for user ${userId} (${user.matrixUserId})`,
+      );
+
+      return client;
+    } catch (error) {
+      this.logger.error(
+        `Error creating Matrix client for user ${userId}: ${error.message}`,
+        error.stack,
+      );
+      throw new Error(`Failed to create Matrix client: ${error.message}`);
+    }
+  }
+
+  /**
+   * Release a Matrix client when it's no longer needed
+   */
+  releaseClientForUser(userId: number): void {
+    const clientInfo = this.userMatrixClients.get(userId);
+    if (clientInfo) {
+      try {
+        this.logger.debug(`Stopping Matrix client for user ${userId}`);
+        clientInfo.client.stopClient();
+      } catch (error) {
+        this.logger.warn(
+          `Error stopping client for user ${userId}: ${error.message}`,
+        );
+      }
+
+      this.userMatrixClients.delete(userId);
+      this.logger.log(`Released Matrix client for user ${userId}`);
     }
   }
 
@@ -520,29 +669,8 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
     const client = await this.clientPool.acquire();
 
     try {
-      // Define default power levels that can be used for room creation
-      const _defaultPowerLevels = {
-        users: {
-          [this.adminUserId]: 100,
-        },
-        events: {
-          'm.room.name': 50,
-          'm.room.power_levels': 100,
-          'm.room.history_visibility': 100,
-          'm.room.canonical_alias': 50,
-          'm.room.avatar': 50,
-          'm.room.tombstone': 100,
-          'm.room.server_acl': 100,
-          'm.room.encryption': 100,
-        },
-        state_default: 50,
-        events_default: 0,
-        users_default: 0,
-        ban: 50,
-        kick: 50,
-        redact: 50,
-        invite: 50,
-      };
+      // Power levels will be set during room creation
+      // and are inherited from server defaults
 
       this.logger.debug(
         `Creating room "${name}" with admin user ${this.adminUserId}`,
@@ -851,12 +979,18 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
         if (state === 'PREPARED') {
           this.logger.log(`Matrix client for user ${userId} is ready`);
 
-          // Emit a ready event
-          this.eventEmitter.emit(`matrix.events.${userId}`, {
+          // Create event object
+          const eventObj = {
             type: 'ready',
             userId,
             timestamp: Date.now(),
-          });
+          };
+
+          // Emit via EventEmitter for SSE (legacy)
+          this.eventEmitter.emit(`matrix.events.${userId}`, eventObj);
+
+          // Send via WebSocket if client is connected
+          this.sendEventToWebSocket(userId, '', eventObj);
         }
       });
 
@@ -879,15 +1013,21 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
           // Get message content
           const content = event.getContent();
 
-          // Emit a message event
-          this.eventEmitter.emit(`matrix.events.${userId}`, {
+          // Create event object
+          const eventObj = {
             type: 'm.room.message',
             room_id: room.roomId,
             event_id: event.getId(),
             sender,
             content,
             origin_server_ts: event.getTs(),
-          });
+          };
+
+          // Emit via EventEmitter for SSE (legacy)
+          this.eventEmitter.emit(`matrix.events.${userId}`, eventObj);
+
+          // Send via WebSocket if client is connected
+          this.sendEventToWebSocket(userId, room.roomId, eventObj);
         },
       );
 
@@ -908,12 +1048,18 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
             .filter((m) => m.typing)
             .map((m) => m.userId);
 
-          // Emit a typing event
-          this.eventEmitter.emit(`matrix.events.${userId}`, {
+          // Create event object
+          const eventObj = {
             type: 'm.typing',
             room_id: roomId,
             user_ids: typingUserIds,
-          });
+          };
+
+          // Emit via EventEmitter for SSE (legacy)
+          this.eventEmitter.emit(`matrix.events.${userId}`, eventObj);
+
+          // Send via WebSocket if client is connected
+          this.sendEventToWebSocket(userId, roomId, eventObj);
         },
       );
 
@@ -925,12 +1071,18 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
           const receiptData = event.getContent();
           const roomId = room.roomId;
 
-          // Emit a receipt event
-          this.eventEmitter.emit(`matrix.events.${userId}`, {
+          // Create event object
+          const eventObj = {
             type: 'm.receipt',
             room_id: roomId,
             content: receiptData,
-          });
+          };
+
+          // Emit via EventEmitter for SSE (legacy)
+          this.eventEmitter.emit(`matrix.events.${userId}`, eventObj);
+
+          // Send via WebSocket if client is connected
+          this.sendEventToWebSocket(userId, roomId, eventObj);
         },
       );
 
@@ -1081,8 +1233,9 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       senderUserId,
       senderAccessToken,
       senderDeviceId,
-      // Add a relationshipType property to control threading
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       relationshipType,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       relationshipEventId,
     } = options;
 
@@ -1184,7 +1337,8 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
    * Start a Matrix client for a specific user with real-time sync
    */
   async startClient(options: StartClientOptions): Promise<void> {
-    const { userId, accessToken, deviceId, onEvent, onSync } = options;
+    const { userId, accessToken, deviceId, onEvent, onSync, wsClient } =
+      options;
 
     // Check if client already exists
     if (this.activeClients.has(userId)) {
@@ -1193,6 +1347,12 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       if (existingClient) {
         // Update last activity
         existingClient.lastActivity = new Date();
+
+        // Update WebSocket client if provided
+        if (wsClient && !existingClient.wsClient) {
+          existingClient.wsClient = wsClient;
+          this.logger.log(`Updated WebSocket client for Matrix user ${userId}`);
+        }
 
         // Add new event callback if provided
         if (onEvent && !existingClient.eventCallbacks.includes(onEvent)) {
@@ -1446,6 +1606,255 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       );
     } finally {
       await this.clientPool.release(client);
+    }
+  }
+
+  /**
+   * Get the WebSocket endpoint for Matrix events
+   */
+  getWebSocketEndpoint(): string {
+    // Try to get the WebSocket endpoint from environment variable
+    const wsEndpoint =
+      process.env.MATRIX_WEBSOCKET_ENDPOINT || process.env.API_BASE_URL;
+
+    if (wsEndpoint) {
+      // Use the configured WebSocket endpoint
+      let endpoint = wsEndpoint;
+
+      // Convert HTTP to WS if needed
+      endpoint = endpoint
+        .replace(/^http:\/\//i, 'ws://')
+        .replace(/^https:\/\//i, 'wss://');
+
+      // Add the matrix namespace
+      if (!endpoint.endsWith('/')) {
+        endpoint += '/';
+      }
+      endpoint += 'matrix';
+
+      this.logger.log(`Using configured WebSocket endpoint: ${endpoint}`);
+      return endpoint;
+    }
+
+    // Fall back to Matrix server URL if no WebSocket endpoint is configured
+    // Replace http/https with ws/wss
+    let endpoint = this.baseUrl
+      .replace(/^http:\/\//i, 'ws://')
+      .replace(/^https:\/\//i, 'wss://');
+
+    // Add the matrix namespace
+    if (!endpoint.endsWith('/')) {
+      endpoint += '/';
+    }
+    endpoint += 'matrix';
+
+    this.logger.log(
+      `Using fallback WebSocket endpoint based on Matrix baseUrl: ${endpoint}`,
+    );
+    return endpoint;
+  }
+
+  /**
+   * Get rooms for a Matrix user (DEPRECATED: Use getUserRoomsWithClient instead)
+   */
+  async getUserRooms(userId: string, accessToken: string): Promise<RoomInfo[]> {
+    try {
+      this.logger.warn(
+        'getUserRooms with explicit credentials is deprecated - use getUserRoomsWithClient instead',
+      );
+      this.logger.log(`Getting rooms for Matrix user: ${userId}`);
+
+      // Note: We're not using the SDK client for this operation
+      // We'll use Axios directly to call the REST API
+
+      // Fetch the user's rooms (we can't use the sync API here)
+      // For rooms API we need to use the REST API
+      try {
+        // Use the Matrix client's API to get joined rooms
+        const response = await axios.get(
+          `${this.baseUrl}/_matrix/client/v3/joined_rooms`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          },
+        );
+
+        const roomIds = response.data.joined_rooms || [];
+        this.logger.log(`Found ${roomIds.length} rooms for user ${userId}`);
+
+        // Get more info about each room
+        const rooms: RoomInfo[] = [];
+
+        for (const roomId of roomIds) {
+          try {
+            // Get room state to get name and topic
+            const stateResponse = await axios.get(
+              `${this.baseUrl}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state/m.room.name/`,
+              {
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                },
+              },
+            );
+
+            const roomName = stateResponse.data?.name || roomId;
+
+            // Get room members
+            const membersResponse = await axios.get(
+              `${this.baseUrl}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/joined_members`,
+              {
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                },
+              },
+            );
+
+            const joinedMembers = Object.keys(
+              membersResponse.data?.joined || {},
+            );
+
+            rooms.push({
+              roomId,
+              name: roomName,
+              joinedMembers,
+            });
+          } catch (roomError) {
+            this.logger.warn(
+              `Error getting details for room ${roomId}: ${roomError.message}`,
+            );
+            // Still add the room with just its ID
+            rooms.push({
+              roomId,
+              name: roomId,
+              joinedMembers: [],
+            });
+          }
+        }
+
+        return rooms;
+      } catch (error) {
+        this.logger.error(
+          `Error getting rooms for user ${userId}: ${error.message}`,
+        );
+        return [];
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to get rooms for user ${userId}: ${error.message}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Get the rooms for a specific Matrix user using a Matrix client
+   * This method uses the provided client to fetch rooms, avoiding
+   * sending sensitive credentials over the network.
+   */
+  async getUserRoomsWithClient(
+    matrixClient: sdk.MatrixClient,
+  ): Promise<RoomInfo[]> {
+    try {
+      const userId = matrixClient.getUserId();
+      this.logger.debug(
+        `Getting rooms for Matrix user ${userId} using client instance`,
+      );
+
+      // Fetch joined rooms first
+      const joinedRooms = await matrixClient.getJoinedRooms();
+      const rooms: RoomInfo[] = [];
+
+      // Process joined rooms
+      if (joinedRooms?.joined_rooms?.length > 0) {
+        for (const roomId of joinedRooms.joined_rooms) {
+          try {
+            const roomState = await matrixClient.roomState(roomId);
+            const nameEvent = roomState.find(
+              (event) => event.type === 'm.room.name',
+            );
+            const topicEvent = roomState.find(
+              (event) => event.type === 'm.room.topic',
+            );
+            const name = nameEvent?.content?.name || '';
+            const topic = topicEvent?.content?.topic || '';
+
+            rooms.push({
+              roomId,
+              name,
+              topic,
+              membership: 'join',
+            });
+          } catch (error) {
+            this.logger.warn(
+              `Error getting room state for ${roomId}: ${error.message}`,
+            );
+            // Still add the room with basic info
+            rooms.push({
+              roomId,
+              name: '',
+              topic: '',
+              membership: 'join',
+            });
+          }
+        }
+      }
+
+      // For invited rooms, we'll use a different approach
+      // Since the Matrix JS SDK doesn't expose a direct method for invited rooms,
+      // we'll skip this for now and only show joined rooms
+      this.logger.warn(
+        'Fetching invited rooms is not supported in the current implementation',
+      );
+
+      // Note: To properly implement this, we would need to:
+      // 1. Use the Matrix REST API directly (not through the SDK)
+      // 2. Make a direct HTTP call to /_matrix/client/v3/sync with filter for invited rooms
+      // 3. Process the response manually
+
+      // For now, we'll just return the joined rooms we have
+
+      // Sort rooms by name
+      return rooms.sort((a, b) => {
+        const nameA = a.name?.toLowerCase() || a.roomId;
+        const nameB = b.name?.toLowerCase() || b.roomId;
+        return nameA.localeCompare(nameB);
+      });
+    } catch (error) {
+      this.logger.error(
+        `Error getting rooms with client: ${error.message}`,
+        error.stack,
+      );
+      throw new Error(`Failed to get rooms: ${error.message}`);
+    }
+  }
+
+  /**
+   * Send Matrix event to connected WebSocket client
+   */
+  private sendEventToWebSocket(
+    userId: string,
+    roomId: string,
+    event: any,
+  ): void {
+    try {
+      // Get the active client for this user
+      const activeClient = this.activeClients.get(userId);
+
+      if (activeClient && activeClient.wsClient) {
+        // Send event to the user via their WebSocket
+        activeClient.wsClient.emit('matrix-event', event);
+
+        // If the event is for a room, also emit to the room
+        if (roomId) {
+          // The gateway maintains room membership
+          activeClient.wsClient.to(roomId).emit('matrix-event', event);
+        }
+
+        this.logger.debug(`Matrix event sent to WebSocket for user ${userId}`);
+      }
+    } catch (error) {
+      this.logger.error(`Error sending event to WebSocket: ${error.message}`);
     }
   }
 }

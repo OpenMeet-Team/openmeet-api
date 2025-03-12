@@ -534,9 +534,9 @@ export class EventQueryService {
   }
 
   @Trace('event-query.findEventTopicsByEventId')
-  async findEventTopicsByEventId(zulipChannelId: number): Promise<any[]> {
+  findEventTopicsByEventId(): Promise<any[]> {
     // Matrix-based discussions don't use Zulip topics
-    return [];
+    return Promise.resolve([]);
   }
 
   @Trace('event-query.showEventAttendees')

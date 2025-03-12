@@ -7,7 +7,6 @@ import {
   ManyToOne,
   JoinColumn,
   Index,
-  OneToMany,
   ManyToMany,
   JoinTable,
 } from 'typeorm';

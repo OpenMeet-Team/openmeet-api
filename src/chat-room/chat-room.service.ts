@@ -23,6 +23,89 @@ export class ChatRoomService {
   private eventRepository: Repository<EventEntity>;
   private groupRepository: Repository<GroupEntity>;
 
+  /**
+   * Ensures a user has Matrix credentials, provisioning them if needed
+   * @param userId The user ID to ensure has Matrix credentials
+   * @returns The user with Matrix credentials
+   * @throws Error if Matrix credentials could not be provisioned
+   */
+  private async ensureUserHasMatrixCredentials(
+    userId: number,
+  ): Promise<UserEntity> {
+    // Get the user
+    let user = await this.userService.getUserById(userId);
+
+    // If user doesn't have Matrix credentials, try to provision them
+    if (!user.matrixUserId || !user.matrixAccessToken || !user.matrixDeviceId) {
+      this.logger.log(
+        `User ${userId} is missing Matrix credentials, attempting to provision...`,
+      );
+      try {
+        // Get user's name for Matrix registration
+        const displayName = [user.firstName, user.lastName]
+          .filter(Boolean)
+          .join(' ');
+        const username = `om_${user.ulid.toLowerCase()}`;
+        const password =
+          Math.random().toString(36).slice(2) +
+          Math.random().toString(36).slice(2);
+
+        // Call the Matrix service to create a user
+        const matrixUserInfo = await this.matrixService.createUser({
+          username,
+          password,
+          displayName: displayName || username,
+        });
+
+        // Update user with Matrix credentials
+        await this.userService.update(userId, {
+          matrixUserId: matrixUserInfo.userId,
+          matrixAccessToken: matrixUserInfo.accessToken,
+          matrixDeviceId: matrixUserInfo.deviceId,
+        });
+
+        // Get the updated user record
+        user = await this.userService.getUserById(userId);
+        this.logger.log(
+          `Successfully provisioned Matrix user for ${userId}: ${user.matrixUserId}`,
+        );
+      } catch (provisionError) {
+        this.logger.error(
+          `Failed to provision Matrix user for ${userId}: ${provisionError.message}`,
+        );
+        throw new Error(
+          `Matrix credentials could not be provisioned. Please try again.`,
+        );
+      }
+    }
+
+    // Check again after provisioning attempt
+    if (!user.matrixUserId || !user.matrixAccessToken) {
+      throw new Error(
+        `User with id ${userId} could not be provisioned with Matrix credentials.`,
+      );
+    }
+
+    // Start the client for this user
+    try {
+      // Add non-null assertions since we've checked these values above
+      await this.matrixService.startClient({
+        userId: user.matrixUserId!, // Non-null assertion
+        accessToken: user.matrixAccessToken!, // Non-null assertion
+        deviceId: user.matrixDeviceId || undefined,
+      });
+    } catch (startError) {
+      this.logger.error(
+        `Failed to start Matrix client for user ${userId}: ${startError.message}`,
+      );
+      throw new Error(
+        `Could not connect to Matrix chat service. Please try again later.`,
+      );
+    }
+
+    return user;
+  }
+
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
@@ -300,23 +383,8 @@ export class ChatRoomService {
       throw new Error(`Chat room with id ${roomId} not found`);
     }
 
-    // Get the user
-    const user = await this.userService.getUserById(userId);
-
-    if (!user.matrixUserId) {
-      throw new Error(`User with id ${userId} does not have a Matrix user ID`);
-    }
-
-    // Start the client for this user if not already started
-    if (user.matrixUserId && user.matrixAccessToken) {
-      await this.matrixService.startClient({
-        userId: user.matrixUserId,
-        accessToken: user.matrixAccessToken,
-        deviceId: user.matrixDeviceId || undefined,
-      });
-    } else {
-      throw new Error(`User ${userId} does not have Matrix credentials`);
-    }
+    // Ensure user has Matrix credentials (will provision them if needed)
+    const user = await this.ensureUserHasMatrixCredentials(userId);
 
     // Make sure user is in the room
     try {
@@ -339,14 +407,14 @@ export class ChatRoomService {
         // First, invite the user via admin
         await this.matrixService.inviteUser({
           roomId: chatRoom.matrixRoomId,
-          userId: user.matrixUserId,
+          userId: user.matrixUserId!, // Non-null assertion
         });
 
         // Then have the user join the room
         await this.matrixService.joinRoom(
           chatRoom.matrixRoomId,
-          user.matrixUserId,
-          user.matrixAccessToken,
+          user.matrixUserId!, // Non-null assertion
+          user.matrixAccessToken!, // Non-null assertion
           user.matrixDeviceId,
         );
 
@@ -376,15 +444,15 @@ export class ChatRoomService {
       );
 
       await this.matrixService.setUserDisplayName(
-        user.matrixUserId,
-        user.matrixAccessToken,
+        user.matrixUserId!, // Non-null assertion
+        user.matrixAccessToken!, // Non-null assertion
         displayName,
         user.matrixDeviceId,
       );
 
       // Verify display name was set
       const displayNameCheck = await this.matrixService.getUserDisplayName(
-        user.matrixUserId,
+        user.matrixUserId!, // Non-null assertion
       );
       this.logger.log(
         `Current Matrix display name for user ${userId}: "${displayNameCheck || 'Not set'}"`,
@@ -396,8 +464,8 @@ export class ChatRoomService {
           `Display name not set correctly, trying direct API method`,
         );
         await this.matrixService.setUserDisplayNameDirect(
-          user.matrixUserId,
-          user.matrixAccessToken,
+          user.matrixUserId!, // Non-null assertion
+          user.matrixAccessToken!, // Non-null assertion
           displayName,
         );
       }
@@ -410,15 +478,15 @@ export class ChatRoomService {
     return this.matrixService.sendMessage({
       roomId: chatRoom.matrixRoomId,
       content: message,
-      userId: user.matrixUserId,
-      accessToken: user.matrixAccessToken,
+      userId: user.matrixUserId!, // Non-null assertion
+      accessToken: user.matrixAccessToken!, // Non-null assertion
       deviceId: user.matrixDeviceId,
       // Legacy/alternate field support
       body: message,
       formatted_body: formattedMessage,
       format: formattedMessage ? 'org.matrix.custom.html' : undefined,
-      senderUserId: user.matrixUserId,
-      senderAccessToken: user.matrixAccessToken,
+      senderUserId: user.matrixUserId!, // Non-null assertion
+      senderAccessToken: user.matrixAccessToken!, // Non-null assertion
       senderDeviceId: user.matrixDeviceId,
     });
   }
@@ -439,30 +507,15 @@ export class ChatRoomService {
       throw new Error(`Chat room with id ${roomId} not found`);
     }
 
-    // Get the user
-    const user = await this.userService.getUserById(userId);
-
-    if (!user.matrixUserId) {
-      throw new Error(`User with id ${userId} does not have a Matrix user ID`);
-    }
-
-    // Start the client for this user if not already started
-    if (user.matrixUserId && user.matrixAccessToken) {
-      await this.matrixService.startClient({
-        userId: user.matrixUserId,
-        accessToken: user.matrixAccessToken,
-        deviceId: user.matrixDeviceId || undefined,
-      });
-    } else {
-      throw new Error(`User ${userId} does not have Matrix credentials`);
-    }
+    // Ensure user has Matrix credentials (will provision them if needed)
+    const user = await this.ensureUserHasMatrixCredentials(userId);
 
     // Get the messages
     return this.matrixService.getRoomMessages(
       chatRoom.matrixRoomId,
       limit,
       from,
-      user.matrixUserId,
+      user.matrixUserId!, // Non-null assertion
     );
   }
 }
