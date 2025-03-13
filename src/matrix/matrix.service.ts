@@ -9,7 +9,6 @@ import { ModuleRef, ContextIdFactory } from '@nestjs/core';
 import * as sdk from 'matrix-js-sdk';
 import * as pool from 'generic-pool';
 import axios from 'axios';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 
 import {
   ActiveClient,
@@ -24,6 +23,7 @@ import {
   StartClientOptions,
 } from './types/matrix.types';
 import { MatrixConfig } from './config/matrix-config.type';
+import { MatrixGateway } from './matrix.gateway';
 
 @Injectable()
 export class MatrixService implements OnModuleInit, OnModuleDestroy {
@@ -35,6 +35,9 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
   private readonly defaultDeviceId: string;
   private readonly defaultInitialDeviceDisplayName: string;
   private readonly adminAccessToken: string;
+
+  // Reference to the MatrixGateway for broadcasting events
+  private matrixGateway: any = null;
 
   // Connection pool for admin API operations
   private clientPool: pool.Pool<MatrixClientWithContext>;
@@ -60,7 +63,6 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly eventEmitter: EventEmitter2,
     moduleRef: ModuleRef,
   ) {
     this.moduleRef = moduleRef;
@@ -157,6 +159,67 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       }
 
       this.logger.log('Matrix client pool initialized');
+
+      // Get reference to the MatrixGateway for broadcasting room events
+      setTimeout(() => {
+        try {
+          // Dynamically find the MatrixGateway instance
+          // This is needed because we can't directly inject it due to circular dependencies
+          if (!this.moduleRef) {
+            this.logger.warn(
+              'ModuleRef not available, cannot get MatrixGateway reference',
+            );
+            return;
+          }
+
+          // Get the MatrixGateway directly from the moduleRef
+          try {
+            // First, try getting by token name
+            this.matrixGateway = this.moduleRef.get('MatrixGateway', {
+              strict: false,
+            });
+            if (this.matrixGateway) {
+              this.logger.log(
+                'Successfully obtained reference to MatrixGateway by name token',
+              );
+            }
+          } catch (innerError) {
+            this.logger.warn(
+              'Error getting MatrixGateway by token name',
+              innerError,
+            );
+          }
+
+          // If first method failed, try getting by constructor reference
+          if (!this.matrixGateway) {
+            try {
+              this.matrixGateway = this.moduleRef.get(MatrixGateway, {
+                strict: false,
+              });
+              if (this.matrixGateway) {
+                this.logger.log(
+                  'Successfully obtained reference to MatrixGateway by constructor',
+                );
+              }
+            } catch (innerError) {
+              this.logger.warn(
+                'Error getting MatrixGateway by constructor',
+                innerError,
+              );
+            }
+          }
+
+          if (!this.matrixGateway) {
+            this.logger.warn(
+              'Could not find MatrixGateway instance, room broadcasting will not work',
+            );
+          }
+        } catch (error) {
+          this.logger.error(
+            `Error getting MatrixGateway reference: ${error.message}`,
+          );
+        }
+      }, 1000); // Short delay to ensure all modules are initialized
     } catch (error) {
       this.logger.error('Error initializing Matrix client pool', error.stack);
     }
@@ -986,9 +1049,6 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
             timestamp: Date.now(),
           };
 
-          // Emit via EventEmitter for SSE (legacy)
-          this.eventEmitter.emit(`matrix.events.${userId}`, eventObj);
-
           // Send via WebSocket if client is connected
           this.sendEventToWebSocket(userId, '', eventObj);
         }
@@ -1004,11 +1064,14 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
           }
 
           const sender = event.getSender();
+          const isLocalEcho = sender === userId;
 
-          // Skip messages sent by this user (already handled by the client)
-          if (sender === userId) {
-            return;
-          }
+          // Log all events for debugging
+          this.logger.log(
+            `Room.timeline event in ${room.roomId} from ${sender}` + 
+            (isLocalEcho ? ' (local echo)' : ''),
+            { eventId: event.getId() }
+          );
 
           // Get message content
           const content = event.getContent();
@@ -1022,9 +1085,6 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
             content,
             origin_server_ts: event.getTs(),
           };
-
-          // Emit via EventEmitter for SSE (legacy)
-          this.eventEmitter.emit(`matrix.events.${userId}`, eventObj);
 
           // Send via WebSocket if client is connected
           this.sendEventToWebSocket(userId, room.roomId, eventObj);
@@ -1055,9 +1115,6 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
             user_ids: typingUserIds,
           };
 
-          // Emit via EventEmitter for SSE (legacy)
-          this.eventEmitter.emit(`matrix.events.${userId}`, eventObj);
-
           // Send via WebSocket if client is connected
           this.sendEventToWebSocket(userId, roomId, eventObj);
         },
@@ -1077,9 +1134,6 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
             room_id: roomId,
             content: receiptData,
           };
-
-          // Emit via EventEmitter for SSE (legacy)
-          this.eventEmitter.emit(`matrix.events.${userId}`, eventObj);
 
           // Send via WebSocket if client is connected
           this.sendEventToWebSocket(userId, roomId, eventObj);
@@ -1389,6 +1443,80 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       client.on('sync' as any, onSync);
     }
 
+    // Set up Room.timeline event handling for message capturing
+    client.on('Room.timeline' as any, (event: sdk.MatrixEvent, room: sdk.Room) => {
+      // Skip events that aren't messages
+      if (event.getType() !== 'm.room.message') {
+        return;
+      }
+
+      const sender = event.getSender();
+      const roomId = room.roomId;
+      const isLocalEcho = sender === userId;
+      
+      // Keep track of processed event IDs to avoid duplicates
+      const eventId = event.getId();
+      
+      // Don't reprocess the same event from the same user
+      const key = `${roomId}:${eventId}:${userId}`;
+      
+      // Skip if this is a duplicate event
+      if (this._processedEvents.has(key)) {
+        this.logger.debug(`Skipping duplicate event ${eventId} from ${sender} in room ${roomId}`);
+        return;
+      }
+      
+      // Remember that we've processed this event
+      this._processedEvents.add(key);
+      
+      // Clean up old events after 30 seconds to prevent memory leaks
+      setTimeout(() => {
+        this._processedEvents.delete(key);
+      }, 30000);
+
+      // Log all events for debugging
+      this.logger.log(
+        `Room.timeline event in ${roomId} from ${sender}` + 
+        (isLocalEcho ? ' (local echo)' : ''),
+        { eventId: eventId, eventType: event.getType() }
+      );
+
+      // Get message content
+      const content = event.getContent();
+      
+      // Get the sender's display name 
+      let senderName: string | null = null;
+      try {
+        // Try to get from room member
+        if (sender) {
+          const member = room.getMember(sender);
+          if (member && member.name) {
+            senderName = member.name;
+            this.logger.debug(`Found sender name from room member: ${senderName}`);
+          }
+        }
+      } catch (e) {
+        this.logger.warn(`Could not get sender name from room member: ${e.message}`);
+      }
+
+      // Create event object
+      const eventObj = {
+        type: 'm.room.message',
+        room_id: roomId,
+        event_id: eventId,
+        sender,
+        sender_name: senderName, // Include the display name
+        content,
+        origin_server_ts: event.getTs(),
+        timestamp: Date.now(),
+      };
+
+      // Send via WebSocket if client is connected
+      if (roomId) {
+        this.sendEventToWebSocket(userId, roomId, eventObj);
+      }
+    });
+
     // Start the client with minimal initial sync
     await client.startClient({ initialSyncLimit: 10 });
 
@@ -1398,6 +1526,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       userId,
       lastActivity: new Date(),
       eventCallbacks,
+      wsClient
     });
 
     this.logger.log(`Started Matrix client for user ${userId}`);
@@ -1829,8 +1958,11 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  // Set to track processed events to avoid duplicates
+  private _processedEvents = new Set<string>();
+
   /**
-   * Send Matrix event to connected WebSocket client
+   * Send Matrix event to connected WebSocket clients
    */
   private sendEventToWebSocket(
     userId: string,
@@ -1838,23 +1970,81 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
     event: any,
   ): void {
     try {
-      // Get the active client for this user
-      const activeClient = this.activeClients.get(userId);
-
-      if (activeClient && activeClient.wsClient) {
-        // Send event to the user via their WebSocket
-        activeClient.wsClient.emit('matrix-event', event);
-
-        // If the event is for a room, also emit to the room
+      // Enhanced logging to debug the path events take
+      this.logger.log(`Matrix event from ${userId} for room ${roomId}, event type: ${event.type}`, {
+        eventId: event.event_id || 'unknown',
+        sender: event.sender || 'unknown',
+      });
+      
+      // Skip if no room ID or gateway
+      if (!roomId || !this.matrixGateway) {
         if (roomId) {
-          // The gateway maintains room membership
-          activeClient.wsClient.to(roomId).emit('matrix-event', event);
+          this.logger.warn(`Cannot broadcast to room ${roomId} - gateway not available`);
         }
-
-        this.logger.debug(`Matrix event sent to WebSocket for user ${userId}`);
+        return;
       }
+      
+      // Check for duplicate broadcasts at the service level
+      // Create a unique event identifier
+      const eventId = event.event_id || event.id || 'unknown';
+      const broadcastKey = `${roomId}:${eventId}`;
+      
+      // Don't broadcast the same event twice
+      if (eventId !== 'unknown' && this._processedEvents.has(broadcastKey)) {
+        this.logger.debug(`Skipping duplicate broadcast of event ${eventId} to room ${roomId}`);
+        return;
+      }
+      
+      // Remember this event for 30 seconds to prevent duplicates
+      if (eventId !== 'unknown') {
+        this._processedEvents.add(broadcastKey);
+        setTimeout(() => {
+          this._processedEvents.delete(broadcastKey);
+        }, 30000);
+      }
+      
+      // Use the gateway to broadcast to all clients in the room
+      this.logger.log(`Broadcasting Matrix event to room ${roomId}, event ID: ${eventId}`);
+      
+      // Make sure event has all required fields
+      if (!event.timestamp) {
+        event.timestamp = Date.now();
+      }
+      
+      // If sender_name is not already set, try to get the display name for this sender
+      if (!event.sender_name && event.sender) {
+        try {
+          // Just use Matrix ID parsing for sender_name
+          // Matrix display names should be set correctly when users register
+          const senderStr = event.sender;
+          if (senderStr.startsWith('@om_')) {
+            // Extract ULID from OpenMeet Matrix ID
+            const userRef = senderStr.split(':')[0].substring(4);
+            event.sender_name = `OpenMeet User`;  // More generic display name
+          } else {
+            event.sender_name = senderStr.split(':')[0].substring(1);
+          }
+          this.logger.debug(`Set sender_name "${event.sender_name}" for ${event.sender}`);
+          
+          // Try to get actual display name in background to update for next message
+          this.getUserDisplayName(event.sender)
+            .then(displayName => {
+              if (displayName) {
+                this.logger.debug(`Found Matrix display name for ${event.sender}: ${displayName}`);
+              }
+            })
+            .catch(err => {
+              this.logger.warn(`Error fetching display name for ${event.sender}: ${err.message}`);
+            });
+        } catch (err) {
+          this.logger.warn(`Error setting sender name for ${event.sender}: ${err.message}`);
+        }
+      }
+      
+      // Broadcast to all clients in the room
+      this.matrixGateway.broadcastRoomEvent(roomId, event);
     } catch (error) {
-      this.logger.error(`Error sending event to WebSocket: ${error.message}`);
+      this.logger.error(`Error sending event to WebSocket: ${error.message}`, error.stack);
     }
   }
 }

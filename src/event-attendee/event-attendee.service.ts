@@ -176,10 +176,6 @@ export class EventAttendeeService {
       .orderBy('attendee.updatedAt', 'DESC')
       .getOne();
 
-    this.logger.debug(
-      `[findEventAttendeeByUserId] Found attendee: ${JSON.stringify(attendee)}`,
-    );
-
     return attendee;
   }
 

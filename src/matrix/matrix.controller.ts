@@ -9,6 +9,7 @@ import {
   Param,
   Body,
   Req,
+  Get,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -19,7 +20,6 @@ import { AuthUser } from '../core/decorators/auth-user.decorator';
 // User entity is imported by the UserService
 import { UserService } from '../user/user.service';
 import * as crypto from 'crypto';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Request } from 'express';
 
 @ApiTags('Matrix')
@@ -32,7 +32,6 @@ export class MatrixController {
   constructor(
     private readonly matrixService: MatrixService,
     private readonly userService: UserService,
-    private readonly eventEmitter: EventEmitter2,
     @Inject(REQUEST) private readonly request: any,
   ) {}
 
@@ -301,6 +300,77 @@ export class MatrixController {
         `Error sending typing notification: ${error.message}`,
         error.stack,
       );
+      throw error;
+    }
+  }
+
+  /**
+   * Test endpoint to broadcast a message to a Matrix room via WebSocket
+   * This helps debug WebSocket event propagation without requiring an actual
+   * Matrix message to be sent
+   */
+  @ApiOperation({
+    summary: 'Test broadcast to Matrix room via WebSocket',
+    description: 'Broadcasts a test message to a room via WebSocket without sending an actual Matrix message',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Test broadcast sent successfully',
+  })
+  @UseGuards(JWTAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('test-broadcast')
+  async testBroadcast(
+    @AuthUser() user: { id: number },
+    @Body() body: { roomId: string; message?: string },
+  ): Promise<any> {
+    try {
+      const { roomId, message } = body;
+      
+      if (!roomId) {
+        throw new Error('Room ID is required');
+      }
+      
+      this.logger.log(`Testing broadcast to room ${roomId} from user ${user.id}`);
+      
+      // Get user for Matrix user ID
+      const fullUser = await this.userService.findById(user.id);
+      if (!fullUser || !fullUser.matrixUserId) {
+        throw new Error('User has no Matrix credentials');
+      }
+      
+      // Create a test event object
+      const testEvent = {
+        type: 'm.room.message',
+        room_id: roomId,
+        event_id: `test-${Date.now()}`,
+        sender: fullUser.matrixUserId,
+        content: {
+          msgtype: 'm.text',
+          body: message || 'Test broadcast message',
+        },
+        origin_server_ts: Date.now(),
+        timestamp: Date.now(),
+      };
+      
+      // Access the Matrix gateway through the service
+      // This is a bit of a hack to access the private property
+      const matrixGateway = (this.matrixService as any).matrixGateway;
+      
+      if (!matrixGateway) {
+        throw new Error('Matrix gateway not available for broadcasting');
+      }
+      
+      // Broadcast the event directly
+      matrixGateway.broadcastRoomEvent(roomId, testEvent);
+      
+      return {
+        success: true,
+        event: testEvent,
+        message: 'Test broadcast sent successfully',
+      };
+    } catch (error) {
+      this.logger.error(`Error testing broadcast: ${error.message}`, error.stack);
       throw error;
     }
   }

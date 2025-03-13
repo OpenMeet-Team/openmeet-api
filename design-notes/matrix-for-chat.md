@@ -511,12 +511,32 @@ As of Phase 1.5, we've made the decision to simplify our messaging model by remo
    - Queue outgoing messages
    - Sync when connection is restored
    
-8. **Consider WebSockets Instead of SSE**
-   - Current SSE implementation faces limitations with custom headers (authorization)
-   - WebSockets would allow proper header-based authentication
-   - Socket.io or raw WebSockets could be implemented with NestJS's WebSockets module
-   - Bidirectional communication would improve efficiency for typing indicators
-   - Better native reconnection handling
-   - AWS ELB/ALB and Kubernetes ingress controllers support WebSockets
-   - Connection pooling and lifecycle management would be similar
-   - Would require changes to both backend controller and frontend client implementation
+8. **IMPLEMENTED: WebSockets Instead of SSE**
+   - ✅ Replaced SSE with WebSockets for real-time Matrix events
+   - ✅ Implemented Socket.io with NestJS WebSocketGateway
+   - ✅ Proper JWT token-based authentication for WebSocket connections
+   - ✅ Room-based broadcasting for efficient message delivery
+   - ✅ Bidirectional communication for typing indicators and messages
+   - ✅ Tenant-aware connection management
+   - ✅ WebSocket lifecycle management with Matrix client lifecycle
+   
+   **Implementation Notes:**
+   - Matrix events are now exclusively sent via WebSockets
+   - Each client explicitly joins their Matrix rooms as Socket.io rooms
+   - Matrix timeline events are captured and broadcast to WebSocket clients
+   - SSE endpoints have been removed in favor of WebSockets
+   - Improved reconnection handling and error recovery
+   
+   **Current Focus (Phase 1.7 - March 2025):**
+   - Debugging WebSocket room membership and event broadcasting
+   - Ensuring Matrix timeline events are properly captured
+   - Adding comprehensive logging for event flow tracing
+   - Implementing proper error handling for WebSocket connections
+   - Testing with multiple concurrent users
+   
+   **Next Steps:**
+   1. Fix event propagation from Matrix to WebSocket clients
+   2. Add additional Matrix event types (typing indicators, read receipts)
+   3. Optimize room membership handling for better reliability
+   4. Add client-side reconnection handling
+   5. Complete frontend integration with the unified message store
