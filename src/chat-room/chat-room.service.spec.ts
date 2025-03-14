@@ -3,6 +3,8 @@ import { ChatRoomService } from './chat-room.service';
 import { UserService } from '../user/user.service';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
+import { REQUEST } from '@nestjs/core';
+import { TenantConnectionService } from '../tenant/tenant.service';
 
 // Create mocks for all dependencies
 // This avoids importing the actual MatrixService which has ESM import issues with Jest
@@ -68,6 +70,26 @@ describe('ChatRoomService', () => {
       providers: [
         ChatRoomService,
         {
+          provide: REQUEST,
+          useValue: {
+            headers: {
+              'x-tenant-id': 'test-tenant',
+            },
+          },
+        },
+        {
+          provide: TenantConnectionService,
+          useValue: {
+            getTenantConnection: jest.fn().mockReturnValue({
+              getRepository: jest.fn().mockReturnValue({
+                findOne: jest.fn(() => Promise.resolve(mockChatRoom)),
+                save: jest.fn(),
+                create: jest.fn(),
+              }),
+            }),
+          },
+        },
+        {
           provide: UserService,
           useValue: {
             getUserById: jest.fn(),
@@ -112,7 +134,7 @@ describe('ChatRoomService', () => {
       ],
     }).compile();
 
-    service = module.get<ChatRoomService>(ChatRoomService);
+    service = await module.resolve<ChatRoomService>(ChatRoomService);
     userService = module.get<UserService>(UserService);
     matrixService = module.get<MatrixService>(MatrixService);
   });

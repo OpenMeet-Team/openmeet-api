@@ -31,7 +31,6 @@ import { VisibilityGuard } from '../shared/guard/visibility.guard';
 import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
-import { EventDiscussionService } from './services/event-discussion.service';
 
 const createEventDto: CreateEventDto = {
   name: 'Test Event',
@@ -85,18 +84,12 @@ const mockEventRecommendationService = {
   showRecommendedEventsByEventSlug: jest.fn(),
 };
 
-const mockEventDiscussionService = {
-  sendEventDiscussionMessage: jest.fn(),
-  getEventDiscussionMessages: jest.fn(),
-  addMemberToEventDiscussion: jest.fn(),
-  removeMemberFromEventDiscussion: jest.fn(),
-};
+// Discussion service mock has been moved to chat.controller.spec.ts
 
 describe('EventController', () => {
   let controller: EventController;
   let eventManagementService: EventManagementService;
   let eventQueryService: EventQueryService;
-  let eventDiscussionService: EventDiscussionService;
   let guard: PermissionsGuard;
 
   const createMockExecutionContext = (
@@ -137,10 +130,7 @@ describe('EventController', () => {
           provide: EventRecommendationService,
           useValue: mockEventRecommendationService,
         },
-        {
-          provide: EventDiscussionService,
-          useValue: mockEventDiscussionService,
-        },
+        // EventDiscussionService has been moved to ChatController
         {
           provide: AuthService,
           useValue: mockAuthService,
@@ -168,9 +158,7 @@ describe('EventController', () => {
       EventManagementService,
     );
     eventQueryService = module.get<EventQueryService>(EventQueryService);
-    eventDiscussionService = module.get<EventDiscussionService>(
-      EventDiscussionService,
-    );
+    // EventDiscussionService has been moved to ChatController
     guard = module.get<PermissionsGuard>(PermissionsGuard);
   });
 
@@ -363,47 +351,7 @@ describe('EventController', () => {
     });
   });
 
-  describe('sendEventDiscussionMessage', () => {
-    it('should send an event discussion message', async () => {
-      jest
-        .spyOn(eventDiscussionService, 'sendEventDiscussionMessage')
-        .mockResolvedValue({ id: 'matrix-event-id-123' });
-      const result = await controller.sendEventDiscussionMessage(
-        mockEvent.slug,
-        mockUser,
-        { message: 'Test Message', topicName: 'Test Topic' },
-      );
-      expect(result).toEqual({ id: 'matrix-event-id-123' });
-    });
-  });
-
-  describe('getEventDiscussionMessages', () => {
-    it('should get event discussion messages', async () => {
-      const mockMessages = { messages: [], end: '' };
-      jest
-        .spyOn(eventDiscussionService, 'getEventDiscussionMessages')
-        .mockResolvedValue(mockMessages);
-      const result = await controller.getEventDiscussionMessages(
-        mockEvent.slug,
-        mockUser,
-        50,
-      );
-      expect(result).toEqual(mockMessages);
-    });
-  });
-
-  describe('addMemberToEventDiscussion', () => {
-    it('should add a member to event discussion', async () => {
-      mockEventQueryService.showEventBySlug.mockResolvedValue(mockEvent);
-      jest
-        .spyOn(eventDiscussionService, 'addMemberToEventDiscussion')
-        .mockResolvedValue(undefined);
-      await controller.addMemberToEventDiscussion(mockEvent.slug, 1);
-      expect(
-        eventDiscussionService.addMemberToEventDiscussion,
-      ).toHaveBeenCalledWith(mockEvent.id, 1);
-    });
-  });
+  // Discussion-related tests have been moved to chat.controller.spec.ts
 
   describe('showDashboardEvents', () => {
     it('should return dashboard events', async () => {
