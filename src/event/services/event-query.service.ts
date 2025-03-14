@@ -548,4 +548,13 @@ export class EventQueryService {
     const event = await this.findEventBySlug(slug);
     return this.eventAttendeeService.showEventAttendees(event.id, pagination);
   }
+
+  @Trace('event-query.findById')
+  async findById(id: number, tenantId: string): Promise<EventEntity | null> {
+    await this.initializeRepository();
+    return this.eventRepository.findOne({
+      where: { id },
+      relations: ['user'],
+    });
+  }
 }

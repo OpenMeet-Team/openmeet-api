@@ -3,7 +3,7 @@
 ## User Experience Changes
 
 ### Overview
-The transition from Zulip to Matrix will be designed to be seamless from the user's perspective, with several notable improvements in functionality and performance. The core chat experience will remain familiar while introducing enhanced features.
+The transition from Zulip to Matrix will be designed to be seamless from the user's perspective, with several notable improvements in functionality and performance. The core chat experience will remain familiar while introducing enhanced features. We'll be removing zulip entirely, and replacing it with matrix. 
 
 ### Key User Experience Improvements
 
@@ -259,6 +259,11 @@ The implementation includes sophisticated error recovery:
    - Archive Zulip data for compliance purposes
    - Remove Zulip-related code and dependencies
 
+### Important Files 
+
+- matrix.gateway.ts - Handles Matrix client creation and management
+
+
 ### Technical Challenges and Solutions
 
 1. **Authentication**
@@ -426,6 +431,125 @@ The implementation includes sophisticated error recovery:
    const user = await userService.findById(userId, tenantId);
    ```
 
+### Phase 1.9: Service Architecture Restructuring ✅ COMPLETED
+
+**Current Status:**
+- Complete restructuring of services to eliminate cross-module dependencies
+- Moved discussion-related endpoints from EventController to ChatController
+- Implemented event-based communication with slugs instead of IDs
+- Eliminated direct dependencies between Event and Matrix modules
+- Frontend updated to use new slug-based API endpoints
+
+**Implementation Goals:**
+- Establish a clean, modular architecture with proper separation of concerns
+- Eliminate circular dependencies between modules
+- Create clear interfaces for all components to ensure maintainability
+- Utilize slug-based methods for all inter-module communication
+
+**Updated Module Relationship Diagram:**
+
+```
+┌─────────────────────────┐     ┌──────────────────────┐
+│                         │     │                      │
+│     Event Module        │     │    Chat Module       │
+│                         │     │                      │
+│ ┌─────────────────────┐ │     │ ┌──────────────────┐ │
+│ │EventController      │ │     │ │ChatController    │ │
+│ └─────────────────────┘ │     │ └──────────────────┘ │
+│ ┌─────────────────────┐ │     │ ┌──────────────────┐ │
+│ │EventManagementService│ │     │ │DiscussionService│ │
+│ └─────────────────────┘ │     │ └──────────────────┘ │
+│ ┌─────────────────────┐ │     │ ┌──────────────────┐ │
+│ │EventQueryService    │ │     │ │ChatListener      │ │
+│ └─────────────────────┘ │     │ └──────────────────┘ │
+│ ┌─────────────────────┐ │     │        ▲             │
+│ │EventListener        │─┼─────┼────────┘             │
+│ └─────────────────────┘ │     │        │             │
+│           │             │     │        │             │
+└───────────┼─────────────┘     └────────┼─────────────┘
+            │                            │
+Events:      │                            │
+chat.event.created   │                            │
+chat.event.member.add│                            ▼
+chat.event.member.remove                 ┌──────────────────────┐
+            │                            │                      │
+            └─────────────────────┐      │  ChatRoom Module     │
+                                  │      │                      │
+                                  │      │ ┌──────────────────┐ │
+                                  └──────┼─▶ChatRoomService   │ │
+                                         │ └──────────────────┘ │
+                                         │        │             │
+                                         └────────┼─────────────┘
+                                                  │
+                                                  ▼
+                                         ┌──────────────────────┐
+                                         │                      │
+                                         │    Matrix Module     │
+                                         │                      │
+                                         │ ┌──────────────────┐ │
+                                         │ │MatrixService     │ │
+                                         │ └──────────────────┘ │
+                                         │ ┌──────────────────┐ │
+                                         │ │MatrixGateway     │ │
+                                         │ └──────────────────┘ │
+                                         │                      │
+                                         └──────────────────────┘
+```
+
+**Key Architectural Changes:**
+
+1. **Slug-Based Event-Driven Communication**
+   - Event module now emits domain events with slugs instead of IDs
+   - Events are now properly named (e.g., `chat.event.created`, `chat.event.member.add`)
+   - All cross-module communication uses slugs instead of numeric IDs
+   - Chat module listens for these events and handles them autonomously
+   - Eliminates direct dependencies between Event and Matrix modules
+
+2. **Clean Interface Abstractions**
+   - Created `DiscussionServiceInterface` to define clear contracts
+   - Created `ChatProviderInterface` to abstract Matrix implementation details
+   - Added helper methods to convert between slugs and IDs where necessary
+   - Legacy ID-based methods delegate to slug-based implementations
+
+3. **Consolidated Chat Functionality**
+   - Moved all chat-related business logic to Chat module
+   - Event module focuses on event domain logic only
+   - ChatRoom and Matrix modules are now only directly used by the Chat module
+   - Clearer separation of concerns for easier maintenance
+
+4. **Forward References for Circular Dependencies**
+   - Use of `forwardRef()` where circular dependencies still exist
+   - Proper resolution ordering for dependent modules
+
+**Implementation Progress:**
+- ✅ Moved EventDiscussionService functionality to DiscussionService in Chat module
+- ✅ Created ChatController with all discussion-related endpoints
+- ✅ Updated EventController to remove discussion endpoints
+- ✅ Implemented slug-based event communication between modules
+- ✅ Added ChatListener to handle events from other modules
+- ✅ Fixed tenant ID handling throughout service layer
+- ✅ Removed direct dependencies between Event and Matrix modules
+- ✅ Updated module imports to use forwardRef() where needed
+- ✅ Created helper methods to convert between slugs and IDs where needed
+- ✅ Updated API endpoints in frontend to use new slug-based patterns
+- ✅ Modified frontend components to use correct parameter types (string slugs instead of numeric IDs)
+- ✅ Updated event-store.ts, chat.ts, and events.ts in frontend to use new endpoints
+
+**Frontend Changes:**
+- Updated API endpoints in chat.ts and events.ts to match the new backend structure
+- Changed URL patterns to use '/api/chat/event/:slug/...' instead of '/api/events/:slug/discussions/...'
+- Modified method signatures to use string slugs instead of numeric IDs
+- Updated EventTopicsComponent and other components to use user.slug instead of user.id
+- Fixed TypeScript types throughout the codebase
+
+**Next Steps:**
+1. Complete comprehensive integration testing of the new architecture
+2. Refactor ChatRoomService to use slugs directly rather than IDs
+3. Remove any remaining legacy ID-based code
+4. Update documentation and developer guides to reflect the new architecture
+5. Implement dark mode styling for discussion components
+6. Verify that all Matrix-related functionality works with the new architecture
+
 ### Phase 2: Feature Implementation (2 weeks)
 - Implement all chat functionality (messaging, rooms, media)
 - Update API endpoints
@@ -540,3 +664,14 @@ As of Phase 1.5, we've made the decision to simplify our messaging model by remo
    3. Optimize room membership handling for better reliability
    4. Add client-side reconnection handling
    5. Complete frontend integration with the unified message store
+
+9. **IMPLEMENTED: Dark Mode Support for Chat Components**
+   - ✅ Added proper dark mode styling for discussion components
+   - ✅ Fixed issue with light text on light background in dark mode
+   - ✅ Implemented consistent color scheme for messages in both light and dark modes
+   
+   **Visual Impact:**
+   - Messages now correctly display with dark background and light text in dark mode
+   - Consistent contrast ratio for improved readability
+   - Timestamps and secondary elements use appropriate opacity for visual hierarchy
+   - Message content maintains proper contrast in both modes

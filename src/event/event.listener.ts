@@ -1,10 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { ChatRoomService } from '../chat-room/chat-room.service';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { ZulipService } from '../zulip/zulip.service';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
-import { EventDiscussionService } from './services/event-discussion.service';
 import { EventAttendeeStatus } from '../core/constants/constant';
 
 @Injectable()
@@ -13,9 +12,8 @@ export class EventListener {
 
   constructor(
     private readonly zulipService: ZulipService,
-    private readonly chatRoomService: ChatRoomService,
     private readonly eventAttendeeService: EventAttendeeService,
-    private readonly eventDiscussionService: EventDiscussionService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   @OnEvent('event.created')
@@ -24,16 +22,16 @@ export class EventListener {
       id: params.id,
     });
 
-    // Create a chat room for the event (async)
-    // This will be called automatically when needed later if it fails
+    // Emit an event for the chat module to handle chat room creation
+    // instead of directly calling the chat room service
     try {
-      this.chatRoomService
-        .createEventChatRoom(params.id, params.user.id)
-        .catch((error) =>
-          this.logger.error(
-            `Failed to create chat room for event ${params.id}: ${error.message}`,
-          ),
-        );
+      this.logger.log(`Emitting chat.event.created event for event ${params.slug}`);
+      this.eventEmitter.emit('chat.event.created', {
+        eventSlug: params.slug,
+        userSlug: params.user.slug,
+        eventName: params.name,
+        eventVisibility: params.visibility,
+      });
     } catch (error) {
       this.logger.error(`Error in handleEventCreatedEvent: ${error.message}`);
     }
@@ -64,10 +62,11 @@ export class EventListener {
   async handleEventAttendeeCreatedEvent(params: {
     eventId: number;
     userId: number;
+    eventSlug?: string;
+    userSlug?: string;
   }) {
     this.logger.log('event.attendee.created', params);
 
-    // Add the user to the event chat room
     try {
       // Only add users to the chat room if they're approved
       const attendee = await this.eventAttendeeService.findOne({
@@ -75,17 +74,20 @@ export class EventListener {
           event: { id: params.eventId },
           user: { id: params.userId },
         },
+        relations: ['event', 'user'],
       });
 
       if (attendee && attendee.status === EventAttendeeStatus.Confirmed) {
-        await this.eventDiscussionService.addMemberToEventDiscussion(
-          params.eventId,
-          params.userId,
-        );
+        // Emit an event for the chat module to handle using slugs
+        this.eventEmitter.emit('chat.event.member.add', {
+          eventSlug: params.eventSlug || attendee.event.slug,
+          userSlug: params.userSlug || attendee.user.slug,
+        });
+        this.logger.log(`Emitted chat.event.member.add event for user ${attendee.user.slug} in event ${attendee.event.slug}`);
       }
     } catch (error) {
       this.logger.error(
-        `Failed to add user ${params.userId} to event ${params.eventId} chat room: ${error.message}`,
+        `Failed to process event attendee created for user ${params.userId} in event ${params.eventId}: ${error.message}`,
       );
     }
   }
@@ -95,23 +97,48 @@ export class EventListener {
     eventId: number;
     userId: number;
     status: string;
+    eventSlug?: string;
+    userSlug?: string;
   }) {
     this.logger.log('event.attendee.updated', params);
 
     try {
+      // Get the attendee to fetch slugs if they weren't provided
+      let eventSlug = params.eventSlug;
+      let userSlug = params.userSlug;
+      
+      if (!eventSlug || !userSlug) {
+        const attendee = await this.eventAttendeeService.findOne({
+          where: {
+            event: { id: params.eventId },
+            user: { id: params.userId },
+          },
+          relations: ['event', 'user'],
+        });
+        
+        if (attendee) {
+          eventSlug = attendee.event.slug;
+          userSlug = attendee.user.slug;
+        }
+      }
+      
       // If status changed to confirmed, add user to chat
-      if (params.status === EventAttendeeStatus.Confirmed) {
-        await this.eventDiscussionService.addMemberToEventDiscussion(
-          params.eventId,
-          params.userId,
-        );
+      if (params.status === EventAttendeeStatus.Confirmed && eventSlug && userSlug) {
+        // Emit an event for the chat module to handle
+        this.eventEmitter.emit('chat.event.member.add', {
+          eventSlug,
+          userSlug,
+        });
+        this.logger.log(`Emitted chat.event.member.add event for user ${userSlug} in event ${eventSlug}`);
       }
       // If status changed from confirmed to something else, remove from chat
-      else if (params.status !== EventAttendeeStatus.Confirmed) {
-        await this.eventDiscussionService.removeMemberFromEventDiscussion(
-          params.eventId,
-          params.userId,
-        );
+      else if (params.status !== EventAttendeeStatus.Confirmed && eventSlug && userSlug) {
+        // Emit an event for the chat module to handle
+        this.eventEmitter.emit('chat.event.member.remove', {
+          eventSlug,
+          userSlug,
+        });
+        this.logger.log(`Emitted chat.event.member.remove event for user ${userSlug} in event ${eventSlug}`);
       }
     } catch (error) {
       this.logger.error(
@@ -127,15 +154,29 @@ export class EventListener {
   }) {
     this.logger.log('event.attendee.deleted', params);
 
-    // Remove the user from the event chat room
     try {
-      await this.eventDiscussionService.removeMemberFromEventDiscussion(
-        params.eventId,
-        params.userId,
-      );
+      // Find event and user to get slugs
+      const attendee = await this.eventAttendeeService.findOne({
+        where: {
+          event: { id: params.eventId },
+          user: { id: params.userId },
+        },
+        relations: ['event', 'user'],
+      });
+      
+      if (attendee && attendee.event && attendee.user) {
+        // Emit an event for the chat module to handle using slugs
+        this.eventEmitter.emit('chat.event.member.remove', {
+          eventSlug: attendee.event.slug,
+          userSlug: attendee.user.slug,
+        });
+        this.logger.log(`Emitted chat.event.member.remove event for user ${attendee.user.slug} in event ${attendee.event.slug}`);
+      } else {
+        this.logger.warn(`Could not retrieve event or user details for attendee (event: ${params.eventId}, user: ${params.userId})`);
+      }
     } catch (error) {
       this.logger.error(
-        `Failed to remove user ${params.userId} from event ${params.eventId} chat room: ${error.message}`,
+        `Failed to process event attendee deleted for user ${params.userId} in event ${params.eventId}: ${error.message}`,
       );
     }
   }

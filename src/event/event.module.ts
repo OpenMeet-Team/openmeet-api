@@ -18,9 +18,7 @@ import { BlueskyModule } from '../bluesky/bluesky.module';
 import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
-import { EventDiscussionService } from './services/event-discussion.service';
-import { ChatRoomModule } from '../chat-room/chat-room.module';
-import { MatrixModule } from '../matrix/matrix.module';
+import { ChatModule } from '../chat/chat.module';
 import { ZulipModule } from '../zulip/zulip.module';
 
 @Module({
@@ -36,8 +34,7 @@ import { ZulipModule } from '../zulip/zulip.module';
     forwardRef(() => GroupModule),
     EventMailModule,
     BlueskyModule,
-    ChatRoomModule,
-    MatrixModule,
+    forwardRef(() => ChatModule),
     ZulipModule,
   ],
   controllers: [EventController],
@@ -45,7 +42,6 @@ import { ZulipModule } from '../zulip/zulip.module';
     EventManagementService,
     EventQueryService,
     EventRecommendationService,
-    EventDiscussionService,
     FilesS3PresignedService,
     EventListener,
     EventRoleService,
@@ -54,7 +50,6 @@ import { ZulipModule } from '../zulip/zulip.module';
     EventManagementService,
     EventQueryService,
     EventRecommendationService,
-    EventDiscussionService,
   ],
 })
 export class EventModule {}
