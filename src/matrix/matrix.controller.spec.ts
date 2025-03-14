@@ -4,6 +4,7 @@ import { MatrixService } from './matrix.service';
 import { UserService } from '../user/user.service';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
+import { REQUEST } from '@nestjs/core';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 
 describe('MatrixController', () => {
@@ -82,7 +83,12 @@ describe('MatrixController', () => {
             }),
           },
         },
-        Logger,
+        {
+          provide: REQUEST,
+          useValue: {
+            tenantId: 'test-tenant',
+          },
+        },
       ],
     }).compile();
 
@@ -113,8 +119,8 @@ describe('MatrixController', () => {
 
       expect(result).toEqual({
         matrixUserId: mockUserWithMatrix.matrixUserId,
-        matrixAccessToken: mockUserWithMatrix.matrixAccessToken,
-        matrixDeviceId: mockUserWithMatrix.matrixDeviceId,
+        success: true,
+        provisioned: false
       });
 
       // Should not create a new Matrix user
@@ -148,8 +154,8 @@ describe('MatrixController', () => {
 
       expect(result).toEqual({
         matrixUserId: mockMatrixUserInfo.userId,
-        matrixAccessToken: mockMatrixUserInfo.accessToken,
-        matrixDeviceId: mockMatrixUserInfo.deviceId,
+        success: true,
+        provisioned: true
       });
     });
 
