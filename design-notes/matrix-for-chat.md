@@ -439,6 +439,7 @@ The implementation includes sophisticated error recovery:
 - Implemented event-based communication with slugs instead of IDs
 - Eliminated direct dependencies between Event and Matrix modules
 - Frontend updated to use new slug-based API endpoints
+- Moved obsolete EventDiscussionService files to disabled-tests directory
 
 **Implementation Goals:**
 - Establish a clean, modular architecture with proper separation of concerns
