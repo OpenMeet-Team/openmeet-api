@@ -18,6 +18,7 @@ import { TenantGuard } from './tenant/tenant.guard';
 import { RequestCounterInterceptor } from './interceptors/request-counter.interceptor';
 import { getBuildInfo } from './utils/version';
 import { SimpleLogger } from './logger/simple.logger';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -125,6 +126,12 @@ async function bootstrap() {
   const requestCounterInterceptor = app.get(RequestCounterInterceptor);
   app.useGlobalInterceptors(requestCounterInterceptor);
 
+  // Use the Socket.io adapter for WebSockets
+  app.useWebSocketAdapter(new IoAdapter(app));
+
   await app.listen(configService.getOrThrow('app.port', { infer: true }));
+
+  logger.log(`Application is running on: ${await app.getUrl()}`);
+  logger.log(`WebSocket server is running on Matrix namespace`);
 }
 void bootstrap();

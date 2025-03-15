@@ -156,6 +156,9 @@ export class EventEntity
   @Column({ type: 'integer', nullable: true })
   zulipChannelId: number;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  matrixRoomId: string;
+
   attendeesCount: number;
 
   @Column({ type: 'enum', enum: 'event_source_type', nullable: true })

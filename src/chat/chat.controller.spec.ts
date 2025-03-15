@@ -1,86 +1,125 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AuthService } from '../auth/auth.service';
-import { ChatService } from './chat.service';
 import { ChatController } from './chat.controller';
-import {
-  mockAuthService,
-  mockChat,
-  mockChatService,
-  mockUser,
-  mockZulipMessage,
-  mockZulipMessageResponse,
-} from '../test/mocks';
+import { DiscussionService } from './services/discussion.service';
+import { mockUser } from '../test/mocks';
+
+// Create mock discussion service with methods matching the controller
+const mockDiscussionService = {
+  sendEventDiscussionMessage: jest.fn().mockResolvedValue({ id: 'event-msg-123' }),
+  getEventDiscussionMessages: jest.fn().mockResolvedValue({ 
+    messages: [{ id: 'msg-1', content: { body: 'test message' } }], 
+    end: 'token-123' 
+  }),
+  addMemberToEventDiscussionBySlug: jest.fn().mockResolvedValue(undefined),
+  removeMemberFromEventDiscussionBySlug: jest.fn().mockResolvedValue(undefined),
+  sendGroupDiscussionMessage: jest.fn().mockResolvedValue({ id: 'group-msg-123' }),
+  getGroupDiscussionMessages: jest.fn().mockResolvedValue({
+    messages: [{ id: 'msg-2', content: { body: 'test group message' } }],
+    end: 'token-456'
+  }),
+  sendDirectMessage: jest.fn().mockResolvedValue({ id: 'direct-msg-123' }),
+  getDirectMessages: jest.fn().mockResolvedValue({
+    messages: [{ id: 'msg-3', content: { body: 'test direct message' } }],
+    end: 'token-789'
+  })
+};
 
 describe('ChatController', () => {
   let controller: ChatController;
-  let chatService: ChatService;
+  let discussionService: DiscussionService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ChatController],
       providers: [
         {
-          provide: ChatService,
-          useValue: mockChatService,
-        },
-        {
-          provide: AuthService,
-          useValue: mockAuthService,
+          provide: DiscussionService,
+          useValue: mockDiscussionService,
         },
       ],
     }).compile();
 
     controller = module.get<ChatController>(ChatController);
-    chatService = module.get<ChatService>(ChatService);
+    discussionService = module.get<DiscussionService>(DiscussionService);
   });
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
   });
 
-  describe('showChats', () => {
-    it('should find all chats', async () => {
-      const result = await controller.showChats(mockUser);
-      expect(result).toEqual({ chats: [mockChat], chat: mockChat });
-    });
-
-    it('should return chat', async () => {
-      const result = await controller.showChats(mockUser, {
-        chat: mockChat.ulid,
-      });
-      expect(result).toEqual({ chats: [mockChat], chat: mockChat });
-    });
-
-    it('should not return own user chat', async () => {
-      jest
-        .spyOn(chatService, 'showChats')
-        .mockResolvedValue({ chats: [mockChat], chat: null });
-      const result = await controller.showChats(mockUser, {
-        member: mockUser.ulid,
-      });
-      expect(result).toEqual({ chats: [mockChat], chat: null });
-    });
-  });
-
-  describe('sendMessage', () => {
-    it('should send a message', async () => {
-      const result = await controller.sendMessage(
-        mockChat.ulid,
-        { content: 'test message' },
+  describe('Event discussion endpoints', () => {
+    it('should send a message to an event discussion', async () => {
+      const eventSlug = 'test-event';
+      const messageBody = { message: 'test message', topicName: 'General' };
+      
+      const result = await controller.sendEventMessage(
+        eventSlug,
+        messageBody,
         mockUser,
       );
 
-      expect(result).toEqual(mockZulipMessageResponse);
+      expect(result).toEqual({ id: 'event-msg-123' });
+      expect(discussionService.sendEventDiscussionMessage).toHaveBeenCalledWith(
+        eventSlug,
+        mockUser.id,
+        messageBody
+      );
+    });
+
+    it('should get messages from an event discussion', async () => {
+      const eventSlug = 'test-event';
+      const limit = 50;
+      const from = 'token-abc';
+      
+      const result = await controller.getEventMessages(
+        eventSlug,
+        mockUser,
+        limit,
+        from
+      );
+
+      expect(result.messages.length).toBe(1);
+      expect(result.end).toBe('token-123');
+      expect(discussionService.getEventDiscussionMessages).toHaveBeenCalledWith(
+        eventSlug,
+        mockUser.id,
+        limit,
+        from
+      );
+    });
+
+    it('should add a member to an event discussion', async () => {
+      const eventSlug = 'test-event';
+      const userSlug = 'test-user';
+      
+      await controller.addMemberToEventDiscussion(
+        eventSlug,
+        userSlug,
+        mockUser
+      );
+
+      expect(discussionService.addMemberToEventDiscussionBySlug).toHaveBeenCalledWith(
+        eventSlug,
+        userSlug
+      );
+    });
+
+    it('should remove a member from an event discussion', async () => {
+      const eventSlug = 'test-event';
+      const userSlug = 'test-user';
+      
+      await controller.removeMemberFromEventDiscussion(
+        eventSlug,
+        userSlug,
+        mockUser
+      );
+
+      expect(discussionService.removeMemberFromEventDiscussionBySlug).toHaveBeenCalledWith(
+        eventSlug,
+        userSlug
+      );
     });
   });
 
-  describe('setMessagesRead', () => {
-    it('should set messages as read', async () => {
-      const result = await controller.setMessagesRead(
-        { messages: [mockZulipMessage.id] },
-        mockUser,
-      );
-      expect(result).toEqual({ messages: [mockZulipMessage.id] });
-    });
-  });
+  // We could add more tests for group and direct message endpoints
 });

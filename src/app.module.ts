@@ -51,6 +51,8 @@ import { AuthBlueskyModule } from './auth-bluesky/auth-bluesky.module';
 import { AuditLoggerService } from './logger/audit-logger.provider';
 import { TracingModule } from './tracing/tracing.module';
 import { BlueskyModule } from './bluesky/bluesky.module';
+import { MatrixModule } from './matrix/matrix.module';
+import { ChatRoomModule } from './chat-room/chat-room.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -101,6 +103,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     }),
     EventEmitterModule.forRoot(),
     PrometheusModule.register(),
+    // It's important that UserModule comes before MatrixModule to ensure it's initialized first
     UserModule,
     FileModule,
     AuthModule,
@@ -129,6 +132,8 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     AuthBlueskyModule,
     BlueskyModule,
     TracingModule,
+    ChatRoomModule,
+    MatrixModule,
   ],
   providers: [
     TenantConnectionService,
@@ -154,5 +159,10 @@ export class AppModule {
   ) {
     // Ensure that TenantConnectionService is instantiated when the application starts
     // This ensures the onModuleInit hook is triggered
+
+    // Create global reference of key services
+    console.log(
+      'AppModule constructor initialized - registering global services',
+    );
   }
 }

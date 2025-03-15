@@ -10,7 +10,6 @@ import { EventListener } from './event.listener';
 import { GroupMemberModule } from '../group-member/group-member.module';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { FileModule } from '../file/file.module';
-import { ZulipService } from '../zulip/zulip.service';
 import { EventRoleService } from '../event-role/event-role.service';
 import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
@@ -19,7 +18,8 @@ import { BlueskyModule } from '../bluesky/bluesky.module';
 import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
-import { EventDiscussionService } from './services/event-discussion.service';
+import { ChatModule } from '../chat/chat.module';
+import { ZulipModule } from '../zulip/zulip.module';
 
 @Module({
   imports: [
@@ -34,23 +34,22 @@ import { EventDiscussionService } from './services/event-discussion.service';
     forwardRef(() => GroupModule),
     EventMailModule,
     BlueskyModule,
+    forwardRef(() => ChatModule),
+    ZulipModule,
   ],
   controllers: [EventController],
   providers: [
     EventManagementService,
     EventQueryService,
     EventRecommendationService,
-    EventDiscussionService,
     FilesS3PresignedService,
     EventListener,
-    ZulipService,
     EventRoleService,
   ],
   exports: [
     EventManagementService,
     EventQueryService,
     EventRecommendationService,
-    EventDiscussionService,
   ],
 })
 export class EventModule {}

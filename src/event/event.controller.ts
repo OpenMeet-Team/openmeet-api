@@ -9,7 +9,10 @@ import {
   UseGuards,
   Req,
   Query,
+  Res,
+  HttpStatus,
 } from '@nestjs/common';
+import { Response } from 'express';
 
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Request } from 'express';
@@ -38,7 +41,6 @@ import { Trace } from '../utils/trace.decorator';
 import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
-import { EventDiscussionService } from './services/event-discussion.service';
 
 @ApiTags('Events')
 @Controller('events')
@@ -49,7 +51,6 @@ export class EventController {
     private readonly eventManagementService: EventManagementService,
     private readonly eventQueryService: EventQueryService,
     private readonly eventRecommendationService: EventRecommendationService,
-    private readonly eventDiscussionService: EventDiscussionService,
     private readonly eventAttendeeService: EventAttendeeService,
   ) {}
 
@@ -255,59 +256,4 @@ export class EventController {
     );
   }
 
-  @Permissions({
-    context: 'event',
-    permissions: [
-      EventAttendeePermission.MessageAttendees,
-      EventAttendeePermission.CreateDiscussion,
-    ],
-  })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
-  @Post(':slug/discussions')
-  @ApiOperation({ summary: 'Send a message to a group discussion' })
-  async sendEventDiscussionMessage(
-    @Param('slug') slug: string,
-    @AuthUser() user: User,
-    @Body() body: { message: string; topicName: string },
-  ): Promise<{ id: number }> {
-    return this.eventDiscussionService.sendEventDiscussionMessage(
-      slug,
-      user.id,
-      body,
-    );
-  }
-
-  @Permissions({
-    context: 'event',
-    permissions: [EventAttendeePermission.ManageDiscussions],
-  })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
-  @Patch(':slug/discussions/:messageId')
-  @ApiOperation({ summary: 'Update a group discussion message' })
-  async updateEventDiscussionMessage(
-    @Param('slug') slug: string,
-    @Param('messageId') messageId: number,
-    @AuthUser() user: User,
-    @Body() body: { message: string },
-  ): Promise<{ id: number }> {
-    return this.eventDiscussionService.updateEventDiscussionMessage(
-      messageId,
-      body.message,
-      user.id,
-    );
-  }
-
-  @Permissions({
-    context: 'event',
-    permissions: [EventAttendeePermission.ManageDiscussions],
-  })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
-  @Delete(':slug/discussions/:messageId')
-  @ApiOperation({ summary: 'Delete a group discussion message' })
-  async deleteEventDiscussionMessage(
-    @Param('slug') slug: string,
-    @Param('messageId') messageId: number,
-  ): Promise<{ id: number }> {
-    return this.eventDiscussionService.deleteEventDiscussionMessage(messageId);
-  }
 }

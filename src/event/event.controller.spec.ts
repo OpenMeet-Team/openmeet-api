@@ -18,8 +18,6 @@ import {
   mockGroupMemberService,
   mockGroupService,
   mockUser,
-  mockZulipMessage,
-  mockZulipMessageResponse,
 } from '../test/mocks';
 import { mockEvents } from '../test/mocks';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
@@ -33,7 +31,6 @@ import { VisibilityGuard } from '../shared/guard/visibility.guard';
 import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
-import { EventDiscussionService } from './services/event-discussion.service';
 
 const createEventDto: CreateEventDto = {
   name: 'Test Event',
@@ -80,23 +77,19 @@ const mockEventQueryService = {
   showEventAttendees: jest.fn(),
   getEventsByCreator: jest.fn(),
   getEventsByAttendee: jest.fn(),
+  showEventBySlug: jest.fn(),
 };
 
 const mockEventRecommendationService = {
   showRecommendedEventsByEventSlug: jest.fn(),
 };
 
-const mockEventDiscussionService = {
-  sendEventDiscussionMessage: jest.fn(),
-  updateEventDiscussionMessage: jest.fn(),
-  deleteEventDiscussionMessage: jest.fn(),
-};
+// Discussion service mock has been moved to chat.controller.spec.ts
 
 describe('EventController', () => {
   let controller: EventController;
   let eventManagementService: EventManagementService;
   let eventQueryService: EventQueryService;
-  let eventDiscussionService: EventDiscussionService;
   let guard: PermissionsGuard;
 
   const createMockExecutionContext = (
@@ -137,10 +130,7 @@ describe('EventController', () => {
           provide: EventRecommendationService,
           useValue: mockEventRecommendationService,
         },
-        {
-          provide: EventDiscussionService,
-          useValue: mockEventDiscussionService,
-        },
+        // EventDiscussionService has been moved to ChatController
         {
           provide: AuthService,
           useValue: mockAuthService,
@@ -168,9 +158,7 @@ describe('EventController', () => {
       EventManagementService,
     );
     eventQueryService = module.get<EventQueryService>(EventQueryService);
-    eventDiscussionService = module.get<EventDiscussionService>(
-      EventDiscussionService,
-    );
+    // EventDiscussionService has been moved to ChatController
     guard = module.get<PermissionsGuard>(PermissionsGuard);
   });
 
@@ -363,47 +351,7 @@ describe('EventController', () => {
     });
   });
 
-  describe('sendEventDiscussionMessage', () => {
-    it('should send an event discussion message', async () => {
-      jest
-        .spyOn(eventDiscussionService, 'sendEventDiscussionMessage')
-        .mockResolvedValue(mockZulipMessageResponse);
-      const result = await controller.sendEventDiscussionMessage(
-        mockEvent.slug,
-        mockUser,
-        { message: 'Test Message', topicName: 'Test Topic' },
-      );
-      expect(result).toEqual(mockZulipMessageResponse);
-    });
-  });
-
-  describe('updateEventDiscussionMessage', () => {
-    it('should update an event discussion message', async () => {
-      jest
-        .spyOn(eventDiscussionService, 'updateEventDiscussionMessage')
-        .mockResolvedValue(mockZulipMessageResponse);
-      const result = await controller.updateEventDiscussionMessage(
-        mockEvent.slug,
-        mockZulipMessage.id,
-        mockUser,
-        { message: 'Updated Message' },
-      );
-      expect(result).toEqual(mockZulipMessageResponse);
-    });
-  });
-
-  describe('deleteEventDiscussionMessage', () => {
-    it('should delete an event discussion message', async () => {
-      jest
-        .spyOn(eventDiscussionService, 'deleteEventDiscussionMessage')
-        .mockResolvedValue(mockZulipMessageResponse);
-      const result = await controller.deleteEventDiscussionMessage(
-        mockEvent.slug,
-        mockZulipMessage.id,
-      );
-      expect(result).toEqual(mockZulipMessageResponse);
-    });
-  });
+  // Discussion-related tests have been moved to chat.controller.spec.ts
 
   describe('showDashboardEvents', () => {
     it('should return dashboard events', async () => {
