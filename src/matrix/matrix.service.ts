@@ -6,9 +6,17 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ModuleRef, ContextIdFactory } from '@nestjs/core';
-import * as sdk from 'matrix-js-sdk';
 import * as pool from 'generic-pool';
 import axios from 'axios';
+
+// Create a placeholder for the SDK that will be dynamically imported 
+// to avoid ESM/CommonJS compatibility issues
+let matrixSdk: any = {
+  createClient: null,
+  MatrixClient: null,
+  MatrixEvent: null,
+  Room: null
+};
 
 import {
   ActiveClient,
@@ -28,7 +36,7 @@ import { MatrixGateway } from './matrix.gateway';
 @Injectable()
 export class MatrixService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MatrixService.name);
-  private readonly adminClient: sdk.MatrixClient;
+  private adminClient: any; // Will be initialized in onModuleInit
   public readonly adminUserId: string;
   private readonly baseUrl: string;
   private readonly serverName: string;
@@ -49,7 +57,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
   private userMatrixClients: Map<
     number,
     {
-      client: sdk.MatrixClient;
+      client: any; // MatrixClient
       matrixUserId: string;
       lastActivity: Date;
     }
@@ -100,51 +108,73 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
         ? '***' + this.adminAccessToken.slice(-5)
         : 'NOT SET',
     });
-
-    // Create admin client for API operations only
-    this.adminClient = sdk.createClient({
-      baseUrl: this.baseUrl,
-      userId: this.adminUserId,
-      accessToken: matrixConfig.adminAccessToken || '',
-      useAuthorizationHeader: true,
-    });
-
-    // Initialize connection pool
-    this.clientPool = pool.createPool<MatrixClientWithContext>(
-      {
-        // eslint-disable-next-line @typescript-eslint/require-await
-        create: async () => {
-          // Use the same userId and accessToken for consistency
-          const client = sdk.createClient({
-            baseUrl: this.baseUrl,
-            userId: this.adminUserId,
-            accessToken: matrixConfig.adminAccessToken || '',
-            useAuthorizationHeader: true,
-          });
-          return {
-            client,
-            userId: this.adminUserId,
-          };
-        },
-        destroy: async (client) => {
-          client.client.stopClient();
-          return Promise.resolve();
-        },
-      },
-      {
-        max: matrixConfig.connectionPoolSize || 10,
-        min: 2,
-        acquireTimeoutMillis: matrixConfig.connectionPoolTimeout || 30000,
-        idleTimeoutMillis: 30000,
-        evictionRunIntervalMillis: 60000,
-      },
-    );
+    
+    // The Matrix client and connection pool will be initialized in onModuleInit
+    // after we dynamically import the matrix-js-sdk
   }
 
   async onModuleInit() {
-    this.logger.log(
-      `Matrix service initialized with admin user ${this.adminUserId}`,
-    );
+    try {
+      // Dynamically import matrix-js-sdk using dynamic import()
+      const importedSdk = await import('matrix-js-sdk');
+      
+      // Assign to our global variable
+      matrixSdk = importedSdk.default || importedSdk;
+      
+      // Log that we've loaded the SDK
+      this.logger.log('Successfully loaded Matrix SDK via dynamic import');
+      
+      // Re-create the admin client now that SDK is loaded
+      const matrixConfig = this.configService.get<MatrixConfig>('matrix', {
+        infer: true,
+      });
+      
+      // Create admin client for API operations only
+      this.adminClient = matrixSdk.createClient({
+        baseUrl: this.baseUrl,
+        userId: this.adminUserId,
+        accessToken: matrixConfig.adminAccessToken || '',
+        useAuthorizationHeader: true,
+      });
+      
+      // Re-initialize connection pool
+      this.clientPool = pool.createPool<MatrixClientWithContext>(
+        {
+          // eslint-disable-next-line @typescript-eslint/require-await
+          create: async () => {
+            // Use the same userId and accessToken for consistency
+            const client = matrixSdk.createClient({
+              baseUrl: this.baseUrl,
+              userId: this.adminUserId,
+              accessToken: matrixConfig.adminAccessToken || '',
+              useAuthorizationHeader: true,
+            });
+            return {
+              client,
+              userId: this.adminUserId,
+            };
+          },
+          destroy: async (client) => {
+            client.client.stopClient();
+            return Promise.resolve();
+          },
+        },
+        {
+          max: matrixConfig.connectionPoolSize || 10,
+          min: 2,
+          acquireTimeoutMillis: matrixConfig.connectionPoolTimeout || 30000,
+          idleTimeoutMillis: 30000,
+          evictionRunIntervalMillis: 60000,
+        },
+      );
+      
+      this.logger.log(
+        `Matrix service initialized with admin user ${this.adminUserId}`,
+      );
+    } catch (sdkImportError) {
+      this.logger.error('Failed to import matrix-js-sdk', sdkImportError);
+      throw new Error(`Matrix SDK import failed: ${sdkImportError.message}`);
+    }
 
     // Warm up the connection pool for admin operations
     try {
@@ -298,7 +328,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
     userId: number,
     userService?: any,
     tenantId?: string,
-  ): Promise<sdk.MatrixClient> {
+  ): Promise<any> { // Return type is MatrixClient but using any for compatibility
     // Check if we already have an active client for this user
     const existingClient = this.userMatrixClients.get(userId);
     if (existingClient) {
@@ -355,7 +385,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
 
     try {
       // Create a Matrix client with the user's credentials
-      const client = sdk.createClient({
+      const client = matrixSdk.createClient({
         baseUrl: this.baseUrl,
         userId: user.matrixUserId,
         accessToken: user.matrixAccessToken,
@@ -684,7 +714,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
             `Setting Matrix display name for user ${userId} to "${displayName}"`,
           );
 
-          const userClient = sdk.createClient({
+          const userClient = matrixSdk.createClient({
             baseUrl: this.baseUrl,
             userId,
             accessToken,
@@ -743,8 +773,8 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       const createRoomResponse = await client.client.createRoom({
         name,
         topic,
-        visibility: isPublic ? sdk.Visibility.Public : sdk.Visibility.Private,
-        preset: isPublic ? sdk.Preset.PublicChat : sdk.Preset.PrivateChat,
+        visibility: isPublic ? matrixSdk.Visibility.Public : matrixSdk.Visibility.Private,
+        preset: isPublic ? matrixSdk.Preset.PublicChat : matrixSdk.Preset.PrivateChat,
         is_direct: isDirect,
         invite: inviteUserIds,
         // Omit power_level_content_override to use Matrix defaults
@@ -884,7 +914,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       this.logger.debug(`User ${userId} joining room ${roomId}`);
 
       // Create a temporary client for the user
-      const tempClient = sdk.createClient({
+      const tempClient = matrixSdk.createClient({
         baseUrl: this.baseUrl,
         userId,
         accessToken,
@@ -945,7 +975,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       );
 
       // Create a temporary client for the user
-      const tempClient = sdk.createClient({
+      const tempClient = matrixSdk.createClient({
         baseUrl: this.baseUrl,
         userId,
         accessToken,
@@ -1024,7 +1054,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(`Starting Matrix client for user ${userId}`);
 
       // Create a new Matrix client instance for this user
-      const client = sdk.createClient({
+      const client = matrixSdk.createClient({
         baseUrl: this.baseUrl,
         userId,
         accessToken,
@@ -1057,7 +1087,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       // Handle room messages
       client.on(
         'Room.timeline' as any,
-        (event: sdk.MatrixEvent, room: sdk.Room) => {
+        (event: any, room: any) => {
           // Skip events that aren't messages
           if (event.getType() !== 'm.room.message') {
             return;
@@ -1094,7 +1124,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       // Handle typing notifications
       client.on(
         'RoomMember.typing' as any,
-        (event: sdk.MatrixEvent, member: sdk.RoomMember) => {
+        (event: any, member: any) => {
           const roomId = member.roomId;
           const room = client.getRoom(roomId);
 
@@ -1123,7 +1153,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       // Handle read receipts
       client.on(
         'Room.receipt' as any,
-        (event: sdk.MatrixEvent, room: sdk.Room) => {
+        (event: any, room: any) => {
           // Extract read receipt data
           const receiptData = event.getContent();
           const roomId = room.roomId;
@@ -1177,7 +1207,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       );
 
       // Check if we have an active client for this user
-      let client: sdk.MatrixClient;
+      let client: any;
 
       if (this.activeClients.has(userId)) {
         // Get the active client
@@ -1191,7 +1221,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
           activeClient.lastActivity = new Date();
         } else {
           // If activeClient doesn't exist despite the Map saying it should, create a new one
-          client = sdk.createClient({
+          client = matrixSdk.createClient({
             baseUrl: this.baseUrl,
             userId,
             accessToken,
@@ -1201,7 +1231,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
         }
       } else {
         // Create a temporary client
-        client = sdk.createClient({
+        client = matrixSdk.createClient({
           baseUrl: this.baseUrl,
           userId,
           accessToken,
@@ -1339,7 +1369,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
 
         // If we have an access token but no active client, create a temporary client
         if (senderAccessToken) {
-          const tempClient = sdk.createClient({
+          const tempClient = matrixSdk.createClient({
             baseUrl: this.baseUrl,
             userId: senderUserId,
             accessToken: senderAccessToken,
@@ -1424,7 +1454,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
     }
 
     // Create a new client for this user
-    const client = sdk.createClient({
+    const client = matrixSdk.createClient({
       baseUrl: this.baseUrl,
       userId,
       accessToken,
@@ -1444,7 +1474,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
     }
 
     // Set up Room.timeline event handling for message capturing
-    client.on('Room.timeline' as any, (event: sdk.MatrixEvent, room: sdk.Room) => {
+    client.on('Room.timeline' as any, (event: any, room: any) => {
       // Skip events that aren't messages
       if (event.getType() !== 'm.room.message') {
         return;
@@ -1882,7 +1912,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
    * sending sensitive credentials over the network.
    */
   async getUserRoomsWithClient(
-    matrixClient: sdk.MatrixClient,
+    matrixClient: any,
   ): Promise<RoomInfo[]> {
     try {
       const userId = matrixClient.getUserId();

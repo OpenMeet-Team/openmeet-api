@@ -1,4 +1,6 @@
-import * as MatrixSdk from 'matrix-js-sdk';
+// Using dynamic import (at runtime) instead of static import for ESM compatibility
+// The actual matrix-js-sdk import will happen in MatrixService
+type MatrixSdk = any;
 import { Socket } from 'socket.io';
 
 // Add explicit type declaration for the mock used in tests
@@ -7,7 +9,7 @@ declare module 'matrix-js-sdk' {
 }
 
 export interface MatrixClientWithContext {
-  client: MatrixSdk.MatrixClient;
+  client: any; // MatrixClient
   userId: string;
 }
 
@@ -31,7 +33,7 @@ export interface CreateRoomOptions {
   isDirect?: boolean;
   inviteUserIds?: string[];
   powerLevels?: Record<string, number>;
-  powerLevelContentOverride?: MatrixSdk.IPowerLevelsContent;
+  powerLevelContentOverride?: any; // IPowerLevelsContent
 }
 
 export interface RoomInfo {
@@ -85,7 +87,7 @@ export interface StartClientOptions {
 }
 
 export interface ActiveClient {
-  client: MatrixSdk.MatrixClient;
+  client: any; // MatrixClient
   userId: string;
   lastActivity: Date;
   eventCallbacks: ((event: any) => void)[];
