@@ -1,7 +1,11 @@
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
-import { ChatRoomEntity, ChatRoomType, ChatRoomVisibility } from '../../chat-room/infrastructure/persistence/relational/entities/chat-room.entity';
+import {
+  ChatRoomEntity,
+  ChatRoomType,
+  ChatRoomVisibility,
+} from '../../chat-room/infrastructure/persistence/relational/entities/chat-room.entity';
 
 /**
  * Interface for the Chat Room Repository
@@ -76,7 +80,9 @@ export interface ChatRoomRepositoryInterface {
    * @param matrixRoomId The Matrix room ID
    * @returns The chat room entity
    */
-  getChatRoomByMatrixRoomId(matrixRoomId: string): Promise<ChatRoomEntity | null>;
+  getChatRoomByMatrixRoomId(
+    matrixRoomId: string,
+  ): Promise<ChatRoomEntity | null>;
 
   /**
    * Get the direct chat room between two users
@@ -84,7 +90,10 @@ export interface ChatRoomRepositoryInterface {
    * @param user2Id The ID of the second user
    * @returns The chat room entity or null if not found
    */
-  getDirectChatRoom(user1Id: number, user2Id: number): Promise<ChatRoomEntity | null>;
+  getDirectChatRoom(
+    user1Id: number,
+    user2Id: number,
+  ): Promise<ChatRoomEntity | null>;
 
   /**
    * Add a user to a chat room

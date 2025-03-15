@@ -255,5 +255,4 @@ export class EventController {
       slug,
     );
   }
-
 }

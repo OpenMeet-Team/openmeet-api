@@ -5,23 +5,27 @@ import { mockUser } from '../test/mocks';
 
 // Create mock discussion service with methods matching the controller
 const mockDiscussionService = {
-  sendEventDiscussionMessage: jest.fn().mockResolvedValue({ id: 'event-msg-123' }),
-  getEventDiscussionMessages: jest.fn().mockResolvedValue({ 
-    messages: [{ id: 'msg-1', content: { body: 'test message' } }], 
-    end: 'token-123' 
+  sendEventDiscussionMessage: jest
+    .fn()
+    .mockResolvedValue({ id: 'event-msg-123' }),
+  getEventDiscussionMessages: jest.fn().mockResolvedValue({
+    messages: [{ id: 'msg-1', content: { body: 'test message' } }],
+    end: 'token-123',
   }),
   addMemberToEventDiscussionBySlug: jest.fn().mockResolvedValue(undefined),
   removeMemberFromEventDiscussionBySlug: jest.fn().mockResolvedValue(undefined),
-  sendGroupDiscussionMessage: jest.fn().mockResolvedValue({ id: 'group-msg-123' }),
+  sendGroupDiscussionMessage: jest
+    .fn()
+    .mockResolvedValue({ id: 'group-msg-123' }),
   getGroupDiscussionMessages: jest.fn().mockResolvedValue({
     messages: [{ id: 'msg-2', content: { body: 'test group message' } }],
-    end: 'token-456'
+    end: 'token-456',
   }),
   sendDirectMessage: jest.fn().mockResolvedValue({ id: 'direct-msg-123' }),
   getDirectMessages: jest.fn().mockResolvedValue({
     messages: [{ id: 'msg-3', content: { body: 'test direct message' } }],
-    end: 'token-789'
-  })
+    end: 'token-789',
+  }),
 };
 
 describe('ChatController', () => {
@@ -51,7 +55,7 @@ describe('ChatController', () => {
     it('should send a message to an event discussion', async () => {
       const eventSlug = 'test-event';
       const messageBody = { message: 'test message', topicName: 'General' };
-      
+
       const result = await controller.sendEventMessage(
         eventSlug,
         messageBody,
@@ -62,7 +66,7 @@ describe('ChatController', () => {
       expect(discussionService.sendEventDiscussionMessage).toHaveBeenCalledWith(
         eventSlug,
         mockUser.id,
-        messageBody
+        messageBody,
       );
     });
 
@@ -70,12 +74,12 @@ describe('ChatController', () => {
       const eventSlug = 'test-event';
       const limit = 50;
       const from = 'token-abc';
-      
+
       const result = await controller.getEventMessages(
         eventSlug,
         mockUser,
         limit,
-        from
+        from,
       );
 
       expect(result.messages.length).toBe(1);
@@ -84,40 +88,38 @@ describe('ChatController', () => {
         eventSlug,
         mockUser.id,
         limit,
-        from
+        from,
       );
     });
 
     it('should add a member to an event discussion', async () => {
       const eventSlug = 'test-event';
       const userSlug = 'test-user';
-      
+
       await controller.addMemberToEventDiscussion(
         eventSlug,
         userSlug,
-        mockUser
+        mockUser,
       );
 
-      expect(discussionService.addMemberToEventDiscussionBySlug).toHaveBeenCalledWith(
-        eventSlug,
-        userSlug
-      );
+      expect(
+        discussionService.addMemberToEventDiscussionBySlug,
+      ).toHaveBeenCalledWith(eventSlug, userSlug);
     });
 
     it('should remove a member from an event discussion', async () => {
       const eventSlug = 'test-event';
       const userSlug = 'test-user';
-      
+
       await controller.removeMemberFromEventDiscussion(
         eventSlug,
         userSlug,
-        mockUser
+        mockUser,
       );
 
-      expect(discussionService.removeMemberFromEventDiscussionBySlug).toHaveBeenCalledWith(
-        eventSlug,
-        userSlug
-      );
+      expect(
+        discussionService.removeMemberFromEventDiscussionBySlug,
+      ).toHaveBeenCalledWith(eventSlug, userSlug);
     });
   });
 

@@ -25,7 +25,9 @@ export class EventListener {
     // Emit an event for the chat module to handle chat room creation
     // instead of directly calling the chat room service
     try {
-      this.logger.log(`Emitting chat.event.created event for event ${params.slug}`);
+      this.logger.log(
+        `Emitting chat.event.created event for event ${params.slug}`,
+      );
       this.eventEmitter.emit('chat.event.created', {
         eventSlug: params.slug,
         userSlug: params.user.slug,
@@ -83,7 +85,9 @@ export class EventListener {
           eventSlug: params.eventSlug || attendee.event.slug,
           userSlug: params.userSlug || attendee.user.slug,
         });
-        this.logger.log(`Emitted chat.event.member.add event for user ${attendee.user.slug} in event ${attendee.event.slug}`);
+        this.logger.log(
+          `Emitted chat.event.member.add event for user ${attendee.user.slug} in event ${attendee.event.slug}`,
+        );
       }
     } catch (error) {
       this.logger.error(
@@ -106,7 +110,7 @@ export class EventListener {
       // Get the attendee to fetch slugs if they weren't provided
       let eventSlug = params.eventSlug;
       let userSlug = params.userSlug;
-      
+
       if (!eventSlug || !userSlug) {
         const attendee = await this.eventAttendeeService.findOne({
           where: {
@@ -115,30 +119,42 @@ export class EventListener {
           },
           relations: ['event', 'user'],
         });
-        
+
         if (attendee) {
           eventSlug = attendee.event.slug;
           userSlug = attendee.user.slug;
         }
       }
-      
+
       // If status changed to confirmed, add user to chat
-      if (params.status === EventAttendeeStatus.Confirmed && eventSlug && userSlug) {
+      if (
+        params.status === EventAttendeeStatus.Confirmed &&
+        eventSlug &&
+        userSlug
+      ) {
         // Emit an event for the chat module to handle
         this.eventEmitter.emit('chat.event.member.add', {
           eventSlug,
           userSlug,
         });
-        this.logger.log(`Emitted chat.event.member.add event for user ${userSlug} in event ${eventSlug}`);
+        this.logger.log(
+          `Emitted chat.event.member.add event for user ${userSlug} in event ${eventSlug}`,
+        );
       }
       // If status changed from confirmed to something else, remove from chat
-      else if (params.status !== EventAttendeeStatus.Confirmed && eventSlug && userSlug) {
+      else if (
+        params.status !== EventAttendeeStatus.Confirmed &&
+        eventSlug &&
+        userSlug
+      ) {
         // Emit an event for the chat module to handle
         this.eventEmitter.emit('chat.event.member.remove', {
           eventSlug,
           userSlug,
         });
-        this.logger.log(`Emitted chat.event.member.remove event for user ${userSlug} in event ${eventSlug}`);
+        this.logger.log(
+          `Emitted chat.event.member.remove event for user ${userSlug} in event ${eventSlug}`,
+        );
       }
     } catch (error) {
       this.logger.error(
@@ -163,16 +179,20 @@ export class EventListener {
         },
         relations: ['event', 'user'],
       });
-      
+
       if (attendee && attendee.event && attendee.user) {
         // Emit an event for the chat module to handle using slugs
         this.eventEmitter.emit('chat.event.member.remove', {
           eventSlug: attendee.event.slug,
           userSlug: attendee.user.slug,
         });
-        this.logger.log(`Emitted chat.event.member.remove event for user ${attendee.user.slug} in event ${attendee.event.slug}`);
+        this.logger.log(
+          `Emitted chat.event.member.remove event for user ${attendee.user.slug} in event ${attendee.event.slug}`,
+        );
       } else {
-        this.logger.warn(`Could not retrieve event or user details for attendee (event: ${params.eventId}, user: ${params.userId})`);
+        this.logger.warn(
+          `Could not retrieve event or user details for attendee (event: ${params.eventId}, user: ${params.userId})`,
+        );
       }
     } catch (error) {
       this.logger.error(

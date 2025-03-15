@@ -10,11 +10,21 @@ import { Logger } from '@nestjs/common';
 
 // Create a test module to mock dependencies
 class TestLogger extends Logger {
-  error() { return; }
-  log() { return; }
-  warn() { return; }
-  debug() { return; }
-  verbose() { return; }
+  error() {
+    return;
+  }
+  log() {
+    return;
+  }
+  warn() {
+    return;
+  }
+  debug() {
+    return;
+  }
+  verbose() {
+    return;
+  }
 }
 
 describe.skip('MatrixGateway', () => {
@@ -70,8 +80,8 @@ describe.skip('MatrixGateway', () => {
               const config = {
                 matrix: {
                   serverName: 'matrix.example.org',
-                  websocketUrl: 'wss://matrix.example.org/matrix'
-                }
+                  websocketUrl: 'wss://matrix.example.org/matrix',
+                },
               };
               const parts = key.split('.');
               let result = config;
@@ -79,7 +89,7 @@ describe.skip('MatrixGateway', () => {
                 result = result[part];
               }
               return result;
-            })
+            }),
           },
         },
       ],
@@ -91,7 +101,7 @@ describe.skip('MatrixGateway', () => {
       matrixService = module.get<MatrixService>(MatrixService);
       userService = module.get<UserService>(UserService);
       jwtService = module.get<JwtService>(JwtService);
-      
+
       // Explicitly set the logger
       (gateway as any).logger = new TestLogger();
     } catch (error) {

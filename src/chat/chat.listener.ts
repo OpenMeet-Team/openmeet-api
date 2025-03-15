@@ -24,7 +24,9 @@ export class ChatListener {
         params.eventSlug,
         params.userSlug,
       );
-      this.logger.log(`Added user ${params.userSlug} to event ${params.eventSlug} chat room`);
+      this.logger.log(
+        `Added user ${params.userSlug} to event ${params.eventSlug} chat room`,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to add user ${params.userSlug} to event ${params.eventSlug} chat room: ${error.message}`,
@@ -45,7 +47,9 @@ export class ChatListener {
         params.eventSlug,
         params.userSlug,
       );
-      this.logger.log(`Removed user ${params.userSlug} from event ${params.eventSlug} chat room`);
+      this.logger.log(
+        `Removed user ${params.userSlug} from event ${params.eventSlug} chat room`,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to remove user ${params.userSlug} from event ${params.eventSlug} chat room: ${error.message}`,
@@ -55,10 +59,7 @@ export class ChatListener {
   }
 
   @OnEvent('chat.group.member.add')
-  async handleChatGroupMemberAdd(params: {
-    groupId: number;
-    userId: number;
-  }) {
+  async handleChatGroupMemberAdd(params: { groupId: number; userId: number }) {
     this.logger.log('chat.group.member.add event received', params);
 
     try {
@@ -66,7 +67,9 @@ export class ChatListener {
         params.groupId,
         params.userId,
       );
-      this.logger.log(`Added user ${params.userId} to group ${params.groupId} chat room`);
+      this.logger.log(
+        `Added user ${params.userId} to group ${params.groupId} chat room`,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to add user ${params.userId} to group ${params.groupId} chat room: ${error.message}`,
@@ -87,7 +90,9 @@ export class ChatListener {
         params.groupId,
         params.userId,
       );
-      this.logger.log(`Removed user ${params.userId} from group ${params.groupId} chat room`);
+      this.logger.log(
+        `Removed user ${params.userId} from group ${params.groupId} chat room`,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to remove user ${params.userId} from group ${params.groupId} chat room: ${error.message}`,
@@ -110,14 +115,18 @@ export class ChatListener {
       // Ideally, we should update ChatRoomService to use slugs directly in the future
       const { eventId, userId } = await this.discussionService.getIdsFromSlugs(
         params.eventSlug,
-        params.userSlug
+        params.userSlug,
       );
 
       if (eventId && userId) {
         await this.chatRoomService.createEventChatRoom(eventId, userId);
-        this.logger.log(`Created chat room for event ${params.eventSlug} by user ${params.userSlug}`);
+        this.logger.log(
+          `Created chat room for event ${params.eventSlug} by user ${params.userSlug}`,
+        );
       } else {
-        this.logger.warn(`Could not convert slugs to IDs for event ${params.eventSlug} and user ${params.userSlug}`);
+        this.logger.warn(
+          `Could not convert slugs to IDs for event ${params.eventSlug} and user ${params.userSlug}`,
+        );
       }
     } catch (error) {
       this.logger.error(

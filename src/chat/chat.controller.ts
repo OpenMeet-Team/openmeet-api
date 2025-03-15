@@ -29,10 +29,14 @@ export class ChatController {
   @ApiOperation({ summary: 'Send a message to an event discussion' })
   async sendEventMessage(
     @Param('slug') slug: string,
-    @Body() body: { message: string; topicName?: string },
+    @Body() body: { message: string },
     @AuthUser() user: User,
   ): Promise<{ id: string }> {
-    return await this.discussionService.sendEventDiscussionMessage(slug, user.id, body);
+    return await this.discussionService.sendEventDiscussionMessage(
+      slug,
+      user.id,
+      body,
+    );
   }
 
   @Get('event/:slug/messages')
@@ -47,13 +51,13 @@ export class ChatController {
     end: string;
   }> {
     return await this.discussionService.getEventDiscussionMessages(
-      slug, 
+      slug,
       user.id,
       limit,
-      from
+      from,
     );
   }
-  
+
   @Post('event/:slug/members/:userSlug')
   @ApiOperation({ summary: 'Add a member to the event chat room' })
   async addMemberToEventDiscussion(
@@ -63,7 +67,7 @@ export class ChatController {
   ): Promise<void> {
     return await this.discussionService.addMemberToEventDiscussionBySlug(
       eventSlug,
-      userSlug
+      userSlug,
     );
   }
 
@@ -76,7 +80,7 @@ export class ChatController {
   ): Promise<void> {
     return await this.discussionService.removeMemberFromEventDiscussionBySlug(
       eventSlug,
-      userSlug
+      userSlug,
     );
   }
 
@@ -87,10 +91,14 @@ export class ChatController {
   @ApiOperation({ summary: 'Send a message to a group discussion' })
   async sendGroupMessage(
     @Param('slug') slug: string,
-    @Body() body: { message: string; topicName?: string },
+    @Body() body: { message: string },
     @AuthUser() user: User,
   ): Promise<{ id: string }> {
-    return await this.discussionService.sendGroupDiscussionMessage(slug, user.id, body);
+    return await this.discussionService.sendGroupDiscussionMessage(
+      slug,
+      user.id,
+      body,
+    );
   }
 
   @Get('group/:slug/messages')
@@ -105,10 +113,10 @@ export class ChatController {
     end: string;
   }> {
     return await this.discussionService.getGroupDiscussionMessages(
-      slug, 
+      slug,
       user.id,
       limit,
-      from
+      from,
     );
   }
 
@@ -122,7 +130,11 @@ export class ChatController {
     @Body() body: { message: string },
     @AuthUser() user: User,
   ): Promise<{ id: string }> {
-    return await this.discussionService.sendDirectMessage(recipientId, user.id, body);
+    return await this.discussionService.sendDirectMessage(
+      recipientId,
+      user.id,
+      body,
+    );
   }
 
   @Get('direct/:userId/messages')
@@ -140,7 +152,7 @@ export class ChatController {
       user.id,
       otherUserId,
       limit,
-      from
+      from,
     );
   }
 }

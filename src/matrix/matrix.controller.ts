@@ -311,7 +311,8 @@ export class MatrixController {
    */
   @ApiOperation({
     summary: 'Test broadcast to Matrix room via WebSocket',
-    description: 'Broadcasts a test message to a room via WebSocket without sending an actual Matrix message',
+    description:
+      'Broadcasts a test message to a room via WebSocket without sending an actual Matrix message',
   })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -326,19 +327,21 @@ export class MatrixController {
   ): Promise<any> {
     try {
       const { roomId, message } = body;
-      
+
       if (!roomId) {
         throw new Error('Room ID is required');
       }
-      
-      this.logger.log(`Testing broadcast to room ${roomId} from user ${user.id}`);
-      
+
+      this.logger.log(
+        `Testing broadcast to room ${roomId} from user ${user.id}`,
+      );
+
       // Get user for Matrix user ID
       const fullUser = await this.userService.findById(user.id);
       if (!fullUser || !fullUser.matrixUserId) {
         throw new Error('User has no Matrix credentials');
       }
-      
+
       // Create a test event object
       const testEvent = {
         type: 'm.room.message',
@@ -352,25 +355,28 @@ export class MatrixController {
         origin_server_ts: Date.now(),
         timestamp: Date.now(),
       };
-      
+
       // Access the Matrix gateway through the service
       // This is a bit of a hack to access the private property
       const matrixGateway = (this.matrixService as any).matrixGateway;
-      
+
       if (!matrixGateway) {
         throw new Error('Matrix gateway not available for broadcasting');
       }
-      
+
       // Broadcast the event directly
       matrixGateway.broadcastRoomEvent(roomId, testEvent);
-      
+
       return {
         success: true,
         event: testEvent,
         message: 'Test broadcast sent successfully',
       };
     } catch (error) {
-      this.logger.error(`Error testing broadcast: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error testing broadcast: ${error.message}`,
+        error.stack,
+      );
       throw error;
     }
   }

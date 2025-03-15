@@ -12,12 +12,12 @@ import { ChatListener } from './chat.listener';
 
 @Module({
   imports: [
-    UserModule, 
-    TenantModule, 
+    UserModule,
+    TenantModule,
     MatrixModule,
     forwardRef(() => EventModule),
     forwardRef(() => GroupModule),
-    ChatRoomModule
+    ChatRoomModule,
   ],
   controllers: [ChatController],
   providers: [

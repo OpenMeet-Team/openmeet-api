@@ -110,7 +110,7 @@ describe('MatrixService', () => {
     }).compile();
 
     service = module.get<MatrixService>(MatrixService);
-    
+
     // Manually initialize clientPool and matrixSdk for tests
     // @ts-ignore - access private property for testing
     service.clientPool = {
@@ -121,7 +121,7 @@ describe('MatrixService', () => {
       release: jest.fn().mockResolvedValue(undefined),
       destroy: jest.fn().mockResolvedValue(undefined),
     };
-    
+
     // @ts-ignore - access and set the matrixSdk for testing
     service.matrixSdk = sdkMock;
 
@@ -164,13 +164,15 @@ describe('MatrixService', () => {
   describe('createUser', () => {
     it('should create a new Matrix user using Admin API', async () => {
       // Setup mock flow - first get will return registration flows
-      mockedAxios.get.mockRejectedValueOnce(new Error('Registration requires admin privileges'));
-      
+      mockedAxios.get.mockRejectedValueOnce(
+        new Error('Registration requires admin privileges'),
+      );
+
       // Mock the put and post requests needed for Admin API user creation
       mockedAxios.put.mockResolvedValueOnce({
         data: { success: true },
       });
-      
+
       // Mock login response
       mockedAxios.post.mockResolvedValueOnce({
         data: {
@@ -252,7 +254,7 @@ describe('MatrixService', () => {
     it('should send a message to a room', async () => {
       const mockAccessToken = 'user-access-token';
       const mockUserId = '@user:example.org';
-      
+
       const result = await service.sendMessage({
         roomId: 'room-123',
         content: JSON.stringify({
@@ -260,7 +262,7 @@ describe('MatrixService', () => {
           body: 'Test message',
         }),
         accessToken: mockAccessToken,
-        userId: mockUserId
+        userId: mockUserId,
       });
 
       expect(sdkMock.__mockClient.sendEvent).toHaveBeenCalledWith(

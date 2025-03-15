@@ -11,22 +11,22 @@ import axios from 'axios';
 
 // Placeholder for the dynamically imported SDK
 // This avoids ESM/CommonJS compatibility issues with ts-node
-let matrixSdk: any = {
+const matrixSdk: any = {
   createClient: null,
   // Define constants used by createRoom
   Visibility: {
     Public: 'public',
-    Private: 'private'
+    Private: 'private',
   },
   Preset: {
     PublicChat: 'public_chat',
     PrivateChat: 'private_chat',
-    TrustedPrivateChat: 'trusted_private_chat'
+    TrustedPrivateChat: 'trusted_private_chat',
   },
   Direction: {
     Forward: 'f',
-    Backward: 'b'
-  }
+    Backward: 'b',
+  },
 };
 
 import {
@@ -95,22 +95,33 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       MATRIX_SERVER_URL: process.env.MATRIX_SERVER_URL,
       MATRIX_ADMIN_USER: process.env.MATRIX_ADMIN_USER,
       MATRIX_ADMIN_USERNAME: process.env.MATRIX_ADMIN_USERNAME,
-      MATRIX_ADMIN_ACCESS_TOKEN: process.env.MATRIX_ADMIN_ACCESS_TOKEN ? '***' + (process.env.MATRIX_ADMIN_ACCESS_TOKEN.slice(-5) || '') : 'undefined',
-      MATRIX_SERVER_NAME: process.env.MATRIX_SERVER_NAME
+      MATRIX_ADMIN_ACCESS_TOKEN: process.env.MATRIX_ADMIN_ACCESS_TOKEN
+        ? '***' + (process.env.MATRIX_ADMIN_ACCESS_TOKEN.slice(-5) || '')
+        : 'undefined',
+      MATRIX_SERVER_NAME: process.env.MATRIX_SERVER_NAME,
     });
 
     if (!matrixConfig) {
-      this.logger.warn('Matrix configuration is missing - Matrix functionality will be limited');
+      this.logger.warn(
+        'Matrix configuration is missing - Matrix functionality will be limited',
+      );
       // Set defaults for required fields to prevent crashes
       const serverName = process.env.MATRIX_SERVER_NAME || 'openmeet.net';
-      const baseUrl = process.env.MATRIX_BASE_URL || process.env.MATRIX_SERVER_URL || `https://matrix-dev.${serverName}`;
-      
-      console.log(`Using Matrix server name: ${serverName} with base URL: ${baseUrl}`);
-      
+      const baseUrl =
+        process.env.MATRIX_BASE_URL ||
+        process.env.MATRIX_SERVER_URL ||
+        `https://matrix-dev.${serverName}`;
+
+      console.log(
+        `Using Matrix server name: ${serverName} with base URL: ${baseUrl}`,
+      );
+
       if (!process.env.MATRIX_ADMIN_ACCESS_TOKEN) {
-        console.warn('WARNING: Matrix admin access token is not set! User provisioning may fail.');
+        console.warn(
+          'WARNING: Matrix admin access token is not set! User provisioning may fail.',
+        );
       }
-      
+
       // Set default configuration
       this.baseUrl = baseUrl;
       this.adminUserId = `@${process.env.MATRIX_ADMIN_USER || process.env.MATRIX_ADMIN_USERNAME || 'admin'}:${serverName}`;
@@ -147,7 +158,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
         ? '***' + this.adminAccessToken.slice(-5)
         : 'NOT SET',
     });
-    
+
     // The Matrix client and connection pool will be initialized in onModuleInit
     // after we dynamically import the matrix-js-sdk
   }
@@ -161,25 +172,40 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
         // Using Function constructor to avoid static analysis warnings about require
         try {
           this.logger.log('Attempting to load Matrix SDK via CommonJS require');
-          const requireFn = new Function('modulePath', 'return require(modulePath)');
+          const requireFn = new Function(
+            'modulePath',
+            'return require(modulePath)',
+          );
           sdk = requireFn('matrix-js-sdk');
-          this.logger.log('Successfully loaded Matrix SDK via CommonJS require');
+          this.logger.log(
+            'Successfully loaded Matrix SDK via CommonJS require',
+          );
         } catch (cjsError) {
           // If CJS import fails, try ESM dynamic import as fallback
-          this.logger.warn(`CommonJS require failed: ${cjsError.message}, trying ESM import`);
+          this.logger.warn(
+            `CommonJS require failed: ${cjsError.message}, trying ESM import`,
+          );
           sdk = await import('matrix-js-sdk');
-          this.logger.log('Successfully loaded Matrix SDK via ESM dynamic import');
+          this.logger.log(
+            'Successfully loaded Matrix SDK via ESM dynamic import',
+          );
         }
       } catch (importError) {
         // Handle completely failed import by creating a mock SDK
         // This allows the application to start even when Matrix SDK is not available
-        this.logger.error(`Failed to import Matrix SDK: ${importError.message}`);
-        this.logger.warn('Creating mock Matrix SDK to allow application to start');
-        
+        this.logger.error(
+          `Failed to import Matrix SDK: ${importError.message}`,
+        );
+        this.logger.warn(
+          'Creating mock Matrix SDK to allow application to start',
+        );
+
         // Create a minimal mock SDK
         sdk = {
           createClient: (options) => {
-            this.logger.warn('Using mock Matrix client - Matrix functionality will be limited');
+            this.logger.warn(
+              'Using mock Matrix client - Matrix functionality will be limited',
+            );
             return {
               // Minimal mock methods to prevent crashes
               startClient: async () => {},
@@ -204,23 +230,23 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
           },
           Visibility: matrixSdk.Visibility,
           Preset: matrixSdk.Preset,
-          Direction: matrixSdk.Direction
+          Direction: matrixSdk.Direction,
         };
       }
-      
+
       // Assign the createClient function to our SDK placeholder
       matrixSdk.createClient = sdk.createClient;
-      
+
       // Ensure Visibility and Preset are properly set
       if (sdk.Visibility) matrixSdk.Visibility = sdk.Visibility;
       if (sdk.Preset) matrixSdk.Preset = sdk.Preset;
       if (sdk.Direction) matrixSdk.Direction = sdk.Direction;
-      
+
       // Re-create the admin client now that SDK is loaded
       const matrixConfig = this.configService.get<MatrixConfig>('matrix', {
         infer: true,
       });
-      
+
       // Create admin client for API operations only
       this.adminClient = matrixSdk.createClient({
         baseUrl: this.baseUrl,
@@ -228,7 +254,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
         accessToken: matrixConfig.adminAccessToken || '',
         useAuthorizationHeader: true,
       });
-      
+
       // Re-initialize connection pool
       this.clientPool = pool.createPool<MatrixClientWithContext>(
         {
@@ -259,7 +285,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
           evictionRunIntervalMillis: 60000,
         },
       );
-      
+
       this.logger.log(
         `Matrix service initialized with admin user ${this.adminUserId}`,
       );
@@ -355,7 +381,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy() {
     this.logger.log('Matrix service destroying...');
-    
+
     try {
       // Stop the admin client if it exists and has stopClient method
       if (this.adminClient?.stopClient) {
@@ -363,12 +389,16 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
           this.logger.log('Stopping Matrix admin client');
           this.adminClient.stopClient();
         } catch (adminError) {
-          this.logger.warn(`Error stopping admin client: ${adminError.message}`);
+          this.logger.warn(
+            `Error stopping admin client: ${adminError.message}`,
+          );
         }
       } else {
-        this.logger.log('No Matrix admin client to stop or client not fully initialized');
+        this.logger.log(
+          'No Matrix admin client to stop or client not fully initialized',
+        );
       }
-  
+
       // Stop all active clients
       try {
         if (this.activeClients && this.activeClients.size > 0) {
@@ -378,7 +408,9 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
                 this.logger.log(`Stopping Matrix client for user ${userId}`);
                 activeClient.client.stopClient();
               } catch (clientError) {
-                this.logger.warn(`Error stopping client for user ${userId}: ${clientError.message}`);
+                this.logger.warn(
+                  `Error stopping client for user ${userId}: ${clientError.message}`,
+                );
               }
             }
           }
@@ -387,7 +419,9 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
           this.logger.log('No active Matrix clients to stop');
         }
       } catch (clientsError) {
-        this.logger.warn(`Error processing active clients: ${clientsError.message}`);
+        this.logger.warn(
+          `Error processing active clients: ${clientsError.message}`,
+        );
       }
     } catch (error) {
       this.logger.error(`Error stopping Matrix clients: ${error.message}`);
@@ -400,19 +434,26 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
         this.logger.log('Cleared Matrix client cleanup interval');
       }
     } catch (intervalError) {
-      this.logger.warn(`Error clearing cleanup interval: ${intervalError.message}`);
+      this.logger.warn(
+        `Error clearing cleanup interval: ${intervalError.message}`,
+      );
     }
 
     // Drain and clear the connection pool if it exists
     try {
       if (this.clientPool) {
-        if (typeof this.clientPool.drain === 'function' && typeof this.clientPool.clear === 'function') {
+        if (
+          typeof this.clientPool.drain === 'function' &&
+          typeof this.clientPool.clear === 'function'
+        ) {
           this.logger.log('Draining Matrix client pool');
           await this.clientPool.drain();
           await this.clientPool.clear();
           this.logger.log('Matrix client pool drained and cleared');
         } else {
-          this.logger.warn('Matrix client pool exists but drain/clear methods not available');
+          this.logger.warn(
+            'Matrix client pool exists but drain/clear methods not available',
+          );
         }
       } else {
         this.logger.log('No Matrix client pool to drain');
@@ -468,7 +509,8 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
     userId: number,
     userService?: any,
     tenantId?: string,
-  ): Promise<any> { // Return type is MatrixClient but using any for compatibility
+  ): Promise<any> {
+    // Return type is MatrixClient but using any for compatibility
     // Check if we already have an active client for this user
     const existingClient = this.userMatrixClients.get(userId);
     if (existingClient) {
@@ -913,8 +955,12 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       const createRoomResponse = await client.client.createRoom({
         name,
         topic,
-        visibility: isPublic ? matrixSdk.Visibility.Public : matrixSdk.Visibility.Private,
-        preset: isPublic ? matrixSdk.Preset.PublicChat : matrixSdk.Preset.PrivateChat,
+        visibility: isPublic
+          ? matrixSdk.Visibility.Public
+          : matrixSdk.Visibility.Private,
+        preset: isPublic
+          ? matrixSdk.Preset.PublicChat
+          : matrixSdk.Preset.PrivateChat,
         is_direct: isDirect,
         invite: inviteUserIds,
         // Omit power_level_content_override to use Matrix defaults
@@ -1225,90 +1271,81 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       });
 
       // Handle room messages
-      client.on(
-        'Room.timeline' as any,
-        (event: any, room: any) => {
-          // Skip events that aren't messages
-          if (event.getType() !== 'm.room.message') {
-            return;
-          }
+      client.on('Room.timeline' as any, (event: any, room: any) => {
+        // Skip events that aren't messages
+        if (event.getType() !== 'm.room.message') {
+          return;
+        }
 
-          const sender = event.getSender();
-          const isLocalEcho = sender === userId;
+        const sender = event.getSender();
+        const isLocalEcho = sender === userId;
 
-          // Log all events for debugging
-          this.logger.log(
-            `Room.timeline event in ${room.roomId} from ${sender}` + 
+        // Log all events for debugging
+        this.logger.log(
+          `Room.timeline event in ${room.roomId} from ${sender}` +
             (isLocalEcho ? ' (local echo)' : ''),
-            { eventId: event.getId() }
-          );
+          { eventId: event.getId() },
+        );
 
-          // Get message content
-          const content = event.getContent();
+        // Get message content
+        const content = event.getContent();
 
-          // Create event object
-          const eventObj = {
-            type: 'm.room.message',
-            room_id: room.roomId,
-            event_id: event.getId(),
-            sender,
-            content,
-            origin_server_ts: event.getTs(),
-          };
+        // Create event object
+        const eventObj = {
+          type: 'm.room.message',
+          room_id: room.roomId,
+          event_id: event.getId(),
+          sender,
+          content,
+          origin_server_ts: event.getTs(),
+        };
 
-          // Send via WebSocket if client is connected
-          this.sendEventToWebSocket(userId, room.roomId, eventObj);
-        },
-      );
+        // Send via WebSocket if client is connected
+        this.sendEventToWebSocket(userId, room.roomId, eventObj);
+      });
 
       // Handle typing notifications
-      client.on(
-        'RoomMember.typing' as any,
-        (event: any, member: any) => {
-          const roomId = member.roomId;
-          const room = client.getRoom(roomId);
+      client.on('RoomMember.typing' as any, (event: any, member: any) => {
+        const roomId = member.roomId;
+        const room = client.getRoom(roomId);
 
-          if (!room) {
-            return;
-          }
+        if (!room) {
+          return;
+        }
 
-          // Get typing users through API since getTypingUsers() doesn't exist
-          const typingUserIds = room
-            .getJoinedMembers()
-            .filter((m) => m.typing)
-            .map((m) => m.userId);
+        // Get typing users through API since getTypingUsers() doesn't exist
+        const typingUserIds = room
+          .getJoinedMembers()
+          .filter((m) => m.typing)
+          .map((m) => m.userId);
 
-          // Create event object
-          const eventObj = {
-            type: 'm.typing',
-            room_id: roomId,
-            user_ids: typingUserIds,
-          };
+        // Create event object
+        const eventObj = {
+          type: 'm.typing',
+          room_id: roomId,
+          user_ids: typingUserIds,
+        };
 
-          // Send via WebSocket if client is connected
-          this.sendEventToWebSocket(userId, roomId, eventObj);
-        },
-      );
+        // Send via WebSocket if client is connected
+        this.sendEventToWebSocket(userId, roomId, eventObj);
+      });
 
       // Handle read receipts
-      client.on(
-        'Room.receipt' as any,
-        (event: any, room: any) => {
-          // Extract read receipt data
-          const receiptData = event.getContent();
-          const roomId = room.roomId;
+      client.on('Room.receipt' as any, (event: any, room: any) => {
+        // Extract read receipt data
+        const receiptData = event.getContent();
+        const roomId = room.roomId;
 
-          // Create event object
-          const eventObj = {
-            type: 'm.receipt',
-            room_id: roomId,
-            content: receiptData,
-          };
+        // Create event object
+        const eventObj = {
+          type: 'm.receipt',
+          room_id: roomId,
+          content: receiptData,
+        };
 
-          // Send via WebSocket if client is connected
-          this.sendEventToWebSocket(userId, roomId, eventObj);
-        },
-      );
+        // Send via WebSocket if client is connected
+        this.sendEventToWebSocket(userId, roomId, eventObj);
+      });
 
       // Start the client with sync enabled
       await client.startClient({ initialSyncLimit: 10 });
@@ -1623,22 +1660,24 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       const sender = event.getSender();
       const roomId = room.roomId;
       const isLocalEcho = sender === userId;
-      
+
       // Keep track of processed event IDs to avoid duplicates
       const eventId = event.getId();
-      
+
       // Don't reprocess the same event from the same user
       const key = `${roomId}:${eventId}:${userId}`;
-      
+
       // Skip if this is a duplicate event
       if (this._processedEvents.has(key)) {
-        this.logger.debug(`Skipping duplicate event ${eventId} from ${sender} in room ${roomId}`);
+        this.logger.debug(
+          `Skipping duplicate event ${eventId} from ${sender} in room ${roomId}`,
+        );
         return;
       }
-      
+
       // Remember that we've processed this event
       this._processedEvents.add(key);
-      
+
       // Clean up old events after 30 seconds to prevent memory leaks
       setTimeout(() => {
         this._processedEvents.delete(key);
@@ -1646,15 +1685,15 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
 
       // Log all events for debugging
       this.logger.log(
-        `Room.timeline event in ${roomId} from ${sender}` + 
-        (isLocalEcho ? ' (local echo)' : ''),
-        { eventId: eventId, eventType: event.getType() }
+        `Room.timeline event in ${roomId} from ${sender}` +
+          (isLocalEcho ? ' (local echo)' : ''),
+        { eventId: eventId, eventType: event.getType() },
       );
 
       // Get message content
       const content = event.getContent();
-      
-      // Get the sender's display name 
+
+      // Get the sender's display name
       let senderName: string | null = null;
       try {
         // Try to get from room member
@@ -1662,11 +1701,15 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
           const member = room.getMember(sender);
           if (member && member.name) {
             senderName = member.name;
-            this.logger.debug(`Found sender name from room member: ${senderName}`);
+            this.logger.debug(
+              `Found sender name from room member: ${senderName}`,
+            );
           }
         }
       } catch (e) {
-        this.logger.warn(`Could not get sender name from room member: ${e.message}`);
+        this.logger.warn(
+          `Could not get sender name from room member: ${e.message}`,
+        );
       }
 
       // Create event object
@@ -1696,7 +1739,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       userId,
       lastActivity: new Date(),
       eventCallbacks,
-      wsClient
+      wsClient,
     });
 
     this.logger.log(`Started Matrix client for user ${userId}`);
@@ -2051,9 +2094,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
    * This method uses the provided client to fetch rooms, avoiding
    * sending sensitive credentials over the network.
    */
-  async getUserRoomsWithClient(
-    matrixClient: any,
-  ): Promise<RoomInfo[]> {
+  async getUserRoomsWithClient(matrixClient: any): Promise<RoomInfo[]> {
     try {
       const userId = matrixClient.getUserId();
       this.logger.debug(
@@ -2141,30 +2182,37 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
   ): void {
     try {
       // Enhanced logging to debug the path events take
-      this.logger.log(`Matrix event from ${userId} for room ${roomId}, event type: ${event.type}`, {
-        eventId: event.event_id || 'unknown',
-        sender: event.sender || 'unknown',
-      });
-      
+      this.logger.log(
+        `Matrix event from ${userId} for room ${roomId}, event type: ${event.type}`,
+        {
+          eventId: event.event_id || 'unknown',
+          sender: event.sender || 'unknown',
+        },
+      );
+
       // Skip if no room ID or gateway
       if (!roomId || !this.matrixGateway) {
         if (roomId) {
-          this.logger.warn(`Cannot broadcast to room ${roomId} - gateway not available`);
+          this.logger.warn(
+            `Cannot broadcast to room ${roomId} - gateway not available`,
+          );
         }
         return;
       }
-      
+
       // Check for duplicate broadcasts at the service level
       // Create a unique event identifier
       const eventId = event.event_id || event.id || 'unknown';
       const broadcastKey = `${roomId}:${eventId}`;
-      
+
       // Don't broadcast the same event twice
       if (eventId !== 'unknown' && this._processedEvents.has(broadcastKey)) {
-        this.logger.debug(`Skipping duplicate broadcast of event ${eventId} to room ${roomId}`);
+        this.logger.debug(
+          `Skipping duplicate broadcast of event ${eventId} to room ${roomId}`,
+        );
         return;
       }
-      
+
       // Remember this event for 30 seconds to prevent duplicates
       if (eventId !== 'unknown') {
         this._processedEvents.add(broadcastKey);
@@ -2172,15 +2220,17 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
           this._processedEvents.delete(broadcastKey);
         }, 30000);
       }
-      
+
       // Use the gateway to broadcast to all clients in the room
-      this.logger.log(`Broadcasting Matrix event to room ${roomId}, event ID: ${eventId}`);
-      
+      this.logger.log(
+        `Broadcasting Matrix event to room ${roomId}, event ID: ${eventId}`,
+      );
+
       // Make sure event has all required fields
       if (!event.timestamp) {
         event.timestamp = Date.now();
       }
-      
+
       // If sender_name is not already set, try to get the display name for this sender
       if (!event.sender_name && event.sender) {
         try {
@@ -2190,31 +2240,42 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
           if (senderStr.startsWith('@om_')) {
             // Extract ULID from OpenMeet Matrix ID
             const userRef = senderStr.split(':')[0].substring(4);
-            event.sender_name = `OpenMeet User`;  // More generic display name
+            event.sender_name = `OpenMeet User`; // More generic display name
           } else {
             event.sender_name = senderStr.split(':')[0].substring(1);
           }
-          this.logger.debug(`Set sender_name "${event.sender_name}" for ${event.sender}`);
-          
+          this.logger.debug(
+            `Set sender_name "${event.sender_name}" for ${event.sender}`,
+          );
+
           // Try to get actual display name in background to update for next message
           this.getUserDisplayName(event.sender)
-            .then(displayName => {
+            .then((displayName) => {
               if (displayName) {
-                this.logger.debug(`Found Matrix display name for ${event.sender}: ${displayName}`);
+                this.logger.debug(
+                  `Found Matrix display name for ${event.sender}: ${displayName}`,
+                );
               }
             })
-            .catch(err => {
-              this.logger.warn(`Error fetching display name for ${event.sender}: ${err.message}`);
+            .catch((err) => {
+              this.logger.warn(
+                `Error fetching display name for ${event.sender}: ${err.message}`,
+              );
             });
         } catch (err) {
-          this.logger.warn(`Error setting sender name for ${event.sender}: ${err.message}`);
+          this.logger.warn(
+            `Error setting sender name for ${event.sender}: ${err.message}`,
+          );
         }
       }
-      
+
       // Broadcast to all clients in the room
       this.matrixGateway.broadcastRoomEvent(roomId, event);
     } catch (error) {
-      this.logger.error(`Error sending event to WebSocket: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error sending event to WebSocket: ${error.message}`,
+        error.stack,
+      );
     }
   }
 }

@@ -30,7 +30,8 @@ export class DiscussionService implements DiscussionServiceInterface {
     private readonly eventQueryService: EventQueryService,
     private readonly groupService: GroupService,
     private readonly chatRoomService: ChatRoomService,
-    @Inject('CHAT_PROVIDER') private readonly chatProvider: ChatProviderInterface,
+    @Inject('CHAT_PROVIDER')
+    private readonly chatProvider: ChatProviderInterface,
   ) {}
 
   /**
@@ -47,69 +48,81 @@ export class DiscussionService implements DiscussionServiceInterface {
     if (!user) {
       throw new Error(`User with id ${userId} not found`);
     }
-    
+
     // If user already has Matrix credentials, return the user
     if (user.matrixUserId && user.matrixAccessToken && user.matrixDeviceId) {
       return user;
     }
-    
-    this.logger.log(`User ${userId} is missing Matrix credentials, provisioning...`);
-    
+
+    this.logger.log(
+      `User ${userId} is missing Matrix credentials, provisioning...`,
+    );
+
     try {
       // Generate a display name for the user
       const displayName = [user.firstName, user.lastName]
         .filter(Boolean)
         .join(' ');
-      
+
       // Create a unique username based on user ID
       const username = `om_${user.ulid.toLowerCase()}`;
-      
+
       // Generate a random password
-      const password = Math.random().toString(36).slice(2) + 
+      const password =
+        Math.random().toString(36).slice(2) +
         Math.random().toString(36).slice(2);
-      
+
       // Create a Matrix user
       const matrixUserInfo = await this.chatProvider.createUser({
         username,
         password,
         displayName: displayName || username,
       });
-      
+
       // Update user with Matrix credentials
       await this.userService.update(userId, {
         matrixUserId: matrixUserInfo.userId,
         matrixAccessToken: matrixUserInfo.accessToken,
         matrixDeviceId: matrixUserInfo.deviceId,
       });
-      
+
       // Get the updated user
       user = await this.userService.findById(userId, tenantId);
       if (!user) {
         throw new Error(`User with id ${userId} not found after update`);
       }
-      
-      this.logger.log(`Successfully provisioned Matrix user for ${userId}: ${user.matrixUserId}`);
+
+      this.logger.log(
+        `Successfully provisioned Matrix user for ${userId}: ${user.matrixUserId}`,
+      );
     } catch (error) {
-      this.logger.error(`Failed to provision Matrix user for ${userId}: ${error.message}`, error.stack);
-      throw new Error(`Matrix credentials could not be provisioned. Please try again.`);
+      this.logger.error(
+        `Failed to provision Matrix user for ${userId}: ${error.message}`,
+        error.stack,
+      );
+      throw new Error(
+        `Matrix credentials could not be provisioned. Please try again.`,
+      );
     }
-    
+
     // Start a Matrix client for the user
     try {
       if (!user.matrixUserId || !user.matrixAccessToken) {
-        throw new Error("Matrix credentials missing after provisioning");
+        throw new Error('Matrix credentials missing after provisioning');
       }
-      
+
       await this.chatProvider.startClient({
         userId: user.matrixUserId,
         accessToken: user.matrixAccessToken,
         deviceId: user.matrixDeviceId,
       });
     } catch (error) {
-      this.logger.warn(`Failed to start Matrix client for user ${userId}: ${error.message}`);
+      this.logger.warn(
+        `Failed to start Matrix client for user ${userId}: ${error.message}`,
+      );
       // Continue anyway - not critical
     }
-    
+
     return user;
   }
 
@@ -117,7 +130,9 @@ export class DiscussionService implements DiscussionServiceInterface {
    * Helper method to enhance messages with user display names
    */
   @Trace('discussion.enhanceMessagesWithUserInfo')
-  private async enhanceMessagesWithUserInfo(messages: Message[]): Promise<Message[]> {
+  private async enhanceMessagesWithUserInfo(
+    messages: Message[],
+  ): Promise<Message[]> {
     return Promise.all(
       messages.map(async (message) => {
         try {
@@ -125,7 +140,8 @@ export class DiscussionService implements DiscussionServiceInterface {
           const userMatrixId = message.sender;
 
           // Find the OpenMeet user with this Matrix ID
-          const userWithMatrixId = await this.userService.findByMatrixUserId(userMatrixId);
+          const userWithMatrixId =
+            await this.userService.findByMatrixUserId(userMatrixId);
 
           // If we found a user, add their name to the message
           if (userWithMatrixId) {
@@ -185,10 +201,11 @@ export class DiscussionService implements DiscussionServiceInterface {
    * Ensure a chat room exists for a group
    */
   @Trace('discussion.ensureGroupChatRoom')
-  private async ensureGroupChatRoom(groupId: number, creatorId: number) {
+  private async ensureGroupChatRoom(groupId: number, _creatorId: number) {
     try {
       // Implementation would be similar to ensureEventChatRoom
       // For now, throwing an error as this is not implemented yet
+      await Promise.resolve(); // Add await to fix require-await error
       throw new Error('Group chat room functionality not implemented yet');
     } catch (error) {
       this.logger.error(
@@ -203,10 +220,10 @@ export class DiscussionService implements DiscussionServiceInterface {
   async sendEventDiscussionMessage(
     slug: string,
     userId: number,
-    body: { message: string; topicName?: string },
+    body: { message: string },
   ): Promise<{ id: string }> {
     const tenantId = this.request.tenantId;
-    
+
     // Find the event by slug
     const event = await this.eventQueryService.showEventBySlug(slug);
     if (!event) {
@@ -243,7 +260,7 @@ export class DiscussionService implements DiscussionServiceInterface {
     if (!tenantId) {
       throw new Error('Tenant ID is required');
     }
-    
+
     // Find the event by slug
     const event = await this.eventQueryService.showEventBySlug(slug);
     if (!event) {
@@ -286,7 +303,7 @@ export class DiscussionService implements DiscussionServiceInterface {
   ): Promise<void> {
     // Get the event's slug first
     const tenantId = this.request.tenantId;
-    
+
     // Find the event to get its slug
     const event = await this.eventQueryService.findById(eventId, tenantId);
     if (!event) {
@@ -302,7 +319,7 @@ export class DiscussionService implements DiscussionServiceInterface {
     // Use the slug-based method which is preferred
     await this.addMemberToEventDiscussionBySlug(event.slug, user.slug);
   }
-  
+
   @Trace('discussion.addMemberToEventDiscussionBySlug')
   async addMemberToEventDiscussionBySlug(
     eventSlug: string,
@@ -312,19 +329,19 @@ export class DiscussionService implements DiscussionServiceInterface {
     if (!tenantId) {
       throw new Error('Tenant ID is required');
     }
-    
+
     // Find the event by slug
     const event = await this.eventQueryService.showEventBySlug(eventSlug);
     if (!event) {
       throw new NotFoundException(`Event with slug ${eventSlug} not found`);
     }
-    
+
     // Find the user by slug
     const user = await this.userService.getUserBySlug(userSlug);
     if (!user) {
       throw new NotFoundException(`User with slug ${userSlug} not found`);
     }
-    
+
     // Ensure chat room exists
     const creatorId = event.user?.id || user.id;
     await this.ensureEventChatRoom(event.id, creatorId);
@@ -343,7 +360,7 @@ export class DiscussionService implements DiscussionServiceInterface {
   ): Promise<void> {
     // Get the event's slug first
     const tenantId = this.request.tenantId;
-    
+
     // Find the event to get its slug
     const event = await this.eventQueryService.findById(eventId, tenantId);
     if (!event) {
@@ -359,7 +376,7 @@ export class DiscussionService implements DiscussionServiceInterface {
     // Use the slug-based method which is preferred
     await this.removeMemberFromEventDiscussionBySlug(event.slug, user.slug);
   }
-  
+
   @Trace('discussion.removeMemberFromEventDiscussionBySlug')
   async removeMemberFromEventDiscussionBySlug(
     eventSlug: string,
@@ -369,69 +386,73 @@ export class DiscussionService implements DiscussionServiceInterface {
     if (!tenantId) {
       throw new Error('Tenant ID is required');
     }
-    
+
     // Find the event by slug
     const event = await this.eventQueryService.showEventBySlug(eventSlug);
     if (!event) {
       throw new NotFoundException(`Event with slug ${eventSlug} not found`);
     }
-    
+
     // Find the user by slug
     const user = await this.userService.getUserBySlug(userSlug);
     if (!user) {
       throw new NotFoundException(`User with slug ${userSlug} not found`);
     }
-    
+
     // Remove the user from the chat room
     await this.chatRoomService.removeUserFromEventChatRoom(event.id, user.id);
   }
 
   @Trace('discussion.sendGroupDiscussionMessage')
   async sendGroupDiscussionMessage(
-    slug: string,
-    userId: number,
-    body: { message: string; topicName?: string },
+    _slug: string,
+    _userId: number,
+    _body: { message: string },
   ): Promise<{ id: string }> {
     // This would be implemented similarly to sendEventDiscussionMessage
     // For now, throwing an error as this is not implemented yet
+    await Promise.resolve(); // Add await to fix require-await error
     throw new Error('Group discussion functionality not implemented yet');
   }
 
   @Trace('discussion.getGroupDiscussionMessages')
   async getGroupDiscussionMessages(
-    slug: string,
-    userId: number,
-    limit?: number,
-    from?: string,
+    _slug: string,
+    _userId: number,
+    _limit?: number,
+    _from?: string,
   ): Promise<{
     messages: Message[];
     end: string;
   }> {
     // This would be implemented similarly to getEventDiscussionMessages
     // For now, throwing an error as this is not implemented yet
+    await Promise.resolve(); // Add await to fix require-await error
     throw new Error('Group discussion functionality not implemented yet');
   }
 
   @Trace('discussion.addMemberToGroupDiscussion')
   async addMemberToGroupDiscussion(
-    groupId: number,
-    userId: number,
+    _groupId: number,
+    _userId: number,
   ): Promise<void> {
     // This would be implemented similarly to addMemberToEventDiscussion
     // For now, throwing an error as this is not implemented yet
+    await Promise.resolve(); // Add await to fix require-await error
     throw new Error('Group discussion functionality not implemented yet');
   }
 
   @Trace('discussion.removeMemberFromGroupDiscussion')
   async removeMemberFromGroupDiscussion(
-    groupId: number,
-    userId: number,
+    _groupId: number,
+    _userId: number,
   ): Promise<void> {
     // This would be implemented similarly to removeMemberFromEventDiscussion
     // For now, throwing an error as this is not implemented yet
+    await Promise.resolve(); // Add await to fix require-await error
     throw new Error('Group discussion functionality not implemented yet');
   }
-  
+
   /**
    * Converts event and user slugs to their corresponding IDs
    * This is a helper method to bridge between slug-based and ID-based APIs
@@ -445,10 +466,10 @@ export class DiscussionService implements DiscussionServiceInterface {
     if (!tenantId) {
       throw new Error('Tenant ID is required');
     }
-    
+
     let eventId: number | null = null;
     let userId: number | null = null;
-    
+
     // Find the event by slug
     try {
       const event = await this.eventQueryService.showEventBySlug(eventSlug);
@@ -456,9 +477,11 @@ export class DiscussionService implements DiscussionServiceInterface {
         eventId = event.id;
       }
     } catch (error) {
-      this.logger.warn(`Could not find event with slug ${eventSlug}: ${error.message}`);
+      this.logger.warn(
+        `Could not find event with slug ${eventSlug}: ${error.message}`,
+      );
     }
-    
+
     // Find the user by slug
     try {
       const user = await this.userService.getUserBySlug(userSlug);
@@ -466,35 +489,39 @@ export class DiscussionService implements DiscussionServiceInterface {
         userId = user.id;
       }
     } catch (error) {
-      this.logger.warn(`Could not find user with slug ${userSlug}: ${error.message}`);
+      this.logger.warn(
+        `Could not find user with slug ${userSlug}: ${error.message}`,
+      );
     }
-    
+
     return { eventId, userId };
   }
 
   @Trace('discussion.sendDirectMessage')
   async sendDirectMessage(
-    recipientId: number,
-    senderId: number,
-    body: { message: string },
+    _recipientId: number,
+    _senderId: number,
+    _body: { message: string },
   ): Promise<{ id: string }> {
     // This would be implemented for direct messaging
     // For now, throwing an error as this is not implemented yet
+    await Promise.resolve(); // Add await to fix require-await error
     throw new Error('Direct messaging functionality not implemented yet');
   }
 
   @Trace('discussion.getDirectMessages')
   async getDirectMessages(
-    userId1: number,
-    userId2: number,
-    limit?: number,
-    from?: string,
+    _userId1: number,
+    _userId2: number,
+    _limit?: number,
+    _from?: string,
   ): Promise<{
     messages: Message[];
     end: string;
   }> {
     // This would be implemented for direct messaging
     // For now, throwing an error as this is not implemented yet
+    await Promise.resolve(); // Add await to fix require-await error
     throw new Error('Direct messaging functionality not implemented yet');
   }
 }

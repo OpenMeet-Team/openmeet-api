@@ -120,7 +120,7 @@ describe('MatrixController', () => {
       expect(result).toEqual({
         matrixUserId: mockUserWithMatrix.matrixUserId,
         success: true,
-        provisioned: false
+        provisioned: false,
       });
 
       // Should not create a new Matrix user
@@ -155,7 +155,7 @@ describe('MatrixController', () => {
       expect(result).toEqual({
         matrixUserId: mockMatrixUserInfo.userId,
         success: true,
-        provisioned: true
+        provisioned: true,
       });
     });
 

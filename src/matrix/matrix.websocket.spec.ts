@@ -80,7 +80,7 @@ describe('MatrixService WebSocket Integration', () => {
       (service as any).baseUrl = 'https://matrix.example.org/';
       const endpointWithTrailingSlash = service.getWebSocketEndpoint();
       expect(endpointWithTrailingSlash).toMatch(/^wss:\/\/.+\/matrix$/);
-      
+
       // Test with HTTP URL - but don't test the protocol as it might change
       (service as any).baseUrl = 'http://localhost:3000';
       const httpEndpoint = service.getWebSocketEndpoint();

@@ -31,7 +31,12 @@ import { WsJwtAuthGuard } from '../auth/ws-auth.guard';
     origin: true, // Allow any origin that sent credentials
     methods: ['GET', 'POST'],
     credentials: true,
-    allowedHeaders: ['x-tenant-id', 'authorization', 'content-type', 'x-requested-with'],
+    allowedHeaders: [
+      'x-tenant-id',
+      'authorization',
+      'content-type',
+      'x-requested-with',
+    ],
   },
   transports: ['websocket', 'polling'],
   middlewares: [],
@@ -402,49 +407,57 @@ export class MatrixGateway
       // Use both event_id and _broadcastId to identify events
       const eventId = event.event_id || event.id || 'unknown';
       const existingBroadcastId = event._broadcastId || '';
-      
+
       if (eventId !== 'unknown') {
         // Create a unique key to track this broadcast
         // Include broadcastId if available to make key more specific
-        const broadcastKey = existingBroadcastId 
+        const broadcastKey = existingBroadcastId
           ? `${roomId}:${eventId}:${existingBroadcastId}`
           : `${roomId}:${eventId}`;
-        
+
         // Check if we've recently broadcast this exact event
         const lastBroadcast = this.recentlyBroadcastEvents.get(broadcastKey);
-        if (lastBroadcast && Date.now() - lastBroadcast < 30000) { // 30 seconds
-          this.logger.debug(`Skipping duplicate broadcast of event ${eventId} to room ${roomId}`);
+        if (lastBroadcast && Date.now() - lastBroadcast < 30000) {
+          // 30 seconds
+          this.logger.debug(
+            `Skipping duplicate broadcast of event ${eventId} to room ${roomId}`,
+          );
           return;
         }
-        
+
         // Also check if we've broadcast this event with a different broadcast ID
         // This handles the case where the same Matrix event comes from different sync responses
         if (!existingBroadcastId) {
           // Look for any keys that contain this roomId:eventId
           const baseKey = `${roomId}:${eventId}`;
           let isDuplicate = false;
-          
-          for (const [key, timestamp] of this.recentlyBroadcastEvents.entries()) {
+
+          for (const [
+            key,
+            timestamp,
+          ] of this.recentlyBroadcastEvents.entries()) {
             if (key.startsWith(baseKey) && Date.now() - timestamp < 30000) {
-              this.logger.debug(`Skipping duplicate broadcast of event ${eventId} (matched existing broadcast)`);
+              this.logger.debug(
+                `Skipping duplicate broadcast of event ${eventId} (matched existing broadcast)`,
+              );
               isDuplicate = true;
               break;
             }
           }
-          
+
           if (isDuplicate) {
             return;
           }
         }
-        
+
         // Record this broadcast to prevent duplicates
         this.recentlyBroadcastEvents.set(broadcastKey, Date.now());
-        
+
         // Add a unique broadcast ID if one doesn't exist
         if (!event._broadcastId) {
           event._broadcastId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         }
-        
+
         // Cleanup old entries every 10 broadcasts
         if (this.recentlyBroadcastEvents.size % 10 === 0) {
           this.cleanupOldBroadcasts();
@@ -478,8 +491,10 @@ export class MatrixGateway
         }
 
         if (usersInRoom.length > 0) {
-          this.logger.log(`Found ${usersInRoom.length} users who should be in room ${roomId}, rejoining them`);
-          
+          this.logger.log(
+            `Found ${usersInRoom.length} users who should be in room ${roomId}, rejoining them`,
+          );
+
           // For each user who should be in this room, find their socket and join
           for (const matrixUserId of usersInRoom) {
             // Find socket IDs for this Matrix user
@@ -487,8 +502,10 @@ export class MatrixGateway
               if (userInfo.matrixUserId === matrixUserId) {
                 const socket = this.server.sockets.sockets.get(socketId);
                 if (socket) {
-                  this.logger.log(`Re-joining socket ${socketId} to room ${roomId}`);
-                  socket.join(roomId);
+                  this.logger.log(
+                    `Re-joining socket ${socketId} to room ${roomId}`,
+                  );
+                  void socket.join(roomId);
                 }
               }
             }
@@ -501,13 +518,13 @@ export class MatrixGateway
       const newBroadcastId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       const eventWithBroadcastId = {
         ...event,
-        _broadcastId: newBroadcastId,  // Add unique ID for this broadcast
-        _broadcastTime: Date.now()  // Add broadcast timestamp
+        _broadcastId: newBroadcastId, // Add unique ID for this broadcast
+        _broadcastTime: Date.now(), // Add broadcast timestamp
       };
-      
+
       // Broadcast the event to all clients in the room
       this.server.to(roomId).emit('matrix-event', eventWithBroadcastId);
-      
+
       // For messages, also emit a specific message event for easier client handling
       if (event.type === 'm.room.message') {
         this.server.to(roomId).emit('matrix-message', {
@@ -516,26 +533,30 @@ export class MatrixGateway
           content: event.content,
           eventId: event.event_id,
           timestamp: event.origin_server_ts || event.timestamp || Date.now(),
-          _broadcastId: newBroadcastId  // Include broadcast ID here too
+          _broadcastId: newBroadcastId, // Include broadcast ID here too
         });
       }
-      
+
       // Check if the broadcast worked by checking room membership again
       const updatedRoom = adapter?.rooms?.get?.(roomId);
       const updatedClientCount = updatedRoom ? updatedRoom.size : 0;
-      
-      this.logger.log(`Event broadcast completed for room ${roomId}, sent to ${updatedClientCount} clients`);
+
+      this.logger.log(
+        `Event broadcast completed for room ${roomId}, sent to ${updatedClientCount} clients`,
+      );
     } catch (error) {
       this.logger.error(
         `Error broadcasting room event: ${error.message}`,
         error.stack,
       );
-      
+
       // Try a fallback broadcast with simpler error handling
       try {
         this.server.to(roomId).emit('matrix-event', event);
       } catch (fallbackError) {
-        this.logger.error(`Fallback broadcast also failed: ${fallbackError.message}`);
+        this.logger.error(
+          `Fallback broadcast also failed: ${fallbackError.message}`,
+        );
       }
     }
   }
@@ -781,17 +802,21 @@ export class MatrixGateway
     try {
       const now = Date.now();
       const tenMinutesAgo = now - 10 * 60 * 1000; // 10 minutes
-      
+
       // Remove entries older than 10 minutes
       for (const [key, timestamp] of this.recentlyBroadcastEvents.entries()) {
         if (timestamp < tenMinutesAgo) {
           this.recentlyBroadcastEvents.delete(key);
         }
       }
-      
-      this.logger.debug(`Cleaned up old broadcast records. Current count: ${this.recentlyBroadcastEvents.size}`);
+
+      this.logger.debug(
+        `Cleaned up old broadcast records. Current count: ${this.recentlyBroadcastEvents.size}`,
+      );
     } catch (error) {
-      this.logger.error(`Error cleaning up broadcast records: ${error.message}`);
+      this.logger.error(
+        `Error cleaning up broadcast records: ${error.message}`,
+      );
     }
   }
 
