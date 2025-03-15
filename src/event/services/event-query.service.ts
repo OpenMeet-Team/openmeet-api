@@ -467,6 +467,7 @@ export class EventQueryService {
     await this.initializeRepository();
     const event = await this.eventRepository
       .createQueryBuilder('event')
+      .leftJoinAndSelect('event.image', 'image')
       .where('event.user.id = :userId', { userId })
       .andWhere('event.startDate > :now', { now: new Date() })
       .andWhere('event.status = :status', { status: EventStatus.Published })
@@ -515,6 +516,7 @@ export class EventQueryService {
     const events = await this.eventRepository
       .createQueryBuilder('event')
       .leftJoin('event.attendees', 'attendee')
+      .leftJoinAndSelect('event.image', 'image')
       .where('attendee.user.id = :userId', { userId })
       .andWhere('event.startDate > :now', { now: new Date() })
       .andWhere('event.status = :status', { status: EventStatus.Published })
