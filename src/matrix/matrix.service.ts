@@ -6,17 +6,9 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ModuleRef, ContextIdFactory } from '@nestjs/core';
+import * as matrixSdk from 'matrix-js-sdk';
 import * as pool from 'generic-pool';
 import axios from 'axios';
-
-// Create a placeholder for the SDK that will be dynamically imported 
-// to avoid ESM/CommonJS compatibility issues
-let matrixSdk: any = {
-  createClient: null,
-  MatrixClient: null,
-  MatrixEvent: null,
-  Room: null
-};
 
 import {
   ActiveClient,
@@ -115,14 +107,8 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     try {
-      // Dynamically import matrix-js-sdk using dynamic import()
-      const importedSdk = await import('matrix-js-sdk');
-      
-      // Assign to our global variable
-      matrixSdk = importedSdk.default || importedSdk;
-      
-      // Log that we've loaded the SDK
-      this.logger.log('Successfully loaded Matrix SDK via dynamic import');
+      // The SDK is now loaded via static import
+      this.logger.log('Using Matrix SDK via static import');
       
       // Re-create the admin client now that SDK is loaded
       const matrixConfig = this.configService.get<MatrixConfig>('matrix', {

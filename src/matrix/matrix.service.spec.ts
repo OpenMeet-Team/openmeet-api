@@ -110,6 +110,20 @@ describe('MatrixService', () => {
     }).compile();
 
     service = module.get<MatrixService>(MatrixService);
+    
+    // Manually initialize clientPool and matrixSdk for tests
+    // @ts-ignore - access private property for testing
+    service.clientPool = {
+      acquire: jest.fn().mockResolvedValue({
+        client: sdkMock.__mockClient,
+        userId: '@admin:example.org',
+      }),
+      release: jest.fn().mockResolvedValue(undefined),
+      destroy: jest.fn().mockResolvedValue(undefined),
+    };
+    
+    // @ts-ignore - access and set the matrixSdk for testing
+    service.matrixSdk = sdkMock;
 
     // Mock the axios responses for REST API calls
     mockedAxios.get.mockResolvedValue({
