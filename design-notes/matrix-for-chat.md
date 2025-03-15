@@ -520,12 +520,33 @@ chat.event.member.remove                 ┌────────────
 - Fixed TypeScript types throughout the codebase
 
 **Next Steps:**
-1. Complete comprehensive integration testing of the new architecture
-2. Refactor ChatRoomService to use slugs directly rather than IDs
-3. Remove any remaining legacy ID-based code
-4. Update documentation and developer guides to reflect the new architecture
-5. Implement dark mode styling for discussion components
-6. Verify that all Matrix-related functionality works with the new architecture
+1. **Unify Message Store Architecture:**
+   - Extend unified-message-store to support all features of chat-store
+   - Add direct chat listing capabilities to unified-message-store
+   - Implement chat presence indicators in the unified model
+   - Create consistent APIs for all message types (DM, group, event)
+   - Gradually migrate UI components to use unified-message-store exclusively
+
+2. **Implementation Plan for Store Unification:**
+   - Phase 1: Add chat listing capabilities to unified-message-store
+   - Phase 2: Add message read status tracking to unified-message-store
+   - Phase 3: Update MessagesPage.vue to use unified-message-store
+   - Phase 4: Update other components to use unified-message-store
+   - Phase 5: Remove chat-store and consolidate into unified-message-store
+
+3. **Enhance Matrix Chat Features:**
+   - Implement rich message formatting (bold, italic, bullet lists)
+   - Add image and file attachment support in all chat contexts
+   - Support message reactions and emoji shortcuts
+   - Consider implementing threaded replies for discussions
+   - Add message editing and deletion capabilities
+
+4. **Architecture Cleanup:**
+   - Refactor ChatRoomService to use slugs directly rather than IDs
+   - Remove any remaining legacy ID-based code
+   - Update documentation and developer guides to reflect the new architecture
+   - Verify that all Matrix-related functionality works with the unified store architecture
+   - Add comprehensive unit and integration tests for the messaging components
 
 ### Phase 2: Feature Implementation (2 weeks)
 - Implement all chat functionality (messaging, rooms, media)
