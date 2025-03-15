@@ -31,6 +31,7 @@ import { WsJwtAuthGuard } from '../auth/ws-auth.guard';
     origin: true, // Allow any origin that sent credentials
     methods: ['GET', 'POST'],
     credentials: true,
+    allowedHeaders: ['x-tenant-id', 'authorization', 'content-type', 'x-requested-with'],
   },
   transports: ['websocket', 'polling'],
   middlewares: [],
