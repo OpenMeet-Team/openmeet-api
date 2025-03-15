@@ -440,6 +440,13 @@ The implementation includes sophisticated error recovery:
 - Eliminated direct dependencies between Event and Matrix modules
 - Frontend updated to use new slug-based API endpoints
 - Moved obsolete EventDiscussionService files to disabled-tests directory
+- Fixed Matrix SDK ESM/CommonJS compatibility issues using dynamic imports
+
+**Matrix SDK ESM Compatibility Solution:**
+- The Matrix SDK (matrix-js-sdk) uses ES modules, causing compatibility issues with CommonJS in ts-node
+- Implemented a dynamic import pattern with placeholder constants to ensure compatibility in all environments
+- Initialization happens in onModuleInit using await import() instead of static imports
+- This pattern works for ts-node, Jest tests, and production builds without modification
 
 **Implementation Goals:**
 - Establish a clean, modular architecture with proper separation of concerns

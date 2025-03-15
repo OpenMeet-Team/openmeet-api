@@ -6,9 +6,28 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ModuleRef, ContextIdFactory } from '@nestjs/core';
-import * as matrixSdk from 'matrix-js-sdk';
 import * as pool from 'generic-pool';
 import axios from 'axios';
+
+// Placeholder for the dynamically imported SDK
+// This avoids ESM/CommonJS compatibility issues with ts-node
+let matrixSdk: any = {
+  createClient: null,
+  // Define constants used by createRoom
+  Visibility: {
+    Public: 'public',
+    Private: 'private'
+  },
+  Preset: {
+    PublicChat: 'public_chat',
+    PrivateChat: 'private_chat',
+    TrustedPrivateChat: 'trusted_private_chat'
+  },
+  Direction: {
+    Forward: 'f',
+    Backward: 'b'
+  }
+};
 
 import {
   ActiveClient,
@@ -107,8 +126,13 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     try {
-      // The SDK is now loaded via static import
-      this.logger.log('Using Matrix SDK via static import');
+      // Dynamically import the matrix-js-sdk
+      const sdk = await import('matrix-js-sdk');
+      
+      // Assign the createClient function to our SDK placeholder
+      matrixSdk.createClient = sdk.createClient;
+      
+      this.logger.log('Successfully loaded Matrix SDK via dynamic import');
       
       // Re-create the admin client now that SDK is loaded
       const matrixConfig = this.configService.get<MatrixConfig>('matrix', {
@@ -248,24 +272,40 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy() {
-    // Stop the admin client
-    this.adminClient.stopClient();
-
-    // Stop all active clients
-    for (const [userId, activeClient] of this.activeClients.entries()) {
-      this.logger.log(`Stopping Matrix client for user ${userId}`);
-      activeClient.client.stopClient();
+    try {
+      // Stop the admin client if it exists
+      if (this.adminClient?.stopClient) {
+        this.logger.log('Stopping Matrix admin client');
+        this.adminClient.stopClient();
+      }
+  
+      // Stop all active clients
+      for (const [userId, activeClient] of this.activeClients.entries()) {
+        if (activeClient?.client?.stopClient) {
+          this.logger.log(`Stopping Matrix client for user ${userId}`);
+          activeClient.client.stopClient();
+        }
+      }
+      this.activeClients.clear();
+    } catch (error) {
+      this.logger.error(`Error stopping Matrix clients: ${error.message}`);
     }
-    this.activeClients.clear();
 
     // Clear the cleanup interval
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
     }
 
-    // Drain and clear the connection pool
-    await this.clientPool.drain();
-    await this.clientPool.clear();
+    // Drain and clear the connection pool if it exists
+    try {
+      if (this.clientPool?.drain && this.clientPool?.clear) {
+        this.logger.log('Draining Matrix client pool');
+        await this.clientPool.drain();
+        await this.clientPool.clear();
+      }
+    } catch (error) {
+      this.logger.error(`Error draining Matrix client pool: ${error.message}`);
+    }
 
     this.logger.log('Matrix service destroyed');
   }
