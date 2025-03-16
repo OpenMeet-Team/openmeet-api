@@ -330,75 +330,88 @@ The implementation includes sophisticated error recovery:
 - ✅ Update existing event pages to use the new unified message component
 - ✅ Update group discussion pages to use the new unified message component
 - ✅ Update direct message pages to use the new unified message component
-- ✅ Removed discussion-store and related topic-based code
+- ✅ Handle graceful migration of existing threaded discussions
+- ✅ Add comprehensive tests for the unified message components
 - ✅ Update message type definitions to remove topic-related fields
-- ✅ Archiving of unused topic-based components
 
-**Benefits Realized:**
+**Key Achievements:**
+- Successfully migrated all messaging UI to the unified component architecture
+- Fixed issues with group discussions matching the event discussion functionality
+- Ensured consistent user experience across all chat contexts
+- Simplified the codebase by removing complex topic-based messaging logic
+- Improved real-time performance with WebSocket integration
+- Ensured proper user membership in Matrix rooms for all discussion types
+- Fixed typing notification issues by implementing proper room membership checks
+
+**Benefits:**
 - Simpler, more maintainable codebase
 - More consistent user experience across the platform
 - Better alignment with Matrix's native messaging model
 - Reduced complexity in state management
-- Simplified controller and service methods
+- Improved real-time responsiveness
+- Better developer experience with standardized patterns
 
 ### Phase 1.6: Secure Matrix Credential Management ✅ COMPLETED
 
-**Implementation Summary:**
-- Implemented hybrid credential management approach for Matrix authentication
-- Maintained real-time WebSocket benefits while securing Matrix credentials
-- Verified server-side only storage of Matrix credentials
-- JWT authentication with secure credential handling
+**Implementation Status:**
+- ✅ Server-side Matrix credential management implemented
+- ✅ WebSocket tenant ID handling (auth object, query param, headers) configured
+- ✅ Matrix client lifecycle management with WebSocket session established
+- ✅ JWT-only authentication for WebSockets (no Matrix credentials sent)
+- ✅ Secure WebSocket connection initialization verified
+- ✅ Backend hotfix: Tenant ID now properly passed to UserService.findById()
 
-**Key Components:**
+**Security Implementation Details:**
 1. **Session-based Matrix Client:**
-   - Matrix client instance created when WebSocket connection is established
-   - Client associated with the user's WebSocket session
-   - Client kept in memory only for the duration of the WebSocket connection
-   - Client used for all Matrix operations during the session
+   - Matrix client instances are now created when WebSocket connections are established
+   - Each client is associated with the user's WebSocket session
+   - Clients remain in memory only for the duration of the WebSocket connection
+   - All Matrix operations use the session-bound client
 
 2. **Server-side Credential Management:**
-   - Matrix credentials stored securely in database (encrypted)
-   - Credentials retrieved using user ID from JWT authentication
-   - No Matrix credentials ever sent to client
-   - Proper credential caching to optimize performance
+   - Matrix credentials are stored securely in the database (encrypted)
+   - Credentials are retrieved using user ID from JWT authentication
+   - No Matrix credentials are ever sent to the client
+   - ElastiCache is used for temporary credential caching to improve performance
 
 3. **Clean Credential Lifecycle:**
    - When WebSocket connection is established:
-     - User authenticated via JWT
-     - Matrix credentials retrieved from database
-     - Matrix client instance created with these credentials
+     - User is authenticated via JWT
+     - Matrix credentials are retrieved from database
+     - Matrix client instance is created with these credentials
    - During session:
-     - Matrix client used for all operations
-     - Tokens refreshed when needed
+     - The Matrix client is used for all operations
+     - Tokens are periodically checked for refresh needs
    - When WebSocket connection closes:
-     - Matrix client destroyed
-     - Credentials cleared from memory
+     - Matrix client is destroyed
+     - Credentials are cleared from memory
 
 4. **Multi-tenant Support:**
    - WebSocket connections include tenant ID for proper authentication
-   - Tenant ID can be provided through Socket.io auth object, query parameter, or header
-   - Tenant ID correctly passed to UserService methods
-   - Frontend includes tenant ID in WebSocket connection
-   - Default 'default' tenant ID used when no specific tenant provided
+   - Tenant ID is provided consistently via Socket.io auth object
+   - All UserService methods correctly receive tenant ID parameter
+   - Frontend ensures tenant ID is properly included in WebSocket connection
+   - Tenant ID is stored in localStorage as fallback mechanism
+   - Default 'default' tenant ID is used if no specific tenant is provided
 
-**Security Benefits Realized:**
+**Security Benefits:**
 - Matrix credentials never exposed to client
 - Credentials only in memory during active session
 - No credential transmission over network (beyond initial DB fetch)
 - Reduced attack surface
+- Proper tenant isolation
 
 **Performance Benefits Realized:**
 - All WebSocket advantages maintained (real-time, low latency)
 - Credential lookup avoided on every Matrix operation
 - Efficient use of resources with proper cleanup
+- Improved response times for Matrix operations
 
-**Implementation Status:**
-- ✅ Server-side Matrix credential management
-- ✅ WebSocket tenant ID handling (auth object, query param, headers)
-- ✅ Matrix client lifecycle management with WebSocket session
-- ✅ JWT-only authentication for WebSockets (no Matrix credentials sent)
-- ✅ Secure WebSocket connection initialization
-- ✅ Passing tenant ID to UserService.findById() properly
+**Key Fixes:**
+- Fixed "Tenant ID is required" error by ensuring tenant ID is passed to UserService methods
+- Corrected race conditions in WebSocket client initialization
+- Improved error handling and logging for authentication failures
+- Enhanced security by removing all client-side Matrix credential management
 
 ### Phase 1.9: Service Architecture Restructuring ✅ COMPLETED
 
@@ -410,6 +423,18 @@ The implementation includes sophisticated error recovery:
 - Frontend updated to use new slug-based API endpoints
 - Moved obsolete EventDiscussionService files to disabled-tests directory
 - Fixed Matrix SDK ESM/CommonJS compatibility issues using dynamic imports
+
+### Phase 2.0: Performance Optimization ✅ COMPLETED
+
+**Current Status:**
+- Implemented comprehensive performance optimizations for Matrix chat integration
+- Added request-scoped caching mechanism to prevent redundant database queries
+- Optimized Matrix room handling to reduce unnecessary API calls
+- Improved error handling for Matrix "already in room" scenarios
+- Added debouncing for typing notifications to reduce Matrix API load
+- Enhanced logging to reduce verbosity in production while maintaining debuggability
+- Fixed group membership verification to minimize database operations
+- Optimized WebSocket event handling to prevent duplicate processing
 
 **Matrix SDK ESM Compatibility Solution:**
 - The Matrix SDK (matrix-js-sdk) uses ES modules, causing compatibility issues with CommonJS in ts-node
@@ -511,6 +536,9 @@ chat.event.member.remove                 ┌────────────
 - ✅ Updated API endpoints in frontend to use new slug-based patterns
 - ✅ Modified frontend components to use correct parameter types (string slugs instead of numeric IDs)
 - ✅ Updated event-store.ts, chat.ts, and events.ts in frontend to use new endpoints
+- ✅ Fixed group discussion functionality to match event discussion patterns
+- ✅ Added proper error handling for Matrix room operations
+- ✅ Ensured consistent user experience between event and group discussions
 
 **Frontend Changes:**
 - Updated API endpoints in chat.ts and events.ts to match the new backend structure
@@ -518,6 +546,9 @@ chat.event.member.remove                 ┌────────────
 - Modified method signatures to use string slugs instead of numeric IDs
 - Updated EventTopicsComponent and other components to use user.slug instead of user.id
 - Fixed TypeScript types throughout the codebase
+- Implemented auto-joining users to group chat rooms when viewing discussions
+- Fixed typing notification issues by ensuring proper room membership
+- Standardized message display components across event and group discussions
 
 **Next Steps:**
 1. **Unify Message Store Architecture:**
@@ -641,6 +672,8 @@ As of Phase 1.5, we've made the decision to simplify our messaging model by remo
    - ✅ Bidirectional communication for typing indicators and messages
    - ✅ Tenant-aware connection management
    - ✅ WebSocket lifecycle management with Matrix client lifecycle
+   - ✅ Fixed group discussion typing notifications issues
+   - ✅ Implemented proper automatic room joining for users
    
    **Implementation Notes:**
    - Matrix events are now exclusively sent via WebSockets
@@ -648,54 +681,39 @@ As of Phase 1.5, we've made the decision to simplify our messaging model by remo
    - Matrix timeline events are captured and broadcast to WebSocket clients
    - SSE endpoints have been removed in favor of WebSockets
    - Improved reconnection handling and error recovery
+   - Secure connection management without exposing Matrix credentials
+   - Proper room membership handling ensures typing notifications work correctly
+   - Added comprehensive logging for troubleshooting connection issues
    
-   **Phase 1.7: WebSocket Room Management & Event Broadcasting ✅ COMPLETED:**
-   - ✅ Fixed WebSocket room membership and event broadcasting
-   - ✅ Ensured Matrix timeline events are properly captured
-   - ✅ Added comprehensive logging for event flow tracing
-   - ✅ Implemented proper error handling for WebSocket connections
-   - ✅ Added duplicate event detection and handling
-   - ✅ Improved room membership reliability with reconnection logic
-   - ✅ Added advanced broadcast queue with deduplication
-   - ✅ Implemented proper client-side error handling for reconnection
+   **Key Fixes:**
+   - Fixed "User not in room" errors for typing notifications
+   - Corrected group discussion WebSocket subscription issues
+   - Implemented proper cleanup of inactive WebSocket connections
+   - Enhanced error handling for network disruptions
+   - Added automatic room joining when users view discussions
+   - Fixed race conditions in client connection sequence
    
-   **Key Improvements:**
-   - Real-time message propagation working reliably
-   - Typing indicators functioning properly across clients
-   - Room membership correctly managed even after reconnection
-   - Duplicate event filtering prevents message duplicates
-   - Auto-cleanup of old broadcast records prevents memory leaks
-   - Proper client reconnection with exponential backoff
+   **Performance Optimizations (March 2025):**
+   - Implemented request-scoped caching to prevent redundant database operations
+   - Added debouncing for typing notifications (15-second cooldown for unchanged states)
+   - Optimized Matrix room joining with direct join-first strategy
+   - Reduced excessive logging by moving verbose logs to debug level
+   - Added in-memory cache for group/user chat room membership verification
+   - Optimized WebSocket handlers to reduce duplicate Matrix API calls
+   - Modified error handling to gracefully handle "already in room" cases
+   - Improved database queries by fetching related data in single operations
+   - Implemented smarter duplicate event detection to prevent redundant broadcasts
 
-9. **IMPLEMENTED: Fix for Duplicate Message Delivery Issues**
-   - ✅ Fixed issues with duplicate message delivery in Matrix chat integration
-   - ✅ Implemented improved store-specific message routing logic
-   - ✅ Enhanced handling of Matrix temporary and permanent IDs
-   - ✅ Centralized event routing through matrixService
-
-   **Technical Implementation:**
-   - Fixed bug in matrixService that was using incorrect property for room detection
-   - Removed direct event handler registration in chat-store to prevent duplicate processing
-   - Added clear routing rules based on room type (DM vs group/event discussions)
-   - Implemented smarter detection of DM rooms using chatList membership
-   - Enhanced handling of Matrix's temporary (~) vs permanent ($) message IDs
-   - Added verbose debugging to track message flow through the system
-   - Maintained typing event handlers while centralizing message delivery
-
-   **Architecture Improvements:**
-   - Established clear separation between chat-store (DMs) and unified-message-store (group/event discussions)
-   - Created migration plan for eventual consolidation into a single message store
-   - Added clear documentation and warnings about deprecated message routing paths
-   - Fixed issues where optimistic updates weren't properly synchronized with real events
-   - Improved reliability with better error handling in message routing
-
-10. **IMPLEMENTED: Dark Mode Support for Chat Components**
+9. **IMPLEMENTED: Dark Mode Support for Chat Components**
    - ✅ Added proper dark mode styling for discussion components
    - ✅ Fixed issue with light text on light background in dark mode
    - ✅ Implemented consistent color scheme for messages in both light and dark modes
+   - ✅ Standardized message styling across all chat contexts
    
    **Visual Impact:**
    - Messages now correctly display with dark background and light text in dark mode
    - Consistent contrast ratio for improved readability
    - Timestamps and secondary elements use appropriate opacity for visual hierarchy
    - Message content maintains proper contrast in both modes
+   - Unified styling for event, group, and direct message components
+   - Improved visual hierarchy for sender information and timestamps

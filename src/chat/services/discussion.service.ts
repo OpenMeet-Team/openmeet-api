@@ -203,10 +203,19 @@ export class DiscussionService implements DiscussionServiceInterface {
   @Trace('discussion.ensureGroupChatRoom')
   private async ensureGroupChatRoom(groupId: number, _creatorId: number) {
     try {
-      // Implementation would be similar to ensureEventChatRoom
-      // For now, throwing an error as this is not implemented yet
-      await Promise.resolve(); // Add await to fix require-await error
-      throw new Error('Group chat room functionality not implemented yet');
+      // Try to get existing chat rooms
+      const chatRooms = await this.chatRoomService.getGroupChatRooms(groupId);
+
+      // If no chat rooms exist, create one
+      if (!chatRooms || chatRooms.length === 0) {
+        return await this.chatRoomService.createGroupChatRoom(
+          groupId,
+          creatorId,
+        );
+      }
+
+      // Return the first chat room (main group chat room)
+      return chatRooms[0];
     } catch (error) {
       this.logger.error(
         `Error ensuring chat room for group ${groupId}: ${error.message}`,
@@ -268,10 +277,33 @@ export class DiscussionService implements DiscussionServiceInterface {
     }
 
     // Get chat rooms for the event
-    const chatRooms = await this.chatRoomService.getEventChatRooms(event.id);
+    let chatRooms = await this.chatRoomService.getEventChatRooms(event.id);
     if (!chatRooms || chatRooms.length === 0) {
-      // No chat room exists yet, return empty result
-      return { messages: [], end: '' };
+      // No chat room exists yet, create one
+      try {
+        await this.ensureEventChatRoom(event.id, userId);
+        const updatedChatRooms = await this.chatRoomService.getEventChatRooms(event.id);
+        
+        // If still no chat rooms, return empty result
+        if (!updatedChatRooms || updatedChatRooms.length === 0) {
+          return { messages: [], end: '' };
+        }
+        
+        // Use the newly created chat rooms
+        chatRooms = updatedChatRooms;
+      } catch (error) {
+        this.logger.error(`Error creating chat room for event ${slug}: ${error.message}`, error.stack);
+        return { messages: [], end: '' };
+      }
+    }
+
+    // Ensure the current user is a member of the room
+    try {
+      this.logger.log(`Ensuring user ${userId} is a member of event chat room ${chatRooms[0].matrixRoomId}`);
+      await this.chatRoomService.addUserToEventChatRoom(event.id, userId);
+    } catch (error) {
+      this.logger.error(`Error adding user ${userId} to event chat room: ${error.message}`, error.stack);
+      // Continue anyway - we'll still try to get messages
     }
 
     // Get messages from the first (main) chat room
@@ -342,8 +374,9 @@ export class DiscussionService implements DiscussionServiceInterface {
       throw new NotFoundException(`User with slug ${userSlug} not found`);
     }
 
-    // Ensure chat room exists
+    // Ensure chat room exists - use event.user as the creator
     const creatorId = event.user?.id || user.id;
+    this.logger.debug(`Using creator ID ${creatorId} for event ${event.id}`);
     await this.ensureEventChatRoom(event.id, creatorId);
 
     // Add the user to the chat room
@@ -403,32 +436,189 @@ export class DiscussionService implements DiscussionServiceInterface {
     await this.chatRoomService.removeUserFromEventChatRoom(event.id, user.id);
   }
 
+  /**
+   * Request-scoped cache for expensive operations to avoid duplication
+   */
+  private getRequestCache() {
+    if (!this.request.discussionCache) {
+      this.request.discussionCache = {
+        groups: new Map(),
+        chatRooms: new Map(),
+        membershipVerified: new Map()
+      };
+    }
+    return this.request.discussionCache;
+  }
+
   @Trace('discussion.sendGroupDiscussionMessage')
   async sendGroupDiscussionMessage(
     _slug: string,
     _userId: number,
     _body: { message: string },
   ): Promise<{ id: string }> {
-    // This would be implemented similarly to sendEventDiscussionMessage
-    // For now, throwing an error as this is not implemented yet
-    await Promise.resolve(); // Add await to fix require-await error
-    throw new Error('Group discussion functionality not implemented yet');
+    const tenantId = this.request.tenantId;
+    const cache = this.getRequestCache();
+    
+    // Get the group, using request-scoped cache if available
+    let group = cache.groups.get(slug);
+    if (!group) {
+      group = await this.groupService.getGroupBySlug(slug);
+      if (!group) {
+        throw new NotFoundException(`Group with slug ${slug} not found`);
+      }
+      
+      // Cache the group for potential future use in this request
+      cache.groups.set(slug, group);
+    }
+
+    // Get or create chat room for the group, using request-scoped cache
+    let chatRoom = cache.chatRooms.get(`group:${group.id}`);
+    if (!chatRoom) {
+      chatRoom = await this.ensureGroupChatRoom(group.id, userId);
+      cache.chatRooms.set(`group:${group.id}`, chatRoom);
+    }
+    
+    // Use a cached flag to check if we've already verified membership in this request
+    const membershipCacheKey = `group:${group.id}:user:${userId}`;
+    const membershipVerified = cache.membershipVerified.get(membershipCacheKey);
+    
+    if (!membershipVerified) {
+      // Check if the user is already a member of the room
+      // This will throw an error if they're not a group member
+      try {
+        // This call is now optimized to handle caching internally
+        await this.chatRoomService.addUserToGroupChatRoom(group.id, userId);
+        
+        // Mark membership as verified for this request cycle
+        cache.membershipVerified.set(membershipCacheKey, true);
+      } catch (error) {
+        if (error.message.includes('not a member of this group')) {
+          this.logger.warn(`User ${userId} is not a member of group ${slug}, cannot send message`);
+          throw new Error(`You must be a member of this group to send messages`);
+        }
+        throw error;
+      }
+    }
+
+    // Send the message to the chat room
+    const messageId = await this.chatRoomService.sendMessage(
+      chatRoom.id,
+      userId,
+      body.message,
+    );
+
+    return { id: messageId };
   }
 
   @Trace('discussion.getGroupDiscussionMessages')
   async getGroupDiscussionMessages(
-    _slug: string,
-    _userId: number,
-    _limit?: number,
-    _from?: string,
+    slug: string,
+    userId: number,
+    limit = 50,
+    from?: string,
   ): Promise<{
     messages: Message[];
     end: string;
+    roomId?: string;
   }> {
-    // This would be implemented similarly to getEventDiscussionMessages
-    // For now, throwing an error as this is not implemented yet
-    await Promise.resolve(); // Add await to fix require-await error
-    throw new Error('Group discussion functionality not implemented yet');
+    const tenantId = this.request.tenantId;
+    if (!tenantId) {
+      throw new Error('Tenant ID is required');
+    }
+    
+    const cache = this.getRequestCache();
+    
+    // Get the group, using request-scoped cache if available
+    let group = cache.groups.get(slug);
+    if (!group) {
+      group = await this.groupService.getGroupBySlug(slug);
+      if (!group) {
+        throw new NotFoundException(`Group with slug ${slug} not found`);
+      }
+      
+      // Cache the group for potential future use in this request
+      cache.groups.set(slug, group);
+    }
+
+    // Try to get chat room from cache first
+    let chatRoom = cache.chatRooms.get(`group:${group.id}`);
+    let roomCreated = false;
+    
+    if (!chatRoom) {
+      // Get existing chat rooms for the group
+      const chatRooms = await this.chatRoomService.getGroupChatRooms(group.id);
+      
+      if (chatRooms && chatRooms.length > 0) {
+        // Use first chat room (main group chat)
+        chatRoom = chatRooms[0];
+        cache.chatRooms.set(`group:${group.id}`, chatRoom);
+      } else {
+        // No chat room exists, create one
+        this.logger.debug(`No chat room found for group ${slug}, creating one...`);
+        try {
+          chatRoom = await this.ensureGroupChatRoom(group.id, userId);
+          cache.chatRooms.set(`group:${group.id}`, chatRoom);
+          roomCreated = true;
+        } catch (error) {
+          this.logger.error(`Error creating chat room for group ${slug}: ${error.message}`, error.stack);
+          // Return a temporary roomId for the frontend
+          const tempRoomId = `temp-group-${group.id}-${Date.now()}`;
+          return { 
+            messages: [], 
+            end: '',
+            roomId: tempRoomId
+          };
+        }
+      }
+    }
+
+    // Use memebership cache to prevent redundant checks
+    const membershipCacheKey = `group:${group.id}:user:${userId}`;
+    const membershipVerified = cache.membershipVerified.get(membershipCacheKey);
+    
+    if (!membershipVerified && !roomCreated) {
+      try {
+        // This call is now optimized to use internal caching
+        await this.chatRoomService.addUserToGroupChatRoom(group.id, userId);
+        cache.membershipVerified.set(membershipCacheKey, true);
+      } catch (error) {
+        // If they're not a group member, we don't continue
+        if (error.message.includes('not a member of this group')) {
+          this.logger.warn(`User ${userId} is not a member of group ${slug}, cannot access chat`);
+          throw new Error(`You must be a member of this group to access discussions`);
+        }
+        
+        this.logger.error(`Error adding user ${userId} to group chat room: ${error.message}`, error.stack);
+      }
+    }
+
+    // Get messages from the chat room
+    const messageData = await this.chatRoomService.getMessages(
+      chatRoom.id,
+      userId,
+      limit,
+      from,
+    );
+
+    // Enhance messages with user display names (could be optimized further with caching)
+    const enhancedMessages = await this.enhanceMessagesWithUserInfo(
+      messageData.messages,
+    );
+
+    // Return messages with the Matrix room ID
+    const roomId = chatRoom.matrixRoomId;
+    
+    if (!roomId) {
+      this.logger.warn(`No Matrix room ID found for chat room of group ${slug}`);
+    } else {
+      this.logger.debug(`Using Matrix room ID for group ${slug}: ${roomId}`);
+    }
+
+    return {
+      messages: enhancedMessages,
+      end: messageData.end,
+      roomId: roomId
+    };
   }
 
   @Trace('discussion.addMemberToGroupDiscussion')
@@ -436,10 +626,54 @@ export class DiscussionService implements DiscussionServiceInterface {
     _groupId: number,
     _userId: number,
   ): Promise<void> {
-    // This would be implemented similarly to addMemberToEventDiscussion
-    // For now, throwing an error as this is not implemented yet
-    await Promise.resolve(); // Add await to fix require-await error
-    throw new Error('Group discussion functionality not implemented yet');
+    // Get the group's slug first
+    const tenantId = this.request.tenantId;
+    
+    // Find the group to get its slug
+    const group = await this.groupService.findOne(groupId);
+    if (!group) {
+      throw new NotFoundException(`Group with id ${groupId} not found`);
+    }
+
+    // Get the user to get their slug
+    const user = await this.userService.findById(userId, tenantId);
+    if (!user) {
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+
+    // Use the slug-based method which is preferred
+    await this.addMemberToGroupDiscussionBySlug(group.slug, user.slug);
+  }
+  
+  @Trace('discussion.addMemberToGroupDiscussionBySlug')
+  async addMemberToGroupDiscussionBySlug(
+    groupSlug: string,
+    userSlug: string,
+  ): Promise<void> {
+    const tenantId = this.request.tenantId;
+    if (!tenantId) {
+      throw new Error('Tenant ID is required');
+    }
+    
+    // Find the group by slug
+    const group = await this.groupService.getGroupBySlug(groupSlug);
+    if (!group) {
+      throw new NotFoundException(`Group with slug ${groupSlug} not found`);
+    }
+    
+    // Find the user by slug
+    const user = await this.userService.getUserBySlug(userSlug);
+    if (!user) {
+      throw new NotFoundException(`User with slug ${userSlug} not found`);
+    }
+    
+    // Ensure chat room exists - use group.createdBy as the creator
+    const creatorId = group.createdBy?.id || user.id;
+    this.logger.debug(`Using creator ID ${creatorId} for group ${group.id}`);
+    await this.ensureGroupChatRoom(group.id, creatorId);
+
+    // Add the user to the chat room
+    await this.chatRoomService.addUserToGroupChatRoom(group.id, user.id);
   }
 
   @Trace('discussion.removeMemberFromGroupDiscussion')
@@ -447,10 +681,49 @@ export class DiscussionService implements DiscussionServiceInterface {
     _groupId: number,
     _userId: number,
   ): Promise<void> {
-    // This would be implemented similarly to removeMemberFromEventDiscussion
-    // For now, throwing an error as this is not implemented yet
-    await Promise.resolve(); // Add await to fix require-await error
-    throw new Error('Group discussion functionality not implemented yet');
+    // Get the group's slug first
+    const tenantId = this.request.tenantId;
+    
+    // Find the group to get its slug
+    const group = await this.groupService.findOne(groupId);
+    if (!group) {
+      throw new NotFoundException(`Group with id ${groupId} not found`);
+    }
+
+    // Get the user to get their slug
+    const user = await this.userService.findById(userId, tenantId);
+    if (!user) {
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+
+    // Use the slug-based method which is preferred
+    await this.removeMemberFromGroupDiscussionBySlug(group.slug, user.slug);
+  }
+  
+  @Trace('discussion.removeMemberFromGroupDiscussionBySlug')
+  async removeMemberFromGroupDiscussionBySlug(
+    groupSlug: string,
+    userSlug: string,
+  ): Promise<void> {
+    const tenantId = this.request.tenantId;
+    if (!tenantId) {
+      throw new Error('Tenant ID is required');
+    }
+    
+    // Find the group by slug
+    const group = await this.groupService.getGroupBySlug(groupSlug);
+    if (!group) {
+      throw new NotFoundException(`Group with slug ${groupSlug} not found`);
+    }
+    
+    // Find the user by slug
+    const user = await this.userService.getUserBySlug(userSlug);
+    if (!user) {
+      throw new NotFoundException(`User with slug ${userSlug} not found`);
+    }
+    
+    // Remove the user from the chat room
+    await this.chatRoomService.removeUserFromGroupChatRoom(group.id, user.id);
   }
 
   /**

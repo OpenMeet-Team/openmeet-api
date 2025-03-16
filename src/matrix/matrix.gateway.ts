@@ -658,6 +658,9 @@ export class MatrixGateway
     }
   }
 
+  // Store last typing state to avoid redundant Matrix API calls
+  private typingCache = new Map<string, { state: boolean; timestamp: number }>();
+
   @UseGuards(WsJwtAuthGuard)
   @SubscribeMessage('typing')
   async handleTyping(
@@ -666,28 +669,42 @@ export class MatrixGateway
     data: { roomId: string; isTyping: boolean; tenantId?: string },
   ) {
     try {
-      this.logger.debug(
-        `Typing indicator from user ${client.data.userId} in room ${data.roomId}: ${data.isTyping}`,
-      );
+      // Skip excessive logging for typing indicators
+      
+      // Check if state has changed since last call - implement debounce
+      const cacheKey = `${client.data.userId}:${data.roomId}`;
+      const lastState = this.typingCache.get(cacheKey);
+      const now = Date.now();
+      
+      // Only send if state changed or it's been more than 15 seconds since last update
+      // This prevents excessive Matrix API calls for typing notifications
+      if (lastState && 
+          lastState.state === data.isTyping && 
+          now - lastState.timestamp < 15000) {
+        // State hasn't changed and it's been less than 15 seconds, skip this update
+        return { success: true, cached: true };
+      }
+      
+      // Update the cache with current state
+      this.typingCache.set(cacheKey, { 
+        state: data.isTyping, 
+        timestamp: now 
+      });
+      
+      // Clean up old entries every 100 new ones
+      if (this.typingCache.size % 100 === 0) {
+        this.cleanupTypingCache();
+      }
 
-      // Check if the client has initialized Matrix credentials
-      if (
-        !client.data.hasMatrixCredentials ||
-        !client.data.matrixClientInitialized
-      ) {
-        this.logger.warn(
-          `Cannot send typing indicator for user ${client.data.userId} - Matrix client not initialized`,
-        );
+      // Check if the client has Matrix credentials
+      if (!client.data.hasMatrixCredentials || !client.data.matrixClientInitialized) {
         return { success: false, error: 'Matrix credentials required' };
       }
 
       try {
         // Get tenant ID from client data or from the request
         const tenantId = client.data.tenantId || data.tenantId;
-        this.logger.debug(
-          `Using tenant ID for typing: ${tenantId || 'undefined'}`,
-        );
-
+        
         // Get Matrix client for this user using credentials from database
         const matrixClient = await this.matrixService.getClientForUser(
           client.data.userId,
@@ -698,30 +715,39 @@ export class MatrixGateway
         // Send typing notification using the client
         await matrixClient.sendTyping(data.roomId, data.isTyping, 30000);
 
-        this.logger.debug(
-          `Typing notification sent for user ${client.data.userId} in room ${data.roomId}`,
-        );
-
-        // Return success response
+        // Return success with minimal logging
         return { success: true };
       } catch (error) {
-        this.logger.error(`Error getting Matrix client: ${error.message}`);
+        // Reduce log verbosity for common errors
+        if (error.message.includes('not in room') || 
+            error.message.includes('not a member')) {
+          this.logger.debug(`Typing notification error (user not in room): ${client.data.userId}`);
+        } else {
+          this.logger.warn(`Error sending typing: ${error.message}`);
+        }
+        
         return {
           success: false,
           error: `Error sending typing notification: ${error.message}`,
         };
       }
     } catch (error) {
-      this.logger.error(
-        `Error sending typing indicator: ${error.message}`,
-        error.stack,
-      );
-
-      // Return error to client rather than throwing exception
-      return {
-        success: false,
-        error: `Error sending typing indicator: ${error.message}`,
-      };
+      this.logger.error(`Error processing typing event: ${error.message}`);
+      return { success: false, error: error.message };
+    }
+  }
+  
+  /**
+   * Clean up typing cache entries older than 5 minutes
+   * to prevent memory leaks
+   */
+  private cleanupTypingCache() {
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+    
+    for (const [key, value] of this.typingCache.entries()) {
+      if (value.timestamp < fiveMinutesAgo) {
+        this.typingCache.delete(key);
+      }
     }
   }
 
@@ -773,6 +799,41 @@ export class MatrixGateway
         this.logger.log(
           `User ${client.data.userId} explicitly joined room ${data.roomId}. Room now has ${clientCount} clients`,
         );
+        
+        // Also make sure the user is actually joined on the Matrix server
+        // This ensures typing notifications and messages will work
+        try {
+          // Create a contextId for this request to resolve request-scoped services
+          const contextId = ContextIdFactory.create();
+          
+          // Get the UserService instance for this context
+          const userService = await this.moduleRef.resolve(
+            UserService,
+            contextId,
+            { strict: false },
+          );
+          
+          // Get tenant ID from client data or from the request
+          const tenantId = client.data.tenantId || data.tenantId;
+          
+          // Get the user with Matrix credentials
+          const user = await userService.findById(client.data.userId, tenantId);
+          
+          if (user && user.matrixUserId && user.matrixAccessToken) {
+            // Explicitly join the Matrix room to ensure membership
+            await this.matrixService.joinRoom(
+              data.roomId,
+              user.matrixUserId,
+              user.matrixAccessToken,
+              user.matrixDeviceId
+            );
+            this.logger.log(`Ensured Matrix membership for user ${client.data.userId} in room ${data.roomId}`);
+          }
+        } catch (matrixError) {
+          // Don't fail the whole request if Matrix join fails
+          // It might fail because they're already a member or for other reasons
+          this.logger.warn(`Matrix join attempt for user ${client.data.userId} in room ${data.roomId} resulted in: ${matrixError.message}`);
+        }
 
         return { success: true };
       } catch (error) {

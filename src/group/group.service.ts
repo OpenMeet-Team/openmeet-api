@@ -538,6 +538,7 @@ export class GroupService {
     let categoryEntities: any[] = [];
     const categoryIds = updateGroupDto.categories;
 
+    // Only process categories if they're included in the update
     if (categoryIds && categoryIds.length > 0) {
       categoryEntities = await Promise.all(
         categoryIds.map(async (categoryId) => {
@@ -550,12 +551,18 @@ export class GroupService {
           return categoryEntity;
         }),
       );
+      
+      // Only include categories in the mapped DTO if they were provided
+      updateGroupDto = {
+        ...updateGroupDto,
+        categories: categoryEntities,
+      };
     }
 
-    const mappedGroupDto = {
-      ...updateGroupDto,
-      categories: categoryEntities,
-    };
+    // Create a copy that won't affect the original updateGroupDto, but omit categories
+    // which we'll handle separately
+    const { categories: _, ...otherProps } = updateGroupDto;
+    const mappedGroupDto = { ...otherProps };
 
     if (mappedGroupDto.image?.id) {
       const fileObject = await this.fileService.findById(
@@ -574,7 +581,13 @@ export class GroupService {
       mappedGroupDto.image = fileObject as FileEntity;
     }
 
+    // First merge the non-category properties
     const updatedGroup = this.groupRepository.merge(group, mappedGroupDto);
+    
+    // Now handle categories separately if they were provided
+    if (categoryEntities.length > 0) {
+      updatedGroup.categories = categoryEntities;
+    }
     const savedGroup = await this.groupRepository.save(updatedGroup);
     this.auditLogger.log('group updated', {
       savedGroup,

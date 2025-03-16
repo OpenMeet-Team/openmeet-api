@@ -111,12 +111,39 @@ export class ChatController {
   ): Promise<{
     messages: Message[];
     end: string;
+    roomId?: string;
   }> {
     return await this.discussionService.getGroupDiscussionMessages(
       slug,
       user.id,
       limit,
       from,
+    );
+  }
+  
+  @Post('group/:slug/members/:userSlug')
+  @ApiOperation({ summary: 'Add a member to the group chat room' })
+  async addMemberToGroupDiscussion(
+    @Param('slug') groupSlug: string,
+    @Param('userSlug') userSlug: string,
+    @AuthUser() user: User,
+  ): Promise<void> {
+    return await this.discussionService.addMemberToGroupDiscussionBySlug(
+      groupSlug,
+      userSlug
+    );
+  }
+
+  @Delete('group/:slug/members/:userSlug')
+  @ApiOperation({ summary: 'Remove a member from the group chat room' })
+  async removeMemberFromGroupDiscussion(
+    @Param('slug') groupSlug: string,
+    @Param('userSlug') userSlug: string,
+    @AuthUser() user: User,
+  ): Promise<void> {
+    return await this.discussionService.removeMemberFromGroupDiscussionBySlug(
+      groupSlug,
+      userSlug
     );
   }
 

@@ -1052,11 +1052,18 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
     try {
       await client.client.invite(roomId, userId);
     } catch (error) {
-      this.logger.error(
-        `Error inviting user ${userId} to room ${roomId}: ${error.message}`,
-        error.stack,
-      );
-      throw new Error(`Failed to invite user to Matrix room: ${error.message}`);
+      // Matrix returns 403 when user is already in room, which is not really an error
+      // for our purposes - it just means we can skip the invite step
+      if (error.message && error.message.includes('already in the room')) {
+        this.logger.log(`User ${userId} is already in room ${roomId}, skipping invite`);
+        // Don't throw - just return since this is expected in some cases
+      } else {
+        this.logger.error(
+          `Error inviting user ${userId} to room ${roomId}: ${error.message}`,
+          error.stack,
+        );
+        throw new Error(`Failed to invite user to Matrix room: ${error.message}`);
+      }
     } finally {
       await this.clientPool.release(client);
     }
@@ -1109,7 +1116,27 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       });
 
       // Join the room
-      await tempClient.joinRoom(roomId);
+      try {
+        await tempClient.joinRoom(roomId);
+        this.logger.debug(`User ${userId} successfully joined room ${roomId}`);
+      } catch (joinError) {
+        // Check if the error is just that the user is already in the room
+        // Different Matrix servers may return different error messages for "already joined"
+        if (joinError.message && (
+            joinError.message.includes('already in the room') || 
+            joinError.message.includes('already a member') ||
+            joinError.message.includes('already joined'))) {
+          this.logger.debug(`User ${userId} is already a member of room ${roomId}`);
+          // This is actually not an error for our purposes
+        } else {
+          // For other errors, we do want to propagate them
+          this.logger.error(
+            `Error joining room ${roomId} as user ${userId}: ${joinError.message}`,
+            joinError.stack,
+          );
+          throw joinError; // Re-throw the error
+        }
+      }
 
       // Get current display name
       try {
@@ -1135,8 +1162,6 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
         );
         // Not critical, continue
       }
-
-      this.logger.debug(`User ${userId} successfully joined room ${roomId}`);
     } catch (error) {
       this.logger.error(
         `Error joining room ${roomId} as user ${userId}: ${error.message}`,
@@ -2173,7 +2198,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
   private _processedEvents = new Set<string>();
 
   /**
-   * Send Matrix event to connected WebSocket clients
+   * Send Matrix event to connected WebSocket clients with optimized logging
    */
   private sendEventToWebSocket(
     userId: string,
@@ -2181,15 +2206,6 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
     event: any,
   ): void {
     try {
-      // Enhanced logging to debug the path events take
-      this.logger.log(
-        `Matrix event from ${userId} for room ${roomId}, event type: ${event.type}`,
-        {
-          eventId: event.event_id || 'unknown',
-          sender: event.sender || 'unknown',
-        },
-      );
-
       // Skip if no room ID or gateway
       if (!roomId || !this.matrixGateway) {
         if (roomId) {
@@ -2201,15 +2217,13 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       }
 
       // Check for duplicate broadcasts at the service level
-      // Create a unique event identifier
       const eventId = event.event_id || event.id || 'unknown';
       const broadcastKey = `${roomId}:${eventId}`;
 
       // Don't broadcast the same event twice
       if (eventId !== 'unknown' && this._processedEvents.has(broadcastKey)) {
-        this.logger.debug(
-          `Skipping duplicate broadcast of event ${eventId} to room ${roomId}`,
-        );
+        // Use debug level instead of regular logging
+        this.logger.debug(`Skipping duplicate broadcast of event ${eventId}`);
         return;
       }
 
@@ -2221,61 +2235,51 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
         }, 30000);
       }
 
-      // Use the gateway to broadcast to all clients in the room
-      this.logger.log(
-        `Broadcasting Matrix event to room ${roomId}, event ID: ${eventId}`,
-      );
-
+      // Less verbose logging for common events
+      if (event.type === 'm.room.message') {
+        // Only log at debug level for messages
+        this.logger.debug(`Broadcasting Matrix message to room ${roomId.slice(0, 8)}...`);
+      } else {
+        // Log other events at debug level too
+        this.logger.debug(`Broadcasting event type ${event.type}`);
+      }
+      
       // Make sure event has all required fields
       if (!event.timestamp) {
         event.timestamp = Date.now();
       }
-
-      // If sender_name is not already set, try to get the display name for this sender
+      
+      // Set sender_name without excessive lookups
       if (!event.sender_name && event.sender) {
         try {
-          // Just use Matrix ID parsing for sender_name
-          // Matrix display names should be set correctly when users register
           const senderStr = event.sender;
           if (senderStr.startsWith('@om_')) {
             // Extract ULID from OpenMeet Matrix ID
-            const userRef = senderStr.split(':')[0].substring(4);
-            event.sender_name = `OpenMeet User`; // More generic display name
+            event.sender_name = `OpenMeet User`;  // More generic display name
           } else {
             event.sender_name = senderStr.split(':')[0].substring(1);
           }
-          this.logger.debug(
-            `Set sender_name "${event.sender_name}" for ${event.sender}`,
-          );
-
-          // Try to get actual display name in background to update for next message
-          this.getUserDisplayName(event.sender)
-            .then((displayName) => {
-              if (displayName) {
-                this.logger.debug(
-                  `Found Matrix display name for ${event.sender}: ${displayName}`,
-                );
-              }
-            })
-            .catch((err) => {
-              this.logger.warn(
-                `Error fetching display name for ${event.sender}: ${err.message}`,
-              );
-            });
+          
+          // Only fetch display name for actual user messages, not typing indicators etc.
+          if (event.type === 'm.room.message') {
+            // No verbose logging in this background operation
+            this.getUserDisplayName(event.sender)
+              .then(displayName => {
+                // Silently use the display name if found
+              })
+              .catch(() => {
+                // Suppress errors to reduce noise
+              });
+          }
         } catch (err) {
-          this.logger.warn(
-            `Error setting sender name for ${event.sender}: ${err.message}`,
-          );
+          // Suppress errors to reduce log noise
         }
       }
 
       // Broadcast to all clients in the room
       this.matrixGateway.broadcastRoomEvent(roomId, event);
     } catch (error) {
-      this.logger.error(
-        `Error sending event to WebSocket: ${error.message}`,
-        error.stack,
-      );
+      this.logger.error(`Error sending event to WebSocket: ${error.message}`);
     }
   }
 }

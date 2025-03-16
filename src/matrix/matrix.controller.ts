@@ -256,8 +256,12 @@ export class MatrixController {
       );
 
       try {
+        // Get the tenant ID from the request
+        const tenantId = this.request.tenantId;
+        this.logger.debug(`Using tenant ID for Matrix client: ${tenantId}`);
+
         // Get Matrix client for this user using credentials from database
-        const matrixClient = await this.matrixService.getClientForUser(user.id);
+        const matrixClient = await this.matrixService.getClientForUser(user.id, tenantId);
 
         // Send typing notification using the Matrix client
         await matrixClient.sendTyping(roomId, body.isTyping, 30000);
@@ -273,8 +277,12 @@ export class MatrixController {
         // Fall back to traditional credential usage method (will be deprecated)
         this.logger.debug('Falling back to traditional credential method');
 
+        // Get the tenant ID from the request
+        const tenantId = this.request.tenantId;
+        this.logger.debug(`Using tenant ID for fallback method: ${tenantId}`);
+
         // Get full user information
-        const fullUser = await this.userService.findById(user.id);
+        const fullUser = await this.userService.findById(user.id, tenantId);
 
         if (
           !fullUser ||

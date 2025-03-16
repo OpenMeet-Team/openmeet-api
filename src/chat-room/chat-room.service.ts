@@ -1,9 +1,10 @@
-import { Injectable, Scope, Inject, Logger } from '@nestjs/common';
+import { Injectable, Scope, Inject, Logger, forwardRef } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Repository } from 'typeorm';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { MatrixService } from '../matrix/matrix.service';
 import { UserService } from '../user/user.service';
+import { GroupMemberService } from '../group-member/group-member.service';
 import {
   ChatRoomEntity,
   ChatRoomType,
@@ -111,6 +112,8 @@ export class ChatRoomService {
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly matrixService: MatrixService,
     private readonly userService: UserService,
+    @Inject(forwardRef(() => GroupMemberService))
+    private readonly groupMemberService: GroupMemberService,
   ) {
     void this.initializeRepositories();
   }
@@ -341,6 +344,280 @@ export class ChatRoomService {
       where: { event: { id: eventId } },
       relations: ['creator', 'event'],
     });
+  }
+  
+  /**
+   * Create a chat room for a group
+   */
+  @Trace('chat-room.createGroupChatRoom')
+  async createGroupChatRoom(
+    groupId: number,
+    creatorId: number,
+  ): Promise<ChatRoomEntity> {
+    await this.initializeRepositories();
+
+    // Get the group
+    const group = await this.groupRepository.findOne({
+      where: { id: groupId },
+      relations: ['createdBy'],
+    });
+
+    if (!group) {
+      throw new Error(`Group with id ${groupId} not found`);
+    }
+
+    // Check if a chat room already exists for this group
+    const existingRoom = await this.chatRoomRepository.findOne({
+      where: { group: { id: groupId } },
+    });
+
+    if (existingRoom) {
+      return existingRoom;
+    }
+
+    // Get the creator user
+    const creator = await this.userService.getUserById(creatorId);
+
+    // Create a chat room in Matrix
+    // Using the group slug for a unique, stable identifier
+    const roomInfo = await this.matrixService.createRoom({
+      name: `group-${group.slug}`,
+      topic: `Discussion for group: ${group.slug}`,
+      isPublic: group.visibility === 'public',
+      isDirect: false,
+      // Add the group creator as the first member
+      inviteUserIds: [creator.matrixUserId].filter((id) => !!id) as string[],
+      // Set creator as moderator - MatrixService will handle admin user
+      powerLevelContentOverride: creator.matrixUserId
+        ? {
+            users: {
+              [creator.matrixUserId]: 50, // Moderator level
+            },
+          }
+        : undefined,
+    });
+
+    // Create a chat room entity
+    const chatRoom = this.chatRoomRepository.create({
+      name: `group-${group.slug}`,
+      topic: `Discussion for group: ${group.slug}`,
+      matrixRoomId: roomInfo.roomId,
+      type: ChatRoomType.GROUP,
+      visibility:
+        group.visibility === 'public'
+          ? ChatRoomVisibility.PUBLIC
+          : ChatRoomVisibility.PRIVATE,
+      creator,
+      group,
+      settings: {
+        historyVisibility: 'shared',
+        guestAccess: false,
+        requireInvitation: group.visibility !== 'public',
+        encrypted: false,
+      },
+    });
+
+    // Save the chat room
+    await this.chatRoomRepository.save(chatRoom);
+
+    // Update the group with the Matrix room ID
+    group.matrixRoomId = roomInfo.roomId;
+    await this.groupRepository.save(group);
+
+    return chatRoom;
+  }
+
+  /**
+   * Get all chat rooms for a group
+   */
+  @Trace('chat-room.getGroupChatRooms')
+  async getGroupChatRooms(groupId: number): Promise<ChatRoomEntity[]> {
+    await this.initializeRepositories();
+
+    return this.chatRoomRepository.find({
+      where: { group: { id: groupId } },
+      relations: ['creator', 'group'],
+    });
+  }
+
+  /**
+   * Add a user to a group chat room, but only if they're a member of the group
+   * 
+   * Uses a cache mechanism to reduce redundant operations
+   */
+  @Trace('chat-room.addUserToGroupChatRoom')
+  async addUserToGroupChatRoom(groupId: number, userId: number): Promise<void> {
+    await this.initializeRepositories();
+
+    // Prepare cache key to prevent redundant operations within the same request cycle
+    const cacheKey = `group:${groupId}:user:${userId}`;
+    
+    // If we already verified and added this user to this chat room in this request, skip
+    if (this.request.chatRoomMembershipCache?.[cacheKey]) {
+      this.logger.debug(`User ${userId} is already verified as member of group ${groupId} chat room in this request`);
+      return;
+    }
+    
+    // Initialize cache if needed
+    if (!this.request.chatRoomMembershipCache) {
+      this.request.chatRoomMembershipCache = {};
+    }
+
+    // Check if the user is a member of the group using the proper service
+    try {
+      // This will throw an error if the tenantId isn't available
+      const groupMember = await this.groupMemberService.findGroupMemberByUserId(groupId, userId);
+      
+      if (!groupMember) {
+        this.logger.warn(`User ${userId} is not a member of group ${groupId}, cannot add to chat room`);
+        throw new Error(`User is not a member of this group`);
+      }
+      
+      this.logger.log(`Verified user ${userId} is a member of group ${groupId} with role ${groupMember.groupRole?.name}`);
+    } catch (error) {
+      // If there was an error checking membership, throw it
+      if (error.message !== 'User is not a member of this group') {
+        this.logger.error(`Error checking group membership: ${error.message}`, error.stack);
+        throw new Error(`Could not verify group membership: ${error.message}`);
+      }
+      throw error;
+    }
+
+    // Get the chat room and group in one query, avoiding multiple DB lookups
+    const chatRoom = await this.chatRoomRepository.findOne({
+      where: { group: { id: groupId } },
+      relations: ['group', 'members'],
+    });
+
+    if (!chatRoom) {
+      throw new Error(`Chat room for group with id ${groupId} not found`);
+    }
+
+    // Check if user is already a chat room member in our database
+    const isAlreadyMember = chatRoom.members?.some(member => member.id === userId);
+    
+    if (isAlreadyMember) {
+      // User is already in our DB as room member, mark cache and skip Matrix operations
+      this.request.chatRoomMembershipCache[cacheKey] = true;
+      this.logger.debug(`User ${userId} is already in database as member of chat room for group ${groupId}`);
+      return;
+    }
+
+    // Get the user with matrix credentials in one query
+    const user = await this.userService.getUserById(userId);
+
+    if (!user.matrixUserId || !user.matrixAccessToken) {
+      throw new Error(`User with id ${userId} does not have valid Matrix credentials`);
+    }
+
+    // First try joining directly (most efficient if the user is already invited)
+    let joinSuccess = false;
+    
+    try {
+      await this.matrixService.joinRoom(
+        chatRoom.matrixRoomId,
+        user.matrixUserId,
+        user.matrixAccessToken,
+        user.matrixDeviceId,
+      );
+      joinSuccess = true;
+      this.logger.debug(`User ${userId} joined group room ${chatRoom.matrixRoomId} directly`);
+    } catch (joinError) {
+      // If join fails with "already in room", that's actually success
+      if (joinError.message && (
+          joinError.message.includes('already in the room') || 
+          joinError.message.includes('already a member') ||
+          joinError.message.includes('already joined'))) {
+        joinSuccess = true;
+        this.logger.debug(`User ${userId} is already a member of room ${chatRoom.matrixRoomId}`);
+      } else {
+        // Only if direct join failed and it's not because they're already in the room, try invite+join
+        this.logger.debug(`Direct join failed, trying invite+join flow: ${joinError.message}`);
+        
+        try {
+          await this.matrixService.inviteUser({
+            roomId: chatRoom.matrixRoomId,
+            userId: user.matrixUserId,
+          });
+          
+          // Try joining again after invite
+          await this.matrixService.joinRoom(
+            chatRoom.matrixRoomId,
+            user.matrixUserId,
+            user.matrixAccessToken,
+            user.matrixDeviceId,
+          );
+          joinSuccess = true;
+          this.logger.debug(`User ${userId} joined group room ${chatRoom.matrixRoomId} after invitation`);
+        } catch (error) {
+          // Log but continue - they might already be in the room despite errors
+          this.logger.warn(`Error in invite+join flow for user ${userId} to room ${chatRoom.matrixRoomId}: ${error.message}`);
+        }
+      }
+    }
+
+    // If join was successful or we think they're already in the room, update our DB
+    if (joinSuccess) {
+      // Add the user to the chat room members in our database
+      if (!chatRoom.members) {
+        chatRoom.members = [];
+      }
+      
+      chatRoom.members.push(user);
+      await this.chatRoomRepository.save(chatRoom);
+      
+      // Cache the result for this request
+      this.request.chatRoomMembershipCache[cacheKey] = true;
+    }
+  }
+
+  /**
+   * Remove a user from a group chat room
+   */
+  @Trace('chat-room.removeUserFromGroupChatRoom')
+  async removeUserFromGroupChatRoom(
+    groupId: number,
+    userId: number,
+  ): Promise<void> {
+    await this.initializeRepositories();
+
+    // Get the group
+    const group = await this.groupRepository.findOne({
+      where: { id: groupId },
+    });
+
+    if (!group) {
+      throw new Error(`Group with id ${groupId} not found`);
+    }
+
+    // Get the chat room
+    const chatRoom = await this.chatRoomRepository.findOne({
+      where: { group: { id: groupId } },
+      relations: ['members'],
+    });
+
+    if (!chatRoom) {
+      throw new Error(`Chat room for group with id ${groupId} not found`);
+    }
+
+    // Get the user
+    const user = await this.userService.getUserById(userId);
+
+    if (!user.matrixUserId) {
+      throw new Error(`User with id ${userId} does not have a Matrix user ID`);
+    }
+
+    // Remove the user from the room
+    await this.matrixService.removeUserFromRoom(
+      chatRoom.matrixRoomId,
+      user.matrixUserId,
+    );
+
+    // Remove the user from the chat room members
+    chatRoom.members = chatRoom.members.filter(
+      (member) => member.id !== userId,
+    );
+    await this.chatRoomRepository.save(chatRoom);
   }
 
   /**
