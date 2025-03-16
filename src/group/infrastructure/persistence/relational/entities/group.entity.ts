@@ -133,7 +133,7 @@ export class GroupEntity extends EntityRelationalHelper {
 
   @Column({ type: 'integer', nullable: true })
   zulipChannelId: number;
-  
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   matrixRoomId: string;
 

@@ -5,13 +5,13 @@ import { GroupMemberEntity } from './infrastructure/persistence/relational/entit
 import { GroupMemberService } from './group-member.service';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { GroupRoleModule } from '../group-role/group-role.module';
-import { ChatRoomModule } from '../chat-room/chat-room.module';
+import { ChatModule } from '../chat/chat.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([GroupEntity, GroupMemberEntity]),
     GroupRoleModule,
-    forwardRef(() => ChatRoomModule),
+    forwardRef(() => ChatModule),
   ],
   controllers: [],
   providers: [GroupMemberService, TenantConnectionService],

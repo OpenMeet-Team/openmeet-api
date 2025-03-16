@@ -1,4 +1,3 @@
-import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
 import { Message } from '../../matrix/types/matrix.types';
 
 /**

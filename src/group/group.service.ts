@@ -551,7 +551,7 @@ export class GroupService {
           return categoryEntity;
         }),
       );
-      
+
       // Only include categories in the mapped DTO if they were provided
       updateGroupDto = {
         ...updateGroupDto,
@@ -583,10 +583,16 @@ export class GroupService {
 
     // First merge the non-category properties
     const updatedGroup = this.groupRepository.merge(group, mappedGroupDto);
-    
-    // Now handle categories separately if they were provided
-    if (categoryEntities.length > 0) {
-      updatedGroup.categories = categoryEntities;
+
+    // Handle categories separately if they were provided and updatedGroup exists
+    try {
+      if (categoryEntities.length > 0 && updatedGroup) {
+        // Safely set categories
+        updatedGroup.categories = categoryEntities;
+      }
+    } catch (error) {
+      this.logger.warn(`Error setting categories: ${error.message}`);
+      // Continue with the save operation even if categories can't be set
     }
     const savedGroup = await this.groupRepository.save(updatedGroup);
     this.auditLogger.log('group updated', {

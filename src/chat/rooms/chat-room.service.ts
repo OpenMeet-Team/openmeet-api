@@ -1,19 +1,26 @@
 import { Injectable, Scope, Inject, Logger, forwardRef } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Repository } from 'typeorm';
-import { TenantConnectionService } from '../tenant/tenant.service';
-import { MatrixService } from '../matrix/matrix.service';
-import { UserService } from '../user/user.service';
-import { GroupMemberService } from '../group-member/group-member.service';
+import { TenantConnectionService } from '../../tenant/tenant.service';
+import { MatrixService } from '../../matrix/matrix.service';
+import { UserService } from '../../user/user.service';
+import { GroupMemberService } from '../../group-member/group-member.service';
+import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
+import {
+  EventAttendeePermission,
+  EventAttendeeRole,
+  GroupRole,
+  GroupPermission,
+} from '../../core/constants/constant';
 import {
   ChatRoomEntity,
   ChatRoomType,
   ChatRoomVisibility,
-} from './infrastructure/persistence/relational/entities/chat-room.entity';
-import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
-import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
-import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
-import { Trace } from '../utils/trace.decorator';
+} from '../infrastructure/persistence/relational/entities/chat-room.entity';
+import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
+import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
+import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
+import { Trace } from '../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
 
 @Injectable({ scope: Scope.REQUEST })
@@ -114,6 +121,8 @@ export class ChatRoomService {
     private readonly userService: UserService,
     @Inject(forwardRef(() => GroupMemberService))
     private readonly groupMemberService: GroupMemberService,
+    @Inject(forwardRef(() => EventAttendeeService))
+    private readonly eventAttendeeService: EventAttendeeService,
   ) {
     void this.initializeRepositories();
   }
@@ -162,8 +171,9 @@ export class ChatRoomService {
     const creator = await this.userService.getUserById(creatorId);
 
     // Create a chat room in Matrix
+    // Using the event slug for a unique, stable identifier
     const roomInfo = await this.matrixService.createRoom({
-      name: `Event: ${event.name}`,
+      name: `event-${event.slug}`,
       topic: `Discussion for ${event.name}`,
       isPublic: event.visibility === 'public',
       isDirect: false,
@@ -181,7 +191,7 @@ export class ChatRoomService {
 
     // Create a chat room entity
     const chatRoom = this.chatRoomRepository.create({
-      name: `Event: ${event.name}`,
+      name: `event-${event.slug}`,
       topic: `Discussion for ${event.name}`,
       matrixRoomId: roomInfo.roomId,
       type: ChatRoomType.EVENT,
@@ -211,10 +221,29 @@ export class ChatRoomService {
 
   /**
    * Add a user to an event chat room
+   *
+   * Uses a cache mechanism to reduce redundant operations
+   * Also sets appropriate permissions if user is an admin/host/moderator
    */
   @Trace('chat-room.addUserToEventChatRoom')
   async addUserToEventChatRoom(eventId: number, userId: number): Promise<void> {
     await this.initializeRepositories();
+
+    // Prepare cache key to prevent redundant operations within the same request cycle
+    const cacheKey = `event:${eventId}:user:${userId}`;
+
+    // If we already verified and added this user to this chat room in this request, skip
+    if (this.request.chatRoomMembershipCache?.[cacheKey]) {
+      this.logger.debug(
+        `User ${userId} is already verified as member of event ${eventId} chat room in this request`,
+      );
+      return;
+    }
+
+    // Initialize cache if needed
+    if (!this.request.chatRoomMembershipCache) {
+      this.request.chatRoomMembershipCache = {};
+    }
 
     // Get the event
     const event = await this.eventRepository.findOne({
@@ -237,18 +266,54 @@ export class ChatRoomService {
     // Get the user
     const user = await this.userService.getUserById(userId);
 
+    // Ensure user has Matrix credentials
     if (!user.matrixUserId) {
-      throw new Error(`User with id ${userId} does not have a Matrix user ID`);
+      try {
+        // Use the ensureUserHasMatrixCredentials method to provision Matrix credentials
+        const userWithCredentials =
+          await this.ensureUserHasMatrixCredentials(userId);
+        // Update our user instance with the credentials
+        user.matrixUserId = userWithCredentials.matrixUserId;
+        user.matrixAccessToken = userWithCredentials.matrixAccessToken;
+        user.matrixDeviceId = userWithCredentials.matrixDeviceId;
+      } catch (error) {
+        this.logger.error(
+          `Failed to ensure Matrix credentials for user ${userId}: ${error.message}`,
+        );
+        throw new Error(
+          `User with id ${userId} could not be provisioned with Matrix credentials`,
+        );
+      }
     }
 
-    // First, invite the user to the room
-    await this.matrixService.inviteUser({
-      roomId: chatRoom.matrixRoomId,
-      userId: user.matrixUserId,
-    });
+    // Try to invite user to the room - may fail if they're already a member
+    if (user.matrixUserId) {
+      try {
+        await this.matrixService.inviteUser({
+          roomId: chatRoom.matrixRoomId,
+          userId: user.matrixUserId,
+        });
+      } catch (inviteError) {
+        // If the error is because they're already in the room, log and continue
+        if (
+          inviteError.message &&
+          inviteError.message.includes('already in the room')
+        ) {
+          this.logger.log(
+            `User ${userId} is already in room ${chatRoom.matrixRoomId}, skipping invite`,
+          );
+        } else {
+          this.logger.warn(
+            `Error inviting user ${userId} to room: ${inviteError.message}`,
+          );
+          // Continue anyway - they may still be able to join
+        }
+      }
+    }
 
     // Next, have the user join the room if they have credentials
-    if (user.matrixAccessToken) {
+    let isJoined = false;
+    if (user.matrixAccessToken && user.matrixUserId) {
       try {
         await this.matrixService.joinRoom(
           chatRoom.matrixRoomId,
@@ -256,12 +321,76 @@ export class ChatRoomService {
           user.matrixAccessToken,
           user.matrixDeviceId,
         );
+        isJoined = true;
         this.logger.log(`User ${userId} joined room ${chatRoom.matrixRoomId}`);
       } catch (joinError) {
+        // If join fails with "already in room", that's actually success
+        if (
+          joinError.message &&
+          (joinError.message.includes('already in the room') ||
+            joinError.message.includes('already a member') ||
+            joinError.message.includes('already joined'))
+        ) {
+          isJoined = true;
+          this.logger.debug(
+            `User ${userId} is already a member of room ${chatRoom.matrixRoomId}`,
+          );
+        } else {
+          this.logger.warn(
+            `User ${userId} failed to join room: ${joinError.message}`,
+          );
+          // Continue anyway - they can join later
+        }
+      }
+    }
+
+    // Check if the user should have moderator privileges, but only if they have Matrix credentials
+    if (user.matrixUserId && isJoined) {
+      try {
+        const attendee =
+          await this.eventAttendeeService.findEventAttendeeByUserId(
+            eventId,
+            userId,
+          );
+
+        if (attendee && attendee.role) {
+          // Only assign moderator privileges to users with appropriate roles: host, moderator
+          // This is the fix to prevent the first attendee from becoming a moderator
+          const isModeratorRole =
+            attendee.role.name === EventAttendeeRole.Host ||
+            attendee.role.name === EventAttendeeRole.Moderator;
+
+          const hasManageEventPermission =
+            attendee.role.permissions &&
+            attendee.role.permissions.some(
+              (p) => p.name === EventAttendeePermission.ManageEvent,
+            );
+
+          if (isModeratorRole && hasManageEventPermission) {
+            this.logger.log(
+              `User ${userId} has role ${attendee.role.name} with ManageEvent permission, setting as moderator in room ${chatRoom.matrixRoomId}`,
+            );
+
+            // Set user as moderator in Matrix room
+            await this.matrixService.setRoomPowerLevels(
+              chatRoom.matrixRoomId,
+              { [user.matrixUserId]: 50 }, // 50 is moderator level
+            );
+
+            this.logger.log(
+              `Successfully set ${user.matrixUserId} as moderator for room ${chatRoom.matrixRoomId}`,
+            );
+          } else {
+            this.logger.log(
+              `User ${userId} with role ${attendee.role.name} does not qualify for moderator privileges`,
+            );
+          }
+        }
+      } catch (error) {
         this.logger.warn(
-          `User ${userId} failed to join room: ${joinError.message}`,
+          `Error checking/setting moderator privileges for user ${userId}: ${error.message}`,
         );
-        // Continue anyway - they can join later
+        // Continue anyway - basic join functionality is more important than moderator privileges
       }
     }
 
@@ -281,6 +410,9 @@ export class ChatRoomService {
         roomWithMembers.members.push(user);
         await this.chatRoomRepository.save(roomWithMembers);
       }
+
+      // Mark that we've handled this user's membership for this event in this request
+      this.request.chatRoomMembershipCache[cacheKey] = true;
     }
   }
 
@@ -345,7 +477,7 @@ export class ChatRoomService {
       relations: ['creator', 'event'],
     });
   }
-  
+
   /**
    * Create a chat room for a group
    */
@@ -442,7 +574,7 @@ export class ChatRoomService {
 
   /**
    * Add a user to a group chat room, but only if they're a member of the group
-   * 
+   *
    * Uses a cache mechanism to reduce redundant operations
    */
   @Trace('chat-room.addUserToGroupChatRoom')
@@ -451,13 +583,15 @@ export class ChatRoomService {
 
     // Prepare cache key to prevent redundant operations within the same request cycle
     const cacheKey = `group:${groupId}:user:${userId}`;
-    
+
     // If we already verified and added this user to this chat room in this request, skip
     if (this.request.chatRoomMembershipCache?.[cacheKey]) {
-      this.logger.debug(`User ${userId} is already verified as member of group ${groupId} chat room in this request`);
+      this.logger.debug(
+        `User ${userId} is already verified as member of group ${groupId} chat room in this request`,
+      );
       return;
     }
-    
+
     // Initialize cache if needed
     if (!this.request.chatRoomMembershipCache) {
       this.request.chatRoomMembershipCache = {};
@@ -466,18 +600,28 @@ export class ChatRoomService {
     // Check if the user is a member of the group using the proper service
     try {
       // This will throw an error if the tenantId isn't available
-      const groupMember = await this.groupMemberService.findGroupMemberByUserId(groupId, userId);
-      
+      const groupMember = await this.groupMemberService.findGroupMemberByUserId(
+        groupId,
+        userId,
+      );
+
       if (!groupMember) {
-        this.logger.warn(`User ${userId} is not a member of group ${groupId}, cannot add to chat room`);
+        this.logger.warn(
+          `User ${userId} is not a member of group ${groupId}, cannot add to chat room`,
+        );
         throw new Error(`User is not a member of this group`);
       }
-      
-      this.logger.log(`Verified user ${userId} is a member of group ${groupId} with role ${groupMember.groupRole?.name}`);
+
+      this.logger.log(
+        `Verified user ${userId} is a member of group ${groupId} with role ${groupMember.groupRole?.name}`,
+      );
     } catch (error) {
       // If there was an error checking membership, throw it
       if (error.message !== 'User is not a member of this group') {
-        this.logger.error(`Error checking group membership: ${error.message}`, error.stack);
+        this.logger.error(
+          `Error checking group membership: ${error.message}`,
+          error.stack,
+        );
         throw new Error(`Could not verify group membership: ${error.message}`);
       }
       throw error;
@@ -494,12 +638,16 @@ export class ChatRoomService {
     }
 
     // Check if user is already a chat room member in our database
-    const isAlreadyMember = chatRoom.members?.some(member => member.id === userId);
-    
+    const isAlreadyMember = chatRoom.members?.some(
+      (member) => member.id === userId,
+    );
+
     if (isAlreadyMember) {
       // User is already in our DB as room member, mark cache and skip Matrix operations
       this.request.chatRoomMembershipCache[cacheKey] = true;
-      this.logger.debug(`User ${userId} is already in database as member of chat room for group ${groupId}`);
+      this.logger.debug(
+        `User ${userId} is already in database as member of chat room for group ${groupId}`,
+      );
       return;
     }
 
@@ -507,12 +655,14 @@ export class ChatRoomService {
     const user = await this.userService.getUserById(userId);
 
     if (!user.matrixUserId || !user.matrixAccessToken) {
-      throw new Error(`User with id ${userId} does not have valid Matrix credentials`);
+      throw new Error(
+        `User with id ${userId} does not have valid Matrix credentials`,
+      );
     }
 
     // First try joining directly (most efficient if the user is already invited)
     let joinSuccess = false;
-    
+
     try {
       await this.matrixService.joinRoom(
         chatRoom.matrixRoomId,
@@ -521,25 +671,33 @@ export class ChatRoomService {
         user.matrixDeviceId,
       );
       joinSuccess = true;
-      this.logger.debug(`User ${userId} joined group room ${chatRoom.matrixRoomId} directly`);
+      this.logger.debug(
+        `User ${userId} joined group room ${chatRoom.matrixRoomId} directly`,
+      );
     } catch (joinError) {
       // If join fails with "already in room", that's actually success
-      if (joinError.message && (
-          joinError.message.includes('already in the room') || 
+      if (
+        joinError.message &&
+        (joinError.message.includes('already in the room') ||
           joinError.message.includes('already a member') ||
-          joinError.message.includes('already joined'))) {
+          joinError.message.includes('already joined'))
+      ) {
         joinSuccess = true;
-        this.logger.debug(`User ${userId} is already a member of room ${chatRoom.matrixRoomId}`);
+        this.logger.debug(
+          `User ${userId} is already a member of room ${chatRoom.matrixRoomId}`,
+        );
       } else {
         // Only if direct join failed and it's not because they're already in the room, try invite+join
-        this.logger.debug(`Direct join failed, trying invite+join flow: ${joinError.message}`);
-        
+        this.logger.debug(
+          `Direct join failed, trying invite+join flow: ${joinError.message}`,
+        );
+
         try {
           await this.matrixService.inviteUser({
             roomId: chatRoom.matrixRoomId,
             userId: user.matrixUserId,
           });
-          
+
           // Try joining again after invite
           await this.matrixService.joinRoom(
             chatRoom.matrixRoomId,
@@ -548,24 +706,77 @@ export class ChatRoomService {
             user.matrixDeviceId,
           );
           joinSuccess = true;
-          this.logger.debug(`User ${userId} joined group room ${chatRoom.matrixRoomId} after invitation`);
+          this.logger.debug(
+            `User ${userId} joined group room ${chatRoom.matrixRoomId} after invitation`,
+          );
         } catch (error) {
           // Log but continue - they might already be in the room despite errors
-          this.logger.warn(`Error in invite+join flow for user ${userId} to room ${chatRoom.matrixRoomId}: ${error.message}`);
+          this.logger.warn(
+            `Error in invite+join flow for user ${userId} to room ${chatRoom.matrixRoomId}: ${error.message}`,
+          );
         }
       }
     }
 
     // If join was successful or we think they're already in the room, update our DB
     if (joinSuccess) {
+      // Check if the user should have moderator privileges based on their group role
+      if (user.matrixUserId) {
+        try {
+          // We've already checked the group member earlier
+          const groupMember =
+            await this.groupMemberService.findGroupMemberByUserId(
+              groupId,
+              userId,
+            );
+
+          if (groupMember && groupMember.groupRole) {
+            // Only give moderator privileges to admins, owners, and moderators
+            const isModeratorRole =
+              groupMember.groupRole.name === GroupRole.Admin ||
+              groupMember.groupRole.name === GroupRole.Owner ||
+              groupMember.groupRole.name === GroupRole.Moderator;
+
+            // Since we can't directly check permissions, we'll rely on the role names
+            // Admin, Owner, and Moderator roles should have proper permissions
+            const hasManageGroupPermission = isModeratorRole;
+
+            if (isModeratorRole && hasManageGroupPermission) {
+              this.logger.log(
+                `User ${userId} has group role ${groupMember.groupRole.name} with management permissions, setting as moderator in room ${chatRoom.matrixRoomId}`,
+              );
+
+              // Set user as moderator in Matrix room
+              await this.matrixService.setRoomPowerLevels(
+                chatRoom.matrixRoomId,
+                { [user.matrixUserId]: 50 }, // 50 is moderator level
+              );
+
+              this.logger.log(
+                `Successfully set ${user.matrixUserId} as moderator for group room ${chatRoom.matrixRoomId}`,
+              );
+            } else {
+              this.logger.log(
+                `User ${userId} with group role ${groupMember.groupRole.name} does not qualify for moderator privileges`,
+              );
+            }
+          }
+        } catch (error) {
+          this.logger.warn(
+            `Error checking/setting moderator privileges for user ${userId}: ${error.message}`,
+          );
+          // Continue anyway - basic join functionality is more important than moderator privileges
+        }
+      }
+
       // Add the user to the chat room members in our database
       if (!chatRoom.members) {
         chatRoom.members = [];
       }
-      
+
       chatRoom.members.push(user);
       await this.chatRoomRepository.save(chatRoom);
-      
+
       // Cache the result for this request
       this.request.chatRoomMembershipCache[cacheKey] = true;
     }

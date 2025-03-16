@@ -1055,14 +1055,18 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       // Matrix returns 403 when user is already in room, which is not really an error
       // for our purposes - it just means we can skip the invite step
       if (error.message && error.message.includes('already in the room')) {
-        this.logger.log(`User ${userId} is already in room ${roomId}, skipping invite`);
+        this.logger.log(
+          `User ${userId} is already in room ${roomId}, skipping invite`,
+        );
         // Don't throw - just return since this is expected in some cases
       } else {
         this.logger.error(
           `Error inviting user ${userId} to room ${roomId}: ${error.message}`,
           error.stack,
         );
-        throw new Error(`Failed to invite user to Matrix room: ${error.message}`);
+        throw new Error(
+          `Failed to invite user to Matrix room: ${error.message}`,
+        );
       }
     } finally {
       await this.clientPool.release(client);
@@ -1122,11 +1126,15 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       } catch (joinError) {
         // Check if the error is just that the user is already in the room
         // Different Matrix servers may return different error messages for "already joined"
-        if (joinError.message && (
-            joinError.message.includes('already in the room') || 
+        if (
+          joinError.message &&
+          (joinError.message.includes('already in the room') ||
             joinError.message.includes('already a member') ||
-            joinError.message.includes('already joined'))) {
-          this.logger.debug(`User ${userId} is already a member of room ${roomId}`);
+            joinError.message.includes('already joined'))
+        ) {
+          this.logger.debug(
+            `User ${userId} is already a member of room ${roomId}`,
+          );
           // This is actually not an error for our purposes
         } else {
           // For other errors, we do want to propagate them
@@ -2238,33 +2246,35 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       // Less verbose logging for common events
       if (event.type === 'm.room.message') {
         // Only log at debug level for messages
-        this.logger.debug(`Broadcasting Matrix message to room ${roomId.slice(0, 8)}...`);
+        this.logger.debug(
+          `Broadcasting Matrix message to room ${roomId.slice(0, 8)}...`,
+        );
       } else {
         // Log other events at debug level too
         this.logger.debug(`Broadcasting event type ${event.type}`);
       }
-      
+
       // Make sure event has all required fields
       if (!event.timestamp) {
         event.timestamp = Date.now();
       }
-      
+
       // Set sender_name without excessive lookups
       if (!event.sender_name && event.sender) {
         try {
           const senderStr = event.sender;
           if (senderStr.startsWith('@om_')) {
             // Extract ULID from OpenMeet Matrix ID
-            event.sender_name = `OpenMeet User`;  // More generic display name
+            event.sender_name = `OpenMeet User`; // More generic display name
           } else {
             event.sender_name = senderStr.split(':')[0].substring(1);
           }
-          
+
           // Only fetch display name for actual user messages, not typing indicators etc.
           if (event.type === 'm.room.message') {
             // No verbose logging in this background operation
             this.getUserDisplayName(event.sender)
-              .then(displayName => {
+              .then((displayName) => {
                 // Silently use the display name if found
               })
               .catch(() => {

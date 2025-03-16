@@ -1,11 +1,7 @@
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
-import {
-  ChatRoomEntity,
-  ChatRoomType,
-  ChatRoomVisibility,
-} from '../../chat-room/infrastructure/persistence/relational/entities/chat-room.entity';
+import { ChatRoomEntity } from '../infrastructure/persistence/relational/entities/chat-room.entity';
 
 /**
  * Interface for the Chat Room Repository

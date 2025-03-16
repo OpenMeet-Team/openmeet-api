@@ -15,8 +15,8 @@ import { Trace } from '../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
 
 @Injectable({ scope: Scope.REQUEST })
-export class MatrixChatService implements ChatServiceInterface {
-  private readonly logger = new Logger(MatrixChatService.name);
+export class MatrixChatServiceAdapter implements ChatServiceInterface {
+  private readonly logger = new Logger(MatrixChatServiceAdapter.name);
   private readonly tracer = trace.getTracer('matrix-chat-service');
 
   constructor(
@@ -31,9 +31,6 @@ export class MatrixChatService implements ChatServiceInterface {
   @Trace('matrix-chat.createRoom')
   async createRoom(options: CreateChatRoomOptions): Promise<ChatRoomResponse> {
     try {
-      // Get the creator user
-      const creator = await this.userService.getUserById(options.creatorId);
-
       // Ensure creator has Matrix credentials
       const creatorWithCredentials = await this.ensureUserHasCredentials(
         options.creatorId,

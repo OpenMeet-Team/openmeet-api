@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
-import { ChatRoomService } from '../chat-room/chat-room.service';
+// import { ChatRoomService } from '../chat/rooms/chat-room.service';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { ZulipService } from '../zulip/zulip.service';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';

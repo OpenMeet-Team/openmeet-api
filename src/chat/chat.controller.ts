@@ -63,7 +63,7 @@ export class ChatController {
   async addMemberToEventDiscussion(
     @Param('slug') eventSlug: string,
     @Param('userSlug') userSlug: string,
-    @AuthUser() user: User,
+    @AuthUser() _user: User, // Prefix with underscore to indicate unused parameter
   ): Promise<void> {
     return await this.discussionService.addMemberToEventDiscussionBySlug(
       eventSlug,
@@ -76,7 +76,7 @@ export class ChatController {
   async removeMemberFromEventDiscussion(
     @Param('slug') eventSlug: string,
     @Param('userSlug') userSlug: string,
-    @AuthUser() user: User,
+    @AuthUser() _user: User, // Auth required but not used directly
   ): Promise<void> {
     return await this.discussionService.removeMemberFromEventDiscussionBySlug(
       eventSlug,
@@ -120,17 +120,17 @@ export class ChatController {
       from,
     );
   }
-  
+
   @Post('group/:slug/members/:userSlug')
   @ApiOperation({ summary: 'Add a member to the group chat room' })
   async addMemberToGroupDiscussion(
     @Param('slug') groupSlug: string,
     @Param('userSlug') userSlug: string,
-    @AuthUser() user: User,
+    @AuthUser() _user: User, // Auth required but not used directly
   ): Promise<void> {
     return await this.discussionService.addMemberToGroupDiscussionBySlug(
       groupSlug,
-      userSlug
+      userSlug,
     );
   }
 
@@ -139,11 +139,11 @@ export class ChatController {
   async removeMemberFromGroupDiscussion(
     @Param('slug') groupSlug: string,
     @Param('userSlug') userSlug: string,
-    @AuthUser() user: User,
+    @AuthUser() _user: User, // Auth required but not used directly
   ): Promise<void> {
     return await this.discussionService.removeMemberFromGroupDiscussionBySlug(
       groupSlug,
-      userSlug
+      userSlug,
     );
   }
 

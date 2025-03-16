@@ -261,7 +261,10 @@ export class MatrixController {
         this.logger.debug(`Using tenant ID for Matrix client: ${tenantId}`);
 
         // Get Matrix client for this user using credentials from database
-        const matrixClient = await this.matrixService.getClientForUser(user.id, tenantId);
+        const matrixClient = await this.matrixService.getClientForUser(
+          user.id,
+          tenantId,
+        );
 
         // Send typing notification using the Matrix client
         await matrixClient.sendTyping(roomId, body.isTyping, 30000);

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { DiscussionService } from './services/discussion.service';
-import { ChatRoomService } from '../chat-room/chat-room.service';
+import { ChatRoomService } from './rooms/chat-room.service';
 
 @Injectable()
 export class ChatListener {
