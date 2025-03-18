@@ -63,7 +63,7 @@ const mockClient = {
     .fn()
     .mockResolvedValue({ room_id: '!mock-room:matrix.org' }),
   getStateEvent: jest.fn().mockResolvedValue({
-    users: { '@admin:example.org': 100 }  // Add default power levels
+    users: { '@admin:example.org': 100 }, // Add default power levels
   }),
   sendStateEvent: jest.fn().mockResolvedValue({}),
   setPowerLevel: jest.fn().mockResolvedValue({}),

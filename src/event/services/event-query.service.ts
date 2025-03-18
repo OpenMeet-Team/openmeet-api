@@ -564,19 +564,22 @@ export class EventQueryService {
    */
   @Trace('event-query.showEventBySlugWithTenant')
   async showEventBySlugWithTenant(
-    slug: string, 
-    tenantId?: string
+    slug: string,
+    tenantId?: string,
   ): Promise<EventEntity | null> {
     // If tenantId is not provided, try to use the one from the request
     const effectiveTenantId = tenantId || this.request?.tenantId;
-    
+
     if (!effectiveTenantId) {
-      this.logger.error('Neither explicit tenantId nor request.tenantId is available');
+      this.logger.error(
+        'Neither explicit tenantId nor request.tenantId is available',
+      );
       throw new Error('Tenant ID is required');
     }
 
     // Get a connection for the tenant
-    const dataSource = await this.tenantConnectionService.getTenantConnection(effectiveTenantId);
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(effectiveTenantId);
     const eventRepo = dataSource.getRepository(EventEntity);
 
     // Find the event using the provided tenant connection
@@ -586,7 +589,9 @@ export class EventQueryService {
     });
 
     if (!event) {
-      this.logger.warn(`Event with slug ${slug} not found in tenant ${effectiveTenantId}`);
+      this.logger.warn(
+        `Event with slug ${slug} not found in tenant ${effectiveTenantId}`,
+      );
       return null;
     }
 

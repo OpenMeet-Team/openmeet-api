@@ -211,21 +211,23 @@ export class EventManagementService {
     if (!tenantId) {
       this.logger.error('No tenant ID available when emitting event.created');
     }
-    
+
     // Clone event and add tenantId
     const eventWithTenant = {
       ...createdEvent,
       tenantId: tenantId,
     };
-    
+
     this.logger.log(`Emitting event.created with tenantId: ${tenantId}`);
-    this.logger.log(`Event data: ${JSON.stringify({
-      id: createdEvent.id,
-      name: createdEvent.name,
-      slug: createdEvent.slug,
-      tenantId: tenantId
-    })}`);
-    
+    this.logger.log(
+      `Event data: ${JSON.stringify({
+        id: createdEvent.id,
+        name: createdEvent.name,
+        slug: createdEvent.slug,
+        tenantId: tenantId,
+      })}`,
+    );
+
     this.eventEmitter.emit('event.created', eventWithTenant);
     return createdEvent;
   }
@@ -488,7 +490,7 @@ export class EventManagementService {
       status: attendeeStatus,
       tenantId: this.request.tenantId,
       eventSlug: event.slug,
-      userSlug: user.slug
+      userSlug: user.slug,
     });
 
     return attendee;

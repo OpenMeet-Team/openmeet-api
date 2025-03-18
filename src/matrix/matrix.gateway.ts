@@ -19,10 +19,12 @@ import {
 } from '@nestjs/common';
 import { ModuleRef, ContextIdFactory } from '@nestjs/core';
 import { Server, Socket } from 'socket.io';
-import { MatrixService } from './matrix.service';
 import { UserService } from '../user/user.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { MatrixUserService } from './services/matrix-user.service';
+import { MatrixRoomService } from './services/matrix-room.service';
+import { MatrixMessageService } from './services/matrix-message.service';
 import { WsJwtAuthGuard } from '../auth/ws-auth.guard';
 
 @WebSocketGateway({
@@ -70,8 +72,12 @@ export class MatrixGateway
   // Instead, we'll resolve it dynamically when needed
 
   constructor(
-    @Inject(forwardRef(() => MatrixService))
-    private readonly matrixService: MatrixService,
+    @Inject(forwardRef(() => MatrixUserService))
+    private readonly matrixUserService: MatrixUserService,
+    @Inject(forwardRef(() => MatrixRoomService))
+    private readonly matrixRoomService: MatrixRoomService,
+    @Inject(forwardRef(() => MatrixMessageService))
+    private readonly matrixMessageService: MatrixMessageService,
     private readonly moduleRef: ModuleRef,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
@@ -305,10 +311,20 @@ export class MatrixGateway
             `Using tenant ID for Matrix client initialization: ${tenantId || 'undefined'}`,
           );
 
-          // Initialize Matrix client using DB credentials (will be cached in MatrixService)
+          // Fetch user to get the slug
+          const user = await userService.findById(userId, tenantId);
+
+          if (!user) {
+            this.logger.error(
+              `User ${userId} not found when initializing Matrix client`,
+            );
+            throw new Error('User not found');
+          }
+
+          // Initialize Matrix client using DB credentials (will be cached in MatrixUserService)
           // Pass userService and tenantId
-          await this.matrixService.getClientForUser(
-            userId,
+          await this.matrixUserService.getClientForUser(
+            user.slug,
             userService,
             tenantId,
           );
@@ -350,7 +366,7 @@ export class MatrixGateway
     }
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: Socket) {
     this.logger.log(`Client disconnected: ${client.id}`);
 
     try {
@@ -371,12 +387,29 @@ export class MatrixGateway
         this.socketUsers.delete(client.id);
 
         // Release Matrix client if it was initialized
-        if (client.data?.userId && client.data?.matrixClientInitialized) {
+        if (
+          client.data?.userId &&
+          client.data?.matrixClientInitialized &&
+          userInfo?.userId
+        ) {
           try {
-            this.matrixService.releaseClientForUser(client.data.userId);
-            this.logger.debug(
-              `Released Matrix client for user ${client.data.userId}`,
+            // Get user to find slug for releasing client
+            const contextId = ContextIdFactory.create();
+            const userService = await this.moduleRef.resolve(
+              UserService,
+              contextId,
+              { strict: false },
             );
+
+            // Get tenant ID from client data
+            const tenantId = client.data.tenantId;
+
+            const user = await userService.findById(userInfo.userId, tenantId);
+
+            if (user) {
+              this.matrixUserService.releaseClientForUser(user.slug);
+              this.logger.debug(`Released Matrix client for user ${user.slug}`);
+            }
           } catch (error) {
             this.logger.warn(`Error releasing Matrix client: ${error.message}`);
           }
@@ -392,7 +425,8 @@ export class MatrixGateway
 
   /**
    * Broadcasts a Matrix event to all clients in a room
-   * This method is used by MatrixService to send events to all clients in a room
+   * This method is used by the specialized Matrix services (MatrixUserService, MatrixRoomService, MatrixMessageService)
+   * to send events to all clients in a room
    * @param roomId Matrix room ID
    * @param event Event to broadcast
    */
@@ -599,10 +633,26 @@ export class MatrixGateway
           `Using tenant ID for joinUserRooms: ${tenantId || 'undefined'}`,
         );
 
-        // Get the Matrix client for this user from our service
-        const matrixClient = await this.matrixService.getClientForUser(
-          userId,
-          null,
+        // Create context for user service
+        const contextId = ContextIdFactory.create();
+        const userService = await this.moduleRef.resolve(
+          UserService,
+          contextId,
+          { strict: false },
+        );
+        const user = await userService.findById(userId, tenantId);
+
+        if (!user) {
+          this.logger.error(
+            `User ${userId} not found when getting Matrix client`,
+          );
+          throw new Error(`User not found`);
+        }
+
+        // Get the Matrix client for this user from our service using slug
+        const matrixClient = await this.matrixUserService.getClientForUser(
+          user.slug,
+          userService,
           tenantId,
         );
 
@@ -613,7 +663,7 @@ export class MatrixGateway
 
         // Get rooms using the user's Matrix client
         const rooms =
-          await this.matrixService.getUserRoomsWithClient(matrixClient);
+          await this.matrixRoomService.getUserRoomsWithClient(matrixClient);
 
         // Create a set to track which rooms this user has joined
         const userRoomSet = new Set<string>();
@@ -713,10 +763,26 @@ export class MatrixGateway
         // Get tenant ID from client data or from the request
         const tenantId = client.data.tenantId || data.tenantId;
 
+        // Create context for user service
+        const contextId = ContextIdFactory.create();
+        const userService = await this.moduleRef.resolve(
+          UserService,
+          contextId,
+          { strict: false },
+        );
+        const user = await userService.findById(client.data.userId, tenantId);
+
+        if (!user) {
+          this.logger.error(
+            `User ${client.data.userId} not found when getting Matrix client for typing`,
+          );
+          throw new Error(`User not found`);
+        }
+
         // Get Matrix client for this user using credentials from database
-        const matrixClient = await this.matrixService.getClientForUser(
-          client.data.userId,
-          null,
+        const matrixClient = await this.matrixUserService.getClientForUser(
+          user.slug,
+          userService,
           tenantId,
         );
 
@@ -833,7 +899,7 @@ export class MatrixGateway
 
           if (user && user.matrixUserId && user.matrixAccessToken) {
             // Explicitly join the Matrix room to ensure membership
-            await this.matrixService.joinRoom(
+            await this.matrixRoomService.joinRoom(
               data.roomId,
               user.matrixUserId,
               user.matrixAccessToken,
@@ -970,18 +1036,42 @@ export class MatrixGateway
           `Using tenant ID for message: ${tenantId || 'undefined'}`,
         );
 
-        // Get Matrix client for this user using credentials from database
-        const matrixClient = await this.matrixService.getClientForUser(
-          client.data.userId,
-          null,
-          tenantId,
+        // Create context for user service
+        const contextId = ContextIdFactory.create();
+        const userService = await this.moduleRef.resolve(
+          UserService,
+          contextId,
+          { strict: false },
         );
+        const user = await userService.findById(client.data.userId, tenantId);
 
-        // Send message using the client
-        const result = await matrixClient.sendTextMessage(
-          data.roomId,
-          data.message,
-        );
+        if (!user) {
+          this.logger.error(
+            `User ${client.data.userId} not found when getting Matrix client for message`,
+          );
+          throw new Error(`User not found`);
+        }
+
+        // Get user Matrix credentials
+        if (!user.matrixUserId || !user.matrixAccessToken) {
+          this.logger.error(
+            `User ${user.id} missing Matrix credentials required to send messages`,
+          );
+          throw new Error('Matrix credentials missing');
+        }
+
+        // Use the MatrixMessageService to send the message
+        const eventId = await this.matrixMessageService.sendMessage({
+          roomId: data.roomId,
+          userId: user.matrixUserId,
+          accessToken: user.matrixAccessToken,
+          deviceId: user.matrixDeviceId,
+          content: data.message,
+          messageType: 'm.text',
+        });
+
+        // Create a result object similar to what we'd get from a Matrix client
+        const result = { event_id: eventId };
 
         this.logger.debug(
           `Message sent for user ${client.data.userId} in room ${data.roomId}`,

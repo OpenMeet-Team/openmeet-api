@@ -42,12 +42,12 @@ import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
     ChatListener,
   ],
   exports: [
-    DiscussionService, 
-    'CHAT_PROVIDER', 
-    'CHAT_SERVICE', 
+    DiscussionService,
+    'CHAT_PROVIDER',
+    'CHAT_SERVICE',
     MatrixChatServiceAdapter,
     ChatRoomService,
-    TypeOrmModule
+    TypeOrmModule,
   ],
 })
 export class ChatModule {}

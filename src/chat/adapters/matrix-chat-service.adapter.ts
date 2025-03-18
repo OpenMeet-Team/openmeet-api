@@ -1,7 +1,9 @@
 import { Injectable, Logger, Scope, Inject } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { UserService } from '../../user/user.service';
-import { MatrixService } from '../../matrix/matrix.service';
+import { MatrixUserService } from '../../matrix/services/matrix-user.service';
+import { MatrixRoomService } from '../../matrix/services/matrix-room.service';
+import { MatrixMessageService } from '../../matrix/services/matrix-message.service';
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
 import {
   ChatServiceInterface,
@@ -22,7 +24,9 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly userService: UserService,
-    private readonly matrixService: MatrixService,
+    private readonly matrixUserService: MatrixUserService,
+    private readonly matrixRoomService: MatrixRoomService,
+    private readonly matrixMessageService: MatrixMessageService,
   ) {}
 
   /**
@@ -56,7 +60,7 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
       }
 
       // Create Matrix room
-      const roomInfo = await this.matrixService.createRoom({
+      const roomInfo = await this.matrixRoomService.createRoom({
         name: options.name,
         topic: options.topic,
         isPublic: options.isPublic || false,
@@ -110,7 +114,7 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
       }
 
       // Send the message using Matrix service
-      return await this.matrixService.sendMessage({
+      return await this.matrixMessageService.sendMessage({
         roomId: options.roomId,
         content: options.message,
         userId: user.matrixUserId!,
@@ -147,7 +151,7 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
       const user = await this.ensureUserHasCredentials(userId);
 
       // Get messages from Matrix
-      const messageData = await this.matrixService.getRoomMessages(
+      const messageData = await this.matrixMessageService.getRoomMessages(
         roomId,
         limit,
         before,
@@ -184,13 +188,10 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
       const user = await this.ensureUserHasCredentials(userId);
 
       // First, invite the user to the room
-      await this.matrixService.inviteUser({
-        roomId: roomId,
-        userId: user.matrixUserId!,
-      });
+      await this.matrixRoomService.inviteUser(roomId, user.matrixUserId!);
 
       // Have the user join the room
-      await this.matrixService.joinRoom(
+      await this.matrixRoomService.joinRoom(
         roomId,
         user.matrixUserId!,
         user.matrixAccessToken!,
@@ -222,7 +223,10 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
       }
 
       // Remove user from Matrix room
-      await this.matrixService.removeUserFromRoom(roomId, user.matrixUserId);
+      await this.matrixRoomService.removeUserFromRoom(
+        roomId,
+        user.matrixUserId,
+      );
 
       this.logger.log(`User ${userId} removed from room ${roomId}`);
     } catch (error) {
@@ -262,7 +266,7 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
         Math.random().toString(36).slice(2);
 
       // Call the Matrix service to create a user
-      const matrixUserInfo = await this.matrixService.createUser({
+      const matrixUserInfo = await this.matrixUserService.createUser({
         username,
         password,
         displayName: displayName || username,
@@ -292,11 +296,16 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
 
     // Start the Matrix client for this user
     try {
-      await this.matrixService.startClient({
-        userId: user.matrixUserId!,
-        accessToken: user.matrixAccessToken!,
-        deviceId: user.matrixDeviceId || undefined,
-      });
+      // Find the user's slug from the ulid
+      const userWithSlug = await this.userService.findBySlug(user.slug);
+      if (userWithSlug) {
+        // Get client for the user using the slug (which is required by the new MatrixUserService)
+        await this.matrixUserService.getClientForUser(user.slug);
+      } else {
+        this.logger.warn(
+          `Couldn't find user with slug ${user.slug} for Matrix client startup`,
+        );
+      }
     } catch (error) {
       this.logger.warn(
         `Failed to start Matrix client for user ${userId}: ${error.message}`,
@@ -321,7 +330,7 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
       const user = await this.ensureUserHasCredentials(userId);
 
       // Send typing notification
-      await this.matrixService.sendTypingNotification(
+      await this.matrixMessageService.sendTypingNotification(
         roomId,
         user.matrixUserId!,
         user.matrixAccessToken!,
@@ -352,7 +361,7 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
       'OpenMeet User';
 
     // Set the display name
-    await this.matrixService.setUserDisplayName(
+    await this.matrixUserService.setUserDisplayName(
       user.matrixUserId,
       user.matrixAccessToken,
       displayName,

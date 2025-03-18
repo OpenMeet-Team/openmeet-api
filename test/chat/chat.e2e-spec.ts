@@ -4,7 +4,7 @@ import { loginAsTester, createEvent, createGroup } from '../utils/functions';
 
 /**
  * Chat API Tests
- * 
+ *
  * NOTE: These tests are currently in progress as part of the Matrix integration (Phase 2).
  * Some tests are skipped as the Matrix endpoints are not fully implemented yet.
  * They will be updated as the implementation progresses through Phases 2-4.
@@ -35,16 +35,16 @@ describe('Chat API Tests', () => {
   beforeAll(async () => {
     // Login as the main test user
     token = await loginAsTester();
-    
+
     // Get the current user information
     const meResponse = await request(TESTING_APP_URL)
       .get('/api/users/me')
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
-    
+
     currentUser = meResponse.body;
     testUserId = currentUser.id;
-    
+
     // Create a test event to use for chat testing
     const eventData = {
       name: 'Test Matrix Chat Event',
@@ -57,12 +57,12 @@ describe('Chat API Tests', () => {
       status: 'published',
       type: 'online',
       // Include this so Event.listener can directly add it to the chat event payload
-      userSlug: currentUser.slug
+      userSlug: currentUser.slug,
     };
-    
+
     const event = await createEvent(TESTING_APP_URL, token, eventData);
     eventSlug = event.slug;
-    
+
     // Create a test group to use for chat testing
     const groupData = {
       name: 'Test Matrix Chat Group',
@@ -70,7 +70,7 @@ describe('Chat API Tests', () => {
       isPublic: true,
       categories: [1],
     };
-    
+
     const group = await createGroup(TESTING_APP_URL, token, groupData);
     groupSlug = group.slug;
   }, 30000); // 30 second timeout
@@ -110,7 +110,7 @@ describe('Chat API Tests', () => {
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('messages');
       expect(response.body).toHaveProperty('end');
-      
+
       // Check that messages are formatted correctly
       if (response.body.messages && response.body.messages.length > 0) {
         const message = response.body.messages[0];
@@ -177,7 +177,7 @@ describe('Chat API Tests', () => {
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('messages');
       expect(response.body).toHaveProperty('end');
-      
+
       // Check that messages are formatted correctly
       if (response.body.messages && response.body.messages.length > 0) {
         const message = response.body.messages[0];
@@ -244,7 +244,7 @@ describe('Chat API Tests', () => {
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('messages');
       expect(response.body).toHaveProperty('end');
-      
+
       // Check that direct messages are formatted correctly
       if (response.body.messages && response.body.messages.length > 0) {
         const message = response.body.messages[0];
@@ -288,18 +288,18 @@ describe('Chat API Tests', () => {
       expect(response.body).toHaveProperty('directChats');
       expect(response.body).toHaveProperty('eventChats');
       expect(response.body).toHaveProperty('groupChats');
-      
+
       // The test event and group chats should be in the lists
       if (response.body.eventChats && response.body.eventChats.length > 0) {
         const foundEvent = response.body.eventChats.some(
-          (chat: any) => chat.slug === eventSlug
+          (chat: any) => chat.slug === eventSlug,
         );
         expect(foundEvent).toBeTruthy();
       }
-      
+
       if (response.body.groupChats && response.body.groupChats.length > 0) {
         const foundGroup = response.body.groupChats.some(
-          (chat: any) => chat.slug === groupSlug
+          (chat: any) => chat.slug === groupSlug,
         );
         expect(foundGroup).toBeTruthy();
       }
@@ -316,7 +316,7 @@ describe('Chat API Tests', () => {
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
 
-      // Socket.io endpoints typically return a 400 Bad Request because 
+      // Socket.io endpoints typically return a 400 Bad Request because
       // they expect WebSocket upgrade headers, but the endpoint should exist
       expect([400, 404]).toContain(response.status);
     });

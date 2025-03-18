@@ -861,19 +861,24 @@ export class DiscussionService implements DiscussionServiceInterface {
   ): Promise<{ eventId: number | null; userId: number | null }> {
     // If tenantId is not provided, try to use the one from the request
     const effectiveTenantId = tenantId || this.request?.tenantId;
-    
+
     if (!effectiveTenantId) {
-      this.logger.error('Neither explicit tenantId nor request.tenantId is available');
+      this.logger.error(
+        'Neither explicit tenantId nor request.tenantId is available',
+      );
       throw new Error('Tenant ID is required');
     }
-    
+
     let eventId: number | null = null;
     let userId: number | null = null;
 
     // Find the event by slug
     try {
       // Use a version of showEventBySlug that accepts a tenant ID
-      const event = await this.eventQueryService.showEventBySlugWithTenant(eventSlug, effectiveTenantId);
+      const event = await this.eventQueryService.showEventBySlugWithTenant(
+        eventSlug,
+        effectiveTenantId,
+      );
       if (event) {
         eventId = event.id;
       }
@@ -886,7 +891,10 @@ export class DiscussionService implements DiscussionServiceInterface {
     // Find the user by slug
     try {
       // Use a version of getUserBySlug that accepts a tenant ID
-      const user = await this.userService.getUserBySlugWithTenant(userSlug, effectiveTenantId);
+      const user = await this.userService.getUserBySlugWithTenant(
+        userSlug,
+        effectiveTenantId,
+      );
       if (user) {
         userId = user.id;
       }

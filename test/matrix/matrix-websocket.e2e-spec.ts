@@ -11,15 +11,15 @@ describe('Matrix WebSocket Integration Tests', () => {
 
   beforeAll(async () => {
     token = await loginAsTester();
-    
+
     // Get the current user information
     const meResponse = await request(TESTING_APP_URL)
       .get('/api/users/me')
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
-    
+
     const currentUser = meResponse.body;
-    
+
     // Create a test event to use for WebSocket testing
     const eventData = {
       name: 'Test WebSocket Event',
@@ -31,9 +31,9 @@ describe('Matrix WebSocket Integration Tests', () => {
       categories: [1],
       status: 'published',
       type: 'online',
-      userSlug: currentUser.slug
+      userSlug: currentUser.slug,
     };
-    
+
     const event = await createEvent(TESTING_APP_URL, token, eventData);
     eventSlug = event.slug;
   });
@@ -47,10 +47,10 @@ describe('Matrix WebSocket Integration Tests', () => {
   /**
    * These tests verify that the Matrix WebSocket endpoints are properly configured,
    * but they don't test actual WebSocket connections which would require a Socket.io client.
-   * 
+   *
    * In a real environment, a proper Socket.io client would be used to connect to the server,
    * but that's beyond the scope of these isolated e2e tests.
-   * 
+   *
    * NOTE: These tests are currently in progress as part of the Matrix integration.
    * They will be updated as the implementation progresses through Phase 2-4.
    */
@@ -61,7 +61,7 @@ describe('Matrix WebSocket Integration Tests', () => {
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
 
-      // Socket.io endpoints typically return a 400 Bad Request because 
+      // Socket.io endpoints typically return a 400 Bad Request because
       // they expect WebSocket upgrade headers, but the endpoint should exist
       expect([400, 404]).toContain(response.status);
     });
@@ -73,7 +73,7 @@ describe('Matrix WebSocket Integration Tests', () => {
         .post(`/api/chat/event/${eventSlug}/join`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
-        
+
       // Then, send a typing notification
       const response = await request(TESTING_APP_URL)
         .post(`/api/chat/event/${eventSlug}/typing`)
@@ -89,7 +89,7 @@ describe('Matrix WebSocket Integration Tests', () => {
       const messageData = {
         message: 'Hello, this is a test WebSocket message',
       };
-      
+
       const response = await request(TESTING_APP_URL)
         .post(`/api/chat/event/${eventSlug}/message`)
         .send(messageData)
@@ -114,7 +114,7 @@ describe('Matrix WebSocket Integration Tests', () => {
       socketClient = Client(`${TESTING_APP_URL}/socket.io/matrix`, {
         extraHeaders: {
           Authorization: `Bearer ${token}`,
-          'x-tenant-id': TESTING_TENANT_ID
+          'x-tenant-id': TESTING_TENANT_ID,
         },
       });
 

@@ -1,6 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MatrixGateway } from './matrix.gateway';
-import { MatrixService } from './matrix.service';
+import { MatrixUserService } from './services/matrix-user.service';
+import { MatrixRoomService } from './services/matrix-room.service';
+import { MatrixMessageService } from './services/matrix-message.service';
+import { MatrixCoreService } from './services/matrix-core.service';
 import { UserService } from '../user/user.service';
 import { ChatRoomService } from '../chat/rooms/chat-room.service';
 import { JwtService } from '@nestjs/jwt';
@@ -36,22 +39,26 @@ class MockSocket extends EventEmitter {
 
 describe('MatrixGateway', () => {
   let gateway: MatrixGateway;
-  let matrixService: MatrixService;
+  let matrixUserService: MatrixUserService;
+  let matrixRoomService: MatrixRoomService;
+  let matrixMessageService: MatrixMessageService;
+  let matrixCoreService: MatrixCoreService;
   let userService: UserService;
   let chatRoomService: ChatRoomService;
   let jwtService: JwtService;
   let mockClient: MockSocket;
   let mockServer: Partial<Server>;
-  
-  // Add missing matrixService method implementations
+
+  // Add missing matrix client method implementations
   const mockMatrixClient = {
     sendTyping: jest.fn().mockResolvedValue(true),
-    sendTextMessage: jest.fn().mockResolvedValue({ event_id: 'event-123' }),
+    sendEvent: jest.fn().mockResolvedValue({ event_id: 'event-123' }),
   };
 
   const mockUser = {
     id: 1,
     ulid: 'USER123',
+    slug: 'test-user-123',
     firstName: 'Test',
     lastName: 'User',
     email: 'test@example.com',
@@ -77,7 +84,7 @@ describe('MatrixGateway', () => {
       matrixUserId: mockUser.matrixUserId,
       matrixClientInitialized: true,
       hasMatrixCredentials: true,
-      tenantId: 'default'
+      tenantId: 'default',
     };
     mockServer = {
       to: jest.fn().mockReturnValue({
@@ -89,25 +96,46 @@ describe('MatrixGateway', () => {
       providers: [
         MatrixGateway,
         {
-          provide: MatrixService,
+          provide: MatrixUserService,
           useValue: {
-            startClient: jest.fn().mockResolvedValue(true),
-            stopClient: jest.fn().mockResolvedValue(true),
-            releaseClientForUser: jest.fn().mockResolvedValue(true),
-            sendTyping: jest.fn().mockResolvedValue(true), 
-            getRoomMessages: jest.fn().mockResolvedValue({
-              messages: [],
-              end: 'end-token',
-            }),
             getClientForUser: jest.fn().mockResolvedValue({
               sendTyping: jest.fn().mockResolvedValue(true),
-              sendTextMessage: jest.fn().mockResolvedValue({ event_id: 'event-123' }),
+              sendEvent: jest.fn().mockResolvedValue({ event_id: 'event-123' }),
             }),
+            releaseClientForUser: jest.fn().mockResolvedValue(true),
+          },
+        },
+        {
+          provide: MatrixRoomService,
+          useValue: {
             joinRoom: jest.fn().mockResolvedValue(true),
             getUserRoomsWithClient: jest.fn().mockResolvedValue([
               { roomId: '!room1:server', name: 'Room 1' },
               { roomId: '!room2:server', name: 'Room 2' },
             ]),
+          },
+        },
+        {
+          provide: MatrixMessageService,
+          useValue: {
+            sendMessage: jest.fn().mockResolvedValue('event-123'),
+            getRoomMessages: jest.fn().mockResolvedValue({
+              messages: [],
+              end: 'end-token',
+            }),
+          },
+        },
+        {
+          provide: MatrixCoreService,
+          useValue: {
+            getConfig: jest.fn().mockReturnValue({
+              baseUrl: 'https://matrix.openmeet.net',
+              serverName: 'openmeet.net',
+              adminUserId: '@admin:openmeet.net',
+            }),
+            getSdk: jest.fn().mockReturnValue({
+              createClient: jest.fn().mockReturnValue(mockMatrixClient),
+            }),
           },
         },
         {
@@ -119,10 +147,12 @@ describe('MatrixGateway', () => {
         {
           provide: ChatRoomService,
           useValue: {
-            findChatRoomsByMatrixUserId: jest.fn().mockResolvedValue([
-              { matrixRoomId: '!room1:server' },
-              { matrixRoomId: '!room2:server' },
-            ]),
+            findChatRoomsByMatrixUserId: jest
+              .fn()
+              .mockResolvedValue([
+                { matrixRoomId: '!room1:server' },
+                { matrixRoomId: '!room2:server' },
+              ]),
           },
         },
         {
@@ -154,7 +184,11 @@ describe('MatrixGateway', () => {
     }).compile();
 
     gateway = module.get<MatrixGateway>(MatrixGateway);
-    matrixService = module.get<MatrixService>(MatrixService);
+    matrixUserService = module.get<MatrixUserService>(MatrixUserService);
+    matrixRoomService = module.get<MatrixRoomService>(MatrixRoomService);
+    matrixMessageService =
+      module.get<MatrixMessageService>(MatrixMessageService);
+    matrixCoreService = module.get<MatrixCoreService>(MatrixCoreService);
     userService = module.get<UserService>(UserService);
     chatRoomService = module.get<ChatRoomService>(ChatRoomService);
     jwtService = module.get<JwtService>(JwtService);
@@ -173,25 +207,28 @@ describe('MatrixGateway', () => {
       await gateway.handleConnection(mockClient as unknown as Socket);
 
       // Verify the connection_confirmed event was emitted
-      expect(mockClient.emit).toHaveBeenCalledWith('matrix-event', expect.objectContaining({
-        type: 'connection_confirmed',
-      }));
+      expect(mockClient.emit).toHaveBeenCalledWith(
+        'matrix-event',
+        expect.objectContaining({
+          type: 'connection_confirmed',
+        }),
+      );
     });
 
     it('should get Matrix client for user if they have credentials', async () => {
       await gateway.handleConnection(mockClient as unknown as Socket);
 
       // Check that getClientForUser was called, which is the updated flow
-      expect(matrixService.getClientForUser).toHaveBeenCalledWith(
-        mockUser.id,
+      expect(matrixUserService.getClientForUser).toHaveBeenCalledWith(
+        mockUser.slug,
         expect.anything(),
-        'default'
+        'default',
       );
     });
 
     it('should set matrixClientInitialized to true when successful', async () => {
       await gateway.handleConnection(mockClient as unknown as Socket);
-      
+
       // Check the client data was updated
       expect(mockClient.data.matrixClientInitialized).toBeTruthy();
     });
@@ -201,18 +238,20 @@ describe('MatrixGateway', () => {
     it('should release Matrix client when user disconnects', async () => {
       // Setup connection first
       await gateway.handleConnection(mockClient as unknown as Socket);
-      
+
       // Manually set the mapping in socketUsers
       (gateway as any).socketUsers.set(mockClient.id, {
         userId: mockUser.id,
         matrixUserId: mockUser.matrixUserId,
       });
-      
+
       // Then disconnect
       await gateway.handleDisconnect(mockClient as unknown as Socket);
 
-      // Check if releaseClientForUser was called instead of stopClient
-      expect(matrixService.releaseClientForUser).toHaveBeenCalledWith(mockUser.id);
+      // Check if releaseClientForUser was called with the user slug
+      expect(matrixUserService.releaseClientForUser).toHaveBeenCalledWith(
+        mockUser.slug,
+      );
     });
   });
 
@@ -220,12 +259,14 @@ describe('MatrixGateway', () => {
     it('should join client to a room', async () => {
       // Setup connection
       await gateway.handleConnection(mockClient as unknown as Socket);
-      
+
       // Reset join mock to test the explicit join
       (mockClient.join as jest.Mock).mockClear();
-      
+
       // Using the correct method name based on your gateway implementation
-      await gateway.joinRoom(mockClient as unknown as Socket, { roomId: '!newroom:server' });
+      await gateway.joinRoom(mockClient as unknown as Socket, {
+        roomId: '!newroom:server',
+      });
 
       expect(mockClient.join).toHaveBeenCalledWith('!newroom:server');
     });
@@ -236,9 +277,11 @@ describe('MatrixGateway', () => {
       // Setup connection
       await gateway.handleConnection(mockClient as unknown as Socket);
       mockClient.rooms.add('!testroom:server');
-      
+
       // Use the correct method name based on your gateway implementation
-      await gateway.leaveRoom(mockClient as unknown as Socket, { roomId: '!testroom:server' });
+      await gateway.leaveRoom(mockClient as unknown as Socket, {
+        roomId: '!testroom:server',
+      });
 
       expect(mockClient.leave).toHaveBeenCalledWith('!testroom:server');
     });
@@ -247,33 +290,68 @@ describe('MatrixGateway', () => {
   describe('typing', () => {
     it('should send typing notification via Matrix', async () => {
       // Reset mock to check call parameters specifically for this test
-      (matrixService.getClientForUser as jest.Mock).mockClear();
-      
+      (matrixUserService.getClientForUser as jest.Mock).mockClear();
+
       // Setup connection
       await gateway.handleConnection(mockClient as unknown as Socket);
-      
+
       // Make getClientForUser return our mock client
-      (matrixService.getClientForUser as jest.Mock).mockResolvedValueOnce(mockMatrixClient);
-      
+      (matrixUserService.getClientForUser as jest.Mock).mockResolvedValueOnce(
+        mockMatrixClient,
+      );
+
       // Reset our mock to verify call
       mockMatrixClient.sendTyping.mockClear();
-      
+
       // Use the handleTyping method directly to match the implementation
-      await gateway.handleTyping(mockClient as unknown as Socket, { 
+      await gateway.handleTyping(mockClient as unknown as Socket, {
         roomId: '!room1:server',
         isTyping: true,
-        tenantId: 'default'
+        tenantId: 'default',
       });
 
-      // Check that getClientForUser was called with the tenant ID
-      expect(matrixService.getClientForUser).toHaveBeenCalledWith(
-        mockUser.id,
-        null,
-        'default'
+      // Check that getClientForUser was called with the user slug and tenant ID
+      expect(matrixUserService.getClientForUser).toHaveBeenCalledWith(
+        mockUser.slug,
+        expect.anything(),
+        'default',
       );
-      
+
       // Verify the sendTyping method was called on the client
-      expect(mockMatrixClient.sendTyping).toHaveBeenCalledWith('!room1:server', true, 30000);
+      expect(mockMatrixClient.sendTyping).toHaveBeenCalledWith(
+        '!room1:server',
+        true,
+        30000,
+      );
+    });
+  });
+
+  describe('handleMessage', () => {
+    it('should send message using MatrixMessageService', async () => {
+      // Reset mocks to check call parameters
+      (matrixUserService.getClientForUser as jest.Mock).mockClear();
+      (matrixMessageService.sendMessage as jest.Mock).mockClear();
+
+      // Setup connection
+      await gateway.handleConnection(mockClient as unknown as Socket);
+
+      // Call the message handler
+      await gateway.handleMessage(mockClient as unknown as Socket, {
+        roomId: '!room1:server',
+        message: 'Hello world!',
+        tenantId: 'default',
+      });
+
+      // Check that message was sent with correct parameters
+      expect(matrixMessageService.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          roomId: '!room1:server',
+          userId: mockUser.matrixUserId,
+          accessToken: mockUser.matrixAccessToken,
+          deviceId: mockUser.matrixDeviceId,
+          content: 'Hello world!',
+        }),
+      );
     });
   });
 
@@ -281,7 +359,7 @@ describe('MatrixGateway', () => {
     it('should broadcast Matrix events to the appropriate room', async () => {
       // Setup connection
       await gateway.handleConnection(mockClient as unknown as Socket);
-      
+
       // Create a mock Matrix event
       const mockMatrixEvent = {
         type: 'm.room.message',
@@ -293,23 +371,29 @@ describe('MatrixGateway', () => {
         },
         origin_server_ts: Date.now(),
       };
-      
+
       // Directly call the broadcast method
       gateway.broadcastRoomEvent('!room1:server', mockMatrixEvent);
 
       // Should have broadcasted to the room
       expect(mockServer.to).toHaveBeenCalledWith('!room1:server');
-      expect(mockEmitHandler).toHaveBeenCalledWith('matrix-event', expect.objectContaining({
-        type: 'm.room.message',
-        room_id: '!room1:server',
-        _broadcastId: expect.any(String), // The method adds a broadcast ID
-      }));
-      
+      expect(mockEmitHandler).toHaveBeenCalledWith(
+        'matrix-event',
+        expect.objectContaining({
+          type: 'm.room.message',
+          room_id: '!room1:server',
+          _broadcastId: expect.any(String), // The method adds a broadcast ID
+        }),
+      );
+
       // For message events, it should also emit a matrix-message event
-      expect(mockEmitHandler).toHaveBeenCalledWith('matrix-message', expect.objectContaining({
-        roomId: '!room1:server',
-        sender: '@another:server',
-      }));
+      expect(mockEmitHandler).toHaveBeenCalledWith(
+        'matrix-message',
+        expect.objectContaining({
+          roomId: '!room1:server',
+          sender: '@another:server',
+        }),
+      );
     });
   });
 });

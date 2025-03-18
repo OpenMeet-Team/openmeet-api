@@ -2,7 +2,9 @@ import { Injectable, Scope, Inject, Logger, forwardRef } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Repository } from 'typeorm';
 import { TenantConnectionService } from '../../tenant/tenant.service';
-import { MatrixService } from '../../matrix/matrix.service';
+import { MatrixRoomService } from '../../matrix/services/matrix-room.service';
+import { MatrixUserService } from '../../matrix/services/matrix-user.service';
+import { MatrixMessageService } from '../../matrix/services/matrix-message.service';
 import { UserService } from '../../user/user.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
@@ -61,7 +63,7 @@ export class ChatRoomService {
           Math.random().toString(36).slice(2);
 
         // Call the Matrix service to create a user
-        const matrixUserInfo = await this.matrixService.createUser({
+        const matrixUserInfo = await this.matrixUserService.createUser({
           username,
           password,
           displayName: displayName || username,
@@ -96,17 +98,17 @@ export class ChatRoomService {
       );
     }
 
-    // Start the client for this user
+    // Get a client for this user
     try {
       // Add non-null assertions since we've checked these values above
-      await this.matrixService.startClient({
-        userId: user.matrixUserId!, // Non-null assertion
-        accessToken: user.matrixAccessToken!, // Non-null assertion
-        deviceId: user.matrixDeviceId || undefined,
-      });
+      // Use getClientForUser from MatrixUserService
+      await this.matrixUserService.getClientForUser(
+        user.slug,
+        this.userService,
+      );
     } catch (startError) {
       this.logger.error(
-        `Failed to start Matrix client for user ${userId}: ${startError.message}`,
+        `Failed to get Matrix client for user ${userId}: ${startError.message}`,
       );
       throw new Error(
         `Could not connect to Matrix chat service. Please try again later.`,
@@ -119,7 +121,9 @@ export class ChatRoomService {
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
-    private readonly matrixService: MatrixService,
+    private readonly matrixUserService: MatrixUserService,
+    private readonly matrixRoomService: MatrixRoomService,
+    private readonly matrixMessageService: MatrixMessageService,
     private readonly userService: UserService,
     @Inject(forwardRef(() => GroupMemberService))
     private readonly groupMemberService: GroupMemberService,
@@ -149,11 +153,9 @@ export class ChatRoomService {
    * This method is used by both tests and production code
    */
   @Trace('chat-room.getOrCreateEventChatRoom')
-  async getOrCreateEventChatRoom(
-    eventId: number,
-  ): Promise<ChatRoomEntity> {
+  async getOrCreateEventChatRoom(eventId: number): Promise<ChatRoomEntity> {
     await this.initializeRepositories();
-    
+
     // Check if a chat room already exists for this event
     const existingRoom = await this.chatRoomRepository.findOne({
       where: { event: { id: eventId } },
@@ -166,7 +168,7 @@ export class ChatRoomService {
     // Get the event info using the EventQueryService
     const tenantId = this.request.tenantId;
     const event = await this.eventQueryService.findById(eventId, tenantId);
-    
+
     if (!event) {
       throw new Error(`Event with id ${eventId} not found`);
     }
@@ -179,7 +181,7 @@ export class ChatRoomService {
     // We'll use the event creator as the chat room creator
     return this.createEventChatRoom(eventId, event.user.id);
   }
-  
+
   /**
    * Create a chat room for an event
    */
@@ -190,7 +192,7 @@ export class ChatRoomService {
   ): Promise<ChatRoomEntity> {
     await this.initializeRepositories();
     const tenantId = this.request.tenantId;
-    
+
     // Use the tenant-aware version with the current tenant ID
     return this.createEventChatRoomWithTenant(eventId, creatorId, tenantId);
   }
@@ -207,14 +209,17 @@ export class ChatRoomService {
   ): Promise<ChatRoomEntity> {
     // If tenantId is not provided, try to use the one from the request
     const effectiveTenantId = tenantId || this.request?.tenantId;
-    
+
     if (!effectiveTenantId) {
-      this.logger.error('Neither explicit tenantId nor request.tenantId is available');
+      this.logger.error(
+        'Neither explicit tenantId nor request.tenantId is available',
+      );
       throw new Error('Tenant ID is required');
     }
 
     // Get a connection for the tenant
-    const dataSource = await this.tenantConnectionService.getTenantConnection(effectiveTenantId);
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(effectiveTenantId);
     const chatRoomRepo = dataSource.getRepository(ChatRoomEntity);
     const eventRepo = dataSource.getRepository(EventEntity);
 
@@ -225,7 +230,9 @@ export class ChatRoomService {
     });
 
     if (!event) {
-      throw new Error(`Event with id ${eventId} not found in tenant ${tenantId}`);
+      throw new Error(
+        `Event with id ${eventId} not found in tenant ${tenantId}`,
+      );
     }
 
     // Check if a chat room already exists for this event
@@ -242,14 +249,14 @@ export class ChatRoomService {
 
     // Create a chat room in Matrix
     // Using the event slug for a unique, stable identifier
-    const roomInfo = await this.matrixService.createRoom({
+    const roomInfo = await this.matrixRoomService.createRoom({
       name: `event-${event.slug}`,
       topic: `Discussion for ${event.name}`,
       isPublic: event.visibility === 'public',
       isDirect: false,
       // Add the event creator as the first member
       inviteUserIds: [creator.matrixUserId].filter((id) => !!id) as string[],
-      // Set creator as moderator - MatrixService will handle admin user
+      // Set creator as moderator - MatrixRoomService will handle admin user
       powerLevelContentOverride: creator.matrixUserId
         ? {
             users: {
@@ -286,7 +293,9 @@ export class ChatRoomService {
     event.matrixRoomId = roomInfo.roomId;
     await eventRepo.save(event);
 
-    this.logger.log(`Created chat room for event ${event.slug} in tenant ${tenantId}`);
+    this.logger.log(
+      `Created chat room for event ${event.slug} in tenant ${tenantId}`,
+    );
     return chatRoom;
   }
 
@@ -360,10 +369,10 @@ export class ChatRoomService {
     // Try to invite user to the room - may fail if they're already a member
     if (user.matrixUserId) {
       try {
-        await this.matrixService.inviteUser({
-          roomId: chatRoom.matrixRoomId,
-          userId: user.matrixUserId,
-        });
+        await this.matrixRoomService.inviteUser(
+          chatRoom.matrixRoomId,
+          user.matrixUserId,
+        );
       } catch (inviteError) {
         // If the error is because they're already in the room, log and continue
         if (
@@ -386,7 +395,7 @@ export class ChatRoomService {
     let isJoined = false;
     if (user.matrixAccessToken && user.matrixUserId) {
       try {
-        await this.matrixService.joinRoom(
+        await this.matrixRoomService.joinRoom(
           chatRoom.matrixRoomId,
           user.matrixUserId,
           user.matrixAccessToken,
@@ -443,7 +452,7 @@ export class ChatRoomService {
             );
 
             // Set user as moderator in Matrix room
-            await this.matrixService.setRoomPowerLevels(
+            await this.matrixRoomService.setRoomPowerLevels(
               chatRoom.matrixRoomId,
               { [user.matrixUserId]: 50 }, // 50 is moderator level
             );
@@ -524,7 +533,7 @@ export class ChatRoomService {
     }
 
     // Remove the user from the room
-    await this.matrixService.removeUserFromRoom(
+    await this.matrixRoomService.removeUserFromRoom(
       chatRoom.matrixRoomId,
       user.matrixUserId,
     );
@@ -548,33 +557,37 @@ export class ChatRoomService {
       relations: ['creator', 'event'],
     });
   }
-  
+
   /**
    * Get a chat room for an event by its slug
    * Uses the EventQueryService to look up the event by slug first
    */
   @Trace('chat-room.getEventChatRoomBySlug')
-  async getEventChatRoomBySlug(eventSlug: string): Promise<ChatRoomEntity | null> {
+  async getEventChatRoomBySlug(
+    eventSlug: string,
+  ): Promise<ChatRoomEntity | null> {
     await this.initializeRepositories();
-    
+
     try {
       // Use the EventQueryService to get the event by slug
       const event = await this.eventQueryService.findEventBySlug(eventSlug);
-      
+
       if (!event) {
         this.logger.debug(`Event with slug ${eventSlug} not found`);
         return null;
       }
-      
+
       // Find the chat room for this event
       const chatRoom = await this.chatRoomRepository.findOne({
         where: { event: { id: event.id } },
         relations: ['creator', 'event'],
       });
-      
+
       return chatRoom;
     } catch (error) {
-      this.logger.warn(`Error finding event by slug ${eventSlug}: ${error.message}`);
+      this.logger.warn(
+        `Error finding event by slug ${eventSlug}: ${error.message}`,
+      );
       return null;
     }
   }
@@ -584,11 +597,9 @@ export class ChatRoomService {
    * This method is used by both tests and production code
    */
   @Trace('chat-room.getOrCreateGroupChatRoom')
-  async getOrCreateGroupChatRoom(
-    groupId: number,
-  ): Promise<ChatRoomEntity> {
+  async getOrCreateGroupChatRoom(groupId: number): Promise<ChatRoomEntity> {
     await this.initializeRepositories();
-    
+
     // Check if a chat room already exists for this group
     const existingRoom = await this.chatRoomRepository.findOne({
       where: { group: { id: groupId } },
@@ -647,14 +658,14 @@ export class ChatRoomService {
 
     // Create a chat room in Matrix
     // Using the group slug for a unique, stable identifier
-    const roomInfo = await this.matrixService.createRoom({
+    const roomInfo = await this.matrixRoomService.createRoom({
       name: `group-${group.slug}`,
       topic: `Discussion for group: ${group.slug}`,
       isPublic: group.visibility === 'public',
       isDirect: false,
       // Add the group creator as the first member
       inviteUserIds: [creator.matrixUserId].filter((id) => !!id) as string[],
-      // Set creator as moderator - MatrixService will handle admin user
+      // Set creator as moderator - MatrixRoomService will handle admin user
       powerLevelContentOverride: creator.matrixUserId
         ? {
             users: {
@@ -706,7 +717,7 @@ export class ChatRoomService {
       relations: ['creator', 'group'],
     });
   }
-  
+
   /**
    * Find or create a direct chat room between two users
    * This method is used by both tests and production code
@@ -717,7 +728,7 @@ export class ChatRoomService {
     user2Id: number,
   ): Promise<ChatRoomEntity> {
     await this.initializeRepositories();
-    
+
     // Check if a chat room already exists between these users (in either order)
     // We need to use the queryBuilder for complex conditions
     const existingRooms = await this.chatRoomRepository
@@ -725,7 +736,7 @@ export class ChatRoomService {
       .where('chatRoom.type = :type', { type: ChatRoomType.DIRECT })
       .andWhere(
         '(chatRoom.user1Id = :user1Id AND chatRoom.user2Id = :user2Id) OR (chatRoom.user1Id = :user2Id AND chatRoom.user2Id = :user1Id)',
-        { user1Id, user2Id }
+        { user1Id, user2Id },
       )
       .getMany();
 
@@ -746,8 +757,8 @@ export class ChatRoomService {
 
     // Create a direct room in Matrix
     const roomName = `Direct: ${user1.firstName || ''} ${user1.lastName || ''} and ${user2.firstName || ''} ${user2.lastName || ''}`;
-    
-    const roomInfo = await this.matrixService.createRoom({
+
+    const roomInfo = await this.matrixRoomService.createRoom({
       name: roomName,
       topic: 'Direct message conversation',
       isPublic: false,
@@ -762,7 +773,7 @@ export class ChatRoomService {
       name: roomName,
       type: ChatRoomType.DIRECT,
       visibility: ChatRoomVisibility.PRIVATE,
-      creator: user1, 
+      creator: user1,
       user1Id: user1Id,
       user2Id: user2Id,
       settings: {
@@ -777,128 +788,151 @@ export class ChatRoomService {
     const savedRoom = await this.chatRoomRepository.save(chatRoom);
     return savedRoom;
   }
-  
+
   /**
    * Get a chat room for a group by its slug
    * Uses the GroupService to look up the group by slug first
    */
   @Trace('chat-room.getGroupChatRoomBySlug')
-  async getGroupChatRoomBySlug(groupSlug: string): Promise<ChatRoomEntity | null> {
+  async getGroupChatRoomBySlug(
+    groupSlug: string,
+  ): Promise<ChatRoomEntity | null> {
     await this.initializeRepositories();
-    
+
     try {
       // Use the GroupService to get the group by slug
       const group = await this.groupService.findGroupBySlug(groupSlug);
-      
+
       if (!group) {
         this.logger.debug(`Group with slug ${groupSlug} not found`);
         return null;
       }
-      
+
       // Find the chat room for this group
       const chatRoom = await this.chatRoomRepository.findOne({
         where: { group: { id: group.id } },
         relations: ['creator', 'group'],
       });
-      
+
       return chatRoom;
     } catch (error) {
-      this.logger.warn(`Error finding group by slug ${groupSlug}: ${error.message}`);
+      this.logger.warn(
+        `Error finding group by slug ${groupSlug}: ${error.message}`,
+      );
       return null;
     }
   }
-  
+
   /**
    * Add a user to an event chat room using event and user slugs
-   * 
+   *
    * This is the preferred method for user-facing APIs over using numeric IDs
-   * 
+   *
    * @param eventSlug The slug of the event
    * @param userSlug The slug of the user
    */
   @Trace('chat-room.addUserToEventChatRoomBySlug')
-  async addUserToEventChatRoomBySlug(eventSlug: string, userSlug: string): Promise<void> {
+  async addUserToEventChatRoomBySlug(
+    eventSlug: string,
+    userSlug: string,
+  ): Promise<void> {
     await this.initializeRepositories();
-    
+
     try {
       // Find the event using the EventQueryService
       const event = await this.eventQueryService.findEventBySlug(eventSlug);
       if (!event) {
         throw new Error(`Event with slug ${eventSlug} not found`);
       }
-      
+
       // Find the user by slug using getUserBySlug
       const user = await this.userService.getUserBySlug(userSlug);
       if (!user) {
         throw new Error(`User with slug ${userSlug} not found`);
       }
-      
+
       // Verify the user is an attendee of the event
       // Note: We would use findBySlugAndUserSlug if it existed, but we'll use what we have
-      const attendee = await this.eventAttendeeService.findEventAttendeeByUserId(
-        event.id,
-        user.id
-      );
-      
+      const attendee =
+        await this.eventAttendeeService.findEventAttendeeByUserId(
+          event.id,
+          user.id,
+        );
+
       if (!attendee) {
-        throw new Error(`User ${userSlug} is not an attendee of event ${eventSlug}`);
+        throw new Error(
+          `User ${userSlug} is not an attendee of event ${eventSlug}`,
+        );
       }
-      
+
       // Now use the existing method with the numeric IDs
       await this.addUserToEventChatRoom(event.id, user.id);
-      
-      this.logger.log(`Added user ${userSlug} to event ${eventSlug} chat room by slug`);
+
+      this.logger.log(
+        `Added user ${userSlug} to event ${eventSlug} chat room by slug`,
+      );
     } catch (error) {
-      this.logger.error(`Error adding user ${userSlug} to event ${eventSlug} chat room: ${error.message}`);
+      this.logger.error(
+        `Error adding user ${userSlug} to event ${eventSlug} chat room: ${error.message}`,
+      );
       throw error;
     }
   }
 
   /**
    * Add a user to a group chat room using group and user slugs
-   * 
+   *
    * This is the preferred method for user-facing APIs over using numeric IDs
-   * 
+   *
    * @param groupSlug The slug of the group
    * @param userSlug The slug of the user
    */
   @Trace('chat-room.addUserToGroupChatRoomBySlug')
-  async addUserToGroupChatRoomBySlug(groupSlug: string, userSlug: string): Promise<void> {
+  async addUserToGroupChatRoomBySlug(
+    groupSlug: string,
+    userSlug: string,
+  ): Promise<void> {
     await this.initializeRepositories();
-    
+
     try {
       // Find the group using the GroupService
       const group = await this.groupService.findGroupBySlug(groupSlug);
       if (!group) {
         throw new Error(`Group with slug ${groupSlug} not found`);
       }
-      
+
       // Find the user by slug using getUserBySlug
       const user = await this.userService.getUserBySlug(userSlug);
       if (!user) {
         throw new Error(`User with slug ${userSlug} not found`);
       }
-      
+
       // Verify the user is a member of the group
       const member = await this.groupMemberService.findGroupMemberByUserId(
         group.id,
-        user.id
+        user.id,
       );
-      
+
       if (!member) {
-        throw new Error(`User ${userSlug} is not a member of group ${groupSlug}`);
+        throw new Error(
+          `User ${userSlug} is not a member of group ${groupSlug}`,
+        );
       }
-      
+
       // Now use the existing method with the numeric IDs
       await this.addUserToGroupChatRoom(group.id, user.id);
-      
-      this.logger.log(`Added user ${userSlug} to group ${groupSlug} chat room by slug`);
+
+      this.logger.log(
+        `Added user ${userSlug} to group ${groupSlug} chat room by slug`,
+      );
     } catch (error) {
-      this.logger.error(`Error adding user ${userSlug} to group ${groupSlug} chat room: ${error.message}`);
+      this.logger.error(
+        `Error adding user ${userSlug} to group ${groupSlug} chat room: ${error.message}`,
+      );
       throw error;
     }
   }
-  
+
   /**
    * Add a user to a group chat room, but only if they're a member of the group
    *
@@ -991,7 +1025,7 @@ export class ChatRoomService {
     let joinSuccess = false;
 
     try {
-      await this.matrixService.joinRoom(
+      await this.matrixRoomService.joinRoom(
         chatRoom.matrixRoomId,
         user.matrixUserId,
         user.matrixAccessToken,
@@ -1020,13 +1054,13 @@ export class ChatRoomService {
         );
 
         try {
-          await this.matrixService.inviteUser({
-            roomId: chatRoom.matrixRoomId,
-            userId: user.matrixUserId,
-          });
+          await this.matrixRoomService.inviteUser(
+            chatRoom.matrixRoomId,
+            user.matrixUserId,
+          );
 
           // Try joining again after invite
-          await this.matrixService.joinRoom(
+          await this.matrixRoomService.joinRoom(
             chatRoom.matrixRoomId,
             user.matrixUserId,
             user.matrixAccessToken,
@@ -1074,7 +1108,7 @@ export class ChatRoomService {
               );
 
               // Set user as moderator in Matrix room
-              await this.matrixService.setRoomPowerLevels(
+              await this.matrixRoomService.setRoomPowerLevels(
                 chatRoom.matrixRoomId,
                 { [user.matrixUserId]: 50 }, // 50 is moderator level
               );
@@ -1146,7 +1180,7 @@ export class ChatRoomService {
     }
 
     // Remove the user from the room
-    await this.matrixService.removeUserFromRoom(
+    await this.matrixRoomService.removeUserFromRoom(
       chatRoom.matrixRoomId,
       user.matrixUserId,
     );
@@ -1220,13 +1254,13 @@ export class ChatRoomService {
         );
 
         // First, invite the user via admin
-        await this.matrixService.inviteUser({
-          roomId: chatRoom.matrixRoomId,
-          userId: user.matrixUserId!, // Non-null assertion
-        });
+        await this.matrixRoomService.inviteUser(
+          chatRoom.matrixRoomId,
+          user.matrixUserId!, // Non-null assertion
+        );
 
         // Then have the user join the room
-        await this.matrixService.joinRoom(
+        await this.matrixRoomService.joinRoom(
           chatRoom.matrixRoomId,
           user.matrixUserId!, // Non-null assertion
           user.matrixAccessToken!, // Non-null assertion
@@ -1258,7 +1292,7 @@ export class ChatRoomService {
         `Setting Matrix display name for user ${userId} to "${displayName}"`,
       );
 
-      await this.matrixService.setUserDisplayName(
+      await this.matrixUserService.setUserDisplayName(
         user.matrixUserId!, // Non-null assertion
         user.matrixAccessToken!, // Non-null assertion
         displayName,
@@ -1266,7 +1300,7 @@ export class ChatRoomService {
       );
 
       // Verify display name was set
-      const displayNameCheck = await this.matrixService.getUserDisplayName(
+      const displayNameCheck = await this.matrixUserService.getUserDisplayName(
         user.matrixUserId!, // Non-null assertion
       );
       this.logger.log(
@@ -1278,7 +1312,9 @@ export class ChatRoomService {
         this.logger.warn(
           `Display name not set correctly, trying direct API method`,
         );
-        await this.matrixService.setUserDisplayNameDirect(
+        // Note: The direct API call functionality has been consolidated
+        // into the MatrixUserService.setUserDisplayName method
+        await this.matrixUserService.setUserDisplayName(
           user.matrixUserId!, // Non-null assertion
           user.matrixAccessToken!, // Non-null assertion
           displayName,
@@ -1290,7 +1326,7 @@ export class ChatRoomService {
     }
 
     // Send the message using the user's Matrix credentials
-    return this.matrixService.sendMessage({
+    return this.matrixMessageService.sendMessage({
       roomId: chatRoom.matrixRoomId,
       content: message,
       userId: user.matrixUserId!, // Non-null assertion
@@ -1326,7 +1362,7 @@ export class ChatRoomService {
     const user = await this.ensureUserHasMatrixCredentials(userId);
 
     // Get the messages
-    return this.matrixService.getRoomMessages(
+    return this.matrixMessageService.getRoomMessages(
       chatRoom.matrixRoomId,
       limit,
       from,

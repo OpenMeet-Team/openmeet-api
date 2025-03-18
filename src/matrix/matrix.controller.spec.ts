@@ -1,15 +1,20 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MatrixController } from './matrix.controller';
-import { MatrixService } from './matrix.service';
+import { MatrixUserService } from './services/matrix-user.service';
+import { MatrixRoomService } from './services/matrix-room.service';
+import { MatrixMessageService } from './services/matrix-message.service';
+import { MatrixGateway } from './matrix.gateway';
 import { UserService } from '../user/user.service';
 import { ConfigService } from '@nestjs/config';
-import { Logger } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 
 describe('MatrixController', () => {
   let controller: MatrixController;
-  let matrixService: MatrixService;
+  let matrixUserService: MatrixUserService;
+  let matrixRoomService: MatrixRoomService;
+  let matrixMessageService: MatrixMessageService;
+  let matrixGateway: MatrixGateway;
   let userService: UserService;
 
   // Mock data
@@ -45,9 +50,35 @@ describe('MatrixController', () => {
       controllers: [MatrixController],
       providers: [
         {
-          provide: MatrixService,
+          provide: MatrixUserService,
           useValue: {
             createUser: jest.fn().mockResolvedValue(mockMatrixUserInfo),
+            setUserDisplayName: jest.fn().mockResolvedValue(undefined),
+            getClientForUser: jest.fn().mockResolvedValue({
+              sendTyping: jest.fn().mockResolvedValue(undefined),
+            }),
+          },
+        },
+        {
+          provide: MatrixRoomService,
+          useValue: {
+            createRoom: jest.fn(),
+            inviteUser: jest.fn(),
+            joinRoom: jest.fn(),
+          },
+        },
+        {
+          provide: MatrixMessageService,
+          useValue: {
+            sendMessage: jest.fn(),
+            getRoomMessages: jest.fn(),
+            sendTypingNotification: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: MatrixGateway,
+          useValue: {
+            broadcastRoomEvent: jest.fn(),
           },
         },
         {
@@ -93,7 +124,11 @@ describe('MatrixController', () => {
     }).compile();
 
     controller = module.get<MatrixController>(MatrixController);
-    matrixService = module.get<MatrixService>(MatrixService);
+    matrixUserService = module.get<MatrixUserService>(MatrixUserService);
+    matrixRoomService = module.get<MatrixRoomService>(MatrixRoomService);
+    matrixMessageService =
+      module.get<MatrixMessageService>(MatrixMessageService);
+    matrixGateway = module.get<MatrixGateway>(MatrixGateway);
     userService = module.get<UserService>(UserService);
   });
 
@@ -124,13 +159,13 @@ describe('MatrixController', () => {
       });
 
       // Should not create a new Matrix user
-      expect(matrixService.createUser).not.toHaveBeenCalled();
+      expect(matrixUserService.createUser).not.toHaveBeenCalled();
     });
 
     it('should provision a new Matrix user if user does not have Matrix credentials', async () => {
       const result = await controller.provisionMatrixUser(mockUser as any);
 
-      expect(matrixService.createUser).toHaveBeenCalledWith({
+      expect(matrixUserService.createUser).toHaveBeenCalledWith({
         username: `om_${mockFullUser.ulid}`,
         password: expect.any(String),
         displayName: 'Test User',
@@ -161,7 +196,7 @@ describe('MatrixController', () => {
 
     it('should propagate errors from Matrix service', async () => {
       const error = new Error('Failed to create Matrix user');
-      jest.spyOn(matrixService, 'createUser').mockRejectedValueOnce(error);
+      jest.spyOn(matrixUserService, 'createUser').mockRejectedValueOnce(error);
 
       await expect(
         controller.provisionMatrixUser(mockUser as any),

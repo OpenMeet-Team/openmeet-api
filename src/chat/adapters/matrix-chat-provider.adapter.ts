@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { MatrixService } from '../../matrix/matrix.service';
 import {
   ChatProviderInterface,
   CreateRoomOptions,
@@ -11,6 +10,9 @@ import {
 import { Message } from '../../matrix/types/matrix.types';
 import { Trace } from '../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
+import { MatrixUserService } from '../../matrix/services/matrix-user.service';
+import { MatrixRoomService } from '../../matrix/services/matrix-room.service';
+import { MatrixMessageService } from '../../matrix/services/matrix-message.service';
 
 /**
  * Matrix implementation of the ChatProviderInterface
@@ -20,12 +22,16 @@ export class MatrixChatProviderAdapter implements ChatProviderInterface {
   private readonly logger = new Logger(MatrixChatProviderAdapter.name);
   private readonly tracer = trace.getTracer('matrix-chat-provider-adapter');
 
-  constructor(private readonly matrixService: MatrixService) {}
+  constructor(
+    private readonly matrixUserService: MatrixUserService,
+    private readonly matrixRoomService: MatrixRoomService,
+    private readonly matrixMessageService: MatrixMessageService,
+  ) {}
 
   @Trace('matrix-chat-provider.createRoom')
   async createRoom(options: CreateRoomOptions): Promise<RoomInfo> {
     try {
-      return await this.matrixService.createRoom(options);
+      return await this.matrixRoomService.createRoom(options);
     } catch (error) {
       this.logger.error(
         `Failed to create Matrix room: ${error.message}`,
@@ -46,7 +52,7 @@ export class MatrixChatProviderAdapter implements ChatProviderInterface {
     end: string;
   }> {
     try {
-      return await this.matrixService.getRoomMessages(
+      return await this.matrixMessageService.getRoomMessages(
         roomId,
         limit,
         from,
@@ -64,7 +70,7 @@ export class MatrixChatProviderAdapter implements ChatProviderInterface {
   @Trace('matrix-chat-provider.sendMessage')
   async sendMessage(options: SendMessageOptions): Promise<string> {
     try {
-      return await this.matrixService.sendMessage(options);
+      return await this.matrixMessageService.sendMessage(options);
     } catch (error) {
       this.logger.error(
         `Failed to send Matrix message: ${error.message}`,
@@ -77,7 +83,7 @@ export class MatrixChatProviderAdapter implements ChatProviderInterface {
   @Trace('matrix-chat-provider.inviteUser')
   async inviteUser(options: { roomId: string; userId: string }): Promise<void> {
     try {
-      await this.matrixService.inviteUser(options);
+      await this.matrixRoomService.inviteUser(options.roomId, options.userId);
     } catch (error) {
       this.logger.error(
         `Failed to invite user to Matrix room: ${error.message}`,
@@ -95,7 +101,12 @@ export class MatrixChatProviderAdapter implements ChatProviderInterface {
     deviceId?: string,
   ): Promise<void> {
     try {
-      await this.matrixService.joinRoom(roomId, userId, accessToken, deviceId);
+      await this.matrixRoomService.joinRoom(
+        roomId,
+        userId,
+        accessToken,
+        deviceId,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to join Matrix room: ${error.message}`,
@@ -108,7 +119,7 @@ export class MatrixChatProviderAdapter implements ChatProviderInterface {
   @Trace('matrix-chat-provider.removeUserFromRoom')
   async removeUserFromRoom(roomId: string, userId: string): Promise<void> {
     try {
-      await this.matrixService.removeUserFromRoom(roomId, userId);
+      await this.matrixRoomService.removeUserFromRoom(roomId, userId);
     } catch (error) {
       this.logger.error(
         `Failed to remove user from Matrix room: ${error.message}`,
@@ -121,7 +132,7 @@ export class MatrixChatProviderAdapter implements ChatProviderInterface {
   @Trace('matrix-chat-provider.createUser')
   async createUser(options: CreateUserOptions): Promise<UserInfo> {
     try {
-      return await this.matrixService.createUser(options);
+      return await this.matrixUserService.createUser(options);
     } catch (error) {
       this.logger.error(
         `Failed to create Matrix user: ${error.message}`,
@@ -139,7 +150,7 @@ export class MatrixChatProviderAdapter implements ChatProviderInterface {
     deviceId?: string,
   ): Promise<void> {
     try {
-      await this.matrixService.setUserDisplayName(
+      await this.matrixUserService.setUserDisplayName(
         userId,
         accessToken,
         displayName,
@@ -157,7 +168,7 @@ export class MatrixChatProviderAdapter implements ChatProviderInterface {
   @Trace('matrix-chat-provider.getUserDisplayName')
   async getUserDisplayName(userId: string): Promise<string | null> {
     try {
-      return await this.matrixService.getUserDisplayName(userId);
+      return await this.matrixUserService.getUserDisplayName(userId);
     } catch (error) {
       this.logger.error(
         `Failed to get Matrix user display name: ${error.message}`,
@@ -174,7 +185,22 @@ export class MatrixChatProviderAdapter implements ChatProviderInterface {
     deviceId?: string;
   }): Promise<void> {
     try {
-      await this.matrixService.startClient(options);
+      // Get the user's slug from the Matrix user ID
+      // Matrix user IDs are in the format @username:server
+      // For our case, we need to extract the username part which includes the slug
+      const userIdParts = options.userId.split(':')[0];
+      if (!userIdParts) {
+        throw new Error('Invalid Matrix user ID format');
+      }
+
+      // Extract slug from the username part (@om_SLUG)
+      const userSlug = userIdParts.replace('@om_', '');
+
+      // Create a temporary client using the extracted userSlug
+      const client = await this.matrixUserService.getClientForUser(userSlug);
+      if (client) {
+        await client.startClient();
+      }
     } catch (error) {
       this.logger.error(
         `Failed to start Matrix client: ${error.message}`,
@@ -193,7 +219,7 @@ export class MatrixChatProviderAdapter implements ChatProviderInterface {
     deviceId?: string,
   ): Promise<void> {
     try {
-      await this.matrixService.sendTypingNotification(
+      await this.matrixMessageService.sendTypingNotification(
         roomId,
         userId,
         accessToken,

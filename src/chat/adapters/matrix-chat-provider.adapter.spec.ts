@@ -1,14 +1,21 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MatrixChatProviderAdapter } from './matrix-chat-provider.adapter';
-import { MatrixService } from '../../matrix/matrix.service';
-import { CreateRoomOptions, SendMessageOptions } from '../interfaces/chat-provider.interface';
+import { MatrixUserService } from '../../matrix/services/matrix-user.service';
+import { MatrixRoomService } from '../../matrix/services/matrix-room.service';
+import { MatrixMessageService } from '../../matrix/services/matrix-message.service';
+import {
+  CreateRoomOptions,
+  SendMessageOptions,
+} from '../interfaces/chat-provider.interface';
 import { Logger } from '@nestjs/common';
 
 // Create simplified tests focused on correct behavior, not mocking
 
 describe('MatrixChatProviderAdapter', () => {
   let adapter: MatrixChatProviderAdapter;
-  let matrixService: MatrixService;
+  let matrixUserService: MatrixUserService;
+  let matrixRoomService: MatrixRoomService;
+  let matrixMessageService: MatrixMessageService;
 
   // Mock the Logger class
   jest.mock('@nestjs/common', () => {
@@ -23,35 +30,54 @@ describe('MatrixChatProviderAdapter', () => {
     };
   });
 
-  const mockMatrixService = {
-    createRoom: jest.fn(),
-    getRoomMessages: jest.fn(),
-    sendMessage: jest.fn(),
-    inviteUser: jest.fn(),
-    joinRoom: jest.fn(),
-    removeUserFromRoom: jest.fn(),
+  const mockMatrixUserService = {
     createUser: jest.fn(),
     setUserDisplayName: jest.fn(),
     getUserDisplayName: jest.fn(),
-    startClient: jest.fn(),
+    getClientForUser: jest.fn(),
+    releaseClientForUser: jest.fn(),
+  };
+
+  const mockMatrixRoomService = {
+    createRoom: jest.fn(),
+    inviteUser: jest.fn(),
+    joinRoom: jest.fn(),
+    removeUserFromRoom: jest.fn(),
+    setRoomPowerLevels: jest.fn(),
+  };
+
+  const mockMatrixMessageService = {
+    sendMessage: jest.fn(),
+    getRoomMessages: jest.fn(),
     sendTypingNotification: jest.fn(),
   };
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MatrixChatProviderAdapter,
         {
-          provide: MatrixService,
-          useValue: mockMatrixService,
+          provide: MatrixUserService,
+          useValue: mockMatrixUserService,
+        },
+        {
+          provide: MatrixRoomService,
+          useValue: mockMatrixRoomService,
+        },
+        {
+          provide: MatrixMessageService,
+          useValue: mockMatrixMessageService,
         },
       ],
     }).compile();
 
     adapter = module.get<MatrixChatProviderAdapter>(MatrixChatProviderAdapter);
-    matrixService = module.get<MatrixService>(MatrixService);
+    matrixUserService = module.get<MatrixUserService>(MatrixUserService);
+    matrixRoomService = module.get<MatrixRoomService>(MatrixRoomService);
+    matrixMessageService =
+      module.get<MatrixMessageService>(MatrixMessageService);
   });
 
   it('should be defined', () => {
@@ -67,20 +93,20 @@ describe('MatrixChatProviderAdapter', () => {
         isPublic: false,
         inviteUserIds: ['@user1:matrix.org'],
       };
-      
+
       const mockResponse = {
         roomId: '!roomId:matrix.org',
         name: 'Test Room',
         topic: 'Test Topic',
       };
-      
-      mockMatrixService.createRoom.mockResolvedValueOnce(mockResponse);
+
+      mockMatrixRoomService.createRoom.mockResolvedValueOnce(mockResponse);
 
       // Act
       const result = await adapter.createRoom(options);
 
       // Assert
-      expect(mockMatrixService.createRoom).toHaveBeenCalledWith(options);
+      expect(mockMatrixRoomService.createRoom).toHaveBeenCalledWith(options);
       expect(result).toEqual(mockResponse);
     });
 
@@ -90,12 +116,14 @@ describe('MatrixChatProviderAdapter', () => {
         name: 'Test Room',
         topic: 'Test Topic',
       };
-      
+
       const error = new Error('Failed to create room');
-      mockMatrixService.createRoom.mockRejectedValueOnce(error);
+      mockMatrixRoomService.createRoom.mockRejectedValueOnce(error);
 
       // Act & Assert
-      await expect(adapter.createRoom(options)).rejects.toThrow('Failed to create chat room');
+      await expect(adapter.createRoom(options)).rejects.toThrow(
+        'Failed to create chat room',
+      );
     });
   });
 
@@ -106,20 +134,25 @@ describe('MatrixChatProviderAdapter', () => {
       const limit = 50;
       const from = 'token123';
       const userId = '@user1:matrix.org';
-      
+
       const mockResponse = {
         messages: [{ id: 'msg1' }],
         end: 'token456',
       };
-      
-      mockMatrixService.getRoomMessages.mockResolvedValueOnce(mockResponse);
+
+      mockMatrixMessageService.getRoomMessages.mockResolvedValueOnce(
+        mockResponse,
+      );
 
       // Act
       const result = await adapter.getRoomMessages(roomId, limit, from, userId);
 
       // Assert
-      expect(mockMatrixService.getRoomMessages).toHaveBeenCalledWith(
-        roomId, limit, from, userId
+      expect(mockMatrixMessageService.getRoomMessages).toHaveBeenCalledWith(
+        roomId,
+        limit,
+        from,
+        userId,
       );
       expect(result).toEqual(mockResponse);
     });
@@ -128,12 +161,14 @@ describe('MatrixChatProviderAdapter', () => {
       // Arrange
       const roomId = '!roomId:matrix.org';
       const limit = 50;
-      
+
       const error = new Error('Failed to get messages');
-      mockMatrixService.getRoomMessages.mockRejectedValueOnce(error);
+      mockMatrixMessageService.getRoomMessages.mockRejectedValueOnce(error);
 
       // Act & Assert
-      await expect(adapter.getRoomMessages(roomId, limit)).rejects.toThrow('Failed to get messages');
+      await expect(adapter.getRoomMessages(roomId, limit)).rejects.toThrow(
+        'Failed to get messages',
+      );
     });
   });
 
@@ -147,15 +182,17 @@ describe('MatrixChatProviderAdapter', () => {
         accessToken: 'access_token_123',
         body: 'Hello world',
       };
-      
+
       const mockResponse = '$eventId1:matrix.org';
-      mockMatrixService.sendMessage.mockResolvedValueOnce(mockResponse);
+      mockMatrixMessageService.sendMessage.mockResolvedValueOnce(mockResponse);
 
       // Act
       const result = await adapter.sendMessage(options);
 
       // Assert
-      expect(mockMatrixService.sendMessage).toHaveBeenCalledWith(options);
+      expect(mockMatrixMessageService.sendMessage).toHaveBeenCalledWith(
+        options,
+      );
       expect(result).toEqual(mockResponse);
     });
 
@@ -167,12 +204,14 @@ describe('MatrixChatProviderAdapter', () => {
         userId: '@user1:matrix.org',
         accessToken: 'access_token_123',
       };
-      
+
       const error = new Error('Failed to send message');
-      mockMatrixService.sendMessage.mockRejectedValueOnce(error);
+      mockMatrixMessageService.sendMessage.mockRejectedValueOnce(error);
 
       // Act & Assert
-      await expect(adapter.sendMessage(options)).rejects.toThrow('Failed to send message');
+      await expect(adapter.sendMessage(options)).rejects.toThrow(
+        'Failed to send message',
+      );
     });
   });
 

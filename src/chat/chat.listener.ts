@@ -29,14 +29,14 @@ export class ChatListener {
         this.logger.error('Tenant ID is required in the event payload');
         throw new Error('Tenant ID is required');
       }
-      
+
       // Use the modified method with tenant ID
       await this.discussionService.addMemberToEventDiscussionBySlug(
         params.eventSlug,
         params.userSlug,
-        params.tenantId
+        params.tenantId,
       );
-      
+
       this.logger.log(
         `Added user ${params.userSlug} to event ${params.eventSlug} chat room in tenant ${params.tenantId}`,
       );
@@ -62,13 +62,13 @@ export class ChatListener {
         this.logger.error('Tenant ID is required in the event payload');
         throw new Error('Tenant ID is required');
       }
-      
+
       await this.discussionService.removeMemberFromEventDiscussionBySlug(
         params.eventSlug,
         params.userSlug,
-        params.tenantId
+        params.tenantId,
       );
-      
+
       this.logger.log(
         `Removed user ${params.userSlug} from event ${params.eventSlug} chat room in tenant ${params.tenantId}`,
       );
@@ -126,8 +126,8 @@ export class ChatListener {
   @OnEvent('chat.event.created')
   async handleChatEventCreated(params: {
     eventSlug: string;
-    userSlug?: string;  // Make userSlug optional for tests
-    userId?: number;     // Allow userId as an alternative to userSlug
+    userSlug?: string; // Make userSlug optional for tests
+    userId?: number; // Allow userId as an alternative to userSlug
     eventName: string;
     eventVisibility: string;
     tenantId?: string;
@@ -137,39 +137,42 @@ export class ChatListener {
 
     try {
       // First check the tenantId
-      this.logger.log(`TenantID check: ${params.tenantId ? 'PRESENT' : 'MISSING'}`);
+      this.logger.log(
+        `TenantID check: ${params.tenantId ? 'PRESENT' : 'MISSING'}`,
+      );
       this.logger.log(`TenantID value: "${params.tenantId}"`);
-      
+
       // Tenant ID is required in all environments
       if (!params.tenantId) {
         this.logger.error('Tenant ID is required in the event payload');
         throw new Error('Tenant ID is required');
       }
-      
+
       const tenantId = params.tenantId;
       this.logger.log(`Using tenant ID: ${tenantId}`);
-      
+
       // Double check all required parameters
       if (!params.eventSlug) {
         this.logger.error('Event slug is required');
         throw new Error('Event slug is required');
       }
-      
+
       let eventId: number | null = null;
       let userId: number | null = null;
-      
+
       // Handle looking up by userId if userSlug is not provided
       if (!params.userSlug && params.userId) {
         this.logger.log(`Using userId ${params.userId} instead of userSlug`);
         userId = params.userId;
-        
+
         // Find the event by slug
-        const dataSource = await this.tenantConnectionService.getTenantConnection(tenantId);
+        const dataSource =
+          await this.tenantConnectionService.getTenantConnection(tenantId);
         const eventRepo = dataSource.getRepository(EventEntity);
         const event = await eventRepo.findOne({
           where: { slug: params.eventSlug },
         });
-        
+
         if (event) {
           eventId = event.id;
         } else {
@@ -181,9 +184,9 @@ export class ChatListener {
         const result = await this.discussionService.getIdsFromSlugsWithTenant(
           params.eventSlug,
           params.userSlug,
-          tenantId
+          tenantId,
         );
-        
+
         eventId = result.eventId;
         userId = result.userId;
       } else {
@@ -193,9 +196,9 @@ export class ChatListener {
 
       if (eventId && userId) {
         await this.chatRoomService.createEventChatRoomWithTenant(
-          eventId, 
-          userId, 
-          tenantId
+          eventId,
+          userId,
+          tenantId,
         );
         this.logger.log(
           `Created chat room for event ${params.eventSlug} by user ID ${userId} in tenant ${tenantId}`,

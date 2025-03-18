@@ -14,13 +14,16 @@ import {
 import { REQUEST } from '@nestjs/core';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JWTAuthGuard } from '../auth/auth.guard';
-import { MatrixService } from './matrix.service';
 import { MatrixUserInfo } from './types/matrix.types';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 // User entity is imported by the UserService
 import { UserService } from '../user/user.service';
 import * as crypto from 'crypto';
 import { Request } from 'express';
+import { MatrixUserService } from './services/matrix-user.service';
+import { MatrixRoomService } from './services/matrix-room.service';
+import { MatrixMessageService } from './services/matrix-message.service';
+import { MatrixGateway } from './matrix.gateway';
 
 @ApiTags('Matrix')
 @Controller({
@@ -30,7 +33,10 @@ export class MatrixController {
   private readonly logger = new Logger(MatrixController.name);
 
   constructor(
-    private readonly matrixService: MatrixService,
+    private readonly matrixUserService: MatrixUserService,
+    private readonly matrixRoomService: MatrixRoomService,
+    private readonly matrixMessageService: MatrixMessageService,
+    private readonly matrixGateway: MatrixGateway,
     private readonly userService: UserService,
     @Inject(REQUEST) private readonly request: any,
   ) {}
@@ -95,7 +101,7 @@ export class MatrixController {
     try {
       // Create the Matrix user
       const matrixUserInfo: MatrixUserInfo =
-        await this.matrixService.createUser({
+        await this.matrixUserService.createUser({
           username: matrixUsername,
           password,
           displayName,
@@ -103,10 +109,11 @@ export class MatrixController {
 
       // Make sure display name is set properly (sometimes it doesn't get set during creation)
       try {
-        await this.matrixService.setUserDisplayNameDirect(
+        await this.matrixUserService.setUserDisplayName(
           matrixUserInfo.userId,
           matrixUserInfo.accessToken,
           displayName,
+          matrixUserInfo.deviceId,
         );
         this.logger.log(
           `Set Matrix display name for ${matrixUserInfo.userId} to "${displayName}"`,
@@ -260,9 +267,17 @@ export class MatrixController {
         const tenantId = this.request.tenantId;
         this.logger.debug(`Using tenant ID for Matrix client: ${tenantId}`);
 
-        // Get Matrix client for this user using credentials from database
-        const matrixClient = await this.matrixService.getClientForUser(
-          user.id,
+        // Get full user info to get the slug
+        const fullUser = await this.userService.findById(user.id, tenantId);
+
+        if (!fullUser) {
+          throw new Error(`User with ID ${user.id} not found`);
+        }
+
+        // Get Matrix client for this user using credentials from database and slug
+        const matrixClient = await this.matrixUserService.getClientForUser(
+          fullUser.slug,
+          this.userService,
           tenantId,
         );
 
@@ -296,7 +311,7 @@ export class MatrixController {
         }
 
         // Send typing notification
-        await this.matrixService.sendTypingNotification(
+        await this.matrixMessageService.sendTypingNotification(
           roomId,
           fullUser.matrixUserId,
           fullUser.matrixAccessToken,
@@ -367,16 +382,13 @@ export class MatrixController {
         timestamp: Date.now(),
       };
 
-      // Access the Matrix gateway through the service
-      // This is a bit of a hack to access the private property
-      const matrixGateway = (this.matrixService as any).matrixGateway;
-
-      if (!matrixGateway) {
+      // Use the Matrix gateway directly
+      if (!this.matrixGateway) {
         throw new Error('Matrix gateway not available for broadcasting');
       }
 
       // Broadcast the event directly
-      matrixGateway.broadcastRoomEvent(roomId, testEvent);
+      this.matrixGateway.broadcastRoomEvent(roomId, testEvent);
 
       return {
         success: true,

@@ -23,7 +23,7 @@ export class EventListener {
     this.logger.log('event.created', {
       id: params.id,
       slug: params.slug,
-      tenantId: params.tenantId
+      tenantId: params.tenantId,
     });
 
     // Get the tenant ID from the request context if not provided in the event
@@ -32,20 +32,22 @@ export class EventListener {
     // Emit an event for the chat module to handle chat room creation
     // instead of directly calling the chat room service
     try {
-      this.logger.log(`Emitting chat.event.created event for event ${params.slug}`);
-      
+      this.logger.log(
+        `Emitting chat.event.created event for event ${params.slug}`,
+      );
+
       // Create payload with all required fields including tenantId
       const payload = {
         eventSlug: params.slug,
-        userSlug: params.user?.slug,  // Include slug if available
-        userId: params.user?.id,      // Always include userId as a fallback
+        userSlug: params.user?.slug, // Include slug if available
+        userId: params.user?.id, // Always include userId as a fallback
         eventName: params.name,
         eventVisibility: params.visibility,
-        tenantId: tenantId  // Use the tenant ID from request context if not in params
+        tenantId: tenantId, // Use the tenant ID from request context if not in params
       };
-      
+
       this.logger.log(`Chat event payload: ${JSON.stringify(payload)}`);
-      
+
       // Emit the event with our prepared payload
       this.eventEmitter.emit('chat.event.created', payload);
     } catch (error) {
@@ -97,13 +99,13 @@ export class EventListener {
       if (attendee && attendee.status === EventAttendeeStatus.Confirmed) {
         // Emit an event for the chat module to handle using slugs
         // Get tenantId from params or request context
-      const tenantId = params.tenantId || this.request?.tenantId;
-      
-      this.eventEmitter.emit('chat.event.member.add', {
-        eventSlug: params.eventSlug || attendee.event.slug,
-        userSlug: params.userSlug || attendee.user.slug,
-        tenantId: tenantId
-      });
+        const tenantId = params.tenantId || this.request?.tenantId;
+
+        this.eventEmitter.emit('chat.event.member.add', {
+          eventSlug: params.eventSlug || attendee.event.slug,
+          userSlug: params.userSlug || attendee.user.slug,
+          tenantId: tenantId,
+        });
         this.logger.log(
           `Emitted chat.event.member.add event for user ${attendee.user.slug} in event ${attendee.event.slug}`,
         );
@@ -114,7 +116,7 @@ export class EventListener {
       );
     }
   }
-  
+
   @OnEvent('event.attendee.added')
   async handleEventAttendeeAddedEvent(params: {
     eventId: number;
@@ -130,12 +132,12 @@ export class EventListener {
       if (params.status === EventAttendeeStatus.Confirmed) {
         // Get tenantId from params or request context
         const tenantId = params.tenantId || this.request?.tenantId;
-        
+
         // Emit an event for the chat module to handle using slugs
         this.eventEmitter.emit('chat.event.member.add', {
           eventSlug: params.eventSlug,
           userSlug: params.userSlug,
-          tenantId: tenantId
+          tenantId: tenantId,
         });
         this.logger.log(
           `Emitted chat.event.member.add event for user ${params.userSlug} in event ${params.eventSlug}`,
@@ -187,12 +189,12 @@ export class EventListener {
       ) {
         // Get tenantId from params or request context
         const tenantId = params.tenantId || this.request?.tenantId;
-        
+
         // Emit an event for the chat module to handle
         this.eventEmitter.emit('chat.event.member.add', {
           eventSlug,
           userSlug,
-          tenantId: tenantId
+          tenantId: tenantId,
         });
         this.logger.log(
           `Emitted chat.event.member.add event for user ${userSlug} in event ${eventSlug}`,
@@ -206,12 +208,12 @@ export class EventListener {
       ) {
         // Get tenantId from params or request context
         const tenantId = params.tenantId || this.request?.tenantId;
-        
+
         // Emit an event for the chat module to handle
         this.eventEmitter.emit('chat.event.member.remove', {
           eventSlug,
           userSlug,
-          tenantId: tenantId
+          tenantId: tenantId,
         });
         this.logger.log(
           `Emitted chat.event.member.remove event for user ${userSlug} in event ${eventSlug}`,
@@ -245,12 +247,12 @@ export class EventListener {
       if (attendee && attendee.event && attendee.user) {
         // Get tenantId from params or request context
         const tenantId = params.tenantId || this.request?.tenantId;
-        
+
         // Emit an event for the chat module to handle using slugs
         this.eventEmitter.emit('chat.event.member.remove', {
           eventSlug: attendee.event.slug,
           userSlug: attendee.user.slug,
-          tenantId: tenantId
+          tenantId: tenantId,
         });
         this.logger.log(
           `Emitted chat.event.member.remove event for user ${attendee.user.slug} in event ${attendee.event.slug}`,
