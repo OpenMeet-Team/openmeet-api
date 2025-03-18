@@ -47,6 +47,6 @@ echo "Running E2E tests..."
 npm run test:e2e -- --runInBand
 
 # Keep the container running for debugging
-echo "Tests completed, keeping container alive for debugging..."
-sleep 90000
+# echo "Tests completed, keeping container alive for debugging..."
+# sleep 90000
 
