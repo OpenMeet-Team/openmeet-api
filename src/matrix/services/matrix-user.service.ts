@@ -390,10 +390,14 @@ export class MatrixUserService
                   content: event.getContent(),
                   event_id: event.getId(),
                   origin_server_ts: event.getTs(),
+                  user_slug: userSlug, // Include user slug for context
+                  tenant_id: tenantId || 'default', // Include tenant ID for multi-tenancy
                 };
                 
                 // Broadcast the event to all connected clients
                 this.matrixGateway.broadcastRoomEvent(room.roomId, eventData);
+                this.logger.debug(`Broadcast Matrix message event for room ${room.roomId} (tenant: ${tenantId || 'default'})`);
+                
               } else {
                 this.logger.warn('Could not get MatrixGateway instance to broadcast event');
               }

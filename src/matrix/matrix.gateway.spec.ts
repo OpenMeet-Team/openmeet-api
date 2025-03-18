@@ -41,14 +41,14 @@ class MockSocket extends EventEmitter {
 describe('MatrixGateway', () => {
   let gateway: MatrixGateway;
   let matrixUserService: MatrixUserService;
-  let _matrixRoomService: MatrixRoomService;
-  let _matrixMessageService: MatrixMessageService;
+  let matrixRoomService: MatrixRoomService;
+  let matrixMessageService: MatrixMessageService;
   let _matrixCoreService: MatrixCoreService;
   let _userService: UserService;
   let _chatRoomService: ChatRoomService;
   let _jwtService: JwtService;
   let mockClient: MockSocket;
-  let mockServer: Partial<Server>;
+  let mockServer: Partial<any>; // Updated to any type to avoid Server type error
 
   // Add missing matrix client method implementations
   const mockMatrixClient = {
@@ -186,8 +186,8 @@ describe('MatrixGateway', () => {
 
     gateway = module.get<MatrixGateway>(MatrixGateway);
     matrixUserService = module.get<MatrixUserService>(MatrixUserService);
-    _matrixRoomService = module.get<MatrixRoomService>(MatrixRoomService);
-    _matrixMessageService =
+    matrixRoomService = module.get<MatrixRoomService>(MatrixRoomService);
+    matrixMessageService =
       module.get<MatrixMessageService>(MatrixMessageService);
     _matrixCoreService = module.get<MatrixCoreService>(MatrixCoreService);
     _userService = module.get<UserService>(UserService);
@@ -195,7 +195,7 @@ describe('MatrixGateway', () => {
     _jwtService = module.get<JwtService>(JwtService);
 
     // Setting private properties for testing
-    (gateway as any).server = mockServer as Server;
+    (gateway as any).server = mockServer;
     (gateway as any).logger = new Logger('MatrixGateway');
   });
 

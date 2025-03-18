@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { MatrixUserService } from './matrix-user.service';
 import { MatrixCoreService } from './matrix-core.service';
 import { ModuleRef } from '@nestjs/core';
+import { forwardRef } from '@nestjs/common';
+import { MatrixGateway } from '../matrix.gateway';
 import axios from 'axios';
 
 // Mock axios
@@ -121,6 +123,12 @@ describe('MatrixUserService', () => {
           useValue: {
             get: jest.fn(),
             resolve: jest.fn(),
+          },
+        },
+        {
+          provide: MatrixGateway,
+          useValue: {
+            broadcastRoomEvent: jest.fn(),
           },
         },
       ],

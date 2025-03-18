@@ -12,9 +12,9 @@ import { UserEntity } from '../user/infrastructure/persistence/relational/entiti
 describe('MatrixController', () => {
   let controller: MatrixController;
   let matrixUserService: MatrixUserService;
-  let _matrixRoomService: MatrixRoomService;
-  let _matrixMessageService: MatrixMessageService;
-  let _matrixGateway: MatrixGateway;
+  let matrixRoomService: MatrixRoomService;
+  let matrixMessageService: MatrixMessageService;
+  let matrixGateway: MatrixGateway;
   let userService: UserService;
 
   // Mock data
