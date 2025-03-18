@@ -74,6 +74,13 @@ export class ChatRoomEntity extends EntityRelationalHelper {
   @ManyToOne(() => GroupEntity, { nullable: true })
   @JoinColumn({ name: 'groupId' })
   group: GroupEntity;
+  
+  // For direct chat rooms, we need to track both users
+  @Column({ type: 'integer', nullable: true })
+  user1Id: number;
+  
+  @Column({ type: 'integer', nullable: true })
+  user2Id: number;
 
   @ManyToMany(() => UserEntity)
   @JoinTable({

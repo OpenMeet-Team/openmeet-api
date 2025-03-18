@@ -22,6 +22,8 @@ import { GroupEntity } from '../../group/infrastructure/persistence/relational/e
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
 import { Trace } from '../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
+import { EventQueryService } from '../../event/services/event-query.service';
+import { GroupService } from '../../group/group.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class ChatRoomService {
@@ -123,6 +125,10 @@ export class ChatRoomService {
     private readonly groupMemberService: GroupMemberService,
     @Inject(forwardRef(() => EventAttendeeService))
     private readonly eventAttendeeService: EventAttendeeService,
+    @Inject(forwardRef(() => EventQueryService))
+    private readonly eventQueryService: EventQueryService,
+    @Inject(forwardRef(() => GroupService))
+    private readonly groupService: GroupService,
   ) {
     void this.initializeRepositories();
   }
@@ -139,25 +145,15 @@ export class ChatRoomService {
   }
 
   /**
-   * Create a chat room for an event
+   * Find or create a chat room for an event
+   * This method is used by both tests and production code
    */
-  @Trace('chat-room.createEventChatRoom')
-  async createEventChatRoom(
+  @Trace('chat-room.getOrCreateEventChatRoom')
+  async getOrCreateEventChatRoom(
     eventId: number,
-    creatorId: number,
   ): Promise<ChatRoomEntity> {
     await this.initializeRepositories();
-
-    // Get the event
-    const event = await this.eventRepository.findOne({
-      where: { id: eventId },
-      relations: ['user'],
-    });
-
-    if (!event) {
-      throw new Error(`Event with id ${eventId} not found`);
-    }
-
+    
     // Check if a chat room already exists for this event
     const existingRoom = await this.chatRoomRepository.findOne({
       where: { event: { id: eventId } },
@@ -167,8 +163,82 @@ export class ChatRoomService {
       return existingRoom;
     }
 
+    // Get the event info using the EventQueryService
+    const tenantId = this.request.tenantId;
+    const event = await this.eventQueryService.findById(eventId, tenantId);
+    
+    if (!event) {
+      throw new Error(`Event with id ${eventId} not found`);
+    }
+
+    if (!event.user || !event.user.id) {
+      throw new Error(`Event with id ${eventId} has no creator`);
+    }
+
+    // Create a new chat room using the existing service method
+    // We'll use the event creator as the chat room creator
+    return this.createEventChatRoom(eventId, event.user.id);
+  }
+  
+  /**
+   * Create a chat room for an event
+   */
+  @Trace('chat-room.createEventChatRoom')
+  async createEventChatRoom(
+    eventId: number,
+    creatorId: number,
+  ): Promise<ChatRoomEntity> {
+    await this.initializeRepositories();
+    const tenantId = this.request.tenantId;
+    
+    // Use the tenant-aware version with the current tenant ID
+    return this.createEventChatRoomWithTenant(eventId, creatorId, tenantId);
+  }
+
+  /**
+   * Tenant-aware version of createEventChatRoom that doesn't rely on the request context
+   * This is useful for event handlers where the request context is not available
+   */
+  @Trace('chat-room.createEventChatRoomWithTenant')
+  async createEventChatRoomWithTenant(
+    eventId: number,
+    creatorId: number,
+    tenantId?: string,
+  ): Promise<ChatRoomEntity> {
+    // If tenantId is not provided, try to use the one from the request
+    const effectiveTenantId = tenantId || this.request?.tenantId;
+    
+    if (!effectiveTenantId) {
+      this.logger.error('Neither explicit tenantId nor request.tenantId is available');
+      throw new Error('Tenant ID is required');
+    }
+
+    // Get a connection for the tenant
+    const dataSource = await this.tenantConnectionService.getTenantConnection(effectiveTenantId);
+    const chatRoomRepo = dataSource.getRepository(ChatRoomEntity);
+    const eventRepo = dataSource.getRepository(EventEntity);
+
+    // Get the event
+    const event = await eventRepo.findOne({
+      where: { id: eventId },
+      relations: ['user'],
+    });
+
+    if (!event) {
+      throw new Error(`Event with id ${eventId} not found in tenant ${tenantId}`);
+    }
+
+    // Check if a chat room already exists for this event
+    const existingRoom = await chatRoomRepo.findOne({
+      where: { event: { id: eventId } },
+    });
+
+    if (existingRoom) {
+      return existingRoom;
+    }
+
     // Get the creator user
-    const creator = await this.userService.getUserById(creatorId);
+    const creator = await this.userService.getUserById(creatorId, tenantId);
 
     // Create a chat room in Matrix
     // Using the event slug for a unique, stable identifier
@@ -190,7 +260,7 @@ export class ChatRoomService {
     });
 
     // Create a chat room entity
-    const chatRoom = this.chatRoomRepository.create({
+    const chatRoom = chatRoomRepo.create({
       name: `event-${event.slug}`,
       topic: `Discussion for ${event.name}`,
       matrixRoomId: roomInfo.roomId,
@@ -210,12 +280,13 @@ export class ChatRoomService {
     });
 
     // Save the chat room
-    await this.chatRoomRepository.save(chatRoom);
+    await chatRoomRepo.save(chatRoom);
 
     // Update the event with the Matrix room ID
     event.matrixRoomId = roomInfo.roomId;
-    await this.eventRepository.save(event);
+    await eventRepo.save(event);
 
+    this.logger.log(`Created chat room for event ${event.slug} in tenant ${tenantId}`);
     return chatRoom;
   }
 
@@ -477,6 +548,70 @@ export class ChatRoomService {
       relations: ['creator', 'event'],
     });
   }
+  
+  /**
+   * Get a chat room for an event by its slug
+   * Uses the EventQueryService to look up the event by slug first
+   */
+  @Trace('chat-room.getEventChatRoomBySlug')
+  async getEventChatRoomBySlug(eventSlug: string): Promise<ChatRoomEntity | null> {
+    await this.initializeRepositories();
+    
+    try {
+      // Use the EventQueryService to get the event by slug
+      const event = await this.eventQueryService.findEventBySlug(eventSlug);
+      
+      if (!event) {
+        this.logger.debug(`Event with slug ${eventSlug} not found`);
+        return null;
+      }
+      
+      // Find the chat room for this event
+      const chatRoom = await this.chatRoomRepository.findOne({
+        where: { event: { id: event.id } },
+        relations: ['creator', 'event'],
+      });
+      
+      return chatRoom;
+    } catch (error) {
+      this.logger.warn(`Error finding event by slug ${eventSlug}: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Find or create a chat room for a group
+   * This method is used by both tests and production code
+   */
+  @Trace('chat-room.getOrCreateGroupChatRoom')
+  async getOrCreateGroupChatRoom(
+    groupId: number,
+  ): Promise<ChatRoomEntity> {
+    await this.initializeRepositories();
+    
+    // Check if a chat room already exists for this group
+    const existingRoom = await this.chatRoomRepository.findOne({
+      where: { group: { id: groupId } },
+    });
+
+    if (existingRoom) {
+      return existingRoom;
+    }
+
+    // Get the group info with createdBy relation using the GroupService
+    const group = await this.groupService.findOne(groupId);
+    if (!group) {
+      throw new Error(`Group with id ${groupId} not found`);
+    }
+
+    if (!group.createdBy || !group.createdBy.id) {
+      throw new Error(`Group with id ${groupId} has no creator`);
+    }
+
+    // Create a new chat room using the existing service method
+    // We'll use the group creator as the chat room creator
+    return this.createGroupChatRoom(groupId, group.createdBy.id);
+  }
 
   /**
    * Create a chat room for a group
@@ -571,7 +706,199 @@ export class ChatRoomService {
       relations: ['creator', 'group'],
     });
   }
+  
+  /**
+   * Find or create a direct chat room between two users
+   * This method is used by both tests and production code
+   */
+  @Trace('chat-room.getOrCreateDirectChatRoom')
+  async getOrCreateDirectChatRoom(
+    user1Id: number,
+    user2Id: number,
+  ): Promise<ChatRoomEntity> {
+    await this.initializeRepositories();
+    
+    // Check if a chat room already exists between these users (in either order)
+    // We need to use the queryBuilder for complex conditions
+    const existingRooms = await this.chatRoomRepository
+      .createQueryBuilder('chatRoom')
+      .where('chatRoom.type = :type', { type: ChatRoomType.DIRECT })
+      .andWhere(
+        '(chatRoom.user1Id = :user1Id AND chatRoom.user2Id = :user2Id) OR (chatRoom.user1Id = :user2Id AND chatRoom.user2Id = :user1Id)',
+        { user1Id, user2Id }
+      )
+      .getMany();
 
+    if (existingRooms.length > 0) {
+      return existingRooms[0];
+    }
+
+    // Get both users using the UserService
+    const user1 = await this.userService.getUserById(user1Id);
+    const user2 = await this.userService.getUserById(user2Id);
+
+    if (!user1 || !user2) {
+      throw new Error(`One or both users not found`);
+    }
+
+    // Ensure first user has Matrix credentials
+    await this.ensureUserHasMatrixCredentials(user1Id);
+
+    // Create a direct room in Matrix
+    const roomName = `Direct: ${user1.firstName || ''} ${user1.lastName || ''} and ${user2.firstName || ''} ${user2.lastName || ''}`;
+    
+    const roomInfo = await this.matrixService.createRoom({
+      name: roomName,
+      topic: 'Direct message conversation',
+      isPublic: false,
+      isDirect: true,
+      // Remove preset - we'll handle that through settings
+      inviteUserIds: user2.matrixUserId ? [user2.matrixUserId] : [],
+    });
+
+    // Create a chat room entity
+    const chatRoom = this.chatRoomRepository.create({
+      matrixRoomId: roomInfo.roomId,
+      name: roomName,
+      type: ChatRoomType.DIRECT,
+      visibility: ChatRoomVisibility.PRIVATE,
+      creator: user1, 
+      user1Id: user1Id,
+      user2Id: user2Id,
+      settings: {
+        historyVisibility: 'shared',
+        guestAccess: false,
+        requireInvitation: true,
+        encrypted: true,
+      },
+    });
+
+    // Save the chat room
+    const savedRoom = await this.chatRoomRepository.save(chatRoom);
+    return savedRoom;
+  }
+  
+  /**
+   * Get a chat room for a group by its slug
+   * Uses the GroupService to look up the group by slug first
+   */
+  @Trace('chat-room.getGroupChatRoomBySlug')
+  async getGroupChatRoomBySlug(groupSlug: string): Promise<ChatRoomEntity | null> {
+    await this.initializeRepositories();
+    
+    try {
+      // Use the GroupService to get the group by slug
+      const group = await this.groupService.findGroupBySlug(groupSlug);
+      
+      if (!group) {
+        this.logger.debug(`Group with slug ${groupSlug} not found`);
+        return null;
+      }
+      
+      // Find the chat room for this group
+      const chatRoom = await this.chatRoomRepository.findOne({
+        where: { group: { id: group.id } },
+        relations: ['creator', 'group'],
+      });
+      
+      return chatRoom;
+    } catch (error) {
+      this.logger.warn(`Error finding group by slug ${groupSlug}: ${error.message}`);
+      return null;
+    }
+  }
+  
+  /**
+   * Add a user to an event chat room using event and user slugs
+   * 
+   * This is the preferred method for user-facing APIs over using numeric IDs
+   * 
+   * @param eventSlug The slug of the event
+   * @param userSlug The slug of the user
+   */
+  @Trace('chat-room.addUserToEventChatRoomBySlug')
+  async addUserToEventChatRoomBySlug(eventSlug: string, userSlug: string): Promise<void> {
+    await this.initializeRepositories();
+    
+    try {
+      // Find the event using the EventQueryService
+      const event = await this.eventQueryService.findEventBySlug(eventSlug);
+      if (!event) {
+        throw new Error(`Event with slug ${eventSlug} not found`);
+      }
+      
+      // Find the user by slug using getUserBySlug
+      const user = await this.userService.getUserBySlug(userSlug);
+      if (!user) {
+        throw new Error(`User with slug ${userSlug} not found`);
+      }
+      
+      // Verify the user is an attendee of the event
+      // Note: We would use findBySlugAndUserSlug if it existed, but we'll use what we have
+      const attendee = await this.eventAttendeeService.findEventAttendeeByUserId(
+        event.id,
+        user.id
+      );
+      
+      if (!attendee) {
+        throw new Error(`User ${userSlug} is not an attendee of event ${eventSlug}`);
+      }
+      
+      // Now use the existing method with the numeric IDs
+      await this.addUserToEventChatRoom(event.id, user.id);
+      
+      this.logger.log(`Added user ${userSlug} to event ${eventSlug} chat room by slug`);
+    } catch (error) {
+      this.logger.error(`Error adding user ${userSlug} to event ${eventSlug} chat room: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Add a user to a group chat room using group and user slugs
+   * 
+   * This is the preferred method for user-facing APIs over using numeric IDs
+   * 
+   * @param groupSlug The slug of the group
+   * @param userSlug The slug of the user
+   */
+  @Trace('chat-room.addUserToGroupChatRoomBySlug')
+  async addUserToGroupChatRoomBySlug(groupSlug: string, userSlug: string): Promise<void> {
+    await this.initializeRepositories();
+    
+    try {
+      // Find the group using the GroupService
+      const group = await this.groupService.findGroupBySlug(groupSlug);
+      if (!group) {
+        throw new Error(`Group with slug ${groupSlug} not found`);
+      }
+      
+      // Find the user by slug using getUserBySlug
+      const user = await this.userService.getUserBySlug(userSlug);
+      if (!user) {
+        throw new Error(`User with slug ${userSlug} not found`);
+      }
+      
+      // Verify the user is a member of the group
+      const member = await this.groupMemberService.findGroupMemberByUserId(
+        group.id,
+        user.id
+      );
+      
+      if (!member) {
+        throw new Error(`User ${userSlug} is not a member of group ${groupSlug}`);
+      }
+      
+      // Now use the existing method with the numeric IDs
+      await this.addUserToGroupChatRoom(group.id, user.id);
+      
+      this.logger.log(`Added user ${userSlug} to group ${groupSlug} chat room by slug`);
+    } catch (error) {
+      this.logger.error(`Error adding user ${userSlug} to group ${groupSlug} chat room: ${error.message}`);
+      throw error;
+    }
+  }
+  
   /**
    * Add a user to a group chat room, but only if they're a member of the group
    *

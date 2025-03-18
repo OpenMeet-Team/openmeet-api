@@ -267,13 +267,25 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
               accessToken: matrixConfig.adminAccessToken || '',
               useAuthorizationHeader: true,
             });
+            
+            // Debug log the structure of the created client
+            this.logger.debug('Matrix client created with methods', {
+              hasCreateRoom: typeof client.createRoom === 'function',
+              availableMethods: Object.keys(client).filter(k => typeof client[k] === 'function').join(', '),
+              type: typeof client
+            });
+            
             return {
               client,
               userId: this.adminUserId,
             };
           },
           destroy: async (client) => {
-            client.client.stopClient();
+            // Handle both client structures
+            const matrixClient = client.client || client;
+            if (matrixClient && typeof matrixClient.stopClient === 'function') {
+              matrixClient.stopClient();
+            }
             return Promise.resolve();
           },
         },
@@ -951,7 +963,133 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
         `Creating room "${name}" with admin user ${this.adminUserId}`,
       );
 
-      // Try without power level overrides
+      // First try fallback method if no client.client.createRoom is available
+      if (!client.client || typeof client.client.createRoom !== 'function') {
+        // Direct API call as fallback
+        this.logger.debug('Using direct API call fallback for room creation');
+        
+        try {
+          // We'll use the admin API directly
+          const apiUrl = `${this.baseUrl}/_matrix/client/v3/createRoom`;
+          
+          // Get the admin access token - check environment variables first if config is missing
+          let accessToken = this.adminAccessToken;
+          
+          // Log token info (securely)
+          this.logger.debug('Matrix token details:', {
+            hasToken: !!accessToken,
+            tokenLength: accessToken ? accessToken.length : 0,
+            tokenStart: accessToken ? accessToken.substring(0, 3) + '...' : 'none',
+            adminUserId: this.adminUserId
+          });
+          
+          // If token is missing or empty, try environment variable directly
+          if (!accessToken) {
+            accessToken = process.env.MATRIX_ADMIN_ACCESS_TOKEN || '';
+            this.logger.debug('Using access token from environment variable');
+          }
+          
+          if (!accessToken) {
+            throw new Error('No Matrix admin access token available');
+          }
+          
+          // Create the room payload
+          const roomPayload = {
+            name,
+            topic,
+            visibility: isPublic ? 'public' : 'private',
+            preset: isPublic ? 'public_chat' : 'private_chat',
+            is_direct: isDirect,
+            invite: inviteUserIds,
+            initial_state: [
+              {
+                type: 'm.room.guest_access',
+                state_key: '',
+                content: {
+                  guest_access: 'forbidden',
+                },
+              },
+              {
+                type: 'm.room.history_visibility',
+                state_key: '',
+                content: {
+                  history_visibility: 'shared',
+                },
+              },
+            ],
+          };
+          
+          // Log the payload for debugging
+          this.logger.debug('Creating room with payload:', roomPayload);
+          
+          // Make the API request - try both authorization methods
+          try {
+            const response = await axios.post(apiUrl, roomPayload, {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+              },
+            });
+            
+            const roomId = response.data.room_id;
+            this.logger.debug(`Created room ${roomId} via direct API call with Bearer token`);
+            
+            return {
+              roomId,
+              name,
+              topic,
+              invitedMembers: inviteUserIds,
+            };
+          } catch (bearerError) {
+            // Try with X-Access-Token header instead
+            this.logger.debug(`Bearer token auth failed, trying X-Access-Token: ${bearerError.message}`);
+            const response = await axios.post(apiUrl, roomPayload, {
+              headers: {
+                'X-Access-Token': accessToken,
+                'Content-Type': 'application/json',
+              },
+            });
+            
+            const roomId = response.data.room_id;
+            this.logger.debug(`Created room ${roomId} via direct API call with X-Access-Token`);
+            
+            return {
+              roomId,
+              name,
+              topic,
+              invitedMembers: inviteUserIds,
+            };
+          }
+          // We should not reach here - this is just a fallback
+          this.logger.warn('Unexpected code path in createRoom - returning fallback response');
+          return {
+            roomId: 'unknown-room-id',
+            name,
+            topic,
+            invitedMembers: inviteUserIds,
+          };
+        }
+        catch (error) {
+          this.logger.error(`Error creating room via direct API: ${error.message}`, error.stack);
+          
+          // Log detailed client info
+          this.logger.error('Matrix client structure:', {
+            hasClient: !!client,
+            hasClientClient: !!(client && client.client),
+            clientType: typeof client,
+            clientClientType: client ? typeof client.client : 'undefined',
+            clientMethods: client ? Object.keys(client).filter(k => typeof client[k] === 'function').join(', ') : 'none',
+            clientClientMethods: client && client.client ? Object.keys(client.client).filter(k => typeof client.client[k] === 'function').join(', ') : 'none',
+          });
+          
+          throw new Error(`Failed to create Matrix room: ${error.message}`);
+        }
+      }
+      
+      // If we get here, try the normal SDK approach
+      this.logger.debug('Using Matrix SDK createRoom method');
+      
+      // Use the properly nested client object
       const createRoomResponse = await client.client.createRoom({
         name,
         topic,
@@ -989,33 +1127,46 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
       // Now that the room is created, set power levels for the creator if specified
       if (powerLevelContentOverride && powerLevelContentOverride.users) {
         try {
-          // Get current power levels
-          const currentPowerLevels = await client.client.getStateEvent(
-            roomId,
-            'm.room.power_levels' as any,
-            '',
-          );
-
-          // Update with user-specific power levels, keeping Matrix defaults
-          const updatedPowerLevels = {
-            ...currentPowerLevels,
-            users: {
-              ...currentPowerLevels.users,
-              ...powerLevelContentOverride.users,
-            },
-          };
-
-          this.logger.debug(
-            `Setting power levels for room ${roomId}: ${JSON.stringify(updatedPowerLevels)}`,
-          );
-
-          // Update the power levels
-          await client.client.sendStateEvent(
-            roomId,
-            'm.room.power_levels' as any,
-            updatedPowerLevels,
-            '',
-          );
+          // Make sure we're using the right client object
+          const matrixClient = client.client || client;
+          
+          if (!matrixClient.getStateEvent || !matrixClient.sendStateEvent) {
+            this.logger.warn(
+              `Cannot set power levels for room ${roomId}: client methods not available`,
+              {
+                hasGetStateEvent: typeof matrixClient.getStateEvent === 'function',
+                hasSendStateEvent: typeof matrixClient.sendStateEvent === 'function'
+              }
+            );
+          } else {
+            // Get current power levels
+            const currentPowerLevels = await matrixClient.getStateEvent(
+              roomId,
+              'm.room.power_levels' as any,
+              '',
+            );
+  
+            // Update with user-specific power levels, keeping Matrix defaults
+            const updatedPowerLevels = {
+              ...currentPowerLevels,
+              users: {
+                ...currentPowerLevels.users,
+                ...powerLevelContentOverride.users,
+              },
+            };
+  
+            this.logger.debug(
+              `Setting power levels for room ${roomId}: ${JSON.stringify(updatedPowerLevels)}`,
+            );
+  
+            // Update the power levels
+            await matrixClient.sendStateEvent(
+              roomId,
+              'm.room.power_levels' as any,
+              updatedPowerLevels,
+              '',
+            );
+          }
         } catch (err) {
           this.logger.warn(
             `Failed to set power levels for room ${roomId}: ${err.message}`,
@@ -1050,7 +1201,10 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
     const client = await this.clientPool.acquire();
 
     try {
-      await client.client.invite(roomId, userId);
+      // Determine which client object to use - handle both formats
+      const matrixClient = client.client || client;
+      
+      await matrixClient.invite(roomId, userId);
     } catch (error) {
       // Matrix returns 403 when user is already in room, which is not really an error
       // for our purposes - it just means we can skip the invite step
@@ -1080,7 +1234,10 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
     const client = await this.clientPool.acquire();
 
     try {
-      await client.client.kick(
+      // Determine which client object to use - handle both formats
+      const matrixClient = client.client || client;
+      
+      await matrixClient.kick(
         roomId,
         userId,
         'Removed from event/group in OpenMeet',
@@ -1896,6 +2053,9 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
     const client = await this.clientPool.acquire();
 
     try {
+      // Determine which client object to use - handle both formats
+      const matrixClient = client.client || client;
+      
       // Use direct API access
       const url = `${this.baseUrl}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/messages`;
       const params = new URLSearchParams({
@@ -1904,9 +2064,14 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
         ...(from ? { from } : {}),
       });
 
+      // Get access token from client
+      const accessToken = matrixClient.getAccessToken ? 
+        matrixClient.getAccessToken() : 
+        this.adminAccessToken;
+
       const response = await axios.get(`${url}?${params.toString()}`, {
         headers: {
-          Authorization: `Bearer ${client.client.getAccessToken()}`,
+          Authorization: `Bearer ${accessToken}`,
         },
       });
 
@@ -1947,8 +2112,11 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
     const client = await this.clientPool.acquire();
 
     try {
+      // Determine which client object to use - handle both formats
+      const matrixClient = client.client || client;
+      
       // Get current power levels
-      const stateEvent = await client.client.getStateEvent(
+      const stateEvent = await matrixClient.getStateEvent(
         roomId,
         'm.room.power_levels' as any,
         '',
@@ -1965,7 +2133,7 @@ export class MatrixService implements OnModuleInit, OnModuleDestroy {
 
       // Set updated power levels
       // Cast the event type to any to work around TypeScript limitations
-      await client.client.sendStateEvent(
+      await matrixClient.sendStateEvent(
         roomId,
         'm.room.power_levels' as any,
         updatedContent,

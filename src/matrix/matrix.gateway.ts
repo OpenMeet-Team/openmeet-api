@@ -898,6 +898,50 @@ export class MatrixGateway
   }
 
   @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('leave-room')
+  async leaveRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { roomId: string; tenantId?: string },
+  ) {
+    try {
+      this.logger.log(
+        `User ${client.data?.userId} leaving room: ${data.roomId}`,
+      );
+
+      // Check if the client has Matrix credentials - still allow leaving even without credentials
+      if (!client.data?.matrixClientInitialized) {
+        this.logger.debug(
+          `User ${client.data?.userId} leaving room ${data.roomId} without Matrix client`,
+        );
+      }
+
+      // Socket.io leave room
+      await client.leave(data.roomId);
+
+      // Update our tracking maps
+      const matrixUserId = client.data?.matrixUserId;
+      if (matrixUserId) {
+        const userRoomSet = this.userRooms.get(matrixUserId);
+        if (userRoomSet) {
+          userRoomSet.delete(data.roomId);
+          // If user has no rooms left, clean up the entry
+          if (userRoomSet.size === 0) {
+            this.userRooms.delete(matrixUserId);
+          }
+        }
+      }
+
+      return { success: true };
+    } catch (error) {
+      this.logger.error(`Error leaving room: ${error.message}`, error.stack);
+      return {
+        success: false,
+        error: `Error leaving room: ${error.message}`,
+      };
+    }
+  }
+
+  @UseGuards(WsJwtAuthGuard)
   @SubscribeMessage('message')
   async handleMessage(
     @ConnectedSocket() client: Socket,

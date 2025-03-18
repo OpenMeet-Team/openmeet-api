@@ -410,8 +410,9 @@ export class DiscussionService implements DiscussionServiceInterface {
   async addMemberToEventDiscussionBySlug(
     eventSlug: string,
     userSlug: string,
+    explicitTenantId?: string,
   ): Promise<void> {
-    const tenantId = this.request.tenantId;
+    const tenantId = explicitTenantId || this.request.tenantId;
     if (!tenantId) {
       throw new Error('Tenant ID is required');
     }
@@ -492,8 +493,9 @@ export class DiscussionService implements DiscussionServiceInterface {
   async removeMemberFromEventDiscussionBySlug(
     eventSlug: string,
     userSlug: string,
+    explicitTenantId?: string,
   ): Promise<void> {
-    const tenantId = this.request.tenantId;
+    const tenantId = explicitTenantId || this.request.tenantId;
     if (!tenantId) {
       throw new Error('Tenant ID is required');
     }
@@ -844,30 +846,53 @@ export class DiscussionService implements DiscussionServiceInterface {
       throw new Error('Tenant ID is required');
     }
 
+    return this.getIdsFromSlugsWithTenant(eventSlug, userSlug, tenantId);
+  }
+
+  /**
+   * Similar to getIdsFromSlugs but accepts an explicit tenantId parameter
+   * This is useful for event handlers where the request context might not be available
+   */
+  @Trace('discussion.getIdsFromSlugsWithTenant')
+  async getIdsFromSlugsWithTenant(
+    eventSlug: string,
+    userSlug: string,
+    tenantId: string | undefined,
+  ): Promise<{ eventId: number | null; userId: number | null }> {
+    // If tenantId is not provided, try to use the one from the request
+    const effectiveTenantId = tenantId || this.request?.tenantId;
+    
+    if (!effectiveTenantId) {
+      this.logger.error('Neither explicit tenantId nor request.tenantId is available');
+      throw new Error('Tenant ID is required');
+    }
+    
     let eventId: number | null = null;
     let userId: number | null = null;
 
     // Find the event by slug
     try {
-      const event = await this.eventQueryService.showEventBySlug(eventSlug);
+      // Use a version of showEventBySlug that accepts a tenant ID
+      const event = await this.eventQueryService.showEventBySlugWithTenant(eventSlug, effectiveTenantId);
       if (event) {
         eventId = event.id;
       }
     } catch (error) {
       this.logger.warn(
-        `Could not find event with slug ${eventSlug}: ${error.message}`,
+        `Could not find event with slug ${eventSlug} in tenant ${effectiveTenantId}: ${error.message}`,
       );
     }
 
     // Find the user by slug
     try {
-      const user = await this.userService.getUserBySlug(userSlug);
+      // Use a version of getUserBySlug that accepts a tenant ID
+      const user = await this.userService.getUserBySlugWithTenant(userSlug, effectiveTenantId);
       if (user) {
         userId = user.id;
       }
     } catch (error) {
       this.logger.warn(
-        `Could not find user with slug ${userSlug}: ${error.message}`,
+        `Could not find user with slug ${userSlug} in tenant ${effectiveTenantId}: ${error.message}`,
       );
     }
 

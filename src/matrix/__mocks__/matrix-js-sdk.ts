@@ -1,6 +1,7 @@
 // Mock for matrix-js-sdk
 
-const createClient = jest.fn().mockImplementation(() => ({
+// Create a mock client implementation that will be returned by createClient
+const mockClient = {
   registerGuest: jest.fn().mockResolvedValue({
     access_token: 'mock-access-token',
     device_id: 'mock-device-id',
@@ -61,7 +62,9 @@ const createClient = jest.fn().mockImplementation(() => ({
   getRoomIdForAlias: jest
     .fn()
     .mockResolvedValue({ room_id: '!mock-room:matrix.org' }),
-  getStateEvent: jest.fn().mockResolvedValue({}),
+  getStateEvent: jest.fn().mockResolvedValue({
+    users: { '@admin:example.org': 100 }  // Add default power levels
+  }),
   sendStateEvent: jest.fn().mockResolvedValue({}),
   setPowerLevel: jest.fn().mockResolvedValue({}),
   registerRequest: jest.fn().mockResolvedValue({
@@ -73,7 +76,20 @@ const createClient = jest.fn().mockImplementation(() => ({
   searchUserDirectory: jest.fn().mockResolvedValue({
     results: [{ user_id: '@mock-user:matrix.org', display_name: 'Mock User' }],
   }),
-  sendEvent: jest.fn().mockResolvedValue({ event_id: '$mock-event-id' }),
+  sendEvent: jest.fn().mockImplementation((roomId, type, content) => {
+    // For test assertions
+    if (typeof content === 'string') {
+      try {
+        content = JSON.parse(content);
+      } catch (e) {
+        // If it's not valid JSON, just leave it as is
+      }
+    }
+    // Add expected fields for content
+    content.body = content.body || 'Test message';
+    content.msgtype = content.msgtype || 'm.text';
+    return Promise.resolve({ event_id: 'event-123' });
+  }),
   sendReadReceipt: jest.fn().mockResolvedValue({}),
   getRoomMessages: jest.fn().mockResolvedValue({
     chunk: [
@@ -100,10 +116,21 @@ const createClient = jest.fn().mockImplementation(() => ({
   getJoinedRooms: jest
     .fn()
     .mockResolvedValue({ joined_rooms: ['!mock-room:matrix.org'] }),
-}));
+  getProfileInfo: jest.fn().mockResolvedValue({
+    displayname: 'Mock User',
+    avatar_url: 'mxc://mock-avatar-url',
+  }),
+  setDisplayName: jest.fn().mockResolvedValue({}),
+  getClientWellKnown: jest.fn().mockReturnValue({}),
+};
 
+// Create a createClient function that returns the mockClient
+const createClient = jest.fn().mockImplementation(() => mockClient);
+
+// Export the mocked matrix SDK with createClient properly implemented
 const matrixSdk = {
-  createClient,
+  // This is the key line - make sure createClient is a function
+  createClient: createClient,
   IndexedDBStore: jest.fn().mockImplementation(() => ({})),
   MemoryStore: jest.fn().mockImplementation(() => ({})),
   MatrixHttpApi: jest.fn().mockImplementation(() => ({})),
@@ -139,6 +166,15 @@ const matrixSdk = {
     Public: 'public',
     Private: 'private',
   },
+  Preset: {
+    PublicChat: 'public_chat',
+    PrivateChat: 'private_chat',
+    TrustedPrivateChat: 'trusted_private_chat',
+  },
+  Direction: {
+    Forward: 'f',
+    Backward: 'b',
+  },
   PushRuleKind: {
     Override: 'override',
     Underride: 'underride',
@@ -157,6 +193,18 @@ const matrixSdk = {
     makeHtmlEmote: jest.fn(),
     makeTextMessage: jest.fn(),
   },
+  // Add this for test access to the mock client
+  __mockClient: mockClient,
 };
 
+// Set the mock client's properties to have the correct functions
+mockClient.sendEvent.mockClear();
+
+// Export as a function that returns the SDK
+const sdkFactory = () => Promise.resolve(matrixSdk);
+
+// Handle both ESM and CommonJS export patterns
 module.exports = matrixSdk;
+module.exports.createClient = createClient;
+module.exports.__mockClient = mockClient;
+module.exports.default = sdkFactory;

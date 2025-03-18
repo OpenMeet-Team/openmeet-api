@@ -557,4 +557,39 @@ export class EventQueryService {
       relations: ['user'],
     });
   }
+
+  /**
+   * Tenant-aware version of showEventBySlug that doesn't rely on the request context
+   * This is useful for background processing where the request context is not available
+   */
+  @Trace('event-query.showEventBySlugWithTenant')
+  async showEventBySlugWithTenant(
+    slug: string, 
+    tenantId?: string
+  ): Promise<EventEntity | null> {
+    // If tenantId is not provided, try to use the one from the request
+    const effectiveTenantId = tenantId || this.request?.tenantId;
+    
+    if (!effectiveTenantId) {
+      this.logger.error('Neither explicit tenantId nor request.tenantId is available');
+      throw new Error('Tenant ID is required');
+    }
+
+    // Get a connection for the tenant
+    const dataSource = await this.tenantConnectionService.getTenantConnection(effectiveTenantId);
+    const eventRepo = dataSource.getRepository(EventEntity);
+
+    // Find the event using the provided tenant connection
+    const event = await eventRepo.findOne({
+      where: { slug },
+      relations: ['user'],
+    });
+
+    if (!event) {
+      this.logger.warn(`Event with slug ${slug} not found in tenant ${effectiveTenantId}`);
+      return null;
+    }
+
+    return event;
+  }
 }

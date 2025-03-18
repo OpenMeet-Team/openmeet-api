@@ -98,3 +98,10 @@ ELASTICACHE_REJECT_UNAUTHORIZED=false
 ELASTICACHE_TLS=false
 # If using auth
 ELASTICACHE_TOKEN=1234567890
+
+# Matrix configuration for CI testing
+MATRIX_HOMESERVER_URL=http://matrix:8448
+MATRIX_SERVER_NAME=matrix-ci.openmeet.test
+MATRIX_ADMIN_USERNAME=admin
+MATRIX_ADMIN_PASSWORD=admin_secret_password
+MATRIX_REGISTRATION_SECRET=ci_test_registration_secret

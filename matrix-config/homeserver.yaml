@@ -1,0 +1,113 @@
+## Server name
+server_name: "matrix-ci.openmeet.test"
+pid_file: /data/homeserver.pid
+
+## Trusted key servers
+trusted_key_servers:
+  - server_name: "matrix.org"
+suppress_key_server_warning: true
+
+## Ports for client/federation and respective TLS ports
+listeners:
+  - port: 8448
+    tls: false
+    type: http
+    x_forwarded: false
+    resources:
+      - names: [client, federation]
+        compress: false
+
+## Database configuration
+database:
+  name: psycopg2
+  args:
+    user: "root"
+    password: "secret"
+    database: "synapse"
+    host: "postgres"
+    port: "5432"
+    cp_min: 5
+    cp_max: 10
+  allow_unsafe_locale: true
+
+## Media store configuration
+media_store_path: /data/media
+
+## Data directory
+data_dir: /data
+
+## Log configuration
+log_config: "/data/log.config"
+
+## Registration
+enable_registration: true
+enable_registration_without_verification: true
+registration_shared_secret: "ci_test_registration_secret"
+
+## Security
+macaroon_secret_key: "ci_test_macaroon_secret_key"
+form_secret: "ci_test_form_secret"
+
+## Federation
+allow_public_rooms_over_federation: true
+allow_public_rooms_without_auth: true
+
+## Retention policy
+retention:
+  enabled: false
+
+## Performance
+rc_messages_per_second: 50
+rc_message_burst_count: 100
+federation_rc_window_size: 1000
+federation_rc_sleep_limit: 10
+federation_rc_sleep_delay: 500
+federation_rc_reject_limit: 50
+federation_rc_concurrent: 3
+
+## Rate limiting
+rc_registration:
+  per_second: 0.17
+  burst_count: 3
+
+rc_joins:
+  local:
+    per_second: 0.5
+    burst_count: 10
+  remote:
+    per_second: 0.1
+    burst_count: 3
+
+## Push notifications - disabled for testing
+push:
+  include_content: false
+  enabled: false
+
+## URL previews
+url_preview_enabled: false
+
+## Metrics - disabled for testing
+enable_metrics: false
+
+## Reports - disabled for testing
+report_stats: false
+
+## Spam checker - disabled for testing
+spam_checker: []
+
+## OpenID configuration for testing
+oidc_providers: []
+
+## Email configuration
+email:
+  enable_notifs: false
+  notif_from: "matrix@example.com"
+  smtp_host: "maildev"
+  smtp_port: 1025
+  smtp_user: ""
+  smtp_pass: ""
+  require_transport_security: false
+  
+## Experimental features
+experimental_features:
+  spaces_enabled: true

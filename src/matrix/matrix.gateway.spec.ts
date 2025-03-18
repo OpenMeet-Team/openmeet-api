@@ -2,260 +2,314 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { MatrixGateway } from './matrix.gateway';
 import { MatrixService } from './matrix.service';
 import { UserService } from '../user/user.service';
+import { ChatRoomService } from '../chat/rooms/chat-room.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { WsException } from '@nestjs/websockets';
-import { Socket } from 'socket.io';
+import { Socket, Server } from 'socket.io';
 import { Logger } from '@nestjs/common';
+import { EventEmitter } from 'events';
 
-// Create a test module to mock dependencies
-class TestLogger extends Logger {
-  error() {
-    return;
-  }
-  log() {
-    return;
-  }
-  warn() {
-    return;
-  }
-  debug() {
-    return;
-  }
-  verbose() {
-    return;
-  }
+class MockSocket extends EventEmitter {
+  id = 'mock-socket-id';
+  rooms = new Set<string>();
+  data: any = {}; // Add data property for testing
+  handshake = {
+    auth: {
+      token: 'mock-token',
+      tenantId: 'default',
+    },
+    query: {},
+    headers: {},
+  };
+  join = jest.fn((room: string) => {
+    this.rooms.add(room);
+    return Promise.resolve();
+  });
+  leave = jest.fn((room: string) => {
+    this.rooms.delete(room);
+    return Promise.resolve();
+  });
+  emit = jest.fn();
+  to = jest.fn(() => ({ emit: jest.fn() }));
+  disconnect = jest.fn();
 }
 
-describe.skip('MatrixGateway', () => {
+describe('MatrixGateway', () => {
   let gateway: MatrixGateway;
   let matrixService: MatrixService;
   let userService: UserService;
+  let chatRoomService: ChatRoomService;
   let jwtService: JwtService;
-
-  const mockMatrixService = {
-    startClient: jest.fn().mockResolvedValue(undefined),
-    getUserRooms: jest.fn().mockResolvedValue([
-      { roomId: 'room-1', name: 'Room 1' },
-      { roomId: 'room-2', name: 'Room 2' },
-    ]),
-    sendTypingNotification: jest.fn().mockResolvedValue(undefined),
-    sendMessage: jest.fn().mockResolvedValue({ eventId: 'event-123' }),
+  let mockClient: MockSocket;
+  let mockServer: Partial<Server>;
+  
+  // Add missing matrixService method implementations
+  const mockMatrixClient = {
+    sendTyping: jest.fn().mockResolvedValue(true),
+    sendTextMessage: jest.fn().mockResolvedValue({ event_id: 'event-123' }),
   };
 
-  const mockUserService = {
-    findById: jest.fn().mockResolvedValue({
-      id: 1,
-      matrixUserId: '@test:example.org',
-      matrixAccessToken: 'test-token',
-      matrixDeviceId: 'test-device',
-    }),
+  const mockUser = {
+    id: 1,
+    ulid: 'USER123',
+    firstName: 'Test',
+    lastName: 'User',
+    email: 'test@example.com',
+    matrixUserId: '@test_user123:matrix.openmeet.net',
+    matrixAccessToken: 'matrix_token_abc123',
+    matrixDeviceId: 'DEVICE_XYZ',
   };
 
-  const mockJwtService = {
-    verify: jest.fn().mockReturnValue({ id: 1 }),
+  const mockJwtPayload = {
+    id: 1,
+    role: { id: 1, name: 'user' },
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 3600,
   };
+
+  const mockEmitHandler = jest.fn();
 
   beforeEach(async () => {
+    mockClient = new MockSocket();
+    // Set mock data that would be set in middleware/handleConnection
+    mockClient.data = {
+      userId: mockUser.id,
+      matrixUserId: mockUser.matrixUserId,
+      matrixClientInitialized: true,
+      hasMatrixCredentials: true,
+      tenantId: 'default'
+    };
+    mockServer = {
+      to: jest.fn().mockReturnValue({
+        emit: mockEmitHandler,
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        { provide: Logger, useClass: TestLogger },
         MatrixGateway,
         {
           provide: MatrixService,
-          useValue: mockMatrixService,
+          useValue: {
+            startClient: jest.fn().mockResolvedValue(true),
+            stopClient: jest.fn().mockResolvedValue(true),
+            releaseClientForUser: jest.fn().mockResolvedValue(true),
+            sendTyping: jest.fn().mockResolvedValue(true), 
+            getRoomMessages: jest.fn().mockResolvedValue({
+              messages: [],
+              end: 'end-token',
+            }),
+            getClientForUser: jest.fn().mockResolvedValue({
+              sendTyping: jest.fn().mockResolvedValue(true),
+              sendTextMessage: jest.fn().mockResolvedValue({ event_id: 'event-123' }),
+            }),
+            joinRoom: jest.fn().mockResolvedValue(true),
+            getUserRoomsWithClient: jest.fn().mockResolvedValue([
+              { roomId: '!room1:server', name: 'Room 1' },
+              { roomId: '!room2:server', name: 'Room 2' },
+            ]),
+          },
         },
         {
           provide: UserService,
-          useValue: mockUserService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue(mockUser),
+          },
+        },
+        {
+          provide: ChatRoomService,
+          useValue: {
+            findChatRoomsByMatrixUserId: jest.fn().mockResolvedValue([
+              { matrixRoomId: '!room1:server' },
+              { matrixRoomId: '!room2:server' },
+            ]),
+          },
         },
         {
           provide: JwtService,
-          useValue: mockJwtService,
+          useValue: {
+            verify: jest.fn().mockReturnValue(mockJwtPayload),
+          },
         },
         {
           provide: ConfigService,
           useValue: {
-            get: jest.fn().mockImplementation((key) => {
-              const config = {
-                matrix: {
-                  serverName: 'matrix.example.org',
-                  websocketUrl: 'wss://matrix.example.org/matrix',
-                },
-              };
-              const parts = key.split('.');
-              let result = config;
-              for (const part of parts) {
-                result = result[part];
-              }
-              return result;
+            get: jest.fn((key) => {
+              if (key === 'auth.jwt.secret') return 'test-secret';
+              if (key === 'auth.jwt.expiresIn') return '1h';
+              return null;
             }),
+          },
+        },
+        {
+          provide: Logger,
+          useValue: {
+            log: jest.fn(),
+            error: jest.fn(),
+            warn: jest.fn(),
+            debug: jest.fn(),
           },
         },
       ],
     }).compile();
 
-    // Initialize the gateway with mocked dependencies
-    try {
-      gateway = module.get<MatrixGateway>(MatrixGateway);
-      matrixService = module.get<MatrixService>(MatrixService);
-      userService = module.get<UserService>(UserService);
-      jwtService = module.get<JwtService>(JwtService);
+    gateway = module.get<MatrixGateway>(MatrixGateway);
+    matrixService = module.get<MatrixService>(MatrixService);
+    userService = module.get<UserService>(UserService);
+    chatRoomService = module.get<ChatRoomService>(ChatRoomService);
+    jwtService = module.get<JwtService>(JwtService);
 
-      // Explicitly set the logger
-      (gateway as any).logger = new TestLogger();
-    } catch (error) {
-      console.error('Error initializing gateway:', error);
-    }
+    // Setting private properties for testing
+    (gateway as any).server = mockServer as Server;
+    (gateway as any).logger = new Logger('MatrixGateway');
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
+  it('should be defined', () => {
+    expect(gateway).toBeDefined();
   });
 
-  describe('joinUserRooms', () => {
-    it('should allow users to join their own rooms', async () => {
-      // Create mock client with data
-      const mockClient: any = {
-        data: {
-          userId: 1,
-          matrixUserId: '@test:example.org',
-          hasMatrixCredentials: true,
-        },
-        join: jest.fn(),
-      };
+  describe('handleConnection', () => {
+    it('should emit connection_confirmed event when client connects', async () => {
+      await gateway.handleConnection(mockClient as unknown as Socket);
 
-      // Call joinUserRooms
-      const result = await gateway.joinUserRooms(
-        mockClient as unknown as Socket,
-        { userId: '@test:example.org' },
+      // Verify the connection_confirmed event was emitted
+      expect(mockClient.emit).toHaveBeenCalledWith('matrix-event', expect.objectContaining({
+        type: 'connection_confirmed',
+      }));
+    });
+
+    it('should get Matrix client for user if they have credentials', async () => {
+      await gateway.handleConnection(mockClient as unknown as Socket);
+
+      // Check that getClientForUser was called, which is the updated flow
+      expect(matrixService.getClientForUser).toHaveBeenCalledWith(
+        mockUser.id,
+        expect.anything(),
+        'default'
       );
+    });
 
-      // Since getUserRooms doesn't exist yet, we'll check that our mock was called
-      expect(mockMatrixService.getUserRooms).toHaveBeenCalledWith(
-        '@test:example.org',
-        expect.any(String),
-      );
+    it('should set matrixClientInitialized to true when successful', async () => {
+      await gateway.handleConnection(mockClient as unknown as Socket);
+      
+      // Check the client data was updated
+      expect(mockClient.data.matrixClientInitialized).toBeTruthy();
+    });
+  });
 
-      // Verify client joined rooms
-      expect(mockClient.join).toHaveBeenCalledWith('room-1');
-      expect(mockClient.join).toHaveBeenCalledWith('room-2');
-
-      // Verify response
-      expect(result).toEqual({
-        success: true,
-        roomCount: 2,
+  describe('handleDisconnect', () => {
+    it('should release Matrix client when user disconnects', async () => {
+      // Setup connection first
+      await gateway.handleConnection(mockClient as unknown as Socket);
+      
+      // Manually set the mapping in socketUsers
+      (gateway as any).socketUsers.set(mockClient.id, {
+        userId: mockUser.id,
+        matrixUserId: mockUser.matrixUserId,
       });
-    });
+      
+      // Then disconnect
+      await gateway.handleDisconnect(mockClient as unknown as Socket);
 
-    it('should prevent joining rooms of another user', async () => {
-      // Create mock client
-      const mockClient: any = {
-        data: {
-          userId: 1,
-          matrixUserId: '@test:example.org',
-          hasMatrixCredentials: true,
-        },
-      };
-
-      // Call with different user ID
-      await expect(
-        gateway.joinUserRooms(mockClient as unknown as Socket, {
-          userId: '@otheruser:example.org',
-        }),
-      ).rejects.toThrow(WsException);
+      // Check if releaseClientForUser was called instead of stopClient
+      expect(matrixService.releaseClientForUser).toHaveBeenCalledWith(mockUser.id);
     });
   });
 
-  describe('handleTyping', () => {
-    it('should forward typing notifications to Matrix', async () => {
-      // Create mock client
-      const mockClient: any = {
-        data: {
-          userId: 1,
-          matrixUserId: '@test:example.org',
-          matrixAccessToken: 'test-token',
-          matrixDeviceId: 'test-device',
-          hasMatrixCredentials: true,
-        },
-      };
+  describe('joinRoom', () => {
+    it('should join client to a room', async () => {
+      // Setup connection
+      await gateway.handleConnection(mockClient as unknown as Socket);
+      
+      // Reset join mock to test the explicit join
+      (mockClient.join as jest.Mock).mockClear();
+      
+      // Using the correct method name based on your gateway implementation
+      await gateway.joinRoom(mockClient as unknown as Socket, { roomId: '!newroom:server' });
 
-      // Call handleTyping
-      const result = await gateway.handleTyping(
-        mockClient as unknown as Socket,
-        { roomId: 'room-1', isTyping: true },
-      );
-
-      // Verify typing notification sent
-      expect(mockMatrixService.sendTypingNotification).toHaveBeenCalledWith(
-        'room-1',
-        '@test:example.org',
-        'test-token',
-        true,
-        'test-device',
-      );
-
-      // Verify response
-      expect(result).toEqual({ success: true });
+      expect(mockClient.join).toHaveBeenCalledWith('!newroom:server');
     });
   });
 
-  describe('handleMessage', () => {
-    it('should send messages to Matrix rooms', async () => {
-      // Create mock client
-      const mockClient: any = {
-        data: {
-          userId: 1,
-          matrixUserId: '@test:example.org',
-          matrixAccessToken: 'test-token',
-          matrixDeviceId: 'test-device',
-          hasMatrixCredentials: true,
-        },
-      };
+  describe('leaveRoom', () => {
+    it('should remove client from a room', async () => {
+      // Setup connection
+      await gateway.handleConnection(mockClient as unknown as Socket);
+      mockClient.rooms.add('!testroom:server');
+      
+      // Use the correct method name based on your gateway implementation
+      await gateway.leaveRoom(mockClient as unknown as Socket, { roomId: '!testroom:server' });
 
-      // Call handleMessage
-      const result = await gateway.handleMessage(
-        mockClient as unknown as Socket,
-        { roomId: 'room-1', message: 'Hello world' },
-      );
+      expect(mockClient.leave).toHaveBeenCalledWith('!testroom:server');
+    });
+  });
 
-      // Verify message sent
-      expect(mockMatrixService.sendMessage).toHaveBeenCalledWith({
-        roomId: 'room-1',
-        userId: '@test:example.org',
-        accessToken: 'test-token',
-        content: 'Hello world',
-        deviceId: 'test-device',
+  describe('typing', () => {
+    it('should send typing notification via Matrix', async () => {
+      // Reset mock to check call parameters specifically for this test
+      (matrixService.getClientForUser as jest.Mock).mockClear();
+      
+      // Setup connection
+      await gateway.handleConnection(mockClient as unknown as Socket);
+      
+      // Make getClientForUser return our mock client
+      (matrixService.getClientForUser as jest.Mock).mockResolvedValueOnce(mockMatrixClient);
+      
+      // Reset our mock to verify call
+      mockMatrixClient.sendTyping.mockClear();
+      
+      // Use the handleTyping method directly to match the implementation
+      await gateway.handleTyping(mockClient as unknown as Socket, { 
+        roomId: '!room1:server',
+        isTyping: true,
+        tenantId: 'default'
       });
 
-      // Verify response
-      expect(result).toEqual({ success: true, id: 'event-123' });
-    });
-
-    it('should handle message sending errors', async () => {
-      // Create mock client
-      const mockClient: any = {
-        data: {
-          userId: 1,
-          matrixUserId: '@test:example.org',
-          matrixAccessToken: 'test-token',
-          matrixDeviceId: 'test-device',
-          hasMatrixCredentials: true,
-        },
-      };
-
-      // Mock error response
-      mockMatrixService.sendMessage.mockRejectedValueOnce(
-        new Error('Failed to send message'),
+      // Check that getClientForUser was called with the tenant ID
+      expect(matrixService.getClientForUser).toHaveBeenCalledWith(
+        mockUser.id,
+        null,
+        'default'
       );
+      
+      // Verify the sendTyping method was called on the client
+      expect(mockMatrixClient.sendTyping).toHaveBeenCalledWith('!room1:server', true, 30000);
+    });
+  });
 
-      // Expect handleMessage to throw a WsException
-      await expect(
-        gateway.handleMessage(mockClient as unknown as Socket, {
-          roomId: 'room-1',
-          message: 'This will fail',
-        }),
-      ).rejects.toThrow(WsException);
+  describe('broadcastRoomEvent', () => {
+    it('should broadcast Matrix events to the appropriate room', async () => {
+      // Setup connection
+      await gateway.handleConnection(mockClient as unknown as Socket);
+      
+      // Create a mock Matrix event
+      const mockMatrixEvent = {
+        type: 'm.room.message',
+        room_id: '!room1:server',
+        sender: '@another:server',
+        content: {
+          msgtype: 'm.text',
+          body: 'Hello, world!',
+        },
+        origin_server_ts: Date.now(),
+      };
+      
+      // Directly call the broadcast method
+      gateway.broadcastRoomEvent('!room1:server', mockMatrixEvent);
+
+      // Should have broadcasted to the room
+      expect(mockServer.to).toHaveBeenCalledWith('!room1:server');
+      expect(mockEmitHandler).toHaveBeenCalledWith('matrix-event', expect.objectContaining({
+        type: 'm.room.message',
+        room_id: '!room1:server',
+        _broadcastId: expect.any(String), // The method adds a broadcast ID
+      }));
+      
+      // For message events, it should also emit a matrix-message event
+      expect(mockEmitHandler).toHaveBeenCalledWith('matrix-message', expect.objectContaining({
+        roomId: '!room1:server',
+        sender: '@another:server',
+      }));
     });
   });
 });

@@ -219,6 +219,89 @@ The system manages Matrix room power levels to provide appropriate moderation ca
 - Permission assignment happens after successful room joining, ensuring users have Matrix credentials
 - Error handling ensures basic join functionality works even if permission setting fails
 
+### TODO: Permission Model Improvements (Priority: High)
+
+The current permission model between OpenMeet and Matrix needs further simplification. Key improvements to consider:
+
+1. **Unidirectional Permission Flow**: Make OpenMeet the single source of truth for permissions, with Matrix reflecting these permissions automatically.
+
+2. **Role-Based Matrix Power Levels**: Create a more granular mapping between OpenMeet roles and Matrix power levels:
+   - System Admin → Matrix Admin (100)
+   - Event/Group Owner → Moderator (50)
+   - Event/Group Admin → Moderator (50)
+   - Event/Group Moderator → Chat Moderator (40)
+   - Regular Member → Regular User (0)
+
+3. **Simplified Permission Checks**: Reduce the complex permission checks currently needed to determine Matrix power levels.
+
+4. **Audit and Enforcement**: Periodically verify that Matrix room permissions match OpenMeet role assignments and fix any discrepancies.
+
+5. **Cache-Friendly Design**: Design permission checks to work efficiently with request-scoped caching.
+
+6. **API Abstraction**: Create a clear permission-related API in the ChatService to hide Matrix-specific implementation details.
+
+This work should be prioritized after current unit testing and stability improvements.
+
+## Testing Strategy for Chat Module
+
+The recent consolidation of chat-related modules requires a comprehensive testing strategy. Here's our plan:
+
+### Unit Testing Plan (High Priority)
+
+1. **Re-enable and Update Disabled Tests**
+   - Move tests from `disabled-tests/chat-room/chat-room.service.spec.ts` to `src/chat/rooms/chat-room.service.spec.ts`
+   - Move tests from `disabled-tests/matrix/*` to appropriate locations in the codebase
+   - Update all imports and mocks to reflect the new module structure
+
+2. **New Tests for Consolidated Services**
+   - Create/update tests for `DiscussionService`
+   - Create tests for `MatrixChatServiceAdapter`
+   - Improve tests for `ChatController` to cover all endpoints
+   - Add tests for circular dependency edge cases
+
+3. **Mock Strategy**
+   - Create proper mocks for Matrix SDK in the test/mocks directory
+   - Develop a consistent mocking strategy for Matrix API responses
+   - Create test fixtures for common chat-related entities and DTOs
+   - Implement request-scoped cache testing
+
+4. **Coverage Targets**
+   - Target 80%+ coverage for ChatService, ChatRoomService
+   - Target 90%+ coverage for ChatController endpoints
+   - Target 70%+ coverage for Matrix adapters
+   - Focus first on public API methods that are used by other modules
+
+### Integration Testing Plan (Medium Priority)
+
+1. **Update E2E Tests**
+   - Fix the skipped tests in `test/chat/chat.e2e-spec.ts`
+   - Expand coverage to include new consolidated functionality
+   - Add tests for real Matrix integration (using a test server)
+   - Test both slug-based and ID-based APIs
+
+2. **Matrix WebSocket Testing**
+   - Add WebSocket testing for real-time Matrix events
+   - Test connection management and lifecycle events
+   - Create mock WebSocket clients for automated testing
+
+### Performance Testing (Lower Priority)
+
+1. **Benchmark Tests**
+   - Add performance tests for chat operations under load
+   - Test request-scoped caching effectiveness
+   - Measure Matrix client connection pool efficiency
+
+2. **Load Testing**
+   - Test room creation and message sending at scale
+   - Verify WebSocket performance with many concurrent connections
+
+### Implementation Timeline
+
+1. Week 1: Re-enable disabled tests and update imports
+2. Week 2: Complete unit tests for core services
+3. Week 3: Update and expand E2E tests
+4. Week 4: Implement WebSocket testing and load tests
+
 ## Matrix SDK ESM Compatibility Solution
 
 - The Matrix SDK (matrix-js-sdk) uses ES modules, causing compatibility issues with CommonJS in ts-node
