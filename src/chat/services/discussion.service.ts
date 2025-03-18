@@ -231,7 +231,7 @@ export class DiscussionService implements DiscussionServiceInterface {
     userId: number,
     body: { message: string },
   ): Promise<{ id: string }> {
-    const tenantId = this.request.tenantId;
+    const _tenantId = this.request.tenantId;
     const cache = this.getRequestCache();
 
     // Find the event by slug
@@ -544,7 +544,7 @@ export class DiscussionService implements DiscussionServiceInterface {
     userId: number,
     body: { message: string },
   ): Promise<{ id: string }> {
-    const tenantId = this.request.tenantId;
+    const _tenantId = this.request.tenantId;
     const cache = this.getRequestCache();
 
     // Get the group, using request-scoped cache if available
@@ -909,9 +909,9 @@ export class DiscussionService implements DiscussionServiceInterface {
 
   @Trace('discussion.sendDirectMessage')
   async sendDirectMessage(
-    recipientId: number,
-    senderId: number,
-    body: { message: string },
+    _recipientId: number,
+    _senderId: number,
+    _body: { message: string },
   ): Promise<{ id: string }> {
     // This would be implemented for direct messaging
     // For now, throwing an error as this is not implemented yet
@@ -921,10 +921,10 @@ export class DiscussionService implements DiscussionServiceInterface {
 
   @Trace('discussion.getDirectMessages')
   async getDirectMessages(
-    userId1: number,
-    userId2: number,
-    limit?: number,
-    from?: string,
+    _userId1: number,
+    _userId2: number,
+    _limit?: number,
+    _from?: string,
   ): Promise<{
     messages: Message[];
     end: string;

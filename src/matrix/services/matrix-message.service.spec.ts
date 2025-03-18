@@ -97,10 +97,10 @@ describe('MatrixMessageService', () => {
       };
 
       const result = await service.sendMessage(options);
-      
+
       // Because the test included userId and accessToken, it should use those credentials
       // instead of the admin client (no client acquire/release)
-      
+
       // Verify sendEvent was called with correct parameters
       expect(mockMatrixClient.sendEvent).toHaveBeenCalledWith(
         'room-123',
@@ -111,7 +111,7 @@ describe('MatrixMessageService', () => {
         }),
         '',
       );
-      
+
       // Verify the result is the event ID
       expect(result).toBe('event-123');
     });
@@ -121,7 +121,7 @@ describe('MatrixMessageService', () => {
         msgtype: 'm.text',
         body: 'Test message with content object',
       };
-      
+
       const options: SendMessageOptions = {
         roomId: 'room-123',
         userId: '@admin:example.org',
@@ -208,9 +208,11 @@ describe('MatrixMessageService', () => {
 
     it('should handle errors when sending messages', async () => {
       // Create a new test client that will fail
-      const mockFailingClient = { 
+      const mockFailingClient = {
         ...mockMatrixClient,
-        sendEvent: jest.fn().mockRejectedValueOnce(new Error('Failed to send message'))
+        sendEvent: jest
+          .fn()
+          .mockRejectedValueOnce(new Error('Failed to send message')),
       };
       mockSdkCreateClient.mockReturnValueOnce(mockFailingClient);
 
@@ -239,7 +241,12 @@ describe('MatrixMessageService', () => {
       const mockUserClient = { ...mockMatrixClient };
       mockSdkCreateClient.mockReturnValueOnce(mockUserClient);
 
-      await service.sendTypingNotification(roomId, userId, accessToken, isTyping);
+      await service.sendTypingNotification(
+        roomId,
+        userId,
+        accessToken,
+        isTyping,
+      );
 
       // Verify client was created for the user
       expect(mockSdkCreateClient).toHaveBeenCalledWith({
@@ -268,7 +275,12 @@ describe('MatrixMessageService', () => {
       const mockUserClient = { ...mockMatrixClient };
       mockSdkCreateClient.mockReturnValueOnce(mockUserClient);
 
-      await service.sendTypingNotification(roomId, userId, accessToken, isTyping);
+      await service.sendTypingNotification(
+        roomId,
+        userId,
+        accessToken,
+        isTyping,
+      );
 
       // Verify sendTyping was called with timeout 0 (stopped typing)
       expect(mockUserClient.sendTyping).toHaveBeenCalledWith(
@@ -289,9 +301,13 @@ describe('MatrixMessageService', () => {
       mockSdkCreateClient.mockReturnValueOnce(mockUserClient);
 
       // Mock sendTyping to fail
-      mockUserClient.sendTyping.mockRejectedValueOnce(new Error('Failed to send typing notification'));
+      mockUserClient.sendTyping.mockRejectedValueOnce(
+        new Error('Failed to send typing notification'),
+      );
 
-      await expect(service.sendTypingNotification(roomId, userId, accessToken, isTyping)).rejects.toThrow(
+      await expect(
+        service.sendTypingNotification(roomId, userId, accessToken, isTyping),
+      ).rejects.toThrow(
         'Failed to send typing notification: Failed to send typing notification',
       );
     });
@@ -349,7 +365,7 @@ describe('MatrixMessageService', () => {
 
     it('should handle missing access token', async () => {
       const roomId = 'room-123';
-      
+
       // Mock getAccessToken to return null
       mockMatrixClient.getAccessToken.mockReturnValueOnce(null);
 
@@ -365,7 +381,9 @@ describe('MatrixMessageService', () => {
       const roomId = 'room-123';
 
       // Mock axios to fail
-      mockedAxios.get.mockRejectedValueOnce(new Error('Failed to fetch messages'));
+      mockedAxios.get.mockRejectedValueOnce(
+        new Error('Failed to fetch messages'),
+      );
 
       await expect(service.getRoomMessages(roomId)).rejects.toThrow(
         'Failed to get messages from Matrix room: Failed to fetch messages',

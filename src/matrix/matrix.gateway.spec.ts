@@ -8,7 +8,8 @@ import { UserService } from '../user/user.service';
 import { ChatRoomService } from '../chat/rooms/chat-room.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { Socket, Server } from 'socket.io';
+import { Socket } from 'socket.io';
+// import { Server } from 'socket.io'; - using partial type instead
 import { Logger } from '@nestjs/common';
 import { EventEmitter } from 'events';
 
@@ -40,12 +41,12 @@ class MockSocket extends EventEmitter {
 describe('MatrixGateway', () => {
   let gateway: MatrixGateway;
   let matrixUserService: MatrixUserService;
-  let matrixRoomService: MatrixRoomService;
-  let matrixMessageService: MatrixMessageService;
-  let matrixCoreService: MatrixCoreService;
-  let userService: UserService;
-  let chatRoomService: ChatRoomService;
-  let jwtService: JwtService;
+  let _matrixRoomService: MatrixRoomService;
+  let _matrixMessageService: MatrixMessageService;
+  let _matrixCoreService: MatrixCoreService;
+  let _userService: UserService;
+  let _chatRoomService: ChatRoomService;
+  let _jwtService: JwtService;
   let mockClient: MockSocket;
   let mockServer: Partial<Server>;
 
@@ -185,13 +186,13 @@ describe('MatrixGateway', () => {
 
     gateway = module.get<MatrixGateway>(MatrixGateway);
     matrixUserService = module.get<MatrixUserService>(MatrixUserService);
-    matrixRoomService = module.get<MatrixRoomService>(MatrixRoomService);
-    matrixMessageService =
+    _matrixRoomService = module.get<MatrixRoomService>(MatrixRoomService);
+    _matrixMessageService =
       module.get<MatrixMessageService>(MatrixMessageService);
-    matrixCoreService = module.get<MatrixCoreService>(MatrixCoreService);
-    userService = module.get<UserService>(UserService);
-    chatRoomService = module.get<ChatRoomService>(ChatRoomService);
-    jwtService = module.get<JwtService>(JwtService);
+    _matrixCoreService = module.get<MatrixCoreService>(MatrixCoreService);
+    _userService = module.get<UserService>(UserService);
+    _chatRoomService = module.get<ChatRoomService>(ChatRoomService);
+    _jwtService = module.get<JwtService>(JwtService);
 
     // Setting private properties for testing
     (gateway as any).server = mockServer as Server;

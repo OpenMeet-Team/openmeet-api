@@ -9,7 +9,9 @@ import {
 } from '../types/matrix.interfaces';
 
 @Injectable()
-export class MatrixUserService implements IMatrixClientProvider, OnModuleDestroy {
+export class MatrixUserService
+  implements IMatrixClientProvider, OnModuleDestroy
+{
   private readonly logger = new Logger(MatrixUserService.name);
 
   // Map to store user-specific Matrix clients (using slug as key)
@@ -52,7 +54,7 @@ export class MatrixUserService implements IMatrixClientProvider, OnModuleDestroy
 
     try {
       // Variable to hold successful response data
-      let registrationResponse;
+      let _registrationResponse;
 
       try {
         // Try v2 admin API (standard in most Matrix servers)
@@ -61,7 +63,7 @@ export class MatrixUserService implements IMatrixClientProvider, OnModuleDestroy
           `Attempting Matrix user registration with v2 Admin API: ${url}`,
         );
 
-        registrationResponse = await axios.put(
+        _registrationResponse = await axios.put(
           url,
           {
             password,
@@ -88,7 +90,7 @@ export class MatrixUserService implements IMatrixClientProvider, OnModuleDestroy
           const url = `${config.baseUrl}/_synapse/admin/v1/users/@${username}:${config.serverName}`;
           this.logger.debug(`Trying v1 Matrix Admin API endpoint: ${url}`);
 
-          registrationResponse = await axios.put(
+          _registrationResponse = await axios.put(
             url,
             {
               password,
@@ -115,7 +117,7 @@ export class MatrixUserService implements IMatrixClientProvider, OnModuleDestroy
               inhibit_login: true,
             };
 
-            registrationResponse = await axios.post(registerUrl, registerData);
+            _registrationResponse = await axios.post(registerUrl, registerData);
           } catch (registerError) {
             this.logger.error('All Matrix registration methods failed:', {
               v2Error: v2Error.message,
@@ -431,7 +433,7 @@ export class MatrixUserService implements IMatrixClientProvider, OnModuleDestroy
   /**
    * Destroy service and clean up resources
    */
-  async onModuleDestroy() {
+  onModuleDestroy() {
     // Clear the cleanup interval
     this.unregisterTimers();
 
@@ -449,5 +451,6 @@ export class MatrixUserService implements IMatrixClientProvider, OnModuleDestroy
 
     // Clear the map
     this.userMatrixClients.clear();
+    return Promise.resolve();
   }
 }

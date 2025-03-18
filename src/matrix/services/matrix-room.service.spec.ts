@@ -9,7 +9,9 @@ describe('MatrixRoomService', () => {
 
   // Mock Matrix client
   const mockMatrixClient = {
-    createRoom: jest.fn().mockResolvedValue({ room_id: '!mock-room:matrix.org' }),
+    createRoom: jest
+      .fn()
+      .mockResolvedValue({ room_id: '!mock-room:matrix.org' }),
     invite: jest.fn().mockResolvedValue({}),
     joinRoom: jest.fn().mockResolvedValue({ room_id: '!mock-room:matrix.org' }),
     setRoomStateWithKey: jest.fn().mockResolvedValue({}),
@@ -91,13 +93,15 @@ describe('MatrixRoomService', () => {
       expect(matrixCoreService.releaseClient).toHaveBeenCalled();
 
       // Verify createRoom was called with correct parameters
-      expect(mockMatrixClient.createRoom).toHaveBeenCalledWith(expect.objectContaining({
-        name: 'Test Room',
-        topic: 'A test room',
-        visibility: 'private',
-        preset: 'private_chat',
-        invite: ['@user1:example.org', '@user2:example.org']
-      }));
+      expect(mockMatrixClient.createRoom).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Test Room',
+          topic: 'A test room',
+          visibility: 'private',
+          preset: 'private_chat',
+          invite: ['@user1:example.org', '@user2:example.org'],
+        }),
+      );
 
       // Verify the result
       expect(result).toEqual({
@@ -128,7 +132,9 @@ describe('MatrixRoomService', () => {
 
     it('should handle errors when creating rooms', async () => {
       // Mock createRoom to fail
-      mockMatrixClient.createRoom.mockRejectedValueOnce(new Error('Failed to create room'));
+      mockMatrixClient.createRoom.mockRejectedValueOnce(
+        new Error('Failed to create room'),
+      );
 
       const options = {
         name: 'Test Room',
@@ -157,15 +163,14 @@ describe('MatrixRoomService', () => {
       expect(matrixCoreService.releaseClient).toHaveBeenCalled();
 
       // Verify invite was called with correct parameters
-      expect(mockMatrixClient.invite).toHaveBeenCalledWith(
-        roomId,
-        userId,
-      );
+      expect(mockMatrixClient.invite).toHaveBeenCalledWith(roomId, userId);
     });
 
     it('should handle errors when inviting users', async () => {
       // Mock invite to fail
-      mockMatrixClient.invite.mockRejectedValueOnce(new Error('User does not exist'));
+      mockMatrixClient.invite.mockRejectedValueOnce(
+        new Error('User does not exist'),
+      );
 
       const roomId = '!room123:example.org';
       const userId = '@nonexistent:example.org';
@@ -221,11 +226,13 @@ describe('MatrixRoomService', () => {
       jest.spyOn(mockSdk, 'createClient').mockImplementation(createClientMock);
 
       // Mock joinRoom to fail
-      mockUserClient.joinRoom.mockRejectedValueOnce(new Error('Unable to join room'));
-
-      await expect(service.joinRoom(roomId, userId, accessToken)).rejects.toThrow(
-        'Failed to join Matrix room: Unable to join room',
+      mockUserClient.joinRoom.mockRejectedValueOnce(
+        new Error('Unable to join room'),
       );
+
+      await expect(
+        service.joinRoom(roomId, userId, accessToken),
+      ).rejects.toThrow('Failed to join Matrix room: Unable to join room');
     });
   });
 
@@ -302,7 +309,7 @@ describe('MatrixRoomService', () => {
           redact: 50,
         });
       });
-      
+
       await service.setRoomPowerLevels(roomId, userLevels);
 
       // Should create a default power levels structure

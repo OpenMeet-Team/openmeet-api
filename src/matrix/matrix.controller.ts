@@ -9,7 +9,6 @@ import {
   Param,
   Body,
   Req,
-  Get,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
