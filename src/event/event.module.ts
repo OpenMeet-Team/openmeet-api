@@ -25,10 +25,10 @@ import { ZulipModule } from '../zulip/zulip.module';
   imports: [
     TypeOrmModule.forFeature([EventEntity]),
     TenantModule,
-    GroupMemberModule,
+    forwardRef(() => GroupMemberModule),
     CategoryModule,
     forwardRef(() => AuthModule),
-    EventAttendeeModule,
+    forwardRef(() => EventAttendeeModule),
     FileModule,
     UserModule,
     forwardRef(() => GroupModule),

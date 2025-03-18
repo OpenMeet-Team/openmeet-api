@@ -9,10 +9,8 @@ import {
   UseGuards,
   Req,
   Query,
-  Res,
-  HttpStatus,
 } from '@nestjs/common';
-import { Response } from 'express';
+// import { Response } from 'express'; - removed unused import
 
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Request } from 'express';
@@ -255,5 +253,4 @@ export class EventController {
       slug,
     );
   }
-
 }

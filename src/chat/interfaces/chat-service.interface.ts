@@ -64,18 +64,18 @@ export interface SendChatMessageOptions {
 export interface ChatServiceInterface {
   /**
    * Creates a new chat room
-   * @param options Room creation options 
+   * @param options Room creation options
    * @returns Information about the created room
    */
   createRoom(options: CreateChatRoomOptions): Promise<ChatRoomResponse>;
-  
+
   /**
    * Sends a message to a chat room
    * @param options Message sending options
    * @returns ID of the sent message
    */
   sendMessage(options: SendChatMessageOptions): Promise<string>;
-  
+
   /**
    * Gets messages from a chat room
    * @param roomId Room ID to get messages from
@@ -85,36 +85,36 @@ export interface ChatServiceInterface {
    * @returns Array of messages and pagination token
    */
   getMessages(
-    roomId: string, 
-    userId: number, 
-    limit?: number, 
-    before?: string
+    roomId: string,
+    userId: number,
+    limit?: number,
+    before?: string,
   ): Promise<{
     messages: ChatMessage[];
     nextToken?: string;
   }>;
-  
+
   /**
    * Adds a user to a chat room
    * @param roomId Room ID to add the user to
    * @param userId User ID to add
    */
   addUserToRoom(roomId: string, userId: number): Promise<void>;
-  
+
   /**
    * Removes a user from a chat room
    * @param roomId Room ID to remove the user from
    * @param userId User ID to remove
    */
   removeUserFromRoom(roomId: string, userId: number): Promise<void>;
-  
+
   /**
    * Ensures a user has necessary chat credentials
    * @param userId User ID to provision
    * @returns Updated user with chat credentials
    */
   ensureUserHasCredentials(userId: number): Promise<UserEntity>;
-  
+
   /**
    * Sends a typing notification in a chat room
    * @param roomId Room ID where the user is typing
@@ -122,8 +122,8 @@ export interface ChatServiceInterface {
    * @param isTyping Whether the user is typing or stopped typing
    */
   sendTypingNotification(
-    roomId: string, 
-    userId: number, 
-    isTyping: boolean
+    roomId: string,
+    userId: number,
+    isTyping: boolean,
   ): Promise<void>;
 }

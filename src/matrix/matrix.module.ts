@@ -1,6 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { MatrixService } from './matrix.service';
 import { MatrixController } from './matrix.controller';
 import { MatrixGateway } from './matrix.gateway';
 import { matrixConfig } from './config/matrix.config';
@@ -9,6 +8,10 @@ import { UserService } from '../user/user.service';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { JwtModule } from '@nestjs/jwt';
 import { TenantModule } from '../tenant/tenant.module';
+import { MatrixCoreService } from './services/matrix-core.service';
+import { MatrixUserService } from './services/matrix-user.service';
+import { MatrixRoomService } from './services/matrix-room.service';
+import { MatrixMessageService } from './services/matrix-message.service';
 
 @Module({
   imports: [
@@ -30,13 +33,27 @@ import { TenantModule } from '../tenant/tenant.module';
   ],
   controllers: [MatrixController],
   providers: [
-    MatrixService,
+    // Matrix services
+    MatrixCoreService,
+    MatrixUserService,
+    MatrixRoomService,
+    MatrixMessageService,
+
+    // Gateway for real-time events
     MatrixGateway,
+
+    // User service provider
     {
       provide: 'USER_SERVICE_FOR_MATRIX',
       useExisting: forwardRef(() => UserService),
     },
   ],
-  exports: [MatrixService],
+  exports: [
+    // Export services
+    MatrixCoreService,
+    MatrixUserService,
+    MatrixRoomService,
+    MatrixMessageService,
+  ],
 })
 export class MatrixModule {}

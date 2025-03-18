@@ -1,4 +1,3 @@
-import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
 import { Message } from '../../matrix/types/matrix.types';
 
 /**
@@ -49,21 +48,30 @@ export interface DiscussionServiceInterface {
    * @param eventSlug The slug of the event
    * @param userSlug The slug of the user to add
    */
-  addMemberToEventDiscussionBySlug(eventSlug: string, userSlug: string): Promise<void>;
+  addMemberToEventDiscussionBySlug(
+    eventSlug: string,
+    userSlug: string,
+  ): Promise<void>;
 
   /**
    * Remove a member from an event's discussion
    * @param eventId The ID of the event
    * @param userId The ID of the user to remove
    */
-  removeMemberFromEventDiscussion(eventId: number, userId: number): Promise<void>;
-  
+  removeMemberFromEventDiscussion(
+    eventId: number,
+    userId: number,
+  ): Promise<void>;
+
   /**
    * Remove a member from an event's discussion using slugs
    * @param eventSlug The slug of the event
    * @param userSlug The slug of the user to remove
    */
-  removeMemberFromEventDiscussionBySlug(eventSlug: string, userSlug: string): Promise<void>;
+  removeMemberFromEventDiscussionBySlug(
+    eventSlug: string,
+    userSlug: string,
+  ): Promise<void>;
 
   /**
    * Send a message to a group's discussion
@@ -108,7 +116,10 @@ export interface DiscussionServiceInterface {
    * @param groupId The ID of the group
    * @param userId The ID of the user to remove
    */
-  removeMemberFromGroupDiscussion(groupId: number, userId: number): Promise<void>;
+  removeMemberFromGroupDiscussion(
+    groupId: number,
+    userId: number,
+  ): Promise<void>;
 
   /**
    * Send a direct message between users

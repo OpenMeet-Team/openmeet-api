@@ -606,6 +606,65 @@ export class UserService {
     return user;
   }
 
+  /**
+   * Alias for getUserBySlug to support the MatrixService refactoring
+   * Maintains compatibility with the MatrixUserService interface
+   */
+  async findBySlug(
+    slug: User['slug'],
+    tenantId?: string,
+  ): Promise<NullableType<UserEntity>> {
+    if (tenantId) {
+      return this.getUserBySlugWithTenant(slug, tenantId);
+    }
+    return this.getUserBySlug(slug);
+  }
+
+  /**
+   * Tenant-aware version of getUserBySlug that doesn't rely on the request context
+   * This is useful for background processing where the request context is not available
+   */
+  async getUserBySlugWithTenant(
+    slug: User['slug'],
+    tenantId?: string,
+  ): Promise<NullableType<UserEntity>> {
+    // If tenantId is not provided, try to use the one from the request
+    const effectiveTenantId = tenantId || this.request?.tenantId;
+
+    if (!effectiveTenantId) {
+      this.logger.error(
+        'Neither explicit tenantId nor request.tenantId is available',
+      );
+      throw new Error('Tenant ID is required');
+    }
+
+    this.logger.debug('getUserBySlugWithTenant', {
+      slug,
+      tenantId: effectiveTenantId,
+    });
+
+    // Get a connection for the tenant
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(effectiveTenantId);
+    const userRepo = dataSource.getRepository(UserEntity);
+
+    // Find the user using the provided tenant connection
+    const user = await userRepo.findOne({ where: { slug } });
+
+    if (!user) {
+      this.logger.warn(
+        `User with slug ${slug} not found in tenant ${effectiveTenantId}`,
+      );
+      return null;
+    }
+
+    this.logger.debug('getUserBySlugWithTenant result', {
+      user,
+    });
+
+    return user;
+  }
+
   async getUserById(id: number, tenantId?: string): Promise<UserEntity> {
     await this.getTenantSpecificRepository(tenantId);
     const user = await this.usersRepository.findOne({ where: { id } });

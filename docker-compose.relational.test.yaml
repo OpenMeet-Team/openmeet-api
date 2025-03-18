@@ -26,6 +26,37 @@ services:
   #   image: redis:7-alpine
   #   expose:
   #     - 6379
+      
+  # Matrix server for chat functionality
+  matrix:
+    image: matrixdotorg/synapse:v1.126.0rc3
+    expose:
+      - 8448
+    ports:
+      - "8448:8448"
+    environment:
+      SYNAPSE_SERVER_NAME: ${MATRIX_SERVER_NAME:-matrix-ci.openmeet.test}
+      SYNAPSE_REPORT_STATS: "no"
+      SYNAPSE_LOG_LEVEL: "INFO"
+      POSTGRES_USER: ${DATABASE_USERNAME}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: "synapse"
+    volumes:
+      - ./matrix-config/homeserver.yaml:/data/homeserver.yaml
+      - ./matrix-config/log.config:/data/log.config
+      - ./matrix-config/start-matrix.sh:/data/start-matrix.sh
+      - matrix-data:/data/media
+    depends_on:
+      - postgres
+    env_file:
+      - env-example-relational
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8448/_matrix/client/versions"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    entrypoint: ["/bin/sh"]
+    command: ["-c", "python -m synapse.app.homeserver --config-path /data/homeserver.yaml"]
 
   api:
     build:
@@ -33,6 +64,13 @@ services:
       dockerfile: relational.test.Dockerfile
     env_file:
       - env-example-relational
+    environment:
+      MATRIX_HOMESERVER_URL: "http://matrix:8448"
     volumes:
       - ./src:/usr/src/app/src
       - ./test:/usr/src/app/test
+    depends_on:
+      - matrix
+
+volumes:
+  matrix-data:
