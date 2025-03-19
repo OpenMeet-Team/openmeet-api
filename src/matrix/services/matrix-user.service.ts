@@ -1,4 +1,10 @@
-import { Injectable, Logger, OnModuleDestroy, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { ContextIdFactory, ModuleRef } from '@nestjs/core';
 import axios from 'axios';
 import { MatrixCoreService } from './matrix-core.service';
@@ -57,8 +63,6 @@ export class MatrixUserService
 
     try {
       // Variable to hold successful response data
-      let _registrationResponse;
-
       try {
         // Try v2 admin API (standard in most Matrix servers)
         const url = `${config.baseUrl}/_synapse/admin/v2/users/@${username}:${config.serverName}`;
@@ -66,7 +70,7 @@ export class MatrixUserService
           `Attempting Matrix user registration with v2 Admin API: ${url}`,
         );
 
-        _registrationResponse = await axios.put(
+        await axios.put(
           url,
           {
             password,
@@ -93,7 +97,7 @@ export class MatrixUserService
           const url = `${config.baseUrl}/_synapse/admin/v1/users/@${username}:${config.serverName}`;
           this.logger.debug(`Trying v1 Matrix Admin API endpoint: ${url}`);
 
-          _registrationResponse = await axios.put(
+          await axios.put(
             url,
             {
               password,
@@ -120,7 +124,7 @@ export class MatrixUserService
               inhibit_login: true,
             };
 
-            _registrationResponse = await axios.post(registerUrl, registerData);
+            await axios.post(registerUrl, registerData);
           } catch (registerError) {
             this.logger.error('All Matrix registration methods failed:', {
               v2Error: v2Error.message,
@@ -358,7 +362,7 @@ export class MatrixUserService
       try {
         // Start the client to enable real-time sync with Matrix server
         this.logger.debug(`Starting Matrix client for user ${userSlug}`);
-        
+
         // Start the client with appropriate sync params
         await client.startClient({
           // Only care about new messages, no need to load complete history
@@ -368,48 +372,64 @@ export class MatrixUserService
           // Increase timeout for better reliability
           requestTimeout: 30000,
         });
-        
+
         // Get reference to MatrixGateway to broadcast events
         try {
           // Set up event listeners for room timeline (new messages)
-          client.on('Room.timeline', (event, room, toStartOfTimeline, removed, data) => {
-            // Skip processing if event is for historical messages or removed events
-            if (toStartOfTimeline || removed) return;
-            
-            // Only broadcast new message events (not state events, typing, etc.)
-            if (event.getType() === 'm.room.message') {
-              this.logger.debug(`Got new message event in room ${room.roomId} from user ${event.getSender()}`);
-              
-              // Use the injected MatrixGateway instance
-              if (this.matrixGateway && this.matrixGateway.broadcastRoomEvent) {
-                // Convert event to plain object for broadcasting
-                const eventData = {
-                  type: event.getType(),
-                  room_id: room.roomId,
-                  sender: event.getSender(),
-                  content: event.getContent(),
-                  event_id: event.getId(),
-                  origin_server_ts: event.getTs(),
-                  user_slug: userSlug, // Include user slug for context
-                  tenant_id: tenantId || 'default', // Include tenant ID for multi-tenancy
-                };
-                
-                // Broadcast the event to all connected clients
-                this.matrixGateway.broadcastRoomEvent(room.roomId, eventData);
-                this.logger.debug(`Broadcast Matrix message event for room ${room.roomId} (tenant: ${tenantId || 'default'})`);
-                
-              } else {
-                this.logger.warn('Could not get MatrixGateway instance to broadcast event');
+          client.on(
+            'Room.timeline',
+            (event, room, toStartOfTimeline, removed, _data) => {
+              // Skip processing if event is for historical messages or removed events
+              if (toStartOfTimeline || removed) return;
+
+              // Only broadcast new message events (not state events, typing, etc.)
+              if (event.getType() === 'm.room.message') {
+                this.logger.debug(
+                  `Got new message event in room ${room.roomId} from user ${event.getSender()}`,
+                );
+
+                // Use the injected MatrixGateway instance
+                if (
+                  this.matrixGateway &&
+                  this.matrixGateway.broadcastRoomEvent
+                ) {
+                  // Convert event to plain object for broadcasting
+                  const eventData = {
+                    type: event.getType(),
+                    room_id: room.roomId,
+                    sender: event.getSender(),
+                    content: event.getContent(),
+                    event_id: event.getId(),
+                    origin_server_ts: event.getTs(),
+                    user_slug: userSlug, // Include user slug for context
+                    tenant_id: tenantId || 'default', // Include tenant ID for multi-tenancy
+                  };
+
+                  // Broadcast the event to all connected clients
+                  this.matrixGateway.broadcastRoomEvent(room.roomId, eventData);
+                  this.logger.debug(
+                    `Broadcast Matrix message event for room ${room.roomId} (tenant: ${tenantId || 'default'})`,
+                  );
+                } else {
+                  this.logger.warn(
+                    'Could not get MatrixGateway instance to broadcast event',
+                  );
+                }
               }
-            }
-          });
-          
+            },
+          );
+
           this.logger.log('Matrix event listeners set up successfully');
         } catch (listenerError) {
-          this.logger.error(`Error setting up Matrix event listeners: ${listenerError.message}`);
+          this.logger.error(
+            `Error setting up Matrix event listeners: ${listenerError.message}`,
+          );
         }
       } catch (startError) {
-        this.logger.error(`Error starting Matrix client: ${startError.message}`, startError.stack);
+        this.logger.error(
+          `Error starting Matrix client: ${startError.message}`,
+          startError.stack,
+        );
         // Continue even if client start fails - we'll still return the client
       }
 

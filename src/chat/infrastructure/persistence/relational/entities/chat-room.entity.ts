@@ -26,7 +26,9 @@ export enum ChatRoomVisibility {
   PRIVATE = 'private', // Visible only to specific members
 }
 
-@Entity({ name: 'chat_rooms' })
+// Using camelCase for the table name to match the migration
+// Note: Some parts of the system might still be trying to access 'chat_rooms'
+@Entity({ name: 'chatRooms' })
 export class ChatRoomEntity extends EntityRelationalHelper {
   @PrimaryGeneratedColumn()
   id: number;
@@ -84,7 +86,7 @@ export class ChatRoomEntity extends EntityRelationalHelper {
 
   @ManyToMany(() => UserEntity)
   @JoinTable({
-    name: 'user_chat_rooms',
+    name: 'userChatRooms',
     joinColumn: { name: 'chatRoomId', referencedColumnName: 'id' },
     inverseJoinColumn: { name: 'userId', referencedColumnName: 'id' },
   })

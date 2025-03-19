@@ -15,9 +15,9 @@ export class CreateChatRoomTable1741628726345 implements MigrationInterface {
       CREATE TYPE "${schema}"."chat_room_visibility" AS ENUM ('public', 'private')
     `);
 
-    // Create chat_rooms table
+    // Create chatRooms table (using camelCase for consistency with other tables)
     await queryRunner.query(`
-      CREATE TABLE IF NOT EXISTS "${schema}"."chat_rooms" (
+      CREATE TABLE IF NOT EXISTS "${schema}"."chatRooms" (
         "id" SERIAL PRIMARY KEY,
         "name" VARCHAR(255) NOT NULL,
         "topic" TEXT,
@@ -28,6 +28,8 @@ export class CreateChatRoomTable1741628726345 implements MigrationInterface {
         "creatorId" INTEGER REFERENCES "${schema}"."users"(id),
         "eventId" INTEGER REFERENCES "${schema}"."events"(id),
         "groupId" INTEGER REFERENCES "${schema}"."groups"(id),
+        "user1Id" INTEGER,
+        "user2Id" INTEGER,
         "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
         "updatedAt" TIMESTAMP NOT NULL DEFAULT now()
       )
@@ -35,30 +37,41 @@ export class CreateChatRoomTable1741628726345 implements MigrationInterface {
 
     // Create index on matrixRoomId for faster lookups
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "idx_chat_rooms_matrix_room_id" 
-      ON "${schema}"."chat_rooms" ("matrixRoomId")
+      CREATE INDEX IF NOT EXISTS "idx_chatRooms_matrix_room_id" 
+      ON "${schema}"."chatRooms" ("matrixRoomId")
     `);
 
     // Create indexes for foreign keys
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "idx_chat_rooms_creator_id" 
-      ON "${schema}"."chat_rooms" ("creatorId")
+      CREATE INDEX IF NOT EXISTS "idx_chatRooms_creator_id" 
+      ON "${schema}"."chatRooms" ("creatorId")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "idx_chat_rooms_event_id" 
-      ON "${schema}"."chat_rooms" ("eventId")
+      CREATE INDEX IF NOT EXISTS "idx_chatRooms_event_id" 
+      ON "${schema}"."chatRooms" ("eventId")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "idx_chat_rooms_group_id" 
-      ON "${schema}"."chat_rooms" ("groupId")
+      CREATE INDEX IF NOT EXISTS "idx_chatRooms_group_id" 
+      ON "${schema}"."chatRooms" ("groupId")
     `);
 
-    // Create user_chat_rooms junction table for many-to-many relationship
+    // Create indexes for user1Id and user2Id (used for direct messages)
     await queryRunner.query(`
-      CREATE TABLE IF NOT EXISTS "${schema}"."user_chat_rooms" (
-        "chatRoomId" INTEGER NOT NULL REFERENCES "${schema}"."chat_rooms"(id) ON DELETE CASCADE,
+      CREATE INDEX IF NOT EXISTS "idx_chatRooms_user1_id" 
+      ON "${schema}"."chatRooms" ("user1Id")
+    `);
+
+    await queryRunner.query(`
+      CREATE INDEX IF NOT EXISTS "idx_chatRooms_user2_id" 
+      ON "${schema}"."chatRooms" ("user2Id")
+    `);
+
+    // Create userChatRooms junction table for many-to-many relationship (using camelCase for consistency)
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}"."userChatRooms" (
+        "chatRoomId" INTEGER NOT NULL REFERENCES "${schema}"."chatRooms"(id) ON DELETE CASCADE,
         "userId" INTEGER NOT NULL REFERENCES "${schema}"."users"(id) ON DELETE CASCADE,
         "joinedAt" TIMESTAMP NOT NULL DEFAULT now(),
         "role" VARCHAR(50),
@@ -68,27 +81,61 @@ export class CreateChatRoomTable1741628726345 implements MigrationInterface {
 
     // Create indexes for junction table
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "idx_user_chat_rooms_user_id" 
-      ON "${schema}"."user_chat_rooms" ("userId")
+      CREATE INDEX IF NOT EXISTS "idx_userChatRooms_user_id" 
+      ON "${schema}"."userChatRooms" ("userId")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "idx_user_chat_rooms_chat_room_id" 
-      ON "${schema}"."user_chat_rooms" ("chatRoomId")
+      CREATE INDEX IF NOT EXISTS "idx_userChatRooms_chat_room_id" 
+      ON "${schema}"."userChatRooms" ("chatRoomId")
     `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     const schema = queryRunner.connection.options.name || 'public';
 
+    // Drop indexes for junction table first
+    await queryRunner.query(`
+      DROP INDEX IF EXISTS "${schema}"."idx_userChatRooms_user_id"
+    `);
+
+    await queryRunner.query(`
+      DROP INDEX IF EXISTS "${schema}"."idx_userChatRooms_chat_room_id"
+    `);
+
     // Drop junction table
     await queryRunner.query(`
-      DROP TABLE IF EXISTS "${schema}"."user_chat_rooms"
+      DROP TABLE IF EXISTS "${schema}"."userChatRooms"
+    `);
+
+    // Drop indexes for chat rooms table
+    await queryRunner.query(`
+      DROP INDEX IF EXISTS "${schema}"."idx_chatRooms_matrix_room_id"
+    `);
+
+    await queryRunner.query(`
+      DROP INDEX IF EXISTS "${schema}"."idx_chatRooms_creator_id"
+    `);
+
+    await queryRunner.query(`
+      DROP INDEX IF EXISTS "${schema}"."idx_chatRooms_event_id"
+    `);
+
+    await queryRunner.query(`
+      DROP INDEX IF EXISTS "${schema}"."idx_chatRooms_group_id"
+    `);
+
+    await queryRunner.query(`
+      DROP INDEX IF EXISTS "${schema}"."idx_chatRooms_user1_id"
+    `);
+
+    await queryRunner.query(`
+      DROP INDEX IF EXISTS "${schema}"."idx_chatRooms_user2_id"
     `);
 
     // Drop main table
     await queryRunner.query(`
-      DROP TABLE IF EXISTS "${schema}"."chat_rooms"
+      DROP TABLE IF EXISTS "${schema}"."chatRooms"
     `);
 
     // Drop enum types
