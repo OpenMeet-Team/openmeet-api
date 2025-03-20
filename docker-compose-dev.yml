@@ -62,6 +62,7 @@ services:
     container_name: openmeet_matrix
     ports:
       - "8448:8448"
+      - "9090:9090"  # Expose Prometheus metrics port
     environment:
       # Only set the host value that can't come from .env
       POSTGRES_HOST: postgres

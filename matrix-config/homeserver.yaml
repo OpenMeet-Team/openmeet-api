@@ -15,8 +15,13 @@ listeners:
     x_forwarded: true
     bind_addresses: ['0.0.0.0']
     resources:
-      - names: [client, federation]
+      - names: [client, federation, metrics]
         compress: false
+        
+  # Dedicated metrics listener
+  - port: 9090
+    type: metrics
+    bind_addresses: ['0.0.0.0']
 
 ## Database configuration
 database:
@@ -90,11 +95,6 @@ url_preview_enabled: false
 
 ## Metrics - enabled with Prometheus support
 enable_metrics: true
-
-prometheus:
-  enabled: true
-  port: 9090
-  endpoint: "metrics"
 
 ## Reports - disabled for testing
 report_stats: false
