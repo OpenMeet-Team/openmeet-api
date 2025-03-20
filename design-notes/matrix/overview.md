@@ -2,70 +2,111 @@
 
 ## Overview
 
-OpenMeet has integrated Matrix as its chat infrastructure, replacing the previous Zulip-based system. This directory contains design documents explaining various aspects of the Matrix integration.
+OpenMeet has integrated Matrix as its chat infrastructure, replacing the previous Zulip-based system. This document provides a high-level overview of the Matrix integration, its architecture, and the key components.
 
-## Document Structure
+## Matrix Integration Architecture
 
-- [**overview.md**](./overview.md) - This document
-- [**user-experience.md**](./user-experience.md) - User-facing changes and improvements
-- [**technical-implementation.md**](./technical-implementation.md) - Technical architecture and implementation details
-- [**client-implementation.md**](./client-implementation.md) - Client-side implementation specifics
-- [**phases.md**](./phases.md) - Implementation phases and progress
-- [**fixes.md**](./fixes.md) - Important fixes and improvements
+### Key Components
 
-## Key Technical Achievements
+1. **Backend (NestJS)**
+   - **Matrix Module**: Core integration with Matrix homeserver
+     - `MatrixCoreService`: SDK loading, admin client, and configuration
+     - `MatrixUserService`: User management and authentication
+     - `MatrixRoomService`: Room creation and moderation
+     - `MatrixMessageService`: Message sending and retrieval
+     - `MatrixGateway`: WebSocket-based real-time event delivery
+   - **Chat Module**: Business logic and API endpoints
+     - `ChatController`: API endpoints for all chat functionality
+     - `ChatRoomService`: Room creation and membership management
+     - `DiscussionService`: Logic for group and event discussions
+     - `MatrixChatServiceAdapter`: Matrix implementation of ChatService interface
 
-1. **Matrix Server Integration**
-   - Complete integration with Matrix homeserver
-   - User provisioning and authentication
-   - Room creation and management
+2. **Matrix Server**
+   - Synapse homeserver for message storage and delivery
+   - User accounts provisioned via Admin API
+   - Rooms created for events, groups, and direct messages
 
-2. **Enhanced Real-time Communications**
-   - WebSocket-based event delivery
-   - Typing indicators
-   - Read receipts
+3. **Frontend (Vue/Quasar)**
+   - WebSocket client for real-time updates
+   - Unified message store for all chat contexts
+   - Consistent UI components for messaging
 
-3. **Unified Message Model**
-   - Simplified chronological messaging
-   - Consistent experience across group and event chats
-   - Removal of Zulip-style threading
+### Data Flow
 
-4. **Secure Credential Management**
-   - Server-side Matrix credential storage
+1. OpenMeet backend provisions Matrix users and rooms
+2. User authentication flows through OpenMeet JWT
+3. Matrix credentials stored securely in OpenMeet database
+4. WebSocket connection established for real-time updates
+5. Matrix events flow through WebSocket to frontend
+6. Messages stored in unified message store on frontend
+
+### Key Technical Achievements
+
+1. **Secure Integration**
+   - Server-side Matrix credential management
    - No client exposure of Matrix tokens
    - Tenant-aware authentication
 
-5. **Advanced Room Management**
-   - Automatic room creation for events and groups
-   - Permission-based moderation
-   - Event-based system for user membership changes
+2. **Enhanced Real-time Communications**
+   - WebSocket-based event delivery
+   - Typing indicators and read receipts
+   - Efficient client connection management
 
-6. **Performance Optimizations**
+3. **Unified Message Model**
+   - Simplified chronological messaging
+   - Consistent experience across all chat contexts
+   - Removal of Zulip-style threading
+
+4. **Advanced Room Management**
+   - Automatic room creation for events and groups
+   - Role-based moderation privileges
+   - Event-based system for membership changes
+
+5. **Performance Optimizations**
    - Request-scoped caching
-   - Smart room joining strategies
-   - Efficient WebSocket communication
+   - Efficient room joining strategies
    - Automatic cleanup of inactive clients
 
-## Architecture Summary
+## User Experience Improvements
 
-The Matrix integration follows a service-oriented architecture with clear separation of concerns. As of March 2025, we've consolidated the previously separate chat services into a unified Chat module:
+1. **Real-time Messaging**
+   - Instant message delivery without page refreshes
+   - Typing indicators and read receipts
+   - Consistent notifications
 
-- **Matrix Service** - Core Matrix API operations and API client management
-- **Matrix Gateway** - WebSocket event handling and real-time communication
-- **Chat Module** (Consolidated):
-  - **ChatRoomService** - Room creation, membership, and permissions management
-  - **DiscussionService** - Business logic for group and event discussions
-  - **MatrixChatServiceAdapter** - Implementation of the ChatServiceInterface for Matrix
-  - **ChatController** - API endpoints for all chat functionality
+2. **Simplified Messaging Model**
+   - Chronological chat replaces threaded discussions
+   - Familiar messaging experience across contexts
+   - Better alignment with Matrix's native capabilities
 
-Events flow through the system in a unidirectional manner:
+3. **Enhanced Features**
+   - Better media sharing and rendering
+   - Improved mobile experience
+   - Dark mode support
 
-1. Backend events (e.g., user joins event) trigger room membership changes
-2. Matrix events flow from Matrix server to Matrix Gateway
-3. Gateway broadcasts events to connected clients
-4. Frontend stores update with new message data
-5. UI components render the messages
+4. **Improved Accessibility**
+   - Better keyboard navigation
+   - Screen reader support
+   - Customizable text sizing
 
-This consolidated architecture improves code organization, reduces duplication, and prepares us for a future where Matrix is the sole source of truth for chat data.
+## Current Status and Next Steps
 
-See [technical-implementation.md](./technical-implementation.md) for detailed architecture information and [phases.md](./phases.md) for the implementation timeline.
+The Matrix integration implementation is largely complete, with the following status:
+
+- ✅ Core infrastructure and services
+- ✅ WebSocket real-time communication
+- ✅ User provisioning and authentication
+- ✅ Room creation and management
+- ✅ Service architecture restructuring and optimization
+- ✅ Credential management improvements
+
+**Current Pending Tasks:**
+
+1. Implement credential validation and error handling for M_UNKNOWN_TOKEN errors
+2. Create database script for resetting Matrix access tokens
+3. Test the credential management solution in both local and dev environments
+4. Deploy the credential management solution to the development environment
+5. Complete Cypress testing for Matrix chat features
+6. Monitor authentication failure patterns
+
+See the [implementation-phases.md](implementation-phases) document for detailed implementation status and upcoming work.
