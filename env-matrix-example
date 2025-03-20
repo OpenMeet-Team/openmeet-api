@@ -1,6 +1,7 @@
-# Matrix Configuration
-MATRIX_BASE_URL=https://matrix-dev.openmeet.net
-MATRIX_ADMIN_USER=admin
+# Matrix Configuration - PRODUCTION/DEV SETTINGS (SAVED BEFORE RESET)
+# This configuration is for the production/dev environment
+# MATRIX_BASE_URL=https://matrix-dev.openmeet.net
+# MATRIX_ADMIN_USER=admin
 # Admin token can be obtained by logging in as admin using:
 # curl -X POST -H "Content-Type: application/json" \
 #   "https://matrix-dev.openmeet.net/_matrix/client/r0/login" \
@@ -13,8 +14,27 @@ MATRIX_ADMIN_USER=admin
 #     "password": "your-admin-password"
 #   }'
 # The access_token from the response is your admin token
-MATRIX_ADMIN_ACCESS_TOKEN=syt_xxxxx
-MATRIX_SERVER_NAME=matrix-dev.openmeet.net
+# MATRIX_ADMIN_ACCESS_TOKEN=syt_xxxxx
+# MATRIX_SERVER_NAME=matrix-dev.openmeet.net
+# MATRIX_DEFAULT_DEVICE_ID=OPENMEET_SERVER
+# MATRIX_DEFAULT_DEVICE_DISPLAY_NAME=OpenMeet Server
+# MATRIX_CONNECTION_POOL_SIZE=10
+# MATRIX_CONNECTION_POOL_TIMEOUT=30000
+# MATRIX_CONNECTION_RETRY_ATTEMPTS=3
+# MATRIX_CONNECTION_RETRY_DELAY=1000
+
+# Matrix Configuration - LOCAL DEVELOPMENT
+# Use these settings for local development with docker-compose-dev.yml
+MATRIX_BASE_URL=http://localhost:8448
+MATRIX_SERVER_URL=http://localhost:8448
+MATRIX_HOMESERVER_URL=http://localhost:8448
+MATRIX_SERVER_NAME=matrix-local.openmeet.test
+MATRIX_ADMIN_USER=admin
+MATRIX_ADMIN_USERNAME=admin
+MATRIX_ADMIN_PASSWORD=admin_secret_password
+# Leave this empty at first, it will be generated automatically
+MATRIX_ADMIN_ACCESS_TOKEN=
+MATRIX_REGISTRATION_SECRET=local_test_registration_secret
 MATRIX_DEFAULT_DEVICE_ID=OPENMEET_SERVER
 MATRIX_DEFAULT_DEVICE_DISPLAY_NAME=OpenMeet Server
 MATRIX_CONNECTION_POOL_SIZE=10

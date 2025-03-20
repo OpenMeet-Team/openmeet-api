@@ -56,6 +56,48 @@ services:
     restart: always
     networks:
       - api-network
+      
+  matrix:
+    image: matrixdotorg/synapse:v1.126.0rc3
+    container_name: openmeet_matrix
+    ports:
+      - "8448:8448"
+    environment:
+      # Only set the host value that can't come from .env
+      POSTGRES_HOST: postgres
+      # Set the default Matrix port and host for local development
+      MATRIX_HOST: localhost
+      MATRIX_PORT: 8448
+      # Standard Synapse settings
+      SYNAPSE_REPORT_STATS: "no"
+      SYNAPSE_LOG_LEVEL: "INFO"
+    volumes:
+      - ./matrix-config/homeserver.yaml:/data/homeserver.yaml
+      - ./matrix-config/log.config:/data/log.config
+      - ./matrix-config/init.sh:/data/init.sh
+      - ./matrix-config/start-matrix.sh:/data/start-matrix.sh
+      - matrix-data:/data/media
+    depends_on:
+      - postgres
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8448/_matrix/client/versions"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        # Install envsubst and jq if not already available
+        apt-get update && apt-get install -y gettext-base jq curl python3
+        chmod +x /data/start-matrix.sh
+        chmod +x /data/init.sh
+        /data/start-matrix.sh &
+        sleep 15 && /data/init.sh &
+        wait
+    networks:
+      - api-network
 
   # api:
   #   build:
@@ -96,6 +138,7 @@ services:
       - api-network
 volumes:
   dbdata:
+  matrix-data:
 
 networks:
   api-network:

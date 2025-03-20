@@ -1,5 +1,5 @@
 ## Server name
-server_name: "matrix-ci.openmeet.test"
+server_name: "${SYNAPSE_SERVER_NAME}"
 pid_file: /data/homeserver.pid
 
 ## Trusted key servers
@@ -12,7 +12,8 @@ listeners:
   - port: 8448
     tls: false
     type: http
-    x_forwarded: false
+    x_forwarded: true
+    bind_addresses: ['0.0.0.0']
     resources:
       - names: [client, federation]
         compress: false
@@ -21,10 +22,10 @@ listeners:
 database:
   name: psycopg2
   args:
-    user: "root"
-    password: "secret"
-    database: "synapse"
-    host: "postgres"
+    user: "${POSTGRES_USER}"
+    password: "${POSTGRES_PASSWORD}"
+    database: "${POSTGRES_DB}"
+    host: "${POSTGRES_HOST}"
     port: "5432"
     cp_min: 5
     cp_max: 10
@@ -42,15 +43,16 @@ log_config: "/data/log.config"
 ## Registration
 enable_registration: true
 enable_registration_without_verification: true
-registration_shared_secret: "ci_test_registration_secret"
+registration_shared_secret: "${SYNAPSE_REGISTRATION_SHARED_SECRET}"
 
-## Security
-macaroon_secret_key: "ci_test_macaroon_secret_key"
-form_secret: "ci_test_form_secret"
+## Security - using Kubernetes naming convention
+macaroon_secret_key: "${SYNAPSE_MACAROON_SECRET_KEY}"
+form_secret: "${SYNAPSE_FORM_SECRET}"
 
 ## Federation
-allow_public_rooms_over_federation: true
-allow_public_rooms_without_auth: true
+enable_federation: false  # Disable federation until ready to scale out
+allow_public_rooms_over_federation: false
+allow_public_rooms_without_auth: false
 
 ## Retention policy
 retention:
@@ -86,8 +88,13 @@ push:
 ## URL previews
 url_preview_enabled: false
 
-## Metrics - disabled for testing
-enable_metrics: false
+## Metrics - enabled with Prometheus support
+enable_metrics: true
+
+prometheus:
+  enabled: true
+  port: 9090
+  endpoint: "metrics"
 
 ## Reports - disabled for testing
 report_stats: false
@@ -111,3 +118,7 @@ email:
 ## Experimental features
 experimental_features:
   spaces_enabled: true
+
+## Encryption settings
+encryption_enabled_by_default_for_room_type: all
+enable_key_server: true
