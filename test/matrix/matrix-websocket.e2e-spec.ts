@@ -1,7 +1,6 @@
 import request from 'supertest';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import { loginAsTester, createEvent } from '../utils/functions';
-import { Server } from 'socket.io';
 import { io as Client } from 'socket.io-client';
 
 describe('Matrix WebSocket Integration Tests', () => {
@@ -38,7 +37,7 @@ describe('Matrix WebSocket Integration Tests', () => {
     eventSlug = event.slug;
   });
 
-  afterAll(async () => {
+  afterAll(() => {
     if (socketClient && socketClient.connected) {
       socketClient.disconnect();
     }

@@ -8,7 +8,11 @@ import {
 import { ContextIdFactory, ModuleRef } from '@nestjs/core';
 import axios from 'axios';
 import { MatrixCoreService } from './matrix-core.service';
-import { CreateUserOptions, MatrixUserInfo } from '../types/matrix.types';
+import {
+  CreateUserOptions,
+  MatrixUserInfo,
+  UpdateMatrixPasswordOptions,
+} from '../types/matrix.types';
 import {
   IMatrixClient,
   IMatrixClientProvider,
@@ -19,6 +23,102 @@ import { MatrixGateway } from '../matrix.gateway';
 export class MatrixUserService
   implements IMatrixClientProvider, OnModuleDestroy
 {
+  /**
+   * Generate a standardized Matrix username for an OpenMeet user
+   * @param user User entity or object with slug property
+   * @param tenantId Optional tenant ID to include in the username
+   * @returns A standardized Matrix username
+   */
+  public static generateMatrixUsername(user: { slug: string }, tenantId?: string): string {
+    return tenantId 
+      ? `${user.slug}_${tenantId}`
+      : user.slug;
+  }
+  
+  /**
+   * Generate a secure random password for Matrix users
+   * @returns A secure random password
+   */
+  public static generateMatrixPassword(): string {
+    return Math.random().toString(36).slice(2) + 
+           Math.random().toString(36).slice(2);
+  }
+  
+  /**
+   * Generate a display name for a Matrix user based on OpenMeet user data
+   * @param user User entity or object with firstName, lastName, and email properties
+   * @returns A formatted display name
+   */
+  public static generateDisplayName(user: { 
+    firstName?: string | null; 
+    lastName?: string | null;
+    email?: string | null;
+    slug?: string;
+  }): string {
+    // First try to use full name
+    const fullName = [user.firstName, user.lastName]
+      .filter(Boolean)
+      .join(' ');
+      
+    if (fullName) {
+      return fullName;
+    }
+    
+    // If no full name, try email username
+    if (user.email) {
+      const emailUsername = user.email.split('@')[0];
+      if (emailUsername) {
+        return emailUsername;
+      }
+    }
+    
+    // If nothing else, use the slug or a generic name
+    return user.slug || 'OpenMeet User';
+  }
+  
+  /**
+   * Provisions a Matrix user for an OpenMeet user if they don't already have Matrix credentials
+   * @param user The OpenMeet user object
+   * @param tenantId Optional tenant ID for multi-tenant support
+   * @returns Matrix user credentials
+   */
+  async provisionMatrixUser(
+    user: {
+      slug: string;
+      firstName?: string | null;
+      lastName?: string | null;
+      email?: string | null;
+    },
+    tenantId?: string
+  ): Promise<MatrixUserInfo> {
+    // Generate username, password, and display name using our static helpers
+    const username = MatrixUserService.generateMatrixUsername(user, tenantId);
+    const password = MatrixUserService.generateMatrixPassword();
+    const displayName = MatrixUserService.generateDisplayName(user);
+    
+    // Create the Matrix user
+    const matrixUserInfo = await this.createUser({
+      username,
+      password,
+      displayName,
+    });
+    
+    // Ensure display name is set properly (sometimes it doesn't get set during creation)
+    try {
+      await this.setUserDisplayName(
+        matrixUserInfo.userId,
+        matrixUserInfo.accessToken,
+        displayName,
+        matrixUserInfo.deviceId
+      );
+      this.logger.debug(`Set Matrix display name for ${matrixUserInfo.userId} to "${displayName}"`);
+    } catch (displayNameError) {
+      this.logger.warn(`Failed to set Matrix display name: ${displayNameError.message}`);
+      // Non-fatal error, continue
+    }
+    
+    return matrixUserInfo;
+  }
   private readonly logger = new Logger(MatrixUserService.name);
 
   // Map to store user-specific Matrix clients (using slug as key)
@@ -113,19 +213,82 @@ export class MatrixUserService
           // Try using the standard register endpoint as a last resort
           try {
             const registerUrl = `${config.baseUrl}/_matrix/client/v3/register`;
+            this.logger.debug(`Trying standard registration endpoint: ${registerUrl}`);
 
-            // Try with dummy auth type
+            // Try with dummy auth type - this often works when admin API fails
             const registerData = {
               username: username,
               password: password,
               auth: {
                 type: 'm.login.dummy',
               },
-              inhibit_login: true,
+              inhibit_login: false, // Changed to false to get access token directly
             };
 
-            await axios.post(registerUrl, registerData);
+            const registerResponse = await axios.post(registerUrl, registerData);
+            
+            // If we get here, registration succeeded - extract credentials
+            if (registerResponse.data && registerResponse.data.access_token) {
+              this.logger.debug('Standard registration succeeded with direct token');
+              
+              // Return user credentials directly
+              return {
+                userId: registerResponse.data.user_id,
+                accessToken: registerResponse.data.access_token,
+                deviceId: registerResponse.data.device_id,
+              };
+            }
           } catch (registerError) {
+            // Try registration with shared secret as absolute last resort
+            try {
+              // Check if we have the registration shared secret from the environment
+              const sharedSecret = process.env.MATRIX_REGISTRATION_SECRET || 
+                                  process.env.SYNAPSE_REGISTRATION_SHARED_SECRET;
+                                  
+              if (sharedSecret) {
+                this.logger.debug('Attempting registration with shared secret');
+                
+                // First get a nonce from the server
+                const nonceResponse = await axios.get(`${config.baseUrl}/_matrix/client/v3/register?kind=user`);
+                
+                if (nonceResponse.data && nonceResponse.data.nonce) {
+                  const nonce = nonceResponse.data.nonce;
+                  
+                  // Create HMAC-SHA1 signature
+                  const crypto = require('crypto');
+                  const hmac = crypto.createHmac('sha1', sharedSecret);
+                  hmac.update(nonce + '\0' + username + '\0' + password + '\0' + (adminUser ? '1' : '0'));
+                  const mac = hmac.digest('hex');
+                  
+                  // Register with shared secret
+                  const sharedSecretResponse = await axios.post(`${config.baseUrl}/_matrix/client/v3/register`, {
+                    username,
+                    password,
+                    nonce,
+                    mac,
+                    type: 'm.login.shared_secret',
+                    admin: adminUser,
+                    inhibit_login: false
+                  });
+                  
+                  if (sharedSecretResponse.data && sharedSecretResponse.data.access_token) {
+                    this.logger.debug('Shared secret registration succeeded');
+                    
+                    return {
+                      userId: sharedSecretResponse.data.user_id,
+                      accessToken: sharedSecretResponse.data.access_token,
+                      deviceId: sharedSecretResponse.data.device_id || config.defaultDeviceId
+                    };
+                  }
+                }
+              }
+            } catch (sharedSecretError) {
+              this.logger.warn('Shared secret registration also failed:', {
+                error: sharedSecretError.message,
+                response: sharedSecretError.response?.data
+              });
+            }
+            
             this.logger.error('All Matrix registration methods failed:', {
               v2Error: v2Error.message,
               v1Error: v1Error.message,
@@ -509,6 +672,130 @@ export class MatrixUserService
       // Use undefined instead of null for Typescript compatibility
       this.cleanupInterval = undefined as unknown as NodeJS.Timeout;
     }
+  }
+
+  /**
+   * Update a Matrix user's password
+   */
+  async updatePassword(options: UpdateMatrixPasswordOptions): Promise<void> {
+    const { matrixUserId, password, tenantId } = options;
+    const config = this.matrixCoreService.getConfig();
+
+    try {
+      this.logger.debug(
+        `Updating password for Matrix user ${matrixUserId} (tenant: ${tenantId || 'default'})`,
+      );
+
+      // Try v2 admin API first (standard in most Matrix servers)
+      const url = `${config.baseUrl}/_synapse/admin/v2/users/${matrixUserId}`;
+      this.logger.debug(`Using API endpoint: ${url}`);
+
+      await axios.put(
+        url,
+        {
+          password,
+          deactivated: false,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.matrixCoreService.getAdminClient().getAccessToken()}`,
+          },
+        },
+      );
+
+      this.logger.log(`Successfully updated password for user ${matrixUserId}`);
+    } catch (v2Error) {
+      this.logger.warn('Matrix v2 API password update failed:', {
+        message: v2Error.message,
+        status: v2Error.response?.status,
+        data: v2Error.response?.data,
+      });
+
+      // Try v1 admin API as fallback
+      try {
+        const url = `${config.baseUrl}/_synapse/admin/v1/users/${matrixUserId}`;
+        this.logger.debug(`Trying v1 Matrix Admin API endpoint: ${url}`);
+
+        await axios.put(
+          url,
+          {
+            password,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${this.matrixCoreService.getAdminClient().getAccessToken()}`,
+            },
+          },
+        );
+
+        this.logger.log(
+          `Successfully updated password via v1 API for user ${matrixUserId}`,
+        );
+      } catch (v1Error) {
+        this.logger.error(
+          `All Matrix password update methods failed for user ${matrixUserId}:`,
+          {
+            v2Error: v2Error.message,
+            v1Error: v1Error.message,
+          },
+        );
+        throw new Error(`Failed to update Matrix password: ${v2Error.message}`);
+      }
+    }
+  }
+
+  /**
+   * Set Matrix password for a user - handles user verification and matrix password setting
+   */
+  async setUserMatrixPassword(
+    userId: number,
+    password: string,
+    tenantId?: string,
+  ): Promise<void> {
+    this.logger.debug(`Setting Matrix password for user ID: ${userId}`);
+
+    // Use dynamic import to get UserService to avoid circular dependency
+    let UserServiceClass;
+    try {
+      UserServiceClass = (await import('../../user/user.service')).UserService;
+    } catch (error) {
+      this.logger.error(`Error importing UserService: ${error.message}`);
+      throw new Error('Internal server error');
+    }
+
+    // Get context ID for DI
+    const contextId = ContextIdFactory.create();
+
+    // Get UserService from module system
+    const userService = await this.moduleRef.resolve(
+      UserServiceClass,
+      contextId,
+      { strict: false },
+    );
+
+    // Get the full user information including Matrix credentials
+    const user = await userService.findById(userId, tenantId);
+
+    if (!user) {
+      this.logger.warn(`User with ID ${userId} not found`);
+      throw new Error('User not found');
+    }
+
+    if (!user.matrixUserId) {
+      this.logger.warn(`User ${userId} has no Matrix account`);
+      throw new Error(
+        'User has no Matrix account. Please provision a Matrix account first.',
+      );
+    }
+
+    // Update the Matrix password using admin API
+    await this.updatePassword({
+      matrixUserId: user.matrixUserId,
+      password,
+      tenantId,
+    });
+
+    this.logger.log(`Matrix password set successfully for user ID: ${userId}`);
   }
 
   /**

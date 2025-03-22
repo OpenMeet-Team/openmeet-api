@@ -1,4 +1,10 @@
-import { Injectable, Scope, Inject, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Scope,
+  Inject,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Repository, MoreThan, Brackets } from 'typeorm';
 import { EventEntity } from '../infrastructure/persistence/relational/entities/event.entity';
@@ -550,7 +556,7 @@ export class EventQueryService {
   }
 
   @Trace('event-query.findById')
-  async findById(id: number, tenantId: string): Promise<EventEntity | null> {
+  async findById(id: number, _tenantId: string): Promise<EventEntity | null> {
     await this.initializeRepository();
     return this.eventRepository.findOne({
       where: { id },

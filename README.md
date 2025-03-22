@@ -55,6 +55,19 @@ Finally, update the `config.json` for the frontend to set frontendDomain to the 
 
 #### Env setup
 
+###### ngrok for Oauth and other testing
+
+```bash
+ngrok http 3000
+```
+
+Copy the new endpoint url into you configuration:
+- .env
+- quasar.config.js
+- config.json
+
+
+
 ```bash
 # Copy example config
 cp env-example-relational .env

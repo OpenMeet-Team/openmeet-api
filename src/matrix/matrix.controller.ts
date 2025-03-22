@@ -9,6 +9,7 @@ import {
   Param,
   Body,
   Req,
+  BadRequestException,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -17,12 +18,12 @@ import { MatrixUserInfo } from './types/matrix.types';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 // User entity is imported by the UserService
 import { UserService } from '../user/user.service';
-import * as crypto from 'crypto';
 import { Request } from 'express';
 import { MatrixUserService } from './services/matrix-user.service';
 import { MatrixRoomService } from './services/matrix-room.service';
 import { MatrixMessageService } from './services/matrix-message.service';
 import { MatrixGateway } from './matrix.gateway';
+import { MatrixPasswordDto } from './dto/matrix-password.dto';
 
 @ApiTags('Matrix')
 @Controller({
@@ -62,6 +63,10 @@ export class MatrixController {
     provisioned: boolean;
     success: boolean;
   }> {
+    const tenantId = this.request?.tenantId;
+    if (!tenantId) {
+      throw new BadRequestException('Tenant ID is required');
+    }
     this.logger.log(`Provisioning Matrix user for user ID: ${user.id}`);
 
     // Check if user already has Matrix credentials
@@ -85,47 +90,14 @@ export class MatrixController {
       throw new Error(`User with ID ${user.id} not found`);
     }
 
-    // Generate a random password for the Matrix user
-    const password = crypto.randomBytes(16).toString('hex');
-
-    // Create a Matrix username from the user's UUID or other unique identifier
-    // Use a prefix to ensure it's valid for Matrix (no @ symbols allowed in usernames)
-    const matrixUsername = `om_${fullUser.ulid}`;
-
-    // Use the display name from the user's profile
-    const displayName =
-      [fullUser.firstName, fullUser.lastName].filter(Boolean).join(' ') ||
-      'OpenMeet User';
-
     try {
-      // Create the Matrix user
-      const matrixUserInfo: MatrixUserInfo =
-        await this.matrixUserService.createUser({
-          username: matrixUsername,
-          password,
-          displayName,
-        });
+      // Use the centralized provisioning method
+      const matrixUserInfo: MatrixUserInfo = await this.matrixUserService.provisionMatrixUser(
+        fullUser,
+        tenantId
+      );
 
-      // Make sure display name is set properly (sometimes it doesn't get set during creation)
-      try {
-        await this.matrixUserService.setUserDisplayName(
-          matrixUserInfo.userId,
-          matrixUserInfo.accessToken,
-          displayName,
-          matrixUserInfo.deviceId,
-        );
-        this.logger.log(
-          `Set Matrix display name for ${matrixUserInfo.userId} to "${displayName}"`,
-        );
-      } catch (displayNameError) {
-        this.logger.warn(
-          `Failed to set Matrix display name: ${displayNameError.message}`,
-        );
-        // Non-fatal error, continue
-      }
-
-      // Get tenant ID from request context
-      const tenantId = this.request?.tenantId;
+      // Display name is now set in the provisionMatrixUser method
 
       // Update the user record with Matrix credentials
       await this.userService.update(
@@ -323,6 +295,59 @@ export class MatrixController {
     } catch (error) {
       this.logger.error(
         `Error sending typing notification: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Set a Matrix password for direct client access
+   */
+  @ApiOperation({
+    summary: 'Set a Matrix password for direct client access',
+    description:
+      'Allows a user to set a password for their Matrix account to use with third-party Matrix clients',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Matrix password set successfully',
+    schema: {
+      properties: {
+        success: { type: 'boolean', example: true },
+        message: {
+          type: 'string',
+          example: 'Matrix password set successfully',
+        },
+      },
+    },
+  })
+  @UseGuards(JWTAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('set-password')
+  async setMatrixPassword(
+    @AuthUser() user: { id: number },
+    @Body() matrixPasswordDto: MatrixPasswordDto,
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      // Get the tenant ID from the request context
+      const tenantId = this.request.tenantId;
+
+      // Use the service method to handle all the complexity
+      await this.matrixUserService.setUserMatrixPassword(
+        user.id,
+        matrixPasswordDto.password,
+        tenantId,
+      );
+
+      return {
+        success: true,
+        message:
+          'Matrix password set successfully. You can now use this password with any Matrix client.',
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error setting Matrix password for user ${user.id}: ${error.message}`,
         error.stack,
       );
       throw error;

@@ -82,6 +82,7 @@ If you encounter authentication errors like `M_UNKNOWN_TOKEN` or `Invalid access
    UPDATE "user" SET matrix_user_id = NULL, matrix_access_token = NULL, matrix_device_id = NULL;
    ```
 
+
 2. The next time users interact with chat features, new credentials will be provisioned automatically.
 
 ## Clearing Matrix Data

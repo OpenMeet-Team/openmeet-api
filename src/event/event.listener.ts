@@ -118,7 +118,7 @@ export class EventListener {
   }
 
   @OnEvent('event.attendee.added')
-  async handleEventAttendeeAddedEvent(params: {
+  handleEventAttendeeAddedEvent(params: {
     eventId: number;
     userId: number;
     status: string;

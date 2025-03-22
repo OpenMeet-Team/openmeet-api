@@ -4,6 +4,7 @@ import { DiscussionService } from './services/discussion.service';
 import { ChatRoomService } from './rooms/chat-room.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
+import { ChatRoomEntity } from './infrastructure/persistence/relational/entities/chat-room.entity';
 
 @Injectable()
 export class ChatListener {
@@ -120,6 +121,64 @@ export class ChatListener {
         `Failed to remove user ${params.userId} from group ${params.groupId} chat room: ${error.message}`,
         error.stack,
       );
+    }
+  }
+
+  @OnEvent('event.before_delete')
+  async handleEventBeforeDelete(params: {
+    eventId: number;
+    eventSlug: string;
+    tenantId?: string;
+  }) {
+    this.logger.log(`event.before_delete event received for event ${params.eventSlug}`);
+
+    try {
+      // Validate tenant ID
+      if (!params.tenantId) {
+        this.logger.error('Tenant ID is required in the event payload');
+        throw new Error('Tenant ID is required');
+      }
+
+      // Clean up all chat rooms for this event through the DiscussionService
+      await this.discussionService.cleanupEventChatRooms(params.eventId, params.tenantId);
+      
+      this.logger.log(`Successfully cleaned up chat rooms for event ${params.eventSlug}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to clean up chat rooms for event ${params.eventSlug}: ${error.message}`,
+        error.stack
+      );
+      // We don't rethrow the error here to prevent blocking the event deletion
+      // The event deletion should proceed even if chat room cleanup fails
+    }
+  }
+
+  @OnEvent('group.before_delete')
+  async handleGroupBeforeDelete(params: {
+    groupId: number;
+    groupSlug: string;
+    tenantId?: string;
+  }) {
+    this.logger.log(`group.before_delete event received for group ${params.groupSlug}`);
+
+    try {
+      // Validate tenant ID
+      if (!params.tenantId) {
+        this.logger.error('Tenant ID is required in the event payload');
+        throw new Error('Tenant ID is required');
+      }
+
+      // Clean up all chat rooms for this group through the DiscussionService
+      await this.discussionService.cleanupGroupChatRooms(params.groupId, params.tenantId);
+      
+      this.logger.log(`Successfully cleaned up chat rooms for group ${params.groupSlug}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to clean up chat rooms for group ${params.groupSlug}: ${error.message}`,
+        error.stack
+      );
+      // We don't rethrow the error here to prevent blocking the group deletion
+      // The group deletion should proceed even if chat room cleanup fails
     }
   }
 

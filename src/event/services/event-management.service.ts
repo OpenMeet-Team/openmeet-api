@@ -409,6 +409,14 @@ export class EventManagementService {
       }
     }
 
+    // Emit event about to be deleted to allow other services to clean up
+    this.eventEmitter.emit('event.before_delete', {
+      eventId: event.id,
+      eventSlug: event.slug,
+      eventName: event.name,
+      tenantId: this.request?.tenantId
+    });
+
     // Delete related event attendees first
     await this.eventAttendeeService.deleteEventAttendees(event.id);
 

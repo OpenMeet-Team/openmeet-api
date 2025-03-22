@@ -12,9 +12,6 @@ import { UserEntity } from '../user/infrastructure/persistence/relational/entiti
 describe('MatrixController', () => {
   let controller: MatrixController;
   let matrixUserService: MatrixUserService;
-  let matrixRoomService: MatrixRoomService;
-  let matrixMessageService: MatrixMessageService;
-  let matrixGateway: MatrixGateway;
   let userService: UserService;
 
   // Mock data
@@ -57,6 +54,7 @@ describe('MatrixController', () => {
             getClientForUser: jest.fn().mockResolvedValue({
               sendTyping: jest.fn().mockResolvedValue(undefined),
             }),
+            provisionMatrixUser: jest.fn().mockResolvedValue(mockMatrixUserInfo),
           },
         },
         {
@@ -125,10 +123,6 @@ describe('MatrixController', () => {
 
     controller = module.get<MatrixController>(MatrixController);
     matrixUserService = module.get<MatrixUserService>(MatrixUserService);
-    matrixRoomService = module.get<MatrixRoomService>(MatrixRoomService);
-    matrixMessageService =
-      module.get<MatrixMessageService>(MatrixMessageService);
-    matrixGateway = module.get<MatrixGateway>(MatrixGateway);
     userService = module.get<UserService>(UserService);
   });
 
@@ -165,11 +159,10 @@ describe('MatrixController', () => {
     it('should provision a new Matrix user if user does not have Matrix credentials', async () => {
       const result = await controller.provisionMatrixUser(mockUser as any);
 
-      expect(matrixUserService.createUser).toHaveBeenCalledWith({
-        username: `om_${mockFullUser.ulid}`,
-        password: expect.any(String),
-        displayName: 'Test User',
-      });
+      expect(matrixUserService.provisionMatrixUser).toHaveBeenCalledWith(
+        mockFullUser,
+        'test-tenant'
+      );
 
       expect(userService.update).toHaveBeenCalledWith(
         mockUser.id,
@@ -196,7 +189,7 @@ describe('MatrixController', () => {
 
     it('should propagate errors from Matrix service', async () => {
       const error = new Error('Failed to create Matrix user');
-      jest.spyOn(matrixUserService, 'createUser').mockRejectedValueOnce(error);
+      jest.spyOn(matrixUserService, 'provisionMatrixUser').mockRejectedValueOnce(error);
 
       await expect(
         controller.provisionMatrixUser(mockUser as any),

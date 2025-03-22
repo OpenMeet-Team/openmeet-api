@@ -1,82 +1,83 @@
-# Matrix Chat Integration Documentation
+# Matrix Integration for OpenMeet
 
-This directory contains the documentation for OpenMeet's Matrix chat integration. The documentation has been consolidated into five key files for easier reference and maintenance.
+This directory contains streamlined documentation for the Matrix chat integration in OpenMeet. The documentation is organized into three core documents:
 
-## Documentation Structure
+## Documentation Overview
 
-1. **[overview.md](./overview.md)**
-   - High-level overview of the Matrix integration
-   - Architecture and key components
-   - Data flow description
-   - Key technical achievements
+1. [Matrix Architecture](./matrix-architecture.md)
+   - High-level architecture overview
+   - Key components and their responsibilities
+   - System data flow
    - User experience improvements
-   - Current status and pending tasks
+   - Implementation status
 
-2. **[implementation-phases.md](./implementation-phases.md)**
-   - Detailed implementation timeline
-   - Completed phases and their achievements
-   - Current in-progress work
-   - Upcoming phases and tasks
-   - Migration strategy
-   - Cutover planning
-
-3. **[technical-details.md](./technical-details.md)**
-   - Detailed technical architecture
-   - Backend component descriptions
-   - Data model updates
-   - Key technical decisions
+2. [Matrix Implementation](./matrix-implementation.md)
+   - Detailed service architecture
+   - Credential management strategies
    - Performance optimizations
-   - Current challenges and future improvements
-
-4. **[credential-management.md](./credential-management.md)**
-   - Current authentication issues
-   - Credential management strategy
-   - Implementation approach with code examples
-   - Reset procedures for local and production environments
-   - Automatic recovery mechanics
+   - Permission management
+   - Key design decisions
    - Future enhancements
 
-5. **[testing-and-monitoring.md](./testing-and-monitoring.md)**
-   - Comprehensive testing strategy
-   - Current test status
-   - Manual testing checklists
-   - Monitoring approach
-   - Pending testing tasks
-   - Next steps for testing improvements
+3. [Matrix Operations](./matrix-operations.md)
+   - Local development setup
+   - Testing strategies and checklists
+   - Monitoring approaches
+   - Troubleshooting common issues
+   - Reset procedures
+   - Migration strategy
 
-## Current Focus: Credential Management
+## Quick Start
 
-We are currently focusing on implementing robust credential management to resolve the `M_UNKNOWN_TOKEN` errors encountered in the development environment. The approach preserves existing Matrix user IDs while providing graceful error recovery when Matrix tokens become invalid.
+For developers new to the Matrix integration:
 
-### Key Pending Tasks
+1. Read [Matrix Architecture](./matrix-architecture.md) first to understand the overall design
+2. Review [Matrix Implementation](./matrix-implementation.md) for technical details
+3. Use [Matrix Operations](./matrix-operations.md) for practical setup and testing guidance
 
-1. Implement credential validation and error handling for `M_UNKNOWN_TOKEN` errors
-2. Create database script for resetting Matrix access tokens
-3. Test the credential management solution in both local and dev environments
-4. Deploy the credential management solution to the development environment
-5. Complete Cypress testing for Matrix chat features
-6. Monitor authentication failure patterns
+## Key Reference
 
-## Getting Started
+### Important Methods
 
-For local development with Matrix:
+- `MatrixUserService.provisionMatrixUser()`: User provisioning with credential management
+- `ChatRoomService.ensureUserHasMatrixCredentials()`: Credential validation and provisioning
+- `MatrixGateway.broadcastRoomEvent()`: Real-time event broadcasting
 
-1. Use Docker Compose with the Matrix container:
-   ```
-   docker-compose -f docker-compose-dev.yml up -d
-   ```
+### Credential Error Handling Pattern
 
-2. Check the Matrix admin token in the logs:
-   ```
-   docker-compose -f docker-compose-dev.yml logs matrix | grep -A 10 "Success! Matrix server initialized"
-   ```
+```typescript
+try {
+  // Attempt Matrix operation
+} catch (error) {
+  if (error.errcode === 'M_UNKNOWN_TOKEN') {
+    // Refresh credentials or reprovision user
+    await this.handleCredentialRefresh(userId);
+    // Retry original operation
+  } else {
+    // Handle other errors
+  }
+}
+```
 
-3. Update your `.env` file with the Matrix credentials:
-   ```
-   MATRIX_ADMIN_ACCESS_TOKEN=your_token_from_logs
-   MATRIX_ADMIN_USER=@admin:matrix-local.openmeet.test
-   MATRIX_SERVER_NAME=matrix-local.openmeet.test
-   MATRIX_HOME_SERVER=http://matrix:8008
-   ```
+### Local Development Quick Setup
 
-For more detailed setup instructions, see [credential-management.md](./credential-management.md).
+```bash
+# Start Matrix server
+docker-compose -f docker-compose-dev.yml up -d
+
+# Get admin token
+docker-compose -f docker-compose-dev.yml logs matrix | grep -A 10 "Success! Matrix server initialized"
+
+# Update .env file with token
+# MATRIX_ADMIN_ACCESS_TOKEN=your_token_from_logs
+```
+
+## Implementation Status
+
+- ✅ Core infrastructure and services
+- ✅ WebSocket real-time communication
+- ✅ User provisioning and authentication
+- ✅ Room creation and management
+- ✅ Service architecture optimization
+- ✅ Credential management improvements
+- 🚧 Comprehensive testing in progress

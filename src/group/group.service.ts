@@ -561,6 +561,7 @@ export class GroupService {
 
     // Create a copy that won't affect the original updateGroupDto, but omit categories
     // which we'll handle separately
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { categories: _, ...otherProps } = updateGroupDto;
     const mappedGroupDto = { ...otherProps };
 
@@ -606,6 +607,14 @@ export class GroupService {
     await this.getTenantSpecificGroupRepository();
     const group = await this.getGroupBySlug(slug);
 
+    // Emit event before deleting group to allow cleanup of chat rooms
+    this.eventEmitter.emit('group.before_delete', {
+      groupId: group.id,
+      groupSlug: group.slug,
+      groupName: group.name,
+      tenantId: this.request?.tenantId
+    });
+    
     // First, delete all group members associated with the group
     await this.groupMembersRepository.delete({ group: { id: group.id } });
     await this.eventManagementService.deleteEventsByGroup(group.id);
