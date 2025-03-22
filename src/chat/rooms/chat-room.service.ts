@@ -1199,6 +1199,119 @@ export class ChatRoomService {
 
     return chatRoom.members;
   }
+  
+  /**
+   * Delete a chat room from the database
+   */
+  @Trace('chat-room.deleteChatRoom')
+  async deleteChatRoom(roomId: number): Promise<void> {
+    await this.initializeRepositories();
+    
+    const chatRoom = await this.chatRoomRepository.findOne({
+      where: { id: roomId },
+      relations: ['members'],
+    });
+    
+    if (!chatRoom) {
+      this.logger.warn(`Chat room with id ${roomId} not found, nothing to delete`);
+      return;
+    }
+    
+    try {
+      // First, remove the members association
+      if (chatRoom.members && chatRoom.members.length > 0) {
+        chatRoom.members = [];
+        await this.chatRoomRepository.save(chatRoom);
+      }
+      
+      // Then delete the chat room entity
+      await this.chatRoomRepository.delete(roomId);
+      this.logger.log(`Successfully deleted chat room with id ${roomId}`);
+    } catch (error) {
+      this.logger.error(`Error deleting chat room with id ${roomId}: ${error.message}`);
+      throw error;
+    }
+  }
+  
+  /**
+   * Delete all chat rooms associated with a group
+   */
+  @Trace('chat-room.deleteGroupChatRooms')
+  async deleteGroupChatRooms(groupId: number): Promise<void> {
+    await this.initializeRepositories();
+    
+    try {
+      // Find all chat rooms for this group
+      const chatRooms = await this.getGroupChatRooms(groupId);
+      
+      if (!chatRooms || chatRooms.length === 0) {
+        this.logger.log(`No chat rooms found for group ${groupId}`);
+        return;
+      }
+      
+      this.logger.log(`Deleting ${chatRooms.length} chat rooms for group ${groupId}`);
+      
+      // Delete each chat room
+      for (const room of chatRooms) {
+        await this.deleteChatRoom(room.id);
+      }
+      
+      // Update the group to clear the matrixRoomId reference
+      const group = await this.groupRepository.findOne({
+        where: { id: groupId }
+      });
+      
+      if (group && group.matrixRoomId) {
+        group.matrixRoomId = '';
+        await this.groupRepository.save(group);
+      }
+      
+      this.logger.log(`Successfully deleted all chat rooms for group ${groupId}`);
+    } catch (error) {
+      this.logger.error(`Error deleting chat rooms for group ${groupId}: ${error.message}`);
+      throw error;
+    }
+  }
+  
+  /**
+   * Delete all chat rooms associated with an event
+   */
+  @Trace('chat-room.deleteEventChatRooms')
+  async deleteEventChatRooms(eventId: number): Promise<void> {
+    await this.initializeRepositories();
+    
+    try {
+      // Find all chat rooms for this event
+      const chatRooms = await this.getEventChatRooms(eventId);
+      
+      if (!chatRooms || chatRooms.length === 0) {
+        this.logger.log(`No chat rooms found for event ${eventId}`);
+        return;
+      }
+      
+      this.logger.log(`Deleting ${chatRooms.length} chat rooms for event ${eventId}`);
+      
+      // Delete each chat room
+      for (const room of chatRooms) {
+        await this.deleteChatRoom(room.id);
+      }
+      
+      // Update the event to clear the matrixRoomId reference
+      const event = await this.eventRepository.findOne({
+        where: { id: eventId }
+      });
+      
+      if (event && event.matrixRoomId) {
+        event.matrixRoomId = '';
+        await this.eventRepository.save(event);
+      }
+      
+      this.logger.log(`Successfully deleted all chat rooms for event ${eventId}`);
+    } catch (error) {
+      this.logger.error(`Error deleting chat rooms for event ${eventId}: ${error.message}`);
+      throw error;
+    }
+  }
 
   /**
    * Delete a chat room from the database
