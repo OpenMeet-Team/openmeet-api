@@ -1,4 +1,10 @@
-import { Injectable, Scope, Inject, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Scope,
+  Inject,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Repository, MoreThan, Brackets } from 'typeorm';
 import { EventEntity } from '../infrastructure/persistence/relational/entities/event.entity';
@@ -69,7 +75,7 @@ export class EventQueryService {
     const event = await queryBuilder.getOne();
 
     if (!event) {
-      throw new Error(`Event with slug ${slug} not found`);
+      throw new NotFoundException(`Event with slug ${slug} not found`);
     }
 
     if (userId) {
@@ -114,7 +120,7 @@ export class EventQueryService {
     });
 
     if (!event) {
-      throw new Error('Event not found');
+      throw new NotFoundException('Event not found');
     }
 
     event.attendees = (
@@ -552,7 +558,7 @@ export class EventQueryService {
   }
 
   @Trace('event-query.findById')
-  async findById(id: number, tenantId: string): Promise<EventEntity | null> {
+  async findById(id: number, _tenantId: string): Promise<EventEntity | null> {
     await this.initializeRepository();
     return this.eventRepository.findOne({
       where: { id },

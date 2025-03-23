@@ -1,6 +1,5 @@
 // Using dynamic import (at runtime) instead of static import for ESM compatibility
 // The actual matrix-js-sdk import will happen in MatrixService
-type MatrixSdk = any;
 import { Socket } from 'socket.io';
 
 // Add explicit type declaration for the mock used in tests
@@ -18,6 +17,12 @@ export interface CreateUserOptions {
   password: string;
   displayName?: string;
   adminUser?: boolean;
+}
+
+export interface UpdateMatrixPasswordOptions {
+  matrixUserId: string;
+  password: string;
+  tenantId?: string;
 }
 
 export interface MatrixUserInfo {

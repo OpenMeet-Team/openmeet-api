@@ -1,11 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { MatrixCoreService } from './matrix-core.service';
-import {
-  CreateRoomOptions,
-  InviteUserOptions,
-  RoomInfo,
-} from '../types/matrix.types';
+import { CreateRoomOptions, RoomInfo } from '../types/matrix.types';
 import { IMatrixClient, IMatrixRoomProvider } from '../types/matrix.interfaces';
 
 @Injectable()

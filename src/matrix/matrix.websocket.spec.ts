@@ -25,10 +25,6 @@ class MockSocket {
 
 describe('MatrixGateway WebSocket Integration', () => {
   let gateway: MatrixGateway;
-  let matrixCoreService: MatrixCoreService;
-  let matrixUserService: MatrixUserService;
-  let matrixRoomService: MatrixRoomService;
-  let matrixMessageService: MatrixMessageService;
   let mockSocket: MockSocket;
 
   beforeEach(async () => {
@@ -123,11 +119,6 @@ describe('MatrixGateway WebSocket Integration', () => {
     }).compile();
 
     gateway = module.get<MatrixGateway>(MatrixGateway);
-    matrixCoreService = module.get<MatrixCoreService>(MatrixCoreService);
-    matrixUserService = module.get<MatrixUserService>(MatrixUserService);
-    matrixRoomService = module.get<MatrixRoomService>(MatrixRoomService);
-    matrixMessageService =
-      module.get<MatrixMessageService>(MatrixMessageService);
 
     // Setup server property on gateway
     (gateway as any).server = {

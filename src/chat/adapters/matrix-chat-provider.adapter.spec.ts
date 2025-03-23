@@ -11,9 +11,6 @@ import {
 
 describe('MatrixChatProviderAdapter', () => {
   let adapter: MatrixChatProviderAdapter;
-  let _matrixUserService: MatrixUserService;
-  let _matrixRoomService: MatrixRoomService;
-  let _matrixMessageService: MatrixMessageService;
 
   // Mock the Logger class
   jest.mock('@nestjs/common', () => {
@@ -72,10 +69,6 @@ describe('MatrixChatProviderAdapter', () => {
     }).compile();
 
     adapter = module.get<MatrixChatProviderAdapter>(MatrixChatProviderAdapter);
-    _matrixUserService = module.get<MatrixUserService>(MatrixUserService);
-    _matrixRoomService = module.get<MatrixRoomService>(MatrixRoomService);
-    _matrixMessageService =
-      module.get<MatrixMessageService>(MatrixMessageService);
   });
 
   it('should be defined', () => {

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as pool from 'generic-pool';
+import axios from 'axios';
 import { MatrixConfig } from '../config/matrix-config.type';
 import { IMatrixClient, IMatrixSdk } from '../types/matrix.interfaces';
 import { MatrixClientWithContext } from '../types/matrix.types';
@@ -18,7 +19,8 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
   private readonly serverName: string;
   private readonly defaultDeviceId: string;
   private readonly defaultInitialDeviceDisplayName: string;
-  private readonly adminUserId: string;
+  // Not readonly so we can correct it if token doesn't match configured user
+  private adminUserId: string;
   private readonly adminAccessToken: string;
 
   // Connection pool for admin API operations
@@ -75,7 +77,11 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.baseUrl = matrixConfig.baseUrl;
-    this.adminUserId = `@${matrixConfig.adminUser}:${matrixConfig.serverName}`;
+    // Use the admin user directly if it contains a full Matrix ID (@user:domain)
+    const adminUser = matrixConfig.adminUser;
+    this.adminUserId = adminUser.startsWith('@')
+      ? adminUser
+      : `@${adminUser}:${matrixConfig.serverName}`;
     this.serverName = matrixConfig.serverName;
     this.defaultDeviceId = matrixConfig.defaultDeviceId;
     this.defaultInitialDeviceDisplayName =
@@ -93,6 +99,9 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       // Create admin client
       this.createAdminClient();
 
+      // Verify admin access
+      await this.verifyAdminAccess();
+
       // Initialize client pool
       this.initializeClientPool();
 
@@ -104,7 +113,125 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
         `Failed to initialize Matrix core service: ${error.message}`,
         error.stack,
       );
-      throw error;
+      this.logger.warn(
+        'Matrix admin access may be limited - user provisioning might fail',
+      );
+      // Continue without throwing to allow the service to start
+    }
+  }
+
+  /**
+   * Verify the admin token has admin privileges
+   */
+  private async verifyAdminAccess(): Promise<void> {
+    try {
+      // Use whoami endpoint to verify token works at all
+      const whoamiUrl = `${this.baseUrl}/_matrix/client/v3/account/whoami`;
+
+      this.logger.debug(`Verifying admin token with: ${whoamiUrl}`);
+      this.logger.debug(`Using admin user ID: ${this.adminUserId}`);
+      this.logger.debug(
+        `Using admin token: ${this.adminAccessToken ? this.adminAccessToken.substring(0, 6) + '...' : 'null'}`,
+      );
+
+      const response = await axios.get(whoamiUrl, {
+        headers: {
+          Authorization: `Bearer ${this.adminAccessToken}`,
+        },
+      });
+
+      if (response.data && response.data.user_id) {
+        this.logger.log(
+          `Matrix token verified for user: ${response.data.user_id}`,
+        );
+
+        // Check if this is actually the expected admin user
+        if (response.data.user_id !== this.adminUserId) {
+          this.logger.warn(
+            `Token belongs to ${response.data.user_id}, not configured admin ${this.adminUserId}`,
+          );
+          // Update the admin user ID to match actual token
+          this.adminUserId = response.data.user_id;
+        }
+
+        // Try multiple admin endpoints to verify privileges
+
+        // Try v2 admin API first
+        try {
+          const adminUrlV2 = `${this.baseUrl}/_synapse/admin/v2/users?from=0&limit=1`;
+          await axios.get(adminUrlV2, {
+            headers: {
+              Authorization: `Bearer ${this.adminAccessToken}`,
+            },
+          });
+
+          this.logger.log(
+            'Successfully verified Matrix admin privileges using v2 API',
+          );
+        } catch (adminV2Error) {
+          this.logger.debug(
+            `Admin v2 API check failed: ${adminV2Error.message}`,
+          );
+
+          // Try v1 admin endpoint
+          try {
+            const adminUrlV1 = `${this.baseUrl}/_synapse/admin/v1/users/${encodeURIComponent(this.adminUserId)}/admin`;
+            await axios.get(adminUrlV1, {
+              headers: {
+                Authorization: `Bearer ${this.adminAccessToken}`,
+              },
+            });
+
+            this.logger.log(
+              'Successfully verified Matrix admin privileges using v1 API',
+            );
+          } catch (adminV1Error) {
+            this.logger.warn(
+              'Admin privilege checks failed, trying server info endpoint',
+            );
+
+            // Try server info endpoint as last resort
+            try {
+              const serverInfoUrl = `${this.baseUrl}/_synapse/admin/v1/server_version`;
+              const serverInfoResponse = await axios.get(serverInfoUrl, {
+                headers: {
+                  Authorization: `Bearer ${this.adminAccessToken}`,
+                },
+              });
+
+              if (serverInfoResponse.status === 200) {
+                this.logger.log(
+                  'Successfully verified Matrix admin access using server info API',
+                );
+              }
+            } catch (serverInfoError) {
+              this.logger.warn(
+                'All admin endpoint checks failed, user provisioning might be limited',
+                {
+                  v2Error: adminV2Error.message,
+                  v1Error: adminV1Error.message,
+                  serverInfoError: serverInfoError.message,
+                },
+              );
+            }
+          }
+        }
+      } else {
+        this.logger.warn(
+          'Unexpected whoami response format - admin access uncertain',
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Matrix admin token verification failed: ${error.message}`,
+        {
+          status: error.response?.status,
+          data: error.response?.data,
+        },
+      );
+      this.logger.warn(
+        'Matrix admin token may not be valid - user provisioning might fail',
+      );
     }
   }
 
@@ -185,26 +312,32 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       );
       return {
         // Minimal mock methods to prevent crashes
-        startClient: async () => {},
-        stopClient: async () => {},
-        sendEvent: async () => ({ event_id: `mock-event-${Date.now()}` }),
-        getStateEvent: async () => ({}),
-        sendStateEvent: async () => ({}),
-        invite: async () => {},
-        kick: async () => {},
-        joinRoom: async () => {},
-        getProfileInfo: async () => ({ displayname: 'Mock User' }),
-        setDisplayName: async () => {},
-        getJoinedRooms: async () => ({ joined_rooms: [] }),
+        startClient: () => Promise.resolve(),
+        stopClient: () => Promise.resolve(),
+        sendEvent: () =>
+          Promise.resolve({
+            event_id: `mock-event-${Date.now()}`,
+          }),
+        getStateEvent: () => Promise.resolve({}),
+        sendStateEvent: () => Promise.resolve({}),
+        invite: () => Promise.resolve(),
+        kick: () => Promise.resolve(),
+        joinRoom: () => Promise.resolve(),
+        getProfileInfo: () => Promise.resolve({ displayname: 'Mock User' }),
+        setDisplayName: () => Promise.resolve(),
+        getJoinedRooms: () => Promise.resolve({ joined_rooms: [] }),
         getRoom: () => null,
         getAccessToken: () => '',
         getUserId: () => options?.userId || '@mock-user:example.org',
         on: () => {},
         removeListener: () => {},
-        roomState: async () => [],
-        sendTyping: async () => {},
+        roomState: () => Promise.resolve([]),
+        sendTyping: () => Promise.resolve(),
         // Add the missing createRoom method to match the IMatrixClient interface
-        createRoom: async () => ({ room_id: `mock-room-${Date.now()}` }),
+        createRoom: () =>
+          Promise.resolve({
+            room_id: `mock-room-${Date.now()}`,
+          }),
       };
     };
   }
@@ -231,7 +364,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
 
     this.clientPool = pool.createPool<MatrixClientWithContext>(
       {
-        create: async () => {
+        create: () => {
           const client = this.matrixSdk.createClient({
             baseUrl: this.baseUrl,
             userId: this.adminUserId,
@@ -239,10 +372,10 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
             useAuthorizationHeader: true,
           });
 
-          return {
+          return Promise.resolve({
             client,
             userId: this.adminUserId,
-          };
+          });
         },
         destroy: async (clientWithContext) => {
           if (clientWithContext.client?.stopClient) {

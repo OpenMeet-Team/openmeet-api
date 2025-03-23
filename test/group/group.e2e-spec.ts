@@ -133,6 +133,42 @@ describe('GroupController (e2e)', () => {
     expect(deleteGroup2Response.status).toBe(200);
   });
 
+  it('should successfully delete a group that has a chat room', async () => {
+    // Create a group that will have a chat room
+    testGroup = await createGroup(token, {
+      name: 'Group With Chat Room',
+      description: 'This group will have a chat room',
+    });
+    expect(testGroup.name).toBe('Group With Chat Room');
+
+    // Access the group's discussion area to ensure a chat room is created
+    const groupDiscussionsResponse = await request(TESTING_APP_URL)
+      .get(`/api/groups/${testGroup.slug}/discussions`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
+
+    expect(groupDiscussionsResponse.status).toBe(200);
+
+    // Delete the group
+    const deleteGroupResponse = await request(TESTING_APP_URL)
+      .delete(`/api/groups/${testGroup.slug}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
+
+    expect(deleteGroupResponse.status).toBe(200);
+
+    // Verify the group was actually deleted
+    const verifyDeletedResponse = await request(TESTING_APP_URL)
+      .get(`/api/groups/${testGroup.slug}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
+
+    expect(verifyDeletedResponse.status).toBe(404);
+
+    // Set testGroup to null so afterEach doesn't try to delete it again
+    testGroup = null;
+  });
+
   it('should retrieve group members', async () => {
     testGroup = await createGroup(token, {
       name: 'Test Group',
@@ -158,11 +194,16 @@ describe('GroupController (e2e)', () => {
 
   // After each test, clean up any remaining test groups
   afterEach(async () => {
-    if (testGroup && testGroup.id) {
-      await request(TESTING_APP_URL)
-        .delete(`/api/groups/${testGroup.slug}`)
-        .set('Authorization', `Bearer ${token}`)
-        .set('x-tenant-id', TESTING_TENANT_ID);
+    if (testGroup && testGroup.slug) {
+      try {
+        await request(TESTING_APP_URL)
+          .delete(`/api/groups/${testGroup.slug}`)
+          .set('Authorization', `Bearer ${token}`)
+          .set('x-tenant-id', TESTING_TENANT_ID);
+      } catch (error) {
+        // Ignore errors during cleanup
+        console.log(`Cleanup error: ${error.message}`);
+      }
     }
   });
 });

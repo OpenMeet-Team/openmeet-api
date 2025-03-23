@@ -49,7 +49,6 @@ jest.mock('matrix-js-sdk', () => {
 
 describe('MatrixCoreService', () => {
   let service: MatrixCoreService;
-  let configService: ConfigService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -79,7 +78,8 @@ describe('MatrixCoreService', () => {
     }).compile();
 
     service = module.get<MatrixCoreService>(MatrixCoreService);
-    configService = module.get<ConfigService>(ConfigService);
+    // Get service but don't use it directly in tests
+    module.get<ConfigService>(ConfigService);
 
     // Skip initialization to avoid side effects
     jest.spyOn(service, 'onModuleInit').mockImplementation(async () => {});
@@ -96,11 +96,10 @@ describe('MatrixCoreService', () => {
 
       // Force dynamically loaded SDK methods to be mocked
       const mockSdk = jest.requireMock('matrix-js-sdk');
-      jest
-        .spyOn(service as any, 'loadMatrixSdk')
-        .mockImplementation(async () => {
-          (service as any).matrixSdk = mockSdk;
-        });
+      jest.spyOn(service as any, 'loadMatrixSdk').mockImplementation(() => {
+        (service as any).matrixSdk = mockSdk;
+        return Promise.resolve();
+      });
 
       // Call initialization
       await service.onModuleInit();
@@ -114,7 +113,7 @@ describe('MatrixCoreService', () => {
       });
     });
 
-    it('should handle SDK loading errors gracefully', async () => {
+    it('should handle SDK loading errors gracefully', () => {
       // Since onModuleInit is mocked for most tests, we'll directly test the error handling
       // by checking if the createMockSdk method exists and does what it should
 

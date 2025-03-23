@@ -256,21 +256,11 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
     );
 
     try {
-      // Get user's name for Matrix registration
-      const displayName = [user.firstName, user.lastName]
-        .filter(Boolean)
-        .join(' ');
-      const username = `om_${user.ulid.toLowerCase()}`;
-      const password =
-        Math.random().toString(36).slice(2) +
-        Math.random().toString(36).slice(2);
-
-      // Call the Matrix service to create a user
-      const matrixUserInfo = await this.matrixUserService.createUser({
-        username,
-        password,
-        displayName: displayName || username,
-      });
+      // Use the centralized provisioning method
+      const matrixUserInfo = await this.matrixUserService.provisionMatrixUser(
+        user,
+        this.request.tenantId,
+      );
 
       // Update user with Matrix credentials
       await this.userService.update(userId, {
@@ -354,11 +344,8 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
       return;
     }
 
-    // Create a proper display name
-    const displayName =
-      [user.firstName, user.lastName].filter(Boolean).join(' ') ||
-      user.email?.split('@')[0] ||
-      'OpenMeet User';
+    // Create a proper display name using the centralized method
+    const displayName = MatrixUserService.generateDisplayName(user);
 
     // Set the display name
     await this.matrixUserService.setUserDisplayName(
@@ -382,12 +369,7 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
       );
 
       if (userWithMatrixId) {
-        senderName =
-          [userWithMatrixId.firstName, userWithMatrixId.lastName]
-            .filter(Boolean)
-            .join(' ') ||
-          userWithMatrixId.email?.split('@')[0] ||
-          'OpenMeet User';
+        senderName = MatrixUserService.generateDisplayName(userWithMatrixId);
       }
     } catch (error) {
       this.logger.warn(

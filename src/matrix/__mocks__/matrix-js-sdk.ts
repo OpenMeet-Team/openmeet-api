@@ -81,7 +81,7 @@ const mockClient = {
     if (typeof content === 'string') {
       try {
         content = JSON.parse(content);
-      } catch (e) {
+      } catch {
         // If it's not valid JSON, just leave it as is
       }
     }

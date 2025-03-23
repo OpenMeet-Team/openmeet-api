@@ -41,12 +41,8 @@ class MockSocket extends EventEmitter {
 describe('MatrixGateway', () => {
   let gateway: MatrixGateway;
   let matrixUserService: MatrixUserService;
-  let matrixRoomService: MatrixRoomService;
   let matrixMessageService: MatrixMessageService;
-  let _matrixCoreService: MatrixCoreService;
-  let _userService: UserService;
-  let _chatRoomService: ChatRoomService;
-  let _jwtService: JwtService;
+  // These services are needed for DI but not directly used in tests
   let mockClient: MockSocket;
   let mockServer: Partial<any>; // Updated to any type to avoid Server type error
 
@@ -186,13 +182,11 @@ describe('MatrixGateway', () => {
 
     gateway = module.get<MatrixGateway>(MatrixGateway);
     matrixUserService = module.get<MatrixUserService>(MatrixUserService);
-    matrixRoomService = module.get<MatrixRoomService>(MatrixRoomService);
+    // Get service but don't use it directly in tests
+    module.get<MatrixRoomService>(MatrixRoomService);
     matrixMessageService =
       module.get<MatrixMessageService>(MatrixMessageService);
-    _matrixCoreService = module.get<MatrixCoreService>(MatrixCoreService);
-    _userService = module.get<UserService>(UserService);
-    _chatRoomService = module.get<ChatRoomService>(ChatRoomService);
-    _jwtService = module.get<JwtService>(JwtService);
+    // DI services retrieved but not directly used in tests
 
     // Setting private properties for testing
     (gateway as any).server = mockServer;

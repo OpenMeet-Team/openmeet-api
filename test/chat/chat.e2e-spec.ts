@@ -12,7 +12,6 @@ import { loginAsTester, createEvent, createGroup } from '../utils/functions';
  */
 describe('Chat API Tests', () => {
   let token: string;
-  let secondUserToken: string;
   let eventSlug: string;
   let groupSlug: string;
   let currentUser: any;

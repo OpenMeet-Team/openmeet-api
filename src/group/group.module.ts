@@ -25,6 +25,7 @@ import { GroupMailModule } from '../group-mail/group-mail.module';
 import { EventModule } from '../event/event.module';
 import { EventMailModule } from '../event-mail/event-mail.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
+import { ChatModule } from '../chat/chat.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { BlueskyModule } from '../bluesky/bluesky.module';
     forwardRef(() => EventModule),
     EventMailModule,
     BlueskyModule,
+    forwardRef(() => ChatModule),
   ],
   controllers: [GroupController],
   providers: [

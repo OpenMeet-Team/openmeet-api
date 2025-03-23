@@ -30,12 +30,9 @@ describe('ChatRoomService', () => {
   let service: ChatRoomService;
   let matrixUserService: MatrixUserService;
   let matrixRoomService: MatrixRoomService;
-  let matrixMessageService: MatrixMessageService;
-  let matrixCoreService: MatrixCoreService;
   let userService: UserService;
   let groupMemberService: GroupMemberService;
   let eventAttendeeService: EventAttendeeService;
-  let tenantConnectionService: TenantConnectionService;
   let groupService: GroupService;
   let eventQueryService: EventQueryService;
 
@@ -230,6 +227,9 @@ describe('ChatRoomService', () => {
             }),
             setUserDisplayName: jest.fn().mockResolvedValue(true),
             getUserDisplayName: jest.fn().mockResolvedValue('Test User'),
+            provisionMatrixUser: jest
+              .fn()
+              .mockResolvedValue(mockMatrixUserInfo),
           },
         },
         {
@@ -398,16 +398,10 @@ describe('ChatRoomService', () => {
     // Use get() for non-scoped providers or mocks
     matrixUserService = module.get<MatrixUserService>(MatrixUserService);
     matrixRoomService = module.get<MatrixRoomService>(MatrixRoomService);
-    matrixMessageService =
-      module.get<MatrixMessageService>(MatrixMessageService);
-    matrixCoreService = module.get<MatrixCoreService>(MatrixCoreService);
     userService = module.get<UserService>(UserService);
     groupMemberService = module.get<GroupMemberService>(GroupMemberService);
     eventAttendeeService =
       module.get<EventAttendeeService>(EventAttendeeService);
-    tenantConnectionService = module.get<TenantConnectionService>(
-      TenantConnectionService,
-    );
     groupService = module.get<GroupService>(GroupService);
     eventQueryService = module.get<EventQueryService>(EventQueryService);
   });
@@ -417,7 +411,7 @@ describe('ChatRoomService', () => {
     mockRequestCache.clear();
   });
 
-  it('should be defined', async () => {
+  it('should be defined', () => {
     expect(service).toBeDefined();
   });
 
@@ -452,13 +446,10 @@ describe('ChatRoomService', () => {
       // Should have called getUserById - the first call gets user without credentials, the second call gets the updated user
       expect(userService.getUserById).toHaveBeenCalledWith(2);
 
-      // Should have called Matrix service to create user
-      expect(matrixUserService.createUser).toHaveBeenCalledWith(
-        expect.objectContaining({
-          username: expect.any(String),
-          password: expect.any(String),
-          displayName: 'Test User',
-        }),
+      // Should have called provisionMatrixUser, not createUser directly
+      expect(matrixUserService.provisionMatrixUser).toHaveBeenCalledWith(
+        mockUserWithoutMatrix,
+        'default',
       );
 
       // Should have updated user with Matrix credentials

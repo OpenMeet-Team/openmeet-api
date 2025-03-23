@@ -12,7 +12,6 @@ import {
   EventAttendeePermission,
   EventAttendeeRole,
   GroupRole,
-  GroupPermission,
 } from '../../core/constants/constant';
 import {
   ChatRoomEntity,
@@ -53,21 +52,11 @@ export class ChatRoomService {
         `User ${userId} is missing Matrix credentials, attempting to provision...`,
       );
       try {
-        // Get user's name for Matrix registration
-        const displayName = [user.firstName, user.lastName]
-          .filter(Boolean)
-          .join(' ');
-        const username = `om_${user.ulid.toLowerCase()}`;
-        const password =
-          Math.random().toString(36).slice(2) +
-          Math.random().toString(36).slice(2);
-
-        // Call the Matrix service to create a user
-        const matrixUserInfo = await this.matrixUserService.createUser({
-          username,
-          password,
-          displayName: displayName || username,
-        });
+        // Use the centralized provisioning method
+        const matrixUserInfo = await this.matrixUserService.provisionMatrixUser(
+          user,
+          this.request.tenantId,
+        );
 
         // Update user with Matrix credentials
         await this.userService.update(userId, {
@@ -1212,6 +1201,135 @@ export class ChatRoomService {
   }
 
   /**
+   * Delete a chat room from the database
+   */
+  @Trace('chat-room.deleteChatRoom')
+  async deleteChatRoom(roomId: number): Promise<void> {
+    await this.initializeRepositories();
+
+    const chatRoom = await this.chatRoomRepository.findOne({
+      where: { id: roomId },
+      relations: ['members'],
+    });
+
+    if (!chatRoom) {
+      this.logger.warn(
+        `Chat room with id ${roomId} not found, nothing to delete`,
+      );
+      return;
+    }
+
+    try {
+      // First, remove the members association
+      if (chatRoom.members && chatRoom.members.length > 0) {
+        chatRoom.members = [];
+        await this.chatRoomRepository.save(chatRoom);
+      }
+
+      // Then delete the chat room entity
+      await this.chatRoomRepository.delete(roomId);
+      this.logger.log(`Successfully deleted chat room with id ${roomId}`);
+    } catch (error) {
+      this.logger.error(
+        `Error deleting chat room with id ${roomId}: ${error.message}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Delete all chat rooms associated with a group
+   */
+  @Trace('chat-room.deleteGroupChatRooms')
+  async deleteGroupChatRooms(groupId: number): Promise<void> {
+    await this.initializeRepositories();
+
+    try {
+      // Find all chat rooms for this group
+      const chatRooms = await this.getGroupChatRooms(groupId);
+
+      if (!chatRooms || chatRooms.length === 0) {
+        this.logger.log(`No chat rooms found for group ${groupId}`);
+        return;
+      }
+
+      this.logger.log(
+        `Deleting ${chatRooms.length} chat rooms for group ${groupId}`,
+      );
+
+      // Delete each chat room
+      for (const room of chatRooms) {
+        await this.deleteChatRoom(room.id);
+      }
+
+      // Update the group to clear the matrixRoomId reference
+      const group = await this.groupRepository.findOne({
+        where: { id: groupId },
+      });
+
+      if (group && group.matrixRoomId) {
+        group.matrixRoomId = '';
+        await this.groupRepository.save(group);
+      }
+
+      this.logger.log(
+        `Successfully deleted all chat rooms for group ${groupId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error deleting chat rooms for group ${groupId}: ${error.message}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Delete all chat rooms associated with an event
+   */
+  @Trace('chat-room.deleteEventChatRooms')
+  async deleteEventChatRooms(eventId: number): Promise<void> {
+    await this.initializeRepositories();
+
+    try {
+      // Find all chat rooms for this event
+      const chatRooms = await this.getEventChatRooms(eventId);
+
+      if (!chatRooms || chatRooms.length === 0) {
+        this.logger.log(`No chat rooms found for event ${eventId}`);
+        return;
+      }
+
+      this.logger.log(
+        `Deleting ${chatRooms.length} chat rooms for event ${eventId}`,
+      );
+
+      // Delete each chat room
+      for (const room of chatRooms) {
+        await this.deleteChatRoom(room.id);
+      }
+
+      // Update the event to clear the matrixRoomId reference
+      const event = await this.eventRepository.findOne({
+        where: { id: eventId },
+      });
+
+      if (event && event.matrixRoomId) {
+        event.matrixRoomId = '';
+        await this.eventRepository.save(event);
+      }
+
+      this.logger.log(
+        `Successfully deleted all chat rooms for event ${eventId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error deleting chat rooms for event ${eventId}: ${error.message}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
    * Send a message to a chat room
    */
   @Trace('chat-room.sendMessage')
@@ -1280,11 +1398,8 @@ export class ChatRoomService {
       // Continue anyway - the message send will confirm if they're really in the room
     }
 
-    // Create a proper display name
-    const displayName =
-      [user.firstName, user.lastName].filter(Boolean).join(' ') ||
-      user.email?.split('@')[0] ||
-      'OpenMeet User';
+    // Create a proper display name using the centralized method
+    const displayName = MatrixUserService.generateDisplayName(user);
 
     // Set the display name if needed
     try {

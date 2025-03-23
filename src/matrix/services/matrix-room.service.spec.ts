@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MatrixRoomService } from './matrix-room.service';
 import { MatrixCoreService } from './matrix-core.service';
-import { Logger } from '@nestjs/common';
 
 describe('MatrixRoomService', () => {
   let service: MatrixRoomService;

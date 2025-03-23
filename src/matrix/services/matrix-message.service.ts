@@ -171,7 +171,7 @@ export class MatrixMessageService implements IMatrixMessageProvider {
     roomId: string,
     limit = 50,
     from?: string,
-    userId?: string,
+    _userId?: string,
   ): Promise<{
     messages: Message[];
     end: string;

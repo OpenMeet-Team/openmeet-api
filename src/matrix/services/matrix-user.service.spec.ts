@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { MatrixUserService } from './matrix-user.service';
 import { MatrixCoreService } from './matrix-core.service';
 import { ModuleRef } from '@nestjs/core';
-import { forwardRef } from '@nestjs/common';
 import { MatrixGateway } from '../matrix.gateway';
 import axios from 'axios';
 
@@ -12,7 +11,6 @@ const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('MatrixUserService', () => {
   let service: MatrixUserService;
-  let matrixCoreService: MatrixCoreService;
 
   const mockMatrixConfig = {
     baseUrl: 'https://matrix.example.org',
@@ -135,7 +133,8 @@ describe('MatrixUserService', () => {
     }).compile();
 
     service = module.get<MatrixUserService>(MatrixUserService);
-    matrixCoreService = module.get<MatrixCoreService>(MatrixCoreService);
+    // Get service but don't use it directly in tests
+    module.get<MatrixCoreService>(MatrixCoreService);
   });
 
   it('should be defined', () => {
