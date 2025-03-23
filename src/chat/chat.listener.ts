@@ -4,7 +4,6 @@ import { DiscussionService } from './services/discussion.service';
 import { ChatRoomService } from './rooms/chat-room.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
-import { ChatRoomEntity } from './infrastructure/persistence/relational/entities/chat-room.entity';
 
 @Injectable()
 export class ChatListener {

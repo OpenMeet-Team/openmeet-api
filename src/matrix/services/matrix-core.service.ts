@@ -98,7 +98,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
 
       // Create admin client
       this.createAdminClient();
-      
+
       // Verify admin access
       await this.verifyAdminAccess();
 
