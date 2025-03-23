@@ -53,8 +53,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    entrypoint: ["python", "-m", "synapse.app.homeserver"]
-    command: ["--config-path", "/data/homeserver.yaml"]
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        apt-get update && apt-get install -y gettext-base jq curl python3
+        chmod +x /data/start-matrix.sh
+        bash /data/start-matrix.sh
 
   api:
     build:
