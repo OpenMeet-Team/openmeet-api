@@ -4,6 +4,7 @@ import {
   Inject,
   Logger,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { UserService } from '../../user/user.service';
@@ -28,6 +29,7 @@ export class DiscussionService implements DiscussionServiceInterface {
     @Inject(REQUEST) private readonly request: any,
     private readonly userService: UserService,
     private readonly eventQueryService: EventQueryService,
+    @Inject(forwardRef(() => GroupService))
     private readonly groupService: GroupService,
     private readonly chatRoomService: ChatRoomService,
     @Inject('CHAT_PROVIDER')
@@ -945,23 +947,29 @@ export class DiscussionService implements DiscussionServiceInterface {
    * @param eventId The ID of the event being deleted
    * @param tenantId Optional tenant ID for multi-tenant environments
    */
+  // Use a static logger for methods that might be called from contexts where 'this' is not properly bound
+  private static staticLogger = new Logger(DiscussionService.name);
+
   @Trace('discussion.cleanupEventChatRooms')
   async cleanupEventChatRooms(eventId: number, tenantId?: string): Promise<void> {
+    // Use either the instance logger or the static logger as fallback
+    const logger = this.logger || DiscussionService.staticLogger;
+    
     const effectiveTenantId = tenantId || this.request?.tenantId;
     
     if (!effectiveTenantId) {
-      this.logger.error('Neither explicit tenantId nor request.tenantId is available');
+      logger.error('Neither explicit tenantId nor request.tenantId is available');
       throw new Error('Tenant ID is required');
     }
     
-    this.logger.log(`Cleaning up chat rooms for event ${eventId} in tenant ${effectiveTenantId}`);
+    logger.log(`Cleaning up chat rooms for event ${eventId} in tenant ${effectiveTenantId}`);
     
     try {
       // Get chat rooms for this event
       const chatRooms = await this.chatRoomService.getEventChatRooms(eventId);
       
       if (chatRooms && chatRooms.length > 0) {
-        this.logger.log(`Found ${chatRooms.length} chat rooms to clean up for event ${eventId}`);
+        logger.log(`Found ${chatRooms.length} chat rooms to clean up for event ${eventId}`);
         
         // Process each chat room
         for (const room of chatRooms) {
@@ -973,14 +981,14 @@ export class DiscussionService implements DiscussionServiceInterface {
             for (const member of members) {
               try {
                 await this.chatRoomService.removeUserFromEventChatRoom(eventId, member.id);
-                this.logger.log(`Removed user ${member.id} from event chat room`);
+                logger.log(`Removed user ${member.id} from event chat room`);
               } catch (removeError) {
-                this.logger.warn(`Error removing user ${member.id} from room: ${removeError.message}`);
+                logger.warn(`Error removing user ${member.id} from room: ${removeError.message}`);
                 // Continue with other members
               }
             }
           } catch (roomError) {
-            this.logger.error(`Error processing members for chat room ${room.id}: ${roomError.message}`);
+            logger.error(`Error processing members for chat room ${room.id}: ${roomError.message}`);
             // Continue with other rooms
           }
         }
@@ -988,16 +996,16 @@ export class DiscussionService implements DiscussionServiceInterface {
         // After removing all members, delete the chat rooms
         try {
           await this.chatRoomService.deleteEventChatRooms(eventId);
-          this.logger.log(`Successfully deleted all chat rooms for event ${eventId}`);
+          logger.log(`Successfully deleted all chat rooms for event ${eventId}`);
         } catch (deleteError) {
-          this.logger.error(`Error deleting chat rooms for event ${eventId}: ${deleteError.message}`);
+          logger.error(`Error deleting chat rooms for event ${eventId}: ${deleteError.message}`);
           throw deleteError;
         }
       } else {
-        this.logger.log(`No chat rooms found for event ${eventId}`);
+        logger.log(`No chat rooms found for event ${eventId}`);
       }
     } catch (error) {
-      this.logger.error(`Error cleaning up chat rooms for event ${eventId}: ${error.message}`);
+      logger.error(`Error cleaning up chat rooms for event ${eventId}: ${error.message}`);
       throw error;
     }
   }
@@ -1010,21 +1018,24 @@ export class DiscussionService implements DiscussionServiceInterface {
    */
   @Trace('discussion.cleanupGroupChatRooms')
   async cleanupGroupChatRooms(groupId: number, tenantId?: string): Promise<void> {
+    // Use either the instance logger or the static logger as fallback
+    const logger = this.logger || DiscussionService.staticLogger;
+    
     const effectiveTenantId = tenantId || this.request?.tenantId;
     
     if (!effectiveTenantId) {
-      this.logger.error('Neither explicit tenantId nor request.tenantId is available');
+      logger.error('Neither explicit tenantId nor request.tenantId is available');
       throw new Error('Tenant ID is required');
     }
     
-    this.logger.log(`Cleaning up chat rooms for group ${groupId} in tenant ${effectiveTenantId}`);
+    logger.log(`Cleaning up chat rooms for group ${groupId} in tenant ${effectiveTenantId}`);
     
     try {
       // Get chat rooms for this group
       const chatRooms = await this.chatRoomService.getGroupChatRooms(groupId);
       
       if (chatRooms && chatRooms.length > 0) {
-        this.logger.log(`Found ${chatRooms.length} chat rooms to clean up for group ${groupId}`);
+        logger.log(`Found ${chatRooms.length} chat rooms to clean up for group ${groupId}`);
         
         // Process each chat room
         for (const room of chatRooms) {
@@ -1036,14 +1047,14 @@ export class DiscussionService implements DiscussionServiceInterface {
             for (const member of members) {
               try {
                 await this.chatRoomService.removeUserFromGroupChatRoom(groupId, member.id);
-                this.logger.log(`Removed user ${member.id} from group chat room`);
+                logger.log(`Removed user ${member.id} from group chat room`);
               } catch (removeError) {
-                this.logger.warn(`Error removing user ${member.id} from room: ${removeError.message}`);
+                logger.warn(`Error removing user ${member.id} from room: ${removeError.message}`);
                 // Continue with other members
               }
             }
           } catch (roomError) {
-            this.logger.error(`Error processing members for chat room ${room.id}: ${roomError.message}`);
+            logger.error(`Error processing members for chat room ${room.id}: ${roomError.message}`);
             // Continue with other rooms
           }
         }
@@ -1051,16 +1062,16 @@ export class DiscussionService implements DiscussionServiceInterface {
         // After removing all members, delete the chat rooms
         try {
           await this.chatRoomService.deleteGroupChatRooms(groupId);
-          this.logger.log(`Successfully deleted all chat rooms for group ${groupId}`);
+          logger.log(`Successfully deleted all chat rooms for group ${groupId}`);
         } catch (deleteError) {
-          this.logger.error(`Error deleting chat rooms for group ${groupId}: ${deleteError.message}`);
+          logger.error(`Error deleting chat rooms for group ${groupId}: ${deleteError.message}`);
           throw deleteError;
         }
       } else {
-        this.logger.log(`No chat rooms found for group ${groupId}`);
+        logger.log(`No chat rooms found for group ${groupId}`);
       }
     } catch (error) {
-      this.logger.error(`Error cleaning up chat rooms for group ${groupId}: ${error.message}`);
+      logger.error(`Error cleaning up chat rooms for group ${groupId}: ${error.message}`);
       throw error;
     }
   }

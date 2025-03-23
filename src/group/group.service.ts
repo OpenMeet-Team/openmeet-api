@@ -50,6 +50,9 @@ import { Trace } from '../utils/trace.decorator';
 import { EventQueryService } from '../event/services/event-query.service';
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventRecommendationService } from '../event/services/event-recommendation.service';
+import { forwardRef } from '@nestjs/common';
+import { ChatRoomService } from '../chat/rooms/chat-room.service';
+import { DiscussionService } from '../chat/services/discussion.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -76,6 +79,10 @@ export class GroupService {
     private readonly userService: UserService,
     private readonly eventEmitter: EventEmitter2,
     private readonly groupMailService: GroupMailService,
+    @Inject(forwardRef(() => ChatRoomService))
+    private readonly chatRoomService: ChatRoomService,
+    @Inject(forwardRef(() => DiscussionService))
+    private readonly discussionService: DiscussionService,
   ) {}
 
   async getTenantSpecificGroupRepository() {
@@ -606,24 +613,59 @@ export class GroupService {
   async remove(slug: string): Promise<void> {
     await this.getTenantSpecificGroupRepository();
     const group = await this.getGroupBySlug(slug);
+    const tenantId = this.request.tenantId;
 
-    // Emit event before deleting group to allow cleanup of chat rooms
-    this.eventEmitter.emit('group.before_delete', {
-      groupId: group.id,
-      groupSlug: group.slug,
-      groupName: group.name,
-      tenantId: this.request?.tenantId
-    });
-    
-    // First, delete all group members associated with the group
-    await this.groupMembersRepository.delete({ group: { id: group.id } });
-    await this.eventManagementService.deleteEventsByGroup(group.id);
-
-    const deletedGroup = await this.groupRepository.remove(group);
-    this.eventEmitter.emit('group.deleted', deletedGroup);
-    this.auditLogger.log('group deleted', {
-      deletedGroup,
-    });
+    try {
+      // We'll still emit the event for any listeners that might need it
+      // but we won't rely on it for chat room cleanup
+      this.eventEmitter.emit('group.before_delete', {
+        groupId: group.id,
+        groupSlug: group.slug,
+        groupName: group.name,
+        tenantId: tenantId
+      });
+      
+      // Directly handle chat room cleanup first to avoid foreign key issues
+      try {
+        this.logger.log(`Directly cleaning up chat rooms for group ${group.slug}`);
+        
+        // Use the discussion service to clean up the chat rooms
+        await this.discussionService.cleanupGroupChatRooms(group.id, tenantId);
+        
+        // Clear the matrixRoomId reference on the group entity
+        if (group.matrixRoomId) {
+          group.matrixRoomId = '';
+          await this.groupRepository.save(group);
+          this.logger.log(`Cleared matrixRoomId reference for group ${group.slug}`);
+        }
+      } catch (chatError) {
+        // Log but continue with deletion - the foreign key issue may already be resolved
+        this.logger.error(`Error cleaning up chat rooms: ${chatError.message}`, chatError.stack);
+      }
+      
+      // First, delete all group members associated with the group
+      await this.groupMembersRepository.delete({ group: { id: group.id } });
+      this.logger.log(`Deleted all group members for group ${group.slug}`);
+      
+      // Delete all events associated with the group
+      await this.eventManagementService.deleteEventsByGroup(group.id);
+      this.logger.log(`Deleted all events for group ${group.slug}`);
+  
+      // Now remove the group itself
+      const deletedGroup = await this.groupRepository.remove(group);
+      
+      // Emit group deleted event after successful deletion
+      this.eventEmitter.emit('group.deleted', deletedGroup);
+      
+      this.auditLogger.log('group deleted', {
+        deletedGroup,
+      });
+      
+      this.logger.log(`Successfully deleted group ${slug}`);
+    } catch (error) {
+      this.logger.error(`Error deleting group ${slug}: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
   async getHomePageFeaturedGroups(): Promise<GroupEntity[]> {

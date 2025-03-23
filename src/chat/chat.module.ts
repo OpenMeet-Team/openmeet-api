@@ -29,6 +29,10 @@ import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
   controllers: [ChatController],
   providers: [
     DiscussionService,
+    {
+      provide: 'DiscussionService',
+      useExisting: DiscussionService,
+    },
     ChatRoomService,
     {
       provide: 'CHAT_PROVIDER',
@@ -43,6 +47,7 @@ import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
   ],
   exports: [
     DiscussionService,
+    'DiscussionService',
     'CHAT_PROVIDER',
     'CHAT_SERVICE',
     MatrixChatServiceAdapter,

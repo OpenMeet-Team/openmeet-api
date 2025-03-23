@@ -5,6 +5,7 @@ import {
   Logger,
   UnprocessableEntityException,
   HttpStatus,
+  forwardRef,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Repository } from 'typeorm';
@@ -53,6 +54,8 @@ export class EventManagementService {
     private readonly userService: UserService,
     private readonly eventMailService: EventMailService,
     private readonly blueskyService: BlueskyService,
+    @Inject(forwardRef(() => 'DiscussionService'))
+    private readonly discussionService: any, // Using any here to avoid circular dependency issues
   ) {
     void this.initializeRepository();
   }
@@ -409,7 +412,26 @@ export class EventManagementService {
       }
     }
 
-    // Emit event about to be deleted to allow other services to clean up
+    // IMPORTANT: Clean up chat rooms directly BEFORE emitting event or deleting
+    try {
+      this.logger.log(`Directly cleaning up chat rooms for event ${event.id}`);
+      await this.discussionService.cleanupEventChatRooms(event.id, this.request.tenantId);
+      this.logger.log(`Successfully cleaned up chat rooms for event ${event.id}`);
+      
+      // Make sure to clear Matrix room ID from event to avoid stale references
+      if (event.matrixRoomId) {
+        event.matrixRoomId = '';
+        await this.eventRepository.save(event);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error cleaning up chat rooms for event ${event.id}: ${error.message}`,
+        error.stack,
+      );
+      // Continue with deletion despite error - we'll still emit the event for other listeners
+    }
+
+    // Still emit the event for any other listeners that need to clean up
     this.eventEmitter.emit('event.before_delete', {
       eventId: event.id,
       eventSlug: event.slug,
@@ -417,7 +439,7 @@ export class EventManagementService {
       tenantId: this.request?.tenantId
     });
 
-    // Delete related event attendees first
+    // Delete related event attendees
     await this.eventAttendeeService.deleteEventAttendees(event.id);
 
     // Now delete the event from our database
