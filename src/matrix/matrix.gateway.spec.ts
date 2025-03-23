@@ -42,7 +42,6 @@ describe('MatrixGateway', () => {
   let gateway: MatrixGateway;
   let matrixUserService: MatrixUserService;
   let matrixMessageService: MatrixMessageService;
-  let matrixRoomService: MatrixRoomService;
   // These services are needed for DI but not directly used in tests
   let mockClient: MockSocket;
   let mockServer: Partial<any>; // Updated to any type to avoid Server type error
@@ -183,7 +182,8 @@ describe('MatrixGateway', () => {
 
     gateway = module.get<MatrixGateway>(MatrixGateway);
     matrixUserService = module.get<MatrixUserService>(MatrixUserService);
-    matrixRoomService = module.get<MatrixRoomService>(MatrixRoomService);
+    // Get service but don't use it directly in tests
+    module.get<MatrixRoomService>(MatrixRoomService);
     matrixMessageService =
       module.get<MatrixMessageService>(MatrixMessageService);
     // DI services retrieved but not directly used in tests

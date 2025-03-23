@@ -4,7 +4,6 @@ import { DiscussionService } from './services/discussion.service';
 import { ChatRoomService } from './rooms/chat-room.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
-import { ChatRoomEntity } from './infrastructure/persistence/relational/entities/chat-room.entity';
 
 @Injectable()
 export class ChatListener {
@@ -130,7 +129,9 @@ export class ChatListener {
     eventSlug: string;
     tenantId?: string;
   }) {
-    this.logger.log(`event.before_delete event received for event ${params.eventSlug}`);
+    this.logger.log(
+      `event.before_delete event received for event ${params.eventSlug}`,
+    );
 
     try {
       // Validate tenant ID
@@ -140,13 +141,18 @@ export class ChatListener {
       }
 
       // Clean up all chat rooms for this event through the DiscussionService
-      await this.discussionService.cleanupEventChatRooms(params.eventId, params.tenantId);
-      
-      this.logger.log(`Successfully cleaned up chat rooms for event ${params.eventSlug}`);
+      await this.discussionService.cleanupEventChatRooms(
+        params.eventId,
+        params.tenantId,
+      );
+
+      this.logger.log(
+        `Successfully cleaned up chat rooms for event ${params.eventSlug}`,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to clean up chat rooms for event ${params.eventSlug}: ${error.message}`,
-        error.stack
+        error.stack,
       );
       // We don't rethrow the error here to prevent blocking the event deletion
       // The event deletion should proceed even if chat room cleanup fails
@@ -159,7 +165,9 @@ export class ChatListener {
     groupSlug: string;
     tenantId?: string;
   }) {
-    this.logger.log(`group.before_delete event received for group ${params.groupSlug}`);
+    this.logger.log(
+      `group.before_delete event received for group ${params.groupSlug}`,
+    );
 
     try {
       // Validate tenant ID
@@ -169,13 +177,18 @@ export class ChatListener {
       }
 
       // Clean up all chat rooms for this group through the DiscussionService
-      await this.discussionService.cleanupGroupChatRooms(params.groupId, params.tenantId);
-      
-      this.logger.log(`Successfully cleaned up chat rooms for group ${params.groupSlug}`);
+      await this.discussionService.cleanupGroupChatRooms(
+        params.groupId,
+        params.tenantId,
+      );
+
+      this.logger.log(
+        `Successfully cleaned up chat rooms for group ${params.groupSlug}`,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to clean up chat rooms for group ${params.groupSlug}: ${error.message}`,
-        error.stack
+        error.stack,
       );
       // We don't rethrow the error here to prevent blocking the group deletion
       // The group deletion should proceed even if chat room cleanup fails
@@ -254,14 +267,33 @@ export class ChatListener {
       }
 
       if (eventId && userId) {
-        await this.chatRoomService.createEventChatRoomWithTenant(
-          eventId,
-          userId,
-          tenantId,
-        );
-        this.logger.log(
-          `Created chat room for event ${params.eventSlug} by user ID ${userId} in tenant ${tenantId}`,
-        );
+        try {
+          // Verify the event still exists using our new method in DiscussionService
+          const eventStillExists =
+            await this.discussionService.checkEventExists(eventId, tenantId);
+
+          if (!eventStillExists) {
+            this.logger.warn(
+              `Event with id ${eventId} no longer exists. Skipping chat room creation.`,
+            );
+            return;
+          }
+
+          await this.chatRoomService.createEventChatRoomWithTenant(
+            eventId,
+            userId,
+            tenantId,
+          );
+          this.logger.log(
+            `Created chat room for event ${params.eventSlug} by user ID ${userId} in tenant ${tenantId}`,
+          );
+        } catch (error) {
+          this.logger.error(
+            `Error verifying event existence (id: ${eventId}): ${error.message}`,
+          );
+          // Don't attempt to create a chat room if we can't verify the event exists
+          return;
+        }
       } else {
         this.logger.warn(
           `Could not get valid eventId and userId for event ${params.eventSlug}`,

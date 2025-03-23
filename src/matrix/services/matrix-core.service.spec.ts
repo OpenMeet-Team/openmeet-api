@@ -49,7 +49,6 @@ jest.mock('matrix-js-sdk', () => {
 
 describe('MatrixCoreService', () => {
   let service: MatrixCoreService;
-  let configService: ConfigService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -79,7 +78,8 @@ describe('MatrixCoreService', () => {
     }).compile();
 
     service = module.get<MatrixCoreService>(MatrixCoreService);
-    configService = module.get<ConfigService>(ConfigService);
+    // Get service but don't use it directly in tests
+    module.get<ConfigService>(ConfigService);
 
     // Skip initialization to avoid side effects
     jest.spyOn(service, 'onModuleInit').mockImplementation(async () => {});

@@ -29,41 +29,41 @@ export class MatrixUserService
    * @param tenantId Optional tenant ID to include in the username
    * @returns A standardized Matrix username
    */
-  public static generateMatrixUsername(user: { slug: string }, tenantId?: string): string {
-    return tenantId 
-      ? `${user.slug}_${tenantId}`
-      : user.slug;
+  public static generateMatrixUsername(
+    user: { slug: string },
+    tenantId?: string,
+  ): string {
+    return tenantId ? `${user.slug}_${tenantId}` : user.slug;
   }
-  
+
   /**
    * Generate a secure random password for Matrix users
    * @returns A secure random password
    */
   public static generateMatrixPassword(): string {
-    return Math.random().toString(36).slice(2) + 
-           Math.random().toString(36).slice(2);
+    return (
+      Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
+    );
   }
-  
+
   /**
    * Generate a display name for a Matrix user based on OpenMeet user data
    * @param user User entity or object with firstName, lastName, and email properties
    * @returns A formatted display name
    */
-  public static generateDisplayName(user: { 
-    firstName?: string | null; 
+  public static generateDisplayName(user: {
+    firstName?: string | null;
     lastName?: string | null;
     email?: string | null;
     slug?: string;
   }): string {
     // First try to use full name
-    const fullName = [user.firstName, user.lastName]
-      .filter(Boolean)
-      .join(' ');
-      
+    const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
+
     if (fullName) {
       return fullName;
     }
-    
+
     // If no full name, try email username
     if (user.email) {
       const emailUsername = user.email.split('@')[0];
@@ -71,11 +71,11 @@ export class MatrixUserService
         return emailUsername;
       }
     }
-    
+
     // If nothing else, use the slug or a generic name
     return user.slug || 'OpenMeet User';
   }
-  
+
   /**
    * Provisions a Matrix user for an OpenMeet user if they don't already have Matrix credentials
    * @param user The OpenMeet user object
@@ -89,34 +89,38 @@ export class MatrixUserService
       lastName?: string | null;
       email?: string | null;
     },
-    tenantId?: string
+    tenantId?: string,
   ): Promise<MatrixUserInfo> {
     // Generate username, password, and display name using our static helpers
     const username = MatrixUserService.generateMatrixUsername(user, tenantId);
     const password = MatrixUserService.generateMatrixPassword();
     const displayName = MatrixUserService.generateDisplayName(user);
-    
+
     // Create the Matrix user
     const matrixUserInfo = await this.createUser({
       username,
       password,
       displayName,
     });
-    
+
     // Ensure display name is set properly (sometimes it doesn't get set during creation)
     try {
       await this.setUserDisplayName(
         matrixUserInfo.userId,
         matrixUserInfo.accessToken,
         displayName,
-        matrixUserInfo.deviceId
+        matrixUserInfo.deviceId,
       );
-      this.logger.debug(`Set Matrix display name for ${matrixUserInfo.userId} to "${displayName}"`);
+      this.logger.debug(
+        `Set Matrix display name for ${matrixUserInfo.userId} to "${displayName}"`,
+      );
     } catch (displayNameError) {
-      this.logger.warn(`Failed to set Matrix display name: ${displayNameError.message}`);
+      this.logger.warn(
+        `Failed to set Matrix display name: ${displayNameError.message}`,
+      );
       // Non-fatal error, continue
     }
-    
+
     return matrixUserInfo;
   }
   private readonly logger = new Logger(MatrixUserService.name);
@@ -213,7 +217,9 @@ export class MatrixUserService
           // Try using the standard register endpoint as a last resort
           try {
             const registerUrl = `${config.baseUrl}/_matrix/client/v3/register`;
-            this.logger.debug(`Trying standard registration endpoint: ${registerUrl}`);
+            this.logger.debug(
+              `Trying standard registration endpoint: ${registerUrl}`,
+            );
 
             // Try with dummy auth type - this often works when admin API fails
             const registerData = {
@@ -225,12 +231,17 @@ export class MatrixUserService
               inhibit_login: false, // Changed to false to get access token directly
             };
 
-            const registerResponse = await axios.post(registerUrl, registerData);
-            
+            const registerResponse = await axios.post(
+              registerUrl,
+              registerData,
+            );
+
             // If we get here, registration succeeded - extract credentials
             if (registerResponse.data && registerResponse.data.access_token) {
-              this.logger.debug('Standard registration succeeded with direct token');
-              
+              this.logger.debug(
+                'Standard registration succeeded with direct token',
+              );
+
               // Return user credentials directly
               return {
                 userId: registerResponse.data.user_id,
@@ -242,42 +253,61 @@ export class MatrixUserService
             // Try registration with shared secret as absolute last resort
             try {
               // Check if we have the registration shared secret from the environment
-              const sharedSecret = process.env.MATRIX_REGISTRATION_SECRET || 
-                                  process.env.SYNAPSE_REGISTRATION_SHARED_SECRET;
-                                  
+              const sharedSecret =
+                process.env.MATRIX_REGISTRATION_SECRET ||
+                process.env.SYNAPSE_REGISTRATION_SHARED_SECRET;
+
               if (sharedSecret) {
                 this.logger.debug('Attempting registration with shared secret');
-                
+
                 // First get a nonce from the server
-                const nonceResponse = await axios.get(`${config.baseUrl}/_matrix/client/v3/register?kind=user`);
-                
+                const nonceResponse = await axios.get(
+                  `${config.baseUrl}/_matrix/client/v3/register?kind=user`,
+                );
+
                 if (nonceResponse.data && nonceResponse.data.nonce) {
                   const nonce = nonceResponse.data.nonce;
-                  
+
                   // Create HMAC-SHA1 signature
-                  const crypto = require('crypto');
+                  const crypto = await import('crypto');
                   const hmac = crypto.createHmac('sha1', sharedSecret);
-                  hmac.update(nonce + '\0' + username + '\0' + password + '\0' + (adminUser ? '1' : '0'));
+                  hmac.update(
+                    nonce +
+                      '\0' +
+                      username +
+                      '\0' +
+                      password +
+                      '\0' +
+                      (adminUser ? '1' : '0'),
+                  );
                   const mac = hmac.digest('hex');
-                  
+
                   // Register with shared secret
-                  const sharedSecretResponse = await axios.post(`${config.baseUrl}/_matrix/client/v3/register`, {
-                    username,
-                    password,
-                    nonce,
-                    mac,
-                    type: 'm.login.shared_secret',
-                    admin: adminUser,
-                    inhibit_login: false
-                  });
-                  
-                  if (sharedSecretResponse.data && sharedSecretResponse.data.access_token) {
+                  const sharedSecretResponse = await axios.post(
+                    `${config.baseUrl}/_matrix/client/v3/register`,
+                    {
+                      username,
+                      password,
+                      nonce,
+                      mac,
+                      type: 'm.login.shared_secret',
+                      admin: adminUser,
+                      inhibit_login: false,
+                    },
+                  );
+
+                  if (
+                    sharedSecretResponse.data &&
+                    sharedSecretResponse.data.access_token
+                  ) {
                     this.logger.debug('Shared secret registration succeeded');
-                    
+
                     return {
                       userId: sharedSecretResponse.data.user_id,
                       accessToken: sharedSecretResponse.data.access_token,
-                      deviceId: sharedSecretResponse.data.device_id || config.defaultDeviceId
+                      deviceId:
+                        sharedSecretResponse.data.device_id ||
+                        config.defaultDeviceId,
                     };
                   }
                 }
@@ -285,10 +315,10 @@ export class MatrixUserService
             } catch (sharedSecretError) {
               this.logger.warn('Shared secret registration also failed:', {
                 error: sharedSecretError.message,
-                response: sharedSecretError.response?.data
+                response: sharedSecretError.response?.data,
               });
             }
-            
+
             this.logger.error('All Matrix registration methods failed:', {
               v2Error: v2Error.message,
               v1Error: v1Error.message,

@@ -415,9 +415,14 @@ export class EventManagementService {
     // IMPORTANT: Clean up chat rooms directly BEFORE emitting event or deleting
     try {
       this.logger.log(`Directly cleaning up chat rooms for event ${event.id}`);
-      await this.discussionService.cleanupEventChatRooms(event.id, this.request.tenantId);
-      this.logger.log(`Successfully cleaned up chat rooms for event ${event.id}`);
-      
+      await this.discussionService.cleanupEventChatRooms(
+        event.id,
+        this.request.tenantId,
+      );
+      this.logger.log(
+        `Successfully cleaned up chat rooms for event ${event.id}`,
+      );
+
       // Make sure to clear Matrix room ID from event to avoid stale references
       if (event.matrixRoomId) {
         event.matrixRoomId = '';
@@ -436,7 +441,7 @@ export class EventManagementService {
       eventId: event.id,
       eventSlug: event.slug,
       eventName: event.name,
-      tenantId: this.request?.tenantId
+      tenantId: this.request?.tenantId,
     });
 
     // Delete related event attendees

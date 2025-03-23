@@ -54,7 +54,9 @@ describe('MatrixController', () => {
             getClientForUser: jest.fn().mockResolvedValue({
               sendTyping: jest.fn().mockResolvedValue(undefined),
             }),
-            provisionMatrixUser: jest.fn().mockResolvedValue(mockMatrixUserInfo),
+            provisionMatrixUser: jest
+              .fn()
+              .mockResolvedValue(mockMatrixUserInfo),
           },
         },
         {
@@ -161,7 +163,7 @@ describe('MatrixController', () => {
 
       expect(matrixUserService.provisionMatrixUser).toHaveBeenCalledWith(
         mockFullUser,
-        'test-tenant'
+        'test-tenant',
       );
 
       expect(userService.update).toHaveBeenCalledWith(
@@ -189,7 +191,9 @@ describe('MatrixController', () => {
 
     it('should propagate errors from Matrix service', async () => {
       const error = new Error('Failed to create Matrix user');
-      jest.spyOn(matrixUserService, 'provisionMatrixUser').mockRejectedValueOnce(error);
+      jest
+        .spyOn(matrixUserService, 'provisionMatrixUser')
+        .mockRejectedValueOnce(error);
 
       await expect(
         controller.provisionMatrixUser(mockUser as any),

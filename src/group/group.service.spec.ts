@@ -17,6 +17,8 @@ import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import {
   mockCategory,
   mockCategoryService,
+  mockChatRoomService,
+  mockDiscussionService,
   mockDiscussions,
   mockEvent,
   mockFile,
@@ -50,6 +52,8 @@ import { ZulipService } from '../zulip/zulip.service';
 import { UserService } from '../user/user.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupMailService } from '../group-mail/group-mail.service';
+import { ChatRoomService } from '../chat/rooms/chat-room.service';
+import { DiscussionService } from '../chat/services/discussion.service';
 
 describe('GroupService', () => {
   let service: GroupService;
@@ -123,6 +127,18 @@ describe('GroupService', () => {
         {
           provide: GroupMailService,
           useValue: mockGroupMailService,
+        },
+        {
+          provide: ChatRoomService,
+          useValue: mockChatRoomService,
+        },
+        {
+          provide: 'DiscussionService',
+          useValue: mockDiscussionService,
+        },
+        {
+          provide: DiscussionService,
+          useValue: mockDiscussionService,
         },
       ],
     }).compile();

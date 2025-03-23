@@ -622,48 +622,58 @@ export class GroupService {
         groupId: group.id,
         groupSlug: group.slug,
         groupName: group.name,
-        tenantId: tenantId
+        tenantId: tenantId,
       });
-      
+
       // Directly handle chat room cleanup first to avoid foreign key issues
       try {
-        this.logger.log(`Directly cleaning up chat rooms for group ${group.slug}`);
-        
+        this.logger.log(
+          `Directly cleaning up chat rooms for group ${group.slug}`,
+        );
+
         // Use the discussion service to clean up the chat rooms
         await this.discussionService.cleanupGroupChatRooms(group.id, tenantId);
-        
+
         // Clear the matrixRoomId reference on the group entity
         if (group.matrixRoomId) {
           group.matrixRoomId = '';
           await this.groupRepository.save(group);
-          this.logger.log(`Cleared matrixRoomId reference for group ${group.slug}`);
+          this.logger.log(
+            `Cleared matrixRoomId reference for group ${group.slug}`,
+          );
         }
       } catch (chatError) {
         // Log but continue with deletion - the foreign key issue may already be resolved
-        this.logger.error(`Error cleaning up chat rooms: ${chatError.message}`, chatError.stack);
+        this.logger.error(
+          `Error cleaning up chat rooms: ${chatError.message}`,
+          chatError.stack,
+        );
       }
-      
+
       // First, delete all group members associated with the group
       await this.groupMembersRepository.delete({ group: { id: group.id } });
       this.logger.log(`Deleted all group members for group ${group.slug}`);
-      
+
       // Delete all events associated with the group
       await this.eventManagementService.deleteEventsByGroup(group.id);
       this.logger.log(`Deleted all events for group ${group.slug}`);
-  
+
       // Now remove the group itself
       const deletedGroup = await this.groupRepository.remove(group);
-      
+
       // Emit group deleted event after successful deletion
       this.eventEmitter.emit('group.deleted', deletedGroup);
-      
+
       this.auditLogger.log('group deleted', {
         deletedGroup,
       });
-      
+
       this.logger.log(`Successfully deleted group ${slug}`);
     } catch (error) {
-      this.logger.error(`Error deleting group ${slug}: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error deleting group ${slug}: ${error.message}`,
+        error.stack,
+      );
       throw error;
     }
   }

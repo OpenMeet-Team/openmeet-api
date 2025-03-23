@@ -79,7 +79,9 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     this.baseUrl = matrixConfig.baseUrl;
     // Use the admin user directly if it contains a full Matrix ID (@user:domain)
     const adminUser = matrixConfig.adminUser;
-    this.adminUserId = adminUser.startsWith('@') ? adminUser : `@${adminUser}:${matrixConfig.serverName}`;
+    this.adminUserId = adminUser.startsWith('@')
+      ? adminUser
+      : `@${adminUser}:${matrixConfig.serverName}`;
     this.serverName = matrixConfig.serverName;
     this.defaultDeviceId = matrixConfig.defaultDeviceId;
     this.defaultInitialDeviceDisplayName =
@@ -96,7 +98,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
 
       // Create admin client
       this.createAdminClient();
-      
+
       // Verify admin access
       await this.verifyAdminAccess();
 
@@ -112,12 +114,12 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
         error.stack,
       );
       this.logger.warn(
-        'Matrix admin access may be limited - user provisioning might fail'
+        'Matrix admin access may be limited - user provisioning might fail',
       );
       // Continue without throwing to allow the service to start
     }
   }
-  
+
   /**
    * Verify the admin token has admin privileges
    */
@@ -125,89 +127,111 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     try {
       // Use whoami endpoint to verify token works at all
       const whoamiUrl = `${this.baseUrl}/_matrix/client/v3/account/whoami`;
-      
+
       this.logger.debug(`Verifying admin token with: ${whoamiUrl}`);
       this.logger.debug(`Using admin user ID: ${this.adminUserId}`);
-      this.logger.debug(`Using admin token: ${this.adminAccessToken ? this.adminAccessToken.substring(0, 6) + '...' : 'null'}`);
-      
+      this.logger.debug(
+        `Using admin token: ${this.adminAccessToken ? this.adminAccessToken.substring(0, 6) + '...' : 'null'}`,
+      );
+
       const response = await axios.get(whoamiUrl, {
         headers: {
-          Authorization: `Bearer ${this.adminAccessToken}`
-        }
+          Authorization: `Bearer ${this.adminAccessToken}`,
+        },
       });
-      
+
       if (response.data && response.data.user_id) {
-        this.logger.log(`Matrix token verified for user: ${response.data.user_id}`);
-        
+        this.logger.log(
+          `Matrix token verified for user: ${response.data.user_id}`,
+        );
+
         // Check if this is actually the expected admin user
         if (response.data.user_id !== this.adminUserId) {
-          this.logger.warn(`Token belongs to ${response.data.user_id}, not configured admin ${this.adminUserId}`);
+          this.logger.warn(
+            `Token belongs to ${response.data.user_id}, not configured admin ${this.adminUserId}`,
+          );
           // Update the admin user ID to match actual token
           this.adminUserId = response.data.user_id;
         }
-        
+
         // Try multiple admin endpoints to verify privileges
-        let adminVerified = false;
-        
+
         // Try v2 admin API first
         try {
           const adminUrlV2 = `${this.baseUrl}/_synapse/admin/v2/users?from=0&limit=1`;
-          const adminResponseV2 = await axios.get(adminUrlV2, {
+          await axios.get(adminUrlV2, {
             headers: {
-              Authorization: `Bearer ${this.adminAccessToken}`
-            }
+              Authorization: `Bearer ${this.adminAccessToken}`,
+            },
           });
-          
-          adminVerified = true;
-          this.logger.log('Successfully verified Matrix admin privileges using v2 API');
+
+          this.logger.log(
+            'Successfully verified Matrix admin privileges using v2 API',
+          );
         } catch (adminV2Error) {
-          this.logger.debug(`Admin v2 API check failed: ${adminV2Error.message}`);
-          
+          this.logger.debug(
+            `Admin v2 API check failed: ${adminV2Error.message}`,
+          );
+
           // Try v1 admin endpoint
           try {
             const adminUrlV1 = `${this.baseUrl}/_synapse/admin/v1/users/${encodeURIComponent(this.adminUserId)}/admin`;
-            const adminResponseV1 = await axios.get(adminUrlV1, {
+            await axios.get(adminUrlV1, {
               headers: {
-                Authorization: `Bearer ${this.adminAccessToken}`
-              }
+                Authorization: `Bearer ${this.adminAccessToken}`,
+              },
             });
-            
-            adminVerified = true;
-            this.logger.log('Successfully verified Matrix admin privileges using v1 API');
+
+            this.logger.log(
+              'Successfully verified Matrix admin privileges using v1 API',
+            );
           } catch (adminV1Error) {
-            this.logger.warn('Admin privilege checks failed, trying server info endpoint');
-            
+            this.logger.warn(
+              'Admin privilege checks failed, trying server info endpoint',
+            );
+
             // Try server info endpoint as last resort
             try {
               const serverInfoUrl = `${this.baseUrl}/_synapse/admin/v1/server_version`;
               const serverInfoResponse = await axios.get(serverInfoUrl, {
                 headers: {
-                  Authorization: `Bearer ${this.adminAccessToken}`
-                }
+                  Authorization: `Bearer ${this.adminAccessToken}`,
+                },
               });
-              
+
               if (serverInfoResponse.status === 200) {
-                adminVerified = true;
-                this.logger.log('Successfully verified Matrix admin access using server info API');
+                this.logger.log(
+                  'Successfully verified Matrix admin access using server info API',
+                );
               }
             } catch (serverInfoError) {
-              this.logger.warn('All admin endpoint checks failed, user provisioning might be limited', {
-                v2Error: adminV2Error.message,
-                v1Error: adminV1Error.message,
-                serverInfoError: serverInfoError.message
-              });
+              this.logger.warn(
+                'All admin endpoint checks failed, user provisioning might be limited',
+                {
+                  v2Error: adminV2Error.message,
+                  v1Error: adminV1Error.message,
+                  serverInfoError: serverInfoError.message,
+                },
+              );
             }
           }
         }
       } else {
-        this.logger.warn('Unexpected whoami response format - admin access uncertain');
+        this.logger.warn(
+          'Unexpected whoami response format - admin access uncertain',
+        );
       }
     } catch (error) {
-      this.logger.error(`Matrix admin token verification failed: ${error.message}`, {
-        status: error.response?.status,
-        data: error.response?.data
-      });
-      this.logger.warn('Matrix admin token may not be valid - user provisioning might fail');
+      this.logger.error(
+        `Matrix admin token verification failed: ${error.message}`,
+        {
+          status: error.response?.status,
+          data: error.response?.data,
+        },
+      );
+      this.logger.warn(
+        'Matrix admin token may not be valid - user provisioning might fail',
+      );
     }
   }
 

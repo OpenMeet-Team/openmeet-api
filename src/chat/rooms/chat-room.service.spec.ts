@@ -227,7 +227,9 @@ describe('ChatRoomService', () => {
             }),
             setUserDisplayName: jest.fn().mockResolvedValue(true),
             getUserDisplayName: jest.fn().mockResolvedValue('Test User'),
-            provisionMatrixUser: jest.fn().mockResolvedValue(mockMatrixUserInfo),
+            provisionMatrixUser: jest
+              .fn()
+              .mockResolvedValue(mockMatrixUserInfo),
           },
         },
         {
@@ -447,7 +449,7 @@ describe('ChatRoomService', () => {
       // Should have called provisionMatrixUser, not createUser directly
       expect(matrixUserService.provisionMatrixUser).toHaveBeenCalledWith(
         mockUserWithoutMatrix,
-        'default'
+        'default',
       );
 
       // Should have updated user with Matrix credentials

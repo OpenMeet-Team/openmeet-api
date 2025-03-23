@@ -20,6 +20,7 @@ import { FilesS3PresignedService } from '../../file/infrastructure/uploader/s3-p
 import { ZulipService } from '../../zulip/zulip.service';
 import {
   mockCategoryService,
+  mockDiscussionService,
   mockEvent,
   mockEventAttendeeService,
   mockGroup,
@@ -124,12 +125,23 @@ describe('EventManagementService', () => {
           provide: getRepositoryToken(UserEntity),
           useValue: mockRepository,
         },
+        {
+          provide: 'DiscussionService',
+          useValue: mockDiscussionService,
+        },
       ],
     }).compile();
 
     service = await module.resolve<EventManagementService>(
       EventManagementService,
     );
+
+    // Manually set the eventRepository to mock the initializeRepository method
+    Object.defineProperty(service, 'eventRepository', {
+      value: mockRepository,
+      writable: true,
+    });
+
     eventAttendeeService =
       await module.resolve<EventAttendeeService>(EventAttendeeService);
   });

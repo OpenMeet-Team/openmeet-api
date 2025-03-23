@@ -259,7 +259,7 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
       // Use the centralized provisioning method
       const matrixUserInfo = await this.matrixUserService.provisionMatrixUser(
         user,
-        this.request.tenantId
+        this.request.tenantId,
       );
 
       // Update user with Matrix credentials

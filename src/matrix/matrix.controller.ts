@@ -92,10 +92,8 @@ export class MatrixController {
 
     try {
       // Use the centralized provisioning method
-      const matrixUserInfo: MatrixUserInfo = await this.matrixUserService.provisionMatrixUser(
-        fullUser,
-        tenantId
-      );
+      const matrixUserInfo: MatrixUserInfo =
+        await this.matrixUserService.provisionMatrixUser(fullUser, tenantId);
 
       // Display name is now set in the provisionMatrixUser method
 
