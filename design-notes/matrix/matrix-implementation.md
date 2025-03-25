@@ -217,9 +217,18 @@ Benefits:
 
 ## Future Enhancements
 
-1. **End-to-End Encryption**
-   - Implement E2EE for direct messages
-   - Handle key management and verification
+1. **End-to-End Encryption Options**
+   - Currently: Messages in encrypted rooms are sent unencrypted via backend clients
+   - Implementation options:
+     a) **Client-Side Only Encryption**: Handle encryption exclusively in frontend clients, backend never handles encrypted content
+     b) **Persistent Backend Clients**: Maintain long-lived client instances per user with persistent crypto store in database
+     c) **Key Backup Implementation**: Implement Matrix key backup/recovery with securely stored backup keys
+   - Challenges with current architecture:
+     - Temporary clients have no persistent crypto store
+     - Each message send creates a new "device" without historical keys
+     - Message history becomes unreadable for users when logging in
+     - No device verification across sessions
+   - Recommended approach: Keep encryption for client-side only, use unencrypted rooms for server-initiated messages
 
 2. **Advanced Search**
    - Full-text search across chat history

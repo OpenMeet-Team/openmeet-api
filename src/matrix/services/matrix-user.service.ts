@@ -715,6 +715,10 @@ export class MatrixUserService
           disablePresence: false,
           // Increase timeout for better reliability
           requestTimeout: 30000,
+          // Set log level for HTTP requests explicitly for this client
+          logLevel: 'warn',
+          // Reduce sync polling logs
+          pollTimeout: 60000,
         });
 
         // Get reference to MatrixGateway to broadcast events

@@ -470,6 +470,14 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       userId: this.adminUserId,
       accessToken: this.adminAccessToken,
       useAuthorizationHeader: true,
+      logger: {
+        // Disable verbose HTTP logging from Matrix SDK
+        log: () => {},
+        info: () => {},
+        warn: () => {},
+        debug: () => {},
+        error: (msg: string) => this.logger.error(msg) // Keep error logs
+      }
     });
   }
 
@@ -489,6 +497,14 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
             userId: this.adminUserId,
             accessToken: this.adminAccessToken,
             useAuthorizationHeader: true,
+            logger: {
+              // Disable verbose HTTP logging from Matrix SDK
+              log: () => {},
+              info: () => {},
+              warn: () => {},
+              debug: () => {},
+              error: (msg: string) => this.logger.error(msg) // Keep error logs
+            }
           });
 
           return Promise.resolve({
