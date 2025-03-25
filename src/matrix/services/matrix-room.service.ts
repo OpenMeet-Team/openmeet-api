@@ -19,6 +19,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       topic,
       isPublic = false,
       isDirect = false,
+      encrypted = false,
       inviteUserIds = [],
       powerLevelContentOverride,
     } = options;
@@ -29,6 +30,43 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       const matrixSdk = this.matrixCoreService.getSdk();
       const config = this.matrixCoreService.getConfig();
       const matrixClient = client.client;
+
+      // Build initial state for the room
+      // Define the type explicitly to allow for different content structures
+      const initialState: Array<{
+        type: string;
+        state_key: string;
+        content: Record<string, any>;
+      }> = [
+        {
+          type: 'm.room.guest_access',
+          state_key: '',
+          content: {
+            guest_access: 'forbidden',
+          },
+        },
+        {
+          type: 'm.room.history_visibility',
+          state_key: '',
+          content: {
+            history_visibility: 'shared',
+          },
+        },
+      ];
+
+      // Add encryption state event if room should be encrypted
+      if (encrypted) {
+        this.logger.log(`Creating encrypted room: ${name}`);
+        initialState.push({
+          type: 'm.room.encryption',
+          state_key: '',
+          content: {
+            algorithm: 'm.megolm.v1.aes-sha2',
+            rotation_period_ms: 604800000, // 1 week
+            rotation_period_msgs: 100,
+          },
+        });
+      }
 
       // First try the SDK method
       if (typeof matrixClient.createRoom === 'function') {
@@ -45,22 +83,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
             : matrixSdk.Preset.PrivateChat,
           is_direct: isDirect,
           invite: inviteUserIds,
-          initial_state: [
-            {
-              type: 'm.room.guest_access',
-              state_key: '',
-              content: {
-                guest_access: 'forbidden',
-              },
-            },
-            {
-              type: 'm.room.history_visibility',
-              state_key: '',
-              content: {
-                history_visibility: 'shared',
-              },
-            },
-          ],
+          initial_state: initialState,
         });
 
         // Get room details
@@ -97,22 +120,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         preset: isPublic ? 'public_chat' : 'private_chat',
         is_direct: isDirect,
         invite: inviteUserIds,
-        initial_state: [
-          {
-            type: 'm.room.guest_access',
-            state_key: '',
-            content: {
-              guest_access: 'forbidden',
-            },
-          },
-          {
-            type: 'm.room.history_visibility',
-            state_key: '',
-            content: {
-              history_visibility: 'shared',
-            },
-          },
-        ],
+        initial_state: initialState,
       };
 
       // Try with Bearer token auth
@@ -148,21 +156,121 @@ export class MatrixRoomService implements IMatrixRoomProvider {
   }
 
   /**
+   * Ensure the admin user is a member of the room
+   * @private
+   */
+  private async ensureAdminInRoom(roomId: string, client: any): Promise<void> {
+    try {
+      const adminUserId = this.matrixCoreService.getConfig().adminUserId;
+      this.logger.debug(
+        `Ensuring admin user ${adminUserId} is in room ${roomId}`,
+      );
+
+      // Try to join the room as admin
+      try {
+        await client.client.joinRoom(roomId);
+        this.logger.debug(
+          `Admin user ${adminUserId} successfully joined room ${roomId}`,
+        );
+      } catch (joinError) {
+        // If error indicates already in room, that's fine
+        if (
+          joinError.message &&
+          (joinError.message.includes('already in the room') ||
+            joinError.message.includes('already a member') ||
+            joinError.message.includes('already joined'))
+        ) {
+          this.logger.debug(
+            `Admin user ${adminUserId} is already in room ${roomId}`,
+          );
+        } else {
+          // For other errors, try to get an invite from someone in the room
+          // This is a fallback and might not always work depending on permissions
+          this.logger.warn(
+            `Admin user failed to join room ${roomId}: ${joinError.message}. Will try alternative methods.`,
+          );
+          throw joinError;
+        }
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to ensure admin is in room ${roomId}: ${error.message}`,
+        error.stack,
+      );
+      throw new Error(`Admin user could not join room: ${error.message}`);
+    }
+  }
+
+  /**
+   * Check if a user is already in a room
+   * @private
+   */
+  private async isUserInRoom(
+    roomId: string,
+    userId: string,
+    client: any,
+  ): Promise<boolean> {
+    try {
+      // Try to get room members
+      const response = await client.client.getJoinedRoomMembers(roomId);
+      if (response && response.joined) {
+        return userId in response.joined;
+      }
+
+      return false;
+    } catch (error) {
+      this.logger.debug(
+        `Could not check if user ${userId} is in room ${roomId}: ${error.message}`,
+      );
+      return false; // Assume not in room if we can't check
+    }
+  }
+
+  /**
    * Invite a user to a room
    */
   async inviteUser(roomId: string, userId: string): Promise<void> {
     const client = await this.matrixCoreService.acquireClient();
 
     try {
+      // First ensure admin is in the room
+      await this.ensureAdminInRoom(roomId, client);
+
+      // Check if user is already in the room before inviting
+      const isAlreadyInRoom = await this.isUserInRoom(roomId, userId, client);
+      if (isAlreadyInRoom) {
+        this.logger.debug(
+          `User ${userId} is already in room ${roomId}, skipping invite`,
+        );
+        return;
+      }
+
+      // Then invite the user
       await client.client.invite(roomId, userId);
     } catch (error) {
-      // Matrix returns 403 when user is already in room, which is not really an error
+      // Handle different types of errors with appropriate severity
+
+      // Already in room - not an error
       if (error.message && error.message.includes('already in the room')) {
         this.logger.debug(
           `User ${userId} is already in room ${roomId}, skipping invite`,
         );
-        // Don't throw - just return since this is expected in some cases
-      } else {
+        return; // Don't throw - expected case
+      }
+      // Rate limiting - warning but not error
+      else if (
+        error.statusCode === 429 ||
+        (error.message && error.message.includes('Too Many Requests')) ||
+        (error.errcode && error.errcode === 'M_LIMIT_EXCEEDED')
+      ) {
+        this.logger.warn(
+          `Rate limited while inviting user ${userId} to room ${roomId}: ${error.message}`,
+        );
+        // Don't throw - this is recoverable
+        return;
+      }
+      // Actual errors
+      else {
         this.logger.error(
           `Error inviting user ${userId} to room ${roomId}: ${error.message}`,
           error.stack,
@@ -183,6 +291,9 @@ export class MatrixRoomService implements IMatrixRoomProvider {
     const client = await this.matrixCoreService.acquireClient();
 
     try {
+      // First ensure admin is in the room
+      await this.ensureAdminInRoom(roomId, client);
+
       await client.client.kick(
         roomId,
         userId,
@@ -267,6 +378,9 @@ export class MatrixRoomService implements IMatrixRoomProvider {
     const client = await this.matrixCoreService.acquireClient();
 
     try {
+      // First ensure admin is in the room
+      await this.ensureAdminInRoom(roomId, client);
+
       // Get current power levels
       const stateEvent = await client.client.getStateEvent(
         roomId,

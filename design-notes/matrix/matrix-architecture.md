@@ -131,4 +131,6 @@ chat.event.member.add│                    │                                 
 - ✅ Room creation and management
 - ✅ Service architecture optimization
 - ✅ Credential management improvements
+- ✅ Admin token regeneration
+- ✅ Robust room operation error handling
 - 🚧 Comprehensive testing in progress

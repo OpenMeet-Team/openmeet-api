@@ -1,7 +1,8 @@
 export type MatrixConfig = {
   baseUrl: string;
   adminUser: string;
-  adminAccessToken: string;
+  adminPassword: string; // Mandatory for token generation
+  adminAccessToken?: string; // Optional now, will be generated dynamically
   serverName: string;
   defaultDeviceId: string;
   defaultInitialDeviceDisplayName: string;

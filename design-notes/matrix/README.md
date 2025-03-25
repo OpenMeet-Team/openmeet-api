@@ -42,22 +42,22 @@ For developers new to the Matrix integration:
 - `MatrixUserService.provisionMatrixUser()`: User provisioning with credential management
 - `ChatRoomService.ensureUserHasMatrixCredentials()`: Credential validation and provisioning
 - `MatrixGateway.broadcastRoomEvent()`: Real-time event broadcasting
+- `MatrixCoreService.regenerateAdminAccessToken()`: Admin token regeneration when expired
+- `MatrixRoomService.ensureAdminInRoom()`: Ensures admin is in room before operations
 
-### Credential Error Handling Pattern
+### Error Handling Patterns
 
-```typescript
-try {
-  // Attempt Matrix operation
-} catch (error) {
-  if (error.errcode === 'M_UNKNOWN_TOKEN') {
-    // Refresh credentials or reprovision user
-    await this.handleCredentialRefresh(userId);
-    // Retry original operation
-  } else {
-    // Handle other errors
-  }
-}
-```
+1. **User Operation Error Handling**
+   - Attempt Matrix operation
+   - If token is invalid (M_UNKNOWN_TOKEN), refresh credentials or reprovision user
+   - Retry the original operation
+   - For rate limiting (M_LIMIT_EXCEEDED), log as warning and backoff gracefully
+
+2. **Admin Operation Error Handling**
+   - Ensure admin is in room before attempting operations
+   - If admin token is invalid, regenerate using stored password
+   - Retry the original operation with new token
+   - Handle rate limiting with appropriate warning logs
 
 ### Local Development Quick Setup
 
@@ -68,8 +68,9 @@ docker-compose -f docker-compose-dev.yml up -d
 # Get admin token
 docker-compose -f docker-compose-dev.yml logs matrix | grep -A 10 "Success! Matrix server initialized"
 
-# Update .env file with token
+# Update .env file with token and password
 # MATRIX_ADMIN_ACCESS_TOKEN=your_token_from_logs
+# MATRIX_ADMIN_PASSWORD=your_admin_password  # Required for token regeneration
 ```
 
 ## Implementation Status
@@ -80,4 +81,6 @@ docker-compose -f docker-compose-dev.yml logs matrix | grep -A 10 "Success! Matr
 - ✅ Room creation and management
 - ✅ Service architecture optimization
 - ✅ Credential management improvements
+- ✅ Admin token regeneration
+- ✅ Robust room operation error handling
 - 🚧 Comprehensive testing in progress

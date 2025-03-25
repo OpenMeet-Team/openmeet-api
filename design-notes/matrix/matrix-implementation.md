@@ -9,6 +9,7 @@ This document details the technical implementation of Matrix chat in OpenMeet, f
 1. **MatrixCoreService**
    - Handles SDK loading and initialization
    - Manages admin client for system operations
+   - Provides admin token regeneration capability
    - Uses dynamic imports for ESM compatibility
    - Centralizes configuration and access to Matrix API
 
@@ -21,8 +22,10 @@ This document details the technical implementation of Matrix chat in OpenMeet, f
 3. **MatrixRoomService**
    - Creates and configures Matrix rooms
    - Manages room membership and invitations
+   - Ensures admin is in room before performing operations
    - Handles power levels based on OpenMeet roles
    - Provides utility methods for room operations
+   - Gracefully handles rate limiting errors
 
 4. **MatrixMessageService**
    - Sends and retrieves messages
@@ -56,26 +59,33 @@ This document details the technical implementation of Matrix chat in OpenMeet, f
 
 The credential management system implements a multi-stage fallback approach for handling Matrix token errors:
 
+#### For Regular Users:
 ```
 Try operation → If M_UNKNOWN_TOKEN error → Try token refresh → If fails → Reprovision
 ```
 
-### Implementation Pattern
-
-```typescript
-// Error handling pattern
-try {
-  // Attempt Matrix operation
-} catch (error) {
-  if (error.errcode === 'M_UNKNOWN_TOKEN') {
-    // Refresh credentials or reprovision user
-    await this.handleCredentialRefresh(userId);
-    // Retry original operation
-  } else {
-    // Handle other errors
-  }
-}
+#### For Admin Operations:
 ```
+Try operation → If M_UNKNOWN_TOKEN error → Regenerate admin token using password → Retry operation
+```
+
+### Implementation Patterns for Error Handling
+
+#### User Operation Pattern
+- First attempt the Matrix operation
+- If token error (M_UNKNOWN_TOKEN) is encountered, refresh user credentials
+- If refresh fails, reprovision the user with new Matrix credentials
+- Retry the original operation with new credentials
+- Handle other errors appropriately (logging, retries for rate limiting)
+
+#### Admin Operation Pattern
+- First ensure admin is in the target room
+- Attempt the Matrix admin operation
+- If token error (M_UNKNOWN_TOKEN) is encountered, regenerate admin token
+- Use stored admin password to authenticate and get new token
+- Update admin client with new token
+- Retry the original operation
+- If token regeneration fails, log error and notify administrators
 
 ### Key Strategies
 
@@ -89,12 +99,22 @@ try {
    - Second attempt: full re-provisioning if needed
    - Transparent to end users
 
-3. **Security-First Approach**
+3. **Admin Token Regeneration**
+   - Store admin password securely in environment variables
+   - Automatically regenerate admin tokens when they expire
+   - Maintain system operations without manual intervention
+
+4. **Proactive Admin Room Joining**
+   - Ensure admin user joins rooms before operations
+   - Check room membership status before operations
+   - Avoid common "User not in room" errors
+
+5. **Security-First Approach**
    - Server-side credential management only
    - No exposure of Matrix tokens to frontend
    - Secure storage in database
 
-4. **Reset Options**
+6. **Reset Options**
    ```sql
    -- Preserve Matrix IDs (preferred)
    UPDATE "user" SET matrix_access_token = NULL, matrix_device_id = NULL;

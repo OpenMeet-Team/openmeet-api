@@ -483,6 +483,97 @@ export class MatrixUserService
   }
 
   /**
+   * Verify if a Matrix access token is still valid
+   * @param userId The Matrix user ID
+   * @param accessToken The Matrix access token to verify
+   * @returns True if the token is valid, false otherwise
+   */
+  async verifyAccessToken(
+    userId: string,
+    accessToken: string,
+  ): Promise<boolean> {
+    if (!userId || !accessToken) {
+      return false;
+    }
+
+    try {
+      const config = this.matrixCoreService.getConfig();
+
+      // The whoami endpoint is the standard way to verify tokens
+      const url = `${config.baseUrl}/_matrix/client/v3/account/whoami`;
+
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      // If we get a valid response with matching user_id, the token is valid
+      if (response.status === 200 && response.data?.user_id === userId) {
+        this.logger.debug(
+          `Matrix token verified successfully for user ${userId}`,
+        );
+        return true;
+      }
+
+      this.logger.warn(
+        `Token verification failed: user ID mismatch. Expected ${userId}, got ${response.data?.user_id}`,
+      );
+      return false;
+    } catch (error) {
+      // If we get an error, the token is likely invalid
+      this.logger.warn(
+        `Matrix token invalid for user ${userId}: ${error.message}`,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Generate a new access token for an existing Matrix user using admin API
+   * @param matrixUserId The full Matrix user ID (@username:server.com)
+   * @returns New access token or null if failed
+   */
+  async generateNewAccessToken(matrixUserId: string): Promise<string | null> {
+    try {
+      const config = this.matrixCoreService.getConfig();
+      const adminToken = this.matrixCoreService
+        .getAdminClient()
+        .getAccessToken();
+
+      // Use admin API to create a new access token
+      const url = `${config.baseUrl}/_synapse/admin/v1/users/${encodeURIComponent(matrixUserId)}/login`;
+
+      const response = await axios.post(
+        url,
+        {
+          valid_until_ms: Date.now() + 90 * 24 * 60 * 60 * 1000, // 90 days from now
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+          },
+        },
+      );
+
+      if (response.data?.access_token) {
+        this.logger.log(
+          `Successfully generated new admin token for ${matrixUserId}`,
+        );
+        return response.data.access_token;
+      }
+
+      return null;
+    } catch (error) {
+      this.logger.error(
+        `Error generating new access token: ${error.message}`,
+        error.stack,
+      );
+      return null;
+    }
+  }
+
+  /**
    * Get or create a Matrix client for a specific user
    * This method fetches user credentials from the database
    */
@@ -506,9 +597,11 @@ export class MatrixUserService
 
     // We need to fetch the user with Matrix credentials
     let user;
+    let userServiceInstance;
     try {
       if (userService) {
         // If userService was passed, use it (more efficient)
+        userServiceInstance = userService;
         user = await userService.findBySlug(userSlug, tenantId);
       } else {
         // Otherwise, get a UserService instance through the module system
@@ -517,7 +610,7 @@ export class MatrixUserService
         // Import UserService
         const UserServiceClass = (await import('../../user/user.service'))
           .UserService;
-        const userServiceInstance = await this.moduleRef.resolve(
+        userServiceInstance = await this.moduleRef.resolve(
           UserServiceClass,
           contextId,
           { strict: false },
@@ -534,9 +627,67 @@ export class MatrixUserService
       throw new Error(`Failed to get user data: ${error.message}`);
     }
 
-    if (!user || !user.matrixUserId || !user.matrixAccessToken) {
-      this.logger.warn(`User ${userSlug} has no Matrix credentials`);
+    if (!user || !user.matrixUserId) {
+      this.logger.warn(`User ${userSlug} has no Matrix user ID`);
       throw new Error('User has no Matrix credentials');
+    }
+
+    // If there's no access token or it's invalid, try to refresh it
+    let accessToken = user.matrixAccessToken;
+    let deviceId = user.matrixDeviceId;
+
+    const isTokenValid = accessToken
+      ? await this.verifyAccessToken(user.matrixUserId, accessToken)
+      : false;
+
+    if (!isTokenValid) {
+      this.logger.warn(
+        `Matrix token for ${userSlug} is invalid or missing, generating new token...`,
+      );
+
+      // Generate a new token using admin API
+      const newToken = await this.generateNewAccessToken(user.matrixUserId);
+
+      if (newToken) {
+        // Update the user record with the new token
+        accessToken = newToken;
+        deviceId =
+          deviceId || this.matrixCoreService.getConfig().defaultDeviceId;
+
+        // Update in database
+        try {
+          await userServiceInstance.update(
+            user.id,
+            {
+              matrixAccessToken: newToken,
+              matrixDeviceId: deviceId,
+              preferences: {
+                ...(user.preferences || {}),
+                matrix: {
+                  ...(user.preferences?.matrix || {}),
+                  connected: true,
+                },
+              },
+            },
+            tenantId,
+          );
+
+          this.logger.log(
+            `Successfully updated Matrix token for user ${userSlug}`,
+          );
+        } catch (updateError) {
+          this.logger.error(
+            `Failed to update Matrix token in database: ${updateError.message}`,
+            updateError.stack,
+          );
+          // Continue anyway with the new token, even if DB update failed
+        }
+      } else {
+        this.logger.error(
+          `Failed to generate new token for ${userSlug}, can't connect to Matrix`,
+        );
+        throw new Error('Failed to refresh Matrix credentials');
+      }
     }
 
     try {
@@ -547,8 +698,8 @@ export class MatrixUserService
       const client = sdk.createClient({
         baseUrl: config.baseUrl,
         userId: user.matrixUserId,
-        accessToken: user.matrixAccessToken,
-        deviceId: user.matrixDeviceId || undefined,
+        accessToken: accessToken,
+        deviceId: deviceId || undefined,
         useAuthorizationHeader: true,
       });
 

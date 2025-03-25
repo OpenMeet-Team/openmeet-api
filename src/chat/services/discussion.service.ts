@@ -296,6 +296,7 @@ export class DiscussionService implements DiscussionServiceInterface {
   ): Promise<{
     messages: Message[];
     end: string;
+    roomId?: string;
   }> {
     const tenantId = this.request.tenantId;
     if (!tenantId) {
@@ -341,7 +342,15 @@ export class DiscussionService implements DiscussionServiceInterface {
     const membershipCacheKey = `event:${event.id}:user:${userId}`;
     const membershipVerified = cache.membershipVerified.get(membershipCacheKey);
 
-    if (!membershipVerified) {
+    // Special handling to avoid race conditions - if already in progress via chatRoomService
+    const chatRoomMembershipInProgress =
+      this.request.chatRoomMembershipCache?.[membershipCacheKey] ===
+      'in-progress';
+
+    if (!membershipVerified && !chatRoomMembershipInProgress) {
+      // Mark as in-progress in our cache too
+      cache.membershipVerified.set(membershipCacheKey, 'in-progress');
+
       // Ensure the current user is a member of the room
       try {
         this.logger.log(
@@ -377,9 +386,21 @@ export class DiscussionService implements DiscussionServiceInterface {
       messageData.messages,
     );
 
+    // Return the Matrix room ID along with messages
+    const roomId = chatRooms[0].matrixRoomId;
+
+    if (!roomId) {
+      this.logger.warn(
+        `No Matrix room ID found for chat room of event ${slug}`,
+      );
+    } else {
+      this.logger.debug(`Using Matrix room ID for event ${slug}: ${roomId}`);
+    }
+
     return {
       messages: enhancedMessages,
       end: messageData.end,
+      roomId: roomId,
     };
   }
 
@@ -530,6 +551,14 @@ export class DiscussionService implements DiscussionServiceInterface {
    * - users: Map<string, UserEntity> - Cached user objects by slug or ID
    */
   private getRequestCache() {
+    // Safe guard against missing request object (events, background jobs)
+    if (!this.request) {
+      this.logger.warn(
+        'No request object available, possibly called from event handler',
+      );
+      return null;
+    }
+
     if (!this.request.discussionCache) {
       this.request.discussionCache = {
         groups: new Map(),
@@ -675,11 +704,18 @@ export class DiscussionService implements DiscussionServiceInterface {
       }
     }
 
-    // Use memebership cache to prevent redundant checks
+    // Use membership cache to prevent redundant checks
     const membershipCacheKey = `group:${group.id}:user:${userId}`;
     const membershipVerified = cache.membershipVerified.get(membershipCacheKey);
+    // Special handling to avoid race conditions - if already in progress via chatRoomService
+    const chatRoomMembershipInProgress =
+      this.request.chatRoomMembershipCache?.[membershipCacheKey] ===
+      'in-progress';
 
-    if (!membershipVerified && !roomCreated) {
+    if (!membershipVerified && !roomCreated && !chatRoomMembershipInProgress) {
+      // Mark as in-progress in our cache too
+      cache.membershipVerified.set(membershipCacheKey, 'in-progress');
+
       try {
         // This call is now optimized to use internal caching
         await this.chatRoomService.addUserToGroupChatRoom(group.id, userId);

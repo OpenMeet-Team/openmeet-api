@@ -36,6 +36,7 @@ export interface CreateRoomOptions {
   topic?: string;
   isPublic?: boolean;
   isDirect?: boolean;
+  encrypted?: boolean;
   inviteUserIds?: string[];
   powerLevels?: Record<string, number>;
   powerLevelContentOverride?: any; // IPowerLevelsContent

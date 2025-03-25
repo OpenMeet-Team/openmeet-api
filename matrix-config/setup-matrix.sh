@@ -56,9 +56,8 @@ USER_ID="@${MATRIX_USER}:${MATRIX_SERVER_NAME}"
 # Create a file with the environment variables
 cat > /matrix-token.sh << EOF
 export MATRIX_ADMIN_ACCESS_TOKEN="${ACCESS_TOKEN}"
-export MATRIX_ADMIN_USER="${USER_ID}"
 EOF
 
-echo "Matrix setup complete! Access token and user ID saved to /matrix-token.sh"
-echo "Matrix admin user: ${USER_ID}"
+echo "Matrix setup complete! Access token saved to /matrix-token.sh"
+echo "Matrix admin user: ${USER_ID} (derived from MATRIX_ADMIN_USERNAME and MATRIX_SERVER_NAME)"
 echo "Matrix access token: ${ACCESS_TOKEN:0:5}..."
