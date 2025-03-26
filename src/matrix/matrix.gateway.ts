@@ -17,15 +17,22 @@ import {
   Inject,
   forwardRef,
 } from '@nestjs/common';
-import { ModuleRef, ContextIdFactory } from '@nestjs/core';
+import { ModuleRef } from '@nestjs/core';
 import { Server, Socket } from 'socket.io';
-import { UserService } from '../user/user.service';
+// UserService is imported dynamically via ModuleRef
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { MatrixUserService } from './services/matrix-user.service';
 import { MatrixRoomService } from './services/matrix-room.service';
 import { MatrixMessageService } from './services/matrix-message.service';
 import { WsJwtAuthGuard } from '../auth/ws-auth.guard';
+import {
+  BroadcastManager,
+  MatrixGatewayHelper,
+  RoomMembershipManager,
+  SocketAuthHandler,
+  TypingManager,
+} from './helpers';
 
 @WebSocketGateway({
   namespace: '/matrix',
@@ -56,20 +63,14 @@ export class MatrixGateway
   @WebSocketServer()
   server: Server;
 
-  // Store user -> rooms mapping for this connection
-  private userRooms: Map<string, Set<string>> = new Map();
-
-  // Store socket -> user mapping
-  private socketUsers: Map<
-    string,
-    { userId: number; matrixUserId: string | undefined }
-  > = new Map();
-
   // Logger will be initialized in afterInit to ensure consistency
   private logger: Logger;
 
-  // Don't store the UserService directly since it's request-scoped
-  // Instead, we'll resolve it dynamically when needed
+  // Helper instances for different responsibilities
+  private roomMembershipManager: RoomMembershipManager;
+  private broadcastManager: BroadcastManager;
+  private typingManager: TypingManager;
+  private socketAuthHandler: SocketAuthHandler;
 
   constructor(
     @Inject(forwardRef(() => MatrixUserService))
@@ -106,8 +107,12 @@ export class MatrixGateway
 
   afterInit(server: any) {
     this.logger = new Logger(MatrixGateway.name);
-
     this.logger.log('Matrix WebSocket Gateway initialized');
+
+    // Initialize helper instances
+    this.roomMembershipManager = new RoomMembershipManager(MatrixGateway.name);
+    this.broadcastManager = new BroadcastManager(MatrixGateway.name);
+    this.typingManager = new TypingManager(MatrixGateway.name);
 
     try {
       // Add authentication middleware
@@ -129,144 +134,19 @@ export class MatrixGateway
         return;
       }
 
-      socketServer.use(async (socket: Socket, next) => {
-        try {
-          // Check for token in various places it might be
-          const token =
-            socket.handshake.auth.token ||
-            socket.handshake.headers.authorization ||
-            socket.handshake.query?.token;
+      // Initialize auth handler with dependencies
+      this.socketAuthHandler = new SocketAuthHandler(
+        this.logger,
+        this.jwtService,
+        this.configService,
+        this.moduleRef,
+        this.roomMembershipManager,
+      );
 
-          this.logger.debug('Token search locations:', {
-            authToken: !!socket.handshake.auth.token,
-            headerAuth: !!socket.handshake.headers.authorization,
-            queryToken: !!socket.handshake.query?.token,
-          });
-
-          if (!token) {
-            this.logger.error('No authentication token found in connection');
-            return next(
-              new WsException('Authentication error - no token provided'),
-            );
-          }
-
-          // Extract actual token from Bearer format
-          const tokenStr = token.startsWith('Bearer ')
-            ? token.substring(7)
-            : token;
-
-          this.logger.debug(
-            `Received token: ${tokenStr.length > 10 ? 'Valid length' : 'Invalid length'}`,
-          );
-
-          try {
-            // Verify the JWT token properly
-            let payload;
-            try {
-              payload = await this.jwtService.verifyAsync(tokenStr, {
-                secret: this.configService.get('auth.secret', { infer: true }),
-              });
-
-              this.logger.debug('JWT verification successful');
-            } catch (verifyError) {
-              this.logger.error('JWT verification error:', verifyError);
-              return next(new WsException('Invalid authentication token'));
-            }
-
-            if (!payload || !payload.id) {
-              this.logger.error('Invalid JWT payload');
-              return next(new WsException('Invalid token - missing user ID'));
-            }
-
-            // Store the user ID for later use
-            const userId = payload.id;
-            socket.data = { userId };
-
-            // Create a contextId for this request to resolve request-scoped services
-            const contextId = ContextIdFactory.create();
-
-            try {
-              // Get the UserService instance for this context
-              const userService = await this.moduleRef.resolve(
-                UserService,
-                contextId,
-                { strict: false },
-              );
-
-              // Extract tenant ID from socket handshake
-              const tenantId =
-                socket.handshake.auth.tenantId ||
-                socket.handshake.headers['x-tenant-id'] ||
-                socket.handshake.query?.tenantId;
-
-              this.logger.debug(
-                `Using tenant ID for user lookup: ${tenantId || 'undefined'}`,
-              );
-
-              // Fetch user with Matrix credentials directly from database
-              // Pass both user ID and tenant ID to the findById method
-              const user = await userService.findById(userId, tenantId);
-
-              if (!user) {
-                this.logger.warn(`User ${userId} not found in database`);
-                return next(new WsException('User not found'));
-              }
-
-              this.logger.debug(`Found user ${userId} in database`);
-
-              // Check if user has Matrix credentials
-              const hasMatrixCredentials = !!(
-                user.matrixUserId &&
-                user.matrixAccessToken &&
-                user.matrixDeviceId
-              );
-
-              // Store minimal information in socket data
-              socket.data.hasMatrixCredentials = hasMatrixCredentials;
-
-              // We only store the Matrix user ID in the socket data, not sensitive credentials
-              if (hasMatrixCredentials) {
-                socket.data.matrixUserId = user.matrixUserId;
-
-                // Store in our tracking maps for room subscriptions
-                this.socketUsers.set(socket.id, {
-                  userId: user.id,
-                  matrixUserId: user.matrixUserId,
-                });
-
-                this.logger.debug(
-                  `User ${userId} has Matrix credentials (${user.matrixUserId})`,
-                );
-              } else {
-                this.logger.warn(
-                  `User ${userId} missing Matrix credentials - some features may not work`,
-                );
-              }
-
-              // Store tenant ID if provided
-              if (socket.handshake.auth.tenantId) {
-                socket.data.tenantId = socket.handshake.auth.tenantId;
-              }
-
-              next();
-            } catch (error) {
-              this.logger.error(
-                `Error fetching user data: ${error.message}`,
-                error.stack,
-              );
-              return next(new WsException('Error authenticating user'));
-            }
-          } catch (error) {
-            this.logger.error('JWT verification error:', error);
-            return next(
-              new WsException('Authentication error - invalid token'),
-            );
-          }
-        } catch (error) {
-          this.logger.error('WebSocket authentication error:', error);
-          return next(new WsException('Authentication error'));
-        }
-      });
+      // Set up authentication middleware
+      socketServer.use((socket, next) =>
+        this.socketAuthHandler.authenticate(socket, next),
+      );
     } catch (error) {
       this.logger.error('Error setting up WebSocket server middleware:', error);
     }
@@ -289,68 +169,7 @@ export class MatrixGateway
         message: 'WebSocket connection established successfully',
       });
 
-      if (client.data.hasMatrixCredentials) {
-        try {
-          // Initialize Matrix client for this user using credentials from database
-          // Just initialize the client - we'll fetch it when needed for operations
-          const userId = client.data.userId;
-
-          // Create context ID for resolving UserService
-          const contextId = ContextIdFactory.create();
-
-          // Get UserService for this request context
-          const userService = await this.moduleRef.resolve(
-            UserService,
-            contextId,
-            { strict: false },
-          );
-
-          // Get tenant ID from client data
-          const tenantId = client.data.tenantId;
-          this.logger.debug(
-            `Using tenant ID for Matrix client initialization: ${tenantId || 'undefined'}`,
-          );
-
-          // Fetch user to get the slug
-          const user = await userService.findById(userId, tenantId);
-
-          if (!user) {
-            this.logger.error(
-              `User ${userId} not found when initializing Matrix client`,
-            );
-            throw new Error('User not found');
-          }
-
-          // Initialize Matrix client using DB credentials (will be cached in MatrixUserService)
-          // Pass userService and tenantId
-          await this.matrixUserService.getClientForUser(
-            user.slug,
-            userService,
-            tenantId,
-          );
-
-          // Store the user ID in socket data for connection management
-          client.data.matrixClientInitialized = true;
-
-          this.logger.log(`Matrix client initialized for user ${userId}`);
-        } catch (error) {
-          this.logger.error(
-            `Failed to initialize Matrix client: ${error.message}`,
-          );
-
-          // Still allow connection, but mark client as not initialized
-          client.data.hasMatrixCredentials = false;
-          client.data.matrixClientInitialized = false;
-
-          // Send error to client
-          client.emit('matrix-event', {
-            type: 'matrix_error',
-            message:
-              'Failed to initialize Matrix client. Some features may be unavailable.',
-            timestamp: Date.now(),
-          });
-        }
-      }
+      await this.initializeMatrixClientForConnection(client);
     } catch (error) {
       this.logger.error(
         `Error in handleConnection: ${error.message}`,
@@ -366,6 +185,71 @@ export class MatrixGateway
     }
   }
 
+  /**
+   * Initialize Matrix client for a user connection
+   * @param client Connected socket client
+   */
+  private async initializeMatrixClientForConnection(
+    client: Socket,
+  ): Promise<void> {
+    if (!client.data.hasMatrixCredentials) {
+      return;
+    }
+
+    try {
+      // Initialize Matrix client for this user using credentials from database
+      // Just initialize the client - we'll fetch it when needed for operations
+      const userId = client.data.userId;
+
+      // Create context ID for resolving UserService
+      const userService = await MatrixGatewayHelper.createUserServiceForRequest(
+        this.moduleRef,
+        this.logger,
+      );
+
+      // Get tenant ID from client data
+      const tenantId = client.data.tenantId;
+      this.logger.debug(
+        `Using tenant ID for Matrix client initialization: ${tenantId || 'undefined'}`,
+      );
+
+      // Fetch user to get the slug
+      const user = await MatrixGatewayHelper.resolveUserById(
+        userId,
+        userService,
+        tenantId,
+        this.logger,
+      );
+
+      // Initialize Matrix client using DB credentials (will be cached in MatrixUserService)
+      // Pass userService and tenantId
+      await this.matrixUserService.getClientForUser(
+        user.slug,
+        userService,
+        tenantId,
+      );
+
+      // Store the user ID in socket data for connection management
+      client.data.matrixClientInitialized = true;
+
+      this.logger.log(`Matrix client initialized for user ${userId}`);
+    } catch (error) {
+      this.logger.error(`Failed to initialize Matrix client: ${error.message}`);
+
+      // Still allow connection, but mark client as not initialized
+      client.data.hasMatrixCredentials = false;
+      client.data.matrixClientInitialized = false;
+
+      // Send error to client
+      client.emit('matrix-event', {
+        type: 'matrix_error',
+        message:
+          'Failed to initialize Matrix client. Some features may be unavailable.',
+        timestamp: Date.now(),
+      });
+    }
+  }
+
   async handleDisconnect(client: Socket) {
     this.logger.log(`Client disconnected: ${client.id}`);
 
@@ -374,54 +258,60 @@ export class MatrixGateway
         return;
       }
 
-      // Get user info
-      const userInfo = this.socketUsers.get(client.id);
-
-      if (userInfo) {
-        // Clean up room subscriptions
-        if (userInfo.matrixUserId) {
-          this.userRooms.delete(userInfo.matrixUserId);
-        }
-
-        // Unregister the client
-        this.socketUsers.delete(client.id);
-
-        // Release Matrix client if it was initialized
-        if (
-          client.data?.userId &&
-          client.data?.matrixClientInitialized &&
-          userInfo?.userId
-        ) {
-          try {
-            // Get user to find slug for releasing client
-            const contextId = ContextIdFactory.create();
-            const userService = await this.moduleRef.resolve(
-              UserService,
-              contextId,
-              { strict: false },
-            );
-
-            // Get tenant ID from client data
-            const tenantId = client.data.tenantId;
-
-            const user = await userService.findById(userInfo.userId, tenantId);
-
-            if (user) {
-              this.matrixUserService.releaseClientForUser(user.slug);
-              this.logger.debug(`Released Matrix client for user ${user.slug}`);
-            }
-          } catch (error) {
-            this.logger.warn(`Error releasing Matrix client: ${error.message}`);
-          }
-        }
-      }
+      await this.cleanupClientConnection(client);
     } catch (error) {
       this.logger.error(`Error during disconnect cleanup: ${error.message}`);
     }
   }
 
-  // Store recently broadcast event IDs to prevent duplicates
-  private recentlyBroadcastEvents = new Map<string, number>();
+  /**
+   * Clean up resources when a client disconnects
+   * @param client Disconnected socket client
+   */
+  private async cleanupClientConnection(client: Socket): Promise<void> {
+    // Get user info
+    const userInfo = this.roomMembershipManager.unregisterSocket(client.id);
+
+    if (userInfo) {
+      // Clean up room subscriptions
+      if (userInfo.matrixUserId) {
+        this.roomMembershipManager.removeUserFromAllRooms(
+          userInfo.matrixUserId,
+        );
+      }
+
+      // Release Matrix client if it was initialized
+      if (
+        client.data?.userId &&
+        client.data?.matrixClientInitialized &&
+        userInfo?.userId
+      ) {
+        try {
+          // Get user to find slug for releasing client
+          const userService =
+            await MatrixGatewayHelper.createUserServiceForRequest(
+              this.moduleRef,
+              this.logger,
+            );
+
+          // Get tenant ID from client data
+          const tenantId = client.data.tenantId;
+
+          const user = await MatrixGatewayHelper.resolveUserById(
+            userInfo.userId,
+            userService,
+            tenantId,
+            this.logger,
+          );
+
+          this.matrixUserService.releaseClientForUser(user.slug);
+          this.logger.debug(`Released Matrix client for user ${user.slug}`);
+        } catch (error) {
+          this.logger.warn(`Error releasing Matrix client: ${error.message}`);
+        }
+      }
+    }
+  }
 
   /**
    * Broadcasts a Matrix event to all clients in a room
@@ -437,119 +327,34 @@ export class MatrixGateway
         return;
       }
 
-      // Check if this is a duplicate event we've already broadcast
-      // Use both event_id and _broadcastId to identify events
-      const eventId = event.event_id || event.id || 'unknown';
-      const existingBroadcastId = event._broadcastId || '';
-
-      if (eventId !== 'unknown') {
-        // Create a unique key to track this broadcast
-        // Include broadcastId if available to make key more specific
-        const broadcastKey = existingBroadcastId
-          ? `${roomId}:${eventId}:${existingBroadcastId}`
-          : `${roomId}:${eventId}`;
-
-        // Check if we've recently broadcast this exact event
-        const lastBroadcast = this.recentlyBroadcastEvents.get(broadcastKey);
-        if (lastBroadcast && Date.now() - lastBroadcast < 30000) {
-          // 30 seconds
-          this.logger.debug(
-            `Skipping duplicate broadcast of event ${eventId} to room ${roomId}`,
-          );
-          return;
-        }
-
-        // Also check if we've broadcast this event with a different broadcast ID
-        // This handles the case where the same Matrix event comes from different sync responses
-        if (!existingBroadcastId) {
-          // Look for any keys that contain this roomId:eventId
-          const baseKey = `${roomId}:${eventId}`;
-          let isDuplicate = false;
-
-          for (const [
-            key,
-            timestamp,
-          ] of this.recentlyBroadcastEvents.entries()) {
-            if (key.startsWith(baseKey) && Date.now() - timestamp < 30000) {
-              this.logger.debug(
-                `Skipping duplicate broadcast of event ${eventId} (matched existing broadcast)`,
-              );
-              isDuplicate = true;
-              break;
-            }
-          }
-
-          if (isDuplicate) {
-            return;
-          }
-        }
-
-        // Record this broadcast to prevent duplicates
-        this.recentlyBroadcastEvents.set(broadcastKey, Date.now());
-
-        // Add a unique broadcast ID if one doesn't exist
-        if (!event._broadcastId) {
-          event._broadcastId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-        }
-
-        // Cleanup old entries every 10 broadcasts
-        if (this.recentlyBroadcastEvents.size % 10 === 0) {
-          this.cleanupOldBroadcasts();
-        }
+      // Skip duplicates
+      if (this.broadcastManager.shouldSkipDuplicateBroadcast(roomId, event)) {
+        return;
       }
 
-      // Get socket.io adapter for detailed room information
-      // Cast adapter to any to access the rooms property
-      const adapter = this.server.adapter as any;
-      const room = adapter?.rooms?.get?.(roomId);
-      const clientCount = room ? room.size : 0;
+      // Add a unique broadcast ID if one doesn't exist
+      if (!event._broadcastId) {
+        event._broadcastId = this.broadcastManager.generateBroadcastId();
+      }
+
+      const clientCount = this.getClientCountInRoom(roomId);
 
       this.logger.log(
         `Broadcasting event to room ${roomId} with ${clientCount} clients`,
         {
           eventType: event.type,
-          eventId: eventId,
+          eventId: event.event_id || event.id || 'unknown',
           sender: event.sender || 'unknown',
         },
       );
 
       if (clientCount === 0) {
         this.logger.warn(`No clients in room ${roomId} to receive event!`);
-
-        // Try to fix this by re-joining relevant clients to this room
-        const usersInRoom: string[] = [];
-        for (const [user, rooms] of this.userRooms.entries()) {
-          if (rooms.has(roomId)) {
-            usersInRoom.push(user);
-          }
-        }
-
-        if (usersInRoom.length > 0) {
-          this.logger.log(
-            `Found ${usersInRoom.length} users who should be in room ${roomId}, rejoining them`,
-          );
-
-          // For each user who should be in this room, find their socket and join
-          for (const matrixUserId of usersInRoom) {
-            // Find socket IDs for this Matrix user
-            for (const [socketId, userInfo] of this.socketUsers.entries()) {
-              if (userInfo.matrixUserId === matrixUserId) {
-                const socket = this.server.sockets.sockets.get(socketId);
-                if (socket) {
-                  this.logger.log(
-                    `Re-joining socket ${socketId} to room ${roomId}`,
-                  );
-                  void socket.join(roomId);
-                }
-              }
-            }
-          }
-        }
+        this.roomMembershipManager.fixRoomMembership(roomId, this.server);
       }
 
-      // Add a unique broadcast ID to help clients identify duplicate broadcasts
-      // This helps especially for test messages that might otherwise be sent multiple times
-      const newBroadcastId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      // Add broadcasting metadata
+      const newBroadcastId = this.broadcastManager.generateBroadcastId();
       const eventWithBroadcastId = {
         ...event,
         _broadcastId: newBroadcastId, // Add unique ID for this broadcast
@@ -561,19 +366,11 @@ export class MatrixGateway
 
       // For messages, also emit a specific message event for easier client handling
       if (event.type === 'm.room.message') {
-        this.server.to(roomId).emit('matrix-message', {
-          roomId: roomId,
-          sender: event.sender,
-          content: event.content,
-          eventId: event.event_id,
-          timestamp: event.origin_server_ts || event.timestamp || Date.now(),
-          _broadcastId: newBroadcastId, // Include broadcast ID here too
-        });
+        this.broadcastMatrixMessage(roomId, event, newBroadcastId);
       }
 
       // Check if the broadcast worked by checking room membership again
-      const updatedRoom = adapter?.rooms?.get?.(roomId);
-      const updatedClientCount = updatedRoom ? updatedRoom.size : 0;
+      const updatedClientCount = this.getClientCountInRoom(roomId);
 
       this.logger.log(
         `Event broadcast completed for room ${roomId}, sent to ${updatedClientCount} clients`,
@@ -595,124 +392,163 @@ export class MatrixGateway
     }
   }
 
+  /**
+   * Broadcasts a Matrix message event with simplified format
+   * @param roomId Room ID to broadcast to
+   * @param event Original Matrix event
+   * @param broadcastId Broadcast ID for tracking
+   */
+  private broadcastMatrixMessage(
+    roomId: string,
+    event: any,
+    broadcastId: string,
+  ): void {
+    this.server.to(roomId).emit('matrix-message', {
+      roomId: roomId,
+      sender: event.sender,
+      content: event.content,
+      eventId: event.event_id,
+      timestamp: event.origin_server_ts || event.timestamp || Date.now(),
+      _broadcastId: broadcastId, // Include broadcast ID here too
+    });
+  }
+
+  /**
+   * Gets the number of clients in a room
+   * @param roomId Room ID to check
+   * @returns Number of clients in the room
+   */
+  private getClientCountInRoom(roomId: string): number {
+    try {
+      // Get socket.io adapter for detailed room information
+      // Cast adapter to any to access the rooms property
+      const adapter = this.server.adapter as any;
+      const room = adapter?.rooms?.get?.(roomId);
+      return room ? room.size : 0;
+    } catch (error) {
+      this.logger.error(`Error getting client count: ${error.message}`);
+      return 0;
+    }
+  }
+
   @UseGuards(WsJwtAuthGuard)
   @SubscribeMessage('join-user-rooms')
   async joinUserRooms(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { userId: string; tenantId?: string },
   ) {
-    try {
-      const userId = client.data.userId;
-      this.logger.log(`User ${userId} joining their Matrix rooms`);
+    return await MatrixGatewayHelper.withErrorHandling(
+      async () => {
+        const userId = client.data.userId;
+        this.logger.log(`User ${userId} joining their Matrix rooms`);
 
-      // Check if the client has initialized Matrix credentials
-      if (
-        !client.data.hasMatrixCredentials ||
-        !client.data.matrixClientInitialized
-      ) {
-        this.logger.warn(
-          `User ${userId} missing Matrix credentials in join-rooms request`,
-        );
-
-        // For development, return empty rooms instead of throwing an error
-        return { success: true, roomCount: 0, rooms: [] };
-      }
-
-      // Verify that the user is joining their own rooms and not someone else's
-      if (data.userId && data.userId !== client.data.matrixUserId) {
-        this.logger.warn(
-          `User ${userId} attempted to join rooms for different Matrix user ID: ${data.userId}`,
-        );
-        throw new WsException('Can only join your own rooms');
-      }
-
-      try {
-        // Get tenant ID from client data or from the request
-        const tenantId = client.data.tenantId || data.tenantId;
-        this.logger.debug(
-          `Using tenant ID for joinUserRooms: ${tenantId || 'undefined'}`,
-        );
-
-        // Create context for user service
-        const contextId = ContextIdFactory.create();
-        const userService = await this.moduleRef.resolve(
-          UserService,
-          contextId,
-          { strict: false },
-        );
-        const user = await userService.findById(userId, tenantId);
-
-        if (!user) {
-          this.logger.error(
-            `User ${userId} not found when getting Matrix client`,
+        // Check if the client has initialized Matrix credentials
+        if (
+          !client.data.hasMatrixCredentials ||
+          !client.data.matrixClientInitialized
+        ) {
+          this.logger.warn(
+            `User ${userId} missing Matrix credentials in join-rooms request`,
           );
-          throw new Error(`User not found`);
+
+          // For development, return empty rooms instead of throwing an error
+          return { success: true, roomCount: 0, rooms: [] };
         }
 
-        // Get the Matrix client for this user from our service using slug
-        const matrixClient = await this.matrixUserService.getClientForUser(
-          user.slug,
-          userService,
-          tenantId,
-        );
-
-        // Use the authenticated user's Matrix ID from socket data
-        const matrixUserId = client.data.matrixUserId;
-
-        this.logger.debug(`Fetching rooms for Matrix user: ${matrixUserId}`);
-
-        // Get rooms using the user's Matrix client
-        const rooms =
-          await this.matrixRoomService.getUserRoomsWithClient(matrixClient);
-
-        // Create a set to track which rooms this user has joined
-        const userRoomSet = new Set<string>();
-
-        // Join each room
-        for (const room of rooms) {
-          await client.join(room.roomId);
-          userRoomSet.add(room.roomId);
-          this.logger.debug(`User ${userId} joined room ${room.roomId}`);
+        // Verify that the user is joining their own rooms and not someone else's
+        if (data.userId && data.userId !== client.data.matrixUserId) {
+          this.logger.warn(
+            `User ${userId} attempted to join rooms for different Matrix user ID: ${data.userId}`,
+          );
+          throw new WsException('Can only join your own rooms');
         }
 
-        // Store the mapping
-        this.userRooms.set(matrixUserId, userRoomSet);
-
-        return {
-          success: true,
-          roomCount: rooms.length,
-          rooms: rooms.map((room) => ({
-            id: room.roomId,
-            name: room.name || room.roomId,
-          })),
-        };
-      } catch (error) {
-        this.logger.error(`Error getting Matrix client: ${error.message}`);
-        return {
-          success: false,
-          error: `Error getting Matrix client: ${error.message}`,
-          roomCount: 0,
-          rooms: [],
-        };
-      }
-    } catch (error) {
-      this.logger.error(`Error joining rooms: ${error.message}`, error.stack);
-
-      // Return error info instead of throwing exception
-      return {
-        success: false,
-        error: `Error joining rooms: ${error.message}`,
-        roomCount: 0,
-        rooms: [],
-      };
-    }
+        return await this.getUserRoomsAndJoin(client, data);
+      },
+      'Error joining rooms',
+      this.logger,
+    );
   }
 
-  // Store last typing state to avoid redundant Matrix API calls
-  private typingCache = new Map<
-    string,
-    { state: boolean; timestamp: number }
-  >();
+  /**
+   * Gets a user's Matrix rooms and joins them
+   * @param client Socket client
+   * @param data Request data
+   * @returns Room information
+   */
+  private async getUserRoomsAndJoin(
+    client: Socket,
+    data: { userId?: string; tenantId?: string },
+  ): Promise<{
+    success: boolean;
+    roomCount: number;
+    rooms: Array<{ id: string; name: string }>;
+  }> {
+    // Get tenant ID from client data or from the request
+    const tenantId = MatrixGatewayHelper.getTenantId(client, data);
+    this.logger.debug(
+      `Using tenant ID for joinUserRooms: ${tenantId || 'undefined'}`,
+    );
+
+    // Create context for user service
+    const userService = await MatrixGatewayHelper.createUserServiceForRequest(
+      this.moduleRef,
+      this.logger,
+    );
+
+    const user = await MatrixGatewayHelper.resolveUserById(
+      client.data.userId,
+      userService,
+      tenantId,
+      this.logger,
+    );
+
+    // Get the Matrix client for this user from our service using slug
+    const matrixClient = await this.matrixUserService.getClientForUser(
+      user.slug,
+      userService,
+      tenantId,
+    );
+
+    // Use the authenticated user's Matrix ID from socket data
+    const matrixUserId = client.data.matrixUserId;
+
+    this.logger.debug(`Fetching rooms for Matrix user: ${matrixUserId}`);
+
+    // Get rooms using the user's Matrix client
+    const rooms =
+      await this.matrixRoomService.getUserRoomsWithClient(matrixClient);
+
+    // Create a set to track which rooms this user has joined
+    const userRoomSet = new Set<string>();
+
+    // Join each room
+    for (const room of rooms) {
+      await client.join(room.roomId);
+      userRoomSet.add(room.roomId);
+      this.logger.debug(
+        `User ${client.data.userId} joined room ${room.roomId}`,
+      );
+    }
+
+    // Store the mapping
+    if (matrixUserId) {
+      this.roomMembershipManager.removeUserFromAllRooms(matrixUserId);
+
+      for (const room of rooms) {
+        this.roomMembershipManager.addUserToRoom(matrixUserId, room.roomId);
+      }
+    }
+
+    return {
+      success: true,
+      roomCount: rooms.length,
+      rooms: rooms.map((room) => ({
+        id: room.roomId,
+        name: room.name || room.roomId,
+      })),
+    };
+  }
 
   @UseGuards(WsJwtAuthGuard)
   @SubscribeMessage('typing')
@@ -721,112 +557,70 @@ export class MatrixGateway
     @MessageBody()
     data: { roomId: string; isTyping: boolean; tenantId?: string },
   ) {
-    try {
-      // Skip excessive logging for typing indicators
-
-      // Check if state has changed since last call - implement debounce
-      const cacheKey = `${client.data.userId}:${data.roomId}`;
-      const lastState = this.typingCache.get(cacheKey);
-      const now = Date.now();
-
-      // Only send if state changed or it's been more than 15 seconds since last update
-      // This prevents excessive Matrix API calls for typing notifications
-      if (
-        lastState &&
-        lastState.state === data.isTyping &&
-        now - lastState.timestamp < 15000
-      ) {
-        // State hasn't changed and it's been less than 15 seconds, skip this update
-        return { success: true, cached: true };
-      }
-
-      // Update the cache with current state
-      this.typingCache.set(cacheKey, {
-        state: data.isTyping,
-        timestamp: now,
-      });
-
-      // Clean up old entries every 100 new ones
-      if (this.typingCache.size % 100 === 0) {
-        this.cleanupTypingCache();
-      }
-
-      // Check if the client has Matrix credentials
-      if (
-        !client.data.hasMatrixCredentials ||
-        !client.data.matrixClientInitialized
-      ) {
-        return { success: false, error: 'Matrix credentials required' };
-      }
-
-      try {
-        // Get tenant ID from client data or from the request
-        const tenantId = client.data.tenantId || data.tenantId;
-
-        // Create context for user service
-        const contextId = ContextIdFactory.create();
-        const userService = await this.moduleRef.resolve(
-          UserService,
-          contextId,
-          { strict: false },
-        );
-        const user = await userService.findById(client.data.userId, tenantId);
-
-        if (!user) {
-          this.logger.error(
-            `User ${client.data.userId} not found when getting Matrix client for typing`,
-          );
-          throw new Error(`User not found`);
-        }
-
-        // Get Matrix client for this user using credentials from database
-        const matrixClient = await this.matrixUserService.getClientForUser(
-          user.slug,
-          userService,
-          tenantId,
-        );
-
-        // Send typing notification using the client
-        await matrixClient.sendTyping(data.roomId, data.isTyping, 30000);
-
-        // Return success with minimal logging
-        return { success: true };
-      } catch (error) {
-        // Reduce log verbosity for common errors
+    return await MatrixGatewayHelper.withErrorHandling(
+      async () => {
+        // Check if state has changed since last call - implement debounce
         if (
-          error.message.includes('not in room') ||
-          error.message.includes('not a member')
+          !this.typingManager.shouldSendTypingNotification(
+            client.data.userId,
+            data.roomId,
+            data.isTyping,
+          )
         ) {
-          this.logger.debug(
-            `Typing notification error (user not in room): ${client.data.userId}`,
-          );
-        } else {
-          this.logger.warn(`Error sending typing: ${error.message}`);
+          return { success: true, cached: true };
         }
 
-        return {
-          success: false,
-          error: `Error sending typing notification: ${error.message}`,
-        };
-      }
-    } catch (error) {
-      this.logger.error(`Error processing typing event: ${error.message}`);
-      return { success: false, error: error.message };
-    }
+        // Check if the client has Matrix credentials
+        MatrixGatewayHelper.validateClientHasMatrixCredentials(
+          client,
+          this.logger,
+        );
+
+        return await this.sendTypingNotification(client, data);
+      },
+      'Error processing typing event',
+      this.logger,
+    );
   }
 
   /**
-   * Clean up typing cache entries older than 5 minutes
-   * to prevent memory leaks
+   * Sends a typing notification to Matrix
+   * @param client Socket client
+   * @param data Typing notification data
+   * @returns Success status
    */
-  private cleanupTypingCache() {
-    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+  private async sendTypingNotification(
+    client: Socket,
+    data: { roomId: string; isTyping: boolean; tenantId?: string },
+  ): Promise<{ success: boolean }> {
+    // Get tenant ID from client data or from the request
+    const tenantId = MatrixGatewayHelper.getTenantId(client, data);
 
-    for (const [key, value] of this.typingCache.entries()) {
-      if (value.timestamp < fiveMinutesAgo) {
-        this.typingCache.delete(key);
-      }
-    }
+    // Create context for user service
+    const userService = await MatrixGatewayHelper.createUserServiceForRequest(
+      this.moduleRef,
+      this.logger,
+    );
+
+    const user = await MatrixGatewayHelper.resolveUserById(
+      client.data.userId,
+      userService,
+      tenantId,
+      this.logger,
+    );
+
+    // Get Matrix client for this user using credentials from database
+    const matrixClient = await this.matrixUserService.getClientForUser(
+      user.slug,
+      userService,
+      tenantId,
+    );
+
+    // Send typing notification using the client
+    await matrixClient.sendTyping(data.roomId, data.isTyping, 30000);
+
+    // Return success with minimal logging
+    return { success: true };
   }
 
   @UseGuards(WsJwtAuthGuard)
@@ -835,130 +629,88 @@ export class MatrixGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { roomId: string; tenantId?: string },
   ) {
-    try {
-      this.logger.log(
-        `User ${client.data.userId} joining specific room: ${data.roomId}`,
-      );
-
-      // Check if the client has initialized Matrix credentials
-      if (
-        !client.data.hasMatrixCredentials ||
-        !client.data.matrixClientInitialized
-      ) {
-        this.logger.warn(
-          `User ${client.data.userId} missing Matrix credentials in join-room request`,
+    return await MatrixGatewayHelper.withErrorHandling(
+      async () => {
+        this.logger.log(
+          `User ${client.data.userId} joining specific room: ${data.roomId}`,
         );
-        return { success: false, error: 'Matrix credentials required' };
-      }
 
-      try {
+        // Check if the client has initialized Matrix credentials
+        MatrixGatewayHelper.validateClientHasMatrixCredentials(
+          client,
+          this.logger,
+        );
+
         // Socket.io join room
         await client.join(data.roomId);
 
         // Update our tracking maps
         const matrixUserId = client.data.matrixUserId;
         if (matrixUserId) {
-          const userRoomSet =
-            this.userRooms.get(matrixUserId) || new Set<string>();
-          userRoomSet.add(data.roomId);
-          this.userRooms.set(matrixUserId, userRoomSet);
+          this.roomMembershipManager.addUserToRoom(matrixUserId, data.roomId);
 
           // Log current rooms for this user
+          const userRooms =
+            this.roomMembershipManager.getUserRooms(matrixUserId);
           this.logger.log(
-            `User ${client.data.userId} rooms after join: ${Array.from(userRoomSet).join(', ')}`,
+            `User ${client.data.userId} rooms after join: ${Array.from(userRooms).join(', ')}`,
           );
         }
-
-        // Get socket.io adapter for detailed room information
-        const adapter = this.server.adapter as any;
-        const room = adapter?.rooms?.get?.(data.roomId);
-        const clientCount = room ? room.size : 0;
-
-        this.logger.log(
-          `User ${client.data.userId} explicitly joined room ${data.roomId}. Room now has ${clientCount} clients`,
-        );
 
         // Also make sure the user is actually joined on the Matrix server
-        // This ensures typing notifications and messages will work
-        try {
-          // Create a contextId for this request to resolve request-scoped services
-          const contextId = ContextIdFactory.create();
-
-          // Get the UserService instance for this context
-          const userService = await this.moduleRef.resolve(
-            UserService,
-            contextId,
-            { strict: false },
-          );
-
-          // Get tenant ID from client data or from the request
-          const tenantId = client.data.tenantId || data.tenantId;
-
-          // Get the user with Matrix credentials
-          const user = await userService.findById(client.data.userId, tenantId);
-
-          if (user && user.matrixUserId && user.matrixAccessToken) {
-            // Explicitly join the Matrix room to ensure membership
-            await this.matrixRoomService.joinRoom(
-              data.roomId,
-              user.matrixUserId,
-              user.matrixAccessToken,
-              user.matrixDeviceId,
-            );
-            this.logger.log(
-              `Ensured Matrix membership for user ${client.data.userId} in room ${data.roomId}`,
-            );
-          }
-        } catch (matrixError) {
-          // Don't fail the whole request if Matrix join fails
-          // It might fail because they're already a member or for other reasons
-          this.logger.warn(
-            `Matrix join attempt for user ${client.data.userId} in room ${data.roomId} resulted in: ${matrixError.message}`,
-          );
-        }
+        await this.ensureMatrixRoomMembership(client, data);
 
         return { success: true };
-      } catch (error) {
-        this.logger.error(`Error joining room: ${error.message}`);
-        return {
-          success: false,
-          error: `Error joining room: ${error.message}`,
-        };
-      }
-    } catch (error) {
-      this.logger.error(
-        `Error in join-room handler: ${error.message}`,
-        error.stack,
-      );
-      return {
-        success: false,
-        error: `Internal error joining room: ${error.message}`,
-      };
-    }
+      },
+      'Error in join-room handler',
+      this.logger,
+    );
   }
 
   /**
-   * Cleanup old broadcast records to prevent memory leaks
-   * Only keeps records from the last 10 minutes
+   * Ensures the user is joined to the Matrix room
+   * @param client Socket client
+   * @param data Room data
    */
-  private cleanupOldBroadcasts(): void {
+  private async ensureMatrixRoomMembership(
+    client: Socket,
+    data: { roomId: string; tenantId?: string },
+  ): Promise<void> {
     try {
-      const now = Date.now();
-      const tenMinutesAgo = now - 10 * 60 * 1000; // 10 minutes
-
-      // Remove entries older than 10 minutes
-      for (const [key, timestamp] of this.recentlyBroadcastEvents.entries()) {
-        if (timestamp < tenMinutesAgo) {
-          this.recentlyBroadcastEvents.delete(key);
-        }
-      }
-
-      this.logger.debug(
-        `Cleaned up old broadcast records. Current count: ${this.recentlyBroadcastEvents.size}`,
+      // Create a contextId for this request to resolve request-scoped services
+      const userService = await MatrixGatewayHelper.createUserServiceForRequest(
+        this.moduleRef,
+        this.logger,
       );
-    } catch (error) {
-      this.logger.error(
-        `Error cleaning up broadcast records: ${error.message}`,
+
+      // Get tenant ID from client data or from the request
+      const tenantId = MatrixGatewayHelper.getTenantId(client, data);
+
+      // Get the user with Matrix credentials
+      const user = await MatrixGatewayHelper.resolveUserById(
+        client.data.userId,
+        userService,
+        tenantId,
+        this.logger,
+      );
+
+      if (user.matrixUserId && user.matrixAccessToken) {
+        // Explicitly join the Matrix room to ensure membership
+        await this.matrixRoomService.joinRoom(
+          data.roomId,
+          user.matrixUserId,
+          user.matrixAccessToken,
+          user.matrixDeviceId,
+        );
+        this.logger.log(
+          `Ensured Matrix membership for user ${client.data.userId} in room ${data.roomId}`,
+        );
+      }
+    } catch (matrixError) {
+      // Don't fail the whole request if Matrix join fails
+      // It might fail because they're already a member or for other reasons
+      this.logger.warn(
+        `Matrix join attempt for user ${client.data.userId} in room ${data.roomId} resulted in: ${matrixError.message}`,
       );
     }
   }
@@ -969,42 +721,29 @@ export class MatrixGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { roomId: string; tenantId?: string },
   ) {
-    try {
-      this.logger.log(
-        `User ${client.data?.userId} leaving room: ${data.roomId}`,
-      );
-
-      // Check if the client has Matrix credentials - still allow leaving even without credentials
-      if (!client.data?.matrixClientInitialized) {
-        this.logger.debug(
-          `User ${client.data?.userId} leaving room ${data.roomId} without Matrix client`,
+    return await MatrixGatewayHelper.withErrorHandling(
+      async () => {
+        this.logger.log(
+          `User ${client.data?.userId} leaving room: ${data.roomId}`,
         );
-      }
 
-      // Socket.io leave room
-      await client.leave(data.roomId);
+        // Socket.io leave room
+        await client.leave(data.roomId);
 
-      // Update our tracking maps
-      const matrixUserId = client.data?.matrixUserId;
-      if (matrixUserId) {
-        const userRoomSet = this.userRooms.get(matrixUserId);
-        if (userRoomSet) {
-          userRoomSet.delete(data.roomId);
-          // If user has no rooms left, clean up the entry
-          if (userRoomSet.size === 0) {
-            this.userRooms.delete(matrixUserId);
-          }
+        // Update our tracking maps
+        const matrixUserId = client.data?.matrixUserId;
+        if (matrixUserId) {
+          this.roomMembershipManager.removeUserFromRoom(
+            matrixUserId,
+            data.roomId,
+          );
         }
-      }
 
-      return { success: true };
-    } catch (error) {
-      this.logger.error(`Error leaving room: ${error.message}`, error.stack);
-      return {
-        success: false,
-        error: `Error leaving room: ${error.message}`,
-      };
-    }
+        return { success: true };
+      },
+      'Error leaving room',
+      this.logger,
+    );
   }
 
   @UseGuards(WsJwtAuthGuard)
@@ -1013,90 +752,79 @@ export class MatrixGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { roomId: string; message: string; tenantId?: string },
   ) {
-    try {
-      this.logger.debug(
-        `Message from user ${client.data.userId} in room ${data.roomId}`,
+    return await MatrixGatewayHelper.withErrorHandling(
+      async () => {
+        this.logger.debug(
+          `Message from user ${client.data.userId} in room ${data.roomId}`,
+        );
+
+        // Check if the client has initialized Matrix credentials
+        MatrixGatewayHelper.validateClientHasMatrixCredentials(
+          client,
+          this.logger,
+        );
+
+        return await this.sendMatrixMessage(client, data);
+      },
+      'Error sending message',
+      this.logger,
+    );
+  }
+
+  /**
+   * Sends a message to a Matrix room
+   * @param client Socket client
+   * @param data Message data
+   * @returns Event ID of the sent message
+   */
+  private async sendMatrixMessage(
+    client: Socket,
+    data: { roomId: string; message: string; tenantId?: string },
+  ): Promise<{ id: string }> {
+    // Get tenant ID from client data or from the request
+    const tenantId = MatrixGatewayHelper.getTenantId(client, data);
+
+    // Create context for user service
+    const userService = await MatrixGatewayHelper.createUserServiceForRequest(
+      this.moduleRef,
+      this.logger,
+    );
+
+    const user = await MatrixGatewayHelper.resolveUserById(
+      client.data.userId,
+      userService,
+      tenantId,
+      this.logger,
+    );
+
+    // Get user Matrix credentials
+    if (!user.matrixUserId || !user.matrixAccessToken) {
+      this.logger.error(
+        `User ${user.id} missing Matrix credentials required to send messages`,
       );
-
-      // Check if the client has initialized Matrix credentials
-      if (
-        !client.data.hasMatrixCredentials ||
-        !client.data.matrixClientInitialized
-      ) {
-        this.logger.warn(
-          `Cannot send message for user ${client.data.userId} - Matrix client not initialized`,
-        );
-        return { success: false, error: 'Matrix credentials required' };
-      }
-
-      try {
-        // Get tenant ID from client data or from the request
-        const tenantId = client.data.tenantId || data.tenantId;
-        this.logger.debug(
-          `Using tenant ID for message: ${tenantId || 'undefined'}`,
-        );
-
-        // Create context for user service
-        const contextId = ContextIdFactory.create();
-        const userService = await this.moduleRef.resolve(
-          UserService,
-          contextId,
-          { strict: false },
-        );
-        const user = await userService.findById(client.data.userId, tenantId);
-
-        if (!user) {
-          this.logger.error(
-            `User ${client.data.userId} not found when getting Matrix client for message`,
-          );
-          throw new Error(`User not found`);
-        }
-
-        // Get user Matrix credentials
-        if (!user.matrixUserId || !user.matrixAccessToken) {
-          this.logger.error(
-            `User ${user.id} missing Matrix credentials required to send messages`,
-          );
-          throw new Error('Matrix credentials missing');
-        }
-
-        // Use the MatrixMessageService to send the message
-        const eventId = await this.matrixMessageService.sendMessage({
-          roomId: data.roomId,
-          userId: user.matrixUserId,
-          accessToken: user.matrixAccessToken,
-          deviceId: user.matrixDeviceId,
-          content: data.message,
-          messageType: 'm.text',
-        });
-
-        // Create a result object similar to what we'd get from a Matrix client
-        const result = { event_id: eventId };
-
-        this.logger.debug(
-          `Message sent for user ${client.data.userId} in room ${data.roomId}`,
-        );
-
-        // Return the event ID to the sender
-        return {
-          success: true,
-          id: result.event_id || 'unknown-event-id',
-        };
-      } catch (error) {
-        this.logger.error(`Error getting Matrix client: ${error.message}`);
-        return {
-          success: false,
-          error: `Error sending message: ${error.message}`,
-        };
-      }
-    } catch (error) {
-      this.logger.error(`Error sending message: ${error.message}`, error.stack);
-
-      // Return error to client rather than throwing exception
-      return {
-        success: false,
-        error: `Error sending message: ${error.message}`,
-      };
+      throw new Error('Matrix credentials missing');
     }
+
+    // Use the MatrixMessageService to send the message
+    const eventId = await this.matrixMessageService.sendMessage({
+      roomId: data.roomId,
+      userId: user.matrixUserId,
+      accessToken: user.matrixAccessToken,
+      deviceId: user.matrixDeviceId,
+      content: data.message,
+      messageType: 'm.text',
+    });
+
+    // Create a result object similar to what we'd get from a Matrix client
+    const result = { event_id: eventId };
+
+    this.logger.debug(
+      `Message sent for user ${client.data.userId} in room ${data.roomId}`,
+    );
+
+    // Return the event ID to the sender
+    return {
+      id: result.event_id || 'unknown-event-id',
+    };
   }
 }

@@ -34,63 +34,94 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
    */
   @Trace('matrix-chat.createRoom')
   async createRoom(options: CreateChatRoomOptions): Promise<ChatRoomResponse> {
-    try {
-      // Ensure creator has Matrix credentials
-      const creatorWithCredentials = await this.ensureUserHasCredentials(
-        options.creatorId,
-      );
+    return this.withErrorHandling(
+      'create chat room',
+      async () => {
+        // Ensure creator has Matrix credentials
+        const creatorWithCredentials = await this.ensureUserHasCredentials(
+          options.creatorId,
+        );
 
-      // Get member Matrix IDs for invitation
-      const memberMatrixIds: string[] = [];
+        // Get member Matrix IDs for invitation
+        const memberMatrixIds: string[] = [];
 
-      if (options.memberIds && options.memberIds.length > 0) {
-        for (const memberId of options.memberIds) {
-          try {
-            // Only get existing credentials, don't provision new ones yet
-            const member = await this.userService.getUserById(memberId);
-            if (member.matrixUserId) {
-              memberMatrixIds.push(member.matrixUserId);
+        if (options.memberIds && options.memberIds.length > 0) {
+          for (const memberId of options.memberIds) {
+            try {
+              // Only get existing credentials, don't provision new ones yet
+              const member = await this.userService.getUserById(memberId);
+              if (member.matrixUserId) {
+                memberMatrixIds.push(member.matrixUserId);
+              }
+            } catch (error) {
+              this.logger.warn(
+                `Failed to get member ${memberId} for room creation: ${error.message}`,
+              );
             }
-          } catch (error) {
-            this.logger.warn(
-              `Failed to get member ${memberId} for room creation: ${error.message}`,
-            );
           }
         }
-      }
 
-      // Create Matrix room
-      const roomInfo = await this.matrixRoomService.createRoom({
+        // Create Matrix room
+        const roomInfo = await this.matrixRoomService.createRoom({
+          name: options.name,
+          topic: options.topic,
+          isPublic: options.isPublic || false,
+          isDirect: options.isDirect || false,
+          inviteUserIds: [
+            ...(creatorWithCredentials.matrixUserId
+              ? [creatorWithCredentials.matrixUserId]
+              : []),
+            ...memberMatrixIds,
+          ].filter(Boolean) as string[],
+          powerLevelContentOverride: creatorWithCredentials.matrixUserId
+            ? {
+                users: {
+                  [creatorWithCredentials.matrixUserId]: 50, // Moderator level
+                },
+              }
+            : undefined,
+        });
+
+        return {
+          id: roomInfo.roomId,
+          name: roomInfo.name,
+          topic: roomInfo.topic,
+        };
+      },
+      {
         name: options.name,
-        topic: options.topic,
-        isPublic: options.isPublic || false,
-        isDirect: options.isDirect || false,
-        inviteUserIds: [
-          ...(creatorWithCredentials.matrixUserId
-            ? [creatorWithCredentials.matrixUserId]
-            : []),
-          ...memberMatrixIds,
-        ].filter(Boolean) as string[],
-        powerLevelContentOverride: creatorWithCredentials.matrixUserId
-          ? {
-              users: {
-                [creatorWithCredentials.matrixUserId]: 50, // Moderator level
-              },
-            }
-          : undefined,
-      });
+        creatorId: options.creatorId,
+        members: options.memberIds?.length || 0,
+      },
+    );
+  }
 
-      return {
-        id: roomInfo.roomId,
-        name: roomInfo.name,
-        topic: roomInfo.topic,
-      };
+  /**
+   * Generic error handling wrapper for Matrix operations
+   * @param operation The name of the operation being performed
+   * @param action The async function to execute
+   * @param errorContext Additional context for error logging
+   * @returns The result of the action
+   */
+  private async withErrorHandling<T>(
+    operation: string,
+    action: () => Promise<T>,
+    errorContext: Record<string, any> = {},
+  ): Promise<T> {
+    try {
+      return await action();
     } catch (error) {
+      // Format the context for logging
+      const contextStr = Object.entries(errorContext)
+        .map(([key, value]) => `${key}: ${value}`)
+        .join(', ');
+
       this.logger.error(
-        `Failed to create Matrix room: ${error.message}`,
+        `Failed to ${operation}: ${error.message} [${contextStr}]`,
         error.stack,
       );
-      throw new Error(`Failed to create chat room: ${error.message}`);
+
+      throw new Error(`Failed to ${operation}: ${error.message}`);
     }
   }
 
@@ -99,41 +130,41 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
    */
   @Trace('matrix-chat.sendMessage')
   async sendMessage(options: SendChatMessageOptions): Promise<string> {
-    try {
-      // Ensure user has Matrix credentials
-      const user = await this.ensureUserHasCredentials(options.userId);
+    return this.withErrorHandling(
+      'send message',
+      async () => {
+        // Ensure user has Matrix credentials
+        const user = await this.ensureUserHasCredentials(options.userId);
 
-      // Set user display name for better UX
-      try {
-        await this.setUserDisplayName(user);
-      } catch (error) {
-        this.logger.warn(
-          `Failed to set display name for user ${options.userId}: ${error.message}`,
-        );
-        // Continue anyway - display name is not critical
-      }
+        // Set user display name for better UX (non-critical operation)
+        try {
+          await this.setUserDisplayName(user);
+        } catch (error) {
+          this.logger.warn(
+            `Failed to set display name for user ${options.userId}: ${error.message}`,
+          );
+          // Continue anyway - display name is not critical
+        }
 
-      // Send the message using Matrix service
-      return await this.matrixMessageService.sendMessage({
-        roomId: options.roomId,
-        content: options.message,
-        userId: user.matrixUserId!,
-        accessToken: user.matrixAccessToken!,
-        deviceId: user.matrixDeviceId,
-        // Support for formatted messages
-        formatted_body: options.formattedMessage,
-        format: options.formattedMessage ? 'org.matrix.custom.html' : undefined,
-        senderUserId: user.matrixUserId!,
-        senderAccessToken: user.matrixAccessToken!,
-        senderDeviceId: user.matrixDeviceId,
-      });
-    } catch (error) {
-      this.logger.error(
-        `Failed to send message to room ${options.roomId}: ${error.message}`,
-        error.stack,
-      );
-      throw new Error(`Failed to send message: ${error.message}`);
-    }
+        // Send the message using Matrix service
+        return await this.matrixMessageService.sendMessage({
+          roomId: options.roomId,
+          content: options.message,
+          userId: user.matrixUserId!,
+          accessToken: user.matrixAccessToken!,
+          deviceId: user.matrixDeviceId,
+          // Support for formatted messages
+          formatted_body: options.formattedMessage,
+          format: options.formattedMessage
+            ? 'org.matrix.custom.html'
+            : undefined,
+          senderUserId: user.matrixUserId!,
+          senderAccessToken: user.matrixAccessToken!,
+          senderDeviceId: user.matrixDeviceId,
+        });
+      },
+      { roomId: options.roomId, userId: options.userId },
+    );
   }
 
   /**
@@ -146,36 +177,91 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
     limit = 50,
     before?: string,
   ): Promise<{ messages: ChatMessage[]; nextToken?: string }> {
-    try {
-      // Ensure user has Matrix credentials
-      const user = await this.ensureUserHasCredentials(userId);
+    return this.withErrorHandling(
+      'get messages',
+      async () => {
+        // Ensure user has Matrix credentials
+        const user = await this.ensureUserHasCredentials(userId);
 
-      // Get messages from Matrix
-      const messageData = await this.matrixMessageService.getRoomMessages(
-        roomId,
-        limit,
-        before,
-        user.matrixUserId!,
-      );
+        // Get messages from Matrix
+        const messageData = await this.matrixMessageService.getRoomMessages(
+          roomId,
+          limit,
+          before,
+          user.matrixUserId!,
+        );
 
-      // Convert Matrix messages to our common format
-      const messages = await Promise.all(
-        messageData.messages.map(async (message: Message) =>
-          this.convertMatrixMessage(message),
-        ),
-      );
+        // Convert Matrix messages to our common format
+        const messages = await Promise.all(
+          messageData.messages.map(async (message: Message) =>
+            this.convertMatrixMessage(message),
+          ),
+        );
 
-      return {
-        messages,
-        nextToken: messageData.end || undefined,
-      };
-    } catch (error) {
-      this.logger.error(
-        `Failed to get messages from room ${roomId}: ${error.message}`,
-        error.stack,
-      );
-      throw new Error(`Failed to get messages: ${error.message}`);
-    }
+        return {
+          messages,
+          nextToken: messageData.end || undefined,
+        };
+      },
+      { roomId, userId, limit, before },
+    );
+  }
+
+  /**
+   * Generic method to handle user room membership operations
+   * @param operation The operation type ('add' or 'remove')
+   * @param roomId The Matrix room ID
+   * @param userId The OpenMeet user ID
+   */
+  private async handleUserRoomMembership(
+    operation: 'add' | 'remove',
+    roomId: string,
+    userId: number,
+  ): Promise<void> {
+    const operationDesc = `${operation} user ${operation === 'add' ? 'to' : 'from'} room`;
+
+    return this.withErrorHandling(
+      operationDesc,
+      async () => {
+        // For removal operations, we just need basic user info
+        const user =
+          operation === 'add'
+            ? await this.ensureUserHasCredentials(userId) // Ensure with provisioning for add
+            : await this.userService.getUserById(userId); // Simple fetch for remove
+
+        // Check if user has Matrix ID (especially for removal)
+        if (!user.matrixUserId) {
+          this.logger.log(
+            `User ${userId} has no Matrix ID, skipping ${operation} operation`,
+          );
+          return;
+        }
+
+        if (operation === 'add') {
+          // First, invite the user to the room
+          await this.matrixRoomService.inviteUser(roomId, user.matrixUserId);
+
+          // Have the user join the room
+          await this.matrixRoomService.joinRoom(
+            roomId,
+            user.matrixUserId,
+            user.matrixAccessToken!,
+            user.matrixDeviceId,
+          );
+        } else {
+          // Remove user from Matrix room
+          await this.matrixRoomService.removeUserFromRoom(
+            roomId,
+            user.matrixUserId,
+          );
+        }
+
+        this.logger.log(
+          `User ${userId} ${operation === 'add' ? 'added to' : 'removed from'} room ${roomId}`,
+        );
+      },
+      { roomId, userId, operation },
+    );
   }
 
   /**
@@ -183,29 +269,7 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
    */
   @Trace('matrix-chat.addUserToRoom')
   async addUserToRoom(roomId: string, userId: number): Promise<void> {
-    try {
-      // Ensure user has Matrix credentials
-      const user = await this.ensureUserHasCredentials(userId);
-
-      // First, invite the user to the room
-      await this.matrixRoomService.inviteUser(roomId, user.matrixUserId!);
-
-      // Have the user join the room
-      await this.matrixRoomService.joinRoom(
-        roomId,
-        user.matrixUserId!,
-        user.matrixAccessToken!,
-        user.matrixDeviceId,
-      );
-
-      this.logger.log(`User ${userId} added to room ${roomId}`);
-    } catch (error) {
-      this.logger.error(
-        `Failed to add user ${userId} to room ${roomId}: ${error.message}`,
-        error.stack,
-      );
-      throw new Error(`Failed to add user to chat room: ${error.message}`);
-    }
+    return this.handleUserRoomMembership('add', roomId, userId);
   }
 
   /**
@@ -213,97 +277,85 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
    */
   @Trace('matrix-chat.removeUserFromRoom')
   async removeUserFromRoom(roomId: string, userId: number): Promise<void> {
-    try {
-      // Get the user with Matrix credentials
-      const user = await this.userService.getUserById(userId);
-
-      if (!user.matrixUserId) {
-        this.logger.log(`User ${userId} has no Matrix ID, skipping removal`);
-        return;
-      }
-
-      // Remove user from Matrix room
-      await this.matrixRoomService.removeUserFromRoom(
-        roomId,
-        user.matrixUserId,
-      );
-
-      this.logger.log(`User ${userId} removed from room ${roomId}`);
-    } catch (error) {
-      this.logger.error(
-        `Failed to remove user ${userId} from room ${roomId}: ${error.message}`,
-        error.stack,
-      );
-      throw new Error(`Failed to remove user from chat room: ${error.message}`);
-    }
+    return this.handleUserRoomMembership('remove', roomId, userId);
   }
 
   /**
-   * Ensures a user has Matrix credentials
+   * Ensures a user has Matrix credentials, provisioning them if needed
    */
   @Trace('matrix-chat.ensureUserHasCredentials')
   async ensureUserHasCredentials(userId: number): Promise<UserEntity> {
-    // Get the user
-    let user = await this.userService.getUserById(userId);
+    return this.withErrorHandling(
+      'ensure Matrix credentials',
+      async () => {
+        // Get the user
+        let user = await this.userService.getUserById(userId);
 
-    // If user has credentials, return the user
-    if (user.matrixUserId && user.matrixAccessToken && user.matrixDeviceId) {
-      return user;
-    }
+        // If user has credentials, return the user
+        if (
+          user.matrixUserId &&
+          user.matrixAccessToken &&
+          user.matrixDeviceId
+        ) {
+          return user;
+        }
 
-    this.logger.log(
-      `User ${userId} is missing Matrix credentials, provisioning...`,
-    );
-
-    try {
-      // Use the centralized provisioning method
-      const matrixUserInfo = await this.matrixUserService.provisionMatrixUser(
-        user,
-        this.request.tenantId,
-      );
-
-      // Update user with Matrix credentials
-      await this.userService.update(userId, {
-        matrixUserId: matrixUserInfo.userId,
-        matrixAccessToken: matrixUserInfo.accessToken,
-        matrixDeviceId: matrixUserInfo.deviceId,
-      });
-
-      // Get the updated user record
-      user = await this.userService.getUserById(userId);
-      this.logger.log(
-        `Successfully provisioned Matrix user for ${userId}: ${user.matrixUserId}`,
-      );
-    } catch (error) {
-      this.logger.error(
-        `Failed to provision Matrix user for ${userId}: ${error.message}`,
-        error.stack,
-      );
-      throw new Error(
-        `Matrix credentials could not be provisioned. Please try again.`,
-      );
-    }
-
-    // Start the Matrix client for this user
-    try {
-      // Find the user's slug from the ulid
-      const userWithSlug = await this.userService.findBySlug(user.slug);
-      if (userWithSlug) {
-        // Get client for the user using the slug (which is required by the new MatrixUserService)
-        await this.matrixUserService.getClientForUser(user.slug);
-      } else {
-        this.logger.warn(
-          `Couldn't find user with slug ${user.slug} for Matrix client startup`,
+        this.logger.log(
+          `User ${userId} is missing Matrix credentials, provisioning...`,
         );
-      }
-    } catch (error) {
-      this.logger.warn(
-        `Failed to start Matrix client for user ${userId}: ${error.message}`,
-      );
-      // Non-critical error, we can still use the credentials
+
+        // Use the centralized provisioning method
+        const matrixUserInfo = await this.matrixUserService.provisionMatrixUser(
+          user,
+          this.request.tenantId,
+        );
+
+        // Update user with Matrix credentials
+        await this.userService.update(userId, {
+          matrixUserId: matrixUserInfo.userId,
+          matrixAccessToken: matrixUserInfo.accessToken,
+          matrixDeviceId: matrixUserInfo.deviceId,
+        });
+
+        // Get the updated user record
+        user = await this.userService.getUserById(userId);
+        this.logger.log(
+          `Successfully provisioned Matrix user for ${userId}: ${user.matrixUserId}`,
+        );
+
+        // Start the Matrix client for this user (non-critical operation)
+        this.startMatrixClientForUser(user).catch((error) => {
+          this.logger.warn(
+            `Failed to start Matrix client for user ${userId}: ${error.message}`,
+          );
+          // Non-critical error, we can still use the credentials
+        });
+
+        return user;
+      },
+      { userId },
+    );
+  }
+
+  /**
+   * Helper method to start a Matrix client for a user
+   * Extracted to a separate method to improve readability
+   */
+  private async startMatrixClientForUser(user: UserEntity): Promise<void> {
+    if (!user.slug) {
+      throw new Error('User has no slug, cannot start Matrix client');
     }
 
-    return user;
+    // Find the user's slug from the ulid
+    const userWithSlug = await this.userService.findBySlug(user.slug);
+    if (userWithSlug) {
+      // Get client for the user using the slug (which is required by the new MatrixUserService)
+      await this.matrixUserService.getClientForUser(user.slug);
+    } else {
+      throw new Error(
+        `Couldn't find user with slug ${user.slug} for Matrix client startup`,
+      );
+    }
   }
 
   /**
@@ -315,25 +367,23 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
     userId: number,
     isTyping: boolean,
   ): Promise<void> {
-    try {
-      // Get the user with Matrix credentials
-      const user = await this.ensureUserHasCredentials(userId);
+    return this.withErrorHandling(
+      'send typing notification',
+      async () => {
+        // Get the user with Matrix credentials
+        const user = await this.ensureUserHasCredentials(userId);
 
-      // Send typing notification
-      await this.matrixMessageService.sendTypingNotification(
-        roomId,
-        user.matrixUserId!,
-        user.matrixAccessToken!,
-        isTyping,
-        user.matrixDeviceId,
-      );
-    } catch (error) {
-      this.logger.error(
-        `Failed to send typing notification for user ${userId} in room ${roomId}: ${error.message}`,
-        error.stack,
-      );
-      throw new Error(`Failed to send typing notification: ${error.message}`);
-    }
+        // Send typing notification
+        await this.matrixMessageService.sendTypingNotification(
+          roomId,
+          user.matrixUserId!,
+          user.matrixAccessToken!,
+          isTyping,
+          user.matrixDeviceId,
+        );
+      },
+      { roomId, userId, isTyping },
+    );
   }
 
   /**
