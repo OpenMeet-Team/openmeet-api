@@ -86,8 +86,8 @@ export class MatrixMessageService implements IMatrixMessageProvider {
             info: () => {},
             warn: () => {},
             debug: () => {},
-            error: (msg) => this.logger.error(msg) // Keep error logs
-          }
+            error: (msg) => this.logger.error(msg), // Keep error logs
+          },
         });
 
         // Send the message
@@ -159,8 +159,8 @@ export class MatrixMessageService implements IMatrixMessageProvider {
           info: () => {},
           warn: () => {},
           debug: () => {},
-          error: (msg) => this.logger.error(msg) // Keep error logs
-        }
+          error: (msg) => this.logger.error(msg), // Keep error logs
+        },
       });
 
       // Send typing notification

@@ -347,9 +347,26 @@ export class DiscussionService implements DiscussionServiceInterface {
       this.request.chatRoomMembershipCache?.[membershipCacheKey] ===
       'in-progress';
 
-    if (!membershipVerified && !chatRoomMembershipInProgress) {
+    // Set up throttling to reduce frequent checks:
+    // Store the last check time in the request cache
+    const lastCheckKey = `${membershipCacheKey}:lastCheck`;
+    const lastCheckTime = cache.membershipVerified.get(lastCheckKey) || 0;
+    const now = Date.now();
+    const minimumCheckInterval = 30000; // 30 seconds
+
+    // Only proceed with membership check if:
+    // 1. We haven't verified membership yet in this request AND
+    // 2. We're not already checking membership in another part of the code AND
+    // 3. Either this is the first check or enough time has passed since the last check
+    const shouldCheckMembership = !membershipVerified && 
+                                 !chatRoomMembershipInProgress && 
+                                 (lastCheckTime === 0 || now - lastCheckTime > minimumCheckInterval);
+
+    if (shouldCheckMembership) {
       // Mark as in-progress in our cache too
       cache.membershipVerified.set(membershipCacheKey, 'in-progress');
+      // Update last check time
+      cache.membershipVerified.set(lastCheckKey, now);
 
       // Ensure the current user is a member of the room
       try {
@@ -367,9 +384,13 @@ export class DiscussionService implements DiscussionServiceInterface {
         );
         // Continue anyway - we'll still try to get messages
       }
-    } else {
+    } else if (membershipVerified) {
       this.logger.debug(
         `User ${userId} already verified as member of event ${event.id} chat room in this request`,
+      );
+    } else {
+      this.logger.debug(
+        `Skipping room membership check for user ${userId} (checked recently or in progress)`,
       );
     }
 
@@ -556,7 +577,14 @@ export class DiscussionService implements DiscussionServiceInterface {
       this.logger.warn(
         'No request object available, possibly called from event handler',
       );
-      return null;
+      // Return a temporary cache for this function call that won't be persisted
+      return {
+        groups: new Map(),
+        events: new Map(),
+        users: new Map(),
+        chatRooms: new Map(),
+        membershipVerified: new Map(),
+      };
     }
 
     if (!this.request.discussionCache) {

@@ -574,8 +574,24 @@ export class ChatRoomService {
         throw new Error(`Event with id ${eventId} not found`);
       }
 
-      // Get chat room and user
+      // Get chat room
       const chatRoom = await this.getChatRoomForEvent(eventId);
+      
+      // First check if the user is already a member in the database
+      // This helps avoid redundant Matrix API calls across requests
+      const roomWithMembers = await this.chatRoomRepository.findOne({
+        where: { id: chatRoom.id },
+        relations: ['members'],
+      });
+      
+      if (roomWithMembers && roomWithMembers.members.some(member => member.id === userId)) {
+        this.logger.debug(`User ${userId} is already a database member of room ${chatRoom.id}, skipping Matrix join`);
+        // Mark as verified in request cache
+        this.markUserAsComplete(eventId, userId);
+        return;
+      }
+
+      // User not yet a member, continue with Matrix operations
       const user = await this.ensureUserWithMatrixCredentials(userId);
 
       // Handle Matrix room operations

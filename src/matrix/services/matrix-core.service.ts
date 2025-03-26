@@ -163,7 +163,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
 
       // Use Matrix login API to get a new token
       const loginUrl = `${this.baseUrl}/_matrix/client/v3/login`;
-      
+
       // Debug the request data
       const requestData = {
         type: 'm.login.password',
@@ -175,12 +175,14 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
         device_id: this.defaultDeviceId,
         initial_device_display_name: this.defaultInitialDeviceDisplayName,
       };
-      
+
       this.logger.debug(`Matrix login request URL: ${loginUrl}`);
-      this.logger.debug(`Matrix login request data: ${JSON.stringify({
-        ...requestData,
-        password: '******' // Don't log the actual password
-      })}`);
+      this.logger.debug(
+        `Matrix login request data: ${JSON.stringify({
+          ...requestData,
+          password: '******', // Don't log the actual password
+        })}`,
+      );
 
       const response = await axios.post(loginUrl, requestData);
 
@@ -476,8 +478,8 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
         info: () => {},
         warn: () => {},
         debug: () => {},
-        error: (msg: string) => this.logger.error(msg) // Keep error logs
-      }
+        error: (msg: string) => this.logger.error(msg), // Keep error logs
+      },
     });
   }
 
@@ -503,8 +505,8 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
               info: () => {},
               warn: () => {},
               debug: () => {},
-              error: (msg: string) => this.logger.error(msg) // Keep error logs
-            }
+              error: (msg: string) => this.logger.error(msg), // Keep error logs
+            },
           });
 
           return Promise.resolve({
