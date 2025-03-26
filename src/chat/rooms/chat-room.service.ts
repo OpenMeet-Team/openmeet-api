@@ -138,42 +138,76 @@ export class ChatRoomService {
   }
 
   /**
-   * Find or create a chat room for an event
-   * This method is used by both tests and production code
+   * Generic method to find or create a chat room for an entity (event or group)
+   *
+   * @param entityType Type of entity - 'event' or 'group'
+   * @param entityId The ID of the entity
    */
-  @Trace('chat-room.getOrCreateEventChatRoom')
-  async getOrCreateEventChatRoom(eventId: number): Promise<ChatRoomEntity> {
+  @Trace('chat-room.getOrCreateEntityChatRoom')
+  private async getOrCreateEntityChatRoom(
+    entityType: 'event' | 'group',
+    entityId: number,
+  ): Promise<ChatRoomEntity> {
     await this.initializeRepositories();
 
-    // Check if a chat room already exists for this event
+    // Check if a chat room already exists for this entity
+    const whereCondition =
+      entityType === 'event'
+        ? { event: { id: entityId } }
+        : { group: { id: entityId } };
+
     const existingRoom = await this.chatRoomRepository.findOne({
-      where: { event: { id: eventId } },
+      where: whereCondition,
     });
 
     if (existingRoom) {
       return existingRoom;
     }
 
-    // Get the event info using the EventQueryService
+    // Get the entity info using the appropriate service
     const tenantId = this.request.tenantId;
-    const event = await this.eventQueryService.findById(eventId, tenantId);
 
-    if (!event) {
-      throw new Error(`Event with id ${eventId} not found`);
+    if (entityType === 'event') {
+      const event = await this.eventQueryService.findById(entityId, tenantId);
+
+      if (!event) {
+        throw new Error(`Event with id ${entityId} not found`);
+      }
+
+      if (!event.user || !event.user.id) {
+        throw new Error(`Event with id ${entityId} has no creator`);
+      }
+
+      // Create a new chat room using the existing service method
+      return this.createEventChatRoom(entityId, event.user.id);
+    } else {
+      const group = await this.groupService.findOne(entityId);
+
+      if (!group) {
+        throw new Error(`Group with id ${entityId} not found`);
+      }
+
+      if (!group.createdBy || !group.createdBy.id) {
+        throw new Error(`Group with id ${entityId} has no creator`);
+      }
+
+      // Create a new chat room using the existing service method
+      return this.createGroupChatRoom(entityId, group.createdBy.id);
     }
+  }
 
-    if (!event.user || !event.user.id) {
-      throw new Error(`Event with id ${eventId} has no creator`);
-    }
-
-    // Create a new chat room using the existing service method
-    // We'll use the event creator as the chat room creator
-    return this.createEventChatRoom(eventId, event.user.id);
+  /**
+   * Find or create a chat room for an event
+   * This method is used by both tests and production code
+   */
+  @Trace('chat-room.getOrCreateEventChatRoom')
+  async getOrCreateEventChatRoom(eventId: number): Promise<ChatRoomEntity> {
+    return this.getOrCreateEntityChatRoom('event', eventId);
   }
 
   /**
    * Create a chat room for an event
-   * 
+   *
    * Future improvements:
    * - Accept event slug instead of ID
    * - This method could be merged with createEventChatRoomWithTenant
@@ -194,7 +228,7 @@ export class ChatRoomService {
   /**
    * Tenant-aware version of createEventChatRoom that doesn't rely on the request context
    * This is useful for event handlers where the request context is not available
-   * 
+   *
    * Future improvements:
    * - Accept event slug instead of ID
    * - Share common room creation logic between events and groups
@@ -313,7 +347,11 @@ export class ChatRoomService {
     userId: number,
     entityType: 'event' | 'group' = 'event',
   ): boolean {
-    const cacheKey = this.getChatMembershipCacheKey(entityId, userId, entityType);
+    const cacheKey = this.getChatMembershipCacheKey(
+      entityId,
+      userId,
+      entityType,
+    );
     const isVerified = !!this.request.chatRoomMembershipCache?.[cacheKey];
 
     if (isVerified) {
@@ -330,7 +368,7 @@ export class ChatRoomService {
    * Supports both events and groups for future slug-based identification
    */
   private getChatMembershipCacheKey(
-    entityId: number, 
+    entityId: number,
     userId: number,
     entityType: 'event' | 'group' = 'event',
   ): string {
@@ -351,7 +389,11 @@ export class ChatRoomService {
       this.request.chatRoomMembershipCache = {};
     }
 
-    const cacheKey = this.getChatMembershipCacheKey(entityId, userId, entityType);
+    const cacheKey = this.getChatMembershipCacheKey(
+      entityId,
+      userId,
+      entityType,
+    );
     this.request.chatRoomMembershipCache[cacheKey] = 'in-progress';
   }
 
@@ -364,7 +406,11 @@ export class ChatRoomService {
     userId: number,
     entityType: 'event' | 'group' = 'event',
   ): void {
-    const cacheKey = this.getChatMembershipCacheKey(entityId, userId, entityType);
+    const cacheKey = this.getChatMembershipCacheKey(
+      entityId,
+      userId,
+      entityType,
+    );
     this.request.chatRoomMembershipCache[cacheKey] = true;
   }
 
@@ -388,21 +434,46 @@ export class ChatRoomService {
 
   /**
    * Helper method to add a user to a Matrix room and return whether they joined
+   * Handles both invite and join operations with appropriate error handling
+   *
+   * @param matrixRoomId The Matrix room ID
+   * @param user The user entity with Matrix credentials
+   * @param options Optional parameters for customizing the join behavior
+   * @returns True if the user joined or is already a member, false otherwise
    */
   @Trace('chat-room.addUserToMatrixRoom')
   private async addUserToMatrixRoom(
     matrixRoomId: string,
     user: UserEntity,
+    options: {
+      skipInvite?: boolean;
+      forceInvite?: boolean;
+    } = {},
   ): Promise<boolean> {
-    // Try to invite user to the room - may fail if they're already a member
-    if (user.matrixUserId) {
+    const { skipInvite = false, forceInvite = false } = options;
+
+    // First check if user has necessary credentials
+    if (!user.matrixUserId) {
+      this.logger.warn(
+        `User ${user.id} does not have a Matrix user ID, cannot join room`,
+      );
+      return false;
+    }
+
+    let isAlreadyJoined = false;
+
+    // Step 1: Invite user to the room if needed
+    if (!skipInvite && user.matrixUserId) {
       try {
         await this.matrixRoomService.inviteUser(
           matrixRoomId,
           user.matrixUserId,
         );
+        this.logger.debug(
+          `Successfully invited user ${user.id} to room ${matrixRoomId}`,
+        );
       } catch (inviteError) {
-        // If the error is because they're already in the room, log and continue
+        // If the error is because they're already in the room, mark as already joined
         if (
           inviteError.message &&
           inviteError.message.includes('already in the room')
@@ -410,6 +481,7 @@ export class ChatRoomService {
           this.logger.log(
             `User ${user.id} is already in room ${matrixRoomId}, skipping invite`,
           );
+          isAlreadyJoined = true;
         } else {
           this.logger.warn(
             `Error inviting user ${user.id} to room: ${inviteError.message}`,
@@ -419,14 +491,17 @@ export class ChatRoomService {
       }
     }
 
-    // Next, have the user join the room if they have credentials
-    let isJoined = false;
-    if (user.matrixAccessToken && user.matrixUserId) {
+    // Step 2: Have the user join the room if they have credentials and either need to join or we're forcing a join
+    let isJoined = isAlreadyJoined;
+    if (
+      (user.matrixAccessToken && user.matrixUserId && !isAlreadyJoined) ||
+      forceInvite
+    ) {
       try {
         await this.matrixRoomService.joinRoom(
           matrixRoomId,
           user.matrixUserId,
-          user.matrixAccessToken,
+          user.matrixAccessToken!, // Add non-null assertion since we've already checked that it exists
           user.matrixDeviceId,
         );
         isJoined = true;
@@ -458,7 +533,7 @@ export class ChatRoomService {
   /**
    * Helper method to handle moderator permissions for both event and group chat rooms
    * Future improvement: Accept slugs instead of IDs
-   * 
+   *
    * @param entityId The event or group ID
    * @param userId The user ID
    * @param matrixUserId The Matrix user ID
@@ -480,10 +555,11 @@ export class ChatRoomService {
 
       if (entityType === 'event') {
         // For events, check event attendee permissions
-        const attendee = await this.eventAttendeeService.findEventAttendeeByUserId(
-          entityId,
-          userId,
-        );
+        const attendee =
+          await this.eventAttendeeService.findEventAttendeeByUserId(
+            entityId,
+            userId,
+          );
 
         if (attendee && attendee.role) {
           roleName = attendee.role.name;
@@ -500,10 +576,11 @@ export class ChatRoomService {
         }
       } else if (entityType === 'group') {
         // For groups, check group member permissions
-        const groupMember = await this.groupMemberService.findGroupMemberByUserId(
-          entityId,
-          userId,
-        );
+        const groupMember =
+          await this.groupMemberService.findGroupMemberByUserId(
+            entityId,
+            userId,
+          );
 
         if (groupMember && groupMember.groupRole) {
           roleName = groupMember.groupRole.name;
@@ -548,23 +625,40 @@ export class ChatRoomService {
 
   /**
    * Helper method to add a user to a room in the database
+   * Works for any chat room type (event, group, direct)
+   *
+   * Future improvements:
+   * - Accept user slug instead of ID
+   * - Implement batching for adding multiple users at once
    */
   @Trace('chat-room.addUserToRoomInDatabase')
   private async addUserToRoomInDatabase(
     roomId: number,
     userId: number,
   ): Promise<void> {
+    await this.initializeRepositories();
+
     const roomWithMembers = await this.chatRoomRepository.findOne({
       where: { id: roomId },
       relations: ['members'],
     });
 
     if (!roomWithMembers) {
+      this.logger.warn(
+        `Could not find chat room with id ${roomId} to add user ${userId}`,
+      );
       return;
     }
 
-    // Get the user
+    // Get the user using UserService (tenant-aware through DI)
     const user = await this.userService.getUserById(userId);
+
+    if (!user) {
+      this.logger.warn(
+        `Could not find user with id ${userId} to add to room ${roomId}`,
+      );
+      return;
+    }
 
     // Check if user is already a member
     const isAlreadyMember = roomWithMembers.members.some(
@@ -574,6 +668,13 @@ export class ChatRoomService {
     if (!isAlreadyMember) {
       roomWithMembers.members.push(user);
       await this.chatRoomRepository.save(roomWithMembers);
+      this.logger.debug(
+        `Added user ${userId} to chat room ${roomId} in database`,
+      );
+    } else {
+      this.logger.debug(
+        `User ${userId} is already a member of chat room ${roomId} in database`,
+      );
     }
   }
 
@@ -604,16 +705,21 @@ export class ChatRoomService {
 
       // Get chat room
       const chatRoom = await this.getChatRoomForEvent(eventId);
-      
+
       // First check if the user is already a member in the database
       // This helps avoid redundant Matrix API calls across requests
       const roomWithMembers = await this.chatRoomRepository.findOne({
         where: { id: chatRoom.id },
         relations: ['members'],
       });
-      
-      if (roomWithMembers && roomWithMembers.members.some(member => member.id === userId)) {
-        this.logger.debug(`User ${userId} is already a database member of room ${chatRoom.id}, skipping Matrix join`);
+
+      if (
+        roomWithMembers &&
+        roomWithMembers.members.some((member) => member.id === userId)
+      ) {
+        this.logger.debug(
+          `User ${userId} is already a database member of room ${chatRoom.id}, skipping Matrix join`,
+        );
         // Mark as verified in request cache
         this.markUserAsComplete(eventId, userId);
         return;
@@ -635,7 +741,7 @@ export class ChatRoomService {
           userId,
           user.matrixUserId,
           chatRoom.matrixRoomId,
-          'event'
+          'event',
         );
       }
 
@@ -770,34 +876,16 @@ export class ChatRoomService {
    */
   @Trace('chat-room.getOrCreateGroupChatRoom')
   async getOrCreateGroupChatRoom(groupId: number): Promise<ChatRoomEntity> {
-    await this.initializeRepositories();
-
-    // Check if a chat room already exists for this group
-    const existingRoom = await this.chatRoomRepository.findOne({
-      where: { group: { id: groupId } },
-    });
-
-    if (existingRoom) {
-      return existingRoom;
-    }
-
-    // Get the group info with createdBy relation using the GroupService
-    const group = await this.groupService.findOne(groupId);
-    if (!group) {
-      throw new Error(`Group with id ${groupId} not found`);
-    }
-
-    if (!group.createdBy || !group.createdBy.id) {
-      throw new Error(`Group with id ${groupId} has no creator`);
-    }
-
-    // Create a new chat room using the existing service method
-    // We'll use the group creator as the chat room creator
-    return this.createGroupChatRoom(groupId, group.createdBy.id);
+    return this.getOrCreateEntityChatRoom('group', groupId);
   }
 
   /**
    * Create a chat room for a group
+   * Uses tenant ID from request context
+   *
+   * Future improvements:
+   * - Accept group slug instead of ID
+   * - Create a consistent pattern for room creation between events and groups
    */
   @Trace('chat-room.createGroupChatRoom')
   async createGroupChatRoom(
@@ -806,11 +894,8 @@ export class ChatRoomService {
   ): Promise<ChatRoomEntity> {
     await this.initializeRepositories();
 
-    // Get the group
-    const group = await this.groupRepository.findOne({
-      where: { id: groupId },
-      relations: ['createdBy'],
-    });
+    // Get the group using the GroupService (tenant-aware through DI)
+    const group = await this.groupService.findOne(groupId);
 
     if (!group) {
       throw new Error(`Group with id ${groupId} not found`);
@@ -825,7 +910,7 @@ export class ChatRoomService {
       return existingRoom;
     }
 
-    // Get the creator user
+    // Get the creator user using the UserService (tenant-aware through DI)
     const creator = await this.userService.getUserById(creatorId);
 
     // Create a chat room in Matrix
@@ -864,16 +949,21 @@ export class ChatRoomService {
         historyVisibility: 'shared',
         guestAccess: false,
         requireInvitation: group.visibility !== 'public',
-        encrypted: true, // Updated to enable encryption for group chat rooms
+        encrypted: true, // Enable encryption for group chat rooms
       },
     });
 
     // Save the chat room
     await this.chatRoomRepository.save(chatRoom);
 
-    // Update the group with the Matrix room ID
-    group.matrixRoomId = roomInfo.roomId;
-    await this.groupRepository.save(group);
+    // Update the group with the Matrix room ID using GroupService
+    await this.groupService.update(group.slug, {
+      matrixRoomId: roomInfo.roomId,
+    });
+
+    this.logger.log(
+      `Created chat room for group ${group.slug} in tenant ${this.request.tenantId}`,
+    );
 
     return chatRoom;
   }
@@ -892,14 +982,17 @@ export class ChatRoomService {
   }
 
   /**
-   * Find or create a direct chat room between two users
-   * This method is used by both tests and production code
+   * Helper method to find an existing direct chat room between two users
+   *
+   * @param user1Id First user ID
+   * @param user2Id Second user ID
+   * @returns The existing chat room or null if none exists
    */
-  @Trace('chat-room.getOrCreateDirectChatRoom')
-  async getOrCreateDirectChatRoom(
+  @Trace('chat-room.findExistingDirectChatRoom')
+  private async findExistingDirectChatRoom(
     user1Id: number,
     user2Id: number,
-  ): Promise<ChatRoomEntity> {
+  ): Promise<ChatRoomEntity | null> {
     await this.initializeRepositories();
 
     // Check if a chat room already exists between these users (in either order)
@@ -917,7 +1010,33 @@ export class ChatRoomService {
       return existingRooms[0];
     }
 
-    // Get both users using the UserService
+    return null;
+  }
+
+  /**
+   * Find or create a direct chat room between two users
+   * This method is used by both tests and production code
+   *
+   * Future improvements:
+   * - Accept user slugs instead of IDs
+   * - Implement better error handling for Matrix room creation failures
+   */
+  @Trace('chat-room.getOrCreateDirectChatRoom')
+  async getOrCreateDirectChatRoom(
+    user1Id: number,
+    user2Id: number,
+  ): Promise<ChatRoomEntity> {
+    // First try to find an existing room
+    const existingRoom = await this.findExistingDirectChatRoom(
+      user1Id,
+      user2Id,
+    );
+
+    if (existingRoom) {
+      return existingRoom;
+    }
+
+    // Get both users using the UserService (tenant-aware through DI)
     const user1 = await this.userService.getUserById(user1Id);
     const user2 = await this.userService.getUserById(user2Id);
 
@@ -960,6 +1079,11 @@ export class ChatRoomService {
 
     // Save the chat room
     const savedRoom = await this.chatRoomRepository.save(chatRoom);
+
+    this.logger.log(
+      `Created direct chat room between users ${user1Id} and ${user2Id} in tenant ${this.request.tenantId}`,
+    );
+
     return savedRoom;
   }
 
@@ -1255,7 +1379,7 @@ export class ChatRoomService {
           userId,
           user.matrixUserId,
           chatRoom.matrixRoomId,
-          'group'
+          'group',
         );
       }
 
@@ -1363,23 +1487,32 @@ export class ChatRoomService {
   }
 
   /**
-   * Delete all chat rooms associated with a group
+   * Generic method to delete all chat rooms for an entity (event or group)
+   *
+   * @param entityType Type of entity - 'event' or 'group'
+   * @param entityId The ID of the entity
    */
-  @Trace('chat-room.deleteGroupChatRooms')
-  async deleteGroupChatRooms(groupId: number): Promise<void> {
+  @Trace('chat-room.deleteEntityChatRooms')
+  private async deleteEntityChatRooms(
+    entityType: 'event' | 'group',
+    entityId: number,
+  ): Promise<void> {
     await this.initializeRepositories();
 
     try {
-      // Find all chat rooms for this group
-      const chatRooms = await this.getGroupChatRooms(groupId);
+      // Find all chat rooms for this entity
+      const chatRooms =
+        entityType === 'event'
+          ? await this.getEventChatRooms(entityId)
+          : await this.getGroupChatRooms(entityId);
 
       if (!chatRooms || chatRooms.length === 0) {
-        this.logger.log(`No chat rooms found for group ${groupId}`);
+        this.logger.log(`No chat rooms found for ${entityType} ${entityId}`);
         return;
       }
 
       this.logger.log(
-        `Deleting ${chatRooms.length} chat rooms for group ${groupId}`,
+        `Deleting ${chatRooms.length} chat rooms for ${entityType} ${entityId}`,
       );
 
       // Delete each chat room
@@ -1387,25 +1520,49 @@ export class ChatRoomService {
         await this.deleteChatRoom(room.id);
       }
 
-      // Update the group to clear the matrixRoomId reference
-      const group = await this.groupRepository.findOne({
-        where: { id: groupId },
-      });
-
-      if (group && group.matrixRoomId) {
-        group.matrixRoomId = '';
-        await this.groupRepository.save(group);
+      // Update the entity to clear the matrixRoomId reference
+      if (entityType === 'event') {
+        // Use EventQueryService to update the event
+        const event = await this.eventQueryService.findById(
+          entityId,
+          this.request.tenantId,
+        );
+        if (event && event.matrixRoomId) {
+          // Would use an event service update method if available
+          const eventEntity = await this.eventRepository.findOne({
+            where: { id: entityId },
+          });
+          if (eventEntity) {
+            eventEntity.matrixRoomId = '';
+            await this.eventRepository.save(eventEntity);
+          }
+        }
+      } else {
+        // Use GroupService to update the group
+        const group = await this.groupService.findOne(entityId);
+        if (group && group.matrixRoomId) {
+          // Use slug instead of ID since GroupService likely expects a slug
+          await this.groupService.update(group.slug, { matrixRoomId: '' });
+        }
       }
 
       this.logger.log(
-        `Successfully deleted all chat rooms for group ${groupId}`,
+        `Successfully deleted all chat rooms for ${entityType} ${entityId}`,
       );
     } catch (error) {
       this.logger.error(
-        `Error deleting chat rooms for group ${groupId}: ${error.message}`,
+        `Error deleting chat rooms for ${entityType} ${entityId}: ${error.message}`,
       );
       throw error;
     }
+  }
+
+  /**
+   * Delete all chat rooms associated with a group
+   */
+  @Trace('chat-room.deleteGroupChatRooms')
+  async deleteGroupChatRooms(groupId: number): Promise<void> {
+    return this.deleteEntityChatRooms('group', groupId);
   }
 
   /**
@@ -1413,45 +1570,7 @@ export class ChatRoomService {
    */
   @Trace('chat-room.deleteEventChatRooms')
   async deleteEventChatRooms(eventId: number): Promise<void> {
-    await this.initializeRepositories();
-
-    try {
-      // Find all chat rooms for this event
-      const chatRooms = await this.getEventChatRooms(eventId);
-
-      if (!chatRooms || chatRooms.length === 0) {
-        this.logger.log(`No chat rooms found for event ${eventId}`);
-        return;
-      }
-
-      this.logger.log(
-        `Deleting ${chatRooms.length} chat rooms for event ${eventId}`,
-      );
-
-      // Delete each chat room
-      for (const room of chatRooms) {
-        await this.deleteChatRoom(room.id);
-      }
-
-      // Update the event to clear the matrixRoomId reference
-      const event = await this.eventRepository.findOne({
-        where: { id: eventId },
-      });
-
-      if (event && event.matrixRoomId) {
-        event.matrixRoomId = '';
-        await this.eventRepository.save(event);
-      }
-
-      this.logger.log(
-        `Successfully deleted all chat rooms for event ${eventId}`,
-      );
-    } catch (error) {
-      this.logger.error(
-        `Error deleting chat rooms for event ${eventId}: ${error.message}`,
-      );
-      throw error;
-    }
+    return this.deleteEntityChatRooms('event', eventId);
   }
 
   /**

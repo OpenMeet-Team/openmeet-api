@@ -358,9 +358,10 @@ export class DiscussionService implements DiscussionServiceInterface {
     // 1. We haven't verified membership yet in this request AND
     // 2. We're not already checking membership in another part of the code AND
     // 3. Either this is the first check or enough time has passed since the last check
-    const shouldCheckMembership = !membershipVerified && 
-                                 !chatRoomMembershipInProgress && 
-                                 (lastCheckTime === 0 || now - lastCheckTime > minimumCheckInterval);
+    const shouldCheckMembership =
+      !membershipVerified &&
+      !chatRoomMembershipInProgress &&
+      (lastCheckTime === 0 || now - lastCheckTime > minimumCheckInterval);
 
     if (shouldCheckMembership) {
       // Mark as in-progress in our cache too

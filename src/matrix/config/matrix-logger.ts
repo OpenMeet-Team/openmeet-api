@@ -2,8 +2,7 @@
  * Configure Matrix SDK global logging
  */
 import { Logger } from '@nestjs/common';
-import path from 'path';
-import fs from 'fs';
+import loglevel from 'loglevel';
 
 // Set up a logger for this file
 const logger = new Logger('MatrixLogger');
@@ -44,8 +43,6 @@ export function configureMatrixLogging(): void {
 
     // Try to configure loglevel too
     try {
-      const loglevel = require('loglevel');
-
       // Configure different logging namespaces
       ['matrix', 'matrix-js-sdk', 'matrix-http', 'http'].forEach((name) => {
         try {
@@ -53,12 +50,12 @@ export function configureMatrixLogging(): void {
           if (logger) {
             logger.setLevel(loglevel.levels.ERROR);
           }
-        } catch (e) {
+        } catch {
           // Ignore errors for individual loggers
         }
       });
-    } catch (e) {
-      logger.warn(`Could not configure loglevel: ${e.message}`);
+    } catch {
+      // Ignore loglevel configuration errors
     }
 
     isPatched = true;

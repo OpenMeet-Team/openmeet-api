@@ -111,7 +111,7 @@ describe('MatrixCoreService', () => {
           userId: '@admin:example.org',
           accessToken: 'admin-token',
           useAuthorizationHeader: true,
-        })
+        }),
       );
     });
 

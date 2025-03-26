@@ -191,7 +191,7 @@ describe('MatrixMessageService', () => {
           accessToken: 'user-token',
           deviceId: 'user-device',
           useAuthorizationHeader: true,
-        })
+        }),
       );
 
       // Verify sendEvent was called on user client
@@ -258,7 +258,7 @@ describe('MatrixMessageService', () => {
           accessToken,
           deviceId: 'OPENMEET_SERVER',
           useAuthorizationHeader: true,
-        })
+        }),
       );
 
       // Verify sendTyping was called with correct parameters

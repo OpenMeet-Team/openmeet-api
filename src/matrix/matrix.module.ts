@@ -1,4 +1,4 @@
-import { Module, forwardRef, Logger } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MatrixController } from './matrix.controller';
 import { MatrixGateway } from './matrix.gateway';

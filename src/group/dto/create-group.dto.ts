@@ -96,4 +96,11 @@ export class CreateGroupDto {
   @IsArray()
   @Type(() => Number)
   categories?: number[];
+
+  @ApiPropertyOptional({
+    description: 'The Matrix room ID associated with this group',
+  })
+  @IsOptional()
+  @IsString()
+  matrixRoomId?: string;
 }
