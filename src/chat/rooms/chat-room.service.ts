@@ -173,6 +173,11 @@ export class ChatRoomService {
 
   /**
    * Create a chat room for an event
+   * 
+   * Future improvements:
+   * - Accept event slug instead of ID
+   * - This method could be merged with createEventChatRoomWithTenant
+   * - Consider splitting room creation into a separate service
    */
   @Trace('chat-room.createEventChatRoom')
   async createEventChatRoom(
@@ -189,6 +194,10 @@ export class ChatRoomService {
   /**
    * Tenant-aware version of createEventChatRoom that doesn't rely on the request context
    * This is useful for event handlers where the request context is not available
+   * 
+   * Future improvements:
+   * - Accept event slug instead of ID
+   * - Share common room creation logic between events and groups
    */
   @Trace('chat-room.createEventChatRoomWithTenant')
   async createEventChatRoomWithTenant(
@@ -297,17 +306,19 @@ export class ChatRoomService {
    */
   /**
    * Helper method to check if a user is already verified in the cache
+   * Supports both events and groups for future slug-based identification
    */
   private isUserAlreadyVerifiedInCache(
-    eventId: number,
+    entityId: number,
     userId: number,
+    entityType: 'event' | 'group' = 'event',
   ): boolean {
-    const cacheKey = this.getChatMembershipCacheKey(eventId, userId);
+    const cacheKey = this.getChatMembershipCacheKey(entityId, userId, entityType);
     const isVerified = !!this.request.chatRoomMembershipCache?.[cacheKey];
 
     if (isVerified) {
       this.logger.debug(
-        `User ${userId} is already verified as member of event ${eventId} chat room in this request`,
+        `User ${userId} is already verified as member of ${entityType} ${entityId} chat room in this request`,
       );
     }
 
@@ -316,29 +327,44 @@ export class ChatRoomService {
 
   /**
    * Helper method to get the cache key for a chat membership
+   * Supports both events and groups for future slug-based identification
    */
-  private getChatMembershipCacheKey(eventId: number, userId: number): string {
-    return `event:${eventId}:user:${userId}`;
+  private getChatMembershipCacheKey(
+    entityId: number, 
+    userId: number,
+    entityType: 'event' | 'group' = 'event',
+  ): string {
+    return `${entityType}:${entityId}:user:${userId}`;
   }
 
   /**
    * Helper method to mark a user as in-progress in the cache
+   * Supports both events and groups for future slug-based identification
    */
-  private markUserAsInProgress(eventId: number, userId: number): void {
+  private markUserAsInProgress(
+    entityId: number,
+    userId: number,
+    entityType: 'event' | 'group' = 'event',
+  ): void {
     // Initialize cache if needed
     if (!this.request.chatRoomMembershipCache) {
       this.request.chatRoomMembershipCache = {};
     }
 
-    const cacheKey = this.getChatMembershipCacheKey(eventId, userId);
+    const cacheKey = this.getChatMembershipCacheKey(entityId, userId, entityType);
     this.request.chatRoomMembershipCache[cacheKey] = 'in-progress';
   }
 
   /**
    * Helper method to mark a user as complete in the cache
+   * Supports both events and groups for future slug-based identification
    */
-  private markUserAsComplete(eventId: number, userId: number): void {
-    const cacheKey = this.getChatMembershipCacheKey(eventId, userId);
+  private markUserAsComplete(
+    entityId: number,
+    userId: number,
+    entityType: 'event' | 'group' = 'event',
+  ): void {
+    const cacheKey = this.getChatMembershipCacheKey(entityId, userId, entityType);
     this.request.chatRoomMembershipCache[cacheKey] = true;
   }
 
@@ -358,39 +384,7 @@ export class ChatRoomService {
     return chatRoom;
   }
 
-  /**
-   * Helper method to ensure a user has Matrix credentials and return the user
-   */
-  @Trace('chat-room.ensureUserWithMatrixCredentials')
-  private async ensureUserWithMatrixCredentials(
-    userId: number,
-  ): Promise<UserEntity> {
-    // Get the user
-    const user = await this.userService.getUserById(userId);
-
-    // Ensure user has Matrix credentials
-    if (!user.matrixUserId) {
-      try {
-        // Use the ensureUserHasMatrixCredentials method to provision Matrix credentials
-        const userWithCredentials =
-          await this.ensureUserHasMatrixCredentials(userId);
-
-        // Update our user instance with the credentials
-        user.matrixUserId = userWithCredentials.matrixUserId;
-        user.matrixAccessToken = userWithCredentials.matrixAccessToken;
-        user.matrixDeviceId = userWithCredentials.matrixDeviceId;
-      } catch (error) {
-        this.logger.error(
-          `Failed to ensure Matrix credentials for user ${userId}: ${error.message}`,
-        );
-        throw new Error(
-          `User with id ${userId} could not be provisioned with Matrix credentials`,
-        );
-      }
-    }
-
-    return user;
-  }
+  // Removed redundant ensureUserWithMatrixCredentials method - using ensureUserHasMatrixCredentials directly
 
   /**
    * Helper method to add a user to a Matrix room and return whether they joined
@@ -462,57 +456,91 @@ export class ChatRoomService {
   }
 
   /**
-   * Helper method to handle moderator permissions
+   * Helper method to handle moderator permissions for both event and group chat rooms
+   * Future improvement: Accept slugs instead of IDs
+   * 
+   * @param entityId The event or group ID
+   * @param userId The user ID
+   * @param matrixUserId The Matrix user ID
+   * @param matrixRoomId The Matrix room ID
+   * @param entityType Whether this is an 'event' or 'group'
    */
   @Trace('chat-room.handleModeratorPermissions')
   private async handleModeratorPermissions(
-    eventId: number,
+    entityId: number,
     userId: number,
     matrixUserId: string,
     matrixRoomId: string,
+    entityType: 'event' | 'group' = 'event',
   ): Promise<void> {
     try {
-      const attendee =
-        await this.eventAttendeeService.findEventAttendeeByUserId(
-          eventId,
+      let isModeratorRole = false;
+      let hasManagePermission = false;
+      let roleName = '';
+
+      if (entityType === 'event') {
+        // For events, check event attendee permissions
+        const attendee = await this.eventAttendeeService.findEventAttendeeByUserId(
+          entityId,
           userId,
         );
 
-      if (attendee && attendee.role) {
-        // Only assign moderator privileges to users with appropriate roles: host, moderator
-        const isModeratorRole =
-          attendee.role.name === EventAttendeeRole.Host ||
-          attendee.role.name === EventAttendeeRole.Moderator;
+        if (attendee && attendee.role) {
+          roleName = attendee.role.name;
+          // Only assign moderator privileges to users with appropriate roles: host, moderator
+          isModeratorRole =
+            attendee.role.name === EventAttendeeRole.Host ||
+            attendee.role.name === EventAttendeeRole.Moderator;
 
-        const hasManageEventPermission =
-          attendee.role.permissions &&
-          attendee.role.permissions.some(
-            (p) => p.name === EventAttendeePermission.ManageEvent,
-          );
-
-        if (isModeratorRole && hasManageEventPermission) {
-          this.logger.log(
-            `User ${userId} has role ${attendee.role.name} with ManageEvent permission, setting as moderator in room ${matrixRoomId}`,
-          );
-
-          // Set user as moderator in Matrix room
-          await this.matrixRoomService.setRoomPowerLevels(
-            matrixRoomId,
-            { [matrixUserId]: 50 }, // 50 is moderator level
-          );
-
-          this.logger.log(
-            `Successfully set ${matrixUserId} as moderator for room ${matrixRoomId}`,
-          );
-        } else {
-          this.logger.log(
-            `User ${userId} with role ${attendee.role.name} does not qualify for moderator privileges`,
-          );
+          hasManagePermission =
+            attendee.role.permissions &&
+            attendee.role.permissions.some(
+              (p) => p.name === EventAttendeePermission.ManageEvent,
+            );
         }
+      } else if (entityType === 'group') {
+        // For groups, check group member permissions
+        const groupMember = await this.groupMemberService.findGroupMemberByUserId(
+          entityId,
+          userId,
+        );
+
+        if (groupMember && groupMember.groupRole) {
+          roleName = groupMember.groupRole.name;
+          // Only give moderator privileges to admins, owners, and moderators
+          isModeratorRole =
+            groupMember.groupRole.name === GroupRole.Admin ||
+            groupMember.groupRole.name === GroupRole.Owner ||
+            groupMember.groupRole.name === GroupRole.Moderator;
+
+          // Since we can't directly check permissions, we'll rely on the role names
+          hasManagePermission = isModeratorRole; // Simplification based on current code
+        }
+      }
+
+      // Apply moderator permissions if needed
+      if (isModeratorRole && hasManagePermission) {
+        this.logger.log(
+          `User ${userId} has ${entityType} role ${roleName} with management permissions, setting as moderator in room ${matrixRoomId}`,
+        );
+
+        // Set user as moderator in Matrix room
+        await this.matrixRoomService.setRoomPowerLevels(
+          matrixRoomId,
+          { [matrixUserId]: 50 }, // 50 is moderator level
+        );
+
+        this.logger.log(
+          `Successfully set ${matrixUserId} as moderator for ${entityType} room ${matrixRoomId}`,
+        );
+      } else if (roleName) {
+        this.logger.log(
+          `User ${userId} with ${entityType} role ${roleName} does not qualify for moderator privileges`,
+        );
       }
     } catch (error) {
       this.logger.warn(
-        `Error checking/setting moderator privileges for user ${userId}: ${error.message}`,
+        `Error checking/setting moderator privileges for user ${userId} in ${entityType} ${entityId}: ${error.message}`,
       );
       // Continue anyway - basic join functionality is more important than moderator privileges
     }
@@ -592,7 +620,7 @@ export class ChatRoomService {
       }
 
       // User not yet a member, continue with Matrix operations
-      const user = await this.ensureUserWithMatrixCredentials(userId);
+      const user = await this.ensureUserHasMatrixCredentials(userId);
 
       // Handle Matrix room operations
       const isJoined = await this.addUserToMatrixRoom(
@@ -607,6 +635,7 @@ export class ChatRoomService {
           userId,
           user.matrixUserId,
           chatRoom.matrixRoomId,
+          'event'
         );
       }
 
@@ -624,7 +653,39 @@ export class ChatRoomService {
   }
 
   /**
+   * Internal helper to remove a user from a chat room
+   * This will be compatible with future slug-based identification
+   * @param chatRoom The chat room entity
+   * @param userId The user ID to remove
+   */
+  @Trace('chat-room.removeUserFromChatRoom')
+  private async removeUserFromChatRoom(
+    chatRoom: ChatRoomEntity,
+    userId: number,
+  ): Promise<void> {
+    // Get the user
+    const user = await this.userService.getUserById(userId);
+
+    if (!user.matrixUserId) {
+      throw new Error(`User with id ${userId} does not have a Matrix user ID`);
+    }
+
+    // Remove the user from the room
+    await this.matrixRoomService.removeUserFromRoom(
+      chatRoom.matrixRoomId,
+      user.matrixUserId,
+    );
+
+    // Remove the user from the chat room members
+    chatRoom.members = chatRoom.members.filter(
+      (member) => member.id !== userId,
+    );
+    await this.chatRoomRepository.save(chatRoom);
+  }
+
+  /**
    * Remove a user from an event chat room
+   * Future improvement: Accept event slug instead of ID
    */
   @Trace('chat-room.removeUserFromEventChatRoom')
   async removeUserFromEventChatRoom(
@@ -652,24 +713,8 @@ export class ChatRoomService {
       throw new Error(`Chat room for event with id ${eventId} not found`);
     }
 
-    // Get the user
-    const user = await this.userService.getUserById(userId);
-
-    if (!user.matrixUserId) {
-      throw new Error(`User with id ${userId} does not have a Matrix user ID`);
-    }
-
-    // Remove the user from the room
-    await this.matrixRoomService.removeUserFromRoom(
-      chatRoom.matrixRoomId,
-      user.matrixUserId,
-    );
-
-    // Remove the user from the chat room members
-    chatRoom.members = chatRoom.members.filter(
-      (member) => member.id !== userId,
-    );
-    await this.chatRoomRepository.save(chatRoom);
+    // Delegate to shared helper method
+    await this.removeUserFromChatRoom(chatRoom, userId);
   }
 
   /**
@@ -1071,24 +1116,13 @@ export class ChatRoomService {
   async addUserToGroupChatRoom(groupId: number, userId: number): Promise<void> {
     await this.initializeRepositories();
 
-    // Prepare cache key to prevent redundant operations within the same request cycle
-    const cacheKey = `group:${groupId}:user:${userId}`;
-
-    // If we already verified and added this user to this chat room in this request, skip
-    if (this.request.chatRoomMembershipCache?.[cacheKey]) {
-      this.logger.debug(
-        `User ${userId} is already verified as member of group ${groupId} chat room in this request`,
-      );
+    // Check cache to avoid duplicates
+    if (this.isUserAlreadyVerifiedInCache(groupId, userId, 'group')) {
       return;
     }
 
-    // Initialize cache if needed
-    if (!this.request.chatRoomMembershipCache) {
-      this.request.chatRoomMembershipCache = {};
-    }
-
-    // Mark as in-progress to prevent concurrent attempts from the same request
-    this.request.chatRoomMembershipCache[cacheKey] = 'in-progress';
+    // Mark as in-progress
+    this.markUserAsInProgress(groupId, userId, 'group');
 
     // Check if the user is a member of the group using the proper service
     try {
@@ -1137,7 +1171,7 @@ export class ChatRoomService {
 
     if (isAlreadyMember) {
       // User is already in our DB as room member, mark cache and skip Matrix operations
-      this.request.chatRoomMembershipCache[cacheKey] = true;
+      this.markUserAsComplete(groupId, userId, 'group');
       this.logger.debug(
         `User ${userId} is already in database as member of chat room for group ${groupId}`,
       );
@@ -1215,51 +1249,14 @@ export class ChatRoomService {
     if (joinSuccess) {
       // Check if the user should have moderator privileges based on their group role
       if (user.matrixUserId) {
-        try {
-          // We've already checked the group member earlier
-          const groupMember =
-            await this.groupMemberService.findGroupMemberByUserId(
-              groupId,
-              userId,
-            );
-
-          if (groupMember && groupMember.groupRole) {
-            // Only give moderator privileges to admins, owners, and moderators
-            const isModeratorRole =
-              groupMember.groupRole.name === GroupRole.Admin ||
-              groupMember.groupRole.name === GroupRole.Owner ||
-              groupMember.groupRole.name === GroupRole.Moderator;
-
-            // Since we can't directly check permissions, we'll rely on the role names
-            // Admin, Owner, and Moderator roles should have proper permissions
-            const hasManageGroupPermission = isModeratorRole;
-
-            if (isModeratorRole && hasManageGroupPermission) {
-              this.logger.log(
-                `User ${userId} has group role ${groupMember.groupRole.name} with management permissions, setting as moderator in room ${chatRoom.matrixRoomId}`,
-              );
-
-              // Set user as moderator in Matrix room
-              await this.matrixRoomService.setRoomPowerLevels(
-                chatRoom.matrixRoomId,
-                { [user.matrixUserId]: 50 }, // 50 is moderator level
-              );
-
-              this.logger.log(
-                `Successfully set ${user.matrixUserId} as moderator for group room ${chatRoom.matrixRoomId}`,
-              );
-            } else {
-              this.logger.log(
-                `User ${userId} with group role ${groupMember.groupRole.name} does not qualify for moderator privileges`,
-              );
-            }
-          }
-        } catch (error) {
-          this.logger.warn(
-            `Error checking/setting moderator privileges for user ${userId}: ${error.message}`,
-          );
-          // Continue anyway - basic join functionality is more important than moderator privileges
-        }
+        // Use shared helper method
+        await this.handleModeratorPermissions(
+          groupId,
+          userId,
+          user.matrixUserId,
+          chatRoom.matrixRoomId,
+          'group'
+        );
       }
 
       // Add the user to the chat room members in our database
@@ -1271,12 +1268,13 @@ export class ChatRoomService {
       await this.chatRoomRepository.save(chatRoom);
 
       // Cache the result for this request
-      this.request.chatRoomMembershipCache[cacheKey] = true;
+      this.markUserAsComplete(groupId, userId, 'group');
     }
   }
 
   /**
    * Remove a user from a group chat room
+   * Future improvement: Accept group slug instead of ID
    */
   @Trace('chat-room.removeUserFromGroupChatRoom')
   async removeUserFromGroupChatRoom(
@@ -1304,24 +1302,8 @@ export class ChatRoomService {
       throw new Error(`Chat room for group with id ${groupId} not found`);
     }
 
-    // Get the user
-    const user = await this.userService.getUserById(userId);
-
-    if (!user.matrixUserId) {
-      throw new Error(`User with id ${userId} does not have a Matrix user ID`);
-    }
-
-    // Remove the user from the room
-    await this.matrixRoomService.removeUserFromRoom(
-      chatRoom.matrixRoomId,
-      user.matrixUserId,
-    );
-
-    // Remove the user from the chat room members
-    chatRoom.members = chatRoom.members.filter(
-      (member) => member.id !== userId,
-    );
-    await this.chatRoomRepository.save(chatRoom);
+    // Delegate to shared helper method
+    await this.removeUserFromChatRoom(chatRoom, userId);
   }
 
   /**

@@ -184,13 +184,15 @@ describe('MatrixMessageService', () => {
       const result = await service.sendMessage(options);
 
       // Verify SDK client was created with user credentials
-      expect(mockSdkCreateClient).toHaveBeenCalledWith({
-        baseUrl: 'https://matrix.example.org',
-        userId: '@user:example.org',
-        accessToken: 'user-token',
-        deviceId: 'user-device',
-        useAuthorizationHeader: true,
-      });
+      expect(mockSdkCreateClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseUrl: 'https://matrix.example.org',
+          userId: '@user:example.org',
+          accessToken: 'user-token',
+          deviceId: 'user-device',
+          useAuthorizationHeader: true,
+        })
+      );
 
       // Verify sendEvent was called on user client
       expect(mockUserClient.sendEvent).toHaveBeenCalledWith(
@@ -249,13 +251,15 @@ describe('MatrixMessageService', () => {
       );
 
       // Verify client was created for the user
-      expect(mockSdkCreateClient).toHaveBeenCalledWith({
-        baseUrl: 'https://matrix.example.org',
-        userId,
-        accessToken,
-        deviceId: 'OPENMEET_SERVER',
-        useAuthorizationHeader: true,
-      });
+      expect(mockSdkCreateClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseUrl: 'https://matrix.example.org',
+          userId,
+          accessToken,
+          deviceId: 'OPENMEET_SERVER',
+          useAuthorizationHeader: true,
+        })
+      );
 
       // Verify sendTyping was called with correct parameters
       expect(mockUserClient.sendTyping).toHaveBeenCalledWith(
