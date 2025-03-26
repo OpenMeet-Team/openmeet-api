@@ -215,10 +215,34 @@ Benefits:
    - Granular mapping between roles and Matrix powers
    - Periodic permission verification
 
+## Current Encryption Implementation
+
+As of March 2025, OpenMeet uses the following approach for Matrix room encryption:
+
+1. **Server-Side Configuration**
+   - Matrix server has encryption capabilities enabled (`enable_key_server: true`)
+   - Default room creation setting allows encryption but doesn't enforce it
+
+2. **Room Creation Policy**
+   - OpenMeet creates all rooms (event, group, direct) with encryption disabled by default
+   - This decision addresses key management challenges while maintaining compatibility
+   - Client-side encryption remains possible through third-party Matrix clients
+
+3. **Encryption Opt-In**
+   - Users who require encrypted communications can:
+     a) Use external Matrix clients with their OpenMeet Matrix credentials
+     b) Create encrypted direct messages through those clients
+     c) Manage their encryption keys using standard Matrix client tools
+
+4. **Rationale**
+   - Server-side sent messages cannot properly participate in encryption (no persistent crypto store)
+   - Automatic encryption led to unreadable message history across sessions
+   - This approach balances security needs with practical usability requirements
+
 ## Future Enhancements
 
 1. **End-to-End Encryption Options**
-   - Currently: Messages in encrypted rooms are sent unencrypted via backend clients
+   - Currently: Backend clients send unencrypted messages, third-party clients can use encryption
    - Implementation options:
      a) **Client-Side Only Encryption**: Handle encryption exclusively in frontend clients, backend never handles encrypted content
      b) **Persistent Backend Clients**: Maintain long-lived client instances per user with persistent crypto store in database

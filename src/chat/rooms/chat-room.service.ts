@@ -5,6 +5,7 @@ import { TenantConnectionService } from '../../tenant/tenant.service';
 import { MatrixRoomService } from '../../matrix/services/matrix-room.service';
 import { MatrixUserService } from '../../matrix/services/matrix-user.service';
 import { MatrixMessageService } from '../../matrix/services/matrix-message.service';
+import { MatrixCoreService } from '../../matrix/services/matrix-core.service';
 import { UserService } from '../../user/user.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
@@ -33,6 +34,38 @@ export class ChatRoomService {
   private chatRoomRepository: Repository<ChatRoomEntity>;
   private eventRepository: Repository<EventEntity>;
   private groupRepository: Repository<GroupEntity>;
+
+  /**
+   * Generates a standardized room name based on entity type and tenant
+   * @param entityType The type of entity ('event', 'group', or 'direct')
+   * @param entitySlug The slug of the entity (event or group slug, or for direct messages, a combination of user slugs)
+   * @param tenantId The tenant ID
+   * @returns A standardized room name
+   */
+  private generateRoomName(
+    entityType: 'event' | 'group' | 'direct',
+    entitySlug: string,
+    tenantId: string,
+  ): string {
+    return `${entityType}-${entitySlug}-${tenantId}`;
+  }
+
+  /**
+   * Generates a direct message room name using user slugs
+   * @param user1Slug First user's slug
+   * @param user2Slug Second user's slug
+   * @param tenantId The tenant ID
+   * @returns A standardized direct message room name
+   */
+  private generateDirectRoomName(
+    user1Slug: string,
+    user2Slug: string,
+    tenantId: string,
+  ): string {
+    // Sort slugs to ensure consistent room naming regardless of who initiates the chat
+    const slugs = [user1Slug, user2Slug].sort();
+    return this.generateRoomName('direct', `${slugs[0]}-${slugs[1]}`, tenantId);
+  }
 
   /**
    * Ensures a user has Matrix credentials, provisioning them if needed
@@ -113,6 +146,7 @@ export class ChatRoomService {
     private readonly matrixUserService: MatrixUserService,
     private readonly matrixRoomService: MatrixRoomService,
     private readonly matrixMessageService: MatrixMessageService,
+    private readonly matrixCoreService: MatrixCoreService,
     private readonly userService: UserService,
     @Inject(forwardRef(() => GroupMemberService))
     private readonly groupMemberService: GroupMemberService,
@@ -280,13 +314,18 @@ export class ChatRoomService {
     const creator = await this.userService.getUserById(creatorId, tenantId);
 
     // Create a chat room in Matrix
-    // Using the event slug for a unique, stable identifier
+    // Using the event slug with tenant ID for a unique, stable identifier
+    const roomName = this.generateRoomName(
+      'event',
+      event.slug,
+      effectiveTenantId,
+    );
     const roomInfo = await this.matrixRoomService.createRoom({
-      name: `event-${event.slug}`,
+      name: roomName,
       topic: `Discussion for ${event.name}`,
       isPublic: event.visibility === 'public',
       isDirect: false,
-      encrypted: true, // Enable encryption for event chat rooms
+      encrypted: false, // Disable encryption for event chat rooms
       // Add the event creator as the first member
       inviteUserIds: [creator.matrixUserId].filter((id) => !!id) as string[],
       // Set creator as moderator - MatrixRoomService will handle admin user
@@ -301,7 +340,7 @@ export class ChatRoomService {
 
     // Create a chat room entity
     const chatRoom = chatRoomRepo.create({
-      name: `event-${event.slug}`,
+      name: roomName,
       topic: `Discussion for ${event.name}`,
       matrixRoomId: roomInfo.roomId,
       type: ChatRoomType.EVENT,
@@ -315,7 +354,7 @@ export class ChatRoomService {
         historyVisibility: 'shared',
         guestAccess: false,
         requireInvitation: event.visibility !== 'public',
-        encrypted: true, // Updated to enable encryption for event chat rooms
+        encrypted: false, // Updated to disable encryption for event chat rooms
       },
     });
 
@@ -914,13 +953,15 @@ export class ChatRoomService {
     const creator = await this.userService.getUserById(creatorId);
 
     // Create a chat room in Matrix
-    // Using the group slug for a unique, stable identifier
+    // Using the group slug with tenant ID for a unique, stable identifier
+    const tenantId = this.request.tenantId;
+    const roomName = this.generateRoomName('group', group.slug, tenantId);
     const roomInfo = await this.matrixRoomService.createRoom({
-      name: `group-${group.slug}`,
+      name: roomName,
       topic: `Discussion for group: ${group.slug}`,
       isPublic: group.visibility === 'public',
       isDirect: false,
-      encrypted: true, // Enable encryption for group chat rooms
+      encrypted: false, // Disable encryption for group chat rooms
       // Add the group creator as the first member
       inviteUserIds: [creator.matrixUserId].filter((id) => !!id) as string[],
       // Set creator as moderator - MatrixRoomService will handle admin user
@@ -935,7 +976,7 @@ export class ChatRoomService {
 
     // Create a chat room entity
     const chatRoom = this.chatRoomRepository.create({
-      name: `group-${group.slug}`,
+      name: roomName,
       topic: `Discussion for group: ${group.slug}`,
       matrixRoomId: roomInfo.roomId,
       type: ChatRoomType.GROUP,
@@ -949,17 +990,45 @@ export class ChatRoomService {
         historyVisibility: 'shared',
         guestAccess: false,
         requireInvitation: group.visibility !== 'public',
-        encrypted: true, // Enable encryption for group chat rooms
+        encrypted: false, // Disable encryption for group chat rooms
       },
     });
 
-    // Save the chat room
-    await this.chatRoomRepository.save(chatRoom);
+    try {
+      // Use a transaction to ensure atomicity
+      await this.chatRoomRepository.manager.transaction(async transactionalEntityManager => {
+        // Save the chat room
+        await transactionalEntityManager.save(chatRoom);
 
-    // Update the group with the Matrix room ID using GroupService
-    await this.groupService.update(group.slug, {
-      matrixRoomId: roomInfo.roomId,
-    });
+        // Get group again to ensure we have latest version before updating
+        const updatedGroup = await transactionalEntityManager.findOne(this.groupRepository.target, {
+          where: { id: group.id },
+          lock: { mode: 'pessimistic_write' }, // Lock the row to prevent concurrent updates
+        });
+
+        if (!updatedGroup) {
+          throw new Error(`Group with id ${group.id} not found during transaction`);
+        }
+
+        // Check if the Matrix room ID is already set
+        if (updatedGroup.matrixRoomId) {
+          this.logger.warn(
+            `Group ${group.slug} already has Matrix room ID ${updatedGroup.matrixRoomId}, not overwriting with ${roomInfo.roomId}`,
+          );
+          return;
+        }
+
+        // Update the group with the Matrix room ID
+        updatedGroup.matrixRoomId = roomInfo.roomId;
+        await transactionalEntityManager.save(updatedGroup);
+      });
+    } catch (error) {
+      this.logger.error(
+        `Error saving chat room or updating group: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
 
     this.logger.log(
       `Created chat room for group ${group.slug} in tenant ${this.request.tenantId}`,
@@ -1048,14 +1117,19 @@ export class ChatRoomService {
     await this.ensureUserHasMatrixCredentials(user1Id);
 
     // Create a direct room in Matrix
-    const roomName = `Direct: ${user1.firstName || ''} ${user1.lastName || ''} and ${user2.firstName || ''} ${user2.lastName || ''}`;
+    const tenantId = this.request.tenantId;
+    const roomName = this.generateDirectRoomName(
+      user1.slug,
+      user2.slug,
+      tenantId,
+    );
 
     const roomInfo = await this.matrixRoomService.createRoom({
       name: roomName,
       topic: 'Direct message conversation',
       isPublic: false,
       isDirect: true,
-      encrypted: true, // Enable encryption for direct messages
+      encrypted: false, // Disable encryption for direct messages
       // Remove preset - we'll handle that through settings
       inviteUserIds: user2.matrixUserId ? [user2.matrixUserId] : [],
     });
@@ -1073,7 +1147,7 @@ export class ChatRoomService {
         historyVisibility: 'shared',
         guestAccess: false,
         requireInvitation: true,
-        encrypted: true, // Match the encryption setting
+        encrypted: false, // Disable encryption for direct messages
       },
     });
 
@@ -1469,7 +1543,32 @@ export class ChatRoomService {
     }
 
     try {
-      // First, remove the members association
+      // First, attempt to delete the Matrix room
+      if (chatRoom.matrixRoomId) {
+        try {
+          // Use the Matrix room service's dedicated room deletion method
+          const deleted = await this.matrixRoomService.deleteRoom(
+            chatRoom.matrixRoomId,
+          );
+
+          if (deleted) {
+            this.logger.log(
+              `Successfully deleted Matrix room ${chatRoom.matrixRoomId} using the Matrix admin API`,
+            );
+          } else {
+            this.logger.warn(
+              `Failed to delete Matrix room ${chatRoom.matrixRoomId}, continuing with database cleanup`,
+            );
+          }
+        } catch (matrixError) {
+          this.logger.error(
+            `Error deleting Matrix room ${chatRoom.matrixRoomId}: ${matrixError.message}`,
+          );
+          // Continue with database cleanup even if Matrix room deletion fails
+        }
+      }
+
+      // Then remove the members association
       if (chatRoom.members && chatRoom.members.length > 0) {
         chatRoom.members = [];
         await this.chatRoomRepository.save(chatRoom);

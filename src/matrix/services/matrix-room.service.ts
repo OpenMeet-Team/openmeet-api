@@ -3,12 +3,194 @@ import axios from 'axios';
 import { MatrixCoreService } from './matrix-core.service';
 import { CreateRoomOptions, RoomInfo } from '../types/matrix.types';
 import { IMatrixClient, IMatrixRoomProvider } from '../types/matrix.interfaces';
+import { HttpStatus } from '@nestjs/common';
 
 @Injectable()
 export class MatrixRoomService implements IMatrixRoomProvider {
   private readonly logger = new Logger(MatrixRoomService.name);
 
   constructor(private readonly matrixCoreService: MatrixCoreService) {}
+
+  /**
+   * Get the admin client for Matrix operations that require admin privileges
+   * @returns The Matrix admin client
+   */
+  getAdminClient(): IMatrixClient {
+    return this.matrixCoreService.getAdminClient();
+  }
+
+  /**
+   * Leave a room as a specific user
+   */
+  async leaveRoom(
+    roomId: string,
+    userId: string,
+    accessToken: string,
+  ): Promise<boolean> {
+    try {
+      const config = this.matrixCoreService.getConfig();
+      // We don't need to create a Matrix client since we're using axios directly
+
+      try {
+        // Create axios request to leave the room using Matrix API directly
+        // since the Matrix SDK doesn't expose the leave method in our interface
+        const leaveUrl = `${config.baseUrl}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/leave`;
+        await axios.post(
+          leaveUrl,
+          {},
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          },
+        );
+        this.logger.debug(`User ${userId} successfully left room ${roomId}`);
+        return true;
+      } catch (leaveError) {
+        // If error indicates not in room, that's fine
+        if (
+          leaveError.message &&
+          (leaveError.message.includes('not in room') ||
+            leaveError.message.includes('not a member'))
+        ) {
+          this.logger.debug(
+            `User ${userId} is not in room ${roomId}, nothing to leave`,
+          );
+          return true;
+        }
+        throw leaveError;
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Error leaving room ${roomId} for user ${userId}: ${error.message}`,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Delete a Matrix room using admin API
+   */
+  async deleteRoom(roomId: string): Promise<boolean> {
+    const client = await this.matrixCoreService.acquireClient();
+
+    try {
+      const config = this.matrixCoreService.getConfig();
+      const baseUrl = config.baseUrl;
+      const accessToken = client.client.getAccessToken();
+      const adminUserId = config.adminUserId;
+
+      // First get all room members
+      const roomMembers = await this.getRoomMembers(roomId, client);
+
+      // Kick all non-admin users from the room
+      for (const memberId of roomMembers) {
+        // Skip admin user - we'll have them leave last
+        if (memberId === adminUserId) {
+          continue;
+        }
+
+        try {
+          // Use admin powers to kick the user
+          await client.client.kick(roomId, memberId, 'Room being deleted');
+          this.logger.debug(
+            `Kicked user ${memberId} from room ${roomId} before deletion`,
+          );
+        } catch (kickError) {
+          this.logger.warn(
+            `Could not kick user ${memberId} from room ${roomId}: ${kickError.message}`,
+          );
+        }
+      }
+
+      // Now have admin leave the room to avoid client errors
+      await this.leaveRoom(roomId, adminUserId, accessToken);
+
+      // Try modern admin API first (Synapse 1.59+)
+      try {
+        const modernUrl = `${baseUrl}/_synapse/admin/v2/rooms/${encodeURIComponent(roomId)}/delete`;
+        await axios.post(
+          modernUrl,
+          {
+            block: true,
+            purge: true,
+            force_purge: true,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          },
+        );
+
+        this.logger.log(
+          `Successfully deleted Matrix room ${roomId} using modern admin API (v2)`,
+        );
+        return true;
+      } catch (modernApiError) {
+        // Check if the error is 404 (room not found)
+        if (
+          modernApiError.response &&
+          modernApiError.response.status === HttpStatus.NOT_FOUND
+        ) {
+          this.logger.warn(
+            `Room ${roomId} not found on Matrix server - considering it deleted`,
+          );
+          return true;
+        }
+
+        this.logger.warn(
+          `Modern Matrix admin deletion API failed: ${modernApiError.message}, trying legacy API`,
+        );
+
+        // Try legacy admin API (pre-1.59)
+        try {
+          const legacyUrl = `${baseUrl}/_synapse/admin/v1/rooms/${encodeURIComponent(roomId)}/delete`;
+          await axios.post(
+            legacyUrl,
+            {
+              block: true,
+              purge: true,
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+              },
+            },
+          );
+
+          this.logger.log(
+            `Successfully deleted Matrix room ${roomId} using legacy admin API (v1)`,
+          );
+          return true;
+        } catch (legacyApiError) {
+          // Check if the error is 404 (room not found)
+          if (
+            legacyApiError.response &&
+            legacyApiError.response.status === HttpStatus.NOT_FOUND
+          ) {
+            this.logger.warn(
+              `Room ${roomId} not found on Matrix server - considering it deleted`,
+            );
+            return true;
+          }
+
+          this.logger.error(
+            `All Matrix admin room deletion methods failed: ${legacyApiError.message}`,
+          );
+          throw legacyApiError;
+        }
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error deleting Matrix room ${roomId}: ${error.message}`,
+        error.stack,
+      );
+      return false;
+    } finally {
+      await this.matrixCoreService.releaseClient(client);
+    }
+  }
 
   /**
    * Create a new Matrix room
@@ -198,6 +380,27 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         error.stack,
       );
       throw new Error(`Admin user could not join room: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get all members of a room
+   * @private
+   */
+  private async getRoomMembers(roomId: string, client: any): Promise<string[]> {
+    try {
+      // Try to get room members
+      const response = await client.client.getJoinedRoomMembers(roomId);
+      if (response && response.joined) {
+        return Object.keys(response.joined);
+      }
+
+      return [];
+    } catch (error) {
+      this.logger.debug(
+        `Could not get members for room ${roomId}: ${error.message}`,
+      );
+      return []; // Return empty array if we can't check
     }
   }
 

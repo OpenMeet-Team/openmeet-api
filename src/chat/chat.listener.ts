@@ -128,16 +128,43 @@ export class ChatListener {
     eventId: number;
     eventSlug: string;
     tenantId?: string;
+    skipChatCleanup?: boolean;
   }) {
     this.logger.log(
       `event.before_delete event received for event ${params.eventSlug}`,
     );
+
+    // Skip cleanup if explicitly told to (when EventManagementService already did it)
+    if (params.skipChatCleanup) {
+      this.logger.log(
+        `Skipping chat room cleanup for event ${params.eventSlug} as it was already done by EventManagementService`,
+      );
+      return;
+    }
 
     try {
       // Validate tenant ID
       if (!params.tenantId) {
         this.logger.error('Tenant ID is required in the event payload');
         throw new Error('Tenant ID is required');
+      }
+
+      // Check if chat rooms still exist for this event before attempting cleanup
+      const dataSource = await this.tenantConnectionService.getTenantConnection(
+        params.tenantId,
+      );
+      const chatRoomRepo = dataSource.getRepository('chat_room');
+
+      // Count chat rooms for this event
+      const count = await chatRoomRepo.count({
+        where: { eventId: params.eventId },
+      });
+
+      if (count === 0) {
+        this.logger.log(
+          `No chat rooms found for event ${params.eventSlug}, skipping cleanup`,
+        );
+        return;
       }
 
       // Clean up all chat rooms for this event through the DiscussionService

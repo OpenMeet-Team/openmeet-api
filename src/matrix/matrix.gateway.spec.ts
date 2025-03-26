@@ -100,9 +100,7 @@ describe('MatrixGateway', () => {
         sockets: new Map([[mockClient.id, mockClient]]),
       },
       adapter: {
-        rooms: new Map([
-          ['!room1:server', new Set([mockClient.id])],
-        ]),
+        rooms: new Map([['!room1:server', new Set([mockClient.id])]]),
       },
     };
 
@@ -200,15 +198,16 @@ describe('MatrixGateway', () => {
           useValue: {
             resolve: jest.fn().mockResolvedValue({
               findById: jest.fn().mockResolvedValue(mockUser),
-            })
-          }
-        }
+            }),
+          },
+        },
       ],
     }).compile();
 
     gateway = module.get<MatrixGateway>(MatrixGateway);
     matrixUserService = module.get<MatrixUserService>(MatrixUserService);
-    matrixMessageService = module.get<MatrixMessageService>(MatrixMessageService);
+    matrixMessageService =
+      module.get<MatrixMessageService>(MatrixMessageService);
 
     // Create helper instances
     roomMembershipManager = new RoomMembershipManager('Test');
@@ -216,24 +215,34 @@ describe('MatrixGateway', () => {
     typingManager = new TypingManager('Test');
 
     // Mock helper methods
-    jest.spyOn(broadcastManager, 'shouldSkipDuplicateBroadcast').mockReturnValue(false);
-    jest.spyOn(broadcastManager, 'generateBroadcastId').mockReturnValue('mock-broadcast-id');
-    jest.spyOn(typingManager, 'shouldSendTypingNotification').mockReturnValue(true);
-    
+    jest
+      .spyOn(broadcastManager, 'shouldSkipDuplicateBroadcast')
+      .mockReturnValue(false);
+    jest
+      .spyOn(broadcastManager, 'generateBroadcastId')
+      .mockReturnValue('mock-broadcast-id');
+    jest
+      .spyOn(typingManager, 'shouldSendTypingNotification')
+      .mockReturnValue(true);
+
     // Setting private properties for testing
     (gateway as any).server = mockServer;
     (gateway as any).logger = new Logger('MatrixGateway');
     (gateway as any).roomMembershipManager = roomMembershipManager;
     (gateway as any).broadcastManager = broadcastManager;
     (gateway as any).typingManager = typingManager;
-    
+
     // Add spy for helper method
     const mockUserService = {
       findById: jest.fn().mockResolvedValue(mockUser),
     } as unknown as UserService;
-    jest.spyOn(MatrixGatewayHelper, 'createUserServiceForRequest').mockResolvedValue(mockUserService);
-    
-    jest.spyOn(MatrixGatewayHelper, 'resolveUserById').mockResolvedValue(mockUser);
+    jest
+      .spyOn(MatrixGatewayHelper, 'createUserServiceForRequest')
+      .mockResolvedValue(mockUserService);
+
+    jest
+      .spyOn(MatrixGatewayHelper, 'resolveUserById')
+      .mockResolvedValue(mockUser);
   });
 
   it('should be defined', () => {
@@ -281,7 +290,7 @@ describe('MatrixGateway', () => {
       roomMembershipManager.registerSocket(
         mockClient.id,
         mockUser.id,
-        mockUser.matrixUserId
+        mockUser.matrixUserId,
       );
 
       // Then disconnect
@@ -345,11 +354,14 @@ describe('MatrixGateway', () => {
       mockMatrixClient.sendTyping.mockClear();
 
       // Use the handleTyping method directly to match the implementation
-      const result = await gateway.handleTyping(mockClient as unknown as Socket, {
-        roomId: '!room1:server',
-        isTyping: true,
-        tenantId: 'default',
-      });
+      const result = await gateway.handleTyping(
+        mockClient as unknown as Socket,
+        {
+          roomId: '!room1:server',
+          isTyping: true,
+          tenantId: 'default',
+        },
+      );
 
       // Check that getClientForUser was called with the user slug and tenant ID
       expect(matrixUserService.getClientForUser).toHaveBeenCalledWith(
@@ -364,7 +376,7 @@ describe('MatrixGateway', () => {
         true,
         30000,
       );
-      
+
       expect(result).toEqual({ success: true });
     });
   });
@@ -379,11 +391,14 @@ describe('MatrixGateway', () => {
       await gateway.handleConnection(mockClient as unknown as Socket);
 
       // Call the message handler
-      const result = await gateway.handleMessage(mockClient as unknown as Socket, {
-        roomId: '!room1:server',
-        message: 'Hello world!',
-        tenantId: 'default',
-      });
+      const result = await gateway.handleMessage(
+        mockClient as unknown as Socket,
+        {
+          roomId: '!room1:server',
+          message: 'Hello world!',
+          tenantId: 'default',
+        },
+      );
 
       // Check that message was sent with correct parameters
       expect(matrixMessageService.sendMessage).toHaveBeenCalledWith(
@@ -395,7 +410,7 @@ describe('MatrixGateway', () => {
           content: 'Hello world!',
         }),
       );
-      
+
       expect(result).toEqual({ success: true, id: 'event-123' });
     });
   });
@@ -422,12 +437,12 @@ describe('MatrixGateway', () => {
 
       // Should have broadcasted to the room
       expect(mockServer.to).toHaveBeenCalledWith('!room1:server');
-      
-      // Check that emit was called (without checking specific contents since the 
+
+      // Check that emit was called (without checking specific contents since the
       // broadcastId and timestamps will be different)
       expect(mockEmitHandler).toHaveBeenCalledWith(
         'matrix-event',
-        expect.anything()
+        expect.anything(),
       );
     });
   });

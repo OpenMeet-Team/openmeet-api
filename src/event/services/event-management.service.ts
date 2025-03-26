@@ -436,12 +436,13 @@ export class EventManagementService {
       // Continue with deletion despite error - we'll still emit the event for other listeners
     }
 
-    // Still emit the event for any other listeners that need to clean up
+    // Emit the event with skipChatCleanup flag since we already did it
     this.eventEmitter.emit('event.before_delete', {
       eventId: event.id,
       eventSlug: event.slug,
       eventName: event.name,
       tenantId: this.request?.tenantId,
+      skipChatCleanup: true, // Flag to indicate cleanup has already been done
     });
 
     // Delete related event attendees

@@ -397,10 +397,24 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(
           `CommonJS require failed: ${cjsError.message}, trying ESM import`,
         );
-        sdk = await import('matrix-js-sdk');
-        this.logger.log(
-          'Successfully loaded Matrix SDK via ESM dynamic import',
-        );
+
+        try {
+          sdk = await import('matrix-js-sdk');
+          this.logger.log(
+            'Successfully loaded Matrix SDK via ESM dynamic import',
+          );
+        } catch (esmError) {
+          this.logger.error(
+            `ESM import also failed: ${esmError.message}`,
+            esmError.stack,
+          );
+          throw esmError;
+        }
+      }
+
+      // Verify SDK was loaded successfully
+      if (!sdk || !sdk.createClient) {
+        throw new Error('Matrix SDK loaded but createClient method is missing');
       }
 
       // Assign the SDK functions to our interface
@@ -491,6 +505,14 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       infer: true,
     });
 
+    // Verify SDK is loaded and createClient method is available
+    if (!this.matrixSdk || typeof this.matrixSdk.createClient !== 'function') {
+      this.logger.error(
+        'Cannot initialize client pool: Matrix SDK not properly loaded',
+      );
+      throw new Error('Matrix SDK not properly initialized');
+    }
+
     this.clientPool = pool.createPool<MatrixClientWithContext>(
       {
         create: () => {
@@ -548,6 +570,27 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     // Check if token is valid and regenerate if needed
     await this.ensureValidAdminToken();
 
+    // Verify client pool is initialized
+    if (!this.clientPool) {
+      this.logger.warn('Client pool not initialized, attempting to initialize');
+      try {
+        this.initializeClientPool();
+      } catch (error) {
+        this.logger.error(
+          `Failed to initialize client pool on demand: ${error.message}`,
+          error.stack,
+        );
+        throw new Error(
+          'Matrix client pool not available: SDK initialization failed',
+        );
+      }
+
+      // Double-check after attempted initialization
+      if (!this.clientPool) {
+        throw new Error('Matrix client pool could not be initialized');
+      }
+    }
+
     // Get a client from the pool
     const client = await this.clientPool.acquire();
 
@@ -577,6 +620,12 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
    * Release a client back to the connection pool
    */
   async releaseClient(client: MatrixClientWithContext): Promise<void> {
+    if (!this.clientPool) {
+      this.logger.warn(
+        'Attempted to release client but pool is not initialized',
+      );
+      return;
+    }
     await this.clientPool.release(client);
   }
 

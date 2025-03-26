@@ -339,17 +339,18 @@ export class MatrixGateway
 
       const clientCount = this.getClientCountInRoom(roomId);
 
-      this.logger.log(
-        `Broadcasting event to room ${roomId} with ${clientCount} clients`,
-        {
-          eventType: event.type,
-          eventId: event.event_id || event.id || 'unknown',
-          sender: event.sender || 'unknown',
-        },
-      );
-
-      if (clientCount === 0) {
-        this.logger.warn(`No clients in room ${roomId} to receive event!`);
+      // Only log broadcasts that will actually reach clients
+      if (clientCount > 0) {
+        this.logger.log(
+          `Broadcasting event to room ${roomId} with ${clientCount} clients`,
+          {
+            eventType: event.type,
+            eventId: event.event_id || event.id || 'unknown',
+            sender: event.sender || 'unknown',
+          },
+        );
+      } else {
+        // Still try to fix room membership
         this.roomMembershipManager.fixRoomMembership(roomId, this.server);
       }
 
@@ -369,12 +370,13 @@ export class MatrixGateway
         this.broadcastMatrixMessage(roomId, event, newBroadcastId);
       }
 
-      // Check if the broadcast worked by checking room membership again
-      const updatedClientCount = this.getClientCountInRoom(roomId);
-
-      this.logger.log(
-        `Event broadcast completed for room ${roomId}, sent to ${updatedClientCount} clients`,
-      );
+      // Only log completion for broadcasts that actually reached clients
+      if (clientCount > 0) {
+        const updatedClientCount = this.getClientCountInRoom(roomId);
+        this.logger.log(
+          `Event broadcast completed for room ${roomId}, sent to ${updatedClientCount} clients`,
+        );
+      }
     } catch (error) {
       this.logger.error(
         `Error broadcasting room event: ${error.message}`,
