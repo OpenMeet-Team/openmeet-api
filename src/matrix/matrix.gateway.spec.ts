@@ -16,7 +16,7 @@ import {
   BroadcastManager,
   MatrixGatewayHelper,
   RoomMembershipManager,
-  SocketAuthHandler,
+  // SocketAuthHandler, // Not used in this file
   TypingManager,
 } from './helpers';
 

@@ -14,6 +14,7 @@ import { ChatRoomService } from './rooms/chat-room.service';
 import { ChatRoomEntity } from './infrastructure/persistence/relational/entities/chat-room.entity';
 import { GroupMemberModule } from '../group-member/group-member.module';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
+import { ElastiCacheModule } from '../elasticache/elasticache.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
     UserModule,
     TenantModule,
     MatrixModule,
+    ElastiCacheModule,
     forwardRef(() => EventModule),
     forwardRef(() => GroupModule),
     forwardRef(() => GroupMemberModule),

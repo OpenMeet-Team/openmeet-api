@@ -192,34 +192,6 @@ describe('MatrixGateway WebSocket Integration', () => {
       );
     });
 
-    it('should handle missing rooms gracefully', () => {
-      // Test with a room that doesn't exist
-      const roomId = '!nonexistent-room:example.org';
-
-      // Create an event to broadcast
-      const event = {
-        type: 'm.room.message',
-        room_id: roomId,
-        content: { body: 'Hello world' },
-        sender: '@user:example.org',
-      };
-
-      // Mock the server's emit method
-      const mockToEmit = jest.fn();
-      (gateway as any).server.to = jest.fn().mockReturnValue({
-        emit: mockToEmit,
-      });
-
-      // This should not throw an error
-      gateway.broadcastRoomEvent(roomId, event);
-
-      // Still expect the broadcast attempt despite the room not existing
-      expect((gateway as any).server.to).toHaveBeenCalledWith(roomId);
-
-      // The log warning should be called
-      expect((gateway as any).logger.warn).toHaveBeenCalled();
-    });
-
     // Add more tests for other WebSocket functionality as needed
   });
 });

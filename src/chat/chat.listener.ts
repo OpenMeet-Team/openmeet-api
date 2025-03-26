@@ -41,10 +41,13 @@ export class ChatListener {
         `Added user ${params.userSlug} to event ${params.eventSlug} chat room in tenant ${params.tenantId}`,
       );
     } catch (error) {
+      // Log the error but don't throw it - this allows the event processing to continue
       this.logger.error(
         `Failed to add user ${params.userSlug} to event ${params.eventSlug} chat room: ${error.message}`,
         error.stack,
       );
+      // Don't rethrow the error - this allows the event processing to continue
+      // The chat room will be created when the event is fully persisted
     }
   }
 

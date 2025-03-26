@@ -100,27 +100,75 @@ export class DiscussionService implements DiscussionServiceInterface {
     let roomCreated = false;
     if (!chatRooms || chatRooms.length === 0) {
       try {
-        const chatRoom = await this.ensureEntityChatRoom(
-          entityType,
-          entityId,
-          userId,
-        );
+        // Get a lock key to prevent concurrent creation
+        const lockKey = `create-${entityType}-chatroom-${entityId}`;
+        const existingLock = this.request.locks?.get(lockKey);
 
-        // Get updated chat rooms list
-        chatRooms =
-          entityType === 'event'
-            ? await this.chatRoomService.getEventChatRooms(entityId)
-            : await this.chatRoomService.getGroupChatRooms(entityId);
-
-        if (!chatRooms || chatRooms.length === 0) {
-          return { messages: [], end: '' };
+        // Initialize lock tracking if needed
+        if (!this.request.locks) {
+          this.request.locks = new Map();
         }
 
-        roomCreated = true;
+        if (existingLock) {
+          this.logger.debug(
+            `Creation of ${entityType} chat room for ID ${entityId} already in progress, waiting...`,
+          );
 
-        // Cache the chat room
-        const chatRoomCacheKey = `${entityType}:${entityId}:chatRoom`;
-        cache.chatRooms.set(chatRoomCacheKey, chatRoom);
+          // Before creating a chat room, check if one was created while we were waiting
+          const freshChatRooms =
+            entityType === 'event'
+              ? await this.chatRoomService.getEventChatRooms(entityId)
+              : await this.chatRoomService.getGroupChatRooms(entityId);
+
+          if (freshChatRooms && freshChatRooms.length > 0) {
+            this.logger.debug(
+              `${entityType} chat room was created by another process, using existing room`,
+            );
+            chatRooms = freshChatRooms;
+          } else {
+            // Still no chat room, we should create one
+            // But only if we don't already have too many locks (prevent deadlocks)
+            if (this.request.locks.size > 5) {
+              this.logger.warn(
+                `Too many locks in request (${this.request.locks.size}), skipping chat room creation`,
+              );
+              return { messages: [], end: '' };
+            }
+          }
+        }
+
+        // Set the lock
+        this.request.locks.set(lockKey, new Date());
+
+        try {
+          // Only create if we still don't have chat rooms
+          if (!chatRooms || chatRooms.length === 0) {
+            const chatRoom = await this.ensureEntityChatRoom(
+              entityType,
+              entityId,
+              userId,
+            );
+
+            // Get updated chat rooms list
+            chatRooms =
+              entityType === 'event'
+                ? await this.chatRoomService.getEventChatRooms(entityId)
+                : await this.chatRoomService.getGroupChatRooms(entityId);
+
+            if (!chatRooms || chatRooms.length === 0) {
+              return { messages: [], end: '' };
+            }
+
+            roomCreated = true;
+
+            // Cache the chat room
+            const chatRoomCacheKey = `${entityType}:${entityId}:chatRoom`;
+            cache.chatRooms.set(chatRoomCacheKey, chatRoom);
+          }
+        } finally {
+          // Release the lock regardless of outcome
+          this.request.locks.delete(lockKey);
+        }
       } catch (error) {
         this.logger.error(
           `Error creating chat room for ${entityType} ${slug}: ${error.message}`,
@@ -597,12 +645,37 @@ export class DiscussionService implements DiscussionServiceInterface {
     userSlug: string,
     explicitTenantId?: string,
   ): Promise<void> {
-    return this.addMemberToEntityDiscussionBySlug(
-      'event',
+    // Get tenant ID from explicit parameter or request context
+    const tenantId = explicitTenantId || this.request?.tenantId;
+    if (!tenantId) {
+      throw new Error('Tenant ID is required');
+    }
+
+    // Get event and user IDs from slugs
+    const { eventId, userId } = await this.getIdsFromSlugsWithTenant(
       eventSlug,
       userSlug,
-      explicitTenantId,
+      tenantId,
     );
+
+    if (!eventId || !userId) {
+      this.logger.error(
+        `Could not find event or user with slugs: event=${eventSlug}, user=${userSlug}`,
+      );
+      return;
+    }
+
+    // Verify event exists before proceeding
+    const eventExists = await this.checkEventExists(eventId, tenantId);
+    if (!eventExists) {
+      this.logger.warn(
+        `Event ${eventSlug} does not exist in tenant ${tenantId}, skipping chat room creation`,
+      );
+      return;
+    }
+
+    // Add member to event discussion
+    await this.addMemberToEventDiscussion(eventId, userId);
   }
 
   /**

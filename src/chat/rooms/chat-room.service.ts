@@ -26,6 +26,7 @@ import { Trace } from '../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupService } from '../../group/group.service';
+import { ElastiCacheService } from '../../elasticache/elasticache.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class ChatRoomService {
@@ -34,6 +35,7 @@ export class ChatRoomService {
   private chatRoomRepository: Repository<ChatRoomEntity>;
   private eventRepository: Repository<EventEntity>;
   private groupRepository: Repository<GroupEntity>;
+  private readonly LOCK_TTL = 30000; // 30 seconds lock TTL
 
   /**
    * Generates a standardized room name based on entity type and tenant
@@ -156,6 +158,7 @@ export class ChatRoomService {
     private readonly eventQueryService: EventQueryService,
     @Inject(forwardRef(() => GroupService))
     private readonly groupService: GroupService,
+    private readonly elastiCacheService: ElastiCacheService,
   ) {
     void this.initializeRepositories();
   }
@@ -184,50 +187,191 @@ export class ChatRoomService {
   ): Promise<ChatRoomEntity> {
     await this.initializeRepositories();
 
-    // Check if a chat room already exists for this entity
-    const whereCondition =
-      entityType === 'event'
-        ? { event: { id: entityId } }
-        : { group: { id: entityId } };
+    this.logger.debug(
+      `Looking for existing ${entityType} chat room for ID ${entityId}`,
+    );
 
-    const existingRoom = await this.chatRoomRepository.findOne({
-      where: whereCondition,
-    });
+    // Use a transaction to ensure we don't have race conditions when checking/creating
+    return await this.chatRoomRepository.manager.transaction(
+      async (transactionalManager) => {
+        // Check if a chat room already exists for this entity
+        const whereCondition =
+          entityType === 'event'
+            ? { event: { id: entityId } }
+            : { group: { id: entityId } };
 
-    if (existingRoom) {
-      return existingRoom;
-    }
+        // Check within transaction for existing room
+        const existingRoom = await transactionalManager.findOne(
+          ChatRoomEntity,
+          {
+            where: whereCondition,
+            lock: { mode: 'pessimistic_read' },
+          },
+        );
 
-    // Get the entity info using the appropriate service
-    const tenantId = this.request.tenantId;
+        if (existingRoom) {
+          this.logger.debug(
+            `Found existing ${entityType} chat room: ${existingRoom.id}`,
+          );
+          return existingRoom;
+        }
 
-    if (entityType === 'event') {
-      const event = await this.eventQueryService.findById(entityId, tenantId);
+        // If we need to create a new one, also check if entity already has a Matrix room ID
+        if (entityType === 'group') {
+          const group = await transactionalManager
+            .createQueryBuilder()
+            .select('g')
+            .from(this.groupRepository.target, 'g')
+            .where('g.id = :id', { id: entityId })
+            .setLock('pessimistic_read')
+            .getOne();
 
-      if (!event) {
-        throw new Error(`Event with id ${entityId} not found`);
-      }
+          if (group?.matrixRoomId) {
+            this.logger.debug(
+              `Group already has Matrix room ID ${group.matrixRoomId} but no chat room record. Creating record.`,
+            );
 
-      if (!event.user || !event.user.id) {
-        throw new Error(`Event with id ${entityId} has no creator`);
-      }
+            // Create a chat room entity for existing Matrix room
+            const groupChatRoom = this.chatRoomRepository.create({
+              name: this.generateRoomName(
+                'group',
+                group.slug,
+                this.request.tenantId,
+              ),
+              topic: `Discussion for group: ${group.slug}`,
+              matrixRoomId: group.matrixRoomId,
+              type: ChatRoomType.GROUP,
+              visibility:
+                group.visibility === 'public'
+                  ? ChatRoomVisibility.PUBLIC
+                  : ChatRoomVisibility.PRIVATE,
+              group: { id: group.id },
+              settings: {
+                historyVisibility: 'shared',
+                guestAccess: false,
+                requireInvitation: group.visibility !== 'public',
+                encrypted: false,
+              },
+            });
 
-      // Create a new chat room using the existing service method
-      return this.createEventChatRoom(entityId, event.user.id);
-    } else {
-      const group = await this.groupService.findOne(entityId);
+            await transactionalManager.save(groupChatRoom);
+            return groupChatRoom;
+          }
+        }
 
-      if (!group) {
-        throw new Error(`Group with id ${entityId} not found`);
-      }
+        // Get the entity info using the appropriate service
+        const tenantId = this.request.tenantId;
 
-      if (!group.createdBy || !group.createdBy.id) {
-        throw new Error(`Group with id ${entityId} has no creator`);
-      }
+        if (entityType === 'event') {
+          const event = await this.eventQueryService.findById(
+            entityId,
+            tenantId,
+          );
 
-      // Create a new chat room using the existing service method
-      return this.createGroupChatRoom(entityId, group.createdBy.id);
-    }
+          if (!event) {
+            throw new Error(`Event with id ${entityId} not found`);
+          }
+
+          if (!event.user || !event.user.id) {
+            throw new Error(`Event with id ${entityId} has no creator`);
+          }
+
+          // Create a new chat room in the transaction
+          // Helper function defined below
+          return await this.createEventChatRoomInTransaction(
+            transactionalManager,
+            entityId,
+            event.user.id,
+          );
+        } else {
+          // For groups, still get full information for creating but use our transaction
+          const group = await this.groupService.findOne(entityId);
+
+          if (!group) {
+            throw new Error(`Group with id ${entityId} not found`);
+          }
+
+          if (!group.createdBy || !group.createdBy.id) {
+            throw new Error(`Group with id ${entityId} has no creator`);
+          }
+
+          // Create chat room within this transaction
+          const creator = await transactionalManager.findOne(UserEntity, {
+            where: { id: group.createdBy.id },
+          });
+
+          if (!creator) {
+            throw new Error(`User with id ${group.createdBy.id} not found`);
+          }
+
+          // Generate the Matrix room name
+          const roomName = this.generateRoomName('group', group.slug, tenantId);
+
+          // Create the Matrix room
+          this.logger.debug(`Creating Matrix room for group ${group.slug}`);
+          const roomInfo = await this.matrixRoomService.createRoom({
+            name: roomName,
+            topic: `Discussion for group: ${group.slug}`,
+            isPublic: group.visibility === 'public',
+            encrypted: false,
+            powerLevelContentOverride: creator.matrixUserId
+              ? {
+                  users: {
+                    [creator.matrixUserId]: 50, // Moderator level
+                  },
+                }
+              : undefined,
+          });
+
+          // Create a chat room entity
+          const chatRoom = this.chatRoomRepository.create({
+            name: roomName,
+            topic: `Discussion for group: ${group.slug}`,
+            matrixRoomId: roomInfo.roomId,
+            type: ChatRoomType.GROUP,
+            visibility:
+              group.visibility === 'public'
+                ? ChatRoomVisibility.PUBLIC
+                : ChatRoomVisibility.PRIVATE,
+            creator,
+            group,
+            settings: {
+              historyVisibility: 'shared',
+              guestAccess: false,
+              requireInvitation: group.visibility !== 'public',
+              encrypted: false, // Disable encryption for group chat rooms
+            },
+          });
+
+          // Save the chat room and update group in transaction
+          await transactionalManager.save(chatRoom);
+
+          // Update the group with Matrix room ID (still in same transaction)
+          group.matrixRoomId = roomInfo.roomId;
+          await transactionalManager.save(group);
+
+          this.logger.log(
+            `Created chat room for group ${group.slug} in tenant ${tenantId}`,
+          );
+
+          return chatRoom;
+        }
+      },
+    );
+  }
+
+  /**
+   * Helper method to create event chat room within transaction
+   * @private
+   */
+  private async createEventChatRoomInTransaction(
+    transactionalManager: any,
+    eventId: number,
+    creatorId: number,
+  ): Promise<ChatRoomEntity> {
+    // For now, this just delegates to the normal method
+    // In the future, we could make this properly transactional
+    return await this.createEventChatRoom(eventId, creatorId);
   }
 
   /**
@@ -933,108 +1077,183 @@ export class ChatRoomService {
   ): Promise<ChatRoomEntity> {
     await this.initializeRepositories();
 
-    // Get the group using the GroupService (tenant-aware through DI)
-    const group = await this.groupService.findOne(groupId);
-
-    if (!group) {
-      throw new Error(`Group with id ${groupId} not found`);
-    }
-
-    // Check if a chat room already exists for this group
-    const existingRoom = await this.chatRoomRepository.findOne({
-      where: { group: { id: groupId } },
-    });
-
-    if (existingRoom) {
-      return existingRoom;
-    }
-
-    // Get the creator user using the UserService (tenant-aware through DI)
-    const creator = await this.userService.getUserById(creatorId);
-
-    // Create a chat room in Matrix
-    // Using the group slug with tenant ID for a unique, stable identifier
+    // Generate a lock key specific to this group and tenant
     const tenantId = this.request.tenantId;
-    const roomName = this.generateRoomName('group', group.slug, tenantId);
-    const roomInfo = await this.matrixRoomService.createRoom({
-      name: roomName,
-      topic: `Discussion for group: ${group.slug}`,
-      isPublic: group.visibility === 'public',
-      isDirect: false,
-      encrypted: false, // Disable encryption for group chat rooms
-      // Add the group creator as the first member
-      inviteUserIds: [creator.matrixUserId].filter((id) => !!id) as string[],
-      // Set creator as moderator - MatrixRoomService will handle admin user
-      powerLevelContentOverride: creator.matrixUserId
-        ? {
-            users: {
-              [creator.matrixUserId]: 50, // Moderator level
-            },
-          }
-        : undefined,
-    });
+    const lockKey = `matrix:room:create:group:${groupId}:tenant:${tenantId}`;
 
-    // Create a chat room entity
-    const chatRoom = this.chatRoomRepository.create({
-      name: roomName,
-      topic: `Discussion for group: ${group.slug}`,
-      matrixRoomId: roomInfo.roomId,
-      type: ChatRoomType.GROUP,
-      visibility:
-        group.visibility === 'public'
-          ? ChatRoomVisibility.PUBLIC
-          : ChatRoomVisibility.PRIVATE,
-      creator,
-      group,
-      settings: {
-        historyVisibility: 'shared',
-        guestAccess: false,
-        requireInvitation: group.visibility !== 'public',
-        encrypted: false, // Disable encryption for group chat rooms
-      },
-    });
+    // Use the distributed lock pattern for the creation process
+    const result = await this.elastiCacheService.withLock<ChatRoomEntity>(
+      lockKey,
+      async () => {
+        // Get the group using the GroupService (tenant-aware through DI)
+        const group = await this.groupService.findOne(groupId);
 
-    try {
-      // Use a transaction to ensure atomicity
-      await this.chatRoomRepository.manager.transaction(async transactionalEntityManager => {
-        // Save the chat room
-        await transactionalEntityManager.save(chatRoom);
+        if (!group) {
+          throw new Error(`Group with id ${groupId} not found`);
+        }
 
-        // Get group again to ensure we have latest version before updating
-        const updatedGroup = await transactionalEntityManager.findOne(this.groupRepository.target, {
-          where: { id: group.id },
-          lock: { mode: 'pessimistic_write' }, // Lock the row to prevent concurrent updates
+        // Check if a chat room already exists for this group
+        const existingRoom = await this.chatRoomRepository.findOne({
+          where: { group: { id: groupId } },
         });
 
-        if (!updatedGroup) {
-          throw new Error(`Group with id ${group.id} not found during transaction`);
-        }
-
-        // Check if the Matrix room ID is already set
-        if (updatedGroup.matrixRoomId) {
-          this.logger.warn(
-            `Group ${group.slug} already has Matrix room ID ${updatedGroup.matrixRoomId}, not overwriting with ${roomInfo.roomId}`,
+        if (existingRoom) {
+          this.logger.log(
+            `Using existing chat room for group ${group.slug} (${groupId}) in tenant ${tenantId}`,
           );
-          return;
+          return existingRoom;
         }
 
-        // Update the group with the Matrix room ID
-        updatedGroup.matrixRoomId = roomInfo.roomId;
-        await transactionalEntityManager.save(updatedGroup);
-      });
-    } catch (error) {
-      this.logger.error(
-        `Error saving chat room or updating group: ${error.message}`,
-        error.stack,
-      );
-      throw error;
-    }
+        // If the group already has a Matrix room ID but no chat room record,
+        // create a chat room record using the existing Matrix room ID
+        if (group.matrixRoomId) {
+          this.logger.log(
+            `Group ${group.slug} already has Matrix room ID ${group.matrixRoomId}, creating chat room record`,
+          );
 
-    this.logger.log(
-      `Created chat room for group ${group.slug} in tenant ${this.request.tenantId}`,
+          const chatRoom = this.chatRoomRepository.create({
+            name: this.generateRoomName('group', group.slug, tenantId),
+            topic: `Discussion for group: ${group.slug}`,
+            matrixRoomId: group.matrixRoomId,
+            type: ChatRoomType.GROUP,
+            visibility:
+              group.visibility === 'public'
+                ? ChatRoomVisibility.PUBLIC
+                : ChatRoomVisibility.PRIVATE,
+            group,
+            settings: {
+              historyVisibility: 'shared',
+              guestAccess: false,
+              requireInvitation: group.visibility !== 'public',
+              encrypted: false,
+            },
+          });
+
+          // Save the chat room
+          return await this.chatRoomRepository.save(chatRoom);
+        }
+
+        // Get the creator user using the UserService (tenant-aware through DI)
+        const creator = await this.userService.getUserById(creatorId);
+
+        // Create a chat room in Matrix
+        // Using the group slug with tenant ID for a unique, stable identifier
+        const roomName = this.generateRoomName('group', group.slug, tenantId);
+        const roomInfo = await this.matrixRoomService.createRoom({
+          name: roomName,
+          topic: `Discussion for group: ${group.slug}`,
+          isPublic: group.visibility === 'public',
+          isDirect: false,
+          encrypted: false, // Disable encryption for group chat rooms
+          // Add the group creator as the first member
+          inviteUserIds: [creator.matrixUserId].filter(
+            (id) => !!id,
+          ) as string[],
+          // Set creator as moderator - MatrixRoomService will handle admin user
+          powerLevelContentOverride: creator.matrixUserId
+            ? {
+                users: {
+                  [creator.matrixUserId]: 50, // Moderator level
+                },
+              }
+            : undefined,
+        });
+
+        // Create a chat room entity
+        const chatRoom = this.chatRoomRepository.create({
+          name: roomName,
+          topic: `Discussion for group: ${group.slug}`,
+          matrixRoomId: roomInfo.roomId,
+          type: ChatRoomType.GROUP,
+          visibility:
+            group.visibility === 'public'
+              ? ChatRoomVisibility.PUBLIC
+              : ChatRoomVisibility.PRIVATE,
+          creator,
+          group,
+          settings: {
+            historyVisibility: 'shared',
+            guestAccess: false,
+            requireInvitation: group.visibility !== 'public',
+            encrypted: false, // Disable encryption for group chat rooms
+          },
+        });
+
+        try {
+          // Use a transaction to ensure atomicity
+          await this.chatRoomRepository.manager.transaction(
+            async (transactionalEntityManager) => {
+              // Save the chat room
+              await transactionalEntityManager.save(chatRoom);
+
+              // Get group again to ensure we have latest version before updating
+              // Use createQueryBuilder to avoid issues with FOR UPDATE + outer joins
+              const updatedGroup = await transactionalEntityManager
+                .createQueryBuilder()
+                .select('g')
+                .from(this.groupRepository.target, 'g')
+                .where('g.id = :id', { id: group.id })
+                .setLock('pessimistic_write')
+                .getOne();
+
+              if (!updatedGroup) {
+                throw new Error(
+                  `Group with id ${group.id} not found during transaction`,
+                );
+              }
+
+              // Check if the Matrix room ID is already set
+              if (updatedGroup.matrixRoomId) {
+                this.logger.warn(
+                  `Group ${group.slug} already has Matrix room ID ${updatedGroup.matrixRoomId}, not overwriting with ${roomInfo.roomId}`,
+                );
+                return;
+              }
+
+              // Update the group with the Matrix room ID
+              updatedGroup.matrixRoomId = roomInfo.roomId;
+              await transactionalEntityManager.save(updatedGroup);
+            },
+          );
+        } catch (error) {
+          this.logger.error(
+            `Error saving chat room or updating group: ${error.message}`,
+            error.stack,
+          );
+          throw error;
+        }
+
+        this.logger.log(
+          `Created chat room for group ${group.slug} in tenant ${tenantId}`,
+        );
+
+        return chatRoom;
+      },
+      60000, // 60-second lock TTL for the room creation process
     );
 
-    return chatRoom;
+    // If result is null, we couldn't acquire the lock
+    if (result === null) {
+      this.logger.warn(
+        `Could not acquire lock for creating Matrix room for group ${groupId} in tenant ${tenantId}. Trying to fetch existing room...`,
+      );
+
+      // Check if another process has created the room while we were waiting
+      const existingRoom = await this.chatRoomRepository.findOne({
+        where: { group: { id: groupId } },
+      });
+
+      if (existingRoom) {
+        return existingRoom;
+      }
+
+      // If still no room, throw an error
+      throw new Error(
+        `Couldn't create Matrix room for group ${groupId} - failed to acquire lock and no existing room found`,
+      );
+    }
+
+    return result;
   }
 
   /**
