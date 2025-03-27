@@ -29,7 +29,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { ulid } from 'ulid';
 import slugify from 'slugify';
 import { generateShortCode } from '../../../../../utils/short-code';
-import { ZulipMessage, ZulipTopic } from 'zulip-js';
+// Matrix messages are retrieved directly from the Matrix API
 
 @Entity({ name: 'groups' })
 export class GroupEntity extends EntityRelationalHelper {
@@ -131,14 +131,8 @@ export class GroupEntity extends EntityRelationalHelper {
   })
   categories: CategoryEntity[];
 
-  @Column({ type: 'integer', nullable: true })
-  zulipChannelId: number;
-
   @Column({ type: 'varchar', length: 255, nullable: true })
   matrixRoomId: string;
-
-  messages: ZulipMessage[];
-  topics: ZulipTopic[];
 
   groupMembersCount: number;
 

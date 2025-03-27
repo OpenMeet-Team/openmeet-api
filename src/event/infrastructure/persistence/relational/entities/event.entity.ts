@@ -29,7 +29,6 @@ import { ApiProperty } from '@nestjs/swagger';
 import { ulid } from 'ulid';
 import slugify from 'slugify';
 import { generateShortCode } from '../../../../../utils/short-code';
-import { ZulipMessage, ZulipTopic } from 'zulip-js';
 import { SourceFields } from '../../../../../core/interfaces/source-data.interface';
 import { EventSourceType } from '../../../../../core/constants/source-type.constant';
 
@@ -153,9 +152,6 @@ export class EventEntity
   groupMember: GroupMemberEntity | null;
   attendee: EventAttendeesEntity | null;
 
-  @Column({ type: 'integer', nullable: true })
-  zulipChannelId: number;
-
   @Column({ type: 'varchar', length: 255, nullable: true })
   matrixRoomId: string;
 
@@ -201,6 +197,5 @@ export class EventEntity
     }
   }
 
-  messages: ZulipMessage[];
-  topics: ZulipTopic[];
+  // Messages are now stored in Matrix, not in the event entity
 }

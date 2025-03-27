@@ -145,9 +145,6 @@ export enum PostgisSrid {
 
 export const DEFAULT_RADIUS = 200; // default radius in Miles for location searching
 
-// By default zulip creates a topic called channel events, we don't want to show this in the UI
-export const ZULIP_DEFAULT_CHANNEL_TOPIC = 'channel events';
-
 export interface TenantConfig {
   id: string; // tenant id, ex: asdf2jkl
   name: string; // tenant name, ex: Openmeet

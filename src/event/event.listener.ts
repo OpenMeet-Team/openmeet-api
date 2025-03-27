@@ -1,9 +1,7 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { REQUEST } from '@nestjs/core';
-// import { ChatRoomService } from '../chat/rooms/chat-room.service';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
-import { ZulipService } from '../zulip/zulip.service';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventAttendeeStatus } from '../core/constants/constant';
 
@@ -12,7 +10,6 @@ export class EventListener {
   private readonly logger = new Logger(EventListener.name);
 
   constructor(
-    private readonly zulipService: ZulipService,
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly eventEmitter: EventEmitter2,
     @Inject(REQUEST) private readonly request: any,
@@ -61,16 +58,8 @@ export class EventListener {
       id: params.id,
     });
 
-    // Clean up Zulip channels (legacy)
-    if (params.zulipChannelId) {
-      this.zulipService
-        .deleteChannel(params.zulipChannelId)
-        .catch((error) =>
-          this.logger.error(
-            `Failed to delete Zulip channel for event ${params.id}: ${error.message}`,
-          ),
-        );
-    }
+    // Matrix rooms are handled via the Matrix service
+    // We no longer need to manually delete Zulip channels
 
     // For Matrix rooms, we don't delete them but could archive them if needed
     // The rooms will remain in the database but can be marked as inactive

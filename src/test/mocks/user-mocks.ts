@@ -8,12 +8,12 @@ export const mockUser = {
   firstName: 'John',
   lastName: 'Doe',
   name: 'John Doe',
-  zulipUsername: 'test',
-  zulipApiKey: 'test',
-  zulipUserId: 1,
+  matrixUserId: '@test:openmeet.net',
+  slug: 'john-doe-abc123',
+  ulid: '01234567890123456789012345',
   createdAt: new Date(),
   updatedAt: new Date(),
-} as UserEntity;
+} as unknown as UserEntity;
 
 export const mockRole = {
   id: 1,

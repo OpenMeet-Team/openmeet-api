@@ -36,7 +36,7 @@ import { GroupUserPermissionEntity } from '../../../../../group/infrastructure/p
 import { GroupMemberEntity } from '../../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group.entity';
 import { ulid } from 'ulid';
-import { ChatEntity } from '../../../../../chat/infrastructure/persistence/relational/entities/chat.entity';
+import { ChatRoomEntity } from '../../../../../chat/infrastructure/persistence/relational/entities/chat-room.entity';
 import slugify from 'slugify';
 import { generateShortCode } from '../../../../../utils/short-code';
 @Entity({
@@ -148,17 +148,7 @@ export class UserEntity extends EntityRelationalHelper {
   @Column({ type: 'text', nullable: true })
   bio?: string;
 
-  @Column({
-    type: 'integer',
-    nullable: true,
-  })
-  zulipUserId?: number;
-
-  @Column({ type: String, nullable: true })
-  zulipApiKey?: string;
-
-  @Column({ type: String, nullable: true })
-  zulipUsername?: string;
+  // Zulip fields have been removed and replaced with Matrix integration
 
   @ManyToOne(() => RoleEntity, (role) => role.users)
   @JoinColumn({ name: 'roleId' })
@@ -167,13 +157,9 @@ export class UserEntity extends EntityRelationalHelper {
   @OneToMany(() => EventEntity, (event) => event.user)
   events: EventEntity[];
 
-  @ManyToMany(() => ChatEntity, (chat) => chat.participants)
-  @JoinTable({
-    name: 'userChats',
-    joinColumn: { name: 'userId', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'chatId', referencedColumnName: 'id' },
-  })
-  chats: ChatEntity[];
+  // Chat entity relation removed as part of Zulip -> Matrix migration
+  // Note: A migration will be needed to clean up the userChats table 
+  // TODO: Create migration to remove userChats table and any other Zulip-related columns
 
   @OneToMany(() => GroupMemberEntity, (groupMember) => groupMember.user)
   groupMembers: GroupMemberEntity[];

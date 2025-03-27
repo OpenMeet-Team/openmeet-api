@@ -14,7 +14,7 @@ export class CreateChatMessageDto {
   content: string;
 
   @ApiProperty({
-    description: 'The user zulip ids to send the message to',
+    description: 'The Matrix user IDs to send the message to',
   })
-  to: number[];
+  to: string[];
 }

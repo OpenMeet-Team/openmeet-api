@@ -19,7 +19,6 @@ import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
 import { ChatModule } from '../chat/chat.module';
-import { ZulipModule } from '../zulip/zulip.module';
 
 @Module({
   imports: [
@@ -35,7 +34,6 @@ import { ZulipModule } from '../zulip/zulip.module';
     EventMailModule,
     BlueskyModule,
     forwardRef(() => ChatModule),
-    ZulipModule,
   ],
   controllers: [EventController],
   providers: [

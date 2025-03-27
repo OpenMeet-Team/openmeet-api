@@ -424,31 +424,8 @@ export class UserService {
     return newUser;
   }
 
-  async addZulipCredentialsToUser(
-    userId: number,
-    {
-      zulipUsername,
-      zulipApiKey,
-      zulipUserId,
-    }: {
-      zulipUsername: string;
-      zulipApiKey: string;
-      zulipUserId: number;
-    },
-    tenantId?: string,
-  ) {
-    await this.getTenantSpecificRepository(tenantId);
-    const user = await this.findById(userId, tenantId);
-
-    if (!user) {
-      return null;
-    }
-
-    user.zulipUserId = zulipUserId;
-    user.zulipApiKey = zulipApiKey;
-    user.zulipUsername = zulipUsername;
-    return this.usersRepository.save(user as UserEntity);
-  }
+  // Method removed as part of Zulip removal
+  // This method is no longer needed as we've migrated to Matrix
 
   async update(
     id: User['id'],

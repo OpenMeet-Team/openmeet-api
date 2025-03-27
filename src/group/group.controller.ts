@@ -25,7 +25,7 @@ import { QueryGroupDto } from './dto/group-query.dto';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
-import { ZulipMessage, ZulipTopic } from 'zulip-js';
+import { MatrixMessage } from '../matrix/matrix-types';
 import { Permissions } from '../shared/guard/permissions.decorator';
 import { PermissionsGuard } from '../shared/guard/permissions.guard';
 import { GroupPermission, UserPermission } from '../core/constants/constant';
@@ -141,8 +141,7 @@ export class GroupController {
   async showGroupAbout(@Param('slug') slug: string): Promise<{
     events: EventEntity[];
     groupMembers: GroupMemberEntity[];
-    messages: ZulipMessage[];
-    topics: ZulipTopic[];
+    messages: MatrixMessage[];
   }> {
     return await this.groupService.showGroupAbout(slug);
   }
@@ -171,7 +170,7 @@ export class GroupController {
   @ApiOperation({ summary: 'Get all group discussions' })
   async showGroupDiscussions(
     @Param('slug') slug: string,
-  ): Promise<{ messages: ZulipMessage[]; topics: ZulipTopic[] }> {
+  ): Promise<{ messages: MatrixMessage[] }> {
     return this.groupService.showGroupDiscussions(slug);
   }
 

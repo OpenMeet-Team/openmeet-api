@@ -5,8 +5,7 @@ import {
 import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
 import { mockUser } from './user-mocks';
-import { mockZulipMessage } from './zulip-mocks';
-import { mockZulipMessageResponse } from './zulip-mocks';
+// Zulip mocks have been removed in favor of Matrix
 import { EventRoleEntity } from '../../event-role/infrastructure/persistence/relational/entities/event-role.entity';
 import { mockGroup } from './group-mocks';
 import { mockCategory } from './mocks';
@@ -95,11 +94,11 @@ export const mockEventService = {
   showEventAttendees: jest.fn().mockResolvedValue(mockEventAttendees),
   sendEventDiscussionMessage: jest
     .fn()
-    .mockResolvedValue(mockZulipMessageResponse),
-  updateEventDiscussionMessage: jest.fn().mockResolvedValue(mockZulipMessage),
+    .mockResolvedValue({ id: 'msg_123456' }),
+  updateEventDiscussionMessage: jest.fn().mockResolvedValue({ id: 'msg_123456' }),
   deleteEventDiscussionMessage: jest
     .fn()
-    .mockResolvedValue(mockZulipMessageResponse),
+    .mockResolvedValue({ id: 'msg_123456' }),
   showRandomEvents: jest.fn().mockResolvedValue(mockEvents),
   searchAllEvents: jest.fn().mockResolvedValue(mockEvents),
   showDashboardEvents: jest.fn().mockResolvedValue(mockEvents),

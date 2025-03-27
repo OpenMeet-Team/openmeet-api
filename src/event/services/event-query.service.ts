@@ -151,9 +151,8 @@ export class EventQueryService {
         );
     }
 
-    // Matrix-based discussions will be loaded from the frontend
-    event.topics = [];
-    event.messages = [];
+    // Matrix-based discussions will be loaded from the frontend directly
+    // No need to set messages or topics in the event entity
 
     return event;
   }
