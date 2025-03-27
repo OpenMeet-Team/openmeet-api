@@ -105,12 +105,14 @@ describe('MatrixCoreService', () => {
       await service.onModuleInit();
 
       // Verify admin client was created
-      expect(mockSdk.createClient).toHaveBeenCalledWith({
-        baseUrl: 'https://matrix.example.org',
-        userId: '@admin:example.org',
-        accessToken: 'admin-token',
-        useAuthorizationHeader: true,
-      });
+      expect(mockSdk.createClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseUrl: 'https://matrix.example.org',
+          userId: '@admin:example.org',
+          accessToken: 'admin-token',
+          useAuthorizationHeader: true,
+        }),
+      );
     });
 
     it('should handle SDK loading errors gracefully', () => {

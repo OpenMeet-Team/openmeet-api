@@ -7,6 +7,7 @@ import {
   Post,
   Query,
   UseGuards,
+  Logger,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JWTAuthGuard } from '../auth/auth.guard';
@@ -20,6 +21,8 @@ import { Message } from '../matrix/types/matrix.types';
 @ApiBearerAuth()
 @UseGuards(JWTAuthGuard)
 export class ChatController {
+  private readonly logger = new Logger(ChatController.name);
+
   constructor(private readonly discussionService: DiscussionService) {}
 
   /**
@@ -49,12 +52,31 @@ export class ChatController {
   ): Promise<{
     messages: Message[];
     end: string;
+    roomId?: string;
   }> {
     return await this.discussionService.getEventDiscussionMessages(
       slug,
       user.id,
       limit,
       from,
+    );
+  }
+
+  @Post('event/:slug/join')
+  @ApiOperation({
+    summary: 'Join an event chat room with appropriate permissions',
+  })
+  async joinEventChatRoom(
+    @Param('slug') eventSlug: string,
+    @AuthUser() user: User,
+  ): Promise<void> {
+    this.logger.log(
+      `User ${user.id} attempting to join event chat room for ${eventSlug}`,
+    );
+    // Implement our join endpoint by adding the current user to the room
+    return await this.discussionService.addMemberToEventDiscussionBySlug(
+      eventSlug,
+      user.slug,
     );
   }
 
@@ -118,6 +140,24 @@ export class ChatController {
       user.id,
       limit,
       from,
+    );
+  }
+
+  @Post('group/:slug/join')
+  @ApiOperation({
+    summary: 'Join a group chat room with appropriate permissions',
+  })
+  async joinGroupChatRoom(
+    @Param('slug') groupSlug: string,
+    @AuthUser() user: User,
+  ): Promise<void> {
+    this.logger.log(
+      `User ${user.id} attempting to join group chat room for ${groupSlug}`,
+    );
+    // Implement our join endpoint by adding the current user to the room
+    return await this.discussionService.addMemberToGroupDiscussionBySlug(
+      groupSlug,
+      user.slug,
     );
   }
 

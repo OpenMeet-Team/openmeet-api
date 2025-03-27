@@ -12,6 +12,11 @@ import { MatrixCoreService } from './services/matrix-core.service';
 import { MatrixUserService } from './services/matrix-user.service';
 import { MatrixRoomService } from './services/matrix-room.service';
 import { MatrixMessageService } from './services/matrix-message.service';
+import { configureMatrixLogging } from './config/matrix-logger';
+
+// Configure Matrix logging at module load time
+// This runs before the module is instantiated
+configureMatrixLogging();
 
 @Module({
   imports: [

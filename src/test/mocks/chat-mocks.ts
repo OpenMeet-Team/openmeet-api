@@ -48,6 +48,8 @@ export const mockChatRoomService = {
   findChatRoomsByGroupId: jest.fn().mockResolvedValue([mockChatRoomGroup]),
   createEventChatRoomWithTenant: jest.fn().mockResolvedValue(mockChatRoom),
   createGroupChatRoomWithTenant: jest.fn().mockResolvedValue(mockChatRoomGroup),
+  createGroupChatRoom: jest.fn().mockResolvedValue(mockChatRoomGroup),
+  getOrCreateGroupChatRoom: jest.fn().mockResolvedValue(mockChatRoomGroup),
   deleteEventChatRooms: jest.fn().mockResolvedValue(undefined),
   deleteGroupChatRooms: jest.fn().mockResolvedValue(undefined),
   findAllRoomsByTenant: jest

@@ -120,5 +120,5 @@ experimental_features:
   spaces_enabled: true
 
 ## Encryption settings
-encryption_enabled_by_default_for_room_type: all
+encryption_enabled_by_default_for_room_type: invite
 enable_key_server: true

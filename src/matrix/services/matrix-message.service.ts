@@ -80,6 +80,14 @@ export class MatrixMessageService implements IMatrixMessageProvider {
           accessToken: senderToken,
           deviceId: senderDevice,
           useAuthorizationHeader: true,
+          logger: {
+            // Disable verbose HTTP logging from Matrix SDK
+            log: () => {},
+            info: () => {},
+            warn: () => {},
+            debug: () => {},
+            error: (msg) => this.logger.error(msg), // Keep error logs
+          },
         });
 
         // Send the message
@@ -145,6 +153,14 @@ export class MatrixMessageService implements IMatrixMessageProvider {
         accessToken,
         deviceId: deviceId || config.defaultDeviceId,
         useAuthorizationHeader: true,
+        logger: {
+          // Disable verbose HTTP logging from Matrix SDK
+          log: () => {},
+          info: () => {},
+          warn: () => {},
+          debug: () => {},
+          error: (msg) => this.logger.error(msg), // Keep error logs
+        },
       });
 
       // Send typing notification

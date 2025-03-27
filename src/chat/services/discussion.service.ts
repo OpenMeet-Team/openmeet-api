@@ -37,9 +37,270 @@ export class DiscussionService implements DiscussionServiceInterface {
   ) {}
 
   /**
-   * Helper method to ensure a user has valid Matrix credentials
+   * Get messages from either an event or group discussion
+   * Generic method that centralizes the logic for both entity types
    */
-  @Trace('discussion.ensureUserHasMatrixCredentials')
+  @Trace('discussion.getEntityDiscussionMessages')
+  private async getEntityDiscussionMessages(
+    entityType: 'event' | 'group',
+    slug: string,
+    userId: number,
+    limit = 50,
+    from?: string,
+  ): Promise<{
+    messages: Message[];
+    end: string;
+    roomId?: string;
+  }> {
+    const tenantId = this.request.tenantId;
+    if (!tenantId) {
+      throw new Error('Tenant ID is required');
+    }
+
+    const cache = this.getRequestCache();
+
+    // Get the entity by slug
+    let entityId: number;
+    let chatRooms;
+    let membershipCacheKey: string;
+
+    if (entityType === 'event') {
+      // Find the event by slug
+      const event = await this.eventQueryService.showEventBySlug(slug);
+      if (!event) {
+        throw new NotFoundException(`Event with slug ${slug} not found`);
+      }
+      entityId = event.id;
+      membershipCacheKey = `event:${entityId}:user:${userId}`;
+
+      // Get chat rooms for the event
+      chatRooms = await this.chatRoomService.getEventChatRooms(entityId);
+
+      // Cache the event for potential future use
+      cache.events.set(slug, event);
+    } else {
+      // Get the group, using request-scoped cache if available
+      let group = cache.groups.get(slug);
+      if (!group) {
+        group = await this.groupService.getGroupBySlug(slug);
+        if (!group) {
+          throw new NotFoundException(`Group with slug ${slug} not found`);
+        }
+        // Cache the group for potential future use
+        cache.groups.set(slug, group);
+      }
+      entityId = group.id;
+      membershipCacheKey = `group:${entityId}:user:${userId}`;
+
+      // Get chat rooms for the group
+      chatRooms = await this.chatRoomService.getGroupChatRooms(entityId);
+    }
+
+    // If no chat rooms exist, create one
+    let roomCreated = false;
+    if (!chatRooms || chatRooms.length === 0) {
+      try {
+        // Get a lock key to prevent concurrent creation
+        const lockKey = `create-${entityType}-chatroom-${entityId}`;
+        const existingLock = this.request.locks?.get(lockKey);
+
+        // Initialize lock tracking if needed
+        if (!this.request.locks) {
+          this.request.locks = new Map();
+        }
+
+        if (existingLock) {
+          this.logger.debug(
+            `Creation of ${entityType} chat room for ID ${entityId} already in progress, waiting...`,
+          );
+
+          // Before creating a chat room, check if one was created while we were waiting
+          const freshChatRooms =
+            entityType === 'event'
+              ? await this.chatRoomService.getEventChatRooms(entityId)
+              : await this.chatRoomService.getGroupChatRooms(entityId);
+
+          if (freshChatRooms && freshChatRooms.length > 0) {
+            this.logger.debug(
+              `${entityType} chat room was created by another process, using existing room`,
+            );
+            chatRooms = freshChatRooms;
+          } else {
+            // Still no chat room, we should create one
+            // But only if we don't already have too many locks (prevent deadlocks)
+            if (this.request.locks.size > 5) {
+              this.logger.warn(
+                `Too many locks in request (${this.request.locks.size}), skipping chat room creation`,
+              );
+              return { messages: [], end: '' };
+            }
+          }
+        }
+
+        // Set the lock
+        this.request.locks.set(lockKey, new Date());
+
+        try {
+          // Only create if we still don't have chat rooms
+          if (!chatRooms || chatRooms.length === 0) {
+            const chatRoom = await this.ensureEntityChatRoom(
+              entityType,
+              entityId,
+              userId,
+            );
+
+            // Get updated chat rooms list
+            chatRooms =
+              entityType === 'event'
+                ? await this.chatRoomService.getEventChatRooms(entityId)
+                : await this.chatRoomService.getGroupChatRooms(entityId);
+
+            if (!chatRooms || chatRooms.length === 0) {
+              return { messages: [], end: '' };
+            }
+
+            roomCreated = true;
+
+            // Cache the chat room
+            const chatRoomCacheKey = `${entityType}:${entityId}:chatRoom`;
+            cache.chatRooms.set(chatRoomCacheKey, chatRoom);
+          }
+        } finally {
+          // Release the lock regardless of outcome
+          this.request.locks.delete(lockKey);
+        }
+      } catch (error) {
+        this.logger.error(
+          `Error creating chat room for ${entityType} ${slug}: ${error.message}`,
+          error.stack,
+        );
+
+        // For groups, return a temporary roomId for the frontend
+        if (entityType === 'group') {
+          const tempRoomId = `temp-${entityType}-${entityId}-${Date.now()}`;
+          return {
+            messages: [],
+            end: '',
+            roomId: tempRoomId,
+          };
+        }
+
+        return { messages: [], end: '' };
+      }
+    }
+
+    // Check if membership verification is needed
+    const membershipVerified = cache.membershipVerified.get(membershipCacheKey);
+    const chatRoomMembershipInProgress =
+      this.request.chatRoomMembershipCache?.[membershipCacheKey] ===
+      'in-progress';
+
+    // For events we use throttling, for groups we only check if not already verified
+    let shouldCheckMembership = false;
+
+    if (entityType === 'event') {
+      // Set up throttling to reduce frequent checks for events
+      const lastCheckKey = `${membershipCacheKey}:lastCheck`;
+      const lastCheckTime = cache.membershipVerified.get(lastCheckKey) || 0;
+      const now = Date.now();
+      const minimumCheckInterval = 30000; // 30 seconds
+
+      // Only proceed with membership check if conditions are met
+      shouldCheckMembership =
+        !membershipVerified &&
+        !chatRoomMembershipInProgress &&
+        (lastCheckTime === 0 || now - lastCheckTime > minimumCheckInterval);
+
+      if (shouldCheckMembership) {
+        // Update last check time
+        cache.membershipVerified.set(lastCheckKey, now);
+      }
+    } else {
+      // For groups, simpler check
+      shouldCheckMembership =
+        !membershipVerified && !roomCreated && !chatRoomMembershipInProgress;
+    }
+
+    if (shouldCheckMembership) {
+      // Mark as in-progress in our cache
+      cache.membershipVerified.set(membershipCacheKey, 'in-progress');
+
+      try {
+        // Add user to chat room based on entity type
+        if (entityType === 'event') {
+          this.logger.log(
+            `Ensuring user ${userId} is a member of event chat room ${chatRooms[0].matrixRoomId}`,
+          );
+          await this.chatRoomService.addUserToEventChatRoom(entityId, userId);
+        } else {
+          await this.chatRoomService.addUserToGroupChatRoom(entityId, userId);
+        }
+
+        // Mark membership as verified for this request cycle
+        cache.membershipVerified.set(membershipCacheKey, true);
+      } catch (error) {
+        // Special handling for groups - must be a member to access group chat
+        if (
+          entityType === 'group' &&
+          error.message.includes('not a member of this group')
+        ) {
+          this.logger.warn(
+            `User ${userId} is not a member of group ${slug}, cannot access chat`,
+          );
+          throw new Error(
+            `You must be a member of this group to access discussions`,
+          );
+        }
+
+        this.logger.error(
+          `Error adding user ${userId} to ${entityType} chat room: ${error.message}`,
+          error.stack,
+        );
+        // Continue anyway for events - we'll still try to get messages
+      }
+    } else if (membershipVerified) {
+      this.logger.debug(
+        `User ${userId} already verified as member of ${entityType} ${entityId} chat room in this request`,
+      );
+    } else {
+      this.logger.debug(
+        `Skipping room membership check for user ${userId} (checked recently or in progress)`,
+      );
+    }
+
+    // Get messages from the first (main) chat room
+    const messageData = await this.chatRoomService.getMessages(
+      chatRooms[0].id,
+      userId,
+      limit,
+      from,
+    );
+
+    // Enhance messages with user display names
+    const enhancedMessages = await this.enhanceMessagesWithUserInfo(
+      messageData.messages,
+    );
+
+    // Return the Matrix room ID along with messages
+    const roomId = chatRooms[0].matrixRoomId;
+
+    if (!roomId) {
+      this.logger.warn(
+        `No Matrix room ID found for chat room of ${entityType} ${slug}`,
+      );
+    } else {
+      this.logger.debug(
+        `Using Matrix room ID for ${entityType} ${slug}: ${roomId}`,
+      );
+    }
+
+    return {
+      messages: enhancedMessages,
+      end: messageData.end,
+      roomId: roomId,
+    };
+  }
+
   private async ensureUserHasMatrixCredentials(userId: number) {
     const tenantId = this.request.tenantId;
     if (!tenantId) {
@@ -172,59 +433,62 @@ export class DiscussionService implements DiscussionServiceInterface {
   }
 
   /**
-   * Ensure a chat room exists for an event
+   * Ensure a chat room exists for an entity (event or group)
+   *
+   * @param entityType 'event' or 'group'
+   * @param entityId ID of the event or group
+   * @param creatorId ID of the user creating the room
+   * @returns The chat room entity
    */
-  @Trace('discussion.ensureEventChatRoom')
-  private async ensureEventChatRoom(eventId: number, creatorId: number) {
+  @Trace('discussion.ensureEntityChatRoom')
+  private async ensureEntityChatRoom(
+    entityType: 'event' | 'group',
+    entityId: number,
+    creatorId: number,
+  ) {
     try {
-      // Try to get existing chat rooms
-      const chatRooms = await this.chatRoomService.getEventChatRooms(eventId);
+      // Try to get existing chat rooms based on entity type
+      const chatRooms =
+        entityType === 'event'
+          ? await this.chatRoomService.getEventChatRooms(entityId)
+          : await this.chatRoomService.getGroupChatRooms(entityId);
 
       // If no chat rooms exist, create one
       if (!chatRooms || chatRooms.length === 0) {
-        return await this.chatRoomService.createEventChatRoom(
-          eventId,
-          creatorId,
-        );
+        return entityType === 'event'
+          ? await this.chatRoomService.createEventChatRoom(entityId, creatorId)
+          : await this.chatRoomService.createGroupChatRoom(entityId, creatorId);
       }
 
-      // Return the first chat room (main event chat room)
+      // Return the first chat room (main entity chat room)
       return chatRooms[0];
     } catch (error) {
       this.logger.error(
-        `Error ensuring chat room for event ${eventId}: ${error.message}`,
+        `Error ensuring chat room for ${entityType} ${entityId}: ${error.message}`,
         error.stack,
       );
-      throw new Error(`Failed to ensure chat room for event: ${error.message}`);
+      throw new Error(
+        `Failed to ensure chat room for ${entityType}: ${error.message}`,
+      );
     }
   }
 
   /**
+   * Ensure a chat room exists for an event
+   * @deprecated Use ensureEntityChatRoom with entityType='event' instead
+   */
+  @Trace('discussion.ensureEventChatRoom')
+  private async ensureEventChatRoom(eventId: number, creatorId: number) {
+    return this.ensureEntityChatRoom('event', eventId, creatorId);
+  }
+
+  /**
    * Ensure a chat room exists for a group
+   * @deprecated Use ensureEntityChatRoom with entityType='group' instead
    */
   @Trace('discussion.ensureGroupChatRoom')
-  private async ensureGroupChatRoom(groupId: number, _creatorId: number) {
-    try {
-      // Try to get existing chat rooms
-      const chatRooms = await this.chatRoomService.getGroupChatRooms(groupId);
-
-      // If no chat rooms exist, create one
-      if (!chatRooms || chatRooms.length === 0) {
-        return await this.chatRoomService.createGroupChatRoom(
-          groupId,
-          _creatorId,
-        );
-      }
-
-      // Return the first chat room (main group chat room)
-      return chatRooms[0];
-    } catch (error) {
-      this.logger.error(
-        `Error ensuring chat room for group ${groupId}: ${error.message}`,
-        error.stack,
-      );
-      throw new Error(`Failed to ensure chat room for group: ${error.message}`);
-    }
+  private async ensureGroupChatRoom(groupId: number, creatorId: number) {
+    return this.ensureEntityChatRoom('group', groupId, creatorId);
   }
 
   @Trace('discussion.sendEventDiscussionMessage')
@@ -233,58 +497,7 @@ export class DiscussionService implements DiscussionServiceInterface {
     userId: number,
     body: { message: string },
   ): Promise<{ id: string }> {
-    // Tenant ID is preserved for future multi-tenant functionality
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _tenantId = this.request.tenantId;
-    const cache = this.getRequestCache();
-
-    // Find the event by slug
-    const event = await this.eventQueryService.showEventBySlug(slug);
-    if (!event) {
-      throw new NotFoundException(`Event with slug ${slug} not found`);
-    }
-
-    // Use request cache for event data if available
-    let chatRoom;
-    const chatRoomCacheKey = `event:${event.id}:chatRoom`;
-    chatRoom = cache.chatRooms.get(chatRoomCacheKey);
-
-    if (!chatRoom) {
-      // Get or create chat room for the event
-      chatRoom = await this.ensureEventChatRoom(event.id, userId);
-      // Cache the chat room for future use in this request
-      cache.chatRooms.set(chatRoomCacheKey, chatRoom);
-    }
-
-    // Check if user is already verified as a member in this request cycle
-    const membershipCacheKey = `event:${event.id}:user:${userId}`;
-    const membershipVerified = cache.membershipVerified.get(membershipCacheKey);
-
-    if (!membershipVerified) {
-      // Ensure the user is a member of the room (addUserToEventChatRoom is idempotent)
-      try {
-        await this.chatRoomService.addUserToEventChatRoom(event.id, userId);
-        cache.membershipVerified.set(membershipCacheKey, true);
-      } catch (error) {
-        this.logger.error(
-          `Error adding user ${userId} to event chat room: ${error.message}`,
-          error.stack,
-        );
-        // Continue anyway - we'll still try to send the message
-      }
-    }
-
-    // Simplified approach - no topic formatting
-    const plainMessage = body.message;
-
-    // Send the message to the chat room
-    const messageId = await this.chatRoomService.sendMessage(
-      chatRoom.id,
-      userId,
-      plainMessage,
-    );
-
-    return { id: messageId };
+    return this.sendEntityDiscussionMessage('event', slug, userId, body);
   }
 
   @Trace('discussion.getEventDiscussionMessages')
@@ -296,91 +509,9 @@ export class DiscussionService implements DiscussionServiceInterface {
   ): Promise<{
     messages: Message[];
     end: string;
+    roomId?: string;
   }> {
-    const tenantId = this.request.tenantId;
-    if (!tenantId) {
-      throw new Error('Tenant ID is required');
-    }
-
-    // Find the event by slug
-    const event = await this.eventQueryService.showEventBySlug(slug);
-    if (!event) {
-      throw new NotFoundException(`Event with slug ${slug} not found`);
-    }
-
-    // Get chat rooms for the event
-    let chatRooms = await this.chatRoomService.getEventChatRooms(event.id);
-    if (!chatRooms || chatRooms.length === 0) {
-      // No chat room exists yet, create one
-      try {
-        await this.ensureEventChatRoom(event.id, userId);
-        const updatedChatRooms = await this.chatRoomService.getEventChatRooms(
-          event.id,
-        );
-
-        // If still no chat rooms, return empty result
-        if (!updatedChatRooms || updatedChatRooms.length === 0) {
-          return { messages: [], end: '' };
-        }
-
-        // Use the newly created chat rooms
-        chatRooms = updatedChatRooms;
-      } catch (error) {
-        this.logger.error(
-          `Error creating chat room for event ${slug}: ${error.message}`,
-          error.stack,
-        );
-        return { messages: [], end: '' };
-      }
-    }
-
-    // Get the request cache for optimizing operations
-    const cache = this.getRequestCache();
-
-    // Use a cached flag to check if we've already verified membership in this request
-    const membershipCacheKey = `event:${event.id}:user:${userId}`;
-    const membershipVerified = cache.membershipVerified.get(membershipCacheKey);
-
-    if (!membershipVerified) {
-      // Ensure the current user is a member of the room
-      try {
-        this.logger.log(
-          `Ensuring user ${userId} is a member of event chat room ${chatRooms[0].matrixRoomId}`,
-        );
-        await this.chatRoomService.addUserToEventChatRoom(event.id, userId);
-
-        // Mark membership as verified for this request cycle
-        cache.membershipVerified.set(membershipCacheKey, true);
-      } catch (error) {
-        this.logger.error(
-          `Error adding user ${userId} to event chat room: ${error.message}`,
-          error.stack,
-        );
-        // Continue anyway - we'll still try to get messages
-      }
-    } else {
-      this.logger.debug(
-        `User ${userId} already verified as member of event ${event.id} chat room in this request`,
-      );
-    }
-
-    // Get messages from the first (main) chat room
-    const messageData = await this.chatRoomService.getMessages(
-      chatRooms[0].id,
-      userId,
-      limit,
-      from,
-    );
-
-    // Enhance messages with user display names
-    const enhancedMessages = await this.enhanceMessagesWithUserInfo(
-      messageData.messages,
-    );
-
-    return {
-      messages: enhancedMessages,
-      end: messageData.end,
-    };
+    return this.getEntityDiscussionMessages('event', slug, userId, limit, from);
   }
 
   /**
@@ -410,9 +541,14 @@ export class DiscussionService implements DiscussionServiceInterface {
     await this.addMemberToEventDiscussionBySlug(event.slug, user.slug);
   }
 
-  @Trace('discussion.addMemberToEventDiscussionBySlug')
-  async addMemberToEventDiscussionBySlug(
-    eventSlug: string,
+  /**
+   * Add a member to either an event or group discussion by slug
+   * Generic method that centralizes the logic for both entity types
+   */
+  @Trace('discussion.addMemberToEntityDiscussionBySlug')
+  private async addMemberToEntityDiscussionBySlug(
+    entityType: 'event' | 'group',
+    entitySlug: string,
     userSlug: string,
     explicitTenantId?: string,
   ): Promise<void> {
@@ -423,10 +559,38 @@ export class DiscussionService implements DiscussionServiceInterface {
 
     const cache = this.getRequestCache();
 
-    // Find the event by slug
-    const event = await this.eventQueryService.showEventBySlug(eventSlug);
-    if (!event) {
-      throw new NotFoundException(`Event with slug ${eventSlug} not found`);
+    // Find the entity by slug
+    let entity;
+    let entityId: number;
+    let creatorId: number;
+    let cacheKey: string;
+
+    if (entityType === 'event') {
+      // Find the event by slug
+      entity = await this.eventQueryService.showEventBySlug(entitySlug);
+      if (!entity) {
+        throw new NotFoundException(`Event with slug ${entitySlug} not found`);
+      }
+
+      entityId = entity.id;
+      creatorId = entity.user?.id || 0;
+      cacheKey = `event:${entityId}:chatRoom`;
+
+      // Cache the event for potential future use
+      cache.events.set(entitySlug, entity);
+    } else {
+      // Find the group by slug
+      entity = await this.groupService.getGroupBySlug(entitySlug);
+      if (!entity) {
+        throw new NotFoundException(`Group with slug ${entitySlug} not found`);
+      }
+
+      entityId = entity.id;
+      creatorId = entity.createdBy?.id || 0;
+      cacheKey = `group:${entityId}:chatRoom`;
+
+      // Cache the group for potential future use
+      cache.groups.set(entitySlug, entity);
     }
 
     // Find the user by slug
@@ -436,34 +600,82 @@ export class DiscussionService implements DiscussionServiceInterface {
     }
 
     // Check if this user's membership has already been verified in this request
-    const membershipCacheKey = `event:${event.id}:user:${user.id}`;
+    const membershipCacheKey = `${entityType}:${entityId}:user:${user.id}`;
     const membershipVerified = cache.membershipVerified.get(membershipCacheKey);
 
     if (membershipVerified) {
       this.logger.debug(
-        `User ${user.id} already verified as member of event ${event.id} chat room in this request`,
+        `User ${user.id} already verified as member of ${entityType} ${entityId} chat room in this request`,
       );
-      return; // Skip the rest of the process if we've already verified this user in this request
+      return; // Skip the rest of the process
     }
 
-    // See if we've already cached the chat room
-    let chatRoom;
-    const chatRoomCacheKey = `event:${event.id}:chatRoom`;
-    chatRoom = cache.chatRooms.get(chatRoomCacheKey);
-
+    // Get or create chat room
+    let chatRoom = cache.chatRooms.get(cacheKey);
     if (!chatRoom) {
-      // Ensure chat room exists - use event.user as the creator
-      const creatorId = event.user?.id || user.id;
-      this.logger.debug(`Using creator ID ${creatorId} for event ${event.id}`);
-      chatRoom = await this.ensureEventChatRoom(event.id, creatorId);
-      cache.chatRooms.set(chatRoomCacheKey, chatRoom);
+      // Use creator ID if available, otherwise use the user being added
+      const effectiveCreatorId = creatorId || user.id;
+      this.logger.debug(
+        `Using creator ID ${effectiveCreatorId} for ${entityType} ${entityId}`,
+      );
+
+      chatRoom = await this.ensureEntityChatRoom(
+        entityType,
+        entityId,
+        effectiveCreatorId,
+      );
+
+      cache.chatRooms.set(cacheKey, chatRoom);
     }
 
-    // Add the user to the chat room
-    await this.chatRoomService.addUserToEventChatRoom(event.id, user.id);
+    // Add the user to the appropriate chat room
+    if (entityType === 'event') {
+      await this.chatRoomService.addUserToEventChatRoom(entityId, user.id);
+    } else {
+      await this.chatRoomService.addUserToGroupChatRoom(entityId, user.id);
+    }
 
     // Cache the membership verification
     cache.membershipVerified.set(membershipCacheKey, true);
+  }
+
+  @Trace('discussion.addMemberToEventDiscussionBySlug')
+  async addMemberToEventDiscussionBySlug(
+    eventSlug: string,
+    userSlug: string,
+    explicitTenantId?: string,
+  ): Promise<void> {
+    // Get tenant ID from explicit parameter or request context
+    const tenantId = explicitTenantId || this.request?.tenantId;
+    if (!tenantId) {
+      throw new Error('Tenant ID is required');
+    }
+
+    // Get event and user IDs from slugs
+    const { eventId, userId } = await this.getIdsFromSlugsWithTenant(
+      eventSlug,
+      userSlug,
+      tenantId,
+    );
+
+    if (!eventId || !userId) {
+      this.logger.error(
+        `Could not find event or user with slugs: event=${eventSlug}, user=${userSlug}`,
+      );
+      return;
+    }
+
+    // Verify event exists before proceeding
+    const eventExists = await this.checkEventExists(eventId, tenantId);
+    if (!eventExists) {
+      this.logger.warn(
+        `Event ${eventSlug} does not exist in tenant ${tenantId}, skipping chat room creation`,
+      );
+      return;
+    }
+
+    // Add member to event discussion
+    await this.addMemberToEventDiscussion(eventId, userId);
   }
 
   /**
@@ -493,9 +705,14 @@ export class DiscussionService implements DiscussionServiceInterface {
     await this.removeMemberFromEventDiscussionBySlug(event.slug, user.slug);
   }
 
-  @Trace('discussion.removeMemberFromEventDiscussionBySlug')
-  async removeMemberFromEventDiscussionBySlug(
-    eventSlug: string,
+  /**
+   * Remove a member from either an event or group discussion by slug
+   * Generic method that centralizes the logic for both entity types
+   */
+  @Trace('discussion.removeMemberFromEntityDiscussionBySlug')
+  private async removeMemberFromEntityDiscussionBySlug(
+    entityType: 'event' | 'group',
+    entitySlug: string,
     userSlug: string,
     explicitTenantId?: string,
   ): Promise<void> {
@@ -504,10 +721,23 @@ export class DiscussionService implements DiscussionServiceInterface {
       throw new Error('Tenant ID is required');
     }
 
-    // Find the event by slug
-    const event = await this.eventQueryService.showEventBySlug(eventSlug);
-    if (!event) {
-      throw new NotFoundException(`Event with slug ${eventSlug} not found`);
+    // Find the entity by slug
+    let entityId: number;
+
+    if (entityType === 'event') {
+      // Find the event by slug
+      const event = await this.eventQueryService.showEventBySlug(entitySlug);
+      if (!event) {
+        throw new NotFoundException(`Event with slug ${entitySlug} not found`);
+      }
+      entityId = event.id;
+    } else {
+      // Find the group by slug
+      const group = await this.groupService.getGroupBySlug(entitySlug);
+      if (!group) {
+        throw new NotFoundException(`Group with slug ${entitySlug} not found`);
+      }
+      entityId = group.id;
     }
 
     // Find the user by slug
@@ -516,8 +746,31 @@ export class DiscussionService implements DiscussionServiceInterface {
       throw new NotFoundException(`User with slug ${userSlug} not found`);
     }
 
-    // Remove the user from the chat room
-    await this.chatRoomService.removeUserFromEventChatRoom(event.id, user.id);
+    // Remove the user from the appropriate chat room
+    if (entityType === 'event') {
+      await this.chatRoomService.removeUserFromEventChatRoom(entityId, user.id);
+    } else {
+      await this.chatRoomService.removeUserFromGroupChatRoom(entityId, user.id);
+    }
+
+    // Clear any cached membership verification for this user/entity
+    const cache = this.getRequestCache();
+    const membershipCacheKey = `${entityType}:${entityId}:user:${user.id}`;
+    cache.membershipVerified.delete(membershipCacheKey);
+  }
+
+  @Trace('discussion.removeMemberFromEventDiscussionBySlug')
+  async removeMemberFromEventDiscussionBySlug(
+    eventSlug: string,
+    userSlug: string,
+    explicitTenantId?: string,
+  ): Promise<void> {
+    return this.removeMemberFromEntityDiscussionBySlug(
+      'event',
+      eventSlug,
+      userSlug,
+      explicitTenantId,
+    );
   }
 
   /**
@@ -529,7 +782,27 @@ export class DiscussionService implements DiscussionServiceInterface {
    * - events: Map<string, EventEntity> - Cached event objects by slug
    * - users: Map<string, UserEntity> - Cached user objects by slug or ID
    */
+  /**
+   * Gets or creates a request-scoped cache for expensive operations to avoid duplication
+   *
+   * @returns The request-scoped cache object
+   */
   private getRequestCache() {
+    // Safe guard against missing request object (events, background jobs)
+    if (!this.request) {
+      this.logger.warn(
+        'No request object available, possibly called from event handler',
+      );
+      // Return a temporary cache for this function call that won't be persisted
+      return {
+        groups: new Map(),
+        events: new Map(),
+        users: new Map(),
+        chatRooms: new Map(),
+        membershipVerified: new Map(),
+      };
+    }
+
     if (!this.request.discussionCache) {
       this.request.discussionCache = {
         groups: new Map(),
@@ -542,51 +815,92 @@ export class DiscussionService implements DiscussionServiceInterface {
     return this.request.discussionCache;
   }
 
-  @Trace('discussion.sendGroupDiscussionMessage')
-  async sendGroupDiscussionMessage(
+  /**
+   * Send a discussion message to either an event or group chat room
+   *
+   * @param entityType 'event' or 'group'
+   * @param slug The slug of the event or group
+   * @param userId The user ID sending the message
+   * @param body The message body
+   * @returns The message ID
+   */
+  @Trace('discussion.sendEntityDiscussionMessage')
+  private async sendEntityDiscussionMessage(
+    entityType: 'event' | 'group',
     slug: string,
     userId: number,
     body: { message: string },
   ): Promise<{ id: string }> {
-    // Tenant ID is preserved for future multi-tenant functionality
+    // We need the tenant ID for future multi-tenant functionality
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const _tenantId = this.request.tenantId;
     const cache = this.getRequestCache();
 
-    // Get the group, using request-scoped cache if available
-    let group = cache.groups.get(slug);
-    if (!group) {
-      group = await this.groupService.getGroupBySlug(slug);
-      if (!group) {
-        throw new NotFoundException(`Group with slug ${slug} not found`);
+    let entityId: number;
+    let chatRoom;
+    let chatRoomCacheKey: string;
+    let membershipCacheKey: string;
+
+    // Get entity and create cache keys
+    if (entityType === 'event') {
+      // Find the event by slug
+      const event = await this.eventQueryService.showEventBySlug(slug);
+      if (!event) {
+        throw new NotFoundException(`Event with slug ${slug} not found`);
       }
+      entityId = event.id;
 
-      // Cache the group for potential future use in this request
-      cache.groups.set(slug, group);
+      // Set cache keys for event
+      chatRoomCacheKey = `event:${entityId}:chatRoom`;
+      membershipCacheKey = `event:${entityId}:user:${userId}`;
+
+      // Cache the event for future use
+      cache.events.set(slug, event);
+    } else {
+      // Get the group, using request-scoped cache if available
+      let group = cache.groups.get(slug);
+      if (!group) {
+        group = await this.groupService.getGroupBySlug(slug);
+        if (!group) {
+          throw new NotFoundException(`Group with slug ${slug} not found`);
+        }
+        // Cache the group for potential future use in this request
+        cache.groups.set(slug, group);
+      }
+      entityId = group.id;
+
+      // Set cache keys for group
+      chatRoomCacheKey = `group:${entityId}:chatRoom`;
+      membershipCacheKey = `group:${entityId}:user:${userId}`;
     }
 
-    // Get or create chat room for the group, using request-scoped cache
-    let chatRoom = cache.chatRooms.get(`group:${group.id}`);
+    // Get chat room from cache or create it
+    chatRoom = cache.chatRooms.get(chatRoomCacheKey);
     if (!chatRoom) {
-      chatRoom = await this.ensureGroupChatRoom(group.id, userId);
-      cache.chatRooms.set(`group:${group.id}`, chatRoom);
+      chatRoom = await this.ensureEntityChatRoom(entityType, entityId, userId);
+      cache.chatRooms.set(chatRoomCacheKey, chatRoom);
     }
 
-    // Use a cached flag to check if we've already verified membership in this request
-    const membershipCacheKey = `group:${group.id}:user:${userId}`;
+    // Check if user membership is already verified in this request
     const membershipVerified = cache.membershipVerified.get(membershipCacheKey);
 
     if (!membershipVerified) {
-      // Check if the user is already a member of the room
-      // This will throw an error if they're not a group member
       try {
-        // This call is now optimized to handle caching internally
-        await this.chatRoomService.addUserToGroupChatRoom(group.id, userId);
+        // Add user to the room based on entity type
+        if (entityType === 'event') {
+          await this.chatRoomService.addUserToEventChatRoom(entityId, userId);
+        } else {
+          await this.chatRoomService.addUserToGroupChatRoom(entityId, userId);
+        }
 
         // Mark membership as verified for this request cycle
         cache.membershipVerified.set(membershipCacheKey, true);
       } catch (error) {
-        if (error.message.includes('not a member of this group')) {
+        // Special handling for groups where membership is required
+        if (
+          entityType === 'group' &&
+          error.message.includes('not a member of this group')
+        ) {
           this.logger.warn(
             `User ${userId} is not a member of group ${slug}, cannot send message`,
           );
@@ -594,7 +908,17 @@ export class DiscussionService implements DiscussionServiceInterface {
             `You must be a member of this group to send messages`,
           );
         }
-        throw error;
+
+        this.logger.error(
+          `Error adding user ${userId} to ${entityType} chat room: ${error.message}`,
+          error.stack,
+        );
+
+        // For events we continue anyway to try sending the message
+        // For groups we rethrow the error
+        if (entityType === 'group') {
+          throw error;
+        }
       }
     }
 
@@ -608,6 +932,15 @@ export class DiscussionService implements DiscussionServiceInterface {
     return { id: messageId };
   }
 
+  @Trace('discussion.sendGroupDiscussionMessage')
+  async sendGroupDiscussionMessage(
+    slug: string,
+    userId: number,
+    body: { message: string },
+  ): Promise<{ id: string }> {
+    return this.sendEntityDiscussionMessage('group', slug, userId, body);
+  }
+
   @Trace('discussion.getGroupDiscussionMessages')
   async getGroupDiscussionMessages(
     slug: string,
@@ -619,118 +952,7 @@ export class DiscussionService implements DiscussionServiceInterface {
     end: string;
     roomId?: string;
   }> {
-    const tenantId = this.request.tenantId;
-    if (!tenantId) {
-      throw new Error('Tenant ID is required');
-    }
-
-    const cache = this.getRequestCache();
-
-    // Get the group, using request-scoped cache if available
-    let group = cache.groups.get(slug);
-    if (!group) {
-      group = await this.groupService.getGroupBySlug(slug);
-      if (!group) {
-        throw new NotFoundException(`Group with slug ${slug} not found`);
-      }
-
-      // Cache the group for potential future use in this request
-      cache.groups.set(slug, group);
-    }
-
-    // Try to get chat room from cache first
-    let chatRoom = cache.chatRooms.get(`group:${group.id}`);
-    let roomCreated = false;
-
-    if (!chatRoom) {
-      // Get existing chat rooms for the group
-      const chatRooms = await this.chatRoomService.getGroupChatRooms(group.id);
-
-      if (chatRooms && chatRooms.length > 0) {
-        // Use first chat room (main group chat)
-        chatRoom = chatRooms[0];
-        cache.chatRooms.set(`group:${group.id}`, chatRoom);
-      } else {
-        // No chat room exists, create one
-        this.logger.debug(
-          `No chat room found for group ${slug}, creating one...`,
-        );
-        try {
-          chatRoom = await this.ensureGroupChatRoom(group.id, userId);
-          cache.chatRooms.set(`group:${group.id}`, chatRoom);
-          roomCreated = true;
-        } catch (error) {
-          this.logger.error(
-            `Error creating chat room for group ${slug}: ${error.message}`,
-            error.stack,
-          );
-          // Return a temporary roomId for the frontend
-          const tempRoomId = `temp-group-${group.id}-${Date.now()}`;
-          return {
-            messages: [],
-            end: '',
-            roomId: tempRoomId,
-          };
-        }
-      }
-    }
-
-    // Use memebership cache to prevent redundant checks
-    const membershipCacheKey = `group:${group.id}:user:${userId}`;
-    const membershipVerified = cache.membershipVerified.get(membershipCacheKey);
-
-    if (!membershipVerified && !roomCreated) {
-      try {
-        // This call is now optimized to use internal caching
-        await this.chatRoomService.addUserToGroupChatRoom(group.id, userId);
-        cache.membershipVerified.set(membershipCacheKey, true);
-      } catch (error) {
-        // If they're not a group member, we don't continue
-        if (error.message.includes('not a member of this group')) {
-          this.logger.warn(
-            `User ${userId} is not a member of group ${slug}, cannot access chat`,
-          );
-          throw new Error(
-            `You must be a member of this group to access discussions`,
-          );
-        }
-
-        this.logger.error(
-          `Error adding user ${userId} to group chat room: ${error.message}`,
-          error.stack,
-        );
-      }
-    }
-
-    // Get messages from the chat room
-    const messageData = await this.chatRoomService.getMessages(
-      chatRoom.id,
-      userId,
-      limit,
-      from,
-    );
-
-    // Enhance messages with user display names (could be optimized further with caching)
-    const enhancedMessages = await this.enhanceMessagesWithUserInfo(
-      messageData.messages,
-    );
-
-    // Return messages with the Matrix room ID
-    const roomId = chatRoom.matrixRoomId;
-
-    if (!roomId) {
-      this.logger.warn(
-        `No Matrix room ID found for chat room of group ${slug}`,
-      );
-    } else {
-      this.logger.debug(`Using Matrix room ID for group ${slug}: ${roomId}`);
-    }
-
-    return {
-      messages: enhancedMessages,
-      end: messageData.end,
-      roomId: roomId,
-    };
+    return this.getEntityDiscussionMessages('group', slug, userId, limit, from);
   }
 
   @Trace('discussion.addMemberToGroupDiscussion')
@@ -761,31 +983,14 @@ export class DiscussionService implements DiscussionServiceInterface {
   async addMemberToGroupDiscussionBySlug(
     groupSlug: string,
     userSlug: string,
+    explicitTenantId?: string,
   ): Promise<void> {
-    const tenantId = this.request.tenantId;
-    if (!tenantId) {
-      throw new Error('Tenant ID is required');
-    }
-
-    // Find the group by slug
-    const group = await this.groupService.getGroupBySlug(groupSlug);
-    if (!group) {
-      throw new NotFoundException(`Group with slug ${groupSlug} not found`);
-    }
-
-    // Find the user by slug
-    const user = await this.userService.getUserBySlug(userSlug);
-    if (!user) {
-      throw new NotFoundException(`User with slug ${userSlug} not found`);
-    }
-
-    // Ensure chat room exists - use group.createdBy as the creator
-    const creatorId = group.createdBy?.id || user.id;
-    this.logger.debug(`Using creator ID ${creatorId} for group ${group.id}`);
-    await this.ensureGroupChatRoom(group.id, creatorId);
-
-    // Add the user to the chat room
-    await this.chatRoomService.addUserToGroupChatRoom(group.id, user.id);
+    return this.addMemberToEntityDiscussionBySlug(
+      'group',
+      groupSlug,
+      userSlug,
+      explicitTenantId,
+    );
   }
 
   @Trace('discussion.removeMemberFromGroupDiscussion')
@@ -816,26 +1021,14 @@ export class DiscussionService implements DiscussionServiceInterface {
   async removeMemberFromGroupDiscussionBySlug(
     groupSlug: string,
     userSlug: string,
+    explicitTenantId?: string,
   ): Promise<void> {
-    const tenantId = this.request.tenantId;
-    if (!tenantId) {
-      throw new Error('Tenant ID is required');
-    }
-
-    // Find the group by slug
-    const group = await this.groupService.getGroupBySlug(groupSlug);
-    if (!group) {
-      throw new NotFoundException(`Group with slug ${groupSlug} not found`);
-    }
-
-    // Find the user by slug
-    const user = await this.userService.getUserBySlug(userSlug);
-    if (!user) {
-      throw new NotFoundException(`User with slug ${userSlug} not found`);
-    }
-
-    // Remove the user from the chat room
-    await this.chatRoomService.removeUserFromGroupChatRoom(group.id, user.id);
+    return this.removeMemberFromEntityDiscussionBySlug(
+      'group',
+      groupSlug,
+      userSlug,
+      explicitTenantId,
+    );
   }
 
   /**

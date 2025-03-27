@@ -21,7 +21,8 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
   private readonly defaultInitialDeviceDisplayName: string;
   // Not readonly so we can correct it if token doesn't match configured user
   private adminUserId: string;
-  private readonly adminAccessToken: string;
+  // Not readonly so we can update it when regenerated
+  private adminAccessToken: string;
 
   // Connection pool for admin API operations
   private clientPool: pool.Pool<MatrixClientWithContext>;
@@ -68,25 +69,26 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
 
       // Set default configuration
       this.baseUrl = baseUrl;
-      this.adminUserId = `@${process.env.MATRIX_ADMIN_USER || process.env.MATRIX_ADMIN_USERNAME || 'admin'}:${serverName}`;
+      const adminUsername = process.env.MATRIX_ADMIN_USERNAME || 'admin';
+      this.adminUserId = `@${adminUsername}:${serverName}`;
       this.serverName = serverName;
       this.defaultDeviceId = 'OPENMEET_SERVER';
       this.defaultInitialDeviceDisplayName = 'OpenMeet Server';
-      this.adminAccessToken = process.env.MATRIX_ADMIN_ACCESS_TOKEN || '';
+      // Initialize with empty token, will be generated in onModuleInit
+      this.adminAccessToken = '';
       return; // Skip logging
     }
 
     this.baseUrl = matrixConfig.baseUrl;
-    // Use the admin user directly if it contains a full Matrix ID (@user:domain)
-    const adminUser = matrixConfig.adminUser;
-    this.adminUserId = adminUser.startsWith('@')
-      ? adminUser
-      : `@${adminUser}:${matrixConfig.serverName}`;
+    // Always construct the full matrix ID for the admin user
+    const adminUsername = matrixConfig.adminUser;
+    this.adminUserId = `@${adminUsername}:${matrixConfig.serverName}`;
     this.serverName = matrixConfig.serverName;
     this.defaultDeviceId = matrixConfig.defaultDeviceId;
     this.defaultInitialDeviceDisplayName =
       matrixConfig.defaultInitialDeviceDisplayName;
-    this.adminAccessToken = matrixConfig.adminAccessToken;
+    // Initialize with token from config or empty string, will be generated if empty
+    this.adminAccessToken = matrixConfig.adminAccessToken || '';
 
     this.logger.log('Matrix core service initialized with configuration');
   }
@@ -96,8 +98,21 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       // Dynamically import the matrix-js-sdk
       await this.loadMatrixSdk();
 
+      // Generate admin token if not provided
+      if (!this.adminAccessToken) {
+        this.logger.log('No admin token provided, generating a new one');
+        const newToken = await this.regenerateAdminAccessToken();
+        if (!newToken) {
+          throw new Error('Failed to generate initial admin token');
+        }
+        // Token is now set in this.adminAccessToken by regenerateAdminAccessToken
+      }
+
       // Create admin client
       this.createAdminClient();
+
+      // Verify admin access
+      await this.verifyAdminAccess();
 
       // Verify admin access
       await this.verifyAdminAccess();
@@ -121,6 +136,85 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Regenerate admin access token using admin password
+   * This method is public to allow external components to request token regeneration
+   */
+  public async regenerateAdminAccessToken(): Promise<string | null> {
+    const matrixConfig = this.configService.get<MatrixConfig>('matrix', {
+      infer: true,
+    });
+
+    // Password is now required in the config
+    const adminPassword = matrixConfig?.adminPassword;
+    if (!adminPassword) {
+      this.logger.error(
+        'Cannot regenerate admin token: admin password not configured',
+      );
+      throw new Error('MATRIX_ADMIN_PASSWORD is required for token generation');
+    }
+
+    try {
+      // Extract username without domain part for login
+      const usernameOnly = this.adminUserId.startsWith('@')
+        ? this.adminUserId.split(':')[0].substring(1)
+        : this.adminUserId;
+
+      this.logger.log(`Generating admin token for user: ${usernameOnly}`);
+
+      // Use Matrix login API to get a new token
+      const loginUrl = `${this.baseUrl}/_matrix/client/v3/login`;
+
+      // Debug the request data
+      const requestData = {
+        type: 'm.login.password',
+        identifier: {
+          type: 'm.id.user',
+          user: usernameOnly,
+        },
+        password: adminPassword,
+        device_id: this.defaultDeviceId,
+        initial_device_display_name: this.defaultInitialDeviceDisplayName,
+      };
+
+      this.logger.debug(`Matrix login request URL: ${loginUrl}`);
+      this.logger.debug(
+        `Matrix login request data: ${JSON.stringify({
+          ...requestData,
+          password: '******', // Don't log the actual password
+        })}`,
+      );
+
+      const response = await axios.post(loginUrl, requestData);
+
+      if (response.data && response.data.access_token) {
+        const newToken = response.data.access_token;
+        // Update the admin token in memory
+        this.adminAccessToken = newToken;
+
+        this.logger.log(
+          `Successfully generated admin token for ${usernameOnly}`,
+        );
+
+        // Recreate admin client with new token
+        this.createAdminClient();
+
+        return newToken;
+      } else {
+        this.logger.error(
+          'Failed to generate admin token: unexpected response format',
+        );
+        return null;
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to generate admin token: ${error.message}`,
+        error.stack,
+      );
+      return null;
+    }
+  }
+
+  /**
    * Verify the admin token has admin privileges
    */
   private async verifyAdminAccess(): Promise<void> {
@@ -134,11 +228,38 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
         `Using admin token: ${this.adminAccessToken ? this.adminAccessToken.substring(0, 6) + '...' : 'null'}`,
       );
 
-      const response = await axios.get(whoamiUrl, {
-        headers: {
-          Authorization: `Bearer ${this.adminAccessToken}`,
-        },
-      });
+      let response;
+      try {
+        response = await axios.get(whoamiUrl, {
+          headers: {
+            Authorization: `Bearer ${this.adminAccessToken}`,
+          },
+        });
+      } catch (whoamiError) {
+        // If the token is invalid, try to regenerate it
+        this.logger.warn(
+          `Admin token verification failed: ${whoamiError.message}. Attempting to regenerate.`,
+        );
+
+        const newToken = await this.regenerateAdminAccessToken();
+        if (!newToken) {
+          this.logger.error(
+            'Failed to regenerate admin token. User provisioning may fail.',
+          );
+          throw whoamiError;
+        }
+
+        // Try again with the new token
+        response = await axios.get(whoamiUrl, {
+          headers: {
+            Authorization: `Bearer ${newToken}`,
+          },
+        });
+
+        this.logger.log(
+          'Successfully verified admin access with regenerated token',
+        );
+      }
 
       if (response.data && response.data.user_id) {
         this.logger.log(
@@ -276,10 +397,24 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(
           `CommonJS require failed: ${cjsError.message}, trying ESM import`,
         );
-        sdk = await import('matrix-js-sdk');
-        this.logger.log(
-          'Successfully loaded Matrix SDK via ESM dynamic import',
-        );
+
+        try {
+          sdk = await import('matrix-js-sdk');
+          this.logger.log(
+            'Successfully loaded Matrix SDK via ESM dynamic import',
+          );
+        } catch (esmError) {
+          this.logger.error(
+            `ESM import also failed: ${esmError.message}`,
+            esmError.stack,
+          );
+          throw esmError;
+        }
+      }
+
+      // Verify SDK was loaded successfully
+      if (!sdk || !sdk.createClient) {
+        throw new Error('Matrix SDK loaded but createClient method is missing');
       }
 
       // Assign the SDK functions to our interface
@@ -351,6 +486,14 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       userId: this.adminUserId,
       accessToken: this.adminAccessToken,
       useAuthorizationHeader: true,
+      logger: {
+        // Disable verbose HTTP logging from Matrix SDK
+        log: () => {},
+        info: () => {},
+        warn: () => {},
+        debug: () => {},
+        error: (msg: string) => this.logger.error(msg), // Keep error logs
+      },
     });
   }
 
@@ -362,6 +505,14 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       infer: true,
     });
 
+    // Verify SDK is loaded and createClient method is available
+    if (!this.matrixSdk || typeof this.matrixSdk.createClient !== 'function') {
+      this.logger.error(
+        'Cannot initialize client pool: Matrix SDK not properly loaded',
+      );
+      throw new Error('Matrix SDK not properly initialized');
+    }
+
     this.clientPool = pool.createPool<MatrixClientWithContext>(
       {
         create: () => {
@@ -370,6 +521,14 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
             userId: this.adminUserId,
             accessToken: this.adminAccessToken,
             useAuthorizationHeader: true,
+            logger: {
+              // Disable verbose HTTP logging from Matrix SDK
+              log: () => {},
+              info: () => {},
+              warn: () => {},
+              debug: () => {},
+              error: (msg: string) => this.logger.error(msg), // Keep error logs
+            },
           });
 
           return Promise.resolve({
@@ -405,15 +564,68 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Acquire a client from the connection pool
+   * Ensures admin token is valid before returning a client
    */
   async acquireClient(): Promise<MatrixClientWithContext> {
-    return this.clientPool.acquire();
+    // Check if token is valid and regenerate if needed
+    await this.ensureValidAdminToken();
+
+    // Verify client pool is initialized
+    if (!this.clientPool) {
+      this.logger.warn('Client pool not initialized, attempting to initialize');
+      try {
+        this.initializeClientPool();
+      } catch (error) {
+        this.logger.error(
+          `Failed to initialize client pool on demand: ${error.message}`,
+          error.stack,
+        );
+        throw new Error(
+          'Matrix client pool not available: SDK initialization failed',
+        );
+      }
+
+      // Double-check after attempted initialization
+      if (!this.clientPool) {
+        throw new Error('Matrix client pool could not be initialized');
+      }
+    }
+
+    // Get a client from the pool
+    const client = await this.clientPool.acquire();
+
+    // If the token was regenerated, we need to update the client's token
+    // This ensures the client uses the latest token
+    if (client.client.getAccessToken() !== this.adminAccessToken) {
+      this.logger.debug('Updating client with regenerated admin token');
+
+      // Release the old client
+      await this.clientPool.release(client);
+
+      // Drain and clear the pool to ensure all clients use the new token
+      await this.clientPool.drain();
+      await this.clientPool.clear();
+
+      // Reinitialize the pool with the new token
+      this.initializeClientPool();
+
+      // Get a fresh client with the new token
+      return this.clientPool.acquire();
+    }
+
+    return client;
   }
 
   /**
    * Release a client back to the connection pool
    */
   async releaseClient(client: MatrixClientWithContext): Promise<void> {
+    if (!this.clientPool) {
+      this.logger.warn(
+        'Attempted to release client but pool is not initialized',
+      );
+      return;
+    }
     await this.clientPool.release(client);
   }
 
@@ -422,6 +634,46 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
    */
   getSdk(): IMatrixSdk {
     return this.matrixSdk;
+  }
+
+  /**
+   * Check if admin token is valid and regenerate if needed
+   * This is useful for operations that require admin access
+   * @returns True if admin token is valid or was successfully regenerated
+   */
+  public async ensureValidAdminToken(): Promise<boolean> {
+    try {
+      // Use whoami endpoint to verify token works
+      const whoamiUrl = `${this.baseUrl}/_matrix/client/v3/account/whoami`;
+
+      try {
+        await axios.get(whoamiUrl, {
+          headers: {
+            Authorization: `Bearer ${this.adminAccessToken}`,
+          },
+        });
+        // Token is valid
+        return true;
+      } catch (whoamiError) {
+        this.logger.warn(
+          `Admin token appears invalid: ${whoamiError.message}. Attempting to regenerate.`,
+        );
+
+        // Try to regenerate the token
+        const newToken = await this.regenerateAdminAccessToken();
+        if (!newToken) {
+          this.logger.error('Failed to regenerate admin token.');
+          return false;
+        }
+
+        // Token regenerated successfully
+        this.logger.log('Admin token regenerated successfully');
+        return true;
+      }
+    } catch (error) {
+      this.logger.error(`Error checking admin token: ${error.message}`);
+      return false;
+    }
   }
 
   /**

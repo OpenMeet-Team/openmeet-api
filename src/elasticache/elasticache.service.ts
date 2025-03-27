@@ -162,4 +162,80 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
       }),
     };
   }
+
+  /**
+   * Acquire a distributed lock using Redis
+   * @param lockKey The key to lock on
+   * @param ttl The time-to-live for the lock in milliseconds
+   * @returns true if lock was acquired, false otherwise
+   */
+  async acquireLock(lockKey: string, ttl: number = 30000): Promise<boolean> {
+    if (!this.redis?.isOpen) {
+      throw new Error('Redis client is not connected');
+    }
+
+    try {
+      // Generate a unique value for this lock instance
+      const lockValue = `${Date.now()}-${Math.random()}`;
+
+      // Try to set the key with NX option (only if it doesn't exist)
+      const result = await this.redis.set(lockKey, lockValue, {
+        NX: true,
+        PX: ttl,
+      });
+
+      // If result is OK, we acquired the lock
+      return result === 'OK';
+    } catch (error) {
+      this.logger.error(
+        `Error acquiring lock for ${lockKey}: ${error.message}`,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Release a distributed lock
+   * @param lockKey The key to release
+   */
+  async releaseLock(lockKey: string): Promise<void> {
+    if (!this.redis?.isOpen) {
+      throw new Error('Redis client is not connected');
+    }
+
+    try {
+      await this.redis.del(lockKey);
+    } catch (error) {
+      this.logger.error(
+        `Error releasing lock for ${lockKey}: ${error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Execute a function with a distributed lock
+   * @param lockKey The key to lock on
+   * @param fn The function to execute while holding the lock
+   * @param ttl The time-to-live for the lock in milliseconds
+   * @returns The result of the function execution, or null if lock couldn't be acquired
+   */
+  async withLock<T>(
+    lockKey: string,
+    fn: () => Promise<T>,
+    ttl: number = 30000,
+  ): Promise<T | null> {
+    const acquired = await this.acquireLock(lockKey, ttl);
+
+    if (!acquired) {
+      this.logger.warn(`Failed to acquire lock for ${lockKey}`);
+      return null;
+    }
+
+    try {
+      const result = await fn();
+      return result;
+    } finally {
+      await this.releaseLock(lockKey);
+    }
+  }
 }

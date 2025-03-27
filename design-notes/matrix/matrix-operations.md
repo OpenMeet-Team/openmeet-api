@@ -20,6 +20,7 @@ This document provides practical guidance for developers working with the Matrix
    MATRIX_ADMIN_USER=@admin:matrix-local.openmeet.test
    MATRIX_SERVER_NAME=matrix-local.openmeet.test
    MATRIX_HOME_SERVER=http://matrix:8008
+   MATRIX_ADMIN_PASSWORD=your_admin_password  # Required for token regeneration
    ```
 
 4. **Reset Credentials (if needed)**
@@ -138,17 +139,33 @@ Key metrics to monitor:
 1. **M_UNKNOWN_TOKEN Errors**
    - **Symptom**: Chat operations fail with 401 errors
    - **Cause**: Invalid or expired Matrix tokens
-   - **Solution**: Reset tokens in database; system will automatically reprovision
+   - **Solution**: 
+     - System will automatically regenerate admin tokens if MATRIX_ADMIN_PASSWORD is configured
+     - For user tokens, reset in database; system will automatically reprovision
 
-2. **Domain Mismatch Errors**
-   - **Symptom**: "Unknown room" or "User not in room" errors
+2. **User Not In Room Errors**
+   - **Symptom**: "User not in room" errors when performing admin operations
+   - **Cause**: Admin user not joined to room before performing operations
+   - **Solution**: 
+     - Automatic with latest updates - admin will be joined to rooms before operations
+     - If issues persist, check Matrix server logs for rate limiting or permission errors
+
+3. **Domain Mismatch Errors**
+   - **Symptom**: "Unknown room" or cross-domain errors
    - **Cause**: Matrix room IDs from different server domains
    - **Solution**: Full reset (see below)
 
-3. **WebSocket Connection Issues**
+4. **WebSocket Connection Issues**
    - **Symptom**: Real-time updates not working
    - **Cause**: WebSocket connection failed or disconnected
    - **Solution**: Check network, JWT token validity, and server logs
+
+5. **Rate Limiting Errors**
+   - **Symptom**: "Too Many Requests" (429) errors in logs
+   - **Cause**: Making too many Matrix API calls in a short period
+   - **Solution**: 
+     - These are now handled gracefully and logged as warnings, not errors
+     - If persistent, consider increasing rate limits in Matrix server config
 
 ### Matrix Reset Procedures
 

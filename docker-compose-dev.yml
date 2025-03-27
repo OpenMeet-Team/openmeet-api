@@ -100,6 +100,19 @@ services:
     networks:
       - api-network
 
+  matrix-web:
+    image: nginx:alpine
+    container_name: openmeet_matrix_web
+    ports:
+      - "80:80"
+    volumes:
+      - ./matrix-config/.well-known:/usr/share/nginx/html/.well-known
+      - ./matrix-config/nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - matrix
+    networks:
+      - api-network
+
   # api:
   #   build:
   #     context: .
@@ -137,6 +150,7 @@ services:
       - COLLECTOR_OTLP_ENABLED=true
     networks:
       - api-network
+
 volumes:
   dbdata:
   matrix-data:
@@ -144,5 +158,3 @@ volumes:
 networks:
   api-network:
     driver: bridge
-
-
