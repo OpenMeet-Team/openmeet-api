@@ -92,10 +92,10 @@ export const mockEventService = {
   showRecommendedEventsByEventSlug: jest.fn().mockResolvedValue(mockEvents),
   showAllEvents: jest.fn().mockResolvedValue(mockEvents),
   showEventAttendees: jest.fn().mockResolvedValue(mockEventAttendees),
-  sendEventDiscussionMessage: jest
+  sendEventDiscussionMessage: jest.fn().mockResolvedValue({ id: 'msg_123456' }),
+  updateEventDiscussionMessage: jest
     .fn()
     .mockResolvedValue({ id: 'msg_123456' }),
-  updateEventDiscussionMessage: jest.fn().mockResolvedValue({ id: 'msg_123456' }),
   deleteEventDiscussionMessage: jest
     .fn()
     .mockResolvedValue({ id: 'msg_123456' }),

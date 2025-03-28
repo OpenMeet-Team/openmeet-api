@@ -43,7 +43,7 @@ export class RemoveZulipFields1743090229098 implements MigrationInterface {
       ALTER TABLE "${schema}"."events" 
       DROP COLUMN IF EXISTS "zulipChannelId"
     `);
-    
+
     // Remove zulip preferences from user preferences JSONB
     await queryRunner.query(`
       UPDATE "${schema}"."users" 
@@ -57,7 +57,7 @@ export class RemoveZulipFields1743090229098 implements MigrationInterface {
 
     // This migration is not fully reversible as it removes data
     // In a production scenario, you should backup data before removing it
-    
+
     // Recreate the chats table
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}"."chats" (
@@ -69,7 +69,7 @@ export class RemoveZulipFields1743090229098 implements MigrationInterface {
         CONSTRAINT "PK_chats" PRIMARY KEY ("id")
       )
     `);
-    
+
     // Recreate the userChats junction table
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "${schema}"."userChats" (
@@ -78,13 +78,13 @@ export class RemoveZulipFields1743090229098 implements MigrationInterface {
         CONSTRAINT "PK_userChats" PRIMARY KEY ("userId", "chatId")
       )
     `);
-    
+
     await queryRunner.query(`
       ALTER TABLE "${schema}"."userChats" 
       ADD CONSTRAINT "FK_userChats_users" 
       FOREIGN KEY ("userId") REFERENCES "${schema}"."users"("id") ON DELETE CASCADE
     `);
-    
+
     await queryRunner.query(`
       ALTER TABLE "${schema}"."userChats" 
       ADD CONSTRAINT "FK_userChats_chats" 
@@ -118,7 +118,7 @@ export class RemoveZulipFields1743090229098 implements MigrationInterface {
       ALTER TABLE "${schema}"."users" 
       ADD COLUMN IF NOT EXISTS "zulipUserId" integer
     `);
-    
+
     // Add empty zulip settings to preferences
     await queryRunner.query(`
       UPDATE "${schema}"."users" 

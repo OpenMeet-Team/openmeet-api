@@ -36,7 +36,6 @@ import { GroupUserPermissionEntity } from '../../../../../group/infrastructure/p
 import { GroupMemberEntity } from '../../../../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupEntity } from '../../../../../group/infrastructure/persistence/relational/entities/group.entity';
 import { ulid } from 'ulid';
-import { ChatRoomEntity } from '../../../../../chat/infrastructure/persistence/relational/entities/chat-room.entity';
 import slugify from 'slugify';
 import { generateShortCode } from '../../../../../utils/short-code';
 @Entity({
@@ -158,7 +157,7 @@ export class UserEntity extends EntityRelationalHelper {
   events: EventEntity[];
 
   // Chat entity relation removed as part of Zulip -> Matrix migration
-  // Note: A migration will be needed to clean up the userChats table 
+  // Note: A migration will be needed to clean up the userChats table
   // TODO: Create migration to remove userChats table and any other Zulip-related columns
 
   @OneToMany(() => GroupMemberEntity, (groupMember) => groupMember.user)

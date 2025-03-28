@@ -38,7 +38,6 @@ import {
   mockTenantConnectionService,
   mockUserService,
   mockMatrixMessage,
-  mockMatrixMessageResponse,
   mockMatrixService,
 } from '../test/mocks';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';

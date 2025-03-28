@@ -96,9 +96,7 @@ export const mockGroupService = {
   updateGroupDiscussionMessage: jest
     .fn()
     .mockResolvedValue({ id: 'msg_123456' }),
-  sendGroupDiscussionMessage: jest
-    .fn()
-    .mockResolvedValue({ id: 'msg_123456' }),
+  sendGroupDiscussionMessage: jest.fn().mockResolvedValue({ id: 'msg_123456' }),
   showGroupAbout: jest.fn().mockResolvedValue(mockGroupAboutResponse),
   showGroupDiscussions: jest.fn().mockResolvedValue(mockDiscussions),
   searchAllGroups: jest.fn().mockResolvedValue(mockGroups),

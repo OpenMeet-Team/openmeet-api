@@ -457,13 +457,13 @@ export class EventManagementService {
   @Trace('event-management.deleteEventsByGroup')
   async deleteEventsByGroup(groupId: number): Promise<void> {
     await this.initializeRepository();
-    
+
     // First find all events for this group
     const events = await this.eventRepository.find({
       where: { group: { id: groupId } },
-      select: ['id', 'slug']
+      select: ['id', 'slug'],
     });
-    
+
     // Delete each event individually to ensure proper cleanup of related entities
     for (const event of events) {
       try {
@@ -471,21 +471,27 @@ export class EventManagementService {
         // If discussionService is available (injected), use it to clean up chat rooms
         if (this.discussionService) {
           await this.discussionService.cleanupEventChatRooms(event.id);
-          this.logger.log(`Cleaned up chat rooms for event ${event.slug} (ID: ${event.id})`);
+          this.logger.log(
+            `Cleaned up chat rooms for event ${event.slug} (ID: ${event.id})`,
+          );
         }
-        
+
         // Now that chat rooms are deleted, we can delete the event itself
         await this.eventRepository.delete(event.id);
-        this.logger.log(`Deleted event ${event.slug} (ID: ${event.id}) from group ${groupId}`);
+        this.logger.log(
+          `Deleted event ${event.slug} (ID: ${event.id}) from group ${groupId}`,
+        );
       } catch (error) {
-        this.logger.error(`Error deleting event ${event.id} from group ${groupId}: ${error.message}`);
+        this.logger.error(
+          `Error deleting event ${event.id} from group ${groupId}: ${error.message}`,
+        );
         // Continue with other events
       }
     }
-    
+
     this.auditLogger.log('events deleted by group', {
       groupId,
-      eventCount: events.length
+      eventCount: events.length,
     });
   }
 

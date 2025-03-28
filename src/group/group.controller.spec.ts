@@ -14,7 +14,6 @@ import {
   mockRepository,
   mockMatrixMessage,
   mockGroupAboutResponse,
-  mockMatrixMessageResponse,
   mockDiscussions,
   mockEventAttendeeService,
 } from '../test/mocks';
