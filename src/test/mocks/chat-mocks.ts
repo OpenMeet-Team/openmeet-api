@@ -68,3 +68,24 @@ export const mockDiscussionService = {
     .fn()
     .mockResolvedValue({ eventId: 1, userId: 1 }),
 };
+
+// Matrix service mock
+export const mockMatrixService = {
+  createRoom: jest.fn().mockResolvedValue('!roomid:server'),
+  inviteToRoom: jest.fn().mockResolvedValue(true),
+  joinRoom: jest.fn().mockResolvedValue(true),
+  leaveRoom: jest.fn().mockResolvedValue(true),
+  sendMessage: jest.fn().mockResolvedValue({ event_id: '$msg_123456' }),
+  updateMessage: jest.fn().mockResolvedValue({ event_id: '$msg_123456' }),
+  deleteMessage: jest.fn().mockResolvedValue({ event_id: '$msg_123456' }),
+  getRoomMembers: jest.fn().mockResolvedValue(['@user:server']),
+  getRoomMessages: jest.fn().mockResolvedValue({
+    chunk: [],
+    end: '',
+    start: '',
+  }),
+};
+
+// Message mocks for Matrix message responses
+export const mockMatrixMessage = { id: 123456, content: 'message content' };
+export const mockMatrixMessageResponse = { id: 123456 };

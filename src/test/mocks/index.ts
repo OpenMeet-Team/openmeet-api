@@ -4,5 +4,8 @@ export * from './user-mocks';
 // Selectively export from chat-mocks to avoid name conflicts
 export { 
   mockChatRoomGroup, 
-  mockChatRoomService 
+  mockChatRoomService,
+  mockMatrixService,
+  mockMatrixMessage,
+  mockMatrixMessageResponse
 } from './chat-mocks';

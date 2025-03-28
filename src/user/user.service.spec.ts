@@ -140,16 +140,7 @@ describe('UserService', () => {
     });
   });
 
-  describe('addZulipCredentialsToUser', () => {
-    it('should add zulip credentials to a user', async () => {
-      const user = await userService.addZulipCredentialsToUser(mockUser.id, {
-        zulipUsername: mockUser.zulipUsername as string,
-        zulipApiKey: mockUser.zulipApiKey as string,
-        zulipUserId: mockUser.zulipUserId as number,
-      });
-      expect(user).toBeDefined();
-    });
-  });
+  // Removed Zulip credentials test - we've migrated to Matrix
 
   describe('update', () => {
     it('should update a user', async () => {
