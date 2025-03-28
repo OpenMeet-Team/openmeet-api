@@ -14,10 +14,8 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { GroupRoleService } from '../group-role/group-role.service';
-import { ZulipService } from '../zulip/zulip.service';
 import { MailModule } from '../mail/mail.module';
 import { EventRoleService } from '../event-role/event-role.service';
-import { ZulipModule } from '../zulip/zulip.module';
 import { AuthModule } from '../auth/auth.module';
 import { GroupListener } from './group.listener';
 import { GroupMailService } from '../group-mail/group-mail.service';
@@ -39,7 +37,6 @@ import { ChatModule } from '../chat/chat.module';
     MailModule,
     GroupMemberModule,
     EventAttendeeModule,
-    ZulipModule,
     forwardRef(() => AuthModule),
     GroupMailModule,
     forwardRef(() => EventModule),
@@ -55,7 +52,6 @@ import { ChatModule } from '../chat/chat.module';
     EventEmitter2,
     FilesS3PresignedService,
     GroupRoleService,
-    ZulipService,
     EventRoleService,
     GroupListener,
     GroupMailService,

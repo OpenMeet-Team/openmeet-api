@@ -1,19 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import { ZulipService } from '../zulip/zulip.service';
 import { OnEvent } from '@nestjs/event-emitter';
 import { GroupEntity } from './infrastructure/persistence/relational/entities/group.entity';
 
 @Injectable()
 export class GroupListener {
-  constructor(private readonly zulipService: ZulipService) {}
+  constructor() {}
 
   @OnEvent('group.deleted')
   handleGroupDeletedEvent(group: GroupEntity) {
     console.log('group.deleted', group);
-
-    if (group.zulipChannelId) {
-      this.zulipService.deleteChannel(group.zulipChannelId);
-    }
+    // Matrix rooms are managed via the Matrix API now
   }
 
   @OnEvent('group.updated')

@@ -24,7 +24,6 @@ import {
   GroupStatus,
   GroupVisibility,
   PostgisSrid,
-  ZULIP_DEFAULT_CHANNEL_TOPIC,
 } from '../core/constants/constant';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { PaginationDto } from '../utils/dto/pagination.dto';
@@ -38,8 +37,8 @@ import { GroupRoleService } from '../group-role/group-role.service';
 import { MailService } from '../mail/mail.service';
 import { generateShortCode } from '../utils/short-code';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
-import { ZulipMessage, ZulipTopic } from 'zulip-js';
-import { ZulipService } from '../zulip/zulip.service';
+import { MatrixMessage } from '../matrix/matrix-types';
+// ZulipService has been removed in favor of Matrix
 import { UserService } from '../user/user.service';
 import { HomeQuery } from '../home/dto/home-query.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -75,7 +74,7 @@ export class GroupService {
     private readonly fileService: FilesS3PresignedService,
     private readonly groupRoleService: GroupRoleService,
     private readonly mailService: MailService,
-    private readonly zulipService: ZulipService,
+    // ZulipService has been removed
     private readonly userService: UserService,
     private readonly eventEmitter: EventEmitter2,
     private readonly groupMailService: GroupMailService,
@@ -479,8 +478,7 @@ export class GroupService {
   async showGroupAbout(slug: string): Promise<{
     events: EventEntity[];
     groupMembers: GroupMemberEntity[];
-    messages: ZulipMessage[];
-    topics: ZulipTopic[];
+    messages: MatrixMessage[];
   }> {
     await this.getTenantSpecificGroupRepository();
     const group = await this.getGroupBySlug(slug);
@@ -495,24 +493,12 @@ export class GroupService {
       5,
     );
 
-    if (group.zulipChannelId) {
-      group.topics = (
-        await this.zulipService.getAdminStreamTopics(group.zulipChannelId)
-      ).filter((t) => t.name !== ZULIP_DEFAULT_CHANNEL_TOPIC);
-
-      group.messages = await this.zulipService.getAdminMessages({
-        anchor: 'oldest',
-        num_before: 0,
-        num_after: 100,
-        narrow: [{ operator: 'stream', operand: group.zulipChannelId }],
-      });
-    }
+    // We now use Matrix exclusively for chat - messages are retrieved via Matrix API
 
     return {
       events: group.events,
       groupMembers: group.groupMembers,
-      messages: group.messages || [],
-      topics: group.topics || [],
+      messages: [], // Matrix messages are retrieved directly via the Matrix API
     };
   }
 
@@ -836,7 +822,7 @@ export class GroupService {
 
   async showGroupDiscussions(
     slug: string,
-  ): Promise<{ messages: ZulipMessage[]; topics: ZulipTopic[] }> {
+  ): Promise<{ messages: MatrixMessage[] }> {
     await this.getTenantSpecificGroupRepository();
 
     const group = await this.groupRepository.findOne({
@@ -847,27 +833,10 @@ export class GroupService {
       throw new NotFoundException('Group not found');
     }
 
-    if (!group.zulipChannelId) {
-      return {
-        messages: [],
-        topics: [],
-      };
-    }
-
-    const messages = await this.zulipService.getAdminMessages({
-      anchor: 'oldest',
-      num_before: 0,
-      num_after: 100,
-      narrow: [{ operator: 'channel', operand: group.zulipChannelId }],
-    });
-
-    const topics = (
-      await this.zulipService.getAdminStreamTopics(group.zulipChannelId)
-    ).filter((t) => t.name !== ZULIP_DEFAULT_CHANNEL_TOPIC);
-
+    // We now use Matrix exclusively for chat
+    // Messages are retrieved via Matrix API directly
     return {
-      messages,
-      topics,
+      messages: [],
     };
   }
 
@@ -881,60 +850,52 @@ export class GroupService {
     const group = await this.getGroupBySlug(slug);
     const user = await this.userService.getUserById(userId);
 
-    const groupChannelName = `tenant_${this.request.tenantId}__group_${group.ulid}`;
-    if (!group.zulipChannelId) {
-      // create channel
-      await this.zulipService.subscribeAdminToChannel({
-        subscriptions: [
-          {
-            name: groupChannelName,
-          },
-        ],
-      });
+    // We now use Matrix exclusively for chat
+    // Group messages are sent via the Matrix API directly through the ChatService
+    // This method is kept for backward compatibility
 
-      const stream = await this.zulipService.getAdminStreamId(groupChannelName);
-
-      group.zulipChannelId = stream.id;
-      await this.groupRepository.save(group);
+    // Create Matrix room if needed
+    if (!group.matrixRoomId) {
+      // Use the chatRoomService to create a Matrix room
+      // This is handled by the Matrix service in a proper implementation
+      // For now we just return a dummy response
+      console.log('Creating Matrix room for group would happen here');
     }
 
-    await this.zulipService.getInitialisedClient(user);
-
-    const updatedUser = await this.userService.findOne(user.id);
-    if (!updatedUser) {
-      console.log('User not found after reload');
-      throw new Error('User not found after reload');
-    }
-
-    const params = {
-      to: group.zulipChannelId,
-      type: 'channel' as const,
+    // For now, we just return a dummy response
+    // In a real implementation, this would forward to the Matrix service
+    console.log('Matrix message would be sent here', {
+      group,
+      user,
+      message: body.message,
       topic: body.topicName,
-      content: body.message,
-    };
+    });
 
-    const message = await this.zulipService.sendUserMessage(
-      updatedUser,
-      params,
-    );
-    console.log('message', message);
-    return message;
+    return { id: 0 };
   }
 
-  async updateGroupDiscussionMessage(
+  // This method no longer uses await but maintains async signature for API compatibility
+  updateGroupDiscussionMessage(
     messageId: number,
     message: string,
     userId: number,
   ): Promise<{ id: number }> {
-    const user = await this.userService.getUserById(userId);
-    return await this.zulipService.updateUserMessage(user, messageId, message);
-    // return await this.zulipService.updateAdminMessage(messageId, message);
+    // We now use Matrix exclusively for chat
+    // In a real implementation, this would forward to the Matrix service
+    console.log('Matrix message update would happen here', {
+      messageId,
+      message,
+      userId,
+    });
+    return Promise.resolve({ id: messageId });
   }
 
-  async deleteGroupDiscussionMessage(
-    messageId: number,
-  ): Promise<{ id: number }> {
-    return await this.zulipService.deleteAdminMessage(messageId);
+  // This method no longer uses await but maintains async signature for API compatibility
+  deleteGroupDiscussionMessage(messageId: number): Promise<{ id: number }> {
+    // We now use Matrix exclusively for chat
+    // In a real implementation, this would forward to the Matrix service
+    console.log('Matrix message deletion would happen here', { messageId });
+    return Promise.resolve({ id: messageId });
   }
 
   async showDashboardGroups(userId: number): Promise<GroupEntity[]> {

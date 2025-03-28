@@ -1,12 +1,8 @@
 import { CategoryEntity } from '../../category/infrastructure/persistence/relational/entities/categories.entity';
 import { SubCategoryEntity } from '../../sub-category/infrastructure/persistence/relational/entities/sub-category.entity';
 import { FileEntity } from '../../file/infrastructure/persistence/relational/entities/file.entity';
-import { ChatEntity } from 'src/chat/infrastructure/persistence/relational/entities/chat.entity';
-import {
-  mockZulipMessage,
-  mockZulipMessageResponse,
-  mockZulipStreamTopic,
-} from './zulip-mocks';
+import { ChatRoomEntity } from 'src/chat/infrastructure/persistence/relational/entities/chat-room.entity';
+// Zulip mocks removed in favor of Matrix
 import {
   mockEvent,
   mockEvents,
@@ -62,15 +58,17 @@ export const mockEventTopic = {
   name: 'test',
 };
 
-export const mockChat = {
+export const mockChatRoom = {
   id: 1,
-  ulid: 'test',
-  participants: [mockUser],
-} as ChatEntity;
+  name: 'test-room',
+  matrixRoomId: '!roomid:matrix.example.org',
+  members: [mockUser],
+} as ChatRoomEntity;
 
 export const mockDiscussions = {
-  messages: [mockZulipMessage],
-  topics: [mockZulipStreamTopic],
+  messages: [],
+  end: '',
+  roomId: '!roomid:matrix.example.org',
 };
 
 export const mockSubCategories = [mockSubCategory];
@@ -78,8 +76,8 @@ export const mockSubCategories = [mockSubCategory];
 export const mockGroupAboutResponse = {
   events: [mockEvent],
   groupMembers: [mockGroupMember],
-  messages: [mockZulipMessage],
-  topics: [mockZulipStreamTopic],
+  messages: [],
+  roomId: '!roomid:matrix.example.org',
 };
 
 export const mockMailService = {
@@ -89,16 +87,13 @@ export const mockMailService = {
   sendMailChatNewMessage: jest.fn().mockResolvedValue(undefined),
 };
 
-export const mockChatService = {
-  getChatByUlid: jest.fn().mockResolvedValue(mockChat),
-  getChatByParticipantUlid: jest.fn().mockResolvedValue(mockChat),
-  sendMessage: jest.fn().mockResolvedValue(mockZulipMessageResponse),
-  showChats: jest
-    .fn()
-    .mockResolvedValue({ chats: [mockChat], chat: mockChat || null }),
-  setMessagesRead: jest
-    .fn()
-    .mockResolvedValue({ messages: [mockZulipMessage.id] }),
+export const mockDiscussionService = {
+  getEventDiscussionMessages: jest.fn().mockResolvedValue(mockDiscussions),
+  getGroupDiscussionMessages: jest.fn().mockResolvedValue(mockDiscussions),
+  sendEventDiscussionMessage: jest.fn().mockResolvedValue({ id: 'msg_123456' }),
+  sendGroupDiscussionMessage: jest.fn().mockResolvedValue({ id: 'msg_123456' }),
+  addMemberToEventDiscussionBySlug: jest.fn().mockResolvedValue(undefined),
+  removeMemberFromEventDiscussionBySlug: jest.fn().mockResolvedValue(undefined),
 };
 
 export const mockCategoryService = {

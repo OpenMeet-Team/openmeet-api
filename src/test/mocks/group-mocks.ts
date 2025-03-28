@@ -5,7 +5,7 @@ import { GroupUserPermissionEntity } from '../../group/infrastructure/persistenc
 import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
 import { mockCategory } from './mocks';
 import { mockEvents } from './event-mocks';
-import { mockZulipMessageResponse } from './zulip-mocks';
+// Zulip mocks have been removed in favor of Matrix
 import { GroupRole } from '../../core/constants/constant';
 import { GroupRoleEntity } from '../../group-role/infrastructure/persistence/relational/entities/group-role.entity';
 
@@ -92,13 +92,11 @@ export const mockGroupService = {
   updateGroupMemberRole: jest.fn().mockResolvedValue(mockGroupMember),
   deleteGroupDiscussionMessage: jest
     .fn()
-    .mockResolvedValue(mockZulipMessageResponse),
+    .mockResolvedValue({ id: 'msg_123456' }),
   updateGroupDiscussionMessage: jest
     .fn()
-    .mockResolvedValue(mockZulipMessageResponse),
-  sendGroupDiscussionMessage: jest
-    .fn()
-    .mockResolvedValue(mockZulipMessageResponse),
+    .mockResolvedValue({ id: 'msg_123456' }),
+  sendGroupDiscussionMessage: jest.fn().mockResolvedValue({ id: 'msg_123456' }),
   showGroupAbout: jest.fn().mockResolvedValue(mockGroupAboutResponse),
   showGroupDiscussions: jest.fn().mockResolvedValue(mockDiscussions),
   searchAllGroups: jest.fn().mockResolvedValue(mockGroups),

@@ -17,7 +17,7 @@ import { CategoryEntity } from '../../category/infrastructure/persistence/relati
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupMemberService } from '../../group-member/group-member.service';
 import { FilesS3PresignedService } from '../../file/infrastructure/uploader/s3-presigned/file.service';
-import { ZulipService } from '../../zulip/zulip.service';
+import { MatrixChatProviderAdapter } from '../../chat/adapters/matrix-chat-provider.adapter';
 import {
   mockCategoryService,
   mockDiscussionService,
@@ -31,7 +31,7 @@ import {
   mockEventAttendee,
   mockEventRoleService,
   mockUserService,
-  mockZulipService,
+  mockMatrixService,
   mockUser,
   mockEventMailService,
 } from '../../test/mocks';
@@ -93,8 +93,8 @@ describe('EventManagementService', () => {
           useValue: mockRepository,
         },
         {
-          provide: ZulipService,
-          useValue: mockZulipService,
+          provide: MatrixChatProviderAdapter,
+          useValue: mockMatrixService,
         },
         {
           provide: EventRoleService,

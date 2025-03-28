@@ -41,7 +41,7 @@ import { RequestCounterInterceptor } from './interceptors/request-counter.interc
 import { GroupRoleModule } from './group-role/group-role.module';
 import { RoleModule } from './role/role.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
-import { ZulipModule } from './zulip/zulip.module';
+// ZulipModule has been removed in favor of MatrixModule
 import { ChatModule } from './chat/chat.module';
 import { AuthGithubModule } from './auth-github/auth-github.module';
 import { GroupMailModule } from './group-mail/group-mail.module';
@@ -123,7 +123,6 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     HealthModule,
     GroupRoleModule,
     RoleModule,
-    ZulipModule,
     ChatModule,
     GroupMailModule,
     EventMailModule,
