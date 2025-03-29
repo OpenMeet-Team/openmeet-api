@@ -184,9 +184,6 @@
     "setupFilesAfterEnv": [
       "<rootDir>/../test/jest-setup.ts"
     ],
-    "moduleNameMapper": {
-      "matrix-js-sdk": "<rootDir>/matrix/__mocks__/matrix-js-sdk.ts"
-    },
     "transformIgnorePatterns": [
       "node_modules/(?!matrix-js-sdk)"
     ]
