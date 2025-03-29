@@ -137,7 +137,7 @@ export class MatrixMessageService implements IMatrixMessageProvider {
     accessToken: string,
     isTyping: boolean,
     deviceId?: string,
-  ): Promise<{}> {
+  ): Promise<Record<string, never>> {
     try {
       this.logger.debug(
         `Sending typing notification for user ${userId} in room ${roomId}, typing: ${isTyping}`,

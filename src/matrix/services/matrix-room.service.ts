@@ -207,7 +207,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
     } = options;
 
     let client;
-    
+
     try {
       client = await this.matrixCoreService.acquireClient();
       const matrixSdk = this.matrixCoreService.getSdk();
@@ -442,9 +442,12 @@ export class MatrixRoomService implements IMatrixRoomProvider {
   /**
    * Invite a user to a room
    */
-  async inviteUser(roomId: string, userId: string): Promise<{}> {
+  async inviteUser(
+    roomId: string,
+    userId: string,
+  ): Promise<Record<string, never>> {
     let client;
-    
+
     try {
       client = await this.matrixCoreService.acquireClient();
 
@@ -512,7 +515,10 @@ export class MatrixRoomService implements IMatrixRoomProvider {
   /**
    * Remove a user from a room
    */
-  async removeUserFromRoom(roomId: string, userId: string): Promise<{}> {
+  async removeUserFromRoom(
+    roomId: string,
+    userId: string,
+  ): Promise<Record<string, never>> {
     let client;
 
     try {
@@ -611,12 +617,12 @@ export class MatrixRoomService implements IMatrixRoomProvider {
   async setRoomPowerLevels(
     roomId: string,
     userPowerLevels: Record<string, number>,
-  ): Promise<{}> {
+  ): Promise<Record<string, never>> {
     let client;
-    
+
     try {
       client = await this.matrixCoreService.acquireClient();
-      
+
       // First ensure admin is in the room
       await this.ensureAdminInRoom(roomId, client);
 

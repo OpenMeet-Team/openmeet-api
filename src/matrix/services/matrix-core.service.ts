@@ -382,12 +382,12 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
   private async loadMatrixSdk(): Promise<void> {
     try {
       this.logger.log('Attempting to dynamically import Matrix SDK');
-      
+
       // Important: Use string literal to prevent TS from transforming this import
       // NestJS compiles this to CommonJS, but matrix-js-sdk is ESM
-      // eslint-disable-next-line @typescript-eslint/no-implied-eval
-      const sdk = await (new Function('return import("matrix-js-sdk")')());
-      
+
+      const sdk = await new Function('return import("matrix-js-sdk")')();
+
       this.logger.log('Successfully loaded Matrix SDK via dynamic import');
 
       // Verify SDK was loaded successfully

@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { MatrixCoreService } from './matrix-core.service';
+import axios from 'axios';
+import { Logger } from '@nestjs/common';
 
 // Create the mocks directly in the test file instead of importing
 // This avoids path issues in different environments
@@ -8,7 +10,9 @@ const mockMatrixClient = {
   startClient: jest.fn().mockResolvedValue(undefined),
   stopClient: jest.fn(),
   createRoom: jest.fn().mockResolvedValue({ room_id: '!mock-room:matrix.org' }),
-  sendEvent: jest.fn().mockResolvedValue({ event_id: '$mock-event-id:matrix.org' }),
+  sendEvent: jest
+    .fn()
+    .mockResolvedValue({ event_id: '$mock-event-id:matrix.org' }),
   getStateEvent: jest.fn().mockResolvedValue({}),
   sendStateEvent: jest.fn().mockResolvedValue({}),
   invite: jest.fn().mockResolvedValue({}),
@@ -79,7 +83,7 @@ describe('MatrixCoreService', () => {
     }).compile();
 
     service = module.get<MatrixCoreService>(MatrixCoreService);
-    
+
     // Skip initialization to avoid side effects
     jest.spyOn(service, 'onModuleInit').mockImplementation(async () => {});
   });
@@ -112,42 +116,44 @@ describe('MatrixCoreService', () => {
       });
 
       // Mock the authentication API call for token verification
-      const axiosMock = jest.spyOn(require('axios'), 'post').mockResolvedValue({
+      jest.spyOn(axios, 'post').mockResolvedValue({
         data: { access_token: 'admin-token' },
       });
-      
-      jest.spyOn(require('axios'), 'get').mockResolvedValue({
-        data: { user_id: '@admin:example.org' }
+
+      jest.spyOn(axios, 'get').mockResolvedValue({
+        data: { user_id: '@admin:example.org' },
       });
-      
+
       // Create a spy for createClient
       const createClientSpy = jest.fn().mockReturnValue(mockMatrixClient);
-      
+
       // Mock the dynamic import to return our mock SDK
-      jest.spyOn(service as any, 'loadMatrixSdk').mockImplementation(async () => {
-        // Set the matrixSdk property to our mock
-        (service as any).matrixSdk = {
-          createClient: createClientSpy,
-          Visibility: {
-            Public: 'public',
-            Private: 'private',
-          },
-          Preset: {
-            PublicChat: 'public_chat',
-            PrivateChat: 'private_chat',
-            TrustedPrivateChat: 'trusted_private_chat',
-          },
-          Direction: {
-            Forward: 'f',
-            Backward: 'b',
-          }
-        };
-        return Promise.resolve();
-      });
+      jest
+        .spyOn(service as any, 'loadMatrixSdk')
+        .mockImplementation(async () => {
+          // Set the matrixSdk property to our mock
+          (service as any).matrixSdk = {
+            createClient: createClientSpy,
+            Visibility: {
+              Public: 'public',
+              Private: 'private',
+            },
+            Preset: {
+              PublicChat: 'public_chat',
+              PrivateChat: 'private_chat',
+              TrustedPrivateChat: 'trusted_private_chat',
+            },
+            Direction: {
+              Forward: 'f',
+              Backward: 'b',
+            },
+          };
+          return Promise.resolve();
+        });
 
       // Call initialization
       await service.onModuleInit();
-      
+
       // Verify admin client was created
       expect(createClientSpy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -162,23 +168,25 @@ describe('MatrixCoreService', () => {
     it('should handle SDK loading errors gracefully', async () => {
       // Reset the mock implementation from previous test
       jest.spyOn(service, 'onModuleInit').mockRestore();
-      
+
       // Create a spy on loadMatrixSdk that simulates a failure
       const loadMatrixSdkSpy = jest.spyOn(service as any, 'loadMatrixSdk');
       loadMatrixSdkSpy.mockRejectedValue(new Error('SDK load failure'));
-      
+
       // Mock console error to prevent test output noise
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-      
+      const consoleErrorSpy = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
       // Mock Logger class to prevent error output
-      jest.spyOn(require('@nestjs/common').Logger.prototype, 'error').mockImplementation(() => {});
-      
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+
       // Initialize module and expect it to catch the error
       await expect(service.onModuleInit()).resolves.not.toThrow();
-      
+
       // We expect the service to log the error but not throw
       expect(loadMatrixSdkSpy).toHaveBeenCalled();
-      
+
       // Restore console.error
       consoleErrorSpy.mockRestore();
     });
@@ -218,7 +226,11 @@ describe('MatrixCoreService', () => {
       const mockSdk = {
         createClient: jest.fn(),
         Visibility: { Public: 'public', Private: 'private' },
-        Preset: { PublicChat: 'public_chat', PrivateChat: 'private_chat', TrustedPrivateChat: 'trusted_private_chat' },
+        Preset: {
+          PublicChat: 'public_chat',
+          PrivateChat: 'private_chat',
+          TrustedPrivateChat: 'trusted_private_chat',
+        },
         Direction: { Forward: 'f', Backward: 'b' },
       };
       (service as any).matrixSdk = mockSdk;

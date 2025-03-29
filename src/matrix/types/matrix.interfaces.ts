@@ -27,9 +27,13 @@ export interface IMatrixClient {
 
   // Room operations
   createRoom: (options: any) => Promise<{ room_id: string }>;
-  invite: (roomId: string, userId: string) => Promise<{}>;
-  kick: (roomId: string, userId: string, reason?: string) => Promise<{}>;
-  joinRoom: (roomId: string) => Promise<{}>;
+  invite: (roomId: string, userId: string) => Promise<Record<string, never>>;
+  kick: (
+    roomId: string,
+    userId: string,
+    reason?: string,
+  ) => Promise<Record<string, never>>;
+  joinRoom: (roomId: string) => Promise<Record<string, never>>;
 
   // State and profile operations
   getStateEvent: (
@@ -44,7 +48,7 @@ export interface IMatrixClient {
     stateKey: string,
   ) => Promise<any>;
   getProfileInfo: (userId: string) => Promise<{ displayname?: string }>;
-  setDisplayName: (displayName: string) => Promise<{}>;
+  setDisplayName: (displayName: string) => Promise<Record<string, never>>;
 
   // Message operations
   sendEvent: (
@@ -57,7 +61,7 @@ export interface IMatrixClient {
     roomId: string,
     isTyping: boolean,
     timeout: number,
-  ) => Promise<{}>;
+  ) => Promise<Record<string, never>>;
 
   // Room info
   getJoinedRooms: () => Promise<{ joined_rooms: string[] }>;
@@ -80,8 +84,11 @@ export interface IMatrixAdminApi {
     isAdmin?: boolean,
     displayName?: string,
   ) => Promise<{ userId: string; accessToken: string; deviceId: string }>;
-  deleteUser: (userId: string) => Promise<{}>;
-  setUserPassword: (userId: string, password: string) => Promise<{}>;
+  deleteUser: (userId: string) => Promise<Record<string, never>>;
+  setUserPassword: (
+    userId: string,
+    password: string,
+  ) => Promise<Record<string, never>>;
 }
 
 export interface IMatrixClientProvider {
@@ -90,7 +97,7 @@ export interface IMatrixClientProvider {
     userService?: any,
     tenantId?: string,
   ) => Promise<IMatrixClient>;
-  releaseClientForUser: (userSlug: string) => {}; // Changed from void to {} for consistency
+  releaseClientForUser: (userSlug: string) => Record<string, never>;
 }
 
 export interface IMatrixRoomProvider {
@@ -100,12 +107,18 @@ export interface IMatrixRoomProvider {
     topic?: string;
     invitedMembers?: string[];
   }>;
-  inviteUser: (roomId: string, userId: string) => Promise<{}>;
-  removeUserFromRoom: (roomId: string, userId: string) => Promise<{}>;
+  inviteUser: (
+    roomId: string,
+    userId: string,
+  ) => Promise<Record<string, never>>;
+  removeUserFromRoom: (
+    roomId: string,
+    userId: string,
+  ) => Promise<Record<string, never>>;
   setRoomPowerLevels: (
     roomId: string,
     userPowerLevels: Record<string, number>,
-  ) => Promise<{}>;
+  ) => Promise<Record<string, never>>;
 }
 
 export interface IMatrixMessageProvider {
@@ -116,7 +129,7 @@ export interface IMatrixMessageProvider {
     accessToken: string,
     isTyping: boolean,
     deviceId?: string,
-  ) => Promise<{}>;
+  ) => Promise<Record<string, never>>;
   getRoomMessages: (
     roomId: string,
     limit?: number,

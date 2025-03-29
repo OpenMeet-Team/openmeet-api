@@ -5,7 +5,9 @@ const mockClient = {
   startClient: jest.fn().mockResolvedValue(undefined),
   stopClient: jest.fn(),
   createRoom: jest.fn().mockResolvedValue({ room_id: '!mock-room:matrix.org' }),
-  sendEvent: jest.fn().mockResolvedValue({ event_id: '$mock-event-id:matrix.org' }),
+  sendEvent: jest
+    .fn()
+    .mockResolvedValue({ event_id: '$mock-event-id:matrix.org' }),
   getStateEvent: jest.fn().mockResolvedValue({}),
   sendStateEvent: jest.fn().mockResolvedValue({}),
   invite: jest.fn().mockResolvedValue({}),
