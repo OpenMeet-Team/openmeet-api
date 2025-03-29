@@ -2,50 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { MatrixCoreService } from './matrix-core.service';
 
-// Mock matrix-js-sdk
-jest.mock('matrix-js-sdk', () => {
-  const mockClient = {
-    startClient: jest.fn(),
-    stopClient: jest.fn(),
-    createRoom: jest
-      .fn()
-      .mockResolvedValue({ room_id: '!mock-room:matrix.org' }),
-    sendEvent: jest
-      .fn()
-      .mockResolvedValue({ event_id: '$mock-event-id:matrix.org' }),
-    getStateEvent: jest.fn().mockResolvedValue({}),
-    sendStateEvent: jest.fn().mockResolvedValue({}),
-    invite: jest.fn().mockResolvedValue({}),
-    kick: jest.fn().mockResolvedValue({}),
-    joinRoom: jest.fn().mockResolvedValue({}),
-    getProfileInfo: jest.fn().mockResolvedValue({ displayname: 'Mock User' }),
-    setDisplayName: jest.fn().mockResolvedValue({}),
-    getJoinedRooms: jest.fn().mockResolvedValue({ joined_rooms: [] }),
-    getRoom: jest.fn().mockReturnValue(null),
-    getAccessToken: jest.fn().mockReturnValue('mock-token'),
-    getUserId: jest.fn().mockReturnValue('@mock-user:matrix.org'),
-    on: jest.fn(),
-    removeListener: jest.fn(),
-  };
-
-  return {
-    createClient: jest.fn().mockReturnValue(mockClient),
-    Visibility: {
-      Public: 'public',
-      Private: 'private',
-    },
-    Preset: {
-      PublicChat: 'public_chat',
-      PrivateChat: 'private_chat',
-      TrustedPrivateChat: 'trusted_private_chat',
-    },
-    Direction: {
-      Forward: 'f',
-      Backward: 'b',
-    },
-    __mockClient: mockClient,
-  };
-});
+// Import the mock directly - don't use jest.mock which is causing issues
+import * as mockMatrixSdk from '../../../test/mocks/matrix/matrix-js-sdk';
 
 describe('MatrixCoreService', () => {
   let service: MatrixCoreService;
@@ -78,9 +36,7 @@ describe('MatrixCoreService', () => {
     }).compile();
 
     service = module.get<MatrixCoreService>(MatrixCoreService);
-    // Get service but don't use it directly in tests
-    module.get<ConfigService>(ConfigService);
-
+    
     // Skip initialization to avoid side effects
     jest.spyOn(service, 'onModuleInit').mockImplementation(async () => {});
   });
@@ -94,18 +50,17 @@ describe('MatrixCoreService', () => {
       // Reset the mock implementation to test actual initialization
       jest.spyOn(service, 'onModuleInit').mockRestore();
 
-      // Force dynamically loaded SDK methods to be mocked
-      const mockSdk = jest.requireMock('matrix-js-sdk');
-      jest.spyOn(service as any, 'loadMatrixSdk').mockImplementation(() => {
-        (service as any).matrixSdk = mockSdk;
+      // Mock the dynamic import to return our mock SDK
+      jest.spyOn(service as any, 'loadMatrixSdk').mockImplementation(async () => {
+        (service as any).matrixSdk = mockMatrixSdk.default;
         return Promise.resolve();
       });
 
       // Call initialization
       await service.onModuleInit();
 
-      // Verify admin client was created
-      expect(mockSdk.createClient).toHaveBeenCalledWith(
+      // Verify admin client was created - using our test mock's createClient
+      expect(mockMatrixSdk.createClient).toHaveBeenCalledWith(
         expect.objectContaining({
           baseUrl: 'https://matrix.example.org',
           userId: '@admin:example.org',
@@ -115,10 +70,7 @@ describe('MatrixCoreService', () => {
       );
     });
 
-    it('should throw an error on SDK loading failure', async () => {
-      // Since we've removed the createMockSdk method, we expect loadMatrixSdk to throw an error
-      // when there's a problem loading the SDK
-      
+    it('should handle SDK loading errors gracefully', async () => {
       // Create a spy on loadMatrixSdk that simulates a failure
       const loadMatrixSdkSpy = jest.spyOn(service as any, 'loadMatrixSdk');
       loadMatrixSdkSpy.mockRejectedValue(new Error('SDK load failure'));
@@ -134,8 +86,7 @@ describe('MatrixCoreService', () => {
   describe('cleanup', () => {
     it('should clean up resources on module destroy', async () => {
       // Setup admin client for cleanup
-      const mockClient = jest.requireMock('matrix-js-sdk').__mockClient;
-      (service as any).adminClient = mockClient;
+      (service as any).adminClient = mockMatrixSdk.__mockClient;
 
       // Setup a mock client pool
       const mockClientPool = {
@@ -148,7 +99,7 @@ describe('MatrixCoreService', () => {
       await service.onModuleDestroy();
 
       // Verify stopClient was called on the admin client
-      expect(mockClient.stopClient).toHaveBeenCalled();
+      expect(mockMatrixSdk.__mockClient.stopClient).toHaveBeenCalled();
 
       // Verify client pool was drained and cleared
       expect(mockClientPool.drain).toHaveBeenCalled();
@@ -158,17 +109,13 @@ describe('MatrixCoreService', () => {
 
   describe('getters', () => {
     it('should return admin client', () => {
-      const mockClient = jest.requireMock('matrix-js-sdk').__mockClient;
-      (service as any).adminClient = mockClient;
-
-      expect(service.getAdminClient()).toBe(mockClient);
+      (service as any).adminClient = mockMatrixSdk.__mockClient;
+      expect(service.getAdminClient()).toBe(mockMatrixSdk.__mockClient);
     });
 
     it('should return matrix SDK', () => {
-      const mockSdk = jest.requireMock('matrix-js-sdk');
-      (service as any).matrixSdk = mockSdk;
-
-      expect(service.getSdk()).toBe(mockSdk);
+      (service as any).matrixSdk = mockMatrixSdk.default;
+      expect(service.getSdk()).toBe(mockMatrixSdk.default);
     });
 
     it('should return configuration', () => {

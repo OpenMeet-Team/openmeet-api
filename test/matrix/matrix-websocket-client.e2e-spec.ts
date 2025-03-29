@@ -167,22 +167,39 @@ describe('Matrix WebSocket Client Tests', () => {
 
   // Helper function to cleanup all sockets
   const cleanupAllSockets = async () => {
-    const promises: Promise<void>[] = [];
+    try {
+      const promises: Promise<void>[] = [];
 
-    // Clean up main socket
-    if (socketClient) {
-      promises.push(safeDisconnect(socketClient));
-      socketClient = null;
+      // Clean up main socket
+      if (socketClient) {
+        promises.push(safeDisconnect(socketClient));
+        socketClient = null;
+      }
+
+      // Clean up all tracked sockets
+      for (const socket of socketClients) {
+        promises.push(safeDisconnect(socket));
+      }
+      socketClients = [];
+
+      // Wait for all disconnections to complete with a timeout
+      const timeoutPromise = new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          console.warn('Socket cleanup timed out, continuing anyway');
+          resolve();
+        }, 2000);
+        timeout.unref();
+      });
+
+      // Use Promise.race to ensure we don't hang if disconnections take too long
+      await Promise.race([
+        Promise.all(promises),
+        timeoutPromise
+      ]);
+    } catch (error) {
+      console.warn('Error in cleanupAllSockets:', error);
+      // Continue anyway to ensure tests can proceed
     }
-
-    // Clean up all tracked sockets
-    for (const socket of socketClients) {
-      promises.push(safeDisconnect(socket));
-    }
-    socketClients = [];
-
-    // Wait for all disconnections to complete
-    await Promise.all(promises);
   };
 
   beforeAll(async () => {
@@ -281,79 +298,95 @@ describe('Matrix WebSocket Client Tests', () => {
   });
 
   afterAll(async () => {
-    // Final cleanup of any remaining sockets
-    await cleanupAllSockets();
-
-    // Make sure to clear any remaining setTimeout/setInterval calls
-    jest.useRealTimers();
-
-    // Advanced cleanup - get and close active handles
-    const activeHandles = (process as any)._getActiveHandles?.() || [];
-
-    // Close any socket connections
-    for (const handle of activeHandles) {
-      try {
-        // Close socket.io connections
-        if (
-          handle?.constructor?.name === 'Socket' &&
-          typeof handle.disconnect === 'function'
-        ) {
-          handle.disconnect();
-        }
-
-        // Close HTTP connections
-        if (
-          handle?.constructor?.name === 'Socket' &&
-          typeof handle.destroy === 'function'
-        ) {
-          handle.destroy();
-        }
-
-        // For timers, use unref to allow the process to exit
-        if (typeof handle.unref === 'function') {
-          handle.unref();
-        }
-
-        // Force removal of event listeners
-        if (typeof handle.removeAllListeners === 'function') {
-          handle.removeAllListeners();
-        }
-      } catch (error) {
-        console.error('Error cleaning up handle:', error);
-      }
-    }
-
-    // Also try to close any HTTP agents that might be keeping process alive
     try {
-      if (http && http.globalAgent) {
-        http.globalAgent.destroy();
+      // Final cleanup of any remaining sockets
+      await cleanupAllSockets();
+
+      // Make sure to clear any remaining setTimeout/setInterval calls
+      jest.useRealTimers();
+
+      // Advanced cleanup - get and close active handles with proper protection
+      try {
+        const activeHandles = (process as any)._getActiveHandles?.() || [];
+        
+        console.log(`Cleaning up ${activeHandles.length} active handles`);
+
+        // Close any socket connections
+        for (const handle of activeHandles) {
+          try {
+            // Close socket.io connections
+            if (
+              handle?.constructor?.name === 'Socket' &&
+              typeof handle.disconnect === 'function'
+            ) {
+              handle.disconnect();
+            }
+
+            // Close HTTP connections
+            if (
+              handle?.constructor?.name === 'Socket' &&
+              typeof handle.destroy === 'function'
+            ) {
+              handle.destroy();
+            }
+
+            // For timers, use unref to allow the process to exit
+            if (typeof handle.unref === 'function') {
+              handle.unref();
+            }
+
+            // Force removal of event listeners
+            if (typeof handle.removeAllListeners === 'function') {
+              handle.removeAllListeners();
+            }
+          } catch (error) {
+            console.warn('Error cleaning up handle:', error);
+            // Continue with other handles
+          }
+        }
+      } catch (handleError) {
+        console.warn('Error accessing active handles:', handleError);
       }
 
-      if (https && https.globalAgent) {
-        https.globalAgent.destroy();
+      // Also try to close any HTTP agents that might be keeping process alive
+      try {
+        if (http && http.globalAgent) {
+          http.globalAgent.destroy();
+        }
+
+        if (https && https.globalAgent) {
+          https.globalAgent.destroy();
+        }
+      } catch (e) {
+        console.warn('Error cleaning up HTTP agents:', e);
       }
-    } catch (e) {
-      console.error('Error cleaning up HTTP agents:', e);
+
+      // Clean up any stray connections from supertest
+      for (const agent of httpAgents) {
+        if (agent && typeof agent.destroy === 'function') {
+          try {
+            agent.destroy();
+          } catch (e) {
+            console.warn('Error destroying HTTP agent:', e);
+          }
+        }
+      }
+
+      // Reset the Jest timeout
+      jest.setTimeout(5000);
+
+      // Force the event loop to finish any pending tasks
+      await new Promise((resolve) => {
+        const timer = setTimeout(resolve, 1000);
+        timer.unref();
+      });
+
+      // Clear all timers
+      jest.clearAllTimers();
+    } catch (cleanupError) {
+      console.warn('Error in afterAll cleanup:', cleanupError);
+      // Continue anyway so the test can complete
     }
-
-    // Clean up any stray connections from supertest
-    for (const agent of httpAgents) {
-      if (agent && typeof agent.destroy === 'function') {
-        agent.destroy();
-      }
-    }
-
-    // Reset the Jest timeout
-    jest.setTimeout(5000);
-
-    // Force the event loop to finish any pending tasks
-    await new Promise((resolve) => {
-      const timer = setTimeout(resolve, 1000);
-      timer.unref();
-    });
-
-    // Clear all timers
-    jest.clearAllTimers();
   });
 
   describe('WebSocket Connection', () => {
