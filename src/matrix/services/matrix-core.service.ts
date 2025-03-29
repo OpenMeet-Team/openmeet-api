@@ -602,15 +602,27 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       // Release the old client
       await this.clientPool.release(client);
 
-      // Drain and clear the pool to ensure all clients use the new token
-      await this.clientPool.drain();
-      await this.clientPool.clear();
+      // Create a new client with the updated token
+      const newClient = this.matrixSdk.createClient({
+        baseUrl: this.baseUrl,
+        userId: this.adminUserId,
+        accessToken: this.adminAccessToken,
+        useAuthorizationHeader: true,
+        logger: {
+          // Disable verbose HTTP logging from Matrix SDK
+          log: () => {},
+          info: () => {},
+          warn: () => {},
+          debug: () => {},
+          error: (msg: string) => this.logger.error(msg), // Keep error logs
+        },
+      });
 
-      // Reinitialize the pool with the new token
-      this.initializeClientPool();
-
-      // Get a fresh client with the new token
-      return this.clientPool.acquire();
+      // Return the new client directly instead of reinitializing the pool
+      return {
+        client: newClient,
+        userId: this.adminUserId,
+      };
     }
 
     return client;

@@ -162,11 +162,66 @@ export class MatrixGateway
         return;
       }
 
+      // Extract the tenant ID from the handshake headers
+      if (!client.data.tenantId && client.handshake?.headers?.['x-tenant-id']) {
+        client.data.tenantId = client.handshake.headers['x-tenant-id'];
+        this.logger.debug(
+          `Applied tenant ID from handshake headers: ${client.data.tenantId}`,
+        );
+      }
+
+      // Verify we have a tenant ID
+      if (!client.data.tenantId) {
+        this.logger.warn(`Client connected without tenant ID: ${client.id}`);
+        // Send error to client
+        client.emit('matrix-event', {
+          type: 'error',
+          message: 'Tenant ID is required for Matrix integration',
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      // Create context for user service
+      const userService = await MatrixGatewayHelper.createUserServiceForRequest(
+        this.moduleRef,
+        this.logger,
+      );
+
+      // Get the user with Matrix credentials
+      const user = await MatrixGatewayHelper.resolveUserById(
+        client.data.userId,
+        userService,
+        client.data.tenantId,
+        this.logger,
+      );
+
+      // Set Matrix credentials in socket data if user has them
+      if (user.matrixUserId && user.matrixAccessToken) {
+        client.data.hasMatrixCredentials = true;
+        client.data.matrixUserId = user.matrixUserId;
+        client.data.matrixAccessToken = user.matrixAccessToken;
+        client.data.matrixDeviceId = user.matrixDeviceId;
+        this.logger.debug(
+          `User ${client.data.userId} has Matrix credentials (${user.matrixUserId})`,
+        );
+      } else {
+        client.data.hasMatrixCredentials = false;
+        client.data.matrixUserId = null;
+        client.data.matrixAccessToken = null;
+        client.data.matrixDeviceId = null;
+        this.logger.warn(
+          `User ${client.data.userId} missing Matrix credentials`,
+        );
+      }
+
       // Send a welcome event to confirm the connection is working
       client.emit('matrix-event', {
         type: 'connection_confirmed',
         timestamp: Date.now(),
         message: 'WebSocket connection established successfully',
+        hasMatrixCredentials: client.data.hasMatrixCredentials,
+        matrixUserId: client.data.matrixUserId,
       });
 
       await this.initializeMatrixClientForConnection(client);
@@ -766,7 +821,27 @@ export class MatrixGateway
           this.logger,
         );
 
-        return await this.sendMatrixMessage(client, data);
+        // Send the message and get the result
+        const result = await this.sendMatrixMessage(client, data);
+
+        // Send a confirmation to the client that the message was received
+        client.emit('message-sent', {
+          success: true,
+          messageId: result.id,
+          roomId: data.roomId,
+          timestamp: Date.now(),
+        });
+
+        // Also send as a matrix-event for clients listening to that channel
+        client.emit('matrix-event', {
+          type: 'message-sent',
+          success: true,
+          messageId: result.id,
+          roomId: data.roomId,
+          timestamp: Date.now(),
+        });
+
+        return result;
       },
       'Error sending message',
       this.logger,
@@ -828,5 +903,107 @@ export class MatrixGateway
     return {
       id: result.event_id || 'unknown-event-id',
     };
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('send-message')
+  async handleSendMessage(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { roomId: string; message: string; tenantId?: string },
+  ) {
+    try {
+      // Forward to our regular message handler and get the result
+      const result = await this.handleMessage(client, data);
+
+      // Return the result directly as an acknowledgement
+      return {
+        success: true,
+        messageId: result?.id || 'unknown',
+        timestamp: Date.now(),
+      };
+    } catch (error) {
+      this.logger.error(`Error in send-message handler: ${error.message}`);
+      // Return error info in the acknowledgement
+      return {
+        success: false,
+        error: error.message,
+        timestamp: Date.now(),
+      };
+    }
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('subscribe')
+  async handleSubscribe(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { roomId: string; tenantId?: string },
+  ) {
+    try {
+      this.logger.log(`User ${client.data?.userId} subscribing to room: ${data.roomId}`);
+      
+      // Forward to our join-room handler
+      await this.joinRoom(client, data);
+
+      // Send confirmation of room subscription as an event
+      client.emit('subscription_confirmed', {
+        roomId: data.roomId,
+        success: true,
+        timestamp: Date.now(),
+      });
+
+      // Return a direct acknowledgement that can be received by the client
+      return {
+        success: true,
+        roomId: data.roomId,
+        subscribed: true,
+        timestamp: Date.now(),
+      };
+    } catch (error) {
+      this.logger.error(`Error in subscribe handler: ${error.message}`);
+
+      // Return error in acknowledgement
+      return {
+        success: false,
+        error: error.message,
+        timestamp: Date.now(),
+      };
+    }
+  }
+
+  @UseGuards(WsJwtAuthGuard)
+  @SubscribeMessage('subscribe-room')
+  async handleSubscribeRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { roomId: string; tenantId?: string },
+  ) {
+    try {
+      // Forward to our join-room handler
+      await this.joinRoom(client, data);
+
+      // Send confirmation of room subscription as an event
+      client.emit('matrix-event', {
+        type: 'room_subscribed',
+        roomId: data.roomId,
+        success: true,
+        timestamp: Date.now(),
+      });
+
+      // Also return a direct acknowledgement that can be received by the client
+      return {
+        success: true,
+        roomId: data.roomId,
+        subscribed: true,
+        timestamp: Date.now(),
+      };
+    } catch (error) {
+      this.logger.error(`Error in subscribe-room handler: ${error.message}`);
+
+      // Return error in acknowledgement
+      return {
+        success: false,
+        error: error.message,
+        timestamp: Date.now(),
+      };
+    }
   }
 }
