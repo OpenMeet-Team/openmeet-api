@@ -114,9 +114,6 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       // Verify admin access
       await this.verifyAdminAccess();
 
-      // Verify admin access
-      await this.verifyAdminAccess();
-
       // Initialize client pool
       this.initializeClientPool();
 
@@ -128,10 +125,11 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
         `Failed to initialize Matrix core service: ${error.message}`,
         error.stack,
       );
-      this.logger.warn(
-        'Matrix admin access may be limited - user provisioning might fail',
+      this.logger.error(
+        'Matrix functionality will not be available - application may still function with limited features',
       );
       // Continue without throwing to allow the service to start
+      // But we won't create a mock SDK - real SDK is required
     }
   }
 
@@ -383,34 +381,14 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
    */
   private async loadMatrixSdk(): Promise<void> {
     try {
-      let sdk;
-      try {
-        // First try regular require for Node.js CJS environment
-        const requireFn = new Function(
-          'modulePath',
-          'return require(modulePath)',
-        );
-        sdk = requireFn('matrix-js-sdk');
-        this.logger.log('Successfully loaded Matrix SDK via CommonJS require');
-      } catch (cjsError) {
-        // If CJS import fails, try ESM dynamic import as fallback
-        this.logger.warn(
-          `CommonJS require failed: ${cjsError.message}, trying ESM import`,
-        );
+      this.logger.log('Attempting to dynamically import Matrix SDK');
 
-        try {
-          sdk = await import('matrix-js-sdk');
-          this.logger.log(
-            'Successfully loaded Matrix SDK via ESM dynamic import',
-          );
-        } catch (esmError) {
-          this.logger.error(
-            `ESM import also failed: ${esmError.message}`,
-            esmError.stack,
-          );
-          throw esmError;
-        }
-      }
+      // Important: Use string literal to prevent TS from transforming this import
+      // NestJS compiles this to CommonJS, but matrix-js-sdk is ESM
+
+      const sdk = await new Function('return import("matrix-js-sdk")')();
+
+      this.logger.log('Successfully loaded Matrix SDK via dynamic import');
 
       // Verify SDK was loaded successfully
       if (!sdk || !sdk.createClient) {
@@ -431,51 +409,11 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
         `Failed to load Matrix SDK: ${error.message}`,
         error.stack,
       );
-      this.createMockSdk();
+      throw new Error(`Matrix SDK failed to load: ${error.message}`);
     }
   }
 
-  /**
-   * Create a mock SDK if loading fails to prevent crashes
-   */
-  private createMockSdk(): void {
-    this.logger.warn('Creating mock Matrix SDK to allow application to start');
-
-    this.matrixSdk.createClient = (options) => {
-      this.logger.warn(
-        'Using mock Matrix client - Matrix functionality will be limited',
-      );
-      return {
-        // Minimal mock methods to prevent crashes
-        startClient: () => Promise.resolve(),
-        stopClient: () => Promise.resolve(),
-        sendEvent: () =>
-          Promise.resolve({
-            event_id: `mock-event-${Date.now()}`,
-          }),
-        getStateEvent: () => Promise.resolve({}),
-        sendStateEvent: () => Promise.resolve({}),
-        invite: () => Promise.resolve(),
-        kick: () => Promise.resolve(),
-        joinRoom: () => Promise.resolve(),
-        getProfileInfo: () => Promise.resolve({ displayname: 'Mock User' }),
-        setDisplayName: () => Promise.resolve(),
-        getJoinedRooms: () => Promise.resolve({ joined_rooms: [] }),
-        getRoom: () => null,
-        getAccessToken: () => '',
-        getUserId: () => options?.userId || '@mock-user:example.org',
-        on: () => {},
-        removeListener: () => {},
-        roomState: () => Promise.resolve([]),
-        sendTyping: () => Promise.resolve(),
-        // Add the missing createRoom method to match the IMatrixClient interface
-        createRoom: () =>
-          Promise.resolve({
-            room_id: `mock-room-${Date.now()}`,
-          }),
-      };
-    };
-  }
+  // No mock SDK implementation - we will require the real SDK to work properly
 
   /**
    * Create the admin client for privileged operations
@@ -602,15 +540,27 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       // Release the old client
       await this.clientPool.release(client);
 
-      // Drain and clear the pool to ensure all clients use the new token
-      await this.clientPool.drain();
-      await this.clientPool.clear();
+      // Create a new client with the updated token
+      const newClient = this.matrixSdk.createClient({
+        baseUrl: this.baseUrl,
+        userId: this.adminUserId,
+        accessToken: this.adminAccessToken,
+        useAuthorizationHeader: true,
+        logger: {
+          // Disable verbose HTTP logging from Matrix SDK
+          log: () => {},
+          info: () => {},
+          warn: () => {},
+          debug: () => {},
+          error: (msg: string) => this.logger.error(msg), // Keep error logs
+        },
+      });
 
-      // Reinitialize the pool with the new token
-      this.initializeClientPool();
-
-      // Get a fresh client with the new token
-      return this.clientPool.acquire();
+      // Return the new client directly instead of reinitializing the pool
+      return {
+        client: newClient,
+        userId: this.adminUserId,
+      };
     }
 
     return client;
