@@ -522,8 +522,29 @@ export class DiscussionService implements DiscussionServiceInterface {
     eventId: number,
     userId: number,
   ): Promise<void> {
-    // Get the event's slug first
+    // Get the tenant ID from the request context
     const tenantId = this.request.tenantId;
+
+    // Check if there's a cycle detection flag in the request to prevent recursive loops
+    if (this.request._avoidRecursion) {
+      this.logger.debug(
+        `Avoiding recursive call to addMemberToEventDiscussionBySlug`,
+      );
+      // Directly add the user to the chat room using entity ID (break the recursion)
+
+      // First ensure a chat room exists for this event
+      await this.ensureEntityChatRoom('event', eventId, userId);
+
+      // Then add the user to the chat room
+      await this.chatRoomService.addUserToEventChatRoom(eventId, userId);
+
+      // Cache the membership verification in the request cache
+      const cache = this.getRequestCache();
+      const membershipCacheKey = `event:${eventId}:user:${userId}`;
+      cache.membershipVerified.set(membershipCacheKey, true);
+
+      return;
+    }
 
     // Find the event to get its slug
     const event = await this.eventQueryService.findById(eventId, tenantId);
@@ -537,8 +558,15 @@ export class DiscussionService implements DiscussionServiceInterface {
       throw new NotFoundException(`User with id ${userId} not found`);
     }
 
-    // Use the slug-based method which is preferred
-    await this.addMemberToEventDiscussionBySlug(event.slug, user.slug);
+    // Set recursion flag before calling the slug-based method to prevent infinite loops
+    this.request._avoidRecursion = true;
+    try {
+      // Use the slug-based method which is preferred
+      await this.addMemberToEventDiscussionBySlug(event.slug, user.slug);
+    } finally {
+      // Always clear the flag when we're done
+      delete this.request._avoidRecursion;
+    }
   }
 
   /**
@@ -651,6 +679,25 @@ export class DiscussionService implements DiscussionServiceInterface {
       throw new Error('Tenant ID is required');
     }
 
+    // Add a debug log to help trace potential recursion issues
+    this.logger.debug(
+      `Adding user ${userSlug} to event ${eventSlug} chat room`,
+    );
+
+    // Check if there's a cycle detection flag in the request to prevent recursive loops
+    if (this.request._avoidRecursion) {
+      this.logger.debug(
+        `Avoiding recursive call in addMemberToEventDiscussionBySlug`,
+      );
+      // Directly use the entity discussion method to break the cycle
+      return this.addMemberToEntityDiscussionBySlug(
+        'event',
+        eventSlug,
+        userSlug,
+        tenantId,
+      );
+    }
+
     // Get event and user IDs from slugs
     const { eventId, userId } = await this.getIdsFromSlugsWithTenant(
       eventSlug,
@@ -674,8 +721,15 @@ export class DiscussionService implements DiscussionServiceInterface {
       return;
     }
 
-    // Add member to event discussion
-    await this.addMemberToEventDiscussion(eventId, userId);
+    // Set recursion flag before calling the ID-based method to prevent infinite loops
+    this.request._avoidRecursion = true;
+    try {
+      // Add member to event discussion
+      await this.addMemberToEventDiscussion(eventId, userId);
+    } finally {
+      // Always clear the flag when we're done
+      delete this.request._avoidRecursion;
+    }
   }
 
   /**

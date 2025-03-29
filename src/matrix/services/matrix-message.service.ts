@@ -137,7 +137,7 @@ export class MatrixMessageService implements IMatrixMessageProvider {
     accessToken: string,
     isTyping: boolean,
     deviceId?: string,
-  ): Promise<void> {
+  ): Promise<Record<string, never>> {
     try {
       this.logger.debug(
         `Sending typing notification for user ${userId} in room ${roomId}, typing: ${isTyping}`,
@@ -171,6 +171,7 @@ export class MatrixMessageService implements IMatrixMessageProvider {
       await client.sendTyping(roomId, isTyping, timeout);
 
       this.logger.debug(`Typing notification sent successfully`);
+      return {};
     } catch (error) {
       this.logger.error(
         `Error sending typing notification in room ${roomId}: ${error.message}`,
@@ -214,31 +215,77 @@ export class MatrixMessageService implements IMatrixMessageProvider {
         throw new Error('No access token available to fetch messages');
       }
 
-      const response = await axios.get(`${url}?${params.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
+      try {
+        const response = await axios.get(`${url}?${params.toString()}`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
 
-      const messages = response.data.chunk
-        .filter((event) => event.type === 'm.room.message')
-        .map((event) => ({
-          eventId: event.event_id || '',
-          roomId: event.room_id || roomId,
-          sender: event.sender || '',
-          content: event.content,
-          timestamp: event.origin_server_ts,
-        }));
+        const messages = response.data.chunk
+          .filter((event) => event.type === 'm.room.message')
+          .map((event) => ({
+            eventId: event.event_id || '',
+            roomId: event.room_id || roomId,
+            sender: event.sender || '',
+            content: event.content,
+            timestamp: event.origin_server_ts,
+          }));
 
-      return {
-        messages,
-        end: response.data.end || '',
-      };
+        return {
+          messages,
+          end: response.data.end || '',
+        };
+      } catch (axiosError) {
+        // Handle specific HTTP errors more gracefully
+        if (axiosError.response) {
+          const status = axiosError.response.status;
+
+          // For 400 errors, it could be that the room is new or empty
+          // Return empty results instead of throwing
+          if (status === 400) {
+            this.logger.warn(
+              `Got 400 error when getting messages from room ${roomId}. Room may be new or empty. Error: ${axiosError.message}`,
+            );
+
+            return {
+              messages: [],
+              end: '',
+            };
+          }
+
+          // For 403 errors, user might not have permission - also return empty
+          if (status === 403) {
+            this.logger.warn(
+              `Got 403 error when getting messages from room ${roomId}. User may not have permission. Error: ${axiosError.message}`,
+            );
+
+            return {
+              messages: [],
+              end: '',
+            };
+          }
+        }
+
+        // For other errors, still log but throw
+        throw axiosError;
+      }
     } catch (error) {
       this.logger.error(
         `Error getting messages from room ${roomId}: ${error.message}`,
         error.stack,
       );
+
+      // Special handling for common errors
+      if (error.message && error.message.includes('M_NOT_FOUND')) {
+        // Room not found - return empty results
+        this.logger.warn(`Room ${roomId} not found, returning empty results`);
+        return {
+          messages: [],
+          end: '',
+        };
+      }
+
       throw new Error(
         `Failed to get messages from Matrix room: ${error.message}`,
       );

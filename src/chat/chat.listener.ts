@@ -298,14 +298,23 @@ export class ChatListener {
 
       if (eventId && userId) {
         try {
-          // Verify the event still exists using our new method in DiscussionService
-          const eventStillExists =
-            await this.discussionService.checkEventExists(eventId, tenantId);
+          // Verify the event still exists using our service-layer method
+          try {
+            const eventStillExists =
+              await this.discussionService.checkEventExists(eventId, tenantId);
 
-          if (!eventStillExists) {
-            this.logger.warn(
-              `Event with id ${eventId} no longer exists. Skipping chat room creation.`,
+            if (!eventStillExists) {
+              this.logger.warn(
+                `Event with id ${eventId} no longer exists based on service check. Skipping chat room creation.`,
+              );
+              return;
+            }
+          } catch (error) {
+            this.logger.error(
+              `Failed to verify event existence for ${eventId}: ${error.message}`,
+              error.stack,
             );
+            // Don't proceed if we can't verify event existence
             return;
           }
 

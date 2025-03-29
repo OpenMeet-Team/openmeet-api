@@ -46,7 +46,7 @@
     "test:e2e": "env-cmd jest --config ./test/jest-e2e.json",
     "test:e2e:relational:docker": "docker compose -f docker-compose.relational.test.yaml --env-file env-example-relational -p tests up -d --build && docker compose -f docker-compose.relational.test.yaml -p tests exec api /opt/wait-for-it.sh -t 60 localhost:3000 -- npm run test:e2e -- --watchAll --runInBand && docker compose -f docker-compose.relational.test.yaml -p tests down && docker compose -p tests rm -svf",
     "test:ci:e2e:relational": "docker compose -f docker-compose.relational.ci.yaml --env-file env-example-relational -p ci-relational up --build --exit-code-from api",
-    "test:ci:e2e:relational:debug": "docker compose -f docker-compose.relational.ci.yaml --env-file env-example-relational -p ci-relational up --build --exit-code-from api && docker cp ci-relational-api-1:/usr/src/app/prod.log . && cat prod.log",
+    "test:ci:e2e:relational:debug": "docker compose -f docker-compose.relational.ci.yaml --env-file env-example-relational -p ci-relational up --build --exit-code-from api && docker cp ci-relational-api-1:/usr/src/app/prod.log . && echo 'prod.log file is in the root directory'",
     "test:ci:e2e:relational:down": "docker compose -f docker-compose.relational.ci.yaml -p ci-relational down && docker compose -p ci-relational rm -svf",
     "release": "release-it"
   },
@@ -184,9 +184,6 @@
     "setupFilesAfterEnv": [
       "<rootDir>/../test/jest-setup.ts"
     ],
-    "moduleNameMapper": {
-      "matrix-js-sdk": "<rootDir>/matrix/__mocks__/matrix-js-sdk.ts"
-    },
     "transformIgnorePatterns": [
       "node_modules/(?!matrix-js-sdk)"
     ]

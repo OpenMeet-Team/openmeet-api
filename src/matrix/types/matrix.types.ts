@@ -2,11 +2,7 @@
 // The actual matrix-js-sdk import will happen in MatrixService
 import { Socket } from 'socket.io';
 
-// Add explicit type declaration for the mock used in tests
-declare module 'matrix-js-sdk' {
-  export const __mockClient: any;
-}
-
+// Types for MatrixClient and related interfaces
 export interface MatrixClientWithContext {
   client: any; // MatrixClient
   userId: string;
