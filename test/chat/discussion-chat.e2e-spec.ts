@@ -27,8 +27,8 @@ describe('Discussion Chat API Tests', () => {
 
   // Increase the timeout for the entire test suite
   beforeAll(async () => {
-    // Set a longer timeout for the entire test suite
-    jest.setTimeout(60000);
+    // Use the global timeout of 120000ms set at the top of the file
+    // Removing the local timeout here to avoid conflicts
 
     try {
       // Login as the main test user

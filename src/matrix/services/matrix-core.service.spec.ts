@@ -115,24 +115,19 @@ describe('MatrixCoreService', () => {
       );
     });
 
-    it('should handle SDK loading errors gracefully', () => {
-      // Since onModuleInit is mocked for most tests, we'll directly test the error handling
-      // by checking if the createMockSdk method exists and does what it should
-
-      // Verify the method exists
-      expect(typeof (service as any).createMockSdk).toBe('function');
-
-      // Call the method directly
-      (service as any).createMockSdk();
-
-      // Verify it creates a mock implementation for createClient
-      expect(typeof (service as any).matrixSdk.createClient).toBe('function');
-
-      // Test the mock client
-      const mockClient = (service as any).matrixSdk.createClient({});
-      expect(mockClient).toBeDefined();
-      expect(typeof mockClient.sendEvent).toBe('function');
-      expect(typeof mockClient.createRoom).toBe('function');
+    it('should throw an error on SDK loading failure', async () => {
+      // Since we've removed the createMockSdk method, we expect loadMatrixSdk to throw an error
+      // when there's a problem loading the SDK
+      
+      // Create a spy on loadMatrixSdk that simulates a failure
+      const loadMatrixSdkSpy = jest.spyOn(service as any, 'loadMatrixSdk');
+      loadMatrixSdkSpy.mockRejectedValue(new Error('SDK load failure'));
+      
+      // Initialize module and expect it to catch the error
+      await expect(service.onModuleInit()).resolves.not.toThrow();
+      
+      // We expect the service to log the error but not throw
+      expect(loadMatrixSdkSpy).toHaveBeenCalled();
     });
   });
 

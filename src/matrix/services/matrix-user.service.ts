@@ -805,7 +805,7 @@ export class MatrixUserService
   /**
    * Release a Matrix client when it's no longer needed
    */
-  releaseClientForUser(userSlug: string): void {
+  releaseClientForUser(userSlug: string): {} {
     const clientInfo = this.userMatrixClients.get(userSlug);
     if (clientInfo) {
       try {
@@ -820,6 +820,7 @@ export class MatrixUserService
       this.userMatrixClients.delete(userSlug);
       this.logger.log(`Released Matrix client for user ${userSlug}`);
     }
+    return {};
   }
 
   /**

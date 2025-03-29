@@ -206,9 +206,10 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       powerLevelContentOverride,
     } = options;
 
-    const client = await this.matrixCoreService.acquireClient();
-
+    let client;
+    
     try {
+      client = await this.matrixCoreService.acquireClient();
       const matrixSdk = this.matrixCoreService.getSdk();
       const config = this.matrixCoreService.getConfig();
       const matrixClient = client.client;
@@ -333,7 +334,16 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       );
       throw new Error(`Failed to create Matrix room: ${error.message}`);
     } finally {
-      await this.matrixCoreService.releaseClient(client);
+      if (client) {
+        try {
+          await this.matrixCoreService.releaseClient(client);
+        } catch (releaseError) {
+          this.logger.warn(
+            `Failed to release Matrix client: ${releaseError.message}`,
+          );
+          // Don't re-throw as this would mask the original error
+        }
+      }
     }
   }
 
@@ -432,10 +442,12 @@ export class MatrixRoomService implements IMatrixRoomProvider {
   /**
    * Invite a user to a room
    */
-  async inviteUser(roomId: string, userId: string): Promise<void> {
-    const client = await this.matrixCoreService.acquireClient();
-
+  async inviteUser(roomId: string, userId: string): Promise<{}> {
+    let client;
+    
     try {
+      client = await this.matrixCoreService.acquireClient();
+
       // First ensure admin is in the room
       await this.ensureAdminInRoom(roomId, client);
 
@@ -445,11 +457,12 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         this.logger.debug(
           `User ${userId} is already in room ${roomId}, skipping invite`,
         );
-        return;
+        return {};
       }
 
       // Then invite the user
       await client.client.invite(roomId, userId);
+      return {};
     } catch (error) {
       // Handle different types of errors with appropriate severity
 
@@ -458,7 +471,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         this.logger.debug(
           `User ${userId} is already in room ${roomId}, skipping invite`,
         );
-        return; // Don't throw - expected case
+        return {}; // Don't throw - expected case
       }
       // Rate limiting - warning but not error
       else if (
@@ -470,7 +483,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
           `Rate limited while inviting user ${userId} to room ${roomId}: ${error.message}`,
         );
         // Don't throw - this is recoverable
-        return;
+        return {};
       }
       // Actual errors
       else {
@@ -483,17 +496,28 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         );
       }
     } finally {
-      await this.matrixCoreService.releaseClient(client);
+      if (client) {
+        try {
+          await this.matrixCoreService.releaseClient(client);
+        } catch (releaseError) {
+          this.logger.warn(
+            `Failed to release Matrix client: ${releaseError.message}`,
+          );
+          // Don't re-throw as this would mask the original error
+        }
+      }
     }
   }
 
   /**
    * Remove a user from a room
    */
-  async removeUserFromRoom(roomId: string, userId: string): Promise<void> {
-    const client = await this.matrixCoreService.acquireClient();
+  async removeUserFromRoom(roomId: string, userId: string): Promise<{}> {
+    let client;
 
     try {
+      client = await this.matrixCoreService.acquireClient();
+
       // First ensure admin is in the room
       await this.ensureAdminInRoom(roomId, client);
 
@@ -502,6 +526,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         userId,
         'Removed from event/group in OpenMeet',
       );
+      return {};
     } catch (error) {
       this.logger.error(
         `Error removing user ${userId} from room ${roomId}: ${error.message}`,
@@ -511,7 +536,16 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         `Failed to remove user from Matrix room: ${error.message}`,
       );
     } finally {
-      await this.matrixCoreService.releaseClient(client);
+      if (client) {
+        try {
+          await this.matrixCoreService.releaseClient(client);
+        } catch (releaseError) {
+          this.logger.warn(
+            `Failed to release Matrix client: ${releaseError.message}`,
+          );
+          // Don't re-throw as this would mask the original error
+        }
+      }
     }
   }
 
@@ -577,10 +611,12 @@ export class MatrixRoomService implements IMatrixRoomProvider {
   async setRoomPowerLevels(
     roomId: string,
     userPowerLevels: Record<string, number>,
-  ): Promise<void> {
-    const client = await this.matrixCoreService.acquireClient();
-
+  ): Promise<{}> {
+    let client;
+    
     try {
+      client = await this.matrixCoreService.acquireClient();
+      
       // First ensure admin is in the room
       await this.ensureAdminInRoom(roomId, client);
 
@@ -607,6 +643,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         updatedContent,
         '',
       );
+      return {};
     } catch (error) {
       this.logger.error(
         `Error setting power levels in room ${roomId}: ${error.message}`,
@@ -616,7 +653,16 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         `Failed to set power levels in Matrix room: ${error.message}`,
       );
     } finally {
-      await this.matrixCoreService.releaseClient(client);
+      if (client) {
+        try {
+          await this.matrixCoreService.releaseClient(client);
+        } catch (releaseError) {
+          this.logger.warn(
+            `Failed to release Matrix client: ${releaseError.message}`,
+          );
+          // Don't re-throw as this would mask the original error
+        }
+      }
     }
   }
 
