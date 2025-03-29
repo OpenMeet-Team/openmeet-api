@@ -310,10 +310,13 @@ export class ChatListener {
           }
 
           // Double-check the event exists before creating the chat room
-          const dataSource = await this.tenantConnectionService.getTenantConnection(tenantId);
+          const dataSource =
+            await this.tenantConnectionService.getTenantConnection(tenantId);
           const eventRepo = dataSource.getRepository(EventEntity);
-          const eventExists = await eventRepo.findOne({ where: { id: eventId } });
-          
+          const eventExists = await eventRepo.findOne({
+            where: { id: eventId },
+          });
+
           if (!eventExists) {
             this.logger.warn(
               `Event with id ${eventId} could not be found in database. Skipping chat room creation.`,

@@ -939,8 +939,10 @@ export class MatrixGateway
     @MessageBody() data: { roomId: string; tenantId?: string },
   ) {
     try {
-      this.logger.log(`User ${client.data?.userId} subscribing to room: ${data.roomId}`);
-      
+      this.logger.log(
+        `User ${client.data?.userId} subscribing to room: ${data.roomId}`,
+      );
+
       // Forward to our join-room handler
       await this.joinRoom(client, data);
 

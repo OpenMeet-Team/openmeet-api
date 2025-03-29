@@ -4,7 +4,7 @@ import { loginAsTester, createEvent, createGroup } from '../utils/functions';
 
 /**
  * Discussion Chat API Tests
- * 
+ *
  * These tests validate the Matrix-powered discussion functionality for:
  * - Event discussions
  * - Group discussions
@@ -71,17 +71,20 @@ describe('Discussion Chat API Tests', () => {
 
         const group = await createGroup(TESTING_APP_URL, token, groupData);
         groupSlug = group.slug;
-        
+
         // Join the group as the current user
         try {
           const joinGroupResponse = await request(TESTING_APP_URL)
             .post(`/api/groups/${groupSlug}/join`)
             .set('Authorization', `Bearer ${token}`)
             .set('x-tenant-id', TESTING_TENANT_ID);
-          
+
           console.log('Joined group response:', joinGroupResponse.status);
-          
-          if (joinGroupResponse.status !== 201 && joinGroupResponse.status !== 200) {
+
+          if (
+            joinGroupResponse.status !== 201 &&
+            joinGroupResponse.status !== 200
+          ) {
             console.warn('Failed to join group:', joinGroupResponse.body);
           }
         } catch (error) {
@@ -124,17 +127,17 @@ describe('Discussion Chat API Tests', () => {
 
       expect(provisionResponse.status).toBe(200);
       expect(provisionResponse.body).toHaveProperty('matrixUserId');
-      
+
       // Verify the event exists
       const eventResponse = await request(TESTING_APP_URL)
         .get(`/api/events/${eventSlug}`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
-        
+
       console.log('Event response status:', eventResponse.status);
       console.log('Event exists:', eventResponse.status === 200 ? 'Yes' : 'No');
       console.log('Event slug:', eventSlug);
-      
+
       // If the event doesn't exist, recreate it to ensure test stability
       if (eventResponse.status !== 200) {
         console.log('Event does not exist, recreating it...');
@@ -150,18 +153,22 @@ describe('Discussion Chat API Tests', () => {
           type: 'online',
           userSlug: currentUser.slug,
         };
-        
-        const recreatedEvent = await createEvent(TESTING_APP_URL, token, eventData);
+
+        const recreatedEvent = await createEvent(
+          TESTING_APP_URL,
+          token,
+          eventData,
+        );
         eventSlug = recreatedEvent.slug;
         console.log('New event created with slug:', eventSlug);
       }
-        
+
       // Now try to join the event chat
       const response = await request(TESTING_APP_URL)
         .post(`/api/chat/event/${eventSlug}/join`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
-        
+
       console.log('Join event discussion response status:', response.status);
       if (response.status !== 201) {
         console.log('Join event discussion response body:', response.body);
@@ -171,10 +178,14 @@ describe('Discussion Chat API Tests', () => {
       // This is a workaround to avoid failing the entire test suite
       try {
         expect(response.status).toBe(201);
-      } catch (error) {
-        console.warn('⚠️ Warning: Could not join event discussion, this might be due to resource constraints when running all tests together.');
-        console.warn('⚠️ Skipping this test assertion but continuing the test suite.');
-        
+      } catch {
+        console.warn(
+          '⚠️ Warning: Could not join event discussion, this might be due to resource constraints when running all tests together.',
+        );
+        console.warn(
+          '⚠️ Skipping this test assertion but continuing the test suite.',
+        );
+
         // Skip the remaining tests in this describe block
         return;
       }
@@ -201,7 +212,7 @@ describe('Discussion Chat API Tests', () => {
       expect(response.body).toHaveProperty('messages');
       expect(response.body).toHaveProperty('end');
       expect(response.body).toHaveProperty('roomId');
-      
+
       // If messages exist, check their structure
       if (response.body.messages && response.body.messages.length > 0) {
         const message = response.body.messages[0];
@@ -211,7 +222,7 @@ describe('Discussion Chat API Tests', () => {
         expect(message).toHaveProperty('message');
       }
     }, 60000);
-    
+
     it('should add and remove members from an event discussion', async () => {
       // Add member
       const addResponse = await request(TESTING_APP_URL)
@@ -220,7 +231,7 @@ describe('Discussion Chat API Tests', () => {
         .set('x-tenant-id', TESTING_TENANT_ID);
 
       expect([200, 201]).toContain(addResponse.status);
-      
+
       // Remove member
       const removeResponse = await request(TESTING_APP_URL)
         .delete(`/api/chat/event/${eventSlug}/members/${currentUser.slug}`)
@@ -270,7 +281,7 @@ describe('Discussion Chat API Tests', () => {
       expect(response.body).toHaveProperty('messages');
       expect(response.body).toHaveProperty('end');
       expect(response.body).toHaveProperty('roomId');
-      
+
       // If messages exist, check their structure
       if (response.body.messages && response.body.messages.length > 0) {
         const message = response.body.messages[0];
@@ -293,11 +304,13 @@ describe('Discussion Chat API Tests', () => {
 
       // Allow both success and server error for direct messages
       expect([201, 500]).toContain(response.status);
-      
+
       if (response.status === 201) {
         expect(response.body).toHaveProperty('id');
       } else {
-        console.info('Direct message API returned 500 - direct messages might not be fully implemented yet');
+        console.info(
+          'Direct message API returned 500 - direct messages might not be fully implemented yet',
+        );
       }
     }, 60000);
 
@@ -309,12 +322,14 @@ describe('Discussion Chat API Tests', () => {
 
       // Allow both success and server error for direct messages
       expect([200, 400, 500]).toContain(response.status);
-      
+
       if (response.status === 200) {
         expect(response.body).toHaveProperty('messages');
         expect(response.body).toHaveProperty('end');
       } else {
-        console.info(`Direct messages API returned ${response.status} - direct messages might not be fully implemented yet`);
+        console.info(
+          `Direct messages API returned ${response.status} - direct messages might not be fully implemented yet`,
+        );
       }
     }, 60000);
   });

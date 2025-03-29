@@ -85,7 +85,7 @@ describe('Matrix WebSocket Tests', () => {
         .set('x-tenant-id', TESTING_TENANT_ID);
 
       expect(provisionResponse.status).toBe(200);
-      
+
       // Join event chat room
       const joinResponse = await request(TESTING_APP_URL)
         .post(`/api/chat/event/${eventSlug}/join`)
@@ -109,18 +109,14 @@ describe('Matrix WebSocket Tests', () => {
 
   afterEach(async () => {
     // Clean up socket after each test
-    await Promise.all(
-      socketClients.map((socket) => safeDisconnect(socket))
-    );
+    await Promise.all(socketClients.map((socket) => safeDisconnect(socket)));
     socketClients.length = 0;
     socketClient = null;
   });
 
   afterAll(async () => {
     // Clean up all sockets
-    await Promise.all(
-      socketClients.map((socket) => safeDisconnect(socket))
-    );
+    await Promise.all(socketClients.map((socket) => safeDisconnect(socket)));
     socketClients.length = 0;
     socketClient = null;
 
@@ -137,10 +133,10 @@ describe('Matrix WebSocket Tests', () => {
         .set('x-tenant-id', TESTING_TENANT_ID);
 
       expect(wsInfoResponse.status).toBe(200);
-      
+
       // Connect to the WebSocket server
       const wsEndpoint = `${wsInfoResponse.body.endpoint}/matrix`;
-      
+
       socketClient = Client(wsEndpoint, {
         auth: {
           token: token,
@@ -148,7 +144,7 @@ describe('Matrix WebSocket Tests', () => {
         },
         transports: ['websocket'],
       });
-      
+
       socketClients.push(socketClient);
 
       // Wait for connection
@@ -175,7 +171,7 @@ describe('Matrix WebSocket Tests', () => {
   // We won't attempt complex tests like subscription or message sending
   // since those are prone to timing issues. Instead, we'll test the basic
   // WebSocket functionalities.
-  
+
   describe('WebSocket Events', () => {
     beforeEach(async () => {
       // Get WebSocket connection info
@@ -185,10 +181,10 @@ describe('Matrix WebSocket Tests', () => {
         .set('x-tenant-id', TESTING_TENANT_ID);
 
       expect(wsInfoResponse.status).toBe(200);
-      
+
       // Connect to the WebSocket server
       const wsEndpoint = `${wsInfoResponse.body.endpoint}/matrix`;
-      
+
       socketClient = Client(wsEndpoint, {
         auth: {
           token: token,
@@ -196,7 +192,7 @@ describe('Matrix WebSocket Tests', () => {
         },
         transports: ['websocket'],
       });
-      
+
       socketClients.push(socketClient);
 
       // Wait for connection
