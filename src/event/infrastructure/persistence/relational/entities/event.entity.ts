@@ -195,7 +195,9 @@ export class EventEntity
   @Column({ nullable: true })
   parentEventId: number;
 
-  @ManyToOne(() => EventEntity, (event) => event.occurrences, { nullable: true })
+  @ManyToOne(() => EventEntity, (event) => event.occurrences, {
+    nullable: true,
+  })
   @JoinColumn({ name: 'parentEventId' })
   parentEvent: EventEntity;
 

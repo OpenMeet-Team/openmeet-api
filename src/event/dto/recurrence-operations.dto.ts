@@ -1,5 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export enum RecurrenceModificationType {
   SINGLE = 'single',
@@ -38,7 +45,8 @@ export class RecurrenceModificationTypeDto {
   modificationType: RecurrenceModificationType;
 
   @ApiPropertyOptional({
-    description: 'The specific occurrence date (required for SINGLE and FUTURE modifications)',
+    description:
+      'The specific occurrence date (required for SINGLE and FUTURE modifications)',
     example: '2024-10-15T09:00:00Z',
   })
   @IsOptional()

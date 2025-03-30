@@ -49,10 +49,10 @@ export const DEFAULT_RECURRENCE_TEXT = {
   WEEKLY: 'Weekly',
   MONTHLY: 'Monthly',
   YEARLY: 'Yearly',
-  INTERVAL: (interval: number, freq: string) => 
+  INTERVAL: (interval: number, freq: string) =>
     interval > 1 ? `Every ${interval} ${freq.toLowerCase()}s` : freq,
-  BYDAYS: (days: string[]) => 
-    `on ${days.map(d => WEEKDAYS[d]?.name || d).join(', ')}`,
+  BYDAYS: (days: string[]) =>
+    `on ${days.map((d) => WEEKDAYS[d]?.name || d).join(', ')}`,
   UNTIL: (date: Date) => `until ${date.toLocaleDateString()}`,
   COUNT: (count: number) => `for ${count} occurrences`,
 };

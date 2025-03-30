@@ -1,4 +1,10 @@
-import { IsOptional, IsString, IsDateString, IsArray, IsBoolean } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsDateString,
+  IsArray,
+  IsBoolean,
+} from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -75,7 +81,8 @@ export class QueryEventDto {
 
   // Recurring event query options
   @ApiPropertyOptional({
-    description: 'Whether to include recurring events in the results. Defaults to true.',
+    description:
+      'Whether to include recurring events in the results. Defaults to true.',
     example: true,
   })
   @IsOptional()
@@ -84,7 +91,8 @@ export class QueryEventDto {
   includeRecurring?: boolean = true;
 
   @ApiPropertyOptional({
-    description: 'Whether to expand recurring events into individual occurrences. Defaults to false.',
+    description:
+      'Whether to expand recurring events into individual occurrences. Defaults to false.',
     example: false,
   })
   @IsOptional()
@@ -93,7 +101,8 @@ export class QueryEventDto {
   expandRecurring?: boolean = false;
 
   @ApiPropertyOptional({
-    description: 'Number of occurrences to expand for recurring events (used when expandRecurring is true).',
+    description:
+      'Number of occurrences to expand for recurring events (used when expandRecurring is true).',
     example: 10,
   })
   @IsOptional()

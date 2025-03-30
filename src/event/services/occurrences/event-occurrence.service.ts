@@ -1,12 +1,12 @@
 import { Injectable, Logger, Scope, Inject } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { Repository, Between, IsNull, Not, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { Repository, Between } from 'typeorm';
 import { EventEntity } from '../../infrastructure/persistence/relational/entities/event.entity';
 import { TenantConnectionService } from '../../../tenant/tenant.service';
 import { RecurrenceService } from '../../../recurrence/recurrence.service';
 import { IEventOccurrenceService } from './event-occurrence.interface';
 import { OccurrenceOptions } from '../../../recurrence/interfaces/recurrence.interface';
-import { addDays, isAfter, isBefore, isEqual, parseISO } from 'date-fns';
+import { isAfter, isBefore, isEqual } from 'date-fns';
 import { Trace } from '../../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
 
@@ -27,7 +27,8 @@ export class EventOccurrenceService implements IEventOccurrenceService {
   @Trace('event-occurrence.initializeRepository')
   async initializeRepository() {
     const tenantId = this.request.tenantId;
-    const dataSource = await this.tenantConnectionService.getTenantConnection(tenantId);
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
     this.eventRepository = dataSource.getRepository(EventEntity);
   }
 
@@ -43,7 +44,9 @@ export class EventOccurrenceService implements IEventOccurrenceService {
       await this.initializeRepository();
 
       if (!parentEvent.isRecurring || !parentEvent.recurrenceRule) {
-        this.logger.warn(`Cannot generate occurrences for non-recurring event ${parentEvent.id}`);
+        this.logger.warn(
+          `Cannot generate occurrences for non-recurring event ${parentEvent.id}`,
+        );
         return [];
       }
 
@@ -56,11 +59,11 @@ export class EventOccurrenceService implements IEventOccurrenceService {
         timeZone: timeZone || 'UTC',
         ...options,
       };
-      
+
       // Handle exception dates with proper typing
       if (recurrenceExceptions && recurrenceExceptions.length > 0) {
-        const processedExdates = recurrenceExceptions.map(
-          d => typeof d === 'string' ? d : new Date(d)
+        const processedExdates = recurrenceExceptions.map((d) =>
+          typeof d === 'string' ? d : new Date(d),
         );
         generationOptions.exdates = processedExdates as string[]; // Type assertion for TypeScript
       }
@@ -73,9 +76,12 @@ export class EventOccurrenceService implements IEventOccurrenceService {
       );
 
       // Skip the first occurrence if it's the same as the parent event's start date
-      const filteredDates = occurrenceDates.filter(date => 
-        !isEqual(new Date(date.toISOString().split('T')[0]), 
-                new Date(parentEvent.startDate.toISOString().split('T')[0]))
+      const filteredDates = occurrenceDates.filter(
+        (date) =>
+          !isEqual(
+            new Date(date.toISOString().split('T')[0]),
+            new Date(parentEvent.startDate.toISOString().split('T')[0]),
+          ),
       );
 
       // Check which occurrences already exist in the database
@@ -88,14 +94,14 @@ export class EventOccurrenceService implements IEventOccurrenceService {
 
       // Map of existing occurrence dates for quick lookup
       const existingDatesMap = new Map<string, EventEntity>();
-      existingOccurrences.forEach(occurrence => {
+      existingOccurrences.forEach((occurrence) => {
         const dateKey = occurrence.startDate.toISOString().split('T')[0];
         existingDatesMap.set(dateKey, occurrence);
       });
 
       // Create occurrence events for new dates
       const newOccurrences: EventEntity[] = [];
-      
+
       for (const occurrenceDate of filteredDates) {
         const dateKey = occurrenceDate.toISOString().split('T')[0];
 
@@ -105,7 +111,10 @@ export class EventOccurrenceService implements IEventOccurrenceService {
         }
 
         // Create the occurrence entity
-        const occurrence = this.createOccurrenceFromParent(parentEvent, occurrenceDate);
+        const occurrence = this.createOccurrenceFromParent(
+          parentEvent,
+          occurrenceDate,
+        );
         newOccurrences.push(occurrence);
       }
 
@@ -116,7 +125,10 @@ export class EventOccurrenceService implements IEventOccurrenceService {
 
       return newOccurrences;
     } catch (error) {
-      this.logger.error(`Error generating occurrences: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error generating occurrences: ${error.message}`,
+        error.stack,
+      );
       return [];
     }
   }
@@ -140,7 +152,9 @@ export class EventOccurrenceService implements IEventOccurrenceService {
       });
 
       if (!parentEvent) {
-        this.logger.warn(`Parent event with ID ${parentEventId} not found or not recurring`);
+        this.logger.warn(
+          `Parent event with ID ${parentEventId} not found or not recurring`,
+        );
         return [];
       }
 
@@ -163,56 +177,62 @@ export class EventOccurrenceService implements IEventOccurrenceService {
 
       // Check if we need to generate additional occurrences
       const { recurrenceRule, timeZone } = parentEvent;
-      
+
       if (recurrenceRule) {
         // Generate occurrence dates for the range
-        const generatedDates = this.recurrenceService.generateOccurrences(
-          parentEvent.startDate,
-          recurrenceRule as any,
-          {
+        const generatedDates = this.recurrenceService
+          .generateOccurrences(parentEvent.startDate, recurrenceRule as any, {
             timeZone: timeZone || 'UTC',
             exdates: parentEvent.recurrenceExceptions,
             until: endDate,
-          },
-        ).filter(date => 
-          isAfter(date, startDate) && 
-          isBefore(date, endDate)
-        );
+          })
+          .filter(
+            (date) => isAfter(date, startDate) && isBefore(date, endDate),
+          );
 
         // Create a map of existing occurrences by date for quick lookup
         const existingDatesMap = new Map<string, boolean>();
-        occurrences.forEach(occurrence => {
+        occurrences.forEach((occurrence) => {
           const dateKey = occurrence.startDate.toISOString().split('T')[0];
           existingDatesMap.set(dateKey, true);
         });
 
         // Create occurrence entities for dates not in the database
         const newOccurrences: EventEntity[] = [];
-        
+
         for (const occurrenceDate of generatedDates) {
           const dateKey = occurrenceDate.toISOString().split('T')[0];
-          
+
           // Skip if this occurrence already exists
           if (existingDatesMap.has(dateKey)) {
             continue;
           }
-          
+
           // Create the occurrence entity
-          const occurrence = this.createOccurrenceFromParent(parentEvent, occurrenceDate);
+          const occurrence = this.createOccurrenceFromParent(
+            parentEvent,
+            occurrenceDate,
+          );
           newOccurrences.push(occurrence);
         }
 
         // Batch save the new occurrences
         if (newOccurrences.length > 0) {
-          const savedOccurrences = await this.eventRepository.save(newOccurrences);
+          const savedOccurrences =
+            await this.eventRepository.save(newOccurrences);
           occurrences.push(...savedOccurrences);
         }
       }
 
       // Sort by start date before returning
-      return occurrences.sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+      return occurrences.sort(
+        (a, b) => a.startDate.getTime() - b.startDate.getTime(),
+      );
     } catch (error) {
-      this.logger.error(`Error getting occurrences in range: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error getting occurrences in range: ${error.message}`,
+        error.stack,
+      );
       return [];
     }
   }
@@ -235,7 +255,9 @@ export class EventOccurrenceService implements IEventOccurrenceService {
       });
 
       if (!parentEvent) {
-        throw new Error(`Parent event with ID ${parentEventId} not found or not recurring`);
+        throw new Error(
+          `Parent event with ID ${parentEventId} not found or not recurring`,
+        );
       }
 
       // Check if this occurrence is part of the recurrence pattern
@@ -248,11 +270,13 @@ export class EventOccurrenceService implements IEventOccurrenceService {
       );
 
       if (!isInPattern) {
-        throw new Error(`Date ${originalDate.toISOString()} is not part of the recurrence pattern`);
+        throw new Error(
+          `Date ${originalDate.toISOString()} is not part of the recurrence pattern`,
+        );
       }
 
       // Check if this exception already exists
-      let existingException = await this.eventRepository.findOne({
+      const existingException = await this.eventRepository.findOne({
         where: {
           parentEventId,
           originalDate,
@@ -291,7 +315,9 @@ export class EventOccurrenceService implements IEventOccurrenceService {
         parentEvent.recurrenceExceptions = [];
       }
 
-      if (!parentEvent.recurrenceExceptions.includes(originalDate.toISOString())) {
+      if (
+        !parentEvent.recurrenceExceptions.includes(originalDate.toISOString())
+      ) {
         parentEvent.recurrenceExceptions.push(originalDate.toISOString());
         await this.eventRepository.save(parentEvent);
       }
@@ -299,7 +325,10 @@ export class EventOccurrenceService implements IEventOccurrenceService {
       // Save and return the exception occurrence
       return await this.eventRepository.save(occurrence);
     } catch (error) {
-      this.logger.error(`Error creating exception occurrence: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error creating exception occurrence: ${error.message}`,
+        error.stack,
+      );
       throw error;
     }
   }
@@ -321,7 +350,9 @@ export class EventOccurrenceService implements IEventOccurrenceService {
       });
 
       if (!parentEvent) {
-        throw new Error(`Parent event with ID ${parentEventId} not found or not recurring`);
+        throw new Error(
+          `Parent event with ID ${parentEventId} not found or not recurring`,
+        );
       }
 
       // Check if this occurrence is part of the recurrence pattern
@@ -333,7 +364,9 @@ export class EventOccurrenceService implements IEventOccurrenceService {
       );
 
       if (!isInPattern) {
-        throw new Error(`Date ${occurrenceDate.toISOString()} is not part of the recurrence pattern`);
+        throw new Error(
+          `Date ${occurrenceDate.toISOString()} is not part of the recurrence pattern`,
+        );
       }
 
       // Add to parent's exception list if not already there
@@ -355,7 +388,10 @@ export class EventOccurrenceService implements IEventOccurrenceService {
 
       return result.affected ? result.affected > 0 : false;
     } catch (error) {
-      this.logger.error(`Error excluding occurrence: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error excluding occurrence: ${error.message}`,
+        error.stack,
+      );
       return false;
     }
   }
@@ -377,14 +413,19 @@ export class EventOccurrenceService implements IEventOccurrenceService {
       });
 
       if (!parentEvent) {
-        throw new Error(`Parent event with ID ${parentEventId} not found or not recurring`);
+        throw new Error(
+          `Parent event with ID ${parentEventId} not found or not recurring`,
+        );
       }
 
       // Remove from parent's exception list
-      if (parentEvent.recurrenceExceptions && parentEvent.recurrenceExceptions.length > 0) {
+      if (
+        parentEvent.recurrenceExceptions &&
+        parentEvent.recurrenceExceptions.length > 0
+      ) {
         const dateString = occurrenceDate.toISOString();
-        parentEvent.recurrenceExceptions = parentEvent.recurrenceExceptions
-          .filter(d => d !== dateString);
+        parentEvent.recurrenceExceptions =
+          parentEvent.recurrenceExceptions.filter((d) => d !== dateString);
         await this.eventRepository.save(parentEvent);
       }
 
@@ -397,13 +438,19 @@ export class EventOccurrenceService implements IEventOccurrenceService {
       });
 
       if (!existingOccurrence) {
-        const newOccurrence = this.createOccurrenceFromParent(parentEvent, occurrenceDate);
+        const newOccurrence = this.createOccurrenceFromParent(
+          parentEvent,
+          occurrenceDate,
+        );
         await this.eventRepository.save(newOccurrence);
       }
 
       return true;
     } catch (error) {
-      this.logger.error(`Error including occurrence: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error including occurrence: ${error.message}`,
+        error.stack,
+      );
       return false;
     }
   }
@@ -423,7 +470,10 @@ export class EventOccurrenceService implements IEventOccurrenceService {
 
       return result.affected ? result.affected : 0;
     } catch (error) {
-      this.logger.error(`Error deleting occurrences: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error deleting occurrences: ${error.message}`,
+        error.stack,
+      );
       return 0;
     }
   }
@@ -441,13 +491,12 @@ export class EventOccurrenceService implements IEventOccurrenceService {
       : 0;
 
     // Create end date for the occurrence based on the same duration
-    const endDate = duration > 0
-      ? new Date(occurrenceDate.getTime() + duration)
-      : undefined;
+    const endDate =
+      duration > 0 ? new Date(occurrenceDate.getTime() + duration) : undefined;
 
     // Create the occurrence entity
     const occurrence = new EventEntity();
-    
+
     // Copy relevant properties from parent
     Object.assign(occurrence, {
       name: parentEvent.name,
@@ -472,7 +521,7 @@ export class EventOccurrenceService implements IEventOccurrenceService {
       resources: parentEvent.resources,
       color: parentEvent.color,
       conferenceData: parentEvent.conferenceData,
-      
+
       // Occurrence-specific fields
       startDate: occurrenceDate,
       endDate: endDate,

@@ -41,7 +41,8 @@ export class RecurrenceRuleDto {
   interval?: number;
 
   @ApiPropertyOptional({
-    description: 'Number of occurrences (either count or until should be specified, not both)',
+    description:
+      'Number of occurrences (either count or until should be specified, not both)',
     example: 10,
     minimum: 1,
   })
@@ -51,7 +52,8 @@ export class RecurrenceRuleDto {
   count?: number;
 
   @ApiPropertyOptional({
-    description: 'End date of recurrence (either count or until should be specified, not both)',
+    description:
+      'End date of recurrence (either count or until should be specified, not both)',
     example: '2024-12-31T23:59:59Z',
   })
   @IsOptional()
@@ -274,7 +276,8 @@ export class CreateEventDto implements SourceFields {
   recurrenceExceptions?: string[];
 
   @ApiPropertyOptional({
-    description: 'End date of recurrence (alternative to setting in recurrenceRule)',
+    description:
+      'End date of recurrence (alternative to setting in recurrenceRule)',
     example: '2024-12-31T23:59:59Z',
   })
   @IsOptional()
@@ -282,7 +285,8 @@ export class CreateEventDto implements SourceFields {
   recurrenceUntil?: string;
 
   @ApiPropertyOptional({
-    description: 'Number of occurrences (alternative to setting in recurrenceRule)',
+    description:
+      'Number of occurrences (alternative to setting in recurrenceRule)',
     example: 10,
     minimum: 1,
   })
@@ -314,7 +318,8 @@ export class CreateEventDto implements SourceFields {
   priority?: number;
 
   @ApiPropertyOptional({
-    description: 'Whether the event blocks time on a calendar (OPAQUE) or not (TRANSPARENT)',
+    description:
+      'Whether the event blocks time on a calendar (OPAQUE) or not (TRANSPARENT)',
     example: true,
     default: true,
   })
@@ -331,7 +336,8 @@ export class CreateEventDto implements SourceFields {
   isAllDay?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Resources needed for the event (e.g., projector, conference room)',
+    description:
+      'Resources needed for the event (e.g., projector, conference room)',
     type: [String],
     example: ['Projector', 'Whiteboard'],
   })

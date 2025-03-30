@@ -1,6 +1,13 @@
-import { MigrationInterface, QueryRunner, TableColumn, TableIndex } from 'typeorm';
+import {
+  MigrationInterface,
+  QueryRunner,
+  TableColumn,
+  TableIndex,
+} from 'typeorm';
 
-export class AddRecurringEventFields1743371499235 implements MigrationInterface {
+export class AddRecurringEventFields1743371499235
+  implements MigrationInterface
+{
   name = 'AddRecurringEventFields1743371499235';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -124,7 +131,10 @@ export class AddRecurringEventFields1743371499235 implements MigrationInterface 
     const schema = queryRunner.connection.options.name || 'public';
 
     // Drop indices
-    await queryRunner.dropIndex(`${schema}.events`, 'IDX_events_parent_event_id');
+    await queryRunner.dropIndex(
+      `${schema}.events`,
+      'IDX_events_parent_event_id',
+    );
     await queryRunner.dropIndex(`${schema}.events`, 'IDX_events_is_recurring');
 
     // Drop foreign key constraint

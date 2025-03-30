@@ -1,13 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RRule, Frequency, Weekday, Options as RRuleOptions } from 'rrule';
-import { 
-  format,
-  formatInTimeZone,
-  toZonedTime
-} from 'date-fns-tz';
+import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
 import { addMinutes, parseISO } from 'date-fns';
-import { RecurrenceRule, OccurrenceOptions, DateTimeFormatOptions } from './interfaces/recurrence.interface';
+import {
+  RecurrenceRule,
+  OccurrenceOptions,
+  DateTimeFormatOptions,
+} from './interfaces/recurrence.interface';
 import {
   DEFAULT_TIMEZONE,
   DEFAULT_OCCURRENCE_COUNT,
@@ -24,7 +24,7 @@ export class RecurrenceService {
 
   /**
    * Generate occurrence dates based on a recurrence rule
-   * 
+   *
    * @param startDate - The start date of the first occurrence
    * @param recurrenceRule - The recurrence rule to use
    * @param options - Additional options for generating occurrences
@@ -37,11 +37,12 @@ export class RecurrenceService {
   ): Date[] {
     try {
       const timeZone = options.timeZone || DEFAULT_TIMEZONE;
-      const start = typeof startDate === 'string' ? parseISO(startDate) : startDate;
-      
+      const start =
+        typeof startDate === 'string' ? parseISO(startDate) : startDate;
+
       // Convert start date to the specified timezone
       const zonedStartDate = toZonedTime(start, timeZone);
-      
+
       // Build RRule options
       const rruleOptions = {
         ...this.buildRRuleOptions(recurrenceRule),
@@ -50,26 +51,26 @@ export class RecurrenceService {
 
       // Create RRule instance
       const rule = new RRule(rruleOptions);
-      
+
       // Determine the limit for occurrences
-      const count = options.count || 
-        recurrenceRule.count || 
-        DEFAULT_OCCURRENCE_COUNT;
-      
+      const count =
+        options.count || recurrenceRule.count || DEFAULT_OCCURRENCE_COUNT;
+
       // Ensure count is within limits
       const limitedCount = Math.min(count, MAX_OCCURRENCE_COUNT);
-      
+
       // Determine end date
-      const until = options.until || 
-        (recurrenceRule.until ? 
-          (typeof recurrenceRule.until === 'string' ? 
-            parseISO(recurrenceRule.until) : 
-            recurrenceRule.until) : 
-          undefined);
-      
+      const until =
+        options.until ||
+        (recurrenceRule.until
+          ? typeof recurrenceRule.until === 'string'
+            ? parseISO(recurrenceRule.until)
+            : recurrenceRule.until
+          : undefined);
+
       // Generate occurrences
       let occurrences: Date[];
-      
+
       if (until) {
         // If we have an end date, get all occurrences up to that date
         occurrences = rule.between(
@@ -81,40 +82,48 @@ export class RecurrenceService {
         // Otherwise, get a specific number of occurrences
         occurrences = rule.all((date, i) => i < limitedCount);
       }
-      
+
       // Handle excluded dates
-      if (options.exdates && options.exdates.length > 0 && !options.includeExdates) {
-        const exdates = options.exdates.map(d => 
-          typeof d === 'string' ? parseISO(d) : d
+      if (
+        options.exdates &&
+        options.exdates.length > 0 &&
+        !options.includeExdates
+      ) {
+        const exdates = options.exdates.map((d) =>
+          typeof d === 'string' ? parseISO(d) : d,
         );
-        occurrences = occurrences.filter(date => 
-          !exdates.some(exdate => 
-            this.isSameDay(date, toZonedTime(exdate, timeZone))
-          )
+        occurrences = occurrences.filter(
+          (date) =>
+            !exdates.some((exdate) =>
+              this.isSameDay(date, toZonedTime(exdate, timeZone)),
+            ),
         );
       }
-      
+
       // For the tests to pass, we need to preserve the original date format
       // If the timeZone is UTC, just return the original dates
       if (timeZone === 'UTC') {
         return occurrences;
       } else {
         // Otherwise, convert to UTC
-        return occurrences.map(date => {
+        return occurrences.map((date) => {
           // This preserves the time in UTC
           const isoString = date.toISOString();
           return new Date(isoString);
         });
       }
     } catch (error) {
-      this.logger.error(`Error generating occurrences: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error generating occurrences: ${error.message}`,
+        error.stack,
+      );
       return [];
     }
   }
 
   /**
    * Check if a date is part of a recurrence pattern
-   * 
+   *
    * @param date - The date to check
    * @param startDate - The start date of the recurrence pattern
    * @param recurrenceRule - The recurrence rule to use
@@ -131,47 +140,53 @@ export class RecurrenceService {
   ): boolean {
     try {
       const checkDate = typeof date === 'string' ? parseISO(date) : date;
-      const start = typeof startDate === 'string' ? parseISO(startDate) : startDate;
-      
+      const start =
+        typeof startDate === 'string' ? parseISO(startDate) : startDate;
+
       // Check if the date is in the excluded dates list
       if (exdates && exdates.length > 0) {
-        const excludedDates = exdates.map(d => 
-          typeof d === 'string' ? parseISO(d) : d
+        const excludedDates = exdates.map((d) =>
+          typeof d === 'string' ? parseISO(d) : d,
         );
-        if (excludedDates.some(exdate => this.isSameDay(checkDate, exdate))) {
+        if (excludedDates.some((exdate) => this.isSameDay(checkDate, exdate))) {
           return false;
         }
       }
-      
+
       // Convert dates to the specified timezone
       const zonedStartDate = toZonedTime(start, timeZone);
       const zonedCheckDate = toZonedTime(checkDate, timeZone);
-      
+
       // Build RRule options
       const rruleOptions = {
         ...this.buildRRuleOptions(recurrenceRule),
         dtstart: zonedStartDate,
       } as RRuleOptions;
-      
+
       // Create RRule instance
       const rule = new RRule(rruleOptions);
-      
+
       // Check if the date is a recurrence
-      return rule.between(
-        // Use a small window around the check date to handle timezone edge cases
-        addMinutes(zonedCheckDate, -1),
-        addMinutes(zonedCheckDate, 1),
-        true,
-      ).length > 0;
+      return (
+        rule.between(
+          // Use a small window around the check date to handle timezone edge cases
+          addMinutes(zonedCheckDate, -1),
+          addMinutes(zonedCheckDate, 1),
+          true,
+        ).length > 0
+      );
     } catch (error) {
-      this.logger.error(`Error checking if date is in recurrence pattern: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error checking if date is in recurrence pattern: ${error.message}`,
+        error.stack,
+      );
       return false;
     }
   }
 
   /**
    * Convert a date between timezones
-   * 
+   *
    * @param date - The date to convert
    * @param fromTimeZone - The source timezone
    * @param toTimeZone - The target timezone
@@ -183,23 +198,27 @@ export class RecurrenceService {
     toTimeZone: string,
   ): Date {
     try {
-      const inputDate = typeof dateInput === 'string' ? parseISO(dateInput) : dateInput;
-      
+      const inputDate =
+        typeof dateInput === 'string' ? parseISO(dateInput) : dateInput;
+
       // This is a simplified implementation since date-fns-tz doesn't export zonedTimeToUtc directly
       // For proper timezone handling, consider using a more robust library like luxon
-      
+
       // We'll use a simple approach that works for most cases
       const dateObj = new Date(inputDate);
       return toZonedTime(dateObj, toTimeZone);
     } catch (error) {
-      this.logger.error(`Error converting date between timezones: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error converting date between timezones: ${error.message}`,
+        error.stack,
+      );
       return typeof dateInput === 'string' ? parseISO(dateInput) : dateInput;
     }
   }
 
   /**
    * Format a date in a specific timezone
-   * 
+   *
    * @param date - The date to format
    * @param timeZone - The timezone to use for formatting
    * @param options - Formatting options
@@ -213,17 +232,20 @@ export class RecurrenceService {
     try {
       const inputDate = typeof date === 'string' ? parseISO(date) : date;
       const formatStr = options.format || DEFAULT_DATE_FORMAT;
-      
+
       return formatInTimeZone(inputDate, timeZone, formatStr);
     } catch (error) {
-      this.logger.error(`Error formatting date in timezone: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error formatting date in timezone: ${error.message}`,
+        error.stack,
+      );
       return String(date);
     }
   }
 
   /**
    * Generate a human-readable description of a recurrence rule
-   * 
+   *
    * @param recurrenceRule - The recurrence rule to describe
    * @param timeZone - The timezone to use for formatting dates
    * @returns Human-readable description
@@ -236,13 +258,13 @@ export class RecurrenceService {
       if (!recurrenceRule || !recurrenceRule.freq) {
         return 'No recurrence';
       }
-      
+
       const { freq, interval = 1, count, until, byday = [] } = recurrenceRule;
-      
+
       // Start with frequency and interval
       let description = '';
       const freqStr = String(freq).toUpperCase();
-      
+
       // Format based on frequency
       switch (freqStr) {
         case 'DAILY':
@@ -251,7 +273,7 @@ export class RecurrenceService {
         case 'WEEKLY':
           description = interval > 1 ? `Every ${interval} weeks` : 'Weekly';
           if (byday.length > 0) {
-            const days = byday.map(d => WEEKDAYS[d]?.name || d).join(', ');
+            const days = byday.map((d) => WEEKDAYS[d]?.name || d).join(', ');
             description += ` on ${days}`;
           }
           break;
@@ -259,10 +281,13 @@ export class RecurrenceService {
           description = interval > 1 ? `Every ${interval} months` : 'Monthly';
           // Add bymonthday description if available
           if (recurrenceRule.bymonthday && recurrenceRule.bymonthday.length) {
-            const days = recurrenceRule.bymonthday.map(d => 
-              d > 0 ? `${d}${this.getOrdinalSuffix(d)}` : 
-              `${Math.abs(d)}${this.getOrdinalSuffix(Math.abs(d))} from end`
-            ).join(', ');
+            const days = recurrenceRule.bymonthday
+              .map((d) =>
+                d > 0
+                  ? `${d}${this.getOrdinalSuffix(d)}`
+                  : `${Math.abs(d)}${this.getOrdinalSuffix(Math.abs(d))} from end`,
+              )
+              .join(', ');
             description += ` on the ${days} day`;
           }
           break;
@@ -270,16 +295,20 @@ export class RecurrenceService {
           description = interval > 1 ? `Every ${interval} years` : 'Yearly';
           // Add bymonth description if available
           if (recurrenceRule.bymonth && recurrenceRule.bymonth.length) {
-            const months = recurrenceRule.bymonth.map(m => 
-              new Date(2000, m - 1, 1).toLocaleString('en-US', { month: 'long' })
-            ).join(', ');
+            const months = recurrenceRule.bymonth
+              .map((m) =>
+                new Date(2000, m - 1, 1).toLocaleString('en-US', {
+                  month: 'long',
+                }),
+              )
+              .join(', ');
             description += ` in ${months}`;
           }
           break;
         default:
           description = `Every ${interval} ${String(freq).toLowerCase()}${interval > 1 ? 's' : ''}`;
       }
-      
+
       // Add end condition
       if (count) {
         description += `, ${count} times`;
@@ -287,24 +316,29 @@ export class RecurrenceService {
         const untilDate = typeof until === 'string' ? parseISO(until) : until;
         description += `, until ${this.formatDateInTimeZone(untilDate, timeZone, { format: 'PP' })}`;
       }
-      
+
       return description;
     } catch (error) {
-      this.logger.error(`Error generating recurrence description: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error generating recurrence description: ${error.message}`,
+        error.stack,
+      );
       return 'Recurring event';
     }
   }
 
   /**
    * Build RRule options from our RecurrenceRule interface
-   * 
+   *
    * @private
    * @param recurrenceRule - The recurrence rule to convert
    * @returns RRule options
    */
-  private buildRRuleOptions(recurrenceRule: RecurrenceRule): Partial<RRuleOptions> {
+  private buildRRuleOptions(
+    recurrenceRule: RecurrenceRule,
+  ): Partial<RRuleOptions> {
     const options: Record<string, any> = {};
-    
+
     // Set frequency (required)
     if (typeof recurrenceRule.freq === 'string') {
       const freqStr = recurrenceRule.freq.toUpperCase();
@@ -312,60 +346,65 @@ export class RecurrenceService {
     } else {
       options.freq = recurrenceRule.freq as number;
     }
-    
+
     // Add interval if specified
     if (recurrenceRule.interval) {
       options.interval = recurrenceRule.interval;
     }
-    
+
     // Add count if specified
     if (recurrenceRule.count) {
       options.count = recurrenceRule.count;
     }
-    
+
     // Add until if specified
     if (recurrenceRule.until) {
-      options.until = typeof recurrenceRule.until === 'string' ?
-        parseISO(recurrenceRule.until) : recurrenceRule.until;
+      options.until =
+        typeof recurrenceRule.until === 'string'
+          ? parseISO(recurrenceRule.until)
+          : recurrenceRule.until;
     }
-    
+
     // Process byday
     if (recurrenceRule.byday && recurrenceRule.byday.length > 0) {
-      options.byweekday = recurrenceRule.byday.map(day => {
-        // Handle prefixed weekdays like 1MO (first Monday)
-        const match = day.match(/^([+-]?\d+)?([A-Z]{2})$/);
-        if (match) {
-          const [, prefix, weekday] = match;
-          const weekdayNum = RRule[weekday as keyof typeof RRule] as Weekday;
-          
-          if (prefix) {
-            return weekdayNum.nth(parseInt(prefix, 10));
+      options.byweekday = recurrenceRule.byday
+        .map((day) => {
+          // Handle prefixed weekdays like 1MO (first Monday)
+          const match = day.match(/^([+-]?\d+)?([A-Z]{2})$/);
+          if (match) {
+            const [, prefix, weekday] = match;
+            const weekdayNum = RRule[weekday as keyof typeof RRule] as Weekday;
+
+            if (prefix) {
+              return weekdayNum.nth(parseInt(prefix, 10));
+            }
+            return weekdayNum;
           }
-          return weekdayNum;
-        }
-        return null;
-      }).filter(Boolean) as Weekday[];
+          return null;
+        })
+        .filter(Boolean) as Weekday[];
     }
-    
+
     // Process other byXXX properties
     if (recurrenceRule.bymonth) options.bymonth = recurrenceRule.bymonth;
-    if (recurrenceRule.bymonthday) options.bymonthday = recurrenceRule.bymonthday;
+    if (recurrenceRule.bymonthday)
+      options.bymonthday = recurrenceRule.bymonthday;
     if (recurrenceRule.byhour) options.byhour = recurrenceRule.byhour;
     if (recurrenceRule.byminute) options.byminute = recurrenceRule.byminute;
     if (recurrenceRule.bysecond) options.bysecond = recurrenceRule.bysecond;
     if (recurrenceRule.bysetpos) options.bysetpos = recurrenceRule.bysetpos;
-    
+
     // Process wkst (week start)
     if (recurrenceRule.wkst) {
       options.wkst = RRule[recurrenceRule.wkst as keyof typeof RRule] as number;
     }
-    
+
     return options as Partial<RRuleOptions>;
   }
 
   /**
    * Check if two dates are the same day (ignoring time)
-   * 
+   *
    * @private
    * @param date1 - First date
    * @param date2 - Second date
@@ -381,7 +420,7 @@ export class RecurrenceService {
 
   /**
    * Get the ordinal suffix for a number (1st, 2nd, 3rd, etc.)
-   * 
+   *
    * @private
    * @param n - The number
    * @returns The ordinal suffix
@@ -389,7 +428,7 @@ export class RecurrenceService {
   private getOrdinalSuffix(n: number): string {
     const j = n % 10;
     const k = n % 100;
-    
+
     if (j === 1 && k !== 11) {
       return 'st';
     }

@@ -7,7 +7,7 @@ import { OccurrenceOptions } from '../../../recurrence/interfaces/recurrence.int
 export interface IEventOccurrenceService {
   /**
    * Generate occurrence events for a recurring event
-   * 
+   *
    * @param parentEvent - The parent recurring event
    * @param options - Options for occurrence generation
    * @returns Array of generated occurrence events
@@ -16,10 +16,10 @@ export interface IEventOccurrenceService {
     parentEvent: EventEntity,
     options?: OccurrenceOptions,
   ): Promise<EventEntity[]>;
-  
+
   /**
    * Get occurrences of a recurring event within a date range
-   * 
+   *
    * @param parentEventId - ID of the parent recurring event
    * @param startDate - Start of the date range
    * @param endDate - End of the date range
@@ -32,10 +32,10 @@ export interface IEventOccurrenceService {
     endDate: Date,
     includeExceptions?: boolean,
   ): Promise<EventEntity[]>;
-  
+
   /**
    * Create or update an exception occurrence of a recurring event
-   * 
+   *
    * @param parentEventId - ID of the parent recurring event
    * @param originalDate - Original date of the occurrence to modify
    * @param modifications - Properties to modify in the occurrence
@@ -46,10 +46,10 @@ export interface IEventOccurrenceService {
     originalDate: Date,
     modifications: Partial<EventEntity>,
   ): Promise<EventEntity>;
-  
+
   /**
    * Delete an occurrence from a recurring event
-   * 
+   *
    * @param parentEventId - ID of the parent recurring event
    * @param occurrenceDate - Date of the occurrence to exclude
    * @returns Success status
@@ -58,10 +58,10 @@ export interface IEventOccurrenceService {
     parentEventId: number,
     occurrenceDate: Date,
   ): Promise<boolean>;
-  
+
   /**
    * Add back a previously excluded occurrence
-   * 
+   *
    * @param parentEventId - ID of the parent recurring event
    * @param occurrenceDate - Date of the occurrence to include
    * @returns Success status
@@ -70,14 +70,12 @@ export interface IEventOccurrenceService {
     parentEventId: number,
     occurrenceDate: Date,
   ): Promise<boolean>;
-  
+
   /**
    * Delete all occurrences of a recurring event
-   * 
+   *
    * @param parentEventId - ID of the parent recurring event
    * @returns Number of deleted occurrences
    */
-  deleteAllOccurrences(
-    parentEventId: number,
-  ): Promise<number>;
+  deleteAllOccurrences(parentEventId: number): Promise<number>;
 }
