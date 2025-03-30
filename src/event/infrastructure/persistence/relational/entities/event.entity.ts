@@ -172,6 +172,64 @@ export class EventEntity
   @Column({ type: 'timestamp', nullable: true })
   lastSyncedAt: Date | null;
 
+  // Recurring event fields
+  @Column({ nullable: true, type: 'varchar', length: 50 })
+  timeZone: string;
+
+  @Column({ nullable: true, type: 'jsonb' })
+  recurrenceRule: Record<string, any>;
+
+  @Column({ nullable: true, type: 'jsonb' })
+  recurrenceExceptions: string[];
+
+  @Column({ nullable: true })
+  recurrenceUntil: Date;
+
+  @Column({ nullable: true })
+  recurrenceCount: number;
+
+  @Column({ nullable: false, default: false })
+  @Index()
+  isRecurring: boolean;
+
+  @Column({ nullable: true })
+  parentEventId: number;
+
+  @ManyToOne(() => EventEntity, (event) => event.occurrences, { nullable: true })
+  @JoinColumn({ name: 'parentEventId' })
+  parentEvent: EventEntity;
+
+  @OneToMany(() => EventEntity, (event) => event.parentEvent)
+  occurrences: EventEntity[];
+
+  @Column({ nullable: false, default: false })
+  isRecurrenceException: boolean;
+
+  @Column({ nullable: true })
+  originalDate: Date;
+
+  // Additional RFC 5545/7986 properties
+  @Column({ nullable: true, type: 'varchar', length: 20 })
+  securityClass: string;
+
+  @Column({ nullable: true, type: 'integer', default: 0 })
+  priority: number;
+
+  @Column({ nullable: false, type: 'boolean', default: true })
+  blocksTime: boolean;
+
+  @Column({ nullable: true, type: 'boolean' })
+  isAllDay: boolean;
+
+  @Column({ nullable: true, type: 'jsonb' })
+  resources: string[];
+
+  @Column({ nullable: true, type: 'varchar', length: 20 })
+  color: string;
+
+  @Column({ nullable: true, type: 'jsonb' })
+  conferenceData: Record<string, any>;
+
   // @Expose()
   // get attendeesCount(): number {
   //   return this.attendees ? this.attendees.length : 0;
