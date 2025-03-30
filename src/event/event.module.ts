@@ -18,12 +18,15 @@ import { BlueskyModule } from '../bluesky/bluesky.module';
 import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
+import { EventOccurrenceService } from './services/occurrences/event-occurrence.service';
+import { RecurrenceModule } from '../recurrence/recurrence.module';
 import { ChatModule } from '../chat/chat.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([EventEntity]),
     TenantModule,
+    RecurrenceModule,
     forwardRef(() => GroupMemberModule),
     CategoryModule,
     forwardRef(() => AuthModule),
@@ -40,6 +43,7 @@ import { ChatModule } from '../chat/chat.module';
     EventManagementService,
     EventQueryService,
     EventRecommendationService,
+    EventOccurrenceService,
     FilesS3PresignedService,
     EventListener,
     EventRoleService,
@@ -48,6 +52,7 @@ import { ChatModule } from '../chat/chat.module';
     EventManagementService,
     EventQueryService,
     EventRecommendationService,
+    EventOccurrenceService,
   ],
 })
 export class EventModule {}

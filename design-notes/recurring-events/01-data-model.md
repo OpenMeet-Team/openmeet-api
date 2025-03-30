@@ -219,6 +219,36 @@ conferenceData: Record<string, any>; // RFC 7986
 
 See the document `05-rfc5545-considerations.md` for detailed explanations of these properties.
 
+## Timezone Handling Implementation
+
+Our implementation of timezone handling follows these principles:
+
+1. **Storage in UTC, Display in Local Time**: 
+   - All event dates (`startDate`, `endDate`, etc.) are stored in UTC in the database
+   - The original timezone is preserved in the `timeZone` field of each event
+   - This allows consistent storage while preserving the user's intent
+
+2. **Recurrence Calculations in Original Timezone**:
+   - When generating occurrences, the RecurrenceService:
+     - Takes the original start date (in UTC)
+     - Converts it to the specified timezone using `toZonedTime` from date-fns-tz
+     - Applies recurrence rules in that timezone context
+     - Converts resulting dates back to UTC for storage
+   - This ensures that "daily at 9 AM" in Eastern Time always means 9 AM Eastern Time, regardless of UTC offset or DST changes
+
+3. **Handling DST Transitions**:
+   - The implementation correctly handles Daylight Saving Time transitions
+   - Events recur at the same local time, even when crossing DST boundaries
+   - For example, a daily 9 AM Eastern Time event will occur at 9 AM EDT during summer and 9 AM EST during winter
+
+4. **Timezone Conversion for APIs**:
+   - The RecurrenceService provides methods to convert dates between timezones
+   - This ensures consistent user experience regardless of the user's timezone
+
+5. **Preserving Original Time Intent**:
+   - By storing both UTC times and the original timezone, we preserve the user's original intent
+   - This is crucial for recurring events where the specific local time is important
+
 ## Next Steps
 
 After implementing these schema changes, we'll need to:
