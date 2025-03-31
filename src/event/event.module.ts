@@ -21,6 +21,7 @@ import { EventRecommendationService } from './services/event-recommendation.serv
 import { EventOccurrenceService } from './services/occurrences/event-occurrence.service';
 import { RecurrenceModule } from '../recurrence/recurrence.module';
 import { ChatModule } from '../chat/chat.module';
+import { ICalendarService } from './services/ical/ical.service';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { ChatModule } from '../chat/chat.module';
     FilesS3PresignedService,
     EventListener,
     EventRoleService,
+    ICalendarService,
   ],
   exports: [
     EventManagementService,

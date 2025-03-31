@@ -31,6 +31,7 @@ import { VisibilityGuard } from '../shared/guard/visibility.guard';
 import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
+import { ICalendarService } from './services/ical/ical.service';
 
 const createEventDto: CreateEventDto = {
   name: 'Test Event',
@@ -84,6 +85,10 @@ const mockEventRecommendationService = {
   showRecommendedEventsByEventSlug: jest.fn(),
 };
 
+const mockICalendarService = {
+  generateICalendar: jest.fn(),
+};
+
 // Discussion service mock has been moved to chat.controller.spec.ts
 
 describe('EventController', () => {
@@ -129,6 +134,10 @@ describe('EventController', () => {
         {
           provide: EventRecommendationService,
           useValue: mockEventRecommendationService,
+        },
+        {
+          provide: ICalendarService,
+          useValue: mockICalendarService,
         },
         // EventDiscussionService has been moved to ChatController
         {
@@ -358,6 +367,45 @@ describe('EventController', () => {
       mockEventQueryService.showDashboardEvents.mockResolvedValue(mockEvents);
       const result = await controller.showDashboardEvents(mockUser);
       expect(result).toEqual(mockEvents);
+    });
+  });
+  
+  describe('getICalendar', () => {
+    it('should return iCalendar content', async () => {
+      const mockEvent = { slug: 'test-event' };
+      const mockICalContent = 'BEGIN:VCALENDAR\nEND:VCALENDAR';
+      const mockResponse = {
+        status: jest.fn().mockReturnThis(),
+        send: jest.fn(),
+        setHeader: jest.fn(),
+      };
+      
+      mockEventQueryService.showEvent.mockResolvedValue(mockEvent);
+      mockICalendarService.generateICalendar.mockReturnValue(mockICalContent);
+      
+      await controller.getICalendar('test-event', mockResponse as any);
+      
+      expect(mockEventQueryService.showEvent).toHaveBeenCalledWith('test-event');
+      expect(mockICalendarService.generateICalendar).toHaveBeenCalledWith(mockEvent);
+      expect(mockResponse.setHeader).toHaveBeenCalledWith(
+        'Content-Disposition',
+        'attachment; filename=test-event.ics',
+      );
+      expect(mockResponse.send).toHaveBeenCalledWith(mockICalContent);
+    });
+    
+    it('should return 404 if event not found', async () => {
+      const mockResponse = {
+        status: jest.fn().mockReturnThis(),
+        send: jest.fn(),
+      };
+      
+      mockEventQueryService.showEvent.mockResolvedValue(null);
+      
+      await controller.getICalendar('non-existent-event', mockResponse as any);
+      
+      expect(mockResponse.status).toHaveBeenCalledWith(404);
+      expect(mockResponse.send).toHaveBeenCalledWith('Event not found');
     });
   });
 

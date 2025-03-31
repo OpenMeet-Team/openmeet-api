@@ -89,6 +89,7 @@
     "generic-pool": "^3.9.0",
     "google-auth-library": "9.14.1",
     "handlebars": "4.7.8",
+    "ical-generator": "^8.1.1",
     "ioredis": "^5.5.0",
     "jwt-decode": "^4.0.0",
     "matrix-js-sdk": "^37.1.0",

@@ -25,6 +25,64 @@ describe('EventController (e2e)', () => {
     token = await loginAsTester();
     testGroup = await createGroup(TESTING_APP_URL, token, groupData);
   });
+  
+  it('should return iCalendar file for an event', async () => {
+    // Create an event with recurrence
+    const eventWithRecurrence = await createEvent(TESTING_APP_URL, token, {
+      name: 'Recurring Test Event',
+      slug: 'recurring-test-event',
+      description: 'Test Description for Recurring Event',
+      startDate: new Date().toISOString(),
+      endDate: new Date(new Date().getTime() + 3600000).toISOString(), // 1 hour later
+      type: EventType.Hybrid,
+      location: 'Test Location',
+      locationOnline: 'https://test-event.com',
+      maxAttendees: 10,
+      categories: [],
+      lat: 0.0,
+      lon: 0.0,
+      status: 'published',
+      group: null,
+      isRecurring: true,
+      timeZone: 'America/New_York',
+      recurrenceRule: {
+        freq: 'WEEKLY',
+        interval: 1,
+        count: 5,
+        byday: ['MO', 'WE', 'FR']
+      }
+    });
+    
+    expect(eventWithRecurrence.name).toBe('Recurring Test Event');
+    expect(eventWithRecurrence.isRecurring).toBe(true);
+    
+    // Get the iCalendar file
+    const response = await request(TESTING_APP_URL)
+      .get(`/api/events/${eventWithRecurrence.slug}/calendar`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID)
+      .set('Accept', 'text/calendar');
+      
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('text/calendar');
+    expect(response.headers['content-disposition']).toContain(`attachment; filename=${eventWithRecurrence.slug}.ics`);
+    
+    // Check iCalendar content
+    const icalContent = response.text;
+    expect(icalContent).toContain('BEGIN:VCALENDAR');
+    expect(icalContent).toContain('PRODID:-//OpenMeet//Calendar//EN');
+    expect(icalContent).toContain('BEGIN:VEVENT');
+    expect(icalContent).toContain(`SUMMARY:${eventWithRecurrence.name}`);
+    expect(icalContent).toContain('RRULE:FREQ=WEEKLY;COUNT=5;BYDAY=MO,WE,FR');
+    expect(icalContent).toContain('END:VEVENT');
+    expect(icalContent).toContain('END:VCALENDAR');
+    
+    // Clean up
+    await request(TESTING_APP_URL)
+      .delete(`/api/events/${eventWithRecurrence.slug}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
+  });
 
   it.skip('should successfully create an event, update it, find it, and delete it', async () => {
     // Create an event using the REST API

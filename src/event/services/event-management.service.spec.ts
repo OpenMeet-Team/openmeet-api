@@ -41,6 +41,7 @@ import { UserService } from '../../user/user.service';
 import { EventRoleService } from '../../event-role/event-role.service';
 import { EventMailService } from '../../event-mail/event-mail.service';
 import { BlueskyService } from '../../bluesky/bluesky.service';
+import { EventOccurrenceService } from './occurrences/event-occurrence.service';
 import { stopCleanupInterval } from '../../database/data-source';
 import { EventManagementService } from './event-management.service';
 
@@ -128,6 +129,17 @@ describe('EventManagementService', () => {
         {
           provide: 'DiscussionService',
           useValue: mockDiscussionService,
+        },
+        {
+          provide: EventOccurrenceService,
+          useValue: {
+            generateOccurrences: jest.fn().mockResolvedValue([]),
+            getOccurrencesInRange: jest.fn().mockResolvedValue([]),
+            createExceptionOccurrence: jest.fn().mockResolvedValue({}),
+            excludeOccurrence: jest.fn().mockResolvedValue(true),
+            includeOccurrence: jest.fn().mockResolvedValue(true),
+            deleteAllOccurrences: jest.fn().mockResolvedValue(0),
+          },
         },
       ],
     }).compile();

@@ -334,6 +334,88 @@ export class RecurrenceService {
    * @param recurrenceRule - The recurrence rule to convert
    * @returns RRule options
    */
+  /**
+   * Builds an RFC 5545-compliant RRULE string from a RecurrenceRule object
+   * @param recurrenceRule - The recurrence rule to convert to string format
+   * @returns RFC 5545 compliant RRULE string
+   */
+  buildRRuleString(recurrenceRule: RecurrenceRule): string {
+    if (!recurrenceRule || !recurrenceRule.freq) {
+      return '';
+    }
+
+    const parts: string[] = [`FREQ=${recurrenceRule.freq}`];
+
+    // Add interval if specified
+    if (recurrenceRule.interval && recurrenceRule.interval > 1) {
+      parts.push(`INTERVAL=${recurrenceRule.interval}`);
+    }
+
+    // Add count if specified
+    if (recurrenceRule.count) {
+      parts.push(`COUNT=${recurrenceRule.count}`);
+    }
+
+    // Add until if specified
+    if (recurrenceRule.until) {
+      const untilDate = typeof recurrenceRule.until === 'string'
+        ? parseISO(recurrenceRule.until)
+        : recurrenceRule.until;
+      
+      // Format until date in UTC format as required by RFC 5545
+      const utcString = untilDate
+        .toISOString()
+        .replace(/[-:]/g, '')
+        .replace(/\.\d{3}/, '');
+      
+      parts.push(`UNTIL=${utcString}`);
+    }
+
+    // Add BYDAY if specified
+    if (recurrenceRule.byday && recurrenceRule.byday.length > 0) {
+      parts.push(`BYDAY=${recurrenceRule.byday.join(',')}`);
+    }
+
+    // Add other byXXX properties
+    if (recurrenceRule.bymonth && recurrenceRule.bymonth.length > 0) {
+      parts.push(`BYMONTH=${recurrenceRule.bymonth.join(',')}`);
+    }
+
+    if (recurrenceRule.bymonthday && recurrenceRule.bymonthday.length > 0) {
+      parts.push(`BYMONTHDAY=${recurrenceRule.bymonthday.join(',')}`);
+    }
+
+    if (recurrenceRule.byhour && recurrenceRule.byhour.length > 0) {
+      parts.push(`BYHOUR=${recurrenceRule.byhour.join(',')}`);
+    }
+
+    if (recurrenceRule.byminute && recurrenceRule.byminute.length > 0) {
+      parts.push(`BYMINUTE=${recurrenceRule.byminute.join(',')}`);
+    }
+
+    if (recurrenceRule.bysecond && recurrenceRule.bysecond.length > 0) {
+      parts.push(`BYSECOND=${recurrenceRule.bysecond.join(',')}`);
+    }
+
+    if (recurrenceRule.bysetpos && recurrenceRule.bysetpos.length > 0) {
+      parts.push(`BYSETPOS=${recurrenceRule.bysetpos.join(',')}`);
+    }
+
+    // Add WKST if specified
+    if (recurrenceRule.wkst) {
+      parts.push(`WKST=${recurrenceRule.wkst}`);
+    }
+
+    return parts.join(';');
+  }
+
+  /**
+   * Build RRule options from our RecurrenceRule interface
+   *
+   * @private
+   * @param recurrenceRule - The recurrence rule to convert
+   * @returns RRule options
+   */
   private buildRRuleOptions(
     recurrenceRule: RecurrenceRule,
   ): Partial<RRuleOptions> {

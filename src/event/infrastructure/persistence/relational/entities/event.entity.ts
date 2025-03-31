@@ -210,6 +210,10 @@ export class EventEntity
   @Column({ nullable: true })
   originalDate: Date;
 
+  @Column({ nullable: false, default: false })
+  @Index('IDX_events_recurrence_split_point')
+  recurrenceSplitPoint: boolean;
+
   // Additional RFC 5545/7986 properties
   @Column({ nullable: true, type: 'varchar', length: 20 })
   securityClass: string;

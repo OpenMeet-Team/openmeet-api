@@ -35,6 +35,8 @@ import { Trace } from '../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
 import { CreateEventAttendeeDto } from '../../event-attendee/dto/create-eventAttendee.dto';
 import { UpdateEventAttendeeDto } from '../../event-attendee/dto/update-eventAttendee.dto';
+import { EventOccurrenceService } from './occurrences/event-occurrence.service';
+import { OccurrenceOptions } from '../../recurrence/interfaces/recurrence.interface';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventManagementService {
@@ -54,6 +56,7 @@ export class EventManagementService {
     private readonly userService: UserService,
     private readonly eventMailService: EventMailService,
     private readonly blueskyService: BlueskyService,
+    private readonly eventOccurrenceService: EventOccurrenceService,
     @Inject(forwardRef(() => 'DiscussionService'))
     private readonly discussionService: any, // Using any here to avoid circular dependency issues
   ) {
@@ -126,6 +129,25 @@ export class EventManagementService {
         : null,
       image: createEventDto.image,
       categories,
+
+      // Recurrence fields
+      isRecurring: !!createEventDto.recurrenceRule,
+      timeZone: createEventDto.timeZone || 'UTC',
+      recurrenceRule: createEventDto.recurrenceRule,
+      recurrenceExceptions: createEventDto.recurrenceExceptions || [],
+      recurrenceUntil:
+        createEventDto.recurrenceUntil || createEventDto.recurrenceRule?.until,
+      recurrenceCount:
+        createEventDto.recurrenceCount || createEventDto.recurrenceRule?.count,
+
+      // Additional RFC 5545/7986 properties
+      securityClass: createEventDto.securityClass,
+      priority: createEventDto.priority,
+      blocksTime: createEventDto.blocksTime ?? true,
+      isAllDay: createEventDto.isAllDay,
+      resources: createEventDto.resources,
+      color: createEventDto.color,
+      conferenceData: createEventDto.conferenceData,
     };
 
     let createdEvent;
@@ -232,6 +254,45 @@ export class EventManagementService {
     );
 
     this.eventEmitter.emit('event.created', eventWithTenant);
+
+    // Generate occurrences if this is a recurring event
+    if (createdEvent.isRecurring && createdEvent.recurrenceRule) {
+      try {
+        this.logger.log(
+          `Generating occurrences for recurring event: ${createdEvent.id}`,
+        );
+
+        // Set occurrence generation options
+        const occurrenceOptions: OccurrenceOptions = {
+          timeZone: createdEvent.timeZone || 'UTC',
+          count: createdEvent.recurrenceCount,
+          until: createdEvent.recurrenceUntil,
+          exdates: createdEvent.recurrenceExceptions,
+        };
+
+        // Generate occurrences asynchronously
+        void this.eventOccurrenceService
+          .generateOccurrences(createdEvent, occurrenceOptions)
+          .then((occurrences) => {
+            this.logger.log(
+              `Generated ${occurrences.length} occurrences for event ${createdEvent.id}`,
+            );
+          })
+          .catch((error) => {
+            this.logger.error(
+              `Error generating occurrences: ${error.message}`,
+              error.stack,
+            );
+          });
+      } catch (error) {
+        this.logger.error(
+          `Error generating occurrences for event ${createdEvent.id}: ${error.message}`,
+          error.stack,
+        );
+        // Don't block the event creation if occurrence generation fails
+      }
+    }
+
     return createdEvent;
   }
 
@@ -291,6 +352,20 @@ export class EventManagementService {
       mappedDto,
     });
 
+    // Check if we need to update recurrence properties
+    if (updateEventDto.recurrenceRule) {
+      mappedDto.isRecurring = true;
+      mappedDto.timeZone = updateEventDto.timeZone || 'UTC';
+      mappedDto.recurrenceUntil =
+        updateEventDto.recurrenceUntil || updateEventDto.recurrenceRule?.until;
+      mappedDto.recurrenceCount =
+        updateEventDto.recurrenceCount || updateEventDto.recurrenceRule?.count;
+    } else if (updateEventDto.recurrenceRule === null) {
+      // If recurrenceRule is explicitly set to null, disable recurring status
+      mappedDto.isRecurring = false;
+      mappedDto.recurrenceRule = null;
+    }
+
     const updatedEvent = this.eventRepository.merge(event, mappedDto);
     const savedEvent = await this.eventRepository.save(updatedEvent);
 
@@ -310,6 +385,56 @@ export class EventManagementService {
         this.logger.error(
           `Failed to update event on Bluesky: ${error.message}`,
         );
+      }
+    }
+
+    // Handle recurring event updates if needed
+    if (savedEvent.isRecurring && savedEvent.recurrenceRule) {
+      // If recurrence pattern changed, regenerate occurrences
+      const recurrenceChanged =
+        event.recurrenceRule?.freq !== savedEvent.recurrenceRule?.freq ||
+        event.recurrenceRule?.interval !==
+          savedEvent.recurrenceRule?.interval ||
+        event.recurrenceRule?.count !== savedEvent.recurrenceRule?.count ||
+        event.recurrenceRule?.until !== savedEvent.recurrenceRule?.until;
+
+      if (recurrenceChanged) {
+        try {
+          this.logger.log(
+            `Updating occurrences for recurring event: ${savedEvent.id}`,
+          );
+
+          // First delete all existing occurrences
+          await this.eventOccurrenceService.deleteAllOccurrences(savedEvent.id);
+
+          // Then generate new occurrences
+          const occurrenceOptions: OccurrenceOptions = {
+            timeZone: savedEvent.timeZone || 'UTC',
+            count: savedEvent.recurrenceCount,
+            until: savedEvent.recurrenceUntil,
+            exdates: savedEvent.recurrenceExceptions,
+          };
+
+          // Generate occurrences asynchronously
+          void this.eventOccurrenceService
+            .generateOccurrences(savedEvent, occurrenceOptions)
+            .then((occurrences) => {
+              this.logger.log(
+                `Regenerated ${occurrences.length} occurrences for event ${savedEvent.id}`,
+              );
+            })
+            .catch((error) => {
+              this.logger.error(
+                `Error regenerating occurrences: ${error.message}`,
+                error.stack,
+              );
+            });
+        } catch (error) {
+          this.logger.error(
+            `Error regenerating occurrences for event ${savedEvent.id}: ${error.message}`,
+            error.stack,
+          );
+        }
       }
     }
 
@@ -448,6 +573,26 @@ export class EventManagementService {
     // Delete related event attendees
     await this.eventAttendeeService.deleteEventAttendees(event.id);
 
+    // Clean up occurrences if this is a recurring event
+    if (event.isRecurring) {
+      try {
+        this.logger.log(
+          `Cleaning up occurrences for recurring event ${event.id}`,
+        );
+        const deletedCount =
+          await this.eventOccurrenceService.deleteAllOccurrences(event.id);
+        this.logger.log(
+          `Deleted ${deletedCount} occurrences of event ${event.id}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Error cleaning up occurrences for event ${event.id}: ${error.message}`,
+          error.stack,
+        );
+        // Continue with event deletion despite error
+      }
+    }
+
     // Now delete the event from our database
     await this.eventRepository.remove(event);
     this.eventEmitter.emit('event.deleted', eventCopy);
@@ -461,7 +606,7 @@ export class EventManagementService {
     // First find all events for this group
     const events = await this.eventRepository.find({
       where: { group: { id: groupId } },
-      select: ['id', 'slug'],
+      select: ['id', 'slug', 'isRecurring'],
     });
 
     // Delete each event individually to ensure proper cleanup of related entities
@@ -474,6 +619,22 @@ export class EventManagementService {
           this.logger.log(
             `Cleaned up chat rooms for event ${event.slug} (ID: ${event.id})`,
           );
+        }
+
+        // Clean up occurrences if this is a recurring event
+        if (event.isRecurring) {
+          try {
+            const deletedCount =
+              await this.eventOccurrenceService.deleteAllOccurrences(event.id);
+            this.logger.log(
+              `Deleted ${deletedCount} occurrences of event ${event.slug} (ID: ${event.id})`,
+            );
+          } catch (error) {
+            this.logger.error(
+              `Error cleaning up occurrences for event ${event.id}: ${error.message}`,
+              error.stack,
+            );
+          }
         }
 
         // Now that chat rooms are deleted, we can delete the event itself
@@ -596,5 +757,236 @@ export class EventManagementService {
     await this.eventMailService.sendMailAttendeeStatusChanged(attendeeId);
 
     return await this.eventAttendeeService.showEventAttendee(attendeeId);
+  }
+
+  /**
+   * Create or update an exception occurrence for a recurring event
+   * This allows modifying a single occurrence without affecting the series
+   *
+   * @param slug - The slug of the parent recurring event
+   * @param occurrenceDate - The date of the occurrence to modify
+   * @param updateEventDto - The modifications to apply to this occurrence
+   * @returns The modified occurrence event
+   */
+  @Trace('event-management.createExceptionOccurrence')
+  async createExceptionOccurrence(
+    slug: string,
+    occurrenceDate: Date,
+    updateEventDto: UpdateEventDto,
+  ): Promise<EventEntity> {
+    await this.initializeRepository();
+
+    // Find the parent event
+    const parentEvent = await this.eventRepository.findOne({
+      where: { slug, isRecurring: true },
+    });
+
+    if (!parentEvent) {
+      throw new UnprocessableEntityException(
+        'Parent event not found or not recurring',
+      );
+    }
+
+    try {
+      // Create exception occurrence with modifications
+      const exceptionEvent =
+        await this.eventOccurrenceService.createExceptionOccurrence(
+          parentEvent.id,
+          occurrenceDate,
+          updateEventDto as Partial<EventEntity>,
+        );
+
+      this.logger.log(
+        `Created exception occurrence of event ${parentEvent.id} for date ${occurrenceDate}`,
+      );
+
+      // Emit event for listeners
+      this.eventEmitter.emit('event.occurrence.modified', {
+        parentEventId: parentEvent.id,
+        occurrenceId: exceptionEvent.id,
+        originalDate: occurrenceDate,
+        tenantId: this.request.tenantId,
+      });
+
+      return exceptionEvent;
+    } catch (error) {
+      this.logger.error(
+        `Error creating exception occurrence: ${error.message}`,
+        error.stack,
+      );
+      throw new UnprocessableEntityException(
+        `Failed to create exception occurrence: ${error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Exclude a specific occurrence from a recurring event series
+   *
+   * @param slug - The slug of the parent recurring event
+   * @param occurrenceDate - The date of the occurrence to exclude
+   * @returns Success status
+   */
+  @Trace('event-management.excludeOccurrence')
+  async excludeOccurrence(
+    slug: string,
+    occurrenceDate: Date,
+  ): Promise<boolean> {
+    await this.initializeRepository();
+
+    // Find the parent event
+    const parentEvent = await this.eventRepository.findOne({
+      where: { slug, isRecurring: true },
+    });
+
+    if (!parentEvent) {
+      throw new UnprocessableEntityException(
+        'Parent event not found or not recurring',
+      );
+    }
+
+    try {
+      // Exclude the occurrence
+      const result = await this.eventOccurrenceService.excludeOccurrence(
+        parentEvent.id,
+        occurrenceDate,
+      );
+
+      if (result) {
+        this.logger.log(
+          `Excluded occurrence of event ${parentEvent.id} for date ${occurrenceDate}`,
+        );
+
+        // Emit event for listeners
+        this.eventEmitter.emit('event.occurrence.excluded', {
+          parentEventId: parentEvent.id,
+          occurrenceDate: occurrenceDate,
+          tenantId: this.request.tenantId,
+        });
+      } else {
+        this.logger.warn(
+          `Failed to exclude occurrence of event ${parentEvent.id} for date ${occurrenceDate}`,
+        );
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Error excluding occurrence: ${error.message}`,
+        error.stack,
+      );
+      throw new UnprocessableEntityException(
+        `Failed to exclude occurrence: ${error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Include a previously excluded occurrence in a recurring event series
+   *
+   * @param slug - The slug of the parent recurring event
+   * @param occurrenceDate - The date of the occurrence to include
+   * @returns Success status
+   */
+  @Trace('event-management.includeOccurrence')
+  async includeOccurrence(
+    slug: string,
+    occurrenceDate: Date,
+  ): Promise<boolean> {
+    await this.initializeRepository();
+
+    // Find the parent event
+    const parentEvent = await this.eventRepository.findOne({
+      where: { slug, isRecurring: true },
+    });
+
+    if (!parentEvent) {
+      throw new UnprocessableEntityException(
+        'Parent event not found or not recurring',
+      );
+    }
+
+    try {
+      // Include the occurrence
+      const result = await this.eventOccurrenceService.includeOccurrence(
+        parentEvent.id,
+        occurrenceDate,
+      );
+
+      if (result) {
+        this.logger.log(
+          `Included occurrence of event ${parentEvent.id} for date ${occurrenceDate}`,
+        );
+
+        // Emit event for listeners
+        this.eventEmitter.emit('event.occurrence.included', {
+          parentEventId: parentEvent.id,
+          occurrenceDate: occurrenceDate,
+          tenantId: this.request.tenantId,
+        });
+      } else {
+        this.logger.warn(
+          `Failed to include occurrence of event ${parentEvent.id} for date ${occurrenceDate}`,
+        );
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Error including occurrence: ${error.message}`,
+        error.stack,
+      );
+      throw new UnprocessableEntityException(
+        `Failed to include occurrence: ${error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Get occurrences of a recurring event within a date range
+   *
+   * @param slug - The slug of the parent recurring event
+   * @param startDate - Start of the date range
+   * @param endDate - End of the date range
+   * @param includeExceptions - Whether to include exception occurrences
+   * @returns Array of occurrence events within the specified range
+   */
+  @Trace('event-management.getOccurrencesInRange')
+  async getOccurrencesInRange(
+    slug: string,
+    startDate: Date,
+    endDate: Date,
+    includeExceptions: boolean = true,
+  ): Promise<EventEntity[]> {
+    await this.initializeRepository();
+
+    // Find the parent event
+    const parentEvent = await this.eventRepository.findOne({
+      where: { slug, isRecurring: true },
+    });
+
+    if (!parentEvent) {
+      throw new UnprocessableEntityException(
+        'Parent event not found or not recurring',
+      );
+    }
+
+    try {
+      // Get occurrences in range
+      return await this.eventOccurrenceService.getOccurrencesInRange(
+        parentEvent.id,
+        startDate,
+        endDate,
+        includeExceptions,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error getting occurrences in range: ${error.message}`,
+        error.stack,
+      );
+      throw new UnprocessableEntityException(
+        `Failed to get occurrences in range: ${error.message}`,
+      );
+    }
   }
 }

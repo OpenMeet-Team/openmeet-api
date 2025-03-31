@@ -9,11 +9,13 @@ import {
   UseGuards,
   Req,
   Query,
+  Header,
+  Res,
 } from '@nestjs/common';
 // import { Response } from 'express'; - removed unused import
 
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
@@ -39,6 +41,7 @@ import { Trace } from '../utils/trace.decorator';
 import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
+import { ICalendarService } from './services/ical/ical.service';
 
 @ApiTags('Events')
 @Controller('events')
@@ -50,6 +53,7 @@ export class EventController {
     private readonly eventQueryService: EventQueryService,
     private readonly eventRecommendationService: EventRecommendationService,
     private readonly eventAttendeeService: EventAttendeeService,
+    private readonly iCalendarService: ICalendarService,
   ) {}
 
   @Get()
@@ -252,5 +256,36 @@ export class EventController {
     return await this.eventRecommendationService.showRecommendedEventsByEventSlug(
       slug,
     );
+  }
+
+  @Public()
+  @UseGuards(JWTAuthGuard)
+  @Get(':slug/calendar')
+  @ApiOperation({ 
+    summary: 'Get iCalendar file for an event',
+  })
+  @Header('Content-Type', 'text/calendar')
+  @Header('Content-Disposition', 'attachment; filename=event.ics')
+  @Trace('event.getICalendar')
+  async getICalendar(
+    @Param('slug') slug: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const event = await this.eventQueryService.showEvent(slug);
+    
+    if (!event) {
+      res.status(404).send('Event not found');
+      return;
+    }
+    
+    const icalContent = this.iCalendarService.generateICalendar(event);
+    
+    // Set Content-Disposition with event slug as filename
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=${event.slug}.ics`,
+    );
+    
+    res.send(icalContent);
   }
 }
