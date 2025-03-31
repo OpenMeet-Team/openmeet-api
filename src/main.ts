@@ -46,7 +46,9 @@ async function bootstrap() {
   useContainer(app.select(AppModule), { fallbackOnErrors: true });
   const configService = app.get(ConfigService<AllConfigType>);
 
+  // Enable shutdown hooks for graceful termination
   app.enableShutdownHooks();
+
   const apiPrefix = configService.getOrThrow('app.apiPrefix', { infer: true });
   app.setGlobalPrefix(
     configService.getOrThrow('app.apiPrefix', { infer: true }),
@@ -129,9 +131,38 @@ async function bootstrap() {
   // Use the Socket.io adapter for WebSockets
   app.useWebSocketAdapter(new IoAdapter(app));
 
-  await app.listen(configService.getOrThrow('app.port', { infer: true }));
+  // Add proper signal handlers for clean shutdown
+  const server = await app.listen(
+    configService.getOrThrow('app.port', { infer: true }),
+  );
+
+  // Add proper signal handlers for graceful shutdown
+  process.on('SIGTERM', async () => {
+    logger.log('SIGTERM signal received: closing HTTP server');
+    await app.close();
+    process.exit(0);
+  });
+
+  process.on('SIGINT', async () => {
+    logger.log('SIGINT signal received: closing HTTP server');
+    await app.close();
+    process.exit(0);
+  });
+
+  // Handle unhandled promise rejections
+  process.on('unhandledRejection', (reason: unknown, _promise) => {
+    logger.error(`Unhandled Promise Rejection: ${String(reason)}`);
+    // Don't exit the process here, just log the error
+  });
 
   logger.log(`Application is running on: ${await app.getUrl()}`);
   logger.log(`WebSocket server is running on Matrix namespace`);
+
+  return server;
 }
-void bootstrap();
+
+// We need to handle errors from bootstrap() to ensure proper process exit
+bootstrap().catch((err) => {
+  console.error('Error during bootstrap:', err);
+  process.exit(1);
+});

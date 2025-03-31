@@ -32,6 +32,7 @@ import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
 import { ICalendarService } from './services/ical/ical.service';
+import { RecurrenceModificationService } from '../recurrence/services/recurrence-modification.service';
 
 const createEventDto: CreateEventDto = {
   name: 'Test Event',
@@ -89,6 +90,11 @@ const mockICalendarService = {
   generateICalendar: jest.fn(),
 };
 
+const mockRecurrenceModificationService = {
+  splitSeriesAt: jest.fn(),
+  getEffectiveEventForDate: jest.fn(),
+};
+
 // Discussion service mock has been moved to chat.controller.spec.ts
 
 describe('EventController', () => {
@@ -138,6 +144,10 @@ describe('EventController', () => {
         {
           provide: ICalendarService,
           useValue: mockICalendarService,
+        },
+        {
+          provide: RecurrenceModificationService,
+          useValue: mockRecurrenceModificationService,
         },
         // EventDiscussionService has been moved to ChatController
         {
@@ -369,7 +379,7 @@ describe('EventController', () => {
       expect(result).toEqual(mockEvents);
     });
   });
-  
+
   describe('getICalendar', () => {
     it('should return iCalendar content', async () => {
       const mockEvent = { slug: 'test-event' };
@@ -379,33 +389,108 @@ describe('EventController', () => {
         send: jest.fn(),
         setHeader: jest.fn(),
       };
-      
+
       mockEventQueryService.showEvent.mockResolvedValue(mockEvent);
       mockICalendarService.generateICalendar.mockReturnValue(mockICalContent);
-      
+
       await controller.getICalendar('test-event', mockResponse as any);
-      
-      expect(mockEventQueryService.showEvent).toHaveBeenCalledWith('test-event');
-      expect(mockICalendarService.generateICalendar).toHaveBeenCalledWith(mockEvent);
+
+      expect(mockEventQueryService.showEvent).toHaveBeenCalledWith(
+        'test-event',
+      );
+      expect(mockICalendarService.generateICalendar).toHaveBeenCalledWith(
+        mockEvent,
+      );
       expect(mockResponse.setHeader).toHaveBeenCalledWith(
         'Content-Disposition',
         'attachment; filename=test-event.ics',
       );
       expect(mockResponse.send).toHaveBeenCalledWith(mockICalContent);
     });
-    
+
     it('should return 404 if event not found', async () => {
       const mockResponse = {
         status: jest.fn().mockReturnThis(),
         send: jest.fn(),
       };
-      
+
       mockEventQueryService.showEvent.mockResolvedValue(null);
-      
+
       await controller.getICalendar('non-existent-event', mockResponse as any);
-      
+
       expect(mockResponse.status).toHaveBeenCalledWith(404);
       expect(mockResponse.send).toHaveBeenCalledWith('Event not found');
+    });
+  });
+
+  describe('modifyThisAndFutureOccurrences', () => {
+    it('should call recurrenceModificationService.splitSeriesAt with correct parameters', async () => {
+      const slug = 'weekly-meeting';
+      const date = '2025-06-15T10:00:00.000Z';
+      const updateEventDto = { name: 'Updated Weekly Meeting' };
+      const mockUser = { id: 1, name: 'Test User' };
+      const expectedResult = {
+        id: 2,
+        name: 'Updated Weekly Meeting',
+        recurrenceSplitPoint: true,
+      };
+
+      mockRecurrenceModificationService.splitSeriesAt.mockResolvedValue(
+        expectedResult,
+      );
+
+      const result = await controller.modifyThisAndFutureOccurrences(
+        slug,
+        date,
+        updateEventDto,
+        mockUser as any,
+      );
+
+      expect(
+        mockRecurrenceModificationService.splitSeriesAt,
+      ).toHaveBeenCalledWith(slug, date, updateEventDto);
+      expect(result).toEqual(expectedResult);
+    });
+  });
+
+  describe('getEffectiveProperties', () => {
+    it('should call recurrenceModificationService.getEffectiveEventForDate with correct parameters', async () => {
+      const slug = 'weekly-meeting';
+      const date = '2025-06-15T10:00:00.000Z';
+      const expectedResult = {
+        id: 2,
+        name: 'Weekly Meeting (June Update)',
+      };
+
+      mockRecurrenceModificationService.getEffectiveEventForDate.mockResolvedValue(
+        expectedResult,
+      );
+
+      const result = await controller.getEffectiveProperties(slug, date);
+
+      expect(
+        mockRecurrenceModificationService.getEffectiveEventForDate,
+      ).toHaveBeenCalledWith(slug, date);
+      expect(result).toEqual(expectedResult);
+    });
+
+    it('should use current date when date parameter is not provided', async () => {
+      const slug = 'weekly-meeting';
+      const expectedResult = { id: 1, name: 'Weekly Meeting' };
+
+      mockRecurrenceModificationService.getEffectiveEventForDate.mockResolvedValue(
+        expectedResult,
+      );
+
+      const result = await controller.getEffectiveProperties(slug, '');
+
+      expect(
+        mockRecurrenceModificationService.getEffectiveEventForDate,
+      ).toHaveBeenCalledWith(
+        slug,
+        expect.any(String), // Should be the current date as ISO string
+      );
+      expect(result).toEqual(expectedResult);
     });
   });
 

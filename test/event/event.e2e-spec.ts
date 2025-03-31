@@ -25,7 +25,7 @@ describe('EventController (e2e)', () => {
     token = await loginAsTester();
     testGroup = await createGroup(TESTING_APP_URL, token, groupData);
   });
-  
+
   it('should return iCalendar file for an event', async () => {
     // Create an event with recurrence
     const eventWithRecurrence = await createEvent(TESTING_APP_URL, token, {
@@ -49,24 +49,26 @@ describe('EventController (e2e)', () => {
         freq: 'WEEKLY',
         interval: 1,
         count: 5,
-        byday: ['MO', 'WE', 'FR']
-      }
+        byday: ['MO', 'WE', 'FR'],
+      },
     });
-    
+
     expect(eventWithRecurrence.name).toBe('Recurring Test Event');
     expect(eventWithRecurrence.isRecurring).toBe(true);
-    
+
     // Get the iCalendar file
     const response = await request(TESTING_APP_URL)
       .get(`/api/events/${eventWithRecurrence.slug}/calendar`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID)
       .set('Accept', 'text/calendar');
-      
+
     expect(response.status).toBe(200);
     expect(response.headers['content-type']).toContain('text/calendar');
-    expect(response.headers['content-disposition']).toContain(`attachment; filename=${eventWithRecurrence.slug}.ics`);
-    
+    expect(response.headers['content-disposition']).toContain(
+      `attachment; filename=${eventWithRecurrence.slug}.ics`,
+    );
+
     // Check iCalendar content
     const icalContent = response.text;
     expect(icalContent).toContain('BEGIN:VCALENDAR');
@@ -76,7 +78,7 @@ describe('EventController (e2e)', () => {
     expect(icalContent).toContain('RRULE:FREQ=WEEKLY;COUNT=5;BYDAY=MO,WE,FR');
     expect(icalContent).toContain('END:VEVENT');
     expect(icalContent).toContain('END:VCALENDAR');
-    
+
     // Clean up
     await request(TESTING_APP_URL)
       .delete(`/api/events/${eventWithRecurrence.slug}`)

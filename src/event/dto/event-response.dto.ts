@@ -156,6 +156,8 @@ export class EventResponseDto {
   @ApiPropertyOptional({ type: [Date] })
   upcomingOccurrences?: Date[];
 
-  @ApiPropertyOptional()
+  @ApiProperty({
+    description: 'Human-readable description of the recurrence pattern',
+  })
   recurrenceDescription?: string;
 }

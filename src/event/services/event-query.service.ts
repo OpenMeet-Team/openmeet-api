@@ -4,6 +4,7 @@ import {
   Inject,
   Logger,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Repository, MoreThan, Brackets } from 'typeorm';
@@ -25,6 +26,7 @@ import { Trace } from '../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
+import { RecurrenceService } from '../../recurrence/recurrence.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventQueryService {
@@ -38,6 +40,8 @@ export class EventQueryService {
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly groupMemberService: GroupMemberService,
+    @Inject(forwardRef(() => RecurrenceService))
+    private readonly recurrenceService: RecurrenceService,
   ) {
     void this.initializeRepository();
   }
@@ -98,7 +102,8 @@ export class EventQueryService {
       }
     }
 
-    return event;
+    // Add recurrence information like human-readable description
+    return this.addRecurrenceInformation(event);
   }
 
   @Trace('event-query.showEvent')
@@ -154,7 +159,8 @@ export class EventQueryService {
     // Matrix-based discussions will be loaded from the frontend directly
     // No need to set messages or topics in the event entity
 
-    return event;
+    // Add recurrence information like human-readable description
+    return this.addRecurrenceInformation(event);
   }
 
   @Trace('event-query.editEvent')
@@ -164,6 +170,9 @@ export class EventQueryService {
       where: { slug },
       relations: ['group', 'categories'],
     });
+    if (event) {
+      return this.addRecurrenceInformation(event);
+    }
     return event;
   }
 
@@ -180,7 +189,7 @@ export class EventQueryService {
       throw new Error(`Event with slug ${slug} not found`);
     }
 
-    return event;
+    return this.addRecurrenceInformation(event);
   }
 
   @Trace('event-query.showAllEvents')
@@ -194,12 +203,12 @@ export class EventQueryService {
     const { search, lat, lon, radius, type, fromDate, toDate, categories } =
       query;
 
+    // We need to make sure to fetch the event images properly
     const eventQuery = this.eventRepository
       .createQueryBuilder('event')
-      .leftJoin('event.user', 'user')
-      .leftJoin('user.photo', 'photo')
-      .leftJoin('event.image', 'eventPhoto')
-      .addSelect(['user.name', 'user.slug', 'photo.path', 'eventPhoto.path'])
+      .leftJoinAndSelect('event.user', 'user')
+      .leftJoinAndSelect('user.photo', 'photo')
+      .leftJoinAndSelect('event.image', 'image') // Use consistent naming to match the entity property
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.group', 'group')
       .loadRelationCountAndMap(
@@ -299,10 +308,83 @@ export class EventQueryService {
       eventQuery.andWhere(`(${likeConditions})`, likeParameters);
     }
 
-    return paginate(eventQuery, {
+    // Get the paginated results
+    const paginatedResults = await paginate(eventQuery, {
       page: pagination.page,
       limit: pagination.limit,
     });
+
+    // Add recurrence descriptions to all events in the result without losing fields
+    if (paginatedResults.data && paginatedResults.data.length > 0) {
+      // Check first event to ensure image is present for debugging
+      if (paginatedResults.data[0]) {
+        const firstEvent = paginatedResults.data[0];
+        this.logger.debug(
+          `Event image before: ${firstEvent.image ? 'present' : 'missing'}`,
+        );
+
+        // If the event has an image, let's log some details about it
+        if (firstEvent.image) {
+          this.logger.debug(
+            `Image details: id=${firstEvent.image.id}, path=${firstEvent.image.path}`,
+          );
+        }
+      }
+
+      // Process each event to add the recurrence description
+      // Without losing fields, especially the image
+      paginatedResults.data = paginatedResults.data.map((event) => {
+        // Just modify the event directly, avoiding creating a new object
+        // that would lose the EntityEntity class methods
+        if (
+          event.isRecurring &&
+          event.recurrenceRule &&
+          event.recurrenceRule.freq
+        ) {
+          const rule = event.recurrenceRule as any;
+          const recurrenceDescription =
+            this.recurrenceService.getRecurrenceDescription(
+              {
+                freq: rule.freq,
+                interval: rule.interval,
+                count: rule.count,
+                until: rule.until,
+                byday: rule.byday,
+                bymonth: rule.bymonth,
+                bymonthday: rule.bymonthday,
+                wkst: rule.wkst,
+              },
+              event.timeZone,
+            );
+
+          // Debug what description is being generated
+          this.logger.debug(
+            `Generated recurrence description: "${recurrenceDescription}" for event id: ${event.id}`,
+          );
+
+          event.recurrenceDescription = recurrenceDescription;
+        }
+
+        return event;
+      });
+
+      // Check again after processing
+      if (paginatedResults.data[0]) {
+        const firstEvent = paginatedResults.data[0];
+        this.logger.debug(
+          `Event image after: ${firstEvent.image ? 'present' : 'missing'}`,
+        );
+
+        // Log image details again
+        if (firstEvent.image) {
+          this.logger.debug(
+            `Image details after: id=${firstEvent.image.id}, path=${firstEvent.image.path}`,
+          );
+        }
+      }
+    }
+
+    return paginatedResults;
   }
 
   @Trace('event-query.searchAllEvents')
@@ -322,10 +404,19 @@ export class EventQueryService {
       });
     }
 
-    return paginate(eventQuery, {
+    const paginatedResults = await paginate(eventQuery, {
       page: pagination.page,
       limit: pagination.limit,
     });
+
+    // Add recurrence descriptions to all events in the result
+    if (paginatedResults.data && paginatedResults.data.length > 0) {
+      paginatedResults.data = paginatedResults.data.map((event) =>
+        this.addRecurrenceInformation(event),
+      );
+    }
+
+    return paginatedResults;
   }
 
   @Trace('event-query.getEventsByCreator')
@@ -339,7 +430,7 @@ export class EventQueryService {
       return [];
     }
 
-    return Promise.all(
+    const eventsWithCounts = (await Promise.all(
       events.map(async (event) => ({
         ...event,
         attendeesCount:
@@ -347,7 +438,12 @@ export class EventQueryService {
             event.id,
           ),
       })),
-    ) as Promise<EventEntity[]>;
+    )) as EventEntity[];
+
+    // Add recurrence descriptions
+    return eventsWithCounts.map((event) =>
+      this.addRecurrenceInformation(event),
+    );
   }
 
   @Trace('event-query.getEventsByAttendee')
@@ -359,7 +455,10 @@ export class EventQueryService {
       .where('eventAttendee.user.id = :userId', { userId })
       .getMany();
 
-    return attendees.map((attendee) => attendee.event);
+    const events = attendees.map((attendee) => attendee.event);
+
+    // Add recurrence descriptions
+    return events.map((event) => this.addRecurrenceInformation(event));
   }
 
   @Trace('event-query.findEventsForGroup')
@@ -376,7 +475,7 @@ export class EventQueryService {
       take: limit,
     });
 
-    return Promise.all(
+    const eventsWithCounts = (await Promise.all(
       events.map(async (event) => ({
         ...event,
         attendeesCount:
@@ -384,7 +483,12 @@ export class EventQueryService {
             event.id,
           ),
       })),
-    ) as Promise<EventEntity[]>;
+    )) as EventEntity[];
+
+    // Add recurrence descriptions
+    return eventsWithCounts.map((event) =>
+      this.addRecurrenceInformation(event),
+    );
   }
 
   @Trace('event-query.findUpcomingEventsForGroup')
@@ -402,7 +506,7 @@ export class EventQueryService {
       take: limit,
     });
 
-    return Promise.all(
+    const eventsWithCounts = (await Promise.all(
       events.map(async (event) => ({
         ...event,
         attendeesCount:
@@ -410,7 +514,12 @@ export class EventQueryService {
             event.id,
           ),
       })),
-    ) as Promise<EventEntity[]>;
+    )) as EventEntity[];
+
+    // Add recurrence descriptions
+    return eventsWithCounts.map((event) =>
+      this.addRecurrenceInformation(event),
+    );
   }
 
   @Trace('event-query.showDashboardEvents')
@@ -425,7 +534,7 @@ export class EventQueryService {
       new Map(allEvents.map((event) => [event.id, event])).values(),
     );
 
-    return Promise.all(
+    const eventsWithAttendees = (await Promise.all(
       uniqueEvents.map(async (event) => ({
         ...event,
         attendee: await this.eventAttendeeService.findEventAttendeeByUserId(
@@ -433,7 +542,12 @@ export class EventQueryService {
           userId,
         ),
       })),
-    ) as Promise<EventEntity[]>;
+    )) as EventEntity[];
+
+    // Add recurrence descriptions
+    return eventsWithAttendees.map((event) =>
+      this.addRecurrenceInformation(event),
+    );
   }
 
   @Trace('event-query.getHomePageFeaturedEvents')
@@ -454,7 +568,7 @@ export class EventQueryService {
       .limit(5)
       .getMany();
 
-    return Promise.all(
+    const eventsWithCounts = (await Promise.all(
       events.map(async (event) => ({
         ...event,
         attendeesCount:
@@ -462,7 +576,12 @@ export class EventQueryService {
             event.id,
           ),
       })),
-    ) as Promise<EventEntity[]>;
+    )) as EventEntity[];
+
+    // Add recurrence descriptions
+    return eventsWithCounts.map((event) =>
+      this.addRecurrenceInformation(event),
+    );
   }
 
   @Trace('event-query.getHomePageUserNextHostedEvent')
@@ -488,7 +607,7 @@ export class EventQueryService {
         event.id,
       );
 
-    return event;
+    return this.addRecurrenceInformation(event);
   }
 
   @Trace('event-query.getHomePageUserRecentEventDrafts')
@@ -504,7 +623,7 @@ export class EventQueryService {
       .limit(3)
       .getMany();
 
-    return Promise.all(
+    const eventsWithCounts = (await Promise.all(
       events.map(async (event) => ({
         ...event,
         attendeesCount:
@@ -512,7 +631,12 @@ export class EventQueryService {
             event.id,
           ),
       })),
-    ) as Promise<EventEntity[]>;
+    )) as EventEntity[];
+
+    // Add recurrence descriptions
+    return eventsWithCounts.map((event) =>
+      this.addRecurrenceInformation(event),
+    );
   }
 
   @Trace('event-query.getHomePageUserUpcomingEvents')
@@ -529,7 +653,7 @@ export class EventQueryService {
       .limit(5)
       .getMany();
 
-    return Promise.all(
+    const eventsWithCounts = (await Promise.all(
       events.map(async (event) => ({
         ...event,
         attendeesCount:
@@ -537,7 +661,12 @@ export class EventQueryService {
             event.id,
           ),
       })),
-    ) as Promise<EventEntity[]>;
+    )) as EventEntity[];
+
+    // Add recurrence descriptions
+    return eventsWithCounts.map((event) =>
+      this.addRecurrenceInformation(event),
+    );
   }
 
   @Trace('event-query.findEventTopicsByEventId')
@@ -559,10 +688,16 @@ export class EventQueryService {
   @Trace('event-query.findById')
   async findById(id: number, _tenantId: string): Promise<EventEntity | null> {
     await this.initializeRepository();
-    return this.eventRepository.findOne({
+    const event = await this.eventRepository.findOne({
       where: { id },
       relations: ['user'],
     });
+
+    if (event) {
+      return this.addRecurrenceInformation(event);
+    }
+
+    return event;
   }
 
   /**
@@ -600,6 +735,89 @@ export class EventQueryService {
         `Event with slug ${slug} not found in tenant ${effectiveTenantId}`,
       );
       return null;
+    }
+
+    return this.addRecurrenceInformation(event);
+  }
+
+  /**
+   * Find all events that have a specific parent event ID
+   * Useful for finding split points and occurrences of a parent event
+   */
+  @Trace('event-query.findEventsByParentId')
+  async findEventsByParentId(parentId: number): Promise<EventEntity[]> {
+    await this.initializeRepository();
+
+    const events = await this.eventRepository.find({
+      where: { parentEventId: parentId },
+      order: {
+        originalDate: 'ASC',
+      },
+    });
+
+    // Add recurrence descriptions
+    return events.map((event) => this.addRecurrenceInformation(event));
+  }
+
+  /**
+   * Enhance event entity with recurrence information
+   * This adds a human-readable description of the recurrence pattern and other helpful properties
+   */
+  @Trace('event-query.addRecurrenceInformation')
+  private addRecurrenceInformation(event: EventEntity): EventEntity {
+    if (!event) {
+      return event;
+    }
+
+    // Don't modify the original object, just add the description
+    if (event.isRecurring && event.recurrenceRule) {
+      // Add a human-readable description of the recurrence pattern
+      // Convert the record to a RecurrenceRule with the required freq property
+      if (event.recurrenceRule.freq) {
+        const rule = event.recurrenceRule as any;
+
+        // Debug what's in the recurrence rule
+        this.logger.debug(
+          `Adding recurrence description for event ${event.id}, rule: ${JSON.stringify(rule)}`,
+        );
+
+        // Just add the description field without modifying anything else
+        const recurrenceDescription =
+          this.recurrenceService.getRecurrenceDescription(
+            {
+              freq: rule.freq,
+              interval: rule.interval,
+              count: rule.count,
+              until: rule.until,
+              byday: rule.byday,
+              bymonth: rule.bymonth,
+              bymonthday: rule.bymonthday,
+              wkst: rule.wkst,
+            },
+            event.timeZone,
+          );
+
+        this.logger.debug(
+          `Generated description: "${recurrenceDescription}" for event ${event.id}`,
+        );
+
+        event.recurrenceDescription = recurrenceDescription;
+      } else {
+        this.logger.debug(
+          `Event ${event.id} is recurring but has no freq in recurrenceRule: ${JSON.stringify(event.recurrenceRule)}`,
+        );
+      }
+    } else if (event.id) {
+      this.logger.debug(
+        `Event ${event.id} is not recurring or has no recurrenceRule`,
+      );
+    }
+
+    // Log if image is missing to help debug
+    if (!event.image && event.id) {
+      this.logger.debug(
+        `Event ${event.id} is missing an image after recurrence processing`,
+      );
     }
 
     return event;

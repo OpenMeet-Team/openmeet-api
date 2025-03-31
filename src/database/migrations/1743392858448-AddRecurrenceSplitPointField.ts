@@ -1,6 +1,8 @@
 import { MigrationInterface, QueryRunner, TableColumn } from 'typeorm';
 
-export class AddRecurrenceSplitPointField1743392858448 implements MigrationInterface {
+export class AddRecurrenceSplitPointField1743392858448
+  implements MigrationInterface
+{
   name = 'AddRecurrenceSplitPointField1743392858448';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

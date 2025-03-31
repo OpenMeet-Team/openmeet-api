@@ -185,6 +185,10 @@ export class EventEntity
   @Column({ nullable: true })
   recurrenceUntil: Date;
 
+  // Virtual field for human-readable recurrence description
+  // Not stored in the database
+  recurrenceDescription?: string;
+
   @Column({ nullable: true })
   recurrenceCount: number;
 

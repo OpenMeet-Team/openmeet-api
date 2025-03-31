@@ -358,16 +358,17 @@ export class RecurrenceService {
 
     // Add until if specified
     if (recurrenceRule.until) {
-      const untilDate = typeof recurrenceRule.until === 'string'
-        ? parseISO(recurrenceRule.until)
-        : recurrenceRule.until;
-      
+      const untilDate =
+        typeof recurrenceRule.until === 'string'
+          ? parseISO(recurrenceRule.until)
+          : recurrenceRule.until;
+
       // Format until date in UTC format as required by RFC 5545
       const utcString = untilDate
         .toISOString()
         .replace(/[-:]/g, '')
         .replace(/\.\d{3}/, '');
-      
+
       parts.push(`UNTIL=${utcString}`);
     }
 

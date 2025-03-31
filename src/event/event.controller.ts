@@ -42,6 +42,7 @@ import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
 import { ICalendarService } from './services/ical/ical.service';
+import { RecurrenceModificationService } from '../recurrence/services/recurrence-modification.service';
 
 @ApiTags('Events')
 @Controller('events')
@@ -54,6 +55,7 @@ export class EventController {
     private readonly eventRecommendationService: EventRecommendationService,
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly iCalendarService: ICalendarService,
+    private readonly recurrenceModificationService: RecurrenceModificationService,
   ) {}
 
   @Get()
@@ -261,7 +263,7 @@ export class EventController {
   @Public()
   @UseGuards(JWTAuthGuard)
   @Get(':slug/calendar')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Get iCalendar file for an event',
   })
   @Header('Content-Type', 'text/calendar')
@@ -272,20 +274,76 @@ export class EventController {
     @Res() res: Response,
   ): Promise<void> {
     const event = await this.eventQueryService.showEvent(slug);
-    
+
     if (!event) {
       res.status(404).send('Event not found');
       return;
     }
-    
+
     const icalContent = this.iCalendarService.generateICalendar(event);
-    
+
     // Set Content-Disposition with event slug as filename
     res.setHeader(
       'Content-Disposition',
       `attachment; filename=${event.slug}.ics`,
     );
-    
+
     res.send(icalContent);
+  }
+
+  /**
+   * Modify this and future occurrences of a recurring event
+   *
+   * This endpoint allows modifying a recurring event from a specific date forward.
+   * It creates a new series starting at the specified date with the modified properties,
+   * while preserving the original series up to but not including that date.
+   */
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.ManageEvent],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Patch(':slug/occurrences/:date/future')
+  @ApiOperation({
+    summary: 'Modify this and all future occurrences of a recurring event',
+  })
+  @Trace('event.modifyThisAndFutureOccurrences')
+  async modifyThisAndFutureOccurrences(
+    @Param('slug') slug: string,
+    @Param('date') date: string,
+    @Body() updateEventDto: UpdateEventDto,
+    @AuthUser() user: User,
+  ): Promise<EventEntity> {
+    return this.recurrenceModificationService.splitSeriesAt(
+      slug,
+      date,
+      updateEventDto,
+    );
+  }
+
+  /**
+   * Get the effective event properties for a specific date
+   *
+   * This endpoint returns the event properties that apply to a specific date
+   * in a recurring series, considering any split points or modifications.
+   */
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.ViewEvent],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Get(':slug/effective-properties')
+  @ApiOperation({
+    summary: 'Get effective event properties for a specific date',
+  })
+  @Trace('event.getEffectiveProperties')
+  async getEffectiveProperties(
+    @Param('slug') slug: string,
+    @Query('date') date: string,
+  ): Promise<EventEntity> {
+    return this.recurrenceModificationService.getEffectiveEventForDate(
+      slug,
+      date || new Date().toISOString(),
+    );
   }
 }

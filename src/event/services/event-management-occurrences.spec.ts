@@ -16,9 +16,7 @@ import { EventMailService } from '../../event-mail/event-mail.service';
 import { BlueskyService } from '../../bluesky/bluesky.service';
 import { CreateEventDto } from '../dto/create-event.dto';
 import { UpdateEventDto } from '../dto/update-event.dto';
-import {
-  EventType,
-} from '../../core/constants/constant';
+import { EventType } from '../../core/constants/constant';
 
 describe('EventManagementService Integration with EventOccurrenceService', () => {
   let managementService: EventManagementService;

@@ -34,7 +34,10 @@ export class ICalendarService {
   /**
    * Add an event to an iCalendar object
    */
-  private addEventToCalendar(calendar: ReturnType<typeof icalGenerator>, event: EventEntity): void {
+  private addEventToCalendar(
+    calendar: ReturnType<typeof icalGenerator>,
+    event: EventEntity,
+  ): void {
     const locationParts: string[] = [];
     if (event.location) {
       locationParts.push(event.location);
@@ -72,22 +75,31 @@ export class ICalendarService {
     // We'll skip status for now due to type issues with the ical-generator library
 
     // Add recurrence rule if this is a recurring event
-    if (event.isRecurring && event.recurrenceRule && typeof event.recurrenceRule === 'object') {
+    if (
+      event.isRecurring &&
+      event.recurrenceRule &&
+      typeof event.recurrenceRule === 'object'
+    ) {
       try {
         // Create the RRULE string from our recurrence rule object
-        const recurrenceRule = event.recurrenceRule as unknown as RecurrenceRule;
-        const rruleString = this.recurrenceService.buildRRuleString(recurrenceRule);
-        
+        const recurrenceRule =
+          event.recurrenceRule as unknown as RecurrenceRule;
+        const rruleString =
+          this.recurrenceService.buildRRuleString(recurrenceRule);
+
         if (rruleString) {
           // Pass the raw RRULE string
           eventObj.repeating(rruleString);
-  
+
           // Add excluded dates if any exist
-          if (event.recurrenceExceptions && event.recurrenceExceptions.length > 0) {
+          if (
+            event.recurrenceExceptions &&
+            event.recurrenceExceptions.length > 0
+          ) {
             const excludeDates = event.recurrenceExceptions.map(
               (ex) => new Date(ex),
             );
-            
+
             // Skip exdate due to type issues with ical-generator
           }
         }
@@ -105,7 +117,7 @@ export class ICalendarService {
             email: attendee.user.email,
             rsvp: true,
           });
-          
+
           // Skip role and status settings due to type issues with ical-generator
         }
       });
