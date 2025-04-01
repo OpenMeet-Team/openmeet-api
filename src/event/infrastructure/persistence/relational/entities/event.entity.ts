@@ -224,11 +224,9 @@ export class EventEntity
   seriesId: number;
 
   @ManyToOne(
-    async () => {
-      const eventSeriesModule = await import(
-        '../../../../../event-series/infrastructure/persistence/relational/entities/event-series.entity'
-      );
-      return eventSeriesModule.EventSeriesEntity;
+    () => {
+      // Use a dynamic import without async/await to resolve circular dependency
+      return require('../../../../../event-series/infrastructure/persistence/relational/entities/event-series.entity').EventSeriesEntity;
     },
     (series: any) => series.events,
     {

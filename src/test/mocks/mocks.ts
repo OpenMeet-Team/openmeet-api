@@ -150,6 +150,9 @@ export const mockRepository = {
   select: jest.fn().mockReturnThis(),
   getRawMany: jest.fn(),
   softDelete: jest.fn(),
+  findAndCount: jest.fn(),
+  update: jest.fn(),
+  getOne: jest.fn(),
 };
 
 export const mockDashboardService = {

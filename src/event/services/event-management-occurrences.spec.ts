@@ -132,6 +132,13 @@ describe('EventManagementService Integration with EventOccurrenceService', () =>
             cleanupEventChatRooms: jest.fn(),
           },
         },
+        {
+          provide: 'EventSeriesService',
+          useValue: {
+            findBySlug: jest.fn().mockResolvedValue({ id: 1, slug: 'test-series' }),
+            findById: jest.fn().mockResolvedValue({ id: 1, slug: 'test-series' }),
+          },
+        },
       ],
     }).compile();
 

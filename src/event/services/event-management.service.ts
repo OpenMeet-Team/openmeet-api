@@ -4,6 +4,7 @@ import {
   Inject,
   Logger,
   UnprocessableEntityException,
+  NotFoundException,
   HttpStatus,
   forwardRef,
 } from '@nestjs/common';
@@ -37,6 +38,8 @@ import { CreateEventAttendeeDto } from '../../event-attendee/dto/create-eventAtt
 import { UpdateEventAttendeeDto } from '../../event-attendee/dto/update-eventAttendee.dto';
 import { EventOccurrenceService } from './occurrences/event-occurrence.service';
 import { OccurrenceOptions } from '../../recurrence/interfaces/recurrence.interface';
+// Import EventSeries types
+import { EventSeriesEntity } from '../../event-series/infrastructure/persistence/relational/entities/event-series.entity';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventManagementService {
@@ -59,6 +62,8 @@ export class EventManagementService {
     private readonly eventOccurrenceService: EventOccurrenceService,
     @Inject(forwardRef(() => 'DiscussionService'))
     private readonly discussionService: any, // Using any here to avoid circular dependency issues
+    @Inject(forwardRef(() => 'EventSeriesService'))
+    private readonly eventSeriesService: any, // Using any here to avoid circular dependency issues
   ) {
     void this.initializeRepository();
   }
@@ -597,6 +602,227 @@ export class EventManagementService {
     await this.eventRepository.remove(event);
     this.eventEmitter.emit('event.deleted', eventCopy);
     this.auditLogger.log('event deleted', { event });
+  }
+
+  /**
+   * Create an event as part of a series using series ID
+   * @internal This method is primarily for internal use - prefer createSeriesOccurrenceBySlug for user-facing code
+   */
+  @Trace('event-management.createSeriesOccurrence')
+  async createSeriesOccurrence(
+    createEventDto: CreateEventDto,
+    userId: number,
+    seriesId: number,
+    isModified: boolean = false,
+    materializedDate?: Date
+  ): Promise<EventEntity> {
+    try {
+      await this.initializeRepository();
+
+      // Mark this event as part of a series
+      const event = await this.create(createEventDto, userId);
+      
+      // Update the event to link it to the series
+      // Using specific fields that exist in the entity
+      await this.eventRepository.update(event.id, {
+        seriesId,
+        materialized: true,
+        originalOccurrenceDate: materializedDate || new Date(),
+      });
+
+      // Reload the event with the updated fields
+      const updatedEvent = await this.eventRepository.findOne({
+        where: { id: event.id },
+        relations: ['user', 'group', 'categories', 'image'],
+      });
+      
+      if (!updatedEvent) {
+        throw new NotFoundException(`Event with ID ${event.id} not found after update`);
+      }
+
+      // Log audit
+      this.auditLogger.log(
+        'Series occurrence created',
+        {
+          context: {
+            eventId: event.id,
+            seriesId,
+            isModified,
+            userId,
+          },
+        },
+        userId,
+      );
+
+      return updatedEvent;
+    } catch (error) {
+      this.logger.error(`Error creating series occurrence: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+  
+  /**
+   * Create an event as part of a series using the series slug
+   * This is the preferred method for user-facing code
+   */
+  @Trace('event-management.createSeriesOccurrenceBySlug')
+  async createSeriesOccurrenceBySlug(
+    createEventDto: CreateEventDto,
+    userId: number,
+    seriesSlug: string,
+    isModified: boolean = false,
+    materializedDate?: Date
+  ): Promise<EventEntity> {
+    try {
+      // Get the series by slug using the EventSeriesService
+      const series = await this.eventSeriesService.findBySlug(seriesSlug);
+      
+      if (!series) {
+        throw new NotFoundException(`Event series with slug ${seriesSlug} not found`);
+      }
+      
+      // Then create the occurrence using the series ID
+      return this.createSeriesOccurrence(
+        createEventDto,
+        userId,
+        series.id,
+        isModified,
+        materializedDate
+      );
+    } catch (error) {
+      this.logger.error(`Error creating series occurrence by slug: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * Update an event occurrence that is part of a series
+   * This method uses the event's slug, which is the correct approach for user-facing code
+   */
+  @Trace('event-management.updateSeriesOccurrence')
+  async updateSeriesOccurrence(
+    slug: string,
+    updateEventDto: UpdateEventDto,
+    userId: number,
+    markAsModified: boolean = true
+  ): Promise<EventEntity> {
+    try {
+      await this.initializeRepository();
+
+      // Use the EventQueryService to find events by slug
+      const event = await this.eventRepository.findOne({ where: { slug } });
+
+      if (!event) {
+        this.logger.error(`Event with slug ${slug} not found`);
+        throw new NotFoundException('Event not found');
+      }
+
+      // Check if user has permission to update the event
+      if (event.user?.id !== userId) {
+        // If the user is not the owner, check if they have admin rights
+        const user = await this.userService.findById(userId);
+        if (!user || !user.role || user.role.name !== 'admin') {
+          throw new UnprocessableEntityException('User is not authorized to modify this event');
+        }
+      }
+
+      // Update the event with the new data
+      const updatedEvent = await this.update(slug, updateEventDto, userId);
+
+      // If this is a series occurrence and we need to mark it as modified, update materialized field
+      if (event.seriesId && markAsModified) {
+        // We'll use the materialized flag to indicate this occurrence is modified
+        await this.eventRepository.update(event.id, {
+          materialized: true,
+        });
+
+        // Reload the event with the updated fields
+        const reloadedEvent = await this.eventRepository.findOne({
+          where: { id: event.id },
+          relations: ['user', 'group', 'categories', 'image'],
+        });
+        
+        if (!reloadedEvent) {
+          throw new NotFoundException(`Event with ID ${event.id} not found after update`);
+        }
+        
+        // Log audit
+        this.auditLogger.log(
+          'Series occurrence modified',
+          {
+            context: {
+              eventId: event.id,
+              seriesId: event.seriesId,
+              userId,
+            },
+          },
+          userId,
+        );
+
+        return reloadedEvent;
+      }
+
+      return updatedEvent;
+    } catch (error) {
+      this.logger.error(`Error updating series occurrence: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+  
+  /**
+   * Find all events (occurrences) that belong to a series by ID
+   * @internal This method is primarily for internal use - prefer findEventsBySeriesSlug for user-facing code
+   */
+  @Trace('event-management.findEventsBySeriesId')
+  async findEventsBySeriesId(
+    seriesId: number,
+    options?: { page: number; limit: number }
+  ): Promise<[EventEntity[], number]> {
+    try {
+      await this.initializeRepository();
+      
+      const page = options?.page || 1;
+      const limit = options?.limit || 10;
+      const skip = (page - 1) * limit;
+      
+      const [events, total] = await this.eventRepository.findAndCount({
+        where: { seriesId },
+        skip,
+        take: limit,
+        order: { startDate: 'ASC' },
+        relations: ['user', 'group', 'categories', 'image'],
+      });
+      
+      return [events, total];
+    } catch (error) {
+      this.logger.error(`Error finding events by seriesId: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * Find all events (occurrences) that belong to a series by the series slug
+   * This is the preferred method for user-facing code
+   */
+  @Trace('event-management.findEventsBySeriesSlug')
+  async findEventsBySeriesSlug(
+    seriesSlug: string,
+    options?: { page: number; limit: number }
+  ): Promise<[EventEntity[], number]> {
+    try {
+      // Get the series by slug using the EventSeriesService
+      const series = await this.eventSeriesService.findBySlug(seriesSlug);
+      
+      if (!series) {
+        throw new NotFoundException(`Series with slug ${seriesSlug} not found`);
+      }
+      
+      // Now find all events that belong to this series
+      return this.findEventsBySeriesId(series.id, options);
+    } catch (error) {
+      this.logger.error(`Error finding events by series slug: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
   @Trace('event-management.deleteEventsByGroup')

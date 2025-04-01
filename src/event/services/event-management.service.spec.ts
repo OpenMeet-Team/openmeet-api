@@ -141,6 +141,13 @@ describe('EventManagementService', () => {
             deleteAllOccurrences: jest.fn().mockResolvedValue(0),
           },
         },
+        {
+          provide: 'EventSeriesService',
+          useValue: {
+            findBySlug: jest.fn().mockResolvedValue({ id: 123, slug: 'test-series' }),
+            findById: jest.fn().mockResolvedValue({ id: 123, slug: 'test-series' }),
+          },
+        },
       ],
     }).compile();
 
@@ -249,6 +256,63 @@ describe('EventManagementService', () => {
         mockUser.id,
       );
       expect(result).toEqual(mockEventAttendee);
+    });
+  });
+
+  // Tests for EventSeries functionality
+  describe('Event Series Integration', () => {
+    const mockSeriesId = 123;
+    const mockSeriesSlug = 'test-series';
+    
+    beforeEach(() => {
+      // Mock the eventRepository.findAndCount for series queries
+      mockRepository.findAndCount.mockResolvedValue([
+        [{ id: 1, name: 'Test Event 1' }, { id: 2, name: 'Test Event 2' }],
+        2,
+      ]);
+    });
+    
+    it('should find events by series ID (internal method)', async () => {
+      const [events, count] = await service.findEventsBySeriesId(mockSeriesId);
+      
+      expect(events).toHaveLength(2);
+      expect(count).toBe(2);
+    });
+    
+    it('should find events by series slug (preferred method)', async () => {
+      // No need to mock eventSeriesService as it's already provided in the test module
+      const [events, count] = await service.findEventsBySeriesSlug(mockSeriesSlug);
+      
+      expect(events).toHaveLength(2);
+      expect(count).toBe(2);
+    });
+    
+    it('should create an event as part of a series using slug (preferred method)', async () => {
+      // Mock the create method to return an event
+      jest.spyOn(service, 'create').mockResolvedValue({ 
+        id: 123, 
+        name: 'Test Series Event' 
+      } as EventEntity);
+      
+      // Mock repository methods
+      mockRepository.update.mockResolvedValue({ affected: 1 });
+      mockRepository.findOne.mockResolvedValue({ 
+        id: 123, 
+        name: 'Test Series Event',
+        seriesId: mockSeriesId,
+        materialized: true
+      } as EventEntity);
+      
+      const result = await service.createSeriesOccurrenceBySlug(
+        { name: 'Test Series Event' } as CreateEventDto,
+        mockUser.id,
+        mockSeriesSlug
+      );
+      
+      expect(result).toBeDefined();
+      expect(result.seriesId).toBe(mockSeriesId);
+      expect(service.create).toHaveBeenCalled();
+      expect(mockRepository.update).toHaveBeenCalled();
     });
   });
 
