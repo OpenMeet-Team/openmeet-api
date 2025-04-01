@@ -9,9 +9,6 @@ import { REQUEST } from '@nestjs/core';
 
 describe('RecurrenceModificationService', () => {
   let service: RecurrenceModificationService;
-  let recurrenceService: RecurrenceService;
-  let eventManagementService: EventManagementService;
-  let eventQueryService: EventQueryService;
 
   const mockRequest = {
     user: { id: 1 },
@@ -61,11 +58,6 @@ describe('RecurrenceModificationService', () => {
     service = await module.resolve<RecurrenceModificationService>(
       RecurrenceModificationService,
     );
-    recurrenceService = module.get<RecurrenceService>(RecurrenceService);
-    eventManagementService = module.get<EventManagementService>(
-      EventManagementService,
-    );
-    eventQueryService = module.get<EventQueryService>(EventQueryService);
   });
 
   it('should be defined', () => {

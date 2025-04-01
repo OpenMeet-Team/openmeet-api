@@ -12,7 +12,7 @@ import { EventManagementService } from '../../event/services/event-management.se
 import { EventQueryService } from '../../event/services/event-query.service';
 import { Trace } from '../../utils/trace.decorator';
 import { RecurrenceRule } from '../interfaces/recurrence.interface';
-import { parseISO, format, isDate } from 'date-fns';
+import { isDate } from 'date-fns';
 import { UpdateEventDto } from '../../event/dto/update-event.dto';
 import {
   CreateEventDto,

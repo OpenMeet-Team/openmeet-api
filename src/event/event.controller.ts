@@ -312,7 +312,7 @@ export class EventController {
     @Param('slug') slug: string,
     @Param('date') date: string,
     @Body() updateEventDto: UpdateEventDto,
-    @AuthUser() user: User,
+    @AuthUser() _user: User,
   ): Promise<EventEntity> {
     return this.recurrenceModificationService.splitSeriesAt(
       slug,

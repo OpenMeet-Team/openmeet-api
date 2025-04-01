@@ -59,7 +59,9 @@ export class ICalendarService {
     });
 
     // Add URL
-    const baseUrl = this.configService.get<string>('CLIENT_URL');
+    const baseUrl = this.configService.get<string>('CLIENT_URL', {
+      infer: true,
+    });
     if (baseUrl) {
       eventObj.url(`${baseUrl}/events/${event.slug}`);
     }
@@ -96,11 +98,8 @@ export class ICalendarService {
             event.recurrenceExceptions &&
             event.recurrenceExceptions.length > 0
           ) {
-            const excludeDates = event.recurrenceExceptions.map(
-              (ex) => new Date(ex),
-            );
-
             // Skip exdate due to type issues with ical-generator
+            // const excludeDates = event.recurrenceExceptions.map((ex) => new Date(ex));
           }
         }
       } catch (error) {
@@ -112,7 +111,7 @@ export class ICalendarService {
     if (event.attendees && event.attendees.length > 0) {
       event.attendees.forEach((attendee) => {
         if (attendee.user && attendee.user.email) {
-          const attendeeObj = eventObj.createAttendee({
+          eventObj.createAttendee({
             name: attendee.user.name || '',
             email: attendee.user.email,
             rsvp: true,
