@@ -196,6 +196,7 @@ export class EventEntity
   @Index()
   isRecurring: boolean;
 
+  // Legacy fields for backward compatibility
   @Column({ nullable: true })
   parentEventId: number;
 
@@ -217,6 +218,23 @@ export class EventEntity
   @Column({ nullable: false, default: false })
   @Index('IDX_events_recurrence_split_point')
   recurrenceSplitPoint: boolean;
+  
+  // New series-based recurrence model
+  @Column({ nullable: true })
+  seriesId: number;
+  
+  @ManyToOne(() => import('../../../../../event-series/infrastructure/persistence/relational/entities/event-series.entity').EventSeriesEntity, (series) => series.events, {
+    nullable: true,
+  })
+  @JoinColumn({ name: 'seriesId' })
+  series: import('../../../../../event-series/infrastructure/persistence/relational/entities/event-series.entity').EventSeriesEntity;
+  
+  @Column({ nullable: false, default: false })
+  @Index()
+  materialized: boolean;
+  
+  @Column({ nullable: true })
+  originalOccurrenceDate: Date;
 
   // Additional RFC 5545/7986 properties
   @Column({ nullable: true, type: 'varchar', length: 20 })
