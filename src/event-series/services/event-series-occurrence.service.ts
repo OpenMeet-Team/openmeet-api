@@ -389,4 +389,24 @@ export class EventSeriesOccurrenceService {
     });
     return d1Str === d2Str;
   }
+  
+  /**
+   * Helper method to get a series by its slug
+   * This delegates to the EventSeriesService
+   */
+  @Trace('event-series-occurrence.getSeries')
+  async getSeries(seriesSlug: string) {
+    try {
+      return this.eventSeriesService.findBySlug(seriesSlug);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        return null;
+      }
+      this.logger.error(
+        `Error getting series by slug: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
 }

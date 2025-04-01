@@ -22,6 +22,7 @@ import { EventOccurrenceService } from './services/occurrences/event-occurrence.
 import { RecurrenceModule } from '../recurrence/recurrence.module';
 import { ChatModule } from '../chat/chat.module';
 import { ICalendarService } from './services/ical/ical.service';
+import { EventSeriesModule } from '../event-series/event-series.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { ICalendarService } from './services/ical/ical.service';
     EventMailModule,
     BlueskyModule,
     forwardRef(() => ChatModule),
+    forwardRef(() => EventSeriesModule),
   ],
   controllers: [EventController],
   providers: [
