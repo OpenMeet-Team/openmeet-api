@@ -195,3 +195,19 @@ export const mockChatMailService = {
 export const mockMailerService = {
   sendMjmlMail: jest.fn().mockResolvedValue(undefined),
 };
+
+export const mockRecurrenceService = {
+  addExceptionDate: jest.fn().mockResolvedValue(true),
+  processExceptionDates: jest.fn().mockResolvedValue([]),
+  getUpcomingOccurrences: jest.fn().mockResolvedValue([]),
+  getOccurrencesBetweenDates: jest.fn().mockResolvedValue([]),
+  materializeOccurrences: jest.fn().mockResolvedValue([]),
+  createOccurrenceFromEvent: jest.fn().mockResolvedValue({}),
+  getEventOccurrenceDate: jest.fn().mockImplementation((event) => event.startDate),
+  getRecurrenceDescription: jest.fn().mockReturnValue('Every week on Monday'),
+  generateOccurrences: jest.fn().mockReturnValue([new Date()]),
+  splitSeries: jest.fn().mockResolvedValue({ 
+    originalSeries: {}, 
+    newSeries: {} 
+  }),
+};

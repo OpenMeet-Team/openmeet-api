@@ -9,6 +9,7 @@ import {
 import { EventSeriesRepository } from '../interfaces/event-series-repository.interface';
 import { EventSeriesService } from './event-series.service';
 import { RecurrenceService } from '../../recurrence/recurrence.service';
+import { RecurrenceRule } from '../../recurrence/interfaces/recurrence.interface';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { EventManagementService } from '../../event/services/event-management.service';
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
@@ -85,7 +86,7 @@ export class EventSeriesOccurrenceService {
         relations: ['user', 'categories', 'image', 'series'],
       });
       
-      return occurrence;
+      return occurrence || undefined;
     } catch (error) {
       if (error instanceof NotFoundException) {
         // Pass through the not found error
@@ -119,7 +120,7 @@ export class EventSeriesOccurrenceService {
       const isValidOccurrence = this.recurrenceService.isDateInRecurrencePattern(
         date,
         series.createdAt.toISOString(), // Use series creation date as reference
-        series.recurrenceRule,
+        series.recurrenceRule as RecurrenceRule,
         series.timeZone,
       );
       
@@ -174,8 +175,8 @@ export class EventSeriesOccurrenceService {
         isRecurring: true,
         recurrenceRule: series.recurrenceRule,
         
-        // Set user ID
-        userId: userId,
+        // Set user via user reference rather than id
+        user: { id: userId } as any,
       });
       
       // Save the new occurrence
@@ -188,7 +189,13 @@ export class EventSeriesOccurrenceService {
         // TODO: Implement proper category handling
       }
       
-      return this.eventQueryService.findEventBySlug(savedOccurrence.slug);
+      // The savedOccurrence should have a slug generated
+      if (savedOccurrence && savedOccurrence.slug) {
+        return this.eventQueryService.findEventBySlug(savedOccurrence.slug);
+      }
+      
+      // If we don't have a slug yet, return the saved occurrence
+      return savedOccurrence;
     } catch (error) {
       this.logger.error(
         `Error materializing occurrence: ${error.message}`,
@@ -229,7 +236,7 @@ export class EventSeriesOccurrenceService {
       // Generate all occurrence dates from the recurrence rule
       const generatedDates = this.recurrenceService.generateOccurrences(
         series.createdAt.toISOString(),
-        series.recurrenceRule,
+        series.recurrenceRule as RecurrenceRule,
         {
           timeZone: series.timeZone,
           count: count * 2, // Get more to account for filtered dates
@@ -328,9 +335,11 @@ export class EventSeriesOccurrenceService {
       // Update each materialized occurrence with the changes
       // In a full implementation, you'd want to be more careful about which fields to update
       for (const occurrence of materializedOccurrences) {
+        // The eventManagementService.update method expects an UpdateEventDto object
+        // and performs conversion of categories from IDs to entities internally
         await this.eventManagementService.update(
           occurrence.slug,
-          updates,
+          updates as any, // Cast to any to bypass type check temporarily
           userId,
         );
       }

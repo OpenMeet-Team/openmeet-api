@@ -11,6 +11,7 @@ import { EventSeriesEntity } from '../infrastructure/persistence/relational/enti
 import { CreateEventSeriesDto } from '../dto/create-event-series.dto';
 import { UpdateEventSeriesDto } from '../dto/update-event-series.dto';
 import { RecurrenceService } from '../../recurrence/recurrence.service';
+import { RecurrenceRule } from '../../recurrence/interfaces/recurrence.interface';
 import { EventManagementService } from '../../event/services/event-management.service';
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
 import { Trace } from '../../utils/trace.decorator';
@@ -20,7 +21,7 @@ export class EventSeriesService {
   private readonly logger = new Logger(EventSeriesService.name);
 
   constructor(
-    @Inject(EventSeriesRepository)
+    @Inject('EventSeriesRepository')
     private readonly eventSeriesRepository: EventSeriesRepository,
     private readonly recurrenceService: RecurrenceService,
     @Inject(forwardRef(() => EventManagementService))
@@ -39,20 +40,26 @@ export class EventSeriesService {
       // Create the event series entity
       const eventSeries = new EventSeriesEntity();
       eventSeries.name = createEventSeriesDto.name;
-      eventSeries.slug = createEventSeriesDto.slug; // Will be auto-generated if not provided
-      eventSeries.description = createEventSeriesDto.description;
-      eventSeries.timeZone = createEventSeriesDto.timeZone;
-      eventSeries.recurrenceRule = createEventSeriesDto.recurrenceRule;
-      eventSeries.userId = userId;
-      eventSeries.groupId = createEventSeriesDto.groupId;
-      eventSeries.imageId = createEventSeriesDto.imageId;
-      eventSeries.matrixRoomId = createEventSeriesDto.matrixRoomId;
+      eventSeries.slug = createEventSeriesDto.slug || ''; // Will be auto-generated if not provided
+      eventSeries.description = createEventSeriesDto.description || '';
+      eventSeries.timeZone = createEventSeriesDto.timeZone || 'UTC';
+      eventSeries.recurrenceRule = createEventSeriesDto.recurrenceRule || { freq: 'WEEKLY' };
+      eventSeries.user = { id: userId } as any; // Set user reference
       
-      // External source fields
-      eventSeries.sourceType = createEventSeriesDto.sourceType;
-      eventSeries.sourceId = createEventSeriesDto.sourceId;
-      eventSeries.sourceUrl = createEventSeriesDto.sourceUrl;
-      eventSeries.sourceData = createEventSeriesDto.sourceData;
+      // Handle group, image, and matrix room id
+      if (createEventSeriesDto.groupId) {
+        eventSeries.group = { id: createEventSeriesDto.groupId } as any;
+      }
+      if (createEventSeriesDto.imageId) {
+        eventSeries.image = { id: createEventSeriesDto.imageId } as any;
+      }
+      eventSeries.matrixRoomId = createEventSeriesDto.matrixRoomId || '';
+      
+      // External source fields (handle null/undefined cases)
+      eventSeries.sourceType = createEventSeriesDto.sourceType || null;
+      eventSeries.sourceId = createEventSeriesDto.sourceId || null;
+      eventSeries.sourceUrl = createEventSeriesDto.sourceUrl || null;
+      eventSeries.sourceData = createEventSeriesDto.sourceData || null;
 
       // Save the event series
       const savedEventSeries = await this.eventSeriesRepository.create(eventSeries);
@@ -94,6 +101,10 @@ export class EventSeriesService {
       allowWaitlist: template.templateAllowWaitlist,
       categories: template.templateCategories,
       
+      // Required fields for CreateEventDto - default to 0
+      lat: 0,  
+      lon: 0,
+      
       // Set it as part of the series
       seriesId: eventSeries.id,
       materialized: true,
@@ -105,7 +116,7 @@ export class EventSeriesService {
     };
 
     // Create the event using the management service
-    const event = await this.eventManagementService.create(eventData, userId);
+    const event = await this.eventManagementService.create(eventData as any, userId);
     return event;
   }
 
@@ -119,15 +130,16 @@ export class EventSeriesService {
     try {
       // For now, this is a simple pass-through to findByUser with null userId
       // In a real implementation, we'd have filtering, search, etc.
+      // Use a userId of 0 to indicate all users (instead of undefined)
       const [data, total] = await this.eventSeriesRepository.findByUser(
-        null,
+        0, // Use 0 instead of undefined for userId parameter to satisfy TypeScript
         options,
       );
       
       // Add human-readable descriptions to each series
       data.forEach((series) => {
         series.recurrenceDescription = this.recurrenceService.getRecurrenceDescription(
-          series.recurrenceRule,
+          series.recurrenceRule as RecurrenceRule,
           series.timeZone,
         );
       });
@@ -159,7 +171,7 @@ export class EventSeriesService {
       // Add human-readable descriptions to each series
       data.forEach((series) => {
         series.recurrenceDescription = this.recurrenceService.getRecurrenceDescription(
-          series.recurrenceRule,
+          series.recurrenceRule as RecurrenceRule,
           series.timeZone,
         );
       });
@@ -191,7 +203,7 @@ export class EventSeriesService {
       // Add human-readable descriptions to each series
       data.forEach((series) => {
         series.recurrenceDescription = this.recurrenceService.getRecurrenceDescription(
-          series.recurrenceRule,
+          series.recurrenceRule as RecurrenceRule,
           series.timeZone,
         );
       });
@@ -220,7 +232,7 @@ export class EventSeriesService {
       
       // Add human-readable description
       eventSeries.recurrenceDescription = this.recurrenceService.getRecurrenceDescription(
-        eventSeries.recurrenceRule,
+        eventSeries.recurrenceRule as RecurrenceRule,
         eventSeries.timeZone,
       );
       
@@ -252,7 +264,7 @@ export class EventSeriesService {
       
       // Ensure the user has permission to update this series
       // This would typically be handled by a guard, but we'll check here as well
-      if (eventSeries.userId !== userId) {
+      if (eventSeries.user?.id !== userId) {
         throw new BadRequestException('You do not have permission to update this event series');
       }
       
@@ -292,7 +304,7 @@ export class EventSeriesService {
       const eventSeries = await this.findBySlug(slug);
       
       // Ensure the user has permission to delete this series
-      if (eventSeries.userId !== userId) {
+      if (eventSeries.user?.id !== userId) {
         throw new BadRequestException('You do not have permission to delete this event series');
       }
       

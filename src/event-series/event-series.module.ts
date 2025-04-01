@@ -20,7 +20,7 @@ import { EventSeriesOccurrenceService } from './services/event-series-occurrence
     EventSeriesService,
     EventSeriesOccurrenceService,
     {
-      provide: EventSeriesRepository,
+      provide: 'EventSeriesRepository',
       useClass: EventSeriesTypeOrmRepository,
     },
   ],

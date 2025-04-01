@@ -58,16 +58,43 @@ export class EventQueryService {
 
   @Trace('event-query.findEventBySlug')
   async findEventBySlug(slug: string): Promise<EventEntity> {
+    return this.findEventBy({ slug });
+  }
+  
+  /**
+   * Find an event by ID
+   */
+  @Trace('event-query.findEventById')
+  async findEventById(id: number): Promise<EventEntity> {
+    return this.findEventBy({ id });
+  }
+  
+  /**
+   * Generic method to find an event by criteria
+   * @private
+   */
+  @Trace('event-query.findEventBy')
+  private async findEventBy(criteria: { slug?: string, id?: number }): Promise<EventEntity> {
     await this.initializeRepository();
 
-    this.logger.debug(`[findEventBySlug] Finding event for slug: ${slug}`);
+    // Create log message based on criteria
+    const criteriaType = criteria.slug ? 'slug' : 'id';
+    const criteriaValue = criteria.slug || criteria.id;
+    this.logger.debug(`[findEventBy] Finding event for ${criteriaType}: ${criteriaValue}`);
+    
     const userId = this.request.user?.id;
     const authState = userId ? 'authenticated' : 'public access';
-    this.logger.debug(`[findEventBySlug] Request type: ${authState}`);
+    this.logger.debug(`[findEventBy] Request type: ${authState}`);
 
     const queryBuilder = this.eventRepository
-      .createQueryBuilder('event')
-      .where('event.slug = :slug', { slug });
+      .createQueryBuilder('event');
+      
+    // Apply criteria
+    if (criteria.slug) {
+      queryBuilder.where('event.slug = :slug', { slug: criteria.slug });
+    } else if (criteria.id) {
+      queryBuilder.where('event.id = :id', { id: criteria.id });
+    }
 
     if (userId) {
       queryBuilder
@@ -79,12 +106,15 @@ export class EventQueryService {
     const event = await queryBuilder.getOne();
 
     if (!event) {
-      throw new NotFoundException(`Event with slug ${slug} not found`);
+      const errorMsg = criteria.slug 
+        ? `Event with slug ${criteria.slug} not found`
+        : `Event with id ${criteria.id} not found`;
+      throw new NotFoundException(errorMsg);
     }
 
     if (userId) {
       this.logger.debug(
-        `[findEventBySlug] Checking attendance for user: ${userId}`,
+        `[findEventBy] Checking attendance for user: ${userId}`,
       );
       const attendee =
         await this.eventAttendeeService.findEventAttendeeByUserId(
