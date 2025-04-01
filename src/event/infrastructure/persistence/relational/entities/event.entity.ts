@@ -218,28 +218,30 @@ export class EventEntity
   @Column({ nullable: false, default: false })
   @Index('IDX_events_recurrence_split_point')
   recurrenceSplitPoint: boolean;
-  
+
   // New series-based recurrence model
   @Column({ nullable: true })
   seriesId: number;
-  
+
   @ManyToOne(
-    () => {
-      const { EventSeriesEntity } = require('../../../../../event-series/infrastructure/persistence/relational/entities/event-series.entity');
-      return EventSeriesEntity;
-    }, 
-    (series: any) => series.events, 
+    async () => {
+      const eventSeriesModule = await import(
+        '../../../../../event-series/infrastructure/persistence/relational/entities/event-series.entity'
+      );
+      return eventSeriesModule.EventSeriesEntity;
+    },
+    (series: any) => series.events,
     {
       nullable: true,
-    }
+    },
   )
   @JoinColumn({ name: 'seriesId' })
   series: any; // Will resolve to EventSeriesEntity at runtime
-  
+
   @Column({ nullable: false, default: false })
   @Index()
   materialized: boolean;
-  
+
   @Column({ nullable: true })
   originalOccurrenceDate: Date;
 

@@ -44,12 +44,15 @@ export class EventSeriesOccurrenceService {
   ): Promise<EventEntity> {
     try {
       // First, check if the occurrence already exists
-      const existingOccurrence = await this.findOccurrence(seriesSlug, occurrenceDate);
-      
+      const existingOccurrence = await this.findOccurrence(
+        seriesSlug,
+        occurrenceDate,
+      );
+
       if (existingOccurrence) {
         return existingOccurrence;
       }
-      
+
       // If not, materialize it
       return this.materializeOccurrence(seriesSlug, occurrenceDate, userId);
     } catch (error) {
@@ -72,10 +75,10 @@ export class EventSeriesOccurrenceService {
     try {
       // Get the series
       const series = await this.eventSeriesService.findBySlug(seriesSlug);
-      
+
       // Convert occurrence date string to Date object
       const date = new Date(occurrenceDate);
-      
+
       // Find occurrence by series ID and occurrence date
       // We need to find events that match this series and have this original occurrence date
       const occurrence = await this.eventRepository.findOne({
@@ -85,14 +88,14 @@ export class EventSeriesOccurrenceService {
         },
         relations: ['user', 'categories', 'image', 'series'],
       });
-      
+
       return occurrence || undefined;
     } catch (error) {
       if (error instanceof NotFoundException) {
         // Pass through the not found error
         throw error;
       }
-      
+
       this.logger.error(
         `Error finding occurrence: ${error.message}`,
         error.stack,
@@ -114,20 +117,23 @@ export class EventSeriesOccurrenceService {
     try {
       // Get the series
       const series = await this.eventSeriesService.findBySlug(seriesSlug);
-      
+
       // Validate that the occurrence date is valid according to the recurrence rule
       const date = new Date(occurrenceDate);
-      const isValidOccurrence = this.recurrenceService.isDateInRecurrencePattern(
-        date,
-        series.createdAt.toISOString(), // Use series creation date as reference
-        series.recurrenceRule as RecurrenceRule,
-        series.timeZone,
-      );
-      
+      const isValidOccurrence =
+        this.recurrenceService.isDateInRecurrencePattern(
+          date,
+          series.createdAt.toISOString(), // Use series creation date as reference
+          series.recurrenceRule as RecurrenceRule,
+          series.timeZone,
+        );
+
       if (!isValidOccurrence) {
-        throw new BadRequestException(`Invalid occurrence date: ${occurrenceDate} is not part of the recurrence pattern`);
+        throw new BadRequestException(
+          `Invalid occurrence date: ${occurrenceDate} is not part of the recurrence pattern`,
+        );
       }
-      
+
       // Find a template event to use as a basis
       // This is typically the first occurrence that was created with the series
       const templateEvent = await this.eventRepository.findOne({
@@ -139,18 +145,21 @@ export class EventSeriesOccurrenceService {
           createdAt: 'ASC',
         },
       });
-      
+
       if (!templateEvent) {
-        throw new BadRequestException(`No template event found for series ${seriesSlug}`);
+        throw new BadRequestException(
+          `No template event found for series ${seriesSlug}`,
+        );
       }
-      
+
       // Calculate the duration of the template event
       let endDate: Date | undefined;
       if (templateEvent.endDate) {
-        const durationMs = templateEvent.endDate.getTime() - templateEvent.startDate.getTime();
+        const durationMs =
+          templateEvent.endDate.getTime() - templateEvent.startDate.getTime();
         endDate = new Date(date.getTime() + durationMs);
       }
-      
+
       // Create a new event based on the template
       const newOccurrence = this.eventRepository.create({
         name: series.name,
@@ -165,35 +174,35 @@ export class EventSeriesOccurrenceService {
         requireApproval: templateEvent.requireApproval,
         approvalQuestion: templateEvent.approvalQuestion,
         allowWaitlist: templateEvent.allowWaitlist,
-        
+
         // Set it as part of the series
         seriesId: series.id,
         materialized: true,
         originalOccurrenceDate: date,
-        
+
         // Set it as recurring (for compatibility with existing code)
         isRecurring: true,
         recurrenceRule: series.recurrenceRule,
-        
+
         // Set user via user reference rather than id
         user: { id: userId } as any,
       });
-      
+
       // Save the new occurrence
       const savedOccurrence = await this.eventRepository.save(newOccurrence);
-      
+
       // Add categories from template
       if (templateEvent.categories?.length > 0) {
         // We'd typically handle this in a transaction using a more specific method
         // but for simplicity, we'll assume there's a way to add categories
         // TODO: Implement proper category handling
       }
-      
+
       // The savedOccurrence should have a slug generated
       if (savedOccurrence && savedOccurrence.slug) {
         return this.eventQueryService.findEventBySlug(savedOccurrence.slug);
       }
-      
+
       // If we don't have a slug yet, return the saved occurrence
       return savedOccurrence;
     } catch (error) {
@@ -217,7 +226,7 @@ export class EventSeriesOccurrenceService {
     try {
       // Get the series
       const series = await this.eventSeriesService.findBySlug(seriesSlug);
-      
+
       // Get all materialized occurrences for this series with future dates
       const now = new Date();
       const materializedOccurrences = await this.eventRepository.find({
@@ -232,7 +241,7 @@ export class EventSeriesOccurrenceService {
         },
         take: count,
       });
-      
+
       // Generate all occurrence dates from the recurrence rule
       const generatedDates = this.recurrenceService.generateOccurrences(
         series.createdAt.toISOString(),
@@ -242,17 +251,21 @@ export class EventSeriesOccurrenceService {
           count: count * 2, // Get more to account for filtered dates
         },
       );
-      
+
       // Filter dates to only include future dates
-      const futureDates = generatedDates.filter(date => date >= now);
-      
+      const futureDates = generatedDates.filter((date) => date >= now);
+
       // Map dates to either materialized occurrences or unmaterialized placeholders
-      const results = futureDates.slice(0, count).map(date => {
+      const results = futureDates.slice(0, count).map((date) => {
         // Find a materialized occurrence matching this date
-        const existingOccurrence = materializedOccurrences.find(occurrence => 
-          this.isSameDay(occurrence.originalOccurrenceDate, date, series.timeZone)
+        const existingOccurrence = materializedOccurrences.find((occurrence) =>
+          this.isSameDay(
+            occurrence.originalOccurrenceDate,
+            date,
+            series.timeZone,
+          ),
         );
-        
+
         if (existingOccurrence) {
           return {
             date: date.toISOString(),
@@ -266,7 +279,7 @@ export class EventSeriesOccurrenceService {
           };
         }
       });
-      
+
       return results;
     } catch (error) {
       this.logger.error(
@@ -288,18 +301,27 @@ export class EventSeriesOccurrenceService {
   ): Promise<EventEntity | undefined> {
     try {
       // Get upcoming occurrences
-      const upcomingOccurrences = await this.getUpcomingOccurrences(seriesSlug, 5);
-      
+      const upcomingOccurrences = await this.getUpcomingOccurrences(
+        seriesSlug,
+        5,
+      );
+
       // Find the first unmaterialized occurrence
-      const nextUnmaterialized = upcomingOccurrences.find(occurrence => !occurrence.materialized);
-      
+      const nextUnmaterialized = upcomingOccurrences.find(
+        (occurrence) => !occurrence.materialized,
+      );
+
       if (!nextUnmaterialized) {
         // No unmaterialized occurrences to create
         return undefined;
       }
-      
+
       // Materialize the next occurrence
-      return this.materializeOccurrence(seriesSlug, nextUnmaterialized.date, userId);
+      return this.materializeOccurrence(
+        seriesSlug,
+        nextUnmaterialized.date,
+        userId,
+      );
     } catch (error) {
       this.logger.error(
         `Error materializing next occurrence: ${error.message}`,
@@ -322,7 +344,7 @@ export class EventSeriesOccurrenceService {
     try {
       // Get the series
       const series = await this.eventSeriesService.findBySlug(seriesSlug);
-      
+
       // Find all materialized occurrences for this series after the specified date
       const date = new Date(fromDate);
       const materializedOccurrences = await this.eventRepository.find({
@@ -331,7 +353,7 @@ export class EventSeriesOccurrenceService {
           startDate: MoreThanOrEqual(date),
         },
       });
-      
+
       // Update each materialized occurrence with the changes
       // In a full implementation, you'd want to be more careful about which fields to update
       for (const occurrence of materializedOccurrences) {
@@ -343,7 +365,7 @@ export class EventSeriesOccurrenceService {
           userId,
         );
       }
-      
+
       return materializedOccurrences.length;
     } catch (error) {
       this.logger.error(
@@ -359,8 +381,12 @@ export class EventSeriesOccurrenceService {
    */
   private isSameDay(date1: Date, date2: Date, timeZone: string): boolean {
     // Converting dates to the same timezone before comparing
-    const d1Str = this.recurrenceService.formatDateInTimeZone(date1, timeZone, { format: 'yyyy-MM-dd' });
-    const d2Str = this.recurrenceService.formatDateInTimeZone(date2, timeZone, { format: 'yyyy-MM-dd' });
+    const d1Str = this.recurrenceService.formatDateInTimeZone(date1, timeZone, {
+      format: 'yyyy-MM-dd',
+    });
+    const d2Str = this.recurrenceService.formatDateInTimeZone(date2, timeZone, {
+      format: 'yyyy-MM-dd',
+    });
     return d1Str === d2Str;
   }
 }

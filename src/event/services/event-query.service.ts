@@ -60,7 +60,7 @@ export class EventQueryService {
   async findEventBySlug(slug: string): Promise<EventEntity> {
     return this.findEventBy({ slug });
   }
-  
+
   /**
    * Find an event by ID
    */
@@ -68,27 +68,31 @@ export class EventQueryService {
   async findEventById(id: number): Promise<EventEntity> {
     return this.findEventBy({ id });
   }
-  
+
   /**
    * Generic method to find an event by criteria
    * @private
    */
   @Trace('event-query.findEventBy')
-  private async findEventBy(criteria: { slug?: string, id?: number }): Promise<EventEntity> {
+  private async findEventBy(criteria: {
+    slug?: string;
+    id?: number;
+  }): Promise<EventEntity> {
     await this.initializeRepository();
 
     // Create log message based on criteria
     const criteriaType = criteria.slug ? 'slug' : 'id';
     const criteriaValue = criteria.slug || criteria.id;
-    this.logger.debug(`[findEventBy] Finding event for ${criteriaType}: ${criteriaValue}`);
-    
+    this.logger.debug(
+      `[findEventBy] Finding event for ${criteriaType}: ${criteriaValue}`,
+    );
+
     const userId = this.request.user?.id;
     const authState = userId ? 'authenticated' : 'public access';
     this.logger.debug(`[findEventBy] Request type: ${authState}`);
 
-    const queryBuilder = this.eventRepository
-      .createQueryBuilder('event');
-      
+    const queryBuilder = this.eventRepository.createQueryBuilder('event');
+
     // Apply criteria
     if (criteria.slug) {
       queryBuilder.where('event.slug = :slug', { slug: criteria.slug });
@@ -106,7 +110,7 @@ export class EventQueryService {
     const event = await queryBuilder.getOne();
 
     if (!event) {
-      const errorMsg = criteria.slug 
+      const errorMsg = criteria.slug
         ? `Event with slug ${criteria.slug} not found`
         : `Event with id ${criteria.id} not found`;
       throw new NotFoundException(errorMsg);

@@ -67,20 +67,26 @@ const mockEventRepository = {
 };
 
 const mockEventSeriesService = {
-  findBySlug: jest.fn().mockImplementation((slug) => Promise.resolve(mockEventSeries)),
+  findBySlug: jest
+    .fn()
+    .mockImplementation((slug) => Promise.resolve(mockEventSeries)),
 };
 
 const mockRecurrenceService = {
   isDateInRecurrencePattern: jest.fn().mockReturnValue(true),
   generateOccurrences: jest.fn(),
-  formatDateInTimeZone: jest.fn().mockImplementation((date, timeZone, options) => {
-    const d = new Date(date);
-    return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-  }),
+  formatDateInTimeZone: jest
+    .fn()
+    .mockImplementation((date, timeZone, options) => {
+      const d = new Date(date);
+      return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+    }),
 };
 
 const mockEventQueryService = {
-  findEventBySlug: jest.fn().mockImplementation((slug) => Promise.resolve(mockTemplateEvent)),
+  findEventBySlug: jest
+    .fn()
+    .mockImplementation((slug) => Promise.resolve(mockTemplateEvent)),
 };
 
 const mockEventManagementService = {
@@ -123,11 +129,13 @@ describe('EventSeriesOccurrenceService', () => {
       ],
     }).compile();
 
-    service = module.get<EventSeriesOccurrenceService>(EventSeriesOccurrenceService);
+    service = module.get<EventSeriesOccurrenceService>(
+      EventSeriesOccurrenceService,
+    );
     eventRepository = module.get(getRepositoryToken(EventEntity));
     eventSeriesService = module.get(EventSeriesService);
     recurrenceService = module.get(RecurrenceService);
-    
+
     // Manually add spy method for materializeOccurrence since it's a method of the service itself
     jest.spyOn(service, 'materializeOccurrence');
     eventQueryService = module.get(EventQueryService);
@@ -146,11 +154,20 @@ describe('EventSeriesOccurrenceService', () => {
     it('should return existing occurrence if found', async () => {
       // Mock existing occurrence
       const occurrenceDate = '2025-10-01T15:00:00Z';
-      jest.spyOn(service, 'findOccurrence').mockResolvedValue(mockTemplateEvent as EventEntity);
+      jest
+        .spyOn(service, 'findOccurrence')
+        .mockResolvedValue(mockTemplateEvent as EventEntity);
 
-      const result = await service.getOrCreateOccurrence('test-series', occurrenceDate, 1);
+      const result = await service.getOrCreateOccurrence(
+        'test-series',
+        occurrenceDate,
+        1,
+      );
 
-      expect(service.findOccurrence).toHaveBeenCalledWith('test-series', occurrenceDate);
+      expect(service.findOccurrence).toHaveBeenCalledWith(
+        'test-series',
+        occurrenceDate,
+      );
       expect(result).toEqual(mockTemplateEvent);
     });
 
@@ -158,7 +175,7 @@ describe('EventSeriesOccurrenceService', () => {
       // Mock non-existent occurrence then successful materialization
       const occurrenceDate = '2025-10-03T15:00:00Z';
       jest.spyOn(service, 'findOccurrence').mockResolvedValue(undefined);
-      
+
       const newOccurrence = {
         ...mockTemplateEvent,
         id: 2,
@@ -166,21 +183,37 @@ describe('EventSeriesOccurrenceService', () => {
         startDate: new Date(occurrenceDate),
         originalOccurrenceDate: new Date(occurrenceDate),
       };
-      
-      jest.spyOn(service, 'materializeOccurrence').mockResolvedValue(newOccurrence as EventEntity);
 
-      const result = await service.getOrCreateOccurrence('test-series', occurrenceDate, 1);
+      jest
+        .spyOn(service, 'materializeOccurrence')
+        .mockResolvedValue(newOccurrence as EventEntity);
 
-      expect(service.findOccurrence).toHaveBeenCalledWith('test-series', occurrenceDate);
-      expect(service.materializeOccurrence).toHaveBeenCalledWith('test-series', occurrenceDate, 1);
+      const result = await service.getOrCreateOccurrence(
+        'test-series',
+        occurrenceDate,
+        1,
+      );
+
+      expect(service.findOccurrence).toHaveBeenCalledWith(
+        'test-series',
+        occurrenceDate,
+      );
+      expect(service.materializeOccurrence).toHaveBeenCalledWith(
+        'test-series',
+        occurrenceDate,
+        1,
+      );
       expect(result.id).toBe(2);
     });
 
     it('should handle errors properly', async () => {
-      jest.spyOn(service, 'findOccurrence').mockRejectedValue(new Error('Database error'));
+      jest
+        .spyOn(service, 'findOccurrence')
+        .mockRejectedValue(new Error('Database error'));
 
-      await expect(service.getOrCreateOccurrence('test-series', '2025-10-01T15:00:00Z', 1))
-        .rejects.toThrow('Database error');
+      await expect(
+        service.getOrCreateOccurrence('test-series', '2025-10-01T15:00:00Z', 1),
+      ).rejects.toThrow('Database error');
     });
   });
 
@@ -189,10 +222,13 @@ describe('EventSeriesOccurrenceService', () => {
       // Mock the series and occurrence
       const occurrenceDate = '2025-10-01T15:00:00Z';
       const date = new Date(occurrenceDate);
-      
+
       eventRepository.findOne.mockResolvedValue(mockTemplateEvent);
 
-      const result = await service.findOccurrence('test-series', occurrenceDate);
+      const result = await service.findOccurrence(
+        'test-series',
+        occurrenceDate,
+      );
 
       expect(eventSeriesService.findBySlug).toHaveBeenCalledWith('test-series');
       expect(eventRepository.findOne).toHaveBeenCalledWith({
@@ -208,7 +244,10 @@ describe('EventSeriesOccurrenceService', () => {
     it('should return undefined if occurrence not found', async () => {
       eventRepository.findOne.mockResolvedValue(null);
 
-      const result = await service.findOccurrence('test-series', '2025-10-05T15:00:00Z');
+      const result = await service.findOccurrence(
+        'test-series',
+        '2025-10-05T15:00:00Z',
+      );
 
       expect(result).toBeUndefined();
     });
@@ -218,10 +257,10 @@ describe('EventSeriesOccurrenceService', () => {
     it('should materialize a new occurrence', async () => {
       const occurrenceDate = '2025-10-03T15:00:00Z';
       const date = new Date(occurrenceDate);
-      
+
       // Mock finding template event
       eventRepository.findOne.mockResolvedValue(mockTemplateEvent);
-      
+
       // Mock creating new occurrence
       const newOccurrence = {
         ...mockTemplateEvent,
@@ -233,7 +272,11 @@ describe('EventSeriesOccurrenceService', () => {
       eventRepository.create.mockReturnValue(newOccurrence);
       eventRepository.save.mockResolvedValue(newOccurrence);
 
-      const result = await service.materializeOccurrence('test-series', occurrenceDate, 1);
+      const result = await service.materializeOccurrence(
+        'test-series',
+        occurrenceDate,
+        1,
+      );
 
       expect(recurrenceService.isDateInRecurrencePattern).toHaveBeenCalled();
       expect(eventRepository.findOne).toHaveBeenCalled();
@@ -246,15 +289,17 @@ describe('EventSeriesOccurrenceService', () => {
     it('should throw error if date is not in recurrence pattern', async () => {
       recurrenceService.isDateInRecurrencePattern.mockReturnValue(false);
 
-      await expect(service.materializeOccurrence('test-series', '2025-12-25T15:00:00Z', 1))
-        .rejects.toThrow(BadRequestException);
+      await expect(
+        service.materializeOccurrence('test-series', '2025-12-25T15:00:00Z', 1),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw error if no template event is found', async () => {
       eventRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.materializeOccurrence('test-series', '2025-10-03T15:00:00Z', 1))
-        .rejects.toThrow(BadRequestException);
+      await expect(
+        service.materializeOccurrence('test-series', '2025-10-03T15:00:00Z', 1),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -270,7 +315,7 @@ describe('EventSeriesOccurrenceService', () => {
           originalOccurrenceDate: new Date('2025-10-03T15:00:00Z'),
         },
       ];
-      
+
       // Generated dates from recurrence pattern
       const generatedDates = [
         new Date('2025-10-03T15:00:00Z'), // Already materialized
@@ -297,16 +342,16 @@ describe('EventSeriesOccurrenceService', () => {
         },
         take: 3,
       });
-      
+
       expect(recurrenceService.generateOccurrences).toHaveBeenCalled();
-      
+
       // Should return 3 occurrences
       expect(result).toHaveLength(3);
-      
+
       // First occurrence should be materialized
       expect(result[0].materialized).toBe(true);
       expect(result[0].event).toBeDefined();
-      
+
       // Second and third should be unmaterialized
       expect(result[1].materialized).toBe(false);
       expect(result[1].event).toBeUndefined();
@@ -334,21 +379,32 @@ describe('EventSeriesOccurrenceService', () => {
         },
       ];
 
-      jest.spyOn(service, 'getUpcomingOccurrences').mockResolvedValue(upcomingOccurrences);
-      
+      jest
+        .spyOn(service, 'getUpcomingOccurrences')
+        .mockResolvedValue(upcomingOccurrences);
+
       const nextOccurrence = {
         ...mockTemplateEvent,
         id: 3,
         startDate: new Date('2025-10-05T15:00:00Z'),
         originalOccurrenceDate: new Date('2025-10-05T15:00:00Z'),
       };
-      
-      jest.spyOn(service, 'materializeOccurrence').mockResolvedValue(nextOccurrence as EventEntity);
+
+      jest
+        .spyOn(service, 'materializeOccurrence')
+        .mockResolvedValue(nextOccurrence as EventEntity);
 
       const result = await service.materializeNextOccurrence('test-series', 1);
 
-      expect(service.getUpcomingOccurrences).toHaveBeenCalledWith('test-series', 5);
-      expect(service.materializeOccurrence).toHaveBeenCalledWith('test-series', '2025-10-05T15:00:00Z', 1);
+      expect(service.getUpcomingOccurrences).toHaveBeenCalledWith(
+        'test-series',
+        5,
+      );
+      expect(service.materializeOccurrence).toHaveBeenCalledWith(
+        'test-series',
+        '2025-10-05T15:00:00Z',
+        1,
+      );
       expect(result).toEqual(nextOccurrence);
     });
 
@@ -362,13 +418,15 @@ describe('EventSeriesOccurrenceService', () => {
         },
         {
           date: '2025-10-05T15:00:00Z',
-          event: {...mockTemplateEvent, id: 3} as EventEntity,
+          event: { ...mockTemplateEvent, id: 3 } as EventEntity,
           materialized: true,
         },
       ];
 
-      jest.spyOn(service, 'getUpcomingOccurrences').mockResolvedValue(upcomingOccurrences);
-      
+      jest
+        .spyOn(service, 'getUpcomingOccurrences')
+        .mockResolvedValue(upcomingOccurrences);
+
       // Create a spy for materializeOccurrence that we can check
       const materializeSpy = jest.spyOn(service, 'materializeOccurrence');
 
@@ -395,7 +453,7 @@ describe('EventSeriesOccurrenceService', () => {
           startDate: new Date('2025-10-07T15:00:00Z'),
         },
       ];
-      
+
       eventRepository.find.mockResolvedValue(updatedEvents);
       eventManagementService.update.mockResolvedValue(updatedEvents[0]);
 
@@ -404,7 +462,12 @@ describe('EventSeriesOccurrenceService', () => {
         description: 'Updated description',
       };
 
-      const result = await service.updateFutureOccurrences('test-series', fromDate, updates, 1);
+      const result = await service.updateFutureOccurrences(
+        'test-series',
+        fromDate,
+        updates,
+        1,
+      );
 
       expect(eventSeriesService.findBySlug).toHaveBeenCalledWith('test-series');
       expect(eventRepository.find).toHaveBeenCalled();
@@ -419,7 +482,7 @@ describe('EventSeriesOccurrenceService', () => {
         'test-series',
         '2025-10-05T00:00:00Z',
         { name: 'Updated' },
-        1
+        1,
       );
 
       expect(eventManagementService.update).not.toHaveBeenCalled();
@@ -431,10 +494,10 @@ describe('EventSeriesOccurrenceService', () => {
     it('should correctly compare dates in the same timezone', () => {
       const date1 = new Date('2025-10-05T10:00:00Z');
       const date2 = new Date('2025-10-05T18:00:00Z');
-      
+
       // Private method, invoke through a test-only method
       const result = service['isSameDay'](date1, date2, 'UTC');
-      
+
       expect(result).toBe(true);
     });
 
@@ -442,14 +505,14 @@ describe('EventSeriesOccurrenceService', () => {
       // These dates are different days in UTC but same day in NY time
       const date1 = new Date('2025-10-05T23:00:00Z'); // Late on Oct 5 UTC, but still Oct 5 in NY
       const date2 = new Date('2025-10-06T01:00:00Z'); // Early Oct 6 UTC, but still Oct 5 in NY
-      
+
       // Mock the formatDateInTimeZone to return same day format for both dates in NY time
       recurrenceService.formatDateInTimeZone
-        .mockReturnValueOnce('2025-10-5')  // First call
+        .mockReturnValueOnce('2025-10-5') // First call
         .mockReturnValueOnce('2025-10-5'); // Second call
-      
+
       const result = service['isSameDay'](date1, date2, 'America/New_York');
-      
+
       expect(recurrenceService.formatDateInTimeZone).toHaveBeenCalledTimes(2);
       expect(result).toBe(true);
     });

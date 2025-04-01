@@ -73,57 +73,92 @@ export const mockSeriesEvent = {
 export const mockEventSeriesList = [
   { ...mockEventSeries, id: 1, slug: 'test-series-1' },
   { ...mockEventSeries, id: 2, slug: 'test-series-2' },
-  { ...mockEventSeries, id: 3, slug: 'test-series-3' }
+  { ...mockEventSeries, id: 3, slug: 'test-series-3' },
 ];
 
 export const mockSeriesOccurrences = [
-  { ...mockSeriesEvent, id: 1, originalOccurrenceDate: new Date('2025-10-01T15:00:00Z') },
-  { ...mockSeriesEvent, id: 2, originalOccurrenceDate: new Date('2025-10-03T15:00:00Z') },
-  { ...mockSeriesEvent, id: 3, originalOccurrenceDate: new Date('2025-10-05T15:00:00Z') },
+  {
+    ...mockSeriesEvent,
+    id: 1,
+    originalOccurrenceDate: new Date('2025-10-01T15:00:00Z'),
+  },
+  {
+    ...mockSeriesEvent,
+    id: 2,
+    originalOccurrenceDate: new Date('2025-10-03T15:00:00Z'),
+  },
+  {
+    ...mockSeriesEvent,
+    id: 3,
+    originalOccurrenceDate: new Date('2025-10-05T15:00:00Z'),
+  },
 ];
 
 // Mock Repository
 export const mockEventSeriesRepository = {
-  findById: jest.fn().mockImplementation(id => Promise.resolve(
-    mockEventSeriesList.find(series => series.id === id)
-  )),
-  
-  findBySlug: jest.fn().mockImplementation(slug => Promise.resolve(
-    mockEventSeriesList.find(series => series.slug === slug)
-  )),
-  
-  findByUser: jest.fn().mockImplementation((userId, options = { page: 1, limit: 10 }) => {
-    const series = mockEventSeriesList;
-    return Promise.resolve([series, series.length]);
-  }),
-  
-  findByGroup: jest.fn().mockImplementation((groupId, options = { page: 1, limit: 10 }) => {
-    const series = mockEventSeriesList;
-    return Promise.resolve([series, series.length]);
-  }),
-  
-  create: jest.fn().mockImplementation(data => Promise.resolve({
-    ...mockEventSeries,
-    ...data,
-    id: Math.floor(Math.random() * 1000),
-    slug: data.slug || `test-series-${Math.floor(Math.random() * 1000)}`,
-  })),
-  
-  update: jest.fn().mockImplementation((id, data) => Promise.resolve({
-    ...mockEventSeries,
-    ...data,
-    id
-  })),
-  
+  findById: jest
+    .fn()
+    .mockImplementation((id) =>
+      Promise.resolve(mockEventSeriesList.find((series) => series.id === id)),
+    ),
+
+  findBySlug: jest
+    .fn()
+    .mockImplementation((slug) =>
+      Promise.resolve(
+        mockEventSeriesList.find((series) => series.slug === slug),
+      ),
+    ),
+
+  findByUser: jest
+    .fn()
+    .mockImplementation((userId, options = { page: 1, limit: 10 }) => {
+      const series = mockEventSeriesList;
+      return Promise.resolve([series, series.length]);
+    }),
+
+  findByGroup: jest
+    .fn()
+    .mockImplementation((groupId, options = { page: 1, limit: 10 }) => {
+      const series = mockEventSeriesList;
+      return Promise.resolve([series, series.length]);
+    }),
+
+  create: jest.fn().mockImplementation((data) =>
+    Promise.resolve({
+      ...mockEventSeries,
+      ...data,
+      id: Math.floor(Math.random() * 1000),
+      slug: data.slug || `test-series-${Math.floor(Math.random() * 1000)}`,
+    }),
+  ),
+
+  update: jest.fn().mockImplementation((id, data) =>
+    Promise.resolve({
+      ...mockEventSeries,
+      ...data,
+      id,
+    }),
+  ),
+
   delete: jest.fn().mockImplementation(() => Promise.resolve()),
 };
 
 // Mock Service
 export const mockEventSeriesService = {
   create: jest.fn().mockResolvedValue(mockEventSeries),
-  findAll: jest.fn().mockResolvedValue({ data: mockEventSeriesList, total: mockEventSeriesList.length }),
-  findByUser: jest.fn().mockResolvedValue({ data: mockEventSeriesList, total: mockEventSeriesList.length }),
-  findByGroup: jest.fn().mockResolvedValue({ data: mockEventSeriesList, total: mockEventSeriesList.length }),
+  findAll: jest.fn().mockResolvedValue({
+    data: mockEventSeriesList,
+    total: mockEventSeriesList.length,
+  }),
+  findByUser: jest.fn().mockResolvedValue({
+    data: mockEventSeriesList,
+    total: mockEventSeriesList.length,
+  }),
+  findByGroup: jest.fn().mockResolvedValue({
+    data: mockEventSeriesList,
+    total: mockEventSeriesList.length,
+  }),
   findBySlug: jest.fn().mockResolvedValue(mockEventSeries),
   update: jest.fn().mockResolvedValue(mockEventSeries),
   delete: jest.fn().mockResolvedValue(undefined),
@@ -131,37 +166,53 @@ export const mockEventSeriesService = {
 
 // Mock Series Occurrence Service
 export const mockEventSeriesOccurrenceService = {
-  getOrCreateOccurrence: jest.fn().mockImplementation((seriesSlug, occurrenceDate) => {
-    return Promise.resolve(mockSeriesOccurrences.find(
-      occ => occ.originalOccurrenceDate.toISOString() === new Date(occurrenceDate).toISOString()
-    ) || mockSeriesOccurrences[0]);
-  }),
-  
+  getOrCreateOccurrence: jest
+    .fn()
+    .mockImplementation((seriesSlug, occurrenceDate) => {
+      return Promise.resolve(
+        mockSeriesOccurrences.find(
+          (occ) =>
+            occ.originalOccurrenceDate.toISOString() ===
+            new Date(occurrenceDate).toISOString(),
+        ) || mockSeriesOccurrences[0],
+      );
+    }),
+
   findOccurrence: jest.fn().mockImplementation((seriesSlug, occurrenceDate) => {
-    return Promise.resolve(mockSeriesOccurrences.find(
-      occ => occ.originalOccurrenceDate.toISOString() === new Date(occurrenceDate).toISOString()
-    ));
+    return Promise.resolve(
+      mockSeriesOccurrences.find(
+        (occ) =>
+          occ.originalOccurrenceDate.toISOString() ===
+          new Date(occurrenceDate).toISOString(),
+      ),
+    );
   }),
-  
-  materializeOccurrence: jest.fn().mockImplementation((seriesSlug, occurrenceDate) => {
-    const date = new Date(occurrenceDate);
-    return Promise.resolve({
-      ...mockSeriesEvent,
-      id: Math.floor(Math.random() * 1000),
-      startDate: date,
-      originalOccurrenceDate: date,
-    });
-  }),
-  
+
+  materializeOccurrence: jest
+    .fn()
+    .mockImplementation((seriesSlug, occurrenceDate) => {
+      const date = new Date(occurrenceDate);
+      return Promise.resolve({
+        ...mockSeriesEvent,
+        id: Math.floor(Math.random() * 1000),
+        startDate: date,
+        originalOccurrenceDate: date,
+      });
+    }),
+
   getUpcomingOccurrences: jest.fn().mockImplementation(() => {
-    return Promise.resolve(mockSeriesOccurrences.map((event, i) => ({
-      date: event.startDate.toISOString(),
-      event: i === 0 ? event : undefined,
-      materialized: i === 0,
-    })));
+    return Promise.resolve(
+      mockSeriesOccurrences.map((event, i) => ({
+        date: event.startDate.toISOString(),
+        event: i === 0 ? event : undefined,
+        materialized: i === 0,
+      })),
+    );
   }),
-  
-  materializeNextOccurrence: jest.fn().mockResolvedValue(mockSeriesOccurrences[1]),
-  
+
+  materializeNextOccurrence: jest
+    .fn()
+    .mockResolvedValue(mockSeriesOccurrences[1]),
+
   updateFutureOccurrences: jest.fn().mockResolvedValue(2),
 };

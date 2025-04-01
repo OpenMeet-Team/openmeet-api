@@ -7,7 +7,9 @@ import {
   TableColumn,
 } from 'typeorm';
 
-export class CreateEventSeriesEntity1744123456789 implements MigrationInterface {
+export class CreateEventSeriesEntity1744123456789
+  implements MigrationInterface
+{
   name = 'CreateEventSeriesEntity1744123456789';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -220,14 +222,32 @@ export class CreateEventSeriesEntity1744123456789 implements MigrationInterface 
     ]);
 
     // Drop foreign keys from event_series table
-    await queryRunner.dropForeignKey(`${schema}.event_series`, 'FK_event_series_file');
-    await queryRunner.dropForeignKey(`${schema}.event_series`, 'FK_event_series_group');
-    await queryRunner.dropForeignKey(`${schema}.event_series`, 'FK_event_series_user');
+    await queryRunner.dropForeignKey(
+      `${schema}.event_series`,
+      'FK_event_series_file',
+    );
+    await queryRunner.dropForeignKey(
+      `${schema}.event_series`,
+      'FK_event_series_group',
+    );
+    await queryRunner.dropForeignKey(
+      `${schema}.event_series`,
+      'FK_event_series_user',
+    );
 
     // Drop indexes from event_series table
-    await queryRunner.dropIndex(`${schema}.event_series`, 'IDX_event_series_user_id');
-    await queryRunner.dropIndex(`${schema}.event_series`, 'IDX_event_series_ulid');
-    await queryRunner.dropIndex(`${schema}.event_series`, 'IDX_event_series_slug');
+    await queryRunner.dropIndex(
+      `${schema}.event_series`,
+      'IDX_event_series_user_id',
+    );
+    await queryRunner.dropIndex(
+      `${schema}.event_series`,
+      'IDX_event_series_ulid',
+    );
+    await queryRunner.dropIndex(
+      `${schema}.event_series`,
+      'IDX_event_series_slug',
+    );
 
     // Drop event_series table
     await queryRunner.dropTable(`${schema}.event_series`);

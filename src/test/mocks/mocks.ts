@@ -203,11 +203,13 @@ export const mockRecurrenceService = {
   getOccurrencesBetweenDates: jest.fn().mockResolvedValue([]),
   materializeOccurrences: jest.fn().mockResolvedValue([]),
   createOccurrenceFromEvent: jest.fn().mockResolvedValue({}),
-  getEventOccurrenceDate: jest.fn().mockImplementation((event) => event.startDate),
+  getEventOccurrenceDate: jest
+    .fn()
+    .mockImplementation((event) => event.startDate),
   getRecurrenceDescription: jest.fn().mockReturnValue('Every week on Monday'),
   generateOccurrences: jest.fn().mockReturnValue([new Date()]),
-  splitSeries: jest.fn().mockResolvedValue({ 
-    originalSeries: {}, 
-    newSeries: {} 
+  splitSeries: jest.fn().mockResolvedValue({
+    originalSeries: {},
+    newSeries: {},
   }),
 };

@@ -22,7 +22,8 @@ export class CreateEventSeriesDto {
   @IsString()
   @IsOptional()
   @ApiProperty({
-    description: 'The slug for the event series (auto-generated if not provided)',
+    description:
+      'The slug for the event series (auto-generated if not provided)',
     example: 'waterfront-wednesdays',
     required: false,
   })

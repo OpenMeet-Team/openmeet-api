@@ -20,7 +20,8 @@ export class UpdateEventSeriesDto extends PartialType(CreateEventSeriesDto) {
   @IsBoolean()
   @IsOptional()
   @ApiProperty({
-    description: 'Whether to propagate changes to future unmaterialized occurrences',
+    description:
+      'Whether to propagate changes to future unmaterialized occurrences',
     example: true,
     required: false,
     default: true,

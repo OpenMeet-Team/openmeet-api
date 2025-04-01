@@ -174,9 +174,9 @@ export class RecurrenceController {
       const exclusions = event?.recurrenceExceptions || [];
 
       // Transform each date into an object with date and isExcluded properties
-      return occurrenceDates.map(date => ({
+      return occurrenceDates.map((date) => ({
         date: date.toISOString(),
-        isExcluded: exclusions.includes(date.toISOString())
+        isExcluded: exclusions.includes(date.toISOString()),
       }));
     } catch (error) {
       if (error.message.includes('not found')) {
@@ -185,7 +185,7 @@ export class RecurrenceController {
       throw error;
     }
   }
-  
+
   @ApiOperation({
     summary: 'Get expanded event occurrences with full event objects',
     description:

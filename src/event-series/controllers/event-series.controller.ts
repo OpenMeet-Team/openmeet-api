@@ -13,19 +13,25 @@ import {
   HttpStatus,
   HttpCode,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { EventSeriesService } from '../services/event-series.service';
 import { EventSeriesOccurrenceService } from '../services/event-series-occurrence.service';
 import { CreateEventSeriesDto } from '../dto/create-event-series.dto';
 import { UpdateEventSeriesDto } from '../dto/update-event-series.dto';
 import { EventSeriesResponseDto } from '../dto/event-series-response.dto';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { TenantGuard } from '../../tenant/guards/tenant.guard';
-import { Tenant } from '../../tenant/decorators/tenant.decorator';
+import { JWTAuthGuard } from '../../auth/auth.guard';
+import { TenantGuard } from '../../tenant/tenant.guard';
+import { AuthUser as Tenant } from '../../core/decorators/auth-user.decorator';
 
 @ApiTags('event-series')
 @Controller('event-series')
-@UseGuards(JwtAuthGuard, TenantGuard)
+@UseGuards(JWTAuthGuard, TenantGuard)
 export class EventSeriesController {
   private readonly logger = new Logger(EventSeriesController.name);
 
@@ -49,12 +55,12 @@ export class EventSeriesController {
     this.logger.log(
       `Creating event series in tenant ${tenant} by user ${req.user.id}`,
     );
-    
+
     const eventSeries = await this.eventSeriesService.create(
       createEventSeriesDto,
       req.user.id,
     );
-    
+
     return new EventSeriesResponseDto(eventSeries);
   }
 
@@ -76,14 +82,14 @@ export class EventSeriesController {
     this.logger.log(
       `Getting all event series in tenant ${tenant} by user ${req.user.id}`,
     );
-    
+
     const { data, total } = await this.eventSeriesService.findAll({
       page: +page,
       limit: +limit,
     });
-    
+
     return {
-      data: data.map(series => new EventSeriesResponseDto(series)),
+      data: data.map((series) => new EventSeriesResponseDto(series)),
       meta: {
         total,
         page: +page,
@@ -111,17 +117,14 @@ export class EventSeriesController {
     this.logger.log(
       `Getting event series for user ${userId} in tenant ${tenant}`,
     );
-    
-    const { data, total } = await this.eventSeriesService.findByUser(
-      +userId,
-      {
-        page: +page,
-        limit: +limit,
-      },
-    );
-    
+
+    const { data, total } = await this.eventSeriesService.findByUser(+userId, {
+      page: +page,
+      limit: +limit,
+    });
+
     return {
-      data: data.map(series => new EventSeriesResponseDto(series)),
+      data: data.map((series) => new EventSeriesResponseDto(series)),
       meta: {
         total,
         page: +page,
@@ -149,7 +152,7 @@ export class EventSeriesController {
     this.logger.log(
       `Getting event series for group ${groupId} in tenant ${tenant}`,
     );
-    
+
     const { data, total } = await this.eventSeriesService.findByGroup(
       +groupId,
       {
@@ -157,9 +160,9 @@ export class EventSeriesController {
         limit: +limit,
       },
     );
-    
+
     return {
-      data: data.map(series => new EventSeriesResponseDto(series)),
+      data: data.map((series) => new EventSeriesResponseDto(series)),
       meta: {
         total,
         page: +page,
@@ -178,7 +181,7 @@ export class EventSeriesController {
   })
   async findOne(@Param('slug') slug: string, @Tenant() tenant: string) {
     this.logger.log(`Getting event series ${slug} in tenant ${tenant}`);
-    
+
     const eventSeries = await this.eventSeriesService.findBySlug(slug);
     return new EventSeriesResponseDto(eventSeries);
   }
@@ -199,7 +202,7 @@ export class EventSeriesController {
     this.logger.log(
       `Getting upcoming occurrences for series ${slug} in tenant ${tenant}`,
     );
-    
+
     return this.eventSeriesOccurrenceService.getUpcomingOccurrences(
       slug,
       +count,
@@ -223,13 +226,14 @@ export class EventSeriesController {
     this.logger.log(
       `Getting or creating occurrence for series ${slug} on date ${occurrenceDate} in tenant ${tenant}`,
     );
-    
-    const occurrence = await this.eventSeriesOccurrenceService.getOrCreateOccurrence(
-      slug,
-      occurrenceDate,
-      req.user.id,
-    );
-    
+
+    const occurrence =
+      await this.eventSeriesOccurrenceService.getOrCreateOccurrence(
+        slug,
+        occurrenceDate,
+        req.user.id,
+      );
+
     return occurrence;
   }
 
@@ -250,13 +254,13 @@ export class EventSeriesController {
     this.logger.log(
       `Updating event series ${slug} in tenant ${tenant} by user ${req.user.id}`,
     );
-    
+
     const eventSeries = await this.eventSeriesService.update(
       slug,
       updateEventSeriesDto,
       req.user.id,
     );
-    
+
     return new EventSeriesResponseDto(eventSeries);
   }
 
@@ -276,7 +280,7 @@ export class EventSeriesController {
     this.logger.log(
       `Deleting event series ${slug} in tenant ${tenant} by user ${req.user.id}`,
     );
-    
+
     await this.eventSeriesService.delete(slug, req.user.id);
   }
 
@@ -298,17 +302,18 @@ export class EventSeriesController {
     this.logger.log(
       `Updating future occurrences for series ${slug} from date ${date} in tenant ${tenant}`,
     );
-    
-    const count = await this.eventSeriesOccurrenceService.updateFutureOccurrences(
-      slug,
-      date,
-      updates,
-      req.user.id,
-    );
-    
-    return { 
+
+    const count =
+      await this.eventSeriesOccurrenceService.updateFutureOccurrences(
+        slug,
+        date,
+        updates,
+        req.user.id,
+      );
+
+    return {
       message: `Updated ${count} future occurrences`,
-      count 
+      count,
     };
   }
 
@@ -327,16 +332,17 @@ export class EventSeriesController {
     this.logger.log(
       `Materializing next occurrence for series ${slug} in tenant ${tenant}`,
     );
-    
-    const occurrence = await this.eventSeriesOccurrenceService.materializeNextOccurrence(
-      slug,
-      req.user.id,
-    );
-    
+
+    const occurrence =
+      await this.eventSeriesOccurrenceService.materializeNextOccurrence(
+        slug,
+        req.user.id,
+      );
+
     if (!occurrence) {
       return { message: 'No unmaterialized occurrences available' };
     }
-    
+
     return occurrence;
   }
 }

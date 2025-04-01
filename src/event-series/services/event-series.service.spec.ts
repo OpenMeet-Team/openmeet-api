@@ -50,11 +50,13 @@ const EVENT_SERIES_REPOSITORY_TOKEN = 'EventSeriesRepository';
 
 // Mock Repository
 const mockEventSeriesRepository = {
-  create: jest.fn().mockImplementation((series) => Promise.resolve({
-    ...series,
-    id: 1,
-    slug: series.slug || 'test-series',
-  })),
+  create: jest.fn().mockImplementation((series) =>
+    Promise.resolve({
+      ...series,
+      id: 1,
+      slug: series.slug || 'test-series',
+    }),
+  ),
   findBySlug: jest.fn().mockImplementation((slug) => {
     if (slug === 'not-found') {
       return Promise.resolve(null);
@@ -65,19 +67,23 @@ const mockEventSeriesRepository = {
     });
   }),
   findByUser: jest.fn().mockImplementation((userId, options) => {
-    const series = Array(options.limit).fill(0).map((_, i) => ({
-      ...mockSeriesData,
-      id: i + 1,
-      slug: `test-series-${i + 1}`,
-    }));
+    const series = Array(options.limit)
+      .fill(0)
+      .map((_, i) => ({
+        ...mockSeriesData,
+        id: i + 1,
+        slug: `test-series-${i + 1}`,
+      }));
     return Promise.resolve([series, series.length]);
   }),
   findByGroup: jest.fn().mockImplementation((groupId, options) => {
-    const series = Array(options.limit).fill(0).map((_, i) => ({
-      ...mockSeriesData,
-      id: i + 1,
-      slug: `test-series-${i + 1}`,
-    }));
+    const series = Array(options.limit)
+      .fill(0)
+      .map((_, i) => ({
+        ...mockSeriesData,
+        id: i + 1,
+        slug: `test-series-${i + 1}`,
+      }));
     return Promise.resolve([series, series.length]);
   }),
   update: jest.fn().mockImplementation((id, updateData) => {
@@ -87,12 +93,16 @@ const mockEventSeriesRepository = {
       id,
     });
   }),
-  delete: jest.fn().mockImplementation((id) => Promise.resolve({ affected: 1 })),
+  delete: jest
+    .fn()
+    .mockImplementation((id) => Promise.resolve({ affected: 1 })),
 };
 
 // Mock RecurrenceService
 const mockRecurrenceService = {
-  getRecurrenceDescription: jest.fn().mockImplementation(() => 'Weekly on Monday, Wednesday, Friday'),
+  getRecurrenceDescription: jest
+    .fn()
+    .mockImplementation(() => 'Weekly on Monday, Wednesday, Friday'),
   generateOccurrences: jest.fn(),
   isDateInRecurrencePattern: jest.fn(),
   formatDateInTimeZone: jest.fn(),
@@ -180,10 +190,15 @@ describe('EventSeriesService', () => {
 
       expect(eventSeriesRepository.create).toHaveBeenCalled();
       expect(eventManagementService.create).toHaveBeenCalled();
-      expect(eventSeriesRepository.findBySlug).toHaveBeenCalledWith('new-series');
+      expect(eventSeriesRepository.findBySlug).toHaveBeenCalledWith(
+        'new-series',
+      );
       expect(result).toHaveProperty('id', 1);
       expect(result).toHaveProperty('slug', 'new-series');
-      expect(result).toHaveProperty('recurrenceDescription', 'Weekly on Monday, Wednesday, Friday');
+      expect(result).toHaveProperty(
+        'recurrenceDescription',
+        'Weekly on Monday, Wednesday, Friday',
+      );
     });
 
     it('should handle errors during creation', async () => {
@@ -199,9 +214,13 @@ describe('EventSeriesService', () => {
         templateType: 'in-person',
       };
 
-      jest.spyOn(eventSeriesRepository, 'create').mockRejectedValue(new Error('Database error'));
+      jest
+        .spyOn(eventSeriesRepository, 'create')
+        .mockRejectedValue(new Error('Database error'));
 
-      await expect(service.create(createDto, 1)).rejects.toThrow('Database error');
+      await expect(service.create(createDto, 1)).rejects.toThrow(
+        'Database error',
+      );
     });
   });
 
@@ -209,8 +228,13 @@ describe('EventSeriesService', () => {
     it('should return paginated series with descriptions', async () => {
       const result = await service.findAll({ page: 1, limit: 5 });
 
-      expect(eventSeriesRepository.findByUser).toHaveBeenCalledWith(0, { page: 1, limit: 5 });
-      expect(recurrenceService.getRecurrenceDescription).toHaveBeenCalledTimes(5);
+      expect(eventSeriesRepository.findByUser).toHaveBeenCalledWith(0, {
+        page: 1,
+        limit: 5,
+      });
+      expect(recurrenceService.getRecurrenceDescription).toHaveBeenCalledTimes(
+        5,
+      );
       expect(result.data).toHaveLength(5);
       expect(result.total).toBe(5);
       expect(result.data[0]).toHaveProperty('recurrenceDescription');
@@ -221,7 +245,10 @@ describe('EventSeriesService', () => {
     it('should return series created by a specific user', async () => {
       const result = await service.findByUser(1, { page: 1, limit: 5 });
 
-      expect(eventSeriesRepository.findByUser).toHaveBeenCalledWith(1, { page: 1, limit: 5 });
+      expect(eventSeriesRepository.findByUser).toHaveBeenCalledWith(1, {
+        page: 1,
+        limit: 5,
+      });
       expect(result.data).toHaveLength(5);
       expect(result.total).toBe(5);
       expect(result.data[0]).toHaveProperty('recurrenceDescription');
@@ -232,7 +259,10 @@ describe('EventSeriesService', () => {
     it('should return series for a specific group', async () => {
       const result = await service.findByGroup(1, { page: 1, limit: 5 });
 
-      expect(eventSeriesRepository.findByGroup).toHaveBeenCalledWith(1, { page: 1, limit: 5 });
+      expect(eventSeriesRepository.findByGroup).toHaveBeenCalledWith(1, {
+        page: 1,
+        limit: 5,
+      });
       expect(result.data).toHaveLength(5);
       expect(result.total).toBe(5);
       expect(result.data[0]).toHaveProperty('recurrenceDescription');
@@ -243,19 +273,27 @@ describe('EventSeriesService', () => {
     it('should return a series by slug', async () => {
       const result = await service.findBySlug('test-series');
 
-      expect(eventSeriesRepository.findBySlug).toHaveBeenCalledWith('test-series');
+      expect(eventSeriesRepository.findBySlug).toHaveBeenCalledWith(
+        'test-series',
+      );
       expect(result).toHaveProperty('slug', 'test-series');
       expect(result).toHaveProperty('recurrenceDescription');
     });
 
     it('should throw NotFoundException if series not found', async () => {
-      await expect(service.findBySlug('not-found')).rejects.toThrow(NotFoundException);
+      await expect(service.findBySlug('not-found')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should handle other errors', async () => {
-      jest.spyOn(eventSeriesRepository, 'findBySlug').mockRejectedValue(new Error('Database error'));
+      jest
+        .spyOn(eventSeriesRepository, 'findBySlug')
+        .mockRejectedValue(new Error('Database error'));
 
-      await expect(service.findBySlug('test-series')).rejects.toThrow('Database error');
+      await expect(service.findBySlug('test-series')).rejects.toThrow(
+        'Database error',
+      );
     });
   });
 
@@ -272,13 +310,13 @@ describe('EventSeriesService', () => {
 
       // Reset and re-mock for this test
       jest.spyOn(eventSeriesRepository, 'findBySlug').mockReset();
-      
+
       // First call when checking permissions
       jest.spyOn(eventSeriesRepository, 'findBySlug').mockResolvedValueOnce({
         ...mockSeriesData,
-        user: { id: 1 } as any
+        user: { id: 1 } as any,
       } as EventSeriesEntity);
-      
+
       // Second call after update is done
       jest.spyOn(eventSeriesRepository, 'findBySlug').mockResolvedValueOnce({
         ...mockSeriesData,
@@ -288,12 +326,14 @@ describe('EventSeriesService', () => {
           freq: 'WEEKLY',
           interval: 2,
         },
-        user: { id: 1 } as any
+        user: { id: 1 } as any,
       } as EventSeriesEntity);
 
       const result = await service.update('test-series', updateDto, 1);
 
-      expect(eventSeriesRepository.findBySlug).toHaveBeenCalledWith('test-series');
+      expect(eventSeriesRepository.findBySlug).toHaveBeenCalledWith(
+        'test-series',
+      );
       expect(eventSeriesRepository.update).toHaveBeenCalledWith(1, updateDto);
       expect(result).toHaveProperty('name', 'Updated Series');
       expect(result).toHaveProperty('recurrenceDescription');
@@ -308,10 +348,12 @@ describe('EventSeriesService', () => {
       jest.spyOn(eventSeriesRepository, 'findBySlug').mockReset();
       jest.spyOn(eventSeriesRepository, 'findBySlug').mockResolvedValue({
         ...mockSeriesData,
-        user: { id: 1 } as any
+        user: { id: 1 } as any,
       } as EventSeriesEntity);
 
-      await expect(service.update('test-series', updateDto, 999)).rejects.toThrow(BadRequestException);
+      await expect(
+        service.update('test-series', updateDto, 999),
+      ).rejects.toThrow(BadRequestException);
       expect(eventSeriesRepository.update).not.toHaveBeenCalled();
     });
   });
@@ -322,12 +364,14 @@ describe('EventSeriesService', () => {
       jest.spyOn(eventSeriesRepository, 'findBySlug').mockReset();
       jest.spyOn(eventSeriesRepository, 'findBySlug').mockResolvedValue({
         ...mockSeriesData,
-        user: { id: 1 } as any
+        user: { id: 1 } as any,
       } as EventSeriesEntity);
-      
+
       await service.delete('test-series', 1);
 
-      expect(eventSeriesRepository.findBySlug).toHaveBeenCalledWith('test-series');
+      expect(eventSeriesRepository.findBySlug).toHaveBeenCalledWith(
+        'test-series',
+      );
       expect(eventSeriesRepository.delete).toHaveBeenCalledWith(1);
     });
 
@@ -336,10 +380,12 @@ describe('EventSeriesService', () => {
       jest.spyOn(eventSeriesRepository, 'findBySlug').mockReset();
       jest.spyOn(eventSeriesRepository, 'findBySlug').mockResolvedValue({
         ...mockSeriesData,
-        user: { id: 1 } as any
+        user: { id: 1 } as any,
       } as EventSeriesEntity);
-      
-      await expect(service.delete('test-series', 999)).rejects.toThrow(BadRequestException);
+
+      await expect(service.delete('test-series', 999)).rejects.toThrow(
+        BadRequestException,
+      );
       expect(eventSeriesRepository.delete).not.toHaveBeenCalled();
     });
   });

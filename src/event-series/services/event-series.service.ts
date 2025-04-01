@@ -43,9 +43,11 @@ export class EventSeriesService {
       eventSeries.slug = createEventSeriesDto.slug || ''; // Will be auto-generated if not provided
       eventSeries.description = createEventSeriesDto.description || '';
       eventSeries.timeZone = createEventSeriesDto.timeZone || 'UTC';
-      eventSeries.recurrenceRule = createEventSeriesDto.recurrenceRule || { freq: 'WEEKLY' };
+      eventSeries.recurrenceRule = createEventSeriesDto.recurrenceRule || {
+        freq: 'WEEKLY',
+      };
       eventSeries.user = { id: userId } as any; // Set user reference
-      
+
       // Handle group, image, and matrix room id
       if (createEventSeriesDto.groupId) {
         eventSeries.group = { id: createEventSeriesDto.groupId } as any;
@@ -54,7 +56,7 @@ export class EventSeriesService {
         eventSeries.image = { id: createEventSeriesDto.imageId } as any;
       }
       eventSeries.matrixRoomId = createEventSeriesDto.matrixRoomId || '';
-      
+
       // External source fields (handle null/undefined cases)
       eventSeries.sourceType = createEventSeriesDto.sourceType || null;
       eventSeries.sourceId = createEventSeriesDto.sourceId || null;
@@ -62,10 +64,15 @@ export class EventSeriesService {
       eventSeries.sourceData = createEventSeriesDto.sourceData || null;
 
       // Save the event series
-      const savedEventSeries = await this.eventSeriesRepository.create(eventSeries);
+      const savedEventSeries =
+        await this.eventSeriesRepository.create(eventSeries);
 
       // Create the first occurrence from the template
-      await this.createFirstOccurrence(savedEventSeries, createEventSeriesDto, userId);
+      await this.createFirstOccurrence(
+        savedEventSeries,
+        createEventSeriesDto,
+        userId,
+      );
 
       return this.findBySlug(savedEventSeries.slug);
     } catch (error) {
@@ -100,23 +107,26 @@ export class EventSeriesService {
       approvalQuestion: template.templateApprovalQuestion,
       allowWaitlist: template.templateAllowWaitlist,
       categories: template.templateCategories,
-      
+
       // Required fields for CreateEventDto - default to 0
-      lat: 0,  
+      lat: 0,
       lon: 0,
-      
+
       // Set it as part of the series
       seriesId: eventSeries.id,
       materialized: true,
       originalOccurrenceDate: new Date(template.templateStartDate),
-      
+
       // Set it as recurring (for compatibility with existing code)
       isRecurring: true,
       recurrenceRule: eventSeries.recurrenceRule,
     };
 
     // Create the event using the management service
-    const event = await this.eventManagementService.create(eventData as any, userId);
+    const event = await this.eventManagementService.create(
+      eventData as any,
+      userId,
+    );
     return event;
   }
 
@@ -135,15 +145,16 @@ export class EventSeriesService {
         0, // Use 0 instead of undefined for userId parameter to satisfy TypeScript
         options,
       );
-      
+
       // Add human-readable descriptions to each series
       data.forEach((series) => {
-        series.recurrenceDescription = this.recurrenceService.getRecurrenceDescription(
-          series.recurrenceRule as RecurrenceRule,
-          series.timeZone,
-        );
+        series.recurrenceDescription =
+          this.recurrenceService.getRecurrenceDescription(
+            series.recurrenceRule as RecurrenceRule,
+            series.timeZone,
+          );
       });
-      
+
       return { data, total };
     } catch (error) {
       this.logger.error(
@@ -167,15 +178,16 @@ export class EventSeriesService {
         userId,
         options,
       );
-      
+
       // Add human-readable descriptions to each series
       data.forEach((series) => {
-        series.recurrenceDescription = this.recurrenceService.getRecurrenceDescription(
-          series.recurrenceRule as RecurrenceRule,
-          series.timeZone,
-        );
+        series.recurrenceDescription =
+          this.recurrenceService.getRecurrenceDescription(
+            series.recurrenceRule as RecurrenceRule,
+            series.timeZone,
+          );
       });
-      
+
       return { data, total };
     } catch (error) {
       this.logger.error(
@@ -199,15 +211,16 @@ export class EventSeriesService {
         groupId,
         options,
       );
-      
+
       // Add human-readable descriptions to each series
       data.forEach((series) => {
-        series.recurrenceDescription = this.recurrenceService.getRecurrenceDescription(
-          series.recurrenceRule as RecurrenceRule,
-          series.timeZone,
-        );
+        series.recurrenceDescription =
+          this.recurrenceService.getRecurrenceDescription(
+            series.recurrenceRule as RecurrenceRule,
+            series.timeZone,
+          );
       });
-      
+
       return { data, total };
     } catch (error) {
       this.logger.error(
@@ -225,23 +238,24 @@ export class EventSeriesService {
   async findBySlug(slug: string): Promise<EventSeriesEntity> {
     try {
       const eventSeries = await this.eventSeriesRepository.findBySlug(slug);
-      
+
       if (!eventSeries) {
         throw new NotFoundException(`Event series with slug ${slug} not found`);
       }
-      
+
       // Add human-readable description
-      eventSeries.recurrenceDescription = this.recurrenceService.getRecurrenceDescription(
-        eventSeries.recurrenceRule as RecurrenceRule,
-        eventSeries.timeZone,
-      );
-      
+      eventSeries.recurrenceDescription =
+        this.recurrenceService.getRecurrenceDescription(
+          eventSeries.recurrenceRule as RecurrenceRule,
+          eventSeries.timeZone,
+        );
+
       return eventSeries;
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
       }
-      
+
       this.logger.error(
         `Error finding event series by slug: ${error.message}`,
         error.stack,
@@ -261,30 +275,31 @@ export class EventSeriesService {
   ): Promise<EventSeriesEntity> {
     try {
       const eventSeries = await this.findBySlug(slug);
-      
+
       // Ensure the user has permission to update this series
       // This would typically be handled by a guard, but we'll check here as well
       if (eventSeries.user?.id !== userId) {
-        throw new BadRequestException('You do not have permission to update this event series');
+        throw new BadRequestException(
+          'You do not have permission to update this event series',
+        );
       }
-      
+
       // Update the event series
       const updatedSeries = await this.eventSeriesRepository.update(
         eventSeries.id,
         updateEventSeriesDto,
       );
-      
+
       // Determine if we should propagate changes to future occurrences
       const propagateChanges = updateEventSeriesDto.propagateChanges !== false;
-      
+
       if (propagateChanges) {
         // Implement logic to update future unmaterialized occurrences
         // This would typically involve finding all events with this seriesId
         // that are not materialized and updating them
-        
         // TODO: Implement propagation logic for unmaterialized occurrences
       }
-      
+
       return this.findBySlug(slug);
     } catch (error) {
       this.logger.error(
@@ -302,12 +317,14 @@ export class EventSeriesService {
   async delete(slug: string, userId: number): Promise<void> {
     try {
       const eventSeries = await this.findBySlug(slug);
-      
+
       // Ensure the user has permission to delete this series
       if (eventSeries.user?.id !== userId) {
-        throw new BadRequestException('You do not have permission to delete this event series');
+        throw new BadRequestException(
+          'You do not have permission to delete this event series',
+        );
       }
-      
+
       // Delete the event series
       // Note: Deleting the series should cascade to all events in the series
       // due to the CASCADE option in the foreign key

@@ -95,49 +95,61 @@ describe('EventQueryService', () => {
       // Mock the database operations through the tenant connection
       const mockRepositoryFind = jest.fn().mockResolvedValue([mockEvent]);
       const mockGetRepository = jest.fn().mockReturnValue({
-        find: mockRepositoryFind
+        find: mockRepositoryFind,
       });
-      
+
       // Mock the attendee count service call which is used to enrich event data
       const mockAttendeeCount = jest.fn().mockResolvedValue(5);
-      jest.spyOn(service['eventAttendeeService'], 'showConfirmedEventAttendeesCount')
+      jest
+        .spyOn(
+          service['eventAttendeeService'],
+          'showConfirmedEventAttendeesCount',
+        )
         .mockImplementation(mockAttendeeCount);
-        
+
       // Provide a mock for the tenant connection
-      jest.spyOn(service['tenantConnectionService'], 'getTenantConnection')
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
         .mockResolvedValue({
-          getRepository: mockGetRepository
+          getRepository: mockGetRepository,
         } as any);
-      
+
       // Call the method under test
       await service.findEventsForGroup(1, 3);
-      
+
       // Verify tenant connection was used correctly
-      expect(service['tenantConnectionService'].getTenantConnection).toHaveBeenCalled();
-      
+      expect(
+        service['tenantConnectionService'].getTenantConnection,
+      ).toHaveBeenCalled();
+
       // Verify repository was queried correctly
       expect(mockGetRepository).toHaveBeenCalledWith(EventEntity);
-      expect(mockRepositoryFind).toHaveBeenCalledWith(expect.objectContaining({
-        where: expect.objectContaining({
-          group: { id: 1 },
-          status: EventStatus.Published
+      expect(mockRepositoryFind).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            group: { id: 1 },
+            status: EventStatus.Published,
+          }),
+          take: 3,
         }),
-        take: 3
-      }));
-      
+      );
+
       // Verify attendee service was called to enrich the returned events
-      expect(service['eventAttendeeService'].showConfirmedEventAttendeesCount)
-        .toHaveBeenCalledWith(mockEvent.id);
+      expect(
+        service['eventAttendeeService'].showConfirmedEventAttendeesCount,
+      ).toHaveBeenCalledWith(mockEvent.id);
     });
   });
 
   describe('editEvent', () => {
     it('should return an event', async () => {
-      jest.spyOn(service['tenantConnectionService'], 'getTenantConnection').mockResolvedValue({
-        getRepository: jest.fn().mockReturnValue({
-          findOne: jest.fn().mockResolvedValue(mockEvent),
-        }),
-      } as any);
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockReturnValue({
+            findOne: jest.fn().mockResolvedValue(mockEvent),
+          }),
+        } as any);
       const result = await service.editEvent(mockEvent.slug);
       expect(result).toEqual(mockEvent);
     });
@@ -145,11 +157,13 @@ describe('EventQueryService', () => {
 
   describe('showEvent', () => {
     it('should return event with details', async () => {
-      jest.spyOn(service['tenantConnectionService'], 'getTenantConnection').mockResolvedValue({
-        getRepository: jest.fn().mockReturnValue({
-          findOne: jest.fn().mockResolvedValue(mockEvent),
-        }),
-      } as any);
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockReturnValue({
+            findOne: jest.fn().mockResolvedValue(mockEvent),
+          }),
+        } as any);
       const result = await service.showEvent(mockEvent.slug);
       expect(result).toEqual(mockEvent);
     });
@@ -158,13 +172,18 @@ describe('EventQueryService', () => {
   describe('getHomePageFeaturedEvents', () => {
     it('should return featured events', async () => {
       // Mock the event attendee service
-      jest.spyOn(service['eventAttendeeService'], 'showConfirmedEventAttendeesCount')
+      jest
+        .spyOn(
+          service['eventAttendeeService'],
+          'showConfirmedEventAttendeesCount',
+        )
         .mockResolvedValue(5);
-      
+
       // Mock the recurrence service for addRecurrenceInformation
-      jest.spyOn(service['recurrenceService'], 'getRecurrenceDescription')
+      jest
+        .spyOn(service['recurrenceService'], 'getRecurrenceDescription')
         .mockReturnValue('Every week on Monday');
-        
+
       const mockQueryBuilder = {
         select: jest.fn().mockReturnThis(),
         leftJoinAndSelect: jest.fn().mockReturnThis(),
@@ -174,16 +193,22 @@ describe('EventQueryService', () => {
         getMany: jest.fn().mockResolvedValue([mockEvent]),
       };
 
-      jest.spyOn(service['tenantConnectionService'], 'getTenantConnection').mockResolvedValue({
-        getRepository: jest.fn().mockReturnValue({
-          createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
-        }),
-      } as any);
+      jest
+        .spyOn(service['tenantConnectionService'], 'getTenantConnection')
+        .mockResolvedValue({
+          getRepository: jest.fn().mockReturnValue({
+            createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+          }),
+        } as any);
 
       // Mock the attendee count service call which is used to enrich event data
-      jest.spyOn(service['eventAttendeeService'], 'showConfirmedEventAttendeesCount')
+      jest
+        .spyOn(
+          service['eventAttendeeService'],
+          'showConfirmedEventAttendeesCount',
+        )
         .mockResolvedValue(5);
-      
+
       const result = await service.getHomePageFeaturedEvents();
       expect(Array.isArray(result)).toBe(true);
     });

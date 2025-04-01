@@ -12,24 +12,27 @@ export class EventSeriesTypeOrmRepository implements EventSeriesRepository {
   ) {}
 
   async findById(id: number): Promise<EventSeriesEntity | undefined> {
-    return this.repository.findOne({
+    const result = await this.repository.findOne({
       where: { id },
       relations: ['user', 'group', 'image'],
     });
+    return result ?? undefined;
   }
 
   async findBySlug(slug: string): Promise<EventSeriesEntity | undefined> {
-    return this.repository.findOne({
+    const result = await this.repository.findOne({
       where: { slug },
       relations: ['user', 'group', 'image'],
     });
+    return result ?? undefined;
   }
 
   async findByUlid(ulid: string): Promise<EventSeriesEntity | undefined> {
-    return this.repository.findOne({
+    const result = await this.repository.findOne({
       where: { ulid },
       relations: ['user', 'group', 'image'],
     });
+    return result ?? undefined;
   }
 
   async findByUser(
@@ -81,8 +84,12 @@ export class EventSeriesTypeOrmRepository implements EventSeriesRepository {
     id: number,
     eventSeries: Partial<EventSeriesEntity>,
   ): Promise<EventSeriesEntity> {
-    await this.repository.update(id, eventSeries);
-    return this.findById(id);
+    await this.repository.update(id, eventSeries as any);
+    const updated = await this.findById(id);
+    if (!updated) {
+      throw new Error(`Event series with id ${id} not found after update`);
+    }
+    return updated;
   }
 
   async delete(id: number): Promise<void> {

@@ -1,5 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { mockEventSeries, mockEventSeriesRepository, mockEventSeriesService, mockEventSeriesOccurrenceService, mockSeriesEvent } from '../test/mocks';
+import {
+  mockEventSeries,
+  mockEventSeriesRepository,
+  mockEventSeriesService,
+  mockEventSeriesOccurrenceService,
+  mockSeriesEvent,
+} from '../test/mocks';
 import { EventSeriesRepository } from './interfaces/event-series-repository.interface';
 
 describe('EventSeriesModule', () => {
@@ -29,10 +35,10 @@ describe('EventSeriesModule', () => {
         slug: 'new-test-series',
         recurrenceRule: {
           freq: 'DAILY',
-          interval: 1
-        }
+          interval: 1,
+        },
       });
-      
+
       expect(newSeries).toBeDefined();
       expect(newSeries.name).toBe('New Test Series');
       expect(newSeries.slug).toBe('new-test-series');
@@ -40,9 +46,9 @@ describe('EventSeriesModule', () => {
 
     it('should update a series', async () => {
       const updated = await repository.update(1, {
-        name: 'Updated Series Name'
+        name: 'Updated Series Name',
       });
-      
+
       expect(updated).toBeDefined();
       expect(updated.id).toBe(1);
       expect(updated.name).toBe('Updated Series Name');
@@ -87,15 +93,23 @@ describe('EventSeriesModule', () => {
       const date = '2025-10-01T15:00:00Z';
       const result = await service.findOccurrence('test-series', date);
       expect(result).toBeDefined();
-      expect(result?.originalOccurrenceDate.toISOString()).toBe(new Date(date).toISOString());
+      expect(result?.originalOccurrenceDate.toISOString()).toBe(
+        new Date(date).toISOString(),
+      );
     });
 
     it('should materialize a new occurrence', async () => {
       const date = '2025-10-07T15:00:00Z';
-      const result = await service.materializeOccurrence('test-series', date, 1);
+      const result = await service.materializeOccurrence(
+        'test-series',
+        date,
+        1,
+      );
       expect(result).toBeDefined();
       expect(result.startDate.toISOString()).toBe(new Date(date).toISOString());
-      expect(result.originalOccurrenceDate.toISOString()).toBe(new Date(date).toISOString());
+      expect(result.originalOccurrenceDate.toISOString()).toBe(
+        new Date(date).toISOString(),
+      );
     });
 
     it('should get upcoming occurrences', async () => {
@@ -103,13 +117,13 @@ describe('EventSeriesModule', () => {
       expect(result).toBeDefined();
       expect(Array.isArray(result)).toBe(true);
       expect(result.length).toBeGreaterThan(0);
-      
+
       // First occurrence should be materialized
       expect(result[0].materialized).toBe(true);
       expect(result[0].event).toBeDefined();
-      
+
       // Should have unmaterialized occurrences
-      const unmaterialized = result.filter(occ => !occ.materialized);
+      const unmaterialized = result.filter((occ) => !occ.materialized);
       expect(unmaterialized.length).toBeGreaterThan(0);
     });
 
@@ -118,9 +132,9 @@ describe('EventSeriesModule', () => {
         'test-series',
         '2025-10-05T00:00:00Z',
         { name: 'Updated Event Name' },
-        1
+        1,
       );
-      
+
       expect(count).toBeGreaterThan(0);
     });
   });
