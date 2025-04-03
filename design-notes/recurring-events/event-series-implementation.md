@@ -36,9 +36,10 @@ CREATE TABLE event_series (
 
 -- Add Series Reference to Events Table
 ALTER TABLE events ADD COLUMN series_id INTEGER REFERENCES event_series(id);
-ALTER TABLE events ADD COLUMN materialized BOOLEAN DEFAULT FALSE;
 ALTER TABLE events ADD COLUMN original_occurrence_date TIMESTAMP;
 ```
+
+Note: After implementation testing, we determined that the `materialized` column was unnecessary and has been removed. Any event record with a `series_id` that exists in the database is considered materialized by definition.
 
 ## URL Structure
 
@@ -49,14 +50,14 @@ ALTER TABLE events ADD COLUMN original_occurrence_date TIMESTAMP;
 
 ## Materialization Rules
 
-Events are materialized (created as concrete entities) when:
+Events are considered materialized when they have an actual database record in the events table with a series_id reference. Materialization happens when:
 1. A user with leadership role edits a specific occurrence
 2. Users attend or start a discussion on an occurrence 
 3. The current next event is completed (auto-materialize the new "next" occurrence)
 
 Changes to the series template:
-- Affect all future unmaterialized occurrences
-- Time changes to materialized occurrences maintain existing attendees and trigger notifications
+- Affect all future occurrences that don't yet exist in the database
+- Time changes to existing occurrences maintain existing attendees and trigger notifications
 
 ## ATProtocol Integration
 
@@ -76,7 +77,7 @@ Until ATProtocol supports native recurrence:
 
 ## UI Considerations
 
-- Calendar shows occurrences on their planned or actual date (if materialized)
+- Calendar shows occurrences on their planned or actual date (if they exist in the database)
 - Clear visual distinction between series templates and individual occurrences
 - Navigation paths to move between series and specific occurrences
 - Template modification interface shows propagation options
@@ -99,8 +100,7 @@ Event series in OpenMeet are implemented with a dedicated series entity that man
 ### Event Entity (extended)
 - seriesId (foreign key to event_series)
 - isTemplate (boolean to identify template events)
-- materialized (boolean)
-- rescheduled (boolean or timestamp, if moved)
+- originalOccurrenceDate (timestamp, tracks which date the event was generated for)
 
 ## Series-Event Relationship
 - Series maintains an ordered list of event IDs
@@ -132,12 +132,12 @@ Event series in OpenMeet are implemented with a dedicated series entity that man
 ### Occurrence Generation
 1. When materializing an occurrence:
    - Use properties from current template event
-   - Set materialzed = true
+   - Create a database record for the occurrence
    - Add to series' ordered list
 
 2. Occurrence management:
-   - Generate unmaterialized occurrences 2 months in advance
-   - Create new ones as old ones pass
+   - Generate virtual occurrences 2 months in advance for display
+   - Create actual database records only when needed
    - Use current template event for new occurrences
 
 ## Test Cases

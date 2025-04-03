@@ -37,15 +37,6 @@ export class CreateEventSeriesDto {
   })
   description?: string;
 
-  @IsString()
-  @IsOptional()
-  @ApiProperty({
-    description: 'The timezone for the event series',
-    example: 'America/New_York',
-    required: false,
-  })
-  timeZone?: string;
-
   @IsObject()
   @ValidateNested()
   @Type(() => RecurrenceRuleDto)

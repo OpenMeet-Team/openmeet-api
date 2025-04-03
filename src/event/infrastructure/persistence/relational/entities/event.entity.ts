@@ -173,54 +173,7 @@ export class EventEntity
   @Column({ type: 'timestamp', nullable: true })
   lastSyncedAt: Date | null;
 
-  // Recurring event fields
-  @Column({ nullable: true, type: 'varchar', length: 50 })
-  timeZone: string;
-
-  @Column({ nullable: true, type: 'jsonb' })
-  recurrenceRule: Record<string, any>;
-
-  @Column({ nullable: true, type: 'jsonb' })
-  recurrenceExceptions: string[];
-
-  @Column({ nullable: true })
-  recurrenceUntil: Date;
-
-  // Virtual field for human-readable recurrence description
-  // Not stored in the database
-  recurrenceDescription?: string;
-
-  @Column({ nullable: true })
-  recurrenceCount: number;
-
-  @Column({ nullable: false, default: false })
-  @Index()
-  isRecurring: boolean;
-
-  // Legacy fields for backward compatibility
-  @Column({ nullable: true })
-  parentEventId: number;
-
-  @ManyToOne(() => EventEntity, (event) => event.occurrences, {
-    nullable: true,
-  })
-  @JoinColumn({ name: 'parentEventId' })
-  parentEvent: EventEntity;
-
-  @OneToMany(() => EventEntity, (event) => event.parentEvent)
-  occurrences: EventEntity[];
-
-  @Column({ nullable: false, default: false })
-  isRecurrenceException: boolean;
-
-  @Column({ nullable: true })
-  originalDate: Date;
-
-  @Column({ nullable: false, default: false })
-  @Index('IDX_events_recurrence_split_point')
-  recurrenceSplitPoint: boolean;
-
-  // New series-based recurrence model
+  // Series-based recurrence model
   @Column({ nullable: true })
   seriesId: number;
 
@@ -234,12 +187,9 @@ export class EventEntity
   @JoinColumn({ name: 'seriesId' })
   series: EventSeriesEntity;
 
-  @Column({ nullable: false, default: false })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   @Index()
-  materialized: boolean;
-
-  @Column({ nullable: true })
-  originalOccurrenceDate: Date;
+  seriesSlug: string;
 
   // Additional RFC 5545/7986 properties
   @Column({ nullable: true, type: 'varchar', length: 20 })

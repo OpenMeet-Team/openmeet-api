@@ -50,6 +50,13 @@ Recently, we've aligned the frontend and backend interfaces for recurrence rules
 - Completely remove old recurrence code
 - Address any bugs identified during client transition
 
+### April 3, 2025: Database Schema Optimization
+
+- Removed the `materialized` column from the events table to simplify the database schema
+- Updated code to treat any event with a seriesId as part of a series
+- Modified the API to keep the materialized property in responses (computed rather than stored)
+- Fixed compatibility issues with existing database schemas
+
 ## Technical Changes
 
 - EventEntity now has a ManyToOne relationship with EventSeriesEntity

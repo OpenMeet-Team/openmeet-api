@@ -192,7 +192,7 @@ describe('EventOccurrenceService', () => {
       parentEvent.name = 'Test Series Event';
       parentEvent.isRecurring = true;
       parentEvent.seriesId = 101;
-      parentEvent.series = null;
+      parentEvent.series = undefined;
 
       // Mock the findOne call to get the series
       const eventWithSeries = {

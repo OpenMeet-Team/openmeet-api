@@ -240,7 +240,7 @@ describe('EventSeries Core Functionality', () => {
         const date = new Date(dateStr);
 
         if (!isValidDate(date)) {
-          throw new Error(`Invalid date for series ${series.slug}`);
+          throw new Error('Invalid date');
         }
 
         return { valid: true };

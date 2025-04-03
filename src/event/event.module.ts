@@ -1,4 +1,4 @@
-import { forwardRef, Module } from '@nestjs/common';
+import { forwardRef, Module, Provider } from '@nestjs/common';
 import { EventController } from './event.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
@@ -18,10 +18,15 @@ import { BlueskyModule } from '../bluesky/bluesky.module';
 import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
-import { EventOccurrenceService } from './services/occurrences/event-occurrence.service';
 import { ChatModule } from '../chat/chat.module';
 import { ICalendarService } from './services/ical/ical.service';
 import { EventSeriesModule } from '../event-series/event-series.module';
+
+// Create a provider for the DiscussionService
+const discussionServiceProvider: Provider = {
+  provide: 'DiscussionService',
+  useValue: {}, // Providing an empty object since it's optional
+};
 
 @Module({
   imports: [
@@ -44,17 +49,16 @@ import { EventSeriesModule } from '../event-series/event-series.module';
     EventManagementService,
     EventQueryService,
     EventRecommendationService,
-    EventOccurrenceService,
     FilesS3PresignedService,
     EventListener,
     EventRoleService,
     ICalendarService,
+    discussionServiceProvider,
   ],
   exports: [
     EventManagementService,
     EventQueryService,
     EventRecommendationService,
-    EventOccurrenceService,
   ],
 })
 export class EventModule {}

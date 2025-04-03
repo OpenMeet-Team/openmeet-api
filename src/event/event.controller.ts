@@ -11,6 +11,7 @@ import {
   Query,
   Header,
   Res,
+  NotFoundException,
 } from '@nestjs/common';
 // import { Response } from 'express'; - removed unused import
 
@@ -127,7 +128,11 @@ export class EventController {
     @Param('slug') slug: string,
     @AuthUser() user: User,
   ): Promise<EventEntity> {
-    return this.eventQueryService.showEvent(slug, user?.id);
+    const event = await this.eventQueryService.showEvent(slug, user?.id);
+    if (!event) {
+      throw new NotFoundException(`Event with slug ${slug} not found`);
+    }
+    return event;
   }
 
   @Permissions({
@@ -326,7 +331,11 @@ export class EventController {
     );
 
     // Return the updated current occurrence
-    return this.eventQueryService.findEventBySlug(slug);
+    const event = await this.eventQueryService.findEventBySlug(slug);
+    if (!event) {
+      throw new NotFoundException(`Event with slug ${slug} not found`);
+    }
+    return event;
   }
 
   /**

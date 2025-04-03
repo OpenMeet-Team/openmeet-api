@@ -1269,6 +1269,9 @@ export class ChatRoomService {
     });
   }
 
+  // The detailed implementations are moved to the generic deleteEntityChatRooms method
+  // Only the calling methods remain, delegating to the generic implementation
+
   /**
    * Helper method to find an existing direct chat room between two users
    *
@@ -1877,6 +1880,7 @@ export class ChatRoomService {
 
   /**
    * Delete all chat rooms associated with a group
+   * This delegates to the generic deleteEntityChatRooms implementation
    */
   @Trace('chat-room.deleteGroupChatRooms')
   async deleteGroupChatRooms(groupId: number): Promise<void> {
@@ -1885,6 +1889,7 @@ export class ChatRoomService {
 
   /**
    * Delete all chat rooms associated with an event
+   * This delegates to the generic deleteEntityChatRooms implementation
    */
   @Trace('chat-room.deleteEventChatRooms')
   async deleteEventChatRooms(eventId: number): Promise<void> {

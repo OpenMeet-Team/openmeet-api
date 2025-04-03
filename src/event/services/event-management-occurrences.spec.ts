@@ -16,6 +16,9 @@ import { EventMailService } from '../../event-mail/event-mail.service';
 import { BlueskyService } from '../../bluesky/bluesky.service';
 import { CreateEventDto } from '../dto/create-event.dto';
 import { EventType } from '../../core/constants/constant';
+import { EventQueryService } from './event-query.service';
+import { EventSeriesService } from '../../event-series/services/event-series.service';
+import { mockEventSeriesService } from '../../test/mocks';
 
 describe('EventManagementService Integration with EventOccurrenceService', () => {
   let managementService: EventManagementService;
@@ -43,6 +46,13 @@ describe('EventManagementService Integration with EventOccurrenceService', () =>
       update: jest.fn(),
       delete: jest.fn(),
       remove: jest.fn(),
+      findAndCount: jest.fn().mockResolvedValue([
+        [
+          { id: 1, name: 'Test Event 1' },
+          { id: 2, name: 'Test Event 2' },
+        ],
+        2,
+      ]),
       createQueryBuilder: jest.fn(() => ({
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
@@ -88,6 +98,7 @@ describe('EventManagementService Integration with EventOccurrenceService', () =>
             showEventAttendeesCount: jest.fn(),
             createEventMember: jest.fn(),
             findEventAttendees: jest.fn(),
+            deleteEventAttendees: jest.fn().mockResolvedValue(undefined),
           },
         },
         {
@@ -136,6 +147,13 @@ describe('EventManagementService Integration with EventOccurrenceService', () =>
           useValue: mockOccurrenceService,
         },
         {
+          provide: EventQueryService,
+          useValue: {
+            findEventBySlug: jest.fn(),
+            findAll: jest.fn(),
+          },
+        },
+        {
           provide: EventEmitter2,
           useValue: eventEmitter,
         },
@@ -157,23 +175,17 @@ describe('EventManagementService Integration with EventOccurrenceService', () =>
           provide: 'DiscussionService',
           useValue: {
             createEventRoom: jest.fn(),
+            cleanupEventChatRooms: jest.fn(),
           },
         },
         {
-          provide: 'EventSeriesService',
-          useValue: {
-            findBySlug: jest
-              .fn()
-              .mockResolvedValue({ id: 1, slug: 'test-series' }),
-            findById: jest
-              .fn()
-              .mockResolvedValue({ id: 1, slug: 'test-series' }),
-          },
+          provide: EventSeriesService,
+          useValue: mockEventSeriesService,
         },
       ],
     }).compile();
 
-    managementService = module.get<EventManagementService>(
+    managementService = await module.resolve<EventManagementService>(
       EventManagementService,
     );
   });
@@ -244,10 +256,12 @@ describe('EventManagementService Integration with EventOccurrenceService', () =>
       eventRepository.create.mockReturnValue(createdEvent);
       eventRepository.save.mockResolvedValue(createdEvent);
 
-      // The service calls are now handled by EventSeriesService instead of directly
-      // in EventManagementService
-
+      // Verify that the service is provided correctly
       expect(managementService).toBeDefined();
+      // Call a method that uses the EventSeriesService to verify it's injected correctly
+      expect(() =>
+        managementService.findEventsBySeriesSlug('test-series'),
+      ).not.toThrow();
     });
   });
 

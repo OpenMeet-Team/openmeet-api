@@ -243,7 +243,7 @@ export class EventSeriesController {
   })
   async promoteToSeries(
     @Param('eventSlug') eventSlug: string,
-    @Body() promoteData: { recurrenceRule: any },
+    @Body() promoteData: { recurrenceRule: any; timeZone: string },
     @Request() req,
   ) {
     this.logger.log(
@@ -254,7 +254,7 @@ export class EventSeriesController {
       const eventSeries = await this.eventSeriesService.createFromExistingEvent(
         eventSlug,
         promoteData.recurrenceRule,
-
+        promoteData.timeZone,
         req.user.id,
       );
 

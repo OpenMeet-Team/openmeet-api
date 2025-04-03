@@ -303,10 +303,46 @@ export class RedesignRecurringEvents1743371499235
         onDelete: 'SET NULL',
       }),
     );
+
+    // 10. Drop materialized column which is no longer needed
+    try {
+      // First drop the index on the materialized column if it exists
+      await queryRunner.query(`
+        DROP INDEX IF EXISTS "${schema}"."IDX_events_materialized";
+      `);
+
+      // Then drop the materialized column
+      await queryRunner.query(`
+        ALTER TABLE "${schema}"."events" 
+        DROP COLUMN IF EXISTS "materialized";
+      `);
+      console.log('Successfully dropped materialized column from events table');
+    } catch (error) {
+      console.warn('Error dropping materialized column:', error.message);
+      // Continue with migration even if dropping the column fails
+      // This allows the migration to work on fresh installs where the column doesn't exist
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     const schema = queryRunner.connection.options.name || 'public';
+
+    // 0. Add back materialized column if it was dropped
+    try {
+      await queryRunner.query(`
+        ALTER TABLE "${schema}"."events" 
+        ADD COLUMN IF NOT EXISTS "materialized" boolean NOT NULL DEFAULT false;
+      `);
+
+      // Re-add the index
+      await queryRunner.query(`
+        CREATE INDEX IF NOT EXISTS "IDX_events_materialized" 
+        ON "${schema}"."events" ("materialized");
+      `);
+    } catch (error) {
+      console.warn('Error adding back materialized column:', error.message);
+      // Continue with migration rollback even if adding the column fails
+    }
 
     // 1. Drop foreign keys from events table
     await queryRunner.dropForeignKey(

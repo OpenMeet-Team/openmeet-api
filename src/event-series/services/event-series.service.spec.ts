@@ -110,21 +110,23 @@ describe('EventSeriesService', () => {
         description: 'A new test series',
         timeZone: 'America/New_York',
         recurrenceRule: {
-          freq: 'WEEKLY',
+          frequency: 'WEEKLY',
           interval: 1,
-          byday: ['MO', 'WE', 'FR'],
+          byweekday: ['MO', 'WE', 'FR'],
         },
         groupId: 1,
         imageId: 2,
-        templateStartDate: '2025-10-01T15:00:00Z',
-        templateEndDate: '2025-10-01T17:00:00Z',
-        templateType: 'in-person',
-        templateLocation: 'Test Location',
-        templateLocationOnline: 'https://zoom.us/j/123456789',
-        templateMaxAttendees: 20,
-        templateRequireApproval: false,
-        templateAllowWaitlist: true,
-        templateCategories: [1, 2, 3],
+        templateEvent: {
+          startDate: '2025-10-01T15:00:00Z',
+          endDate: '2025-10-01T17:00:00Z',
+          type: 'in-person',
+          location: 'Test Location',
+          locationOnline: 'https://zoom.us/j/123456789',
+          maxAttendees: 20,
+          requireApproval: false,
+          allowWaitlist: true,
+          categories: [1, 2, 3],
+        },
       };
 
       const result = await service.create(createDto, 1);
@@ -144,12 +146,14 @@ describe('EventSeriesService', () => {
         name: 'New Series',
         timeZone: 'America/New_York',
         recurrenceRule: {
-          freq: 'WEEKLY',
+          frequency: 'WEEKLY',
           interval: 1,
         },
-        templateStartDate: '2025-10-01T15:00:00Z',
-        templateEndDate: '2025-10-01T17:00:00Z',
-        templateType: 'in-person',
+        templateEvent: {
+          startDate: '2025-10-01T15:00:00Z',
+          endDate: '2025-10-01T17:00:00Z',
+          type: 'in-person',
+        },
       };
 
       jest
@@ -170,9 +174,11 @@ describe('EventSeriesService', () => {
           interval: 1,
           count: 10,
         },
-        templateStartDate: '2025-10-01T15:00:00Z',
-        templateEndDate: '2025-10-01T17:00:00Z',
-        templateType: 'in-person',
+        templateEvent: {
+          startDate: '2025-10-01T15:00:00Z',
+          endDate: '2025-10-01T17:00:00Z',
+          type: 'in-person',
+        },
       };
 
       const result = await service.create(createDto, 1);
@@ -184,16 +190,17 @@ describe('EventSeriesService', () => {
         name: 'Daily Series',
         timeZone: 'America/New_York',
         recurrenceRule: {
-          freq: 'DAILY', // Use freq as defined in RecurrenceRuleDto
+          frequency: 'DAILY',
           interval: 1,
           count: 10,
-        } as any, // Use type assertion for the test
-        templateStartDate: '2025-10-01T15:00:00Z',
-        templateEndDate: '2025-10-01T17:00:00Z',
-        templateType: 'in-person',
+        },
+        templateEvent: {
+          startDate: '2025-10-01T15:00:00Z',
+          endDate: '2025-10-01T17:00:00Z',
+          type: 'in-person',
+        },
       };
 
-      // This test should pass with the fix to handle both freq and frequency
       const result = await service.create(createDto, 1);
       expect(result).toBeDefined();
     });
@@ -203,12 +210,14 @@ describe('EventSeriesService', () => {
         name: 'Invalid Series',
         timeZone: 'America/New_York',
         recurrenceRule: {
-          freq: 'INVALID',
+          frequency: 'INVALID',
           interval: 1,
+        } as any,
+        templateEvent: {
+          startDate: '2025-10-01T15:00:00Z',
+          endDate: '2025-10-01T17:00:00Z',
+          type: 'in-person',
         },
-        templateStartDate: '2025-10-01T15:00:00Z',
-        templateEndDate: '2025-10-01T17:00:00Z',
-        templateType: 'in-person',
       };
 
       jest
@@ -292,7 +301,7 @@ describe('EventSeriesService', () => {
         name: 'Updated Series',
         description: 'Updated description',
         recurrenceRule: {
-          freq: 'WEEKLY',
+          frequency: 'WEEKLY',
           interval: 2,
         },
       };

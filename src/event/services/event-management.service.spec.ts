@@ -183,6 +183,11 @@ describe.skip('EventManagementService', () => {
               { id: 1, name: 'Test Event 1' },
               { id: 2, name: 'Test Event 2' },
             ]),
+            findEventBySlug: jest.fn().mockResolvedValue({
+              id: 1,
+              name: 'Test Event',
+              slug: 'test-event',
+            }),
           },
         },
       ],
@@ -351,6 +356,7 @@ describe.skip('EventManagementService', () => {
         } as CreateEventDto,
         mockUser.id,
         mockSeriesSlug,
+        new Date('2023-10-01T12:00:00Z'),
       );
 
       expect(result).toBeDefined();

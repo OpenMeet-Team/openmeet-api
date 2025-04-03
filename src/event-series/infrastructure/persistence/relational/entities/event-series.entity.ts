@@ -60,11 +60,11 @@ export class EventSeriesEntity
   @JoinColumn({ name: 'imageId' })
   image?: FileEntity;
 
-  @Column({ nullable: true, type: 'varchar', length: 50 })
-  timeZone: string;
+  @Column({ nullable: false, type: 'jsonb' })
+  recurrenceRule: Record<string, any>;
 
   @Column({ nullable: true, type: 'jsonb' })
-  recurrenceRule: Record<string, any>;
+  recurrenceExceptions: string[];
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   matrixRoomId: string;

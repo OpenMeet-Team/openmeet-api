@@ -13,6 +13,12 @@ The EventSeries implementation provides:
 - Compatible with iCalendar standards
 - More maintainable entity relationships
 
+### Implementation Change (April 3, 2025)
+
+We have removed the `materialized` column from the database schema. This property was originally intended to track which events were materialized occurrences vs. regular events, but we found it caused compatibility issues with existing database schemas. We've updated the code to treat any event with a `seriesId` reference as part of a series, and any event that exists in the database as already materialized by definition.
+
+The API still maintains the same contracts by keeping the `materialized` property in responses for compatibility, but this is now computed based on whether an occurrence has an actual database record rather than being stored in the database.
+
 ## Completed Changes
 
 - ✅ Implemented EventSeries entity and related functionality
@@ -23,6 +29,7 @@ The EventSeries implementation provides:
 - ✅ Modified EventOccurrenceService to use EventSeriesOccurrenceService
 - ✅ Updated tests to support both legacy and new implementations
 - ✅ Implemented backward compatibility to ensure smooth transition
+- ✅ Removed dependency on the `materialized` column to improve database compatibility
 
 ## Remaining Tasks
 
@@ -44,8 +51,8 @@ The EventSeries model provides a more flexible and maintainable way to handle re
 
 2. **Occurrence Handling**:
    - Virtual occurrences are generated on-demand
-   - Materialized occurrences are stored as regular events with a series reference
-   - Modified occurrences have the materialized flag and originalOccurrenceDate
+   - Occurrences that exist in the database (with a database record) are treated as materialized
+   - Modified occurrences have the originalOccurrenceDate field set to track which date they were generated for
 
 3. **API Endpoints**:
    - CRUD operations for series management
@@ -80,3 +87,4 @@ The transition from the old recurrence implementation to EventSeries follows a c
 - Full timezone support
 - Better standardization with iCalendar
 - Improved support for third-party integrations
+- Simplified database schema with better compatibility
