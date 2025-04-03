@@ -37,9 +37,7 @@ import { trace } from '@opentelemetry/api';
 import { CreateEventAttendeeDto } from '../../event-attendee/dto/create-eventAttendee.dto';
 import { UpdateEventAttendeeDto } from '../../event-attendee/dto/update-eventAttendee.dto';
 import { EventOccurrenceService } from './occurrences/event-occurrence.service';
-import { OccurrenceOptions } from '../../recurrence/interfaces/recurrence.interface';
-// Import EventSeries types
-import { EventSeriesEntity } from '../../event-series/infrastructure/persistence/relational/entities/event-series.entity';
+import { EventSeriesService } from '../../event-series/services/event-series.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventManagementService {
@@ -62,8 +60,8 @@ export class EventManagementService {
     private readonly eventOccurrenceService: EventOccurrenceService,
     @Inject(forwardRef(() => 'DiscussionService'))
     private readonly discussionService: any, // Using any here to avoid circular dependency issues
-    @Inject(forwardRef(() => 'EventSeriesService'))
-    private readonly eventSeriesService: any, // Using any here to avoid circular dependency issues
+    @Inject(forwardRef(() => EventSeriesService))
+    private readonly eventSeriesService: EventSeriesService,
   ) {
     void this.initializeRepository();
   }
@@ -81,10 +79,25 @@ export class EventManagementService {
   async create(
     createEventDto: CreateEventDto,
     userId: number,
+    options: { materialized?: boolean } = {},
   ): Promise<EventEntity> {
     this.logger.debug('Creating event with dto:', createEventDto);
 
     await this.initializeRepository();
+
+    // Handle series lookup if seriesSlug is provided
+    let seriesId: number | undefined;
+    if (createEventDto.seriesSlug) {
+      const series = await this.eventSeriesService.findBySlug(
+        createEventDto.seriesSlug,
+      );
+      if (!series) {
+        throw new NotFoundException(
+          `Event series with slug ${createEventDto.seriesSlug} not found`,
+        );
+      }
+      seriesId = series.id;
+    }
 
     // Handle categories
     let categories: CategoryEntity[] = [];
@@ -134,6 +147,8 @@ export class EventManagementService {
         : null,
       image: createEventDto.image,
       categories,
+      seriesId,
+      materialized: options.materialized ?? false, // Use the provided materialized flag or default to false
 
       // Recurrence fields
       isRecurring: !!createEventDto.recurrenceRule,
@@ -260,43 +275,7 @@ export class EventManagementService {
 
     this.eventEmitter.emit('event.created', eventWithTenant);
 
-    // Generate occurrences if this is a recurring event
-    if (createdEvent.isRecurring && createdEvent.recurrenceRule) {
-      try {
-        this.logger.log(
-          `Generating occurrences for recurring event: ${createdEvent.id}`,
-        );
-
-        // Set occurrence generation options
-        const occurrenceOptions: OccurrenceOptions = {
-          timeZone: createdEvent.timeZone || 'UTC',
-          count: createdEvent.recurrenceCount,
-          until: createdEvent.recurrenceUntil,
-          exdates: createdEvent.recurrenceExceptions,
-        };
-
-        // Generate occurrences asynchronously
-        void this.eventOccurrenceService
-          .generateOccurrences(createdEvent, occurrenceOptions)
-          .then((occurrences) => {
-            this.logger.log(
-              `Generated ${occurrences.length} occurrences for event ${createdEvent.id}`,
-            );
-          })
-          .catch((error) => {
-            this.logger.error(
-              `Error generating occurrences: ${error.message}`,
-              error.stack,
-            );
-          });
-      } catch (error) {
-        this.logger.error(
-          `Error generating occurrences for event ${createdEvent.id}: ${error.message}`,
-          error.stack,
-        );
-        // Don't block the event creation if occurrence generation fails
-      }
-    }
+    // Note: Recurrence is now handled by EventSeries, not through EventEntity directly
 
     return createdEvent;
   }
@@ -393,55 +372,7 @@ export class EventManagementService {
       }
     }
 
-    // Handle recurring event updates if needed
-    if (savedEvent.isRecurring && savedEvent.recurrenceRule) {
-      // If recurrence pattern changed, regenerate occurrences
-      const recurrenceChanged =
-        event.recurrenceRule?.freq !== savedEvent.recurrenceRule?.freq ||
-        event.recurrenceRule?.interval !==
-          savedEvent.recurrenceRule?.interval ||
-        event.recurrenceRule?.count !== savedEvent.recurrenceRule?.count ||
-        event.recurrenceRule?.until !== savedEvent.recurrenceRule?.until;
-
-      if (recurrenceChanged) {
-        try {
-          this.logger.log(
-            `Updating occurrences for recurring event: ${savedEvent.id}`,
-          );
-
-          // First delete all existing occurrences
-          await this.eventOccurrenceService.deleteAllOccurrences(savedEvent.id);
-
-          // Then generate new occurrences
-          const occurrenceOptions: OccurrenceOptions = {
-            timeZone: savedEvent.timeZone || 'UTC',
-            count: savedEvent.recurrenceCount,
-            until: savedEvent.recurrenceUntil,
-            exdates: savedEvent.recurrenceExceptions,
-          };
-
-          // Generate occurrences asynchronously
-          void this.eventOccurrenceService
-            .generateOccurrences(savedEvent, occurrenceOptions)
-            .then((occurrences) => {
-              this.logger.log(
-                `Regenerated ${occurrences.length} occurrences for event ${savedEvent.id}`,
-              );
-            })
-            .catch((error) => {
-              this.logger.error(
-                `Error regenerating occurrences: ${error.message}`,
-                error.stack,
-              );
-            });
-        } catch (error) {
-          this.logger.error(
-            `Error regenerating occurrences for event ${savedEvent.id}: ${error.message}`,
-            error.stack,
-          );
-        }
-      }
-    }
+    // Note: Recurrence is now handled by EventSeries, not through EventEntity directly
 
     return savedEvent;
   }
@@ -605,94 +536,72 @@ export class EventManagementService {
   }
 
   /**
-   * Create an event as part of a series using series ID
-   * @internal This method is primarily for internal use - prefer createSeriesOccurrenceBySlug for user-facing code
+   * Create an event as part of a series using series slug
    */
   @Trace('event-management.createSeriesOccurrence')
   async createSeriesOccurrence(
-    createEventDto: CreateEventDto,
+    eventData: CreateEventDto,
     userId: number,
-    seriesId: number,
-    isModified: boolean = false,
-    materializedDate?: Date
+    seriesSlug: string,
+    occurrenceDate: Date,
   ): Promise<EventEntity> {
-    try {
-      await this.initializeRepository();
+    this.logger.debug('Creating series occurrence:', {
+      eventData,
+      userId,
+      seriesSlug,
+      occurrenceDate,
+    });
 
-      // Mark this event as part of a series
-      const event = await this.create(createEventDto, userId);
-      
-      // Update the event to link it to the series
-      // Using specific fields that exist in the entity
-      await this.eventRepository.update(event.id, {
-        seriesId,
-        materialized: true,
-        originalOccurrenceDate: materializedDate || new Date(),
-      });
-
-      // Reload the event with the updated fields
-      const updatedEvent = await this.eventRepository.findOne({
-        where: { id: event.id },
-        relations: ['user', 'group', 'categories', 'image'],
-      });
-      
-      if (!updatedEvent) {
-        throw new NotFoundException(`Event with ID ${event.id} not found after update`);
-      }
-
-      // Log audit
-      this.auditLogger.log(
-        'Series occurrence created',
-        {
-          context: {
-            eventId: event.id,
-            seriesId,
-            isModified,
-            userId,
-          },
-        },
-        userId,
+    // Get the series by slug
+    const series = await this.eventSeriesService.findBySlug(seriesSlug);
+    if (!series) {
+      throw new NotFoundException(
+        `Event series with slug ${seriesSlug} not found`,
       );
-
-      return updatedEvent;
-    } catch (error) {
-      this.logger.error(`Error creating series occurrence: ${error.message}`, error.stack);
-      throw error;
     }
+
+    // Create the event with materialized and seriesId set
+    const event = await this.create(
+      {
+        ...eventData,
+        startDate: occurrenceDate,
+        seriesSlug,
+      },
+      userId,
+      { materialized: true }, // Pass materialized: true when creating series occurrences
+    );
+
+    // Reload the event to get the updated fields
+    const updatedEvent = await this.eventRepository.findOne({
+      where: { id: event.id },
+      relations: ['user', 'group', 'categories', 'image'],
+    });
+
+    if (!updatedEvent) {
+      throw new NotFoundException(
+        `Event with ID ${event.id} not found after update`,
+      );
+    }
+
+    return updatedEvent;
   }
-  
+
   /**
-   * Create an event as part of a series using the series slug
-   * This is the preferred method for user-facing code
+   * @deprecated Use createSeriesOccurrence with slug instead
    */
   @Trace('event-management.createSeriesOccurrenceBySlug')
   async createSeriesOccurrenceBySlug(
     createEventDto: CreateEventDto,
     userId: number,
     seriesSlug: string,
-    isModified: boolean = false,
-    materializedDate?: Date
+    occurrenceDate: Date,
   ): Promise<EventEntity> {
-    try {
-      // Get the series by slug using the EventSeriesService
-      const series = await this.eventSeriesService.findBySlug(seriesSlug);
-      
-      if (!series) {
-        throw new NotFoundException(`Event series with slug ${seriesSlug} not found`);
-      }
-      
-      // Then create the occurrence using the series ID
-      return this.createSeriesOccurrence(
-        createEventDto,
-        userId,
-        series.id,
-        isModified,
-        materializedDate
-      );
-    } catch (error) {
-      this.logger.error(`Error creating series occurrence by slug: ${error.message}`, error.stack);
-      throw error;
-    }
+    return this.createSeriesOccurrence(
+      createEventDto,
+      userId,
+      seriesSlug,
+      occurrenceDate,
+    );
   }
 
   /**
@@ -704,7 +613,7 @@ export class EventManagementService {
     slug: string,
     updateEventDto: UpdateEventDto,
     userId: number,
-    markAsModified: boolean = true
+    markAsModified: boolean = true,
   ): Promise<EventEntity> {
     try {
       await this.initializeRepository();
@@ -722,7 +631,9 @@ export class EventManagementService {
         // If the user is not the owner, check if they have admin rights
         const user = await this.userService.findById(userId);
         if (!user || !user.role || user.role.name !== 'admin') {
-          throw new UnprocessableEntityException('User is not authorized to modify this event');
+          throw new UnprocessableEntityException(
+            'User is not authorized to modify this event',
+          );
         }
       }
 
@@ -741,11 +652,13 @@ export class EventManagementService {
           where: { id: event.id },
           relations: ['user', 'group', 'categories', 'image'],
         });
-        
+
         if (!reloadedEvent) {
-          throw new NotFoundException(`Event with ID ${event.id} not found after update`);
+          throw new NotFoundException(
+            `Event with ID ${event.id} not found after update`,
+          );
         }
-        
+
         // Log audit
         this.auditLogger.log(
           'Series occurrence modified',
@@ -764,11 +677,14 @@ export class EventManagementService {
 
       return updatedEvent;
     } catch (error) {
-      this.logger.error(`Error updating series occurrence: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error updating series occurrence: ${error.message}`,
+        error.stack,
+      );
       throw error;
     }
   }
-  
+
   /**
    * Find all events (occurrences) that belong to a series by ID
    * @internal This method is primarily for internal use - prefer findEventsBySeriesSlug for user-facing code
@@ -776,15 +692,15 @@ export class EventManagementService {
   @Trace('event-management.findEventsBySeriesId')
   async findEventsBySeriesId(
     seriesId: number,
-    options?: { page: number; limit: number }
+    options?: { page: number; limit: number },
   ): Promise<[EventEntity[], number]> {
     try {
       await this.initializeRepository();
-      
+
       const page = options?.page || 1;
       const limit = options?.limit || 10;
       const skip = (page - 1) * limit;
-      
+
       const [events, total] = await this.eventRepository.findAndCount({
         where: { seriesId },
         skip,
@@ -792,10 +708,13 @@ export class EventManagementService {
         order: { startDate: 'ASC' },
         relations: ['user', 'group', 'categories', 'image'],
       });
-      
+
       return [events, total];
     } catch (error) {
-      this.logger.error(`Error finding events by seriesId: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error finding events by seriesId: ${error.message}`,
+        error.stack,
+      );
       throw error;
     }
   }
@@ -807,20 +726,23 @@ export class EventManagementService {
   @Trace('event-management.findEventsBySeriesSlug')
   async findEventsBySeriesSlug(
     seriesSlug: string,
-    options?: { page: number; limit: number }
+    options?: { page: number; limit: number },
   ): Promise<[EventEntity[], number]> {
     try {
       // Get the series by slug using the EventSeriesService
       const series = await this.eventSeriesService.findBySlug(seriesSlug);
-      
+
       if (!series) {
         throw new NotFoundException(`Series with slug ${seriesSlug} not found`);
       }
-      
+
       // Now find all events that belong to this series
       return this.findEventsBySeriesId(series.id, options);
     } catch (error) {
-      this.logger.error(`Error finding events by series slug: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error finding events by series slug: ${error.message}`,
+        error.stack,
+      );
       throw error;
     }
   }
@@ -985,234 +907,5 @@ export class EventManagementService {
     return await this.eventAttendeeService.showEventAttendee(attendeeId);
   }
 
-  /**
-   * Create or update an exception occurrence for a recurring event
-   * This allows modifying a single occurrence without affecting the series
-   *
-   * @param slug - The slug of the parent recurring event
-   * @param occurrenceDate - The date of the occurrence to modify
-   * @param updateEventDto - The modifications to apply to this occurrence
-   * @returns The modified occurrence event
-   */
-  @Trace('event-management.createExceptionOccurrence')
-  async createExceptionOccurrence(
-    slug: string,
-    occurrenceDate: Date,
-    updateEventDto: UpdateEventDto,
-  ): Promise<EventEntity> {
-    await this.initializeRepository();
-
-    // Find the parent event
-    const parentEvent = await this.eventRepository.findOne({
-      where: { slug, isRecurring: true },
-    });
-
-    if (!parentEvent) {
-      throw new UnprocessableEntityException(
-        'Parent event not found or not recurring',
-      );
-    }
-
-    try {
-      // Create exception occurrence with modifications
-      const exceptionEvent =
-        await this.eventOccurrenceService.createExceptionOccurrence(
-          parentEvent.id,
-          occurrenceDate,
-          updateEventDto as Partial<EventEntity>,
-        );
-
-      this.logger.log(
-        `Created exception occurrence of event ${parentEvent.id} for date ${occurrenceDate}`,
-      );
-
-      // Emit event for listeners
-      this.eventEmitter.emit('event.occurrence.modified', {
-        parentEventId: parentEvent.id,
-        occurrenceId: exceptionEvent.id,
-        originalDate: occurrenceDate,
-        tenantId: this.request.tenantId,
-      });
-
-      return exceptionEvent;
-    } catch (error) {
-      this.logger.error(
-        `Error creating exception occurrence: ${error.message}`,
-        error.stack,
-      );
-      throw new UnprocessableEntityException(
-        `Failed to create exception occurrence: ${error.message}`,
-      );
-    }
-  }
-
-  /**
-   * Exclude a specific occurrence from a recurring event series
-   *
-   * @param slug - The slug of the parent recurring event
-   * @param occurrenceDate - The date of the occurrence to exclude
-   * @returns Success status
-   */
-  @Trace('event-management.excludeOccurrence')
-  async excludeOccurrence(
-    slug: string,
-    occurrenceDate: Date,
-  ): Promise<boolean> {
-    await this.initializeRepository();
-
-    // Find the parent event
-    const parentEvent = await this.eventRepository.findOne({
-      where: { slug, isRecurring: true },
-    });
-
-    if (!parentEvent) {
-      throw new UnprocessableEntityException(
-        'Parent event not found or not recurring',
-      );
-    }
-
-    try {
-      // Exclude the occurrence
-      const result = await this.eventOccurrenceService.excludeOccurrence(
-        parentEvent.id,
-        occurrenceDate,
-      );
-
-      if (result) {
-        this.logger.log(
-          `Excluded occurrence of event ${parentEvent.id} for date ${occurrenceDate}`,
-        );
-
-        // Emit event for listeners
-        this.eventEmitter.emit('event.occurrence.excluded', {
-          parentEventId: parentEvent.id,
-          occurrenceDate: occurrenceDate,
-          tenantId: this.request.tenantId,
-        });
-      } else {
-        this.logger.warn(
-          `Failed to exclude occurrence of event ${parentEvent.id} for date ${occurrenceDate}`,
-        );
-      }
-
-      return result;
-    } catch (error) {
-      this.logger.error(
-        `Error excluding occurrence: ${error.message}`,
-        error.stack,
-      );
-      throw new UnprocessableEntityException(
-        `Failed to exclude occurrence: ${error.message}`,
-      );
-    }
-  }
-
-  /**
-   * Include a previously excluded occurrence in a recurring event series
-   *
-   * @param slug - The slug of the parent recurring event
-   * @param occurrenceDate - The date of the occurrence to include
-   * @returns Success status
-   */
-  @Trace('event-management.includeOccurrence')
-  async includeOccurrence(
-    slug: string,
-    occurrenceDate: Date,
-  ): Promise<boolean> {
-    await this.initializeRepository();
-
-    // Find the parent event
-    const parentEvent = await this.eventRepository.findOne({
-      where: { slug, isRecurring: true },
-    });
-
-    if (!parentEvent) {
-      throw new UnprocessableEntityException(
-        'Parent event not found or not recurring',
-      );
-    }
-
-    try {
-      // Include the occurrence
-      const result = await this.eventOccurrenceService.includeOccurrence(
-        parentEvent.id,
-        occurrenceDate,
-      );
-
-      if (result) {
-        this.logger.log(
-          `Included occurrence of event ${parentEvent.id} for date ${occurrenceDate}`,
-        );
-
-        // Emit event for listeners
-        this.eventEmitter.emit('event.occurrence.included', {
-          parentEventId: parentEvent.id,
-          occurrenceDate: occurrenceDate,
-          tenantId: this.request.tenantId,
-        });
-      } else {
-        this.logger.warn(
-          `Failed to include occurrence of event ${parentEvent.id} for date ${occurrenceDate}`,
-        );
-      }
-
-      return result;
-    } catch (error) {
-      this.logger.error(
-        `Error including occurrence: ${error.message}`,
-        error.stack,
-      );
-      throw new UnprocessableEntityException(
-        `Failed to include occurrence: ${error.message}`,
-      );
-    }
-  }
-
-  /**
-   * Get occurrences of a recurring event within a date range
-   *
-   * @param slug - The slug of the parent recurring event
-   * @param startDate - Start of the date range
-   * @param endDate - End of the date range
-   * @param includeExceptions - Whether to include exception occurrences
-   * @returns Array of occurrence events within the specified range
-   */
-  @Trace('event-management.getOccurrencesInRange')
-  async getOccurrencesInRange(
-    slug: string,
-    startDate: Date,
-    endDate: Date,
-    includeExceptions: boolean = true,
-  ): Promise<EventEntity[]> {
-    await this.initializeRepository();
-
-    // Find the parent event
-    const parentEvent = await this.eventRepository.findOne({
-      where: { slug, isRecurring: true },
-    });
-
-    if (!parentEvent) {
-      throw new UnprocessableEntityException(
-        'Parent event not found or not recurring',
-      );
-    }
-
-    try {
-      // Get occurrences in range
-      return await this.eventOccurrenceService.getOccurrencesInRange(
-        parentEvent.id,
-        startDate,
-        endDate,
-        includeExceptions,
-      );
-    } catch (error) {
-      this.logger.error(
-        `Error getting occurrences in range: ${error.message}`,
-        error.stack,
-      );
-      throw new UnprocessableEntityException(
-        `Failed to get occurrences in range: ${error.message}`,
-      );
-    }
-  }
+  // Note: Recurrence management is now handled by EventSeries functionality
 }

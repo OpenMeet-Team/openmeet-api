@@ -1,5 +1,3 @@
-import { Test } from '@nestjs/testing';
-
 // This test file focuses on the behavioral contracts of the EventSeries services
 // rather than implementation details, avoiding circular dependency issues
 
@@ -76,7 +74,7 @@ describe('EventSeries Behavioral Tests', () => {
           return this.findBySlug(series.slug || 'test-series');
         },
 
-        async findAll(options = { page: 1, limit: 10 }) {
+        async findAll(_options = { page: 1, limit: 10 }) {
           const [series, total] = await mockSeriesRepository.findByUser();
 
           // Add descriptions
@@ -232,19 +230,19 @@ describe('EventSeries Behavioral Tests', () => {
     // Factory function for simplified service
     const createService = () => {
       return {
-        async findOccurrence(seriesSlug, occurrenceDate) {
+        async findOccurrence(_seriesSlug, _occurrenceDate) {
           await mockSeriesService.findBySlug();
           return mockEventRepo.findOne();
         },
 
-        async materializeOccurrence(seriesSlug, occurrenceDate) {
+        async materializeOccurrence(_seriesSlug, _occurrenceDate) {
           const series = await mockSeriesService.findBySlug();
-          const date = new Date(occurrenceDate);
+          const date = new Date(_occurrenceDate);
 
           // Validate date
           const isValid = mockRecurrenceService.isDateInRecurrencePattern();
           if (!isValid) {
-            throw new Error(`Invalid occurrence date: ${occurrenceDate}`);
+            throw new Error(`Invalid occurrence date: ${_occurrenceDate}`);
           }
 
           // Find template event
@@ -263,7 +261,7 @@ describe('EventSeries Behavioral Tests', () => {
             user: { id: 1 },
           };
 
-          const saved = await mockEventRepo.save(newOccurrence);
+          await mockEventRepo.save(newOccurrence);
           return mockEventQuery.findEventBySlug();
         },
 

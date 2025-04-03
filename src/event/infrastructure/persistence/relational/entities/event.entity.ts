@@ -31,6 +31,7 @@ import slugify from 'slugify';
 import { generateShortCode } from '../../../../../utils/short-code';
 import { SourceFields } from '../../../../../core/interfaces/source-data.interface';
 import { EventSourceType } from '../../../../../core/constants/source-type.constant';
+import { EventSeriesEntity } from '../../../../../event-series/infrastructure/persistence/relational/entities/event-series.entity';
 
 @Entity({ name: 'events' })
 export class EventEntity
@@ -224,17 +225,14 @@ export class EventEntity
   seriesId: number;
 
   @ManyToOne(
-    () => {
-      // Use a dynamic import without async/await to resolve circular dependency
-      return require('../../../../../event-series/infrastructure/persistence/relational/entities/event-series.entity').EventSeriesEntity;
-    },
-    (series: any) => series.events,
+    () => EventSeriesEntity,
+    (series: EventSeriesEntity) => series.events,
     {
       nullable: true,
     },
   )
   @JoinColumn({ name: 'seriesId' })
-  series: any; // Will resolve to EventSeriesEntity at runtime
+  series: EventSeriesEntity;
 
   @Column({ nullable: false, default: false })
   @Index()

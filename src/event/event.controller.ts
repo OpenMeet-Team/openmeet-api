@@ -42,7 +42,7 @@ import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
 import { ICalendarService } from './services/ical/ical.service';
-import { RecurrenceModificationService } from '../recurrence/services/recurrence-modification.service';
+import { EventSeriesOccurrenceService } from '../event-series/services/event-series-occurrence.service';
 
 @ApiTags('Events')
 @Controller('events')
@@ -55,7 +55,7 @@ export class EventController {
     private readonly eventRecommendationService: EventRecommendationService,
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly iCalendarService: ICalendarService,
-    private readonly recurrenceModificationService: RecurrenceModificationService,
+    private readonly eventSeriesOccurrenceService: EventSeriesOccurrenceService,
   ) {}
 
   @Get()
@@ -314,11 +314,19 @@ export class EventController {
     @Body() updateEventDto: UpdateEventDto,
     @AuthUser() _user: User,
   ): Promise<EventEntity> {
-    return this.recurrenceModificationService.splitSeriesAt(
+    // First update the current occurrence
+    await this.eventManagementService.update(slug, updateEventDto, _user.id);
+
+    // Then update all future occurrences
+    await this.eventSeriesOccurrenceService.updateFutureOccurrences(
       slug,
       date,
       updateEventDto,
+      _user.id,
     );
+
+    // Return the updated current occurrence
+    return this.eventQueryService.findEventBySlug(slug);
   }
 
   /**
@@ -341,7 +349,7 @@ export class EventController {
     @Param('slug') slug: string,
     @Query('date') date: string,
   ): Promise<EventEntity> {
-    return this.recurrenceModificationService.getEffectiveEventForDate(
+    return this.eventSeriesOccurrenceService.getEffectiveEventForDate(
       slug,
       date || new Date().toISOString(),
     );

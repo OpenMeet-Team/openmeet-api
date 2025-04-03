@@ -1,14 +1,16 @@
-import { Injectable, Logger, Scope, Inject } from '@nestjs/common';
+import { Injectable, Logger, Scope, Inject, forwardRef } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Repository, Between } from 'typeorm';
 import { EventEntity } from '../../infrastructure/persistence/relational/entities/event.entity';
 import { TenantConnectionService } from '../../../tenant/tenant.service';
-import { RecurrenceService } from '../../../recurrence/recurrence.service';
+import { EventSeriesOccurrenceService } from '../../../event-series/services/event-series-occurrence.service';
+import { RecurrencePatternService } from '../../../event-series/services/recurrence-pattern.service';
 import { IEventOccurrenceService } from './event-occurrence.interface';
-import { OccurrenceOptions } from '../../../recurrence/interfaces/recurrence.interface';
+import { OccurrenceOptions } from '../../../event-series/interfaces/recurrence.interface';
 import { isAfter, isBefore, isEqual } from 'date-fns';
 import { Trace } from '../../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
+import { EventStatus } from '../../../core/constants/constant';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventOccurrenceService implements IEventOccurrenceService {
@@ -19,7 +21,10 @@ export class EventOccurrenceService implements IEventOccurrenceService {
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
-    private readonly recurrenceService: RecurrenceService,
+    @Inject(forwardRef(() => RecurrencePatternService))
+    private readonly recurrencePatternService: RecurrencePatternService,
+    @Inject(forwardRef(() => EventSeriesOccurrenceService))
+    private readonly eventSeriesOccurrenceService: EventSeriesOccurrenceService,
   ) {
     void this.initializeRepository();
   }
@@ -34,6 +39,7 @@ export class EventOccurrenceService implements IEventOccurrenceService {
 
   /**
    * Generate occurrence events for a recurring event
+   * @deprecated Use EventSeriesOccurrenceService.getUpcomingOccurrences instead
    */
   @Trace('event-occurrence.generateOccurrences')
   async generateOccurrences(
@@ -43,13 +49,61 @@ export class EventOccurrenceService implements IEventOccurrenceService {
     try {
       await this.initializeRepository();
 
-      if (!parentEvent.isRecurring || !parentEvent.recurrenceRule) {
+      if (!parentEvent.isRecurring) {
         this.logger.warn(
           `Cannot generate occurrences for non-recurring event ${parentEvent.id}`,
         );
         return [];
       }
 
+      // If this is a new EventSeries-based event
+      if (parentEvent.seriesId) {
+        this.logger.log(
+          `Using EventSeriesOccurrenceService for event with seriesId ${parentEvent.seriesId}`,
+        );
+
+        // Find the series for this event
+        if (!parentEvent.series) {
+          // Try to find the series from the series ID
+          const series = await this.eventRepository.findOne({
+            where: { id: parentEvent.seriesId },
+            relations: ['series'],
+          });
+
+          if (!series || !series.series) {
+            this.logger.warn(
+              `Cannot find series for event with seriesId ${parentEvent.seriesId}`,
+            );
+            return [];
+          }
+
+          parentEvent.series = series.series;
+        }
+
+        // Use the EventSeriesOccurrenceService to get upcoming occurrences
+        const seriesSlug = parentEvent.series.slug;
+        const count = options.count || 10;
+
+        const occurrences =
+          await this.eventSeriesOccurrenceService.getUpcomingOccurrences(
+            seriesSlug,
+            count,
+          );
+
+        // Filter and convert the occurrences to EventEntity objects
+        const result: EventEntity[] = [];
+
+        for (const occurrence of occurrences) {
+          // Only include materialized occurrences with event data
+          if (occurrence.materialized && occurrence.event) {
+            result.push(occurrence.event);
+          }
+        }
+
+        return result;
+      }
+
+      // Fallback to using RecurrencePatternService for backward compatibility
       // Get recurrence rule and settings from parent event
       const { recurrenceRule, timeZone, startDate } = parentEvent;
       const recurrenceExceptions = parentEvent.recurrenceExceptions || [];
@@ -68,8 +122,8 @@ export class EventOccurrenceService implements IEventOccurrenceService {
         generationOptions.exdates = processedExdates as string[]; // Type assertion for TypeScript
       }
 
-      // Generate occurrence dates using RecurrenceService
-      const occurrenceDates = this.recurrenceService.generateOccurrences(
+      // Generate occurrence dates using RecurrencePatternService
+      const occurrenceDates = this.recurrencePatternService.generateOccurrences(
         startDate,
         recurrenceRule as any,
         generationOptions,
@@ -135,6 +189,7 @@ export class EventOccurrenceService implements IEventOccurrenceService {
 
   /**
    * Get occurrences of a recurring event within a date range
+   * @deprecated Use EventSeriesOccurrenceService.getUpcomingOccurrences with date filtering instead
    */
   @Trace('event-occurrence.getOccurrencesInRange')
   async getOccurrencesInRange(
@@ -149,6 +204,7 @@ export class EventOccurrenceService implements IEventOccurrenceService {
       // Fetch the parent event
       const parentEvent = await this.eventRepository.findOne({
         where: { id: parentEventId, isRecurring: true },
+        relations: ['series'],
       });
 
       if (!parentEvent) {
@@ -157,6 +213,43 @@ export class EventOccurrenceService implements IEventOccurrenceService {
         );
         return [];
       }
+
+      // If this is a new EventSeries-based event
+      if (parentEvent.seriesId && parentEvent.series) {
+        this.logger.log(
+          `Using EventSeriesOccurrenceService for event with seriesId ${parentEvent.seriesId}`,
+        );
+
+        const seriesSlug = parentEvent.series.slug;
+        // Get a larger number to ensure we capture enough dates in range
+        const count = 50;
+
+        const occurrences =
+          await this.eventSeriesOccurrenceService.getUpcomingOccurrences(
+            seriesSlug,
+            count,
+          );
+
+        // Filter and convert the occurrences to EventEntity objects
+        const result: EventEntity[] = [];
+
+        for (const occurrence of occurrences) {
+          // Only include materialized occurrences with event data that are in the date range
+          if (occurrence.materialized && occurrence.event) {
+            const occurrenceDate = new Date(occurrence.date);
+            if (
+              isAfter(occurrenceDate, startDate) &&
+              isBefore(occurrenceDate, endDate)
+            ) {
+              result.push(occurrence.event);
+            }
+          }
+        }
+
+        return result;
+      }
+
+      // Fallback to the old implementation for backward compatibility
 
       // Base query conditions for occurrences
       const whereConditions: any = {
@@ -180,7 +273,7 @@ export class EventOccurrenceService implements IEventOccurrenceService {
 
       if (recurrenceRule) {
         // Generate occurrence dates for the range
-        const generatedDates = this.recurrenceService
+        const generatedDates = this.recurrencePatternService
           .generateOccurrences(parentEvent.startDate, recurrenceRule as any, {
             timeZone: timeZone || 'UTC',
             exdates: parentEvent.recurrenceExceptions,
@@ -239,6 +332,7 @@ export class EventOccurrenceService implements IEventOccurrenceService {
 
   /**
    * Create or update an exception occurrence of a recurring event
+   * @deprecated Use EventSeriesOccurrenceService.materializeOccurrence instead
    */
   @Trace('event-occurrence.createExceptionOccurrence')
   async createExceptionOccurrence(
@@ -252,6 +346,7 @@ export class EventOccurrenceService implements IEventOccurrenceService {
       // Fetch the parent event
       const parentEvent = await this.eventRepository.findOne({
         where: { id: parentEventId, isRecurring: true },
+        relations: ['series'],
       });
 
       if (!parentEvent) {
@@ -260,14 +355,45 @@ export class EventOccurrenceService implements IEventOccurrenceService {
         );
       }
 
+      // If this is a new EventSeries-based event
+      if (parentEvent.seriesId && parentEvent.series) {
+        this.logger.log(
+          `Using EventSeriesOccurrenceService for event with seriesId ${parentEvent.seriesId}`,
+        );
+
+        const seriesSlug = parentEvent.series.slug;
+        const userId = parentEvent.user?.id || 1; // Default to admin user if not found
+
+        // First, materialize the occurrence if it's not already materialized
+        const materializedOccurrence =
+          await this.eventSeriesOccurrenceService.materializeOccurrence(
+            seriesSlug,
+            originalDate.toISOString(),
+            userId,
+          );
+
+        // Apply the modifications to the materialized occurrence
+        if (materializedOccurrence) {
+          Object.assign(materializedOccurrence, modifications);
+          return await this.eventRepository.save(materializedOccurrence);
+        }
+
+        throw new Error(
+          `Failed to materialize occurrence for series ${seriesSlug} on date ${originalDate.toISOString()}`,
+        );
+      }
+
+      // Fallback to the old implementation for backward compatibility
+
       // Check if this occurrence is part of the recurrence pattern
-      const isInPattern = this.recurrenceService.isDateInRecurrencePattern(
-        originalDate,
-        parentEvent.startDate,
-        parentEvent.recurrenceRule as any,
-        parentEvent.timeZone,
-        parentEvent.recurrenceExceptions,
-      );
+      const isInPattern =
+        this.recurrencePatternService.isDateInRecurrencePattern(
+          originalDate,
+          parentEvent.startDate,
+          parentEvent.recurrenceRule as any,
+          parentEvent.timeZone,
+          parentEvent.recurrenceExceptions,
+        );
 
       if (!isInPattern) {
         throw new Error(
@@ -335,6 +461,7 @@ export class EventOccurrenceService implements IEventOccurrenceService {
 
   /**
    * Delete an occurrence from a recurring event
+   * @deprecated For EventSeries-based events, cancel a specific occurrence instead
    */
   @Trace('event-occurrence.excludeOccurrence')
   async excludeOccurrence(
@@ -347,6 +474,7 @@ export class EventOccurrenceService implements IEventOccurrenceService {
       // Fetch the parent event
       const parentEvent = await this.eventRepository.findOne({
         where: { id: parentEventId, isRecurring: true },
+        relations: ['series'],
       });
 
       if (!parentEvent) {
@@ -355,13 +483,58 @@ export class EventOccurrenceService implements IEventOccurrenceService {
         );
       }
 
+      // For EventSeries-based events, we handle differently
+      // We would typically cancel a specific occurrence rather than exclude it
+      if (parentEvent.seriesId && parentEvent.series) {
+        // Find the specific occurrence for this date
+        const seriesSlug = parentEvent.series.slug;
+        const occurrence =
+          await this.eventSeriesOccurrenceService.findOccurrence(
+            seriesSlug,
+            occurrenceDate.toISOString(),
+          );
+
+        // If the occurrence exists, update its status to canceled
+        if (occurrence) {
+          occurrence.status = EventStatus.Cancelled;
+          await this.eventRepository.save(occurrence);
+          return true;
+        }
+
+        // If the occurrence doesn't exist yet, materialize it and then cancel it
+        const userId = parentEvent.user?.id || 1; // Default to admin user if not found
+        try {
+          const materializedOccurrence =
+            await this.eventSeriesOccurrenceService.materializeOccurrence(
+              seriesSlug,
+              occurrenceDate.toISOString(),
+              userId,
+            );
+
+          if (materializedOccurrence) {
+            materializedOccurrence.status = EventStatus.Cancelled;
+            await this.eventRepository.save(materializedOccurrence);
+            return true;
+          }
+        } catch (error) {
+          this.logger.error(
+            `Error materializing occurrence for exclusion: ${error.message}`,
+            error.stack,
+          );
+          return false;
+        }
+      }
+
+      // Fallback for old-style recurrence
+
       // Check if this occurrence is part of the recurrence pattern
-      const isInPattern = this.recurrenceService.isDateInRecurrencePattern(
-        occurrenceDate,
-        parentEvent.startDate,
-        parentEvent.recurrenceRule as any,
-        parentEvent.timeZone,
-      );
+      const isInPattern =
+        this.recurrencePatternService.isDateInRecurrencePattern(
+          occurrenceDate,
+          parentEvent.startDate,
+          parentEvent.recurrenceRule as any,
+          parentEvent.timeZone,
+        );
 
       if (!isInPattern) {
         throw new Error(
@@ -398,6 +571,7 @@ export class EventOccurrenceService implements IEventOccurrenceService {
 
   /**
    * Add back a previously excluded occurrence
+   * @deprecated For EventSeries-based events, reactivate a specific occurrence instead
    */
   @Trace('event-occurrence.includeOccurrence')
   async includeOccurrence(
@@ -410,6 +584,7 @@ export class EventOccurrenceService implements IEventOccurrenceService {
       // Fetch the parent event
       const parentEvent = await this.eventRepository.findOne({
         where: { id: parentEventId, isRecurring: true },
+        relations: ['series'],
       });
 
       if (!parentEvent) {
@@ -417,6 +592,47 @@ export class EventOccurrenceService implements IEventOccurrenceService {
           `Parent event with ID ${parentEventId} not found or not recurring`,
         );
       }
+
+      // For EventSeries-based events, we handle differently
+      if (parentEvent.seriesId && parentEvent.series) {
+        // Find the specific occurrence for this date
+        const seriesSlug = parentEvent.series.slug;
+        const occurrence =
+          await this.eventSeriesOccurrenceService.findOccurrence(
+            seriesSlug,
+            occurrenceDate.toISOString(),
+          );
+
+        // If the occurrence exists and is canceled, reactivate it
+        if (occurrence && occurrence.status === EventStatus.Cancelled) {
+          occurrence.status = EventStatus.Published;
+          await this.eventRepository.save(occurrence);
+          return true;
+        }
+
+        // If the occurrence doesn't exist yet, materialize it
+        if (!occurrence) {
+          const userId = parentEvent.user?.id || 1; // Default to admin user if not found
+          try {
+            await this.eventSeriesOccurrenceService.materializeOccurrence(
+              seriesSlug,
+              occurrenceDate.toISOString(),
+              userId,
+            );
+            return true;
+          } catch (error) {
+            this.logger.error(
+              `Error materializing occurrence for inclusion: ${error.message}`,
+              error.stack,
+            );
+            return false;
+          }
+        }
+
+        return true;
+      }
+
+      // Fallback for old-style recurrence
 
       // Remove from parent's exception list
       if (
@@ -457,13 +673,32 @@ export class EventOccurrenceService implements IEventOccurrenceService {
 
   /**
    * Delete all occurrences of a recurring event
+   * @deprecated For EventSeries events, delete the entire series instead
    */
   @Trace('event-occurrence.deleteAllOccurrences')
   async deleteAllOccurrences(parentEventId: number): Promise<number> {
     try {
       await this.initializeRepository();
 
-      // Delete all occurrences for this parent event
+      // Fetch the parent event to check if it's an EventSeries-based event
+      const parentEvent = await this.eventRepository.findOne({
+        where: { id: parentEventId, isRecurring: true },
+        relations: ['series'],
+      });
+
+      // For EventSeries-based events, we can delete all materialized occurrences
+      if (parentEvent?.seriesId) {
+        const seriesId = parentEvent.seriesId;
+
+        // Delete all events with this seriesId
+        const result = await this.eventRepository.delete({
+          seriesId,
+        });
+
+        return result.affected ? result.affected : 0;
+      }
+
+      // Fallback for old-style recurrence - delete all occurrences for this parent event
       const result = await this.eventRepository.delete({
         parentEventId,
       });

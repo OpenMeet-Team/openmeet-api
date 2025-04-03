@@ -93,6 +93,13 @@ export class EventSeriesEntity
   @Column({ type: 'jsonb', nullable: true })
   sourceData: Record<string, unknown> | null;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  templateEventSlug: string;
+
+  @OneToOne(() => EventEntity, { nullable: true })
+  @JoinColumn({ name: 'templateEventSlug', referencedColumnName: 'slug' })
+  templateEvent: EventEntity;
+
   // Human-readable description of recurrence pattern (virtual field)
   recurrenceDescription?: string;
 

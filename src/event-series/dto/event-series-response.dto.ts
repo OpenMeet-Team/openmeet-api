@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { EventSeriesEntity } from '../infrastructure/persistence/relational/entities/event-series.entity';
 import { EventResponseDto } from '../../event/dto/event-response.dto';
-import { RecurrenceRule } from '../../recurrence/interfaces/recurrence.interface';
-import { Exclude, Expose, Transform, Type } from 'class-transformer';
+import { RecurrenceRule } from '../interfaces/recurrence.interface';
+import { Exclude, Type } from 'class-transformer';
 
 export class EventSeriesResponseDto {
   @ApiProperty({ example: 1 })

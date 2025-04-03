@@ -1,43 +1,41 @@
 import {
-  IsOptional,
-  IsBoolean,
   IsString,
+  IsOptional,
   IsNumber,
   IsArray,
+  IsBoolean,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { PartialType } from '@nestjs/swagger';
-import { CreateEventSeriesDto } from './create-event-series.dto';
 
-export class UpdateEventSeriesDto extends PartialType(CreateEventSeriesDto) {
-  // All fields are optional in an update DTO
-  // Add any fields that have special update behavior here
-
-  @IsBoolean()
-  @IsOptional()
+export class TemplateEventDto {
+  @IsString()
   @ApiProperty({
-    description:
-      'Whether to propagate changes to future unmaterialized occurrences',
-    example: true,
-    required: false,
-    default: true,
+    description: 'The start date and time for the template event',
+    example: '2023-01-01T10:00:00Z',
   })
-  propagateChanges?: boolean;
+  startDate: string;
 
   @IsString()
   @IsOptional()
   @ApiProperty({
-    description: 'The slug of the template event for this series',
-    example: 'template-event-123',
+    description: 'The end date and time for the template event',
+    example: '2023-01-01T12:00:00Z',
     required: false,
   })
-  templateEventSlug?: string;
+  endDate?: string;
 
-  // Direct template properties for the series
+  @IsString()
+  @ApiProperty({
+    description: 'The type of event',
+    example: 'in-person',
+    enum: ['online', 'in-person', 'hybrid'],
+  })
+  type: string;
+
   @IsString()
   @IsOptional()
   @ApiProperty({
-    description: 'The location for the event',
+    description: 'The location for in-person or hybrid events',
     example: '123 Main St, Louisville, KY',
     required: false,
   })
@@ -46,7 +44,7 @@ export class UpdateEventSeriesDto extends PartialType(CreateEventSeriesDto) {
   @IsString()
   @IsOptional()
   @ApiProperty({
-    description: 'The online location (URL) for the event',
+    description: 'The online location (URL) for online or hybrid events',
     example: 'https://zoom.us/j/123456789',
     required: false,
   })

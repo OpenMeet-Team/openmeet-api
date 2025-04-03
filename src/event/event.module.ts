@@ -19,7 +19,6 @@ import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
 import { EventOccurrenceService } from './services/occurrences/event-occurrence.service';
-import { RecurrenceModule } from '../recurrence/recurrence.module';
 import { ChatModule } from '../chat/chat.module';
 import { ICalendarService } from './services/ical/ical.service';
 import { EventSeriesModule } from '../event-series/event-series.module';
@@ -28,7 +27,6 @@ import { EventSeriesModule } from '../event-series/event-series.module';
   imports: [
     TypeOrmModule.forFeature([EventEntity]),
     TenantModule,
-    RecurrenceModule,
     forwardRef(() => GroupMemberModule),
     CategoryModule,
     forwardRef(() => AuthModule),

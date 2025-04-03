@@ -1,17 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventOccurrenceService } from './event-occurrence.service';
-import { RecurrenceService } from '../../../recurrence/recurrence.service';
-import { TenantConnectionService } from '../../../tenant/tenant.service';
 import { EventEntity } from '../../infrastructure/persistence/relational/entities/event.entity';
+import { TenantConnectionService } from '../../../tenant/tenant.service';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { REQUEST } from '@nestjs/core';
-import {
-  EventStatus,
-  EventVisibility,
-  EventType,
-} from '../../../core/constants/constant';
-import { addWeeks } from 'date-fns';
+import { EventStatus } from '../../../core/constants/constant';
+import { EventSeriesOccurrenceService } from '../../../event-series/services/event-series-occurrence.service';
+import { RecurrencePatternService } from '../../../event-series/services/recurrence-pattern.service';
 
 // Mock repository factory
 const mockRepository = () => ({
@@ -22,13 +18,19 @@ const mockRepository = () => ({
   delete: jest.fn(),
 });
 
-// Mock RecurrenceService
-const mockRecurrenceService = () => ({
+// Mock RecurrencePatternService
+const mockRecurrencePatternService = () => ({
   generateOccurrences: jest.fn(),
   isDateInRecurrencePattern: jest.fn(),
-  convertDateBetweenTimezones: jest.fn(),
   formatDateInTimeZone: jest.fn(),
-  getRecurrenceDescription: jest.fn(),
+  buildRRuleString: jest.fn(),
+});
+
+// Mock EventSeriesOccurrenceService
+const mockEventSeriesOccurrenceService = () => ({
+  findOccurrence: jest.fn(),
+  materializeOccurrence: jest.fn(),
+  getUpcomingOccurrences: jest.fn(),
 });
 
 // Mock TenantConnectionService
@@ -40,7 +42,8 @@ const mockTenantConnectionService = () => ({
 
 describe('EventOccurrenceService', () => {
   let service: EventOccurrenceService;
-  let recurrenceService: RecurrenceService;
+  let recurrencePatternService: RecurrencePatternService;
+  let eventSeriesOccurrenceService: EventSeriesOccurrenceService;
   let eventRepository: Repository<EventEntity>;
   const mockRequest = { tenantId: 'test-tenant' };
 
@@ -49,8 +52,12 @@ describe('EventOccurrenceService', () => {
       providers: [
         EventOccurrenceService,
         {
-          provide: RecurrenceService,
-          useFactory: mockRecurrenceService,
+          provide: RecurrencePatternService,
+          useFactory: mockRecurrencePatternService,
+        },
+        {
+          provide: EventSeriesOccurrenceService,
+          useFactory: mockEventSeriesOccurrenceService,
         },
         {
           provide: TenantConnectionService,
@@ -76,7 +83,12 @@ describe('EventOccurrenceService', () => {
 
     // For request-scoped providers, use resolve instead of get
     service = await module.resolve(EventOccurrenceService);
-    recurrenceService = module.get<RecurrenceService>(RecurrenceService);
+    recurrencePatternService = module.get<RecurrencePatternService>(
+      RecurrencePatternService,
+    );
+    eventSeriesOccurrenceService = module.get<EventSeriesOccurrenceService>(
+      EventSeriesOccurrenceService,
+    );
     const tenantService = module.get<TenantConnectionService>(
       TenantConnectionService,
     );
@@ -103,489 +115,458 @@ describe('EventOccurrenceService', () => {
 
       const result = await service.generateOccurrences(nonRecurringEvent);
       expect(result).toEqual([]);
-      expect(recurrenceService.generateOccurrences).not.toHaveBeenCalled();
+      expect(
+        recurrencePatternService.generateOccurrences,
+      ).not.toHaveBeenCalled();
     });
 
-    it('should generate occurrences for a recurring event', async () => {
-      // Setup parent event
+    it('should use EventSeriesOccurrenceService for series-based events', async () => {
+      // Setup parent event with seriesId
       const parentEvent = new EventEntity();
       parentEvent.id = 1;
-      parentEvent.name = 'Test Recurring Event';
+      parentEvent.name = 'Test Series Event';
       parentEvent.isRecurring = true;
-      parentEvent.startDate = new Date('2025-01-01T10:00:00Z');
-      parentEvent.endDate = new Date('2025-01-01T12:00:00Z');
-      parentEvent.timeZone = 'UTC';
-      parentEvent.recurrenceRule = {
-        freq: 'WEEKLY',
-        interval: 1,
-        count: 4,
-      };
-      parentEvent.status = EventStatus.Published;
-      parentEvent.visibility = EventVisibility.Public;
-      parentEvent.type = EventType.InPerson;
+      parentEvent.seriesId = 101;
+      parentEvent.series = {
+        id: 101,
+        slug: 'test-series-slug',
+        name: 'Test Series',
+      } as any;
 
-      // Mock recurrence service response
-      const occurrenceDates = [
-        parentEvent.startDate, // This will be skipped as it's the parent event's date
-        addWeeks(parentEvent.startDate, 1),
-        addWeeks(parentEvent.startDate, 2),
-        addWeeks(parentEvent.startDate, 3),
-      ];
-
-      (recurrenceService.generateOccurrences as jest.Mock).mockReturnValue(
-        occurrenceDates,
-      );
-
-      // Mock repository response
-      (eventRepository.find as jest.Mock).mockResolvedValue([]);
-
-      // Mock the repository save method
-      const savedOccurrences = [
-        { id: 2, parentEventId: 1, startDate: occurrenceDates[1] },
-        { id: 3, parentEventId: 1, startDate: occurrenceDates[2] },
-        { id: 4, parentEventId: 1, startDate: occurrenceDates[3] },
-      ];
-      (eventRepository.save as jest.Mock).mockResolvedValue(savedOccurrences);
-
-      // Call the service method
-      const result = await service.generateOccurrences(parentEvent);
-
-      // Assertions
-      expect(recurrenceService.generateOccurrences).toHaveBeenCalledWith(
-        parentEvent.startDate,
-        parentEvent.recurrenceRule,
-        expect.objectContaining({ timeZone: 'UTC' }),
-      );
-
-      expect(eventRepository.save).toHaveBeenCalled();
-      expect(result).toEqual(savedOccurrences);
-      expect(result.length).toBe(3); // Should skip the first occurrence
-    });
-
-    it('should skip existing occurrences', async () => {
-      // Setup parent event
-      const parentEvent = new EventEntity();
-      parentEvent.id = 1;
-      parentEvent.name = 'Test Recurring Event';
-      parentEvent.isRecurring = true;
-      parentEvent.startDate = new Date('2025-01-01T10:00:00Z');
-      parentEvent.endDate = new Date('2025-01-01T12:00:00Z');
-      parentEvent.timeZone = 'UTC';
-      parentEvent.recurrenceRule = {
-        freq: 'WEEKLY',
-        interval: 1,
-        count: 4,
-      };
-
-      // Mock recurrence service response
-      const occurrenceDates = [
-        parentEvent.startDate,
-        addWeeks(parentEvent.startDate, 1),
-        addWeeks(parentEvent.startDate, 2),
-        addWeeks(parentEvent.startDate, 3),
-      ];
-
-      (recurrenceService.generateOccurrences as jest.Mock).mockReturnValue(
-        occurrenceDates,
-      );
-
-      // Mock existing occurrences
-      const existingOccurrences = [
+      // Mock upcoming occurrences response
+      const mockOccurrences = [
         {
-          id: 2,
-          parentEventId: 1,
-          startDate: addWeeks(parentEvent.startDate, 1),
+          date: '2025-01-08T10:00:00Z',
+          event: {
+            id: 2,
+            slug: 'event-1',
+            name: 'Test Series Event - Jan 8',
+          },
+          materialized: true,
+        },
+        {
+          date: '2025-01-15T10:00:00Z',
+          event: {
+            id: 3,
+            slug: 'event-2',
+            name: 'Test Series Event - Jan 15',
+          },
+          materialized: true,
+        },
+        {
+          date: '2025-01-22T10:00:00Z',
+          materialized: false,
         },
       ];
 
-      (eventRepository.find as jest.Mock).mockResolvedValue(
-        existingOccurrences,
-      );
-
-      // Mock the repository save method
-      const savedOccurrences = [
-        { id: 3, parentEventId: 1, startDate: occurrenceDates[2] },
-        { id: 4, parentEventId: 1, startDate: occurrenceDates[3] },
-      ];
-      (eventRepository.save as jest.Mock).mockResolvedValue(savedOccurrences);
+      (
+        eventSeriesOccurrenceService.getUpcomingOccurrences as jest.Mock
+      ).mockResolvedValue(mockOccurrences);
 
       // Call the service method
       const result = await service.generateOccurrences(parentEvent);
 
       // Assertions
+      expect(
+        eventSeriesOccurrenceService.getUpcomingOccurrences,
+      ).toHaveBeenCalledWith(
+        'test-series-slug',
+        10, // default count
+      );
+
+      // Should only include materialized occurrences with event data
+      expect(result.length).toBe(2);
+      expect(result[0].id).toBe(2);
+      expect(result[1].id).toBe(3);
+
+      // RecurrenceService should not be called
+      expect(
+        recurrencePatternService.generateOccurrences,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should handle series-based events with missing series', async () => {
+      // Setup parent event with seriesId but no series object
+      const parentEvent = new EventEntity();
+      parentEvent.id = 1;
+      parentEvent.name = 'Test Series Event';
+      parentEvent.isRecurring = true;
+      parentEvent.seriesId = 101;
+      parentEvent.series = null;
+
+      // Mock the findOne call to get the series
+      const eventWithSeries = {
+        id: 1,
+        series: {
+          id: 101,
+          slug: 'test-series-slug',
+        },
+      };
+      (eventRepository.findOne as jest.Mock).mockResolvedValue(eventWithSeries);
+
+      // Mock upcoming occurrences response
+      const mockOccurrences = [
+        {
+          date: '2025-01-08T10:00:00Z',
+          event: {
+            id: 2,
+            slug: 'event-1',
+          },
+          materialized: true,
+        },
+      ];
+
+      (
+        eventSeriesOccurrenceService.getUpcomingOccurrences as jest.Mock
+      ).mockResolvedValue(mockOccurrences);
+
+      // Call the service method
+      const result = await service.generateOccurrences(parentEvent);
+
+      // Assertions
+      expect(eventRepository.findOne).toHaveBeenCalled();
+      expect(
+        eventSeriesOccurrenceService.getUpcomingOccurrences,
+      ).toHaveBeenCalledWith('test-series-slug', 10);
+      expect(result.length).toBe(1);
+    });
+
+    it('should use legacy implementation for old-style recurring events', async () => {
+      // Setup parent event without seriesId
+      const parentEvent = new EventEntity();
+      parentEvent.id = 1;
+      parentEvent.name = 'Legacy Recurring Event';
+      parentEvent.isRecurring = true;
+      parentEvent.startDate = new Date('2025-01-01T10:00:00Z');
+      parentEvent.endDate = new Date('2025-01-01T12:00:00Z');
+      parentEvent.recurrenceRule = { frequency: 'WEEKLY', interval: 1 };
+      parentEvent.timeZone = 'UTC';
+
+      // Mock generateOccurrences response
+      const occurrenceDates = [
+        new Date('2025-01-08T10:00:00Z'),
+        new Date('2025-01-15T10:00:00Z'),
+        new Date('2025-01-22T10:00:00Z'),
+      ];
+      (
+        recurrencePatternService.generateOccurrences as jest.Mock
+      ).mockReturnValue(occurrenceDates);
+
+      // Mock repository responses
+      (eventRepository.find as jest.Mock).mockResolvedValue([]);
+      (eventRepository.save as jest.Mock).mockImplementation(
+        (entities) => entities,
+      );
+
+      // Call the service method
+      const result = await service.generateOccurrences(parentEvent);
+
+      // Assertions
+      expect(recurrencePatternService.generateOccurrences).toHaveBeenCalled();
       expect(eventRepository.save).toHaveBeenCalled();
-      expect(result).toEqual(savedOccurrences);
-      expect(result.length).toBe(2); // Should skip the first occurrence and the existing one
+      expect(result.length).toBe(3);
     });
   });
 
   describe('getOccurrencesInRange', () => {
-    it('should return occurrences in the specified date range', async () => {
-      // Setup parent event
-      const parentEvent = new EventEntity();
-      parentEvent.id = 1;
-      parentEvent.name = 'Test Recurring Event';
-      parentEvent.isRecurring = true;
-      parentEvent.startDate = new Date('2025-01-01T10:00:00Z');
-      parentEvent.endDate = new Date('2025-01-01T12:00:00Z');
-      parentEvent.timeZone = 'UTC';
-      parentEvent.recurrenceRule = {
-        freq: 'WEEKLY',
-        interval: 1,
-        count: 4,
+    it('should get occurrences in range for series-based events', async () => {
+      // Setup
+      const parentEventId = 1;
+      const startDate = new Date('2025-01-01');
+      const endDate = new Date('2025-02-01');
+
+      // Mock parent event with seriesId
+      const parentEvent = {
+        id: parentEventId,
+        isRecurring: true,
+        seriesId: 101,
+        series: {
+          id: 101,
+          slug: 'test-series-slug',
+        },
       };
 
       (eventRepository.findOne as jest.Mock).mockResolvedValue(parentEvent);
 
-      // Mock existing occurrences in range
-      const startDate = new Date('2025-01-05T00:00:00Z');
-      const endDate = new Date('2025-01-20T23:59:59Z');
-
-      const existingOccurrences = [
+      // Mock occurrences
+      const mockOccurrences = [
         {
-          id: 2,
-          parentEventId: 1,
-          startDate: new Date('2025-01-08T10:00:00Z'),
+          date: '2025-01-08T10:00:00Z',
+          event: {
+            id: 2,
+            slug: 'event-1',
+          },
+          materialized: true,
+        },
+        {
+          date: '2025-01-15T10:00:00Z',
+          event: {
+            id: 3,
+            slug: 'event-2',
+          },
+          materialized: true,
         },
       ];
 
-      (eventRepository.find as jest.Mock).mockResolvedValue(
-        existingOccurrences,
-      );
-
-      // Mock generated dates from recurrence service
-      const generatedDates = [
-        new Date('2025-01-08T10:00:00Z'), // Already exists
-        new Date('2025-01-15T10:00:00Z'), // Needs to be created
-      ];
-
-      (recurrenceService.generateOccurrences as jest.Mock).mockReturnValue(
-        generatedDates,
-      );
-
-      // Mock saving new occurrences
-      const newOccurrence = {
-        id: 3,
-        parentEventId: 1,
-        startDate: new Date('2025-01-15T10:00:00Z'),
-      };
-
-      (eventRepository.save as jest.Mock).mockResolvedValue([newOccurrence]);
+      (
+        eventSeriesOccurrenceService.getUpcomingOccurrences as jest.Mock
+      ).mockResolvedValue(mockOccurrences);
 
       // Call the service method
-      const result = await service.getOccurrencesInRange(1, startDate, endDate);
+      const result = await service.getOccurrencesInRange(
+        parentEventId,
+        startDate,
+        endDate,
+      );
 
       // Assertions
       expect(eventRepository.findOne).toHaveBeenCalledWith({
-        where: { id: 1, isRecurring: true },
+        where: { id: parentEventId, isRecurring: true },
+        relations: ['series'],
       });
 
-      expect(eventRepository.find).toHaveBeenCalledWith({
-        where: {
-          parentEventId: 1,
-          startDate: expect.any(Object),
-        },
-        order: { startDate: 'ASC' },
-      });
+      expect(
+        eventSeriesOccurrenceService.getUpcomingOccurrences,
+      ).toHaveBeenCalledWith('test-series-slug', 50);
 
-      expect(recurrenceService.generateOccurrences).toHaveBeenCalled();
-      expect(eventRepository.save).toHaveBeenCalled();
       expect(result.length).toBe(2);
-      expect(result).toContainEqual(existingOccurrences[0]);
-      expect(result).toContainEqual(newOccurrence);
-    });
-
-    it('should return empty array if parent event not found', async () => {
-      (eventRepository.findOne as jest.Mock).mockResolvedValue(null);
-
-      const result = await service.getOccurrencesInRange(
-        999,
-        new Date('2025-01-01T00:00:00Z'),
-        new Date('2025-01-31T23:59:59Z'),
-      );
-
-      expect(result).toEqual([]);
-      expect(recurrenceService.generateOccurrences).not.toHaveBeenCalled();
     });
   });
 
   describe('createExceptionOccurrence', () => {
-    it('should create an exception occurrence', async () => {
-      // Setup parent event
-      const parentEvent = new EventEntity();
-      parentEvent.id = 1;
-      parentEvent.name = 'Test Recurring Event';
-      parentEvent.isRecurring = true;
-      parentEvent.startDate = new Date('2025-01-01T10:00:00Z');
-      parentEvent.timeZone = 'UTC';
-      parentEvent.recurrenceRule = {
-        freq: 'WEEKLY',
-        interval: 1,
+    it('should create exception occurrence for series-based events', async () => {
+      // Setup
+      const parentEventId = 1;
+      const originalDate = new Date('2025-01-15T10:00:00Z');
+      const modifications = { name: 'Modified Event' };
+
+      // Mock parent event with seriesId
+      const parentEvent = {
+        id: parentEventId,
+        isRecurring: true,
+        seriesId: 101,
+        series: {
+          id: 101,
+          slug: 'test-series-slug',
+        },
+        user: {
+          id: 42,
+        },
       };
-      parentEvent.recurrenceExceptions = [];
 
-      (eventRepository.findOne as jest.Mock)
-        .mockResolvedValueOnce(parentEvent) // For parent event lookup
-        .mockResolvedValueOnce(null) // For existing exception lookup
-        .mockResolvedValueOnce(null); // For existing occurrence lookup
+      (eventRepository.findOne as jest.Mock).mockResolvedValue(parentEvent);
 
-      // Mock isDateInRecurrencePattern
+      // Mock materializeOccurrence
+      const materializedEvent = {
+        id: 3,
+        slug: 'event-2',
+        name: 'Original Name',
+      };
       (
-        recurrenceService.isDateInRecurrencePattern as jest.Mock
-      ).mockReturnValue(true);
+        eventSeriesOccurrenceService.materializeOccurrence as jest.Mock
+      ).mockResolvedValue(materializedEvent);
 
-      // Setup occurrence date and modifications
-      const occurrenceDate = new Date('2025-01-15T10:00:00Z');
-      const modifications = {
-        name: 'Modified Occurrence',
-        description: 'This occurrence has been modified',
+      // Mock save
+      const savedEvent = {
+        ...materializedEvent,
+        ...modifications,
       };
-
-      // Mock the createOccurrenceFromParent (internal method)
-      const occurrence = new EventEntity();
-      occurrence.id = 2;
-      occurrence.parentEventId = 1;
-      occurrence.startDate = occurrenceDate;
-      occurrence.name = parentEvent.name;
-      Object.assign(occurrence, modifications);
-      occurrence.isRecurrenceException = true;
-      occurrence.originalDate = occurrenceDate;
-
-      // Mock saving the modified parent event and exception
-      (eventRepository.save as jest.Mock)
-        .mockResolvedValueOnce(parentEvent) // Saving parent with updated exceptions
-        .mockResolvedValueOnce(occurrence); // Saving the exception occurrence
+      (eventRepository.save as jest.Mock).mockResolvedValue(savedEvent);
 
       // Call the service method
       const result = await service.createExceptionOccurrence(
-        1,
-        occurrenceDate,
+        parentEventId,
+        originalDate,
         modifications,
       );
 
       // Assertions
-      expect(eventRepository.findOne).toHaveBeenCalledTimes(3);
-      expect(recurrenceService.isDateInRecurrencePattern).toHaveBeenCalledWith(
-        occurrenceDate,
-        parentEvent.startDate,
-        parentEvent.recurrenceRule,
-        parentEvent.timeZone,
-        parentEvent.recurrenceExceptions,
+      expect(eventRepository.findOne).toHaveBeenCalledWith({
+        where: { id: parentEventId, isRecurring: true },
+        relations: ['series'],
+      });
+
+      expect(
+        eventSeriesOccurrenceService.materializeOccurrence,
+      ).toHaveBeenCalledWith(
+        'test-series-slug',
+        originalDate.toISOString(),
+        42,
       );
 
-      expect(eventRepository.save).toHaveBeenCalledTimes(2);
-      expect(result.isRecurrenceException).toBe(true);
-      expect(result.originalDate).toEqual(occurrenceDate);
-      expect(result.name).toBe(modifications.name);
-      expect(result.description).toBe(modifications.description);
-    });
+      expect(eventRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Modified Event',
+        }),
+      );
 
-    it('should throw an error if date is not in recurrence pattern', async () => {
-      // Setup parent event
-      const parentEvent = new EventEntity();
-      parentEvent.id = 1;
-      parentEvent.isRecurring = true;
-      parentEvent.startDate = new Date('2025-01-01T10:00:00Z');
-      parentEvent.recurrenceRule = {
-        freq: 'WEEKLY',
-        interval: 1,
-      };
-
-      (eventRepository.findOne as jest.Mock).mockResolvedValue(parentEvent);
-
-      // Mock isDateInRecurrencePattern
-      (
-        recurrenceService.isDateInRecurrencePattern as jest.Mock
-      ).mockReturnValue(false);
-
-      // Call the service method
-      const occurrenceDate = new Date('2025-02-15T10:00:00Z');
-      const modifications = { name: 'Modified Occurrence' };
-
-      await expect(
-        service.createExceptionOccurrence(1, occurrenceDate, modifications),
-      ).rejects.toThrow(/not part of the recurrence pattern/);
+      expect(result).toEqual(savedEvent);
     });
   });
 
   describe('excludeOccurrence', () => {
-    it('should exclude an occurrence', async () => {
-      // Setup parent event
-      const parentEvent = new EventEntity();
-      parentEvent.id = 1;
-      parentEvent.isRecurring = true;
-      parentEvent.startDate = new Date('2025-01-01T10:00:00Z');
-      parentEvent.recurrenceRule = {
-        freq: 'WEEKLY',
-        interval: 1,
+    it('should exclude occurrence for series-based events by cancelling it', async () => {
+      // Setup
+      const parentEventId = 1;
+      const occurrenceDate = new Date('2025-01-15T10:00:00Z');
+
+      // Mock parent event with seriesId
+      const parentEvent = {
+        id: parentEventId,
+        isRecurring: true,
+        seriesId: 101,
+        series: {
+          id: 101,
+          slug: 'test-series-slug',
+        },
+        user: {
+          id: 42,
+        },
       };
-      parentEvent.recurrenceExceptions = [];
 
       (eventRepository.findOne as jest.Mock).mockResolvedValue(parentEvent);
 
-      // Mock isDateInRecurrencePattern
+      // Mock findOccurrence to return existing occurrence
+      const existingOccurrence = {
+        id: 3,
+        slug: 'event-3',
+        status: EventStatus.Published,
+      };
       (
-        recurrenceService.isDateInRecurrencePattern as jest.Mock
-      ).mockReturnValue(true);
+        eventSeriesOccurrenceService.findOccurrence as jest.Mock
+      ).mockResolvedValue(existingOccurrence);
 
-      // Mock deletion result
-      (eventRepository.delete as jest.Mock).mockResolvedValue({ affected: 1 });
-
-      // Mock saving the parent event with updated exceptions
-      (eventRepository.save as jest.Mock).mockResolvedValue(parentEvent);
+      // Mock save
+      const cancelledEvent = {
+        ...existingOccurrence,
+        status: EventStatus.Cancelled,
+      };
+      (eventRepository.save as jest.Mock).mockResolvedValue(cancelledEvent);
 
       // Call the service method
-      const occurrenceDate = new Date('2025-01-15T10:00:00Z');
-      const result = await service.excludeOccurrence(1, occurrenceDate);
+      const result = await service.excludeOccurrence(
+        parentEventId,
+        occurrenceDate,
+      );
 
       // Assertions
       expect(eventRepository.findOne).toHaveBeenCalledWith({
-        where: { id: 1, isRecurring: true },
+        where: { id: parentEventId, isRecurring: true },
+        relations: ['series'],
       });
 
-      expect(recurrenceService.isDateInRecurrencePattern).toHaveBeenCalled();
-      expect(parentEvent.recurrenceExceptions).toContain(
+      expect(eventSeriesOccurrenceService.findOccurrence).toHaveBeenCalledWith(
+        'test-series-slug',
         occurrenceDate.toISOString(),
       );
-      expect(eventRepository.save).toHaveBeenCalledWith(parentEvent);
-      expect(eventRepository.delete).toHaveBeenCalledWith({
-        parentEventId: 1,
-        startDate: occurrenceDate,
-      });
+
+      expect(eventRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: EventStatus.Cancelled,
+        }),
+      );
 
       expect(result).toBe(true);
-    });
-
-    it('should return false if deletion fails', async () => {
-      // Setup parent event
-      const parentEvent = new EventEntity();
-      parentEvent.id = 1;
-      parentEvent.isRecurring = true;
-      parentEvent.startDate = new Date('2025-01-01T10:00:00Z');
-      parentEvent.recurrenceRule = {
-        freq: 'WEEKLY',
-        interval: 1,
-      };
-      parentEvent.recurrenceExceptions = [];
-
-      (eventRepository.findOne as jest.Mock).mockResolvedValue(parentEvent);
-
-      // Mock isDateInRecurrencePattern
-      (
-        recurrenceService.isDateInRecurrencePattern as jest.Mock
-      ).mockReturnValue(true);
-
-      // Mock deletion result (no records affected)
-      (eventRepository.delete as jest.Mock).mockResolvedValue({ affected: 0 });
-
-      // Mock saving the parent event with updated exceptions
-      (eventRepository.save as jest.Mock).mockResolvedValue(parentEvent);
-
-      // Call the service method
-      const occurrenceDate = new Date('2025-01-15T10:00:00Z');
-      const result = await service.excludeOccurrence(1, occurrenceDate);
-
-      expect(result).toBe(false);
     });
   });
 
   describe('includeOccurrence', () => {
-    it('should include a previously excluded occurrence', async () => {
-      // Setup parent event
-      const parentEvent = new EventEntity();
-      parentEvent.id = 1;
-      parentEvent.isRecurring = true;
-      parentEvent.startDate = new Date('2025-01-01T10:00:00Z');
-      parentEvent.recurrenceRule = {
-        freq: 'WEEKLY',
-        interval: 1,
+    it('should include occurrence for series-based events by reactivating it', async () => {
+      // Setup
+      const parentEventId = 1;
+      const occurrenceDate = new Date('2025-01-15T10:00:00Z');
+
+      // Mock parent event with seriesId
+      const parentEvent = {
+        id: parentEventId,
+        isRecurring: true,
+        seriesId: 101,
+        series: {
+          id: 101,
+          slug: 'test-series-slug',
+        },
+        user: {
+          id: 42,
+        },
       };
-      parentEvent.recurrenceExceptions = [
-        new Date('2025-01-15T10:00:00Z').toISOString(),
-      ];
 
-      (eventRepository.findOne as jest.Mock)
-        .mockResolvedValueOnce(parentEvent) // For parent event lookup
-        .mockResolvedValueOnce(null); // For existing occurrence lookup
+      (eventRepository.findOne as jest.Mock).mockResolvedValue(parentEvent);
 
-      // Mock saving the parent event with updated exceptions
-      (eventRepository.save as jest.Mock)
-        .mockResolvedValueOnce(parentEvent) // Saving parent with updated exceptions
-        .mockResolvedValueOnce({ id: 2 }); // Saving the new occurrence
+      // Mock findOccurrence to return existing cancelled occurrence
+      const existingOccurrence = {
+        id: 3,
+        slug: 'event-3',
+        status: EventStatus.Cancelled,
+      };
+      (
+        eventSeriesOccurrenceService.findOccurrence as jest.Mock
+      ).mockResolvedValue(existingOccurrence);
+
+      // Mock save
+      const reactivatedEvent = {
+        ...existingOccurrence,
+        status: EventStatus.Published,
+      };
+      (eventRepository.save as jest.Mock).mockResolvedValue(reactivatedEvent);
 
       // Call the service method
-      const occurrenceDate = new Date('2025-01-15T10:00:00Z');
-      const result = await service.includeOccurrence(1, occurrenceDate);
+      const result = await service.includeOccurrence(
+        parentEventId,
+        occurrenceDate,
+      );
 
       // Assertions
-      expect(eventRepository.findOne).toHaveBeenCalledTimes(2);
-      expect(parentEvent.recurrenceExceptions).not.toContain(
+      expect(eventRepository.findOne).toHaveBeenCalledWith({
+        where: { id: parentEventId, isRecurring: true },
+        relations: ['series'],
+      });
+
+      expect(eventSeriesOccurrenceService.findOccurrence).toHaveBeenCalledWith(
+        'test-series-slug',
         occurrenceDate.toISOString(),
       );
-      expect(eventRepository.save).toHaveBeenCalledTimes(2);
-      expect(result).toBe(true);
-    });
 
-    it('should not create a new occurrence if one already exists', async () => {
-      // Setup parent event
-      const parentEvent = new EventEntity();
-      parentEvent.id = 1;
-      parentEvent.isRecurring = true;
-      parentEvent.startDate = new Date('2025-01-01T10:00:00Z');
-      parentEvent.recurrenceRule = {
-        freq: 'WEEKLY',
-        interval: 1,
-      };
-      parentEvent.recurrenceExceptions = [
-        new Date('2025-01-15T10:00:00Z').toISOString(),
-      ];
+      expect(eventRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: EventStatus.Published,
+        }),
+      );
 
-      const existingOccurrence = new EventEntity();
-      existingOccurrence.id = 2;
-      existingOccurrence.parentEventId = 1;
-      existingOccurrence.startDate = new Date('2025-01-15T10:00:00Z');
-
-      (eventRepository.findOne as jest.Mock)
-        .mockResolvedValueOnce(parentEvent) // For parent event lookup
-        .mockResolvedValueOnce(existingOccurrence); // For existing occurrence lookup
-
-      // Mock saving the parent event with updated exceptions
-      (eventRepository.save as jest.Mock).mockResolvedValue(parentEvent);
-
-      // Call the service method
-      const occurrenceDate = new Date('2025-01-15T10:00:00Z');
-      const result = await service.includeOccurrence(1, occurrenceDate);
-
-      // Assertions
-      expect(eventRepository.save).toHaveBeenCalledTimes(1); // Only saving parent
       expect(result).toBe(true);
     });
   });
 
   describe('deleteAllOccurrences', () => {
-    it('should delete all occurrences of a recurring event', async () => {
-      // Mock deletion result
+    it('should delete all occurrences for series-based events', async () => {
+      // Setup
+      const parentEventId = 1;
+
+      // Mock parent event with seriesId
+      const parentEvent = {
+        id: parentEventId,
+        isRecurring: true,
+        seriesId: 101,
+      };
+
+      (eventRepository.findOne as jest.Mock).mockResolvedValue(parentEvent);
+
+      // Mock delete
       (eventRepository.delete as jest.Mock).mockResolvedValue({ affected: 5 });
 
       // Call the service method
-      const result = await service.deleteAllOccurrences(1);
+      const result = await service.deleteAllOccurrences(parentEventId);
 
       // Assertions
+      expect(eventRepository.findOne).toHaveBeenCalledWith({
+        where: { id: parentEventId, isRecurring: true },
+        relations: ['series'],
+      });
+
       expect(eventRepository.delete).toHaveBeenCalledWith({
-        parentEventId: 1,
+        seriesId: 101,
       });
 
       expect(result).toBe(5);
-    });
-
-    it('should return 0 if no occurrences were deleted', async () => {
-      // Mock deletion result
-      (eventRepository.delete as jest.Mock).mockResolvedValue({ affected: 0 });
-
-      // Call the service method
-      const result = await service.deleteAllOccurrences(999);
-
-      expect(result).toBe(0);
     });
   });
 });

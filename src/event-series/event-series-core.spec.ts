@@ -32,7 +32,7 @@ describe('EventSeries Core Functionality', () => {
       };
 
       // Functions to test
-      const createSeries = async (data, userId) => {
+      const createSeries = async (data, _userId) => {
         const series = await createSeriesRepo(data);
         await createEvent({
           name: series.name,
@@ -240,7 +240,7 @@ describe('EventSeries Core Functionality', () => {
         const date = new Date(dateStr);
 
         if (!isValidDate(date)) {
-          throw new Error('Invalid date');
+          throw new Error(`Invalid date for series ${series.slug}`);
         }
 
         return { valid: true };
@@ -286,7 +286,7 @@ describe('EventSeries Core Functionality', () => {
           if (materialized) {
             return {
               date: date.toISOString(),
-              event: materialized,
+              event: { ...materialized, seriesId: series.id },
               materialized: true,
             };
           } else {

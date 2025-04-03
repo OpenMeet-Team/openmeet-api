@@ -1,12 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventSeriesOccurrenceService } from './event-series-occurrence.service';
 import { EventSeriesService } from './event-series.service';
-import { RecurrenceService } from '../../recurrence/recurrence.service';
+import { RecurrencePatternService } from './recurrence-pattern.service';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { EventManagementService } from '../../event/services/event-management.service';
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository, MoreThanOrEqual } from 'typeorm';
+import { MoreThanOrEqual } from 'typeorm';
 import { BadRequestException } from '@nestjs/common';
 import { EventSeriesEntity } from '../infrastructure/persistence/relational/entities/event-series.entity';
 import { EventType } from '../../core/constants/constant';
@@ -69,7 +69,7 @@ const mockEventRepository = {
 const mockEventSeriesService = {
   findBySlug: jest
     .fn()
-    .mockImplementation((slug) => Promise.resolve(mockEventSeries)),
+    .mockImplementation((_slug) => Promise.resolve(mockEventSeries)),
 };
 
 const mockRecurrenceService = {
@@ -77,7 +77,7 @@ const mockRecurrenceService = {
   generateOccurrences: jest.fn(),
   formatDateInTimeZone: jest
     .fn()
-    .mockImplementation((date, timeZone, options) => {
+    .mockImplementation((date, _timeZone, _options) => {
       const d = new Date(date);
       return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
     }),
@@ -86,7 +86,7 @@ const mockRecurrenceService = {
 const mockEventQueryService = {
   findEventBySlug: jest
     .fn()
-    .mockImplementation((slug) => Promise.resolve(mockTemplateEvent)),
+    .mockImplementation((_slug) => Promise.resolve(mockTemplateEvent)),
 };
 
 const mockEventManagementService = {
@@ -115,7 +115,7 @@ describe('EventSeriesOccurrenceService', () => {
           useValue: mockEventSeriesService,
         },
         {
-          provide: RecurrenceService,
+          provide: RecurrencePatternService,
           useValue: mockRecurrenceService,
         },
         {
@@ -134,7 +134,7 @@ describe('EventSeriesOccurrenceService', () => {
     );
     eventRepository = module.get(getRepositoryToken(EventEntity));
     eventSeriesService = module.get(EventSeriesService);
-    recurrenceService = module.get(RecurrenceService);
+    recurrenceService = module.get(RecurrencePatternService);
 
     // Manually add spy method for materializeOccurrence since it's a method of the service itself
     jest.spyOn(service, 'materializeOccurrence');
@@ -306,7 +306,6 @@ describe('EventSeriesOccurrenceService', () => {
   describe('getUpcomingOccurrences', () => {
     it('should return both materialized and unmaterialized occurrences', async () => {
       // Setup the test
-      const now = new Date();
       const materializedOccurrences = [
         {
           ...mockTemplateEvent,

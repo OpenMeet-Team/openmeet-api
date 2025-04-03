@@ -27,7 +27,7 @@ export class RecurrenceRuleDto {
   })
   @IsString()
   @IsIn(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'])
-  freq: string;
+  frequency: string;
 
   @ApiPropertyOptional({
     description: 'Interval between recurrences (e.g., every 2 weeks)',
@@ -68,7 +68,7 @@ export class RecurrenceRuleDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  byday?: string[];
+  byweekday?: string[];
 
   @ApiPropertyOptional({
     description: 'Months of the year (1-12)',
@@ -208,21 +208,23 @@ export class CreateEventDto implements SourceFields {
   @IsString()
   location?: string;
 
+  @IsNumber()
+  @IsOptional()
   @ApiProperty({
     description: 'The latitude of the event location',
+    example: 38.2527,
+    required: false,
   })
-  @IsOptional()
-  @IsNumber()
-  @Type(() => Number)
-  lat: number;
+  lat?: number;
 
+  @IsNumber()
+  @IsOptional()
   @ApiProperty({
     description: 'The longitude of the event location',
+    example: -85.7585,
+    required: false,
   })
-  @IsOptional()
-  @IsNumber()
-  @Type(() => Number)
-  lon: number;
+  lon?: number;
 
   @ApiPropertyOptional({
     description: 'The status of the event',
@@ -410,6 +412,14 @@ export class CreateEventDto implements SourceFields {
   @ApiPropertyOptional()
   @IsOptional()
   lastSyncedAt?: Date | null;
+
+  @ApiPropertyOptional({
+    description: 'The slug of the event series this event belongs to',
+    example: 'weekly-team-meeting',
+  })
+  @IsOptional()
+  @IsString()
+  seriesSlug?: string;
 }
 
 export class CommentDto {

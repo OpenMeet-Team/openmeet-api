@@ -1,14 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { EventEntity } from '../../infrastructure/persistence/relational/entities/event.entity';
 import icalGenerator from 'ical-generator';
-import { RecurrenceService } from '../../../recurrence/recurrence.service';
 import { ConfigService } from '@nestjs/config';
-import { RecurrenceRule } from '../../../recurrence/interfaces/recurrence.interface';
+import { RecurrenceRule } from '../../../event-series/interfaces/recurrence.interface';
+import { RecurrencePatternService } from '../../../event-series/services/recurrence-pattern.service';
 
 @Injectable()
 export class ICalendarService {
   constructor(
-    private readonly recurrenceService: RecurrenceService,
+    @Inject(forwardRef(() => RecurrencePatternService))
+    private readonly recurrencePatternService: RecurrencePatternService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -87,7 +88,7 @@ export class ICalendarService {
         const recurrenceRule =
           event.recurrenceRule as unknown as RecurrenceRule;
         const rruleString =
-          this.recurrenceService.buildRRuleString(recurrenceRule);
+          this.recurrencePatternService.buildRRuleString(recurrenceRule);
 
         if (rruleString) {
           // Pass the raw RRULE string

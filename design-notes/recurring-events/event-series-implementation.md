@@ -80,3 +80,122 @@ Until ATProtocol supports native recurrence:
 - Clear visual distinction between series templates and individual occurrences
 - Navigation paths to move between series and specific occurrences
 - Template modification interface shows propagation options
+
+## Event Series Implementation Notes
+
+## Overview
+Event series in OpenMeet are implemented with a dedicated series entity that manages recurring events. The series maintains an ordered list of events and references a current template event that serves as the blueprint for future occurrences.
+
+## Database Schema
+
+### Event Series Entity
+- id, name, description, slug
+- recurrenceRule, recurrenceDescription
+- currentTemplateEventId (reference to template event)
+- timeZone, user, group, image references
+- source tracking (ATProtocol, etc.)
+- matrixRoomId (for integrations)
+
+### Event Entity (extended)
+- seriesId (foreign key to event_series)
+- isTemplate (boolean to identify template events)
+- materialized (boolean)
+- rescheduled (boolean or timestamp, if moved)
+
+## Series-Event Relationship
+- Series maintains an ordered list of event IDs
+- Series has a pointer to the current template event
+- Events can determine they're part of a series via seriesId
+- Series and event properties are independent (no inheritance)
+
+## Implementation Details
+
+### Creating a Series
+1. Create series with name, description, recurrence rule
+2. Create first event with provided properties
+3. Mark first event as template (isTemplate = true)
+4. Set first event as current template for series
+5. Add first event to series' ordered list
+
+### Template Event Management
+1. When updating "this and all future events":
+   - Update specified event with new properties
+   - Mark this event as a template (isTemplate = true)
+   - Update series to reference this event as the current template
+   - Update all future occurrences using properties from new template
+
+2. When editing a single occurrence:
+   - Only update that specific occurrence
+   - Current template remains unchanged
+   - Future occurrences continue using current template
+
+### Occurrence Generation
+1. When materializing an occurrence:
+   - Use properties from current template event
+   - Set materialzed = true
+   - Add to series' ordered list
+
+2. Occurrence management:
+   - Generate unmaterialized occurrences 2 months in advance
+   - Create new ones as old ones pass
+   - Use current template event for new occurrences
+
+## Test Cases
+
+### Basic Series Creation and Template
+1. Create a weekly book club series starting March 21st:
+   - First event becomes template with location "Library A"
+   - Series points to first event as current template
+   - March 28th occurrence uses Library A location
+   - April 4th occurrence uses Library A location
+
+### Template Changes
+1. Update April 4th and all future events:
+   - April 4th event becomes new template with location "Library B"
+   - Series updates currentTemplateEventId to April 4th
+   - April 4th occurrence uses Library B location
+   - April 11th occurrence uses Library B location
+   - March 28th occurrence keeps Library A location
+
+### Single Occurrence Updates
+1. Edit March 28th event only:
+   - March 28th uses "Library C" location
+   - April 4th and future events still use Library B location
+   - Current template remains unchanged
+
+### Multiple Template Changes
+1. Series timeline with multiple templates:
+   - March 21st: First template (Library A)
+   - April 4th: Second template (Library B) - series points to this
+   - May 2nd: Third template (Library C) - series points to this
+   - Each template affects only its date and future dates
+
+### Edge Cases
+1. Timezone handling:
+   - Series in America/New_York
+   - Template change at 11:59 PM
+   - Next occurrence at 12:01 AM
+   - Verify correct template is used
+
+2. Cancellation and rescheduling:
+   - Cancel April 4th event (mark as cancelled)
+   - April 11th still uses current template
+   - Reschedule April 11th to April 12th (set rescheduled = true)
+   - Still uses current template
+
+## Future Improvements
+
+### Optimization
+- Consider caching template properties
+- Batch generation of future occurrences
+- Efficient query patterns for large series
+
+### Consistency
+- Ensure timezone consistency across series
+- Validation for template changes
+- Handling of series spanning DST changes
+
+### User Experience
+- Provide clear indication of template status
+- Show which template applies to which occurrences
+- Allow viewing template history

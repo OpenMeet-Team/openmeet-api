@@ -67,3 +67,98 @@ Our recurring events implementation follows these standards:
 - Support for complex recurrence patterns (e.g., "third Tuesday of the month")
 - Calendar export/import with standard `.ics` files
 - Enhanced visibility controls and permissions
+
+# Recurring Events Implementation
+
+This directory contains design documents and implementation details for the recurring events system in OpenMeet.
+
+## Overview
+
+Recurring events in OpenMeet are managed via the EventSeries model. Event series represent a collection of events that follow a recurrence pattern, with a template event defining the properties of future occurrences.
+
+The implementation follows the iCalendar (RFC 5545) approach to recurrence, using RRULE syntax for defining patterns. We use the RRule.js library for recurrence rule processing and occurrence calculation.
+
+## Key Documents
+
+- [Implementation Progress](./implementation-progress.md) - Current status and roadmap
+- [Consolidated Implementation Plan](./consolidated-implementation-plan.md) - Detailed implementation plan
+- [Event Series Implementation](./event-series-implementation.md) - Technical details of the EventSeries model
+- [Recurring Events Unified](./recurring-events-unified.md) - Integration with the rest of the system
+- [Event Series Integration](./event-series-integration.md) - API details and client integration
+- [Migration Plan](./migration-plan.md) - Plan for migrating from old recurrence model to EventSeries
+- [Bluesky Integration](./bluesky-integration.md) - Integration with Bluesky for recurring events
+
+## Core Components
+
+### Backend
+
+- `EventSeriesEntity`: Model for event series
+- `EventSeriesService`: Business logic for event series management
+- `EventSeriesController`: API endpoints for event series
+- `EventSeriesOccurrenceService`: Handles occurrence generation and materialization
+- `RecurrencePatternService`: Utilities for working with recurrence patterns
+
+### Frontend
+
+- `EventSeriesFormComponent`: Component for creating and editing event series
+- `RecurrenceComponent`: Component for defining recurrence patterns
+- `EventSeriesService`: Service for interacting with event series API
+- `RecurrenceService`: Utilities for working with recurrence patterns
+- `recurrenceUtils.ts`: Utility functions for converting between frontend and backend recurrence rule formats
+
+## Type System
+
+The recurrence system uses a standardized approach to type handling:
+
+- `RecurrenceRule`: Interface for recurrence rule definition, with properties aligned between frontend and backend
+- `RecurrenceRuleDto`: Data transfer object for recurrence rule validation in the API
+- Utility functions for conversion between formats
+
+Example:
+```typescript
+// Frontend RecurrenceRule
+interface RecurrenceRule {
+  frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' | 'HOURLY' | 'MINUTELY' | 'SECONDLY'
+  interval?: number
+  count?: number
+  until?: string
+  byweekday?: string[] // Days of the week (SU, MO, TU, WE, TH, FR, SA)
+  // ...other properties
+}
+
+// Backend RecurrenceRuleDto
+class RecurrenceRuleDto {
+  @IsString()
+  @IsIn(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'])
+  frequency: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  interval?: number;
+
+  // ...other properties
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  byweekday?: string[];
+}
+```
+
+## Architecture
+
+The recurrence system follows a template-based approach:
+
+1. A series has one or more template events
+2. Each template event defines properties for occurrences after its date
+3. Occurrences are materialized as needed from template events
+4. Occurrences can be customized without affecting other occurrences
+
+## Future Work
+
+- Complete migration from old recurrence model to EventSeries
+- Enhance UI for customizing individual occurrences
+- Add support for more complex recurrence patterns
+- Improve performance of occurrence calculation
+- Integration with external calendar systems

@@ -112,14 +112,14 @@ export const mockEventSeriesRepository = {
 
   findByUser: jest
     .fn()
-    .mockImplementation((userId, options = { page: 1, limit: 10 }) => {
+    .mockImplementation((userId, _options = { page: 1, limit: 10 }) => {
       const series = mockEventSeriesList;
       return Promise.resolve([series, series.length]);
     }),
 
   findByGroup: jest
     .fn()
-    .mockImplementation((groupId, options = { page: 1, limit: 10 }) => {
+    .mockImplementation((groupId, _options = { page: 1, limit: 10 }) => {
       const series = mockEventSeriesList;
       return Promise.resolve([series, series.length]);
     }),

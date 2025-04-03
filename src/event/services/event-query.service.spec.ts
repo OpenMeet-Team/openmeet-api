@@ -6,14 +6,13 @@ import { TESTING_TENANT_ID } from '../../../test/utils/constants';
 import { EventStatus } from '../../core/constants/constant';
 import {
   mockEvent,
-  mockEvents,
   mockTenantConnectionService,
   mockRepository,
   mockUser,
   mockEventAttendeeService,
   mockMatrixService,
   mockGroupMemberService,
-  mockRecurrenceService,
+  mockRecurrencePatternService,
 } from '../../test/mocks';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -22,7 +21,7 @@ import { EventAttendeeService } from '../../event-attendee/event-attendee.servic
 import { MatrixChatProviderAdapter } from '../../chat/adapters/matrix-chat-provider.adapter';
 import { GroupMemberService } from '../../group-member/group-member.service';
 import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
-import { RecurrenceService } from '../../recurrence/recurrence.service';
+import { RecurrencePatternService } from '../../event-series/services/recurrence-pattern.service';
 
 describe('EventQueryService', () => {
   let service: EventQueryService;
@@ -53,8 +52,8 @@ describe('EventQueryService', () => {
           useValue: mockGroupMemberService,
         },
         {
-          provide: RecurrenceService,
-          useValue: mockRecurrenceService,
+          provide: RecurrencePatternService,
+          useValue: mockRecurrencePatternService,
         },
         {
           provide: getRepositoryToken(EventEntity),
@@ -179,10 +178,7 @@ describe('EventQueryService', () => {
         )
         .mockResolvedValue(5);
 
-      // Mock the recurrence service for addRecurrenceInformation
-      jest
-        .spyOn(service['recurrenceService'], 'getRecurrenceDescription')
-        .mockReturnValue('Every week on Monday');
+      // No need to mock recurrence service anymore as we now generate the description directly
 
       const mockQueryBuilder = {
         select: jest.fn().mockReturnThis(),
@@ -211,6 +207,14 @@ describe('EventQueryService', () => {
 
       const result = await service.getHomePageFeaturedEvents();
       expect(Array.isArray(result)).toBe(true);
+    });
+  });
+
+  describe('findEventBySlug', () => {
+    it('should return an event by slug', async () => {
+      const result = await service.findEventBySlug('test-event');
+      expect(eventRepository.findOne).toHaveBeenCalled();
+      expect(result).toEqual(mockEvent);
     });
   });
 });

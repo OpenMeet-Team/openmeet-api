@@ -32,7 +32,7 @@ import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
 import { ICalendarService } from './services/ical/ical.service';
-import { RecurrenceModificationService } from '../recurrence/services/recurrence-modification.service';
+import { EventSeriesOccurrenceService } from '../event-series/services/event-series-occurrence.service';
 
 const createEventDto: CreateEventDto = {
   name: 'Test Event',
@@ -90,7 +90,7 @@ const mockICalendarService = {
   generateICalendar: jest.fn(),
 };
 
-const mockRecurrenceModificationService = {
+const mockEventSeriesOccurrenceService = {
   splitSeriesAt: jest.fn(),
   getEffectiveEventForDate: jest.fn(),
 };
@@ -146,8 +146,8 @@ describe('EventController', () => {
           useValue: mockICalendarService,
         },
         {
-          provide: RecurrenceModificationService,
-          useValue: mockRecurrenceModificationService,
+          provide: EventSeriesOccurrenceService,
+          useValue: mockEventSeriesOccurrenceService,
         },
         // EventDiscussionService has been moved to ChatController
         {
@@ -435,7 +435,7 @@ describe('EventController', () => {
         recurrenceSplitPoint: true,
       };
 
-      mockRecurrenceModificationService.splitSeriesAt.mockResolvedValue(
+      mockEventSeriesOccurrenceService.splitSeriesAt.mockResolvedValue(
         expectedResult,
       );
 
@@ -447,8 +447,8 @@ describe('EventController', () => {
       );
 
       expect(
-        mockRecurrenceModificationService.splitSeriesAt,
-      ).toHaveBeenCalledWith(slug, date, updateEventDto);
+        mockEventSeriesOccurrenceService.splitSeriesAt,
+      ).toHaveBeenCalledWith(slug, date, mockUser.id, updateEventDto);
       expect(result).toEqual(expectedResult);
     });
   });
@@ -462,14 +462,14 @@ describe('EventController', () => {
         name: 'Weekly Meeting (June Update)',
       };
 
-      mockRecurrenceModificationService.getEffectiveEventForDate.mockResolvedValue(
+      mockEventSeriesOccurrenceService.getEffectiveEventForDate.mockResolvedValue(
         expectedResult,
       );
 
       const result = await controller.getEffectiveProperties(slug, date);
 
       expect(
-        mockRecurrenceModificationService.getEffectiveEventForDate,
+        mockEventSeriesOccurrenceService.getEffectiveEventForDate,
       ).toHaveBeenCalledWith(slug, date);
       expect(result).toEqual(expectedResult);
     });
@@ -478,14 +478,14 @@ describe('EventController', () => {
       const slug = 'weekly-meeting';
       const expectedResult = { id: 1, name: 'Weekly Meeting' };
 
-      mockRecurrenceModificationService.getEffectiveEventForDate.mockResolvedValue(
+      mockEventSeriesOccurrenceService.getEffectiveEventForDate.mockResolvedValue(
         expectedResult,
       );
 
       const result = await controller.getEffectiveProperties(slug, '');
 
       expect(
-        mockRecurrenceModificationService.getEffectiveEventForDate,
+        mockEventSeriesOccurrenceService.getEffectiveEventForDate,
       ).toHaveBeenCalledWith(
         slug,
         expect.any(String), // Should be the current date as ISO string

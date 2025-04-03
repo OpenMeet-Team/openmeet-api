@@ -4,7 +4,6 @@ import {
   Inject,
   Logger,
   NotFoundException,
-  forwardRef,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Repository, MoreThan, Brackets } from 'typeorm';
@@ -26,7 +25,6 @@ import { Trace } from '../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
-import { RecurrenceService } from '../../recurrence/recurrence.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventQueryService {
@@ -40,8 +38,6 @@ export class EventQueryService {
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly groupMemberService: GroupMemberService,
-    @Inject(forwardRef(() => RecurrenceService))
-    private readonly recurrenceService: RecurrenceService,
   ) {
     void this.initializeRepository();
   }
@@ -375,21 +371,15 @@ export class EventQueryService {
           event.recurrenceRule &&
           event.recurrenceRule.freq
         ) {
+          // Use simple description format instead of RecurrenceService
           const rule = event.recurrenceRule as any;
-          const recurrenceDescription =
-            this.recurrenceService.getRecurrenceDescription(
-              {
-                freq: rule.freq,
-                interval: rule.interval,
-                count: rule.count,
-                until: rule.until,
-                byday: rule.byday,
-                bymonth: rule.bymonth,
-                bymonthday: rule.bymonthday,
-                wkst: rule.wkst,
-              },
-              event.timeZone,
-            );
+          const freq = rule.freq.toLowerCase();
+          const interval = rule.interval || 1;
+
+          let recurrenceDescription = `Every ${interval > 1 ? interval : ''} ${freq}`;
+          if (interval > 1) {
+            recurrenceDescription += freq.endsWith('s') ? '' : 's';
+          }
 
           // Debug what description is being generated
           this.logger.debug(
@@ -815,21 +805,14 @@ export class EventQueryService {
           `Adding recurrence description for event ${event.id}, rule: ${JSON.stringify(rule)}`,
         );
 
-        // Just add the description field without modifying anything else
-        const recurrenceDescription =
-          this.recurrenceService.getRecurrenceDescription(
-            {
-              freq: rule.freq,
-              interval: rule.interval,
-              count: rule.count,
-              until: rule.until,
-              byday: rule.byday,
-              bymonth: rule.bymonth,
-              bymonthday: rule.bymonthday,
-              wkst: rule.wkst,
-            },
-            event.timeZone,
-          );
+        // Just add the description field without modifying anything else - simplified version
+        const freq = rule.freq.toLowerCase();
+        const interval = rule.interval || 1;
+
+        let recurrenceDescription = `Every ${interval > 1 ? interval : ''} ${freq}`;
+        if (interval > 1) {
+          recurrenceDescription += freq.endsWith('s') ? '' : 's';
+        }
 
         this.logger.debug(
           `Generated description: "${recurrenceDescription}" for event ${event.id}`,

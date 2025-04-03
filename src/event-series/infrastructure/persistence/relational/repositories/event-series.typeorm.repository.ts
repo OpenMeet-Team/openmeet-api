@@ -1,17 +1,31 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
+import { Injectable, Inject, Scope } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { EventSeriesEntity } from '../entities/event-series.entity';
 import { EventSeriesRepository } from '../../../../interfaces/event-series-repository.interface';
+import { TenantConnectionService } from '../../../../../tenant/tenant.service';
+import { REQUEST } from '@nestjs/core';
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventSeriesTypeOrmRepository implements EventSeriesRepository {
+  private repository: Repository<EventSeriesEntity>;
+
   constructor(
-    @InjectRepository(EventSeriesEntity)
-    private readonly repository: Repository<EventSeriesEntity>,
+    @Inject(REQUEST) private readonly request: any,
+    private readonly tenantConnectionService: TenantConnectionService,
   ) {}
 
+  private async getTenantSpecificRepository(tenantId?: string) {
+    const effectiveTenantId = tenantId || this.request?.tenantId;
+    if (!effectiveTenantId) {
+      throw new Error('Tenant ID is required');
+    }
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(effectiveTenantId);
+    this.repository = dataSource.getRepository(EventSeriesEntity);
+  }
+
   async findById(id: number): Promise<EventSeriesEntity | undefined> {
+    await this.getTenantSpecificRepository();
     const result = await this.repository.findOne({
       where: { id },
       relations: ['user', 'group', 'image'],
@@ -20,6 +34,7 @@ export class EventSeriesTypeOrmRepository implements EventSeriesRepository {
   }
 
   async findBySlug(slug: string): Promise<EventSeriesEntity | undefined> {
+    await this.getTenantSpecificRepository();
     const result = await this.repository.findOne({
       where: { slug },
       relations: ['user', 'group', 'image'],
@@ -28,6 +43,7 @@ export class EventSeriesTypeOrmRepository implements EventSeriesRepository {
   }
 
   async findByUlid(ulid: string): Promise<EventSeriesEntity | undefined> {
+    await this.getTenantSpecificRepository();
     const result = await this.repository.findOne({
       where: { ulid },
       relations: ['user', 'group', 'image'],
@@ -36,20 +52,27 @@ export class EventSeriesTypeOrmRepository implements EventSeriesRepository {
   }
 
   async findByUser(
-    userId: number,
+    userId: number | null,
     options?: { page: number; limit: number },
   ): Promise<[EventSeriesEntity[], number]> {
+    await this.getTenantSpecificRepository();
     const page = options?.page || 1;
     const limit = options?.limit || 10;
     const skip = (page - 1) * limit;
 
-    const [data, total] = await this.repository.findAndCount({
-      where: { user: { id: userId } },
+    const query: any = {
       relations: ['user', 'group', 'image'],
       skip,
       take: limit,
       order: { createdAt: 'DESC' },
-    });
+    };
+
+    // If userId is provided, filter by user
+    if (userId !== null) {
+      query['where'] = { user: { id: userId } };
+    }
+
+    const [data, total] = await this.repository.findAndCount(query);
 
     return [data, total];
   }
@@ -58,6 +81,7 @@ export class EventSeriesTypeOrmRepository implements EventSeriesRepository {
     groupId: number,
     options?: { page: number; limit: number },
   ): Promise<[EventSeriesEntity[], number]> {
+    await this.getTenantSpecificRepository();
     const page = options?.page || 1;
     const limit = options?.limit || 10;
     const skip = (page - 1) * limit;
@@ -76,6 +100,7 @@ export class EventSeriesTypeOrmRepository implements EventSeriesRepository {
   async create(
     eventSeries: Partial<EventSeriesEntity>,
   ): Promise<EventSeriesEntity> {
+    await this.getTenantSpecificRepository();
     const newEventSeries = this.repository.create(eventSeries);
     return this.repository.save(newEventSeries);
   }
@@ -84,6 +109,7 @@ export class EventSeriesTypeOrmRepository implements EventSeriesRepository {
     id: number,
     eventSeries: Partial<EventSeriesEntity>,
   ): Promise<EventSeriesEntity> {
+    await this.getTenantSpecificRepository();
     await this.repository.update(id, eventSeries as any);
     const updated = await this.findById(id);
     if (!updated) {
@@ -93,6 +119,14 @@ export class EventSeriesTypeOrmRepository implements EventSeriesRepository {
   }
 
   async delete(id: number): Promise<void> {
+    await this.getTenantSpecificRepository();
     await this.repository.delete(id);
+  }
+
+  async save(
+    eventSeries: Partial<EventSeriesEntity>,
+  ): Promise<EventSeriesEntity> {
+    await this.getTenantSpecificRepository();
+    return this.repository.save(eventSeries);
   }
 }
