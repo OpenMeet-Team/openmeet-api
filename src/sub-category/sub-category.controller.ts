@@ -13,7 +13,7 @@ import { CreateSubCategoryDto } from './dto/create-subcategory.dto';
 import { UpdateSubCategoryDto } from './dto/update-subcategory.dto';
 import { SubCategoryEntity } from './infrastructure/persistence/relational/entities/sub-category.entity';
 import { SubCategoryService } from './sub-category.service';
-import { Public } from 'src/auth/decorators/public.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 
 @ApiTags('SubCategories')
 @Controller('subcategories')

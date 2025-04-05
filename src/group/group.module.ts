@@ -24,9 +24,11 @@ import { EventModule } from '../event/event.module';
 import { EventMailModule } from '../event-mail/event-mail.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
 import { ChatModule } from '../chat/chat.module';
+import { ConfigModule } from '@nestjs/config';
 
 @Module({
   imports: [
+    ConfigModule,
     TypeOrmModule.forFeature([
       GroupEntity,
       GroupMemberEntity,

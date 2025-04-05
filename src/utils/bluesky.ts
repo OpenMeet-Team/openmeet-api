@@ -10,6 +10,7 @@ import {
 } from '@atproto/oauth-client-node';
 import { JoseKey } from '@atproto/jwk-jose';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
+import { createRequestLock } from '../auth-bluesky/stores/redlock';
 
 /**
  * Restores and initializes the OAuth client using the tenant configuration,
@@ -20,7 +21,6 @@ import { ElastiCacheService } from '../elasticache/elasticache.service';
  * @param elasticacheService - The caching service for state/session persistence.
  * @returns A Promise resolving to a new NodeOAuthClient.
  */
-import { createRequestLock } from '../auth-bluesky/stores/redlock';
 
 export async function initializeOAuthClient(
   tenantId: string,

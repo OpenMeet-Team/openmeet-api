@@ -126,12 +126,26 @@ async function createCategory(app, token, categoryData) {
   return response.body;
 }
 
-async function createEvent(app, token, eventData) {
+async function createEvent(app: string, authToken: string, eventData: any) {
+  console.log('Creating event with data:', JSON.stringify(eventData, null, 2));
+
   const response = await request(app)
     .post('/api/events')
-    .set('Authorization', `Bearer ${token}`)
+    .set('Authorization', `Bearer ${authToken}`)
     .set('x-tenant-id', TESTING_TENANT_ID)
     .send(eventData);
+
+  console.log('Create event response:', {
+    status: response.status,
+    body: response.body,
+  });
+
+  if (response.status !== 201) {
+    console.error('Create event failed:', {
+      status: response.status,
+      body: response.body,
+    });
+  }
 
   expect(response.status).toBe(201);
   return response.body;
@@ -173,8 +187,14 @@ async function updateEvent(app, token, eventId, eventData) {
     .set('x-tenant-id', TESTING_TENANT_ID)
     .send(eventData);
 
-  expect(response.status).toBe(200);
+  if (response.status !== 200) {
+    console.error('Update event failed:', {
+      status: response.status,
+      body: response.body,
+    });
+  }
 
+  expect(response.status).toBe(200);
   return response.body;
 }
 

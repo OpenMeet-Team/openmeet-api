@@ -7,6 +7,7 @@ import { AuthModule } from '../auth/auth.module';
 import { ElastiCacheModule } from '../elasticache/elasticache.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
 import { UserModule } from '../user/user.module';
+import { EventSeriesModule } from '../event-series/event-series.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { UserModule } from '../user/user.module';
     ElastiCacheModule,
     forwardRef(() => BlueskyModule),
     UserModule,
+    EventSeriesModule,
   ],
   controllers: [AuthBlueskyController],
   providers: [AuthBlueskyService],

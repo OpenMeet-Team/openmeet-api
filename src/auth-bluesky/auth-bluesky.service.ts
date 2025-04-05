@@ -17,6 +17,7 @@ import { BlueskyService } from '../bluesky/bluesky.service';
 import { UserService } from '../user/user.service';
 import { initializeOAuthClient } from '../utils/bluesky';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { EventSeriesOccurrenceService } from '../event-series/services/event-series-occurrence.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class AuthBlueskyService {
@@ -31,6 +32,7 @@ export class AuthBlueskyService {
     private elasticacheService: ElastiCacheService,
     private blueskyService: BlueskyService,
     private userService: UserService,
+    private eventSeriesOccurrenceService: EventSeriesOccurrenceService,
   ) {
     this.logger.log('AuthBlueskyService constructed');
   }
@@ -320,6 +322,30 @@ export class AuthBlueskyService {
     };
 
     this.logger.debug('login Response', { loginResponse });
+
+    // Materialize the user's Bluesky events after successful login
+    try {
+      this.logger.debug('Starting materialization of Bluesky events for user', {
+        userId: loginResponse.user.id,
+      });
+
+      const materialized =
+        await this.eventSeriesOccurrenceService.bufferBlueskyMaterialization(
+          loginResponse.user.id,
+        );
+
+      this.logger.debug('Completed materialization of Bluesky events', {
+        userId: loginResponse.user.id,
+        materialized,
+      });
+    } catch (error) {
+      // Log the error but don't block the login process
+      this.logger.error('Failed to materialize Bluesky events', {
+        userId: loginResponse.user.id,
+        error: error.message,
+        stack: error.stack,
+      });
+    }
 
     const newParams = new URLSearchParams({
       token: loginResponse.token,

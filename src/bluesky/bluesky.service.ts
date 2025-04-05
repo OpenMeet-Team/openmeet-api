@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, forwardRef, Inject } from '@nestjs/common';
 import { UserService } from '../user/user.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { ConfigService } from '@nestjs/config';
@@ -9,6 +9,8 @@ import { initializeOAuthClient } from '../utils/bluesky';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { delay } from '../utils/delay';
 import { BlueskyLocation, BlueskyEventUri } from './BlueskyTypes';
+import { EventManagementService } from '../event/services/event-management.service';
+import { EventQueryService } from '../event/services/event-query.service';
 
 @Injectable()
 export class BlueskyService {
@@ -21,6 +23,10 @@ export class BlueskyService {
     private readonly configService: ConfigService,
     private readonly userService: UserService,
     private readonly elasticacheService: ElastiCacheService,
+    @Inject(forwardRef(() => EventManagementService))
+    private readonly eventManagementService: EventManagementService,
+    @Inject(forwardRef(() => EventQueryService))
+    private readonly eventQueryService: EventQueryService,
   ) {}
 
   private async getOAuthClient(tenantId: string): Promise<NodeOAuthClient> {
@@ -425,5 +431,73 @@ export class BlueskyService {
       success: true,
       message: 'Event deleted successfully',
     };
+  }
+
+  /**
+   * Handle deletion of an event from Bluesky
+   * This method is called when an event is deleted in Bluesky and should be deleted in OpenMeet
+   *
+   * @param did DID of the user who owns the event
+   * @param rkey Record key of the event in Bluesky
+   * @param tenantId Tenant ID
+   * @returns Status of the operation
+   */
+  async handleExternalEventDeletion(
+    did: string,
+    rkey: string,
+    tenantId: string,
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      this.logger.debug('Handling external event deletion', {
+        did,
+        rkey,
+        tenantId,
+      });
+
+      // Find the event in our system by source ID and rkey
+      const events = await this.eventQueryService.findByBlueskySource({
+        did,
+        rkey,
+      });
+
+      if (!events || events.length === 0) {
+        this.logger.debug('No matching event found for deletion', {
+          did,
+          rkey,
+        });
+        return {
+          success: false,
+          message: 'No matching event found to delete',
+        };
+      }
+
+      this.logger.debug('Found events to delete', {
+        count: events.length,
+        slugs: events.map((e) => e.slug),
+      });
+
+      // Delete each matching event
+      for (const event of events) {
+        this.logger.debug('Deleting event', { slug: event.slug });
+        await this.eventManagementService.remove(event.slug);
+      }
+
+      return {
+        success: true,
+        message: `Successfully deleted ${events.length} event(s)`,
+      };
+    } catch (error) {
+      this.logger.error('Failed to handle external event deletion', {
+        error: error.message,
+        stack: error.stack,
+        did,
+        rkey,
+      });
+
+      return {
+        success: false,
+        message: `Failed to delete event: ${error.message}`,
+      };
+    }
   }
 }

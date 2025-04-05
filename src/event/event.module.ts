@@ -1,4 +1,4 @@
-import { forwardRef, Module } from '@nestjs/common';
+import { forwardRef, Module, Provider } from '@nestjs/common';
 import { EventController } from './event.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
@@ -19,9 +19,19 @@ import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
 import { ChatModule } from '../chat/chat.module';
+import { ICalendarService } from './services/ical/ical.service';
+import { EventSeriesModule } from '../event-series/event-series.module';
+import { ConfigModule } from '@nestjs/config';
+
+// Create a provider for the DiscussionService
+const discussionServiceProvider: Provider = {
+  provide: 'DiscussionService',
+  useValue: {}, // Providing an empty object since it's optional
+};
 
 @Module({
   imports: [
+    ConfigModule,
     TypeOrmModule.forFeature([EventEntity]),
     TenantModule,
     forwardRef(() => GroupMemberModule),
@@ -34,6 +44,7 @@ import { ChatModule } from '../chat/chat.module';
     EventMailModule,
     BlueskyModule,
     forwardRef(() => ChatModule),
+    forwardRef(() => EventSeriesModule),
   ],
   controllers: [EventController],
   providers: [
@@ -43,6 +54,8 @@ import { ChatModule } from '../chat/chat.module';
     FilesS3PresignedService,
     EventListener,
     EventRoleService,
+    ICalendarService,
+    discussionServiceProvider,
   ],
   exports: [
     EventManagementService,
