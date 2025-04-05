@@ -53,7 +53,11 @@ export class EventSeriesTypeOrmRepository implements EventSeriesRepository {
 
   async findByUser(
     userId: number | null,
-    options?: { page: number; limit: number },
+    options?: {
+      page: number;
+      limit: number;
+      sourceType?: string;
+    },
   ): Promise<[EventSeriesEntity[], number]> {
     await this.getTenantSpecificRepository();
     const page = options?.page || 1;
@@ -67,9 +71,22 @@ export class EventSeriesTypeOrmRepository implements EventSeriesRepository {
       order: { createdAt: 'DESC' },
     };
 
+    // Build where clause based on filters
+    const whereClause: any = {};
+
     // If userId is provided, filter by user
     if (userId !== null) {
-      query['where'] = { user: { id: userId } };
+      whereClause.user = { id: userId };
+    }
+
+    // If sourceType is provided, filter by sourceType
+    if (options?.sourceType) {
+      whereClause.sourceType = options.sourceType;
+    }
+
+    // Only add where clause if we have filters
+    if (Object.keys(whereClause).length > 0) {
+      query.where = whereClause;
     }
 
     const [data, total] = await this.repository.findAndCount(query);

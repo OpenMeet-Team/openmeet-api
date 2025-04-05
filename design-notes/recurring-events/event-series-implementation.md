@@ -1,5 +1,10 @@
 # EventSeries Implementation for Recurring Events
 
+## random notes and questions to be resolved
+
+when we create new event series using the page at event-series/create we are only setting recurring info.  I think we should remove the button for "create event series" and the menu item for turning an event into a recuring event.  and the backing pages for the series only.  for now, the only way using the ui to create recuring event serirs is to create an event and set recurring rule.  how do we delete the future series? 
+
+
 ## Current State
 
 Our current implementation of recurring events extends the Event entity with recurrence fields:
@@ -7,6 +12,27 @@ Our current implementation of recurring events extends the Event entity with rec
 - Implemented a `RecurrenceService` to handle pattern generation and timezone adjustments
 - Created basic UI components for creating and viewing recurring events
 - Started implementing series modification with splitting functionality
+
+### Safeguards and Restrictions
+- **Nested Series Prevention**: The system prevents events that are already part of a series from being turned into recurring events themselves (double recurrence). This protection is implemented at multiple levels:
+  - In the EventFormBasicComponent: The recurrence checkbox is disabled when an event has a seriesSlug
+  - In the PromoteToSeriesComponent: Validation prevents promoting events that already belong to a series
+  - In the RecurrenceManagementComponent: "Convert to Series" button is disabled for events in a series
+  - Informative UI messages explain why an event can't be made recurring again
+
+### Known Limitations
+- When editing an event that belongs to a series, all recurrence controls are disabled to prevent creating nested series
+- Series-wide changes require using the dedicated series management interface rather than individual event editing
+- Template events must have all necessary fields (location, end date, etc.) when creating a series for proper propagation to future occurrences
+- When migrating from the old recurrence model to EventSeries, special handling is required for existing recurring events
+
+### Data Flow
+- Creating a recurring event requires two primary objects:
+  - A series object with metadata and recurrence pattern
+  - A template event with complete event details
+- The template event must include all fields that would be required for a standalone event 
+- Fields missing from the template event will not be properly propagated to future occurrences
+- Debug logging has been added to trace template event data flow during series creation
 
 ## New Direction
 

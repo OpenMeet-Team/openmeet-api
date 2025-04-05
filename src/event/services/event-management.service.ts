@@ -149,6 +149,7 @@ export class EventManagementService {
       image: createEventDto.image,
       categories,
       seriesId,
+      seriesSlug: createEventDto.seriesSlug,
 
       // Recurrence fields
       isRecurring: !!createEventDto.recurrenceRule,

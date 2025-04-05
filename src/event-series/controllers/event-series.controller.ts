@@ -536,18 +536,41 @@ export class EventSeriesController {
 
   @Delete(':slug')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete an event series' })
-  @ApiParam({ name: 'slug', type: String })
+  @ApiOperation({
+    summary: 'Delete an event series',
+    description: `
+      Deletes an event series and optionally its associated events.
+      If deleteEvents is false, the events will be kept but will no longer be part of a series.
+    `,
+  })
+  @ApiParam({
+    name: 'slug',
+    type: String,
+    description: 'Slug of the event series to delete',
+  })
+  @ApiQuery({
+    name: 'deleteEvents',
+    type: Boolean,
+    required: false,
+    description: 'Whether to delete associated events or keep them',
+  })
   @ApiResponse({
     status: HttpStatus.NO_CONTENT,
     description: 'The event series has been successfully deleted',
   })
   @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'User is not authorized to delete this event series',
+    status: HttpStatus.NOT_FOUND,
+    description: 'Event series not found',
   })
-  async remove(@Param('slug') slug: string, @Request() req) {
-    // Extract tenant ID directly from request
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'User is not authorized to delete the series',
+  })
+  async delete(
+    @Param('slug') slug: string,
+    @Query('deleteEvents') deleteEvents: boolean = false,
+    @Request() req,
+  ) {
     const tenantId =
       req.tenantId || (req.headers && req.headers['x-tenant-id']);
 
@@ -555,7 +578,17 @@ export class EventSeriesController {
       `Deleting event series ${slug} in tenant ${tenantId} by user ${req.user.id}`,
     );
 
-    await this.eventSeriesService.delete(slug, req.user.id);
+    try {
+      await this.eventSeriesService.delete(slug, req.user.id, deleteEvents);
+      // Return nothing with 204 No Content status
+      return;
+    } catch (error) {
+      this.logger.error(
+        `Error deleting event series: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
   }
 
   @Patch(':slug/future-from/:date')
@@ -668,5 +701,75 @@ export class EventSeriesController {
     }
 
     return occurrence;
+  }
+
+  @Post(':seriesSlug/associate-event/:eventSlug')
+  @ApiOperation({
+    summary:
+      'Associate an existing event with an event series as a one-off occurrence',
+    description: `
+      Associates an existing event with an event series as a one-off occurrence.
+      This allows the event to be part of the series without following its recurrence pattern.
+      
+      The event must not already be part of another series.
+      The user must have permission to edit both the event and the series.
+    `,
+  })
+  @ApiParam({
+    name: 'seriesSlug',
+    type: String,
+    description: 'The slug of the event series',
+  })
+  @ApiParam({
+    name: 'eventSlug',
+    type: String,
+    description: 'The slug of the event to associate',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'The event has been successfully associated with the series',
+    type: EventResponseDto,
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description:
+      'Invalid request or the event is already part of another series',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Event series or event not found',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'User is not authorized to perform this action',
+  })
+  async associateEventWithSeries(
+    @Param('seriesSlug') seriesSlug: string,
+    @Param('eventSlug') eventSlug: string,
+    @Request() req,
+  ) {
+    // Extract tenant ID directly from request
+    const tenantId =
+      req.tenantId || (req.headers && req.headers['x-tenant-id']);
+
+    this.logger.log(
+      `Associating event ${eventSlug} with series ${seriesSlug} in tenant ${tenantId} by user ${req.user.id}`,
+    );
+
+    try {
+      const event = await this.eventSeriesService.associateEventWithSeries(
+        seriesSlug,
+        eventSlug,
+        req.user.id,
+      );
+
+      return event;
+    } catch (error) {
+      this.logger.error(
+        `Error associating event with series: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
   }
 }

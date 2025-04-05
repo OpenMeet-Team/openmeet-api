@@ -264,6 +264,71 @@ POST /api/event-series/promote/{eventSlug}
 - Can reschedule all future occurrences
 - Rescheduling doesn't create new templates unless properties are also changed
 
+## Event Series Association Feature
+
+### Overview
+The event series association feature allows users to link an existing event with an event series as a one-off occurrence. This enables events to be part of a series without following its recurrence pattern, providing flexibility in managing event series and their exceptions.
+
+### API Endpoint
+```typescript
+POST /api/event-series/{seriesSlug}/associate-event/{eventSlug}
+```
+
+### Implementation Details
+
+#### Key Components
+1. **Controller Layer**
+   - `EventSeriesController` handles the association request
+   - Validates user permissions and request parameters
+   - Returns appropriate HTTP status codes and responses
+
+2. **Service Layer**
+   - `EventSeriesService` implements the association logic
+   - Validates series and event existence
+   - Checks for existing series associations
+   - Verifies user permissions for both event and series
+   - Updates event with series information
+
+3. **Data Model**
+   - `EventEntity` includes fields for series association:
+     - `seriesId`: Foreign key to the event series
+     - `seriesSlug`: Reference to the series slug
+   - `UpdateEventDto` supports series fields for updates
+
+#### Security Considerations
+- User must have permission to edit both the event and the series
+- Event must not already be part of another series
+- Series and event must exist in the same tenant
+
+#### Error Handling
+- `404 Not Found`: Series or event not found
+- `400 Bad Request`: Event already part of another series
+- `401 Unauthorized`: User lacks permission to perform the action
+
+### Usage Example
+```typescript
+// Associate an event with a series
+POST /api/event-series/weekly-team-meeting/associate-event/special-guest-lecture
+```
+
+This associates the event "special-guest-lecture" with the series "weekly-team-meeting" as a one-off occurrence.
+
+### Future Considerations
+1. **Series Management**
+   - Add ability to remove events from series
+   - Support for bulk association of events
+   - Enhanced series exception handling
+
+2. **UI Integration**
+   - Series management interface
+   - Event association workflow
+   - Series exception visualization
+
+3. **Performance**
+   - Optimize series queries
+   - Implement caching for series data
+   - Batch processing for bulk operations
+
 ## Future Considerations
 
 ### Template History

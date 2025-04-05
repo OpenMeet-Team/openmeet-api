@@ -85,7 +85,6 @@ describe('Recurring Event Tests (e2e)', () => {
       .get(`/api/events/${eventSlug}`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
-    
     console.log(
       'Event data:',
       JSON.stringify(
@@ -99,12 +98,9 @@ describe('Recurring Event Tests (e2e)', () => {
         2,
       ),
     );
-    
     expect(eventResponse.status).toBe(200);
-    
     // Check if event is linked to series
     const eventLinked = eventResponse.body.seriesSlug === seriesSlug;
-    
     // KNOWN BUG: The event is not being linked to the series properly
     console.log(
       `Event-series link check: ${eventLinked ? 'PASSED' : 'FAILED (KNOWN BUG)'}`,

@@ -432,4 +432,94 @@ describe('EventSeriesController (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
   });
+
+  it('should verify seriesSlug field is properly set in event responses', async () => {
+    // First get authentication token
+    token = await loginAsTester();
+
+    // Create a new event series with unique slug
+    const uniqueSlug = `test-series-slug-${Date.now()}`;
+    const seriesData = {
+      name: 'Series for Slug Testing',
+      description: 'Testing seriesSlug field in event responses',
+      slug: uniqueSlug,
+      timeZone: 'America/New_York',
+      recurrenceRule: {
+        frequency: 'DAILY',
+        interval: 1,
+        count: 5,
+      },
+      templateEvent: {
+        startDate: new Date(Date.now() + oneDay).toISOString(),
+        endDate: new Date(Date.now() + oneDay + 3600000).toISOString(), // 1 hour after start
+        type: EventType.InPerson,
+        location: 'Test Location',
+        locationOnline: null,
+        maxAttendees: 20,
+        categories: [],
+        requireApproval: false,
+        allowWaitlist: false,
+      },
+    };
+
+    // Create the event series
+    const createResponse = await request(TESTING_APP_URL)
+      .post('/api/event-series')
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID)
+      .send(seriesData);
+
+    expect(createResponse.status).toBe(201);
+    expect(createResponse.body.slug).toBe(uniqueSlug);
+
+    // Get the upcoming occurrences
+    const occurrencesResponse = await request(TESTING_APP_URL)
+      .get(`/api/event-series/${uniqueSlug}/occurrences?count=1`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
+
+    expect(occurrencesResponse.status).toBe(200);
+    expect(Array.isArray(occurrencesResponse.body)).toBe(true);
+    expect(occurrencesResponse.body.length).toBeGreaterThan(0);
+
+    // Materialize the first occurrence
+    const occurrenceDate = new Date(occurrencesResponse.body[0].date)
+      .toISOString()
+      .split('T')[0];
+
+    const materializeResponse = await request(TESTING_APP_URL)
+      .get(`/api/event-series/${uniqueSlug}/${occurrenceDate}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
+
+    expect(materializeResponse.status).toBe(200);
+
+    // The key test: verify the seriesSlug field is set to the parent series slug
+    expect(materializeResponse.body).toHaveProperty('seriesSlug');
+    expect(materializeResponse.body.seriesSlug).toBe(uniqueSlug);
+
+    // Verify other properties related to the series are also set
+    expect(materializeResponse.body.seriesId).toBeTruthy();
+
+    // Get the materialized event directly by its slug
+    const eventSlug = materializeResponse.body.slug;
+    const eventResponse = await request(TESTING_APP_URL)
+      .get(`/api/events/${eventSlug}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
+
+    expect(eventResponse.status).toBe(200);
+
+    // Verify the seriesSlug field is still properly set when retrieving the event directly
+    expect(eventResponse.body).toHaveProperty('seriesSlug');
+    expect(eventResponse.body.seriesSlug).toBe(uniqueSlug);
+
+    // Clean up by deleting the series
+    const deleteResponse = await request(TESTING_APP_URL)
+      .delete(`/api/event-series/${uniqueSlug}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
+
+    expect(deleteResponse.status).toBe(204);
+  });
 });

@@ -5,6 +5,7 @@ import {
   Inject,
   forwardRef,
   Logger,
+  UnauthorizedException,
 } from '@nestjs/common';
 import {
   EventSeriesRepository,
@@ -19,7 +20,6 @@ import { Trace } from '../../utils/trace.decorator';
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
 import { CreateEventDto } from '../../event/dto/create-event.dto';
 import { EventQueryService } from '../../event/services/event-query.service';
-import { generateShortCode } from '../../utils/short-code';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 
@@ -402,6 +402,13 @@ export class EventSeriesService {
       // Find the series by slug
       const series = await this.findBySlug(slug);
 
+      // Check if user has permission to update the series
+      if (series.user.id !== userId) {
+        throw new UnauthorizedException(
+          'You do not have permission to update this series',
+        );
+      }
+
       // If recurrence rule is provided, validate it
       if (updateEventSeriesDto.recurrenceRule) {
         this.validateRecurrenceRule(updateEventSeriesDto.recurrenceRule);
@@ -532,7 +539,11 @@ export class EventSeriesService {
   @Trace('event-series.findByUser')
   async findByUser(
     userId: number,
-    options?: { page: number; limit: number },
+    options?: {
+      page: number;
+      limit: number;
+      sourceType?: string; // Add sourceType parameter for filtering Bluesky events
+    },
   ): Promise<{ data: EventSeriesEntity[]; total: number }> {
     try {
       const [data, total] = await this.eventSeriesRepository.findByUser(
@@ -576,65 +587,44 @@ export class EventSeriesService {
    * Delete an event series
    */
   @Trace('event-series.delete')
-  async delete(slug: string, userId: number): Promise<boolean> {
+  async delete(
+    slug: string,
+    userId: number,
+    deleteEvents: boolean = false,
+  ): Promise<void> {
     try {
-      // Find the series
+      // Find the series by slug
       const series = await this.findBySlug(slug);
 
-      // Verify that the user is the owner of the series
-      if (!series.user) {
-        this.logger.warn(
-          `Series ${slug} has no user association, but user ${userId} attempted to delete it`,
-        );
-        throw new Error('This event series has no owner');
-      }
-
+      // Check if user has permission to delete the series
       if (series.user.id !== userId) {
-        this.logger.warn(
-          `User ${userId} attempted to delete series ${slug} owned by user ${series.user.id}`,
+        throw new UnauthorizedException(
+          'You do not have permission to delete this series',
         );
-        throw new Error('You are not authorized to delete this event series');
       }
 
-      // Find all events in this series first, so we can clean them up
-      this.logger.log(
-        `Finding and cleaning up events in series ${series.id} (${series.slug})`,
-      );
-      const [events] = await this.eventManagementService.findEventsBySeriesId(
-        series.id,
-      );
-
-      // Delete each event in the series
-      if (events && events.length > 0) {
-        this.logger.log(
-          `Deleting ${events.length} events in series ${series.id}`,
-        );
-
+      if (deleteEvents) {
+        // Delete all events in the series
+        const [events] =
+          await this.eventManagementService.findEventsBySeriesSlug(slug);
         for (const event of events) {
-          try {
-            // Use the EventManagementService to delete the event properly
-            // This will handle chat room cleanup and any other dependencies
-            await this.eventManagementService.remove(event.slug);
-            this.logger.log(
-              `Successfully deleted event ${event.slug} (ID: ${event.id}) from series ${series.id}`,
-            );
-          } catch (eventDeleteError) {
-            this.logger.error(
-              `Error deleting event ${event.slug} (ID: ${event.id}) from series ${series.id}: ${eventDeleteError.message}`,
-            );
-            // Continue with other events despite errors
-          }
+          await this.eventManagementService.remove(event.slug);
+        }
+      } else {
+        // Remove series association from events
+        const [events] =
+          await this.eventManagementService.findEventsBySeriesSlug(slug);
+        for (const event of events) {
+          await this.eventManagementService.update(
+            event.slug,
+            { seriesId: undefined, seriesSlug: undefined },
+            userId,
+          );
         }
       }
 
-      // Now it's safe to delete the series itself
-      this.logger.log(`Deleting series ${series.id} (${series.slug})`);
+      // Delete the series
       await this.eventSeriesRepository.delete(series.id);
-      this.logger.log(
-        `Successfully deleted series ${series.id} (${series.slug})`,
-      );
-
-      return true;
     } catch (error) {
       this.logger.error(
         `Error deleting event series: ${error.message}`,
@@ -813,6 +803,34 @@ export class EventSeriesService {
     return days[abbreviation] || abbreviation;
   }
 
+  // Fix for the event series association when updating past events
+  // in the delete method
+  @Trace('event-series.updatePastEventForSeriesRemoval')
+  private async updatePastEventForSeriesRemoval(
+    event: EventEntity,
+    userId: number,
+  ): Promise<void> {
+    try {
+      // Update the event to remove the series association - only modify the necessary fields
+      await this.eventManagementService.update(
+        event.slug,
+        {
+          seriesSlug: undefined,
+        },
+        userId,
+      );
+
+      this.logger.log(
+        `Successfully preserved past event ${event.slug} (ID: ${event.id}) by removing series association`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error preserving past event ${event.slug} (ID: ${event.id}): ${error.message}`,
+      );
+      throw error;
+    }
+  }
+
   @Trace('event-series.createSeriesOccurrence')
   async createSeriesOccurrence(
     eventData: CreateEventDto,
@@ -864,5 +882,67 @@ export class EventSeriesService {
       seriesSlug,
       occurrenceDate,
     );
+  }
+
+  /**
+   * Associate an existing event with an event series as a one-off occurrence
+   */
+  @Trace('event-series.associateEventWithSeries')
+  async associateEventWithSeries(
+    seriesSlug: string,
+    eventSlug: string,
+    userId: number,
+  ): Promise<EventEntity> {
+    try {
+      // Get the series
+      const series = await this.eventSeriesRepository.findBySlug(seriesSlug);
+      if (!series) {
+        throw new NotFoundException(
+          `Event series with slug ${seriesSlug} not found`,
+        );
+      }
+
+      // Get the event
+      const event = await this.eventQueryService.findEventBySlug(eventSlug);
+      if (!event) {
+        throw new NotFoundException(`Event with slug ${eventSlug} not found`);
+      }
+
+      // Check if the event is already part of a series
+      if (event.seriesId) {
+        throw new BadRequestException(
+          `Event ${eventSlug} is already part of a series`,
+        );
+      }
+
+      // Check if the user has permission to edit both the event and the series
+      if (event.user.id !== userId || series.user.id !== userId) {
+        throw new BadRequestException(
+          'You do not have permission to perform this action',
+        );
+      }
+
+      // Associate the event with the series
+      event.seriesId = series.id;
+      event.seriesSlug = series.slug;
+
+      // Save the updated event
+      const updatedEvent = await this.eventManagementService.update(
+        event.slug,
+        {
+          seriesId: series.id,
+          seriesSlug: series.slug,
+        },
+        userId,
+      );
+
+      return updatedEvent;
+    } catch (error) {
+      this.logger.error(
+        `Error associating event with series: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
   }
 }

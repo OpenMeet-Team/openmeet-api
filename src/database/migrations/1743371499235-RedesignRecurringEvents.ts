@@ -18,7 +18,7 @@ export class RedesignRecurringEvents1743371499235
     // 1. Create EventSeries table
     await queryRunner.createTable(
       new Table({
-        name: `${schema}.event_series`,
+        name: `${schema}.eventSeries`,
         columns: [
           {
             name: 'id',
@@ -217,21 +217,21 @@ export class RedesignRecurringEvents1743371499235
     }
 
     // 5. Add indexes to EventSeries table
-    await queryRunner.createIndices(`${schema}.event_series`, [
+    await queryRunner.createIndices(`${schema}.eventSeries`, [
       new TableIndex({
-        name: 'IDX_event_series_slug',
+        name: 'IDX_eventSeries_slug',
         columnNames: ['slug'],
       }),
       new TableIndex({
-        name: 'IDX_event_series_ulid',
+        name: 'IDX_eventSeries_ulid',
         columnNames: ['ulid'],
       }),
       new TableIndex({
-        name: 'IDX_event_series_user_id',
+        name: 'IDX_eventSeries_user_id',
         columnNames: ['userId'],
       }),
       new TableIndex({
-        name: 'IDX_event_series_template_event_slug',
+        name: 'IDX_eventSeries_template_event_slug',
         columnNames: ['templateEventSlug'],
       }),
     ]);
@@ -249,30 +249,30 @@ export class RedesignRecurringEvents1743371499235
     ]);
 
     // 7. Add foreign keys from EventSeries to other tables
-    await queryRunner.createForeignKeys(`${schema}.event_series`, [
+    await queryRunner.createForeignKeys(`${schema}.eventSeries`, [
       new TableForeignKey({
-        name: 'FK_event_series_user',
+        name: 'FK_eventSeries_user',
         columnNames: ['userId'],
         referencedTableName: `${schema}.users`,
         referencedColumnNames: ['id'],
         onDelete: 'CASCADE',
       }),
       new TableForeignKey({
-        name: 'FK_event_series_group',
+        name: 'FK_eventSeries_group',
         columnNames: ['groupId'],
         referencedTableName: `${schema}.groups`,
         referencedColumnNames: ['id'],
         onDelete: 'SET NULL',
       }),
       new TableForeignKey({
-        name: 'FK_event_series_file',
+        name: 'FK_eventSeries_file',
         columnNames: ['imageId'],
         referencedTableName: `${schema}.files`,
         referencedColumnNames: ['id'],
         onDelete: 'SET NULL',
       }),
       new TableForeignKey({
-        name: 'FK_event_series_template_event_slug',
+        name: 'FK_eventSeries_template_event_slug',
         columnNames: ['templateEventSlug'],
         referencedTableName: `${schema}.events`,
         referencedColumnNames: ['slug'],
@@ -286,7 +286,7 @@ export class RedesignRecurringEvents1743371499235
       new TableForeignKey({
         name: 'FK_events_series',
         columnNames: ['seriesId'],
-        referencedTableName: `${schema}.event_series`,
+        referencedTableName: `${schema}.eventSeries`,
         referencedColumnNames: ['id'],
         onDelete: 'CASCADE',
       }),
@@ -298,7 +298,7 @@ export class RedesignRecurringEvents1743371499235
       new TableForeignKey({
         name: 'FK_events_series_slug',
         columnNames: ['seriesSlug'],
-        referencedTableName: `${schema}.event_series`,
+        referencedTableName: `${schema}.eventSeries`,
         referencedColumnNames: ['slug'],
         onDelete: 'SET NULL',
       }),
@@ -351,44 +351,44 @@ export class RedesignRecurringEvents1743371499235
     );
     await queryRunner.dropForeignKey(`${schema}.events`, 'FK_events_series');
 
-    // 2. Drop foreign keys from event_series table
+    // 2. Drop foreign keys from eventSeries table
     await queryRunner.dropForeignKey(
-      `${schema}.event_series`,
-      'FK_event_series_template_event_slug',
+      `${schema}.eventSeries`,
+      'FK_eventSeries_template_event_slug',
     );
     await queryRunner.dropForeignKey(
-      `${schema}.event_series`,
-      'FK_event_series_file',
+      `${schema}.eventSeries`,
+      'FK_eventSeries_file',
     );
     await queryRunner.dropForeignKey(
-      `${schema}.event_series`,
-      'FK_event_series_group',
+      `${schema}.eventSeries`,
+      'FK_eventSeries_group',
     );
     await queryRunner.dropForeignKey(
-      `${schema}.event_series`,
-      'FK_event_series_user',
+      `${schema}.eventSeries`,
+      'FK_eventSeries_user',
     );
 
     // 3. Drop indexes from events table
     await queryRunner.dropIndex(`${schema}.events`, 'IDX_events_series_slug');
     await queryRunner.dropIndex(`${schema}.events`, 'IDX_events_series_id');
 
-    // 4. Drop indexes from event_series table
+    // 4. Drop indexes from eventSeries table
     await queryRunner.dropIndex(
-      `${schema}.event_series`,
-      'IDX_event_series_template_event_slug',
+      `${schema}.eventSeries`,
+      'IDX_eventSeries_template_event_slug',
     );
     await queryRunner.dropIndex(
-      `${schema}.event_series`,
-      'IDX_event_series_user_id',
+      `${schema}.eventSeries`,
+      'IDX_eventSeries_user_id',
     );
     await queryRunner.dropIndex(
-      `${schema}.event_series`,
-      'IDX_event_series_ulid',
+      `${schema}.eventSeries`,
+      'IDX_eventSeries_ulid',
     );
     await queryRunner.dropIndex(
-      `${schema}.event_series`,
-      'IDX_event_series_slug',
+      `${schema}.eventSeries`,
+      'IDX_eventSeries_slug',
     );
 
     // 5. Drop series relationship columns from events table
@@ -411,7 +411,7 @@ export class RedesignRecurringEvents1743371499235
       'conferenceData',
     ]);
 
-    // 7. Drop event_series table
-    await queryRunner.dropTable(`${schema}.event_series`);
+    // 7. Drop eventSeries table
+    await queryRunner.dropTable(`${schema}.eventSeries`);
   }
 }

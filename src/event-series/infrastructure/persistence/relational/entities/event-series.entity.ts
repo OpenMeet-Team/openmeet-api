@@ -22,7 +22,7 @@ import { generateShortCode } from '../../../../../utils/short-code';
 import { SourceFields } from '../../../../../core/interfaces/source-data.interface';
 import { ApiProperty } from '@nestjs/swagger';
 
-@Entity({ name: 'event_series' })
+@Entity({ name: 'eventSeries' })
 export class EventSeriesEntity
   extends EntityRelationalHelper
   implements SourceFields

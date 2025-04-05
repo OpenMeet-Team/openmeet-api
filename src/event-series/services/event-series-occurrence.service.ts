@@ -30,6 +30,17 @@ export class EventSeriesOccurrenceService {
   ) {}
 
   /**
+   * Configuration for occurrence materialization timeframes
+   * @private
+   */
+  private readonly materializationConfig = {
+    // For Bluesky events, materialize the next 5 future events
+    blueskyEventCount: 5,
+    // For normal events, materialize occurrences 2 months into the future
+    normalEventMonths: 2,
+  };
+
+  /**
    * Get or create (materialize) an occurrence for a specific date
    * This is the core function for materializing occurrences when needed
    */
@@ -384,6 +395,157 @@ export class EventSeriesOccurrenceService {
     } catch (error) {
       this.logger.error(
         `Error materializing next occurrence: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Materialize the next N occurrences of a series
+   * Specifically designed for Bluesky integration to ensure we have the next 5 events populated
+   *
+   * @param seriesSlug - The slug of the series to materialize occurrences for
+   * @param userId - The user ID to associate with the materialized occurrences
+   * @param isBlueskyEvent - Whether this is a Bluesky-sourced event
+   * @returns Array of materialized event occurrences
+   */
+  @Trace('event-series-occurrence.materializeNextNOccurrences')
+  async materializeNextNOccurrences(
+    seriesSlug: string,
+    userId: number,
+    isBlueskyEvent: boolean = false,
+  ): Promise<EventEntity[]> {
+    try {
+      this.logger.debug('Starting to materialize next occurrences for series', {
+        seriesSlug,
+        userId,
+        isBlueskyEvent,
+      });
+
+      // Configure how many occurrences to materialize
+      const count = isBlueskyEvent
+        ? this.materializationConfig.blueskyEventCount
+        : 5; // Default to 5 for standard operations
+
+      // Get upcoming occurrences (both materialized and unmaterialized)
+      const upcomingOccurrences = await this.getUpcomingOccurrences(
+        seriesSlug,
+        count * 2, // Get more than we need to ensure we have enough unmaterialized
+      );
+
+      // Filter out already materialized occurrences
+      const unmaterializedOccurrences = upcomingOccurrences
+        .filter((occurrence) => !occurrence.materialized)
+        .slice(0, count);
+
+      this.logger.debug('Found unmaterialized occurrences to create', {
+        count: unmaterializedOccurrences.length,
+        dates: unmaterializedOccurrences.map((o) => o.date),
+      });
+
+      // No unmaterialized occurrences to create
+      if (unmaterializedOccurrences.length === 0) {
+        return [];
+      }
+
+      // Materialize each occurrence in sequence
+      const materializedEvents: EventEntity[] = [];
+      for (const occurrence of unmaterializedOccurrences) {
+        this.logger.debug('Materializing occurrence', {
+          date: occurrence.date,
+        });
+        try {
+          const materializedEvent = await this.materializeOccurrence(
+            seriesSlug,
+            occurrence.date,
+            userId,
+          );
+          materializedEvents.push(materializedEvent);
+        } catch (error) {
+          this.logger.error(
+            `Error materializing occurrence for date ${occurrence.date}`,
+            error.stack,
+          );
+          // Continue with other occurrences even if one fails
+        }
+      }
+
+      this.logger.debug('Successfully materialized occurrences', {
+        count: materializedEvents.length,
+        slugs: materializedEvents.map((e) => e.slug),
+      });
+
+      return materializedEvents;
+    } catch (error) {
+      this.logger.error(
+        `Error in materializeNextNOccurrences: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Buffer materialization for when a user logs in
+   * This ensures Bluesky events always have the correct number of future occurrences materialized
+   *
+   * @param userId - The user ID to materialize events for
+   * @returns Number of events materialized
+   */
+  @Trace('event-series-occurrence.bufferBlueskyMaterialization')
+  async bufferBlueskyMaterialization(userId: number): Promise<number> {
+    try {
+      this.logger.debug(
+        'Starting buffered materialization for Bluesky events',
+        { userId },
+      );
+
+      // Get all event series owned by this user that are Bluesky-sourced
+      const userSeriesResult = await this.eventSeriesService.findByUser(
+        userId,
+        {
+          sourceType: 'bluesky', // Filter to only Bluesky-sourced events
+          page: 1,
+          limit: 100, // Retrieve up to 100 series (adjust as needed)
+        },
+      );
+
+      if (!userSeriesResult || !userSeriesResult.data) {
+        this.logger.debug('No Bluesky series found for user', { userId });
+        return 0;
+      }
+
+      const userSeries = userSeriesResult.data;
+
+      this.logger.debug('Found Bluesky event series for user', {
+        userId,
+        count: userSeries.length,
+        seriesSlugs: userSeries.map((s) => s.slug),
+      });
+
+      let totalMaterialized = 0;
+
+      // Process each series to ensure it has the required number of materialized occurrences
+      for (const series of userSeries) {
+        const materializedEvents = await this.materializeNextNOccurrences(
+          series.slug,
+          userId,
+          true, // This is a Bluesky event
+        );
+
+        totalMaterialized += materializedEvents.length;
+      }
+
+      this.logger.debug('Completed buffered materialization', {
+        userId,
+        totalMaterialized,
+      });
+
+      return totalMaterialized;
+    } catch (error) {
+      this.logger.error(
+        `Error in bufferBlueskyMaterialization: ${error.message}`,
         error.stack,
       );
       throw error;
