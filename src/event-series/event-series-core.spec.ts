@@ -236,7 +236,7 @@ describe('EventSeries Core Functionality', () => {
       const isValidDate = jest.fn().mockReturnValue(false);
 
       const materializeOccurrence = async (seriesSlug, dateStr) => {
-        const series = await findSeries(seriesSlug);
+        await findSeries(seriesSlug);
         const date = new Date(dateStr);
 
         if (!isValidDate(date)) {
@@ -286,7 +286,7 @@ describe('EventSeries Core Functionality', () => {
           if (materialized) {
             return {
               date: date.toISOString(),
-              event: { ...materialized, seriesId: series.id },
+              event: { ...materialized, seriesSlug: series.slug },
               materialized: true,
             };
           } else {

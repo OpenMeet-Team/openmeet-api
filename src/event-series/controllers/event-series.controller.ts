@@ -232,7 +232,8 @@ export class EventSeriesController {
   })
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
-    description: 'Invalid recurrence rule or the event is already part of a series',
+    description:
+      'Invalid recurrence rule or the event is already part of a series',
   })
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,

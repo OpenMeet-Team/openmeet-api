@@ -59,6 +59,7 @@ export class EventManagementService {
     private readonly eventRoleService: EventRoleService,
     private readonly userService: UserService,
     private readonly eventMailService: EventMailService,
+    @Inject(forwardRef(() => BlueskyService))
     private readonly blueskyService: BlueskyService,
     @Inject(forwardRef(() => 'DiscussionService'))
     private readonly discussionService: any, // Using any here to avoid circular dependency issues
@@ -158,7 +159,7 @@ export class EventManagementService {
       recurrenceRule: {
         ...createEventDto.recurrenceRule,
         frequency: RecurrenceFrequency.WEEKLY,
-        interval: 1
+        interval: 1,
       },
       recurrenceExceptions: createEventDto.recurrenceExceptions || [],
 
@@ -400,7 +401,7 @@ export class EventManagementService {
       mappedDto.recurrenceRule = {
         ...updateEventDto.recurrenceRule,
         frequency: RecurrenceFrequency.WEEKLY,
-        interval: 1
+        interval: 1,
       };
     } else if (updateEventDto.recurrenceRule === null) {
       // If recurrenceRule is explicitly set to null, disable recurring status

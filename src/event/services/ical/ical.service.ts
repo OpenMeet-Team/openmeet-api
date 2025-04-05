@@ -145,41 +145,43 @@ export class ICalendarService {
    */
   private createRRule(rule: RecurrenceRule): string {
     const parts: string[] = [];
-    
+
     // Add frequency
     parts.push(`FREQ=${rule.frequency}`);
-    
+
     // Add interval if specified
     if (rule.interval && rule.interval > 1) {
       parts.push(`INTERVAL=${rule.interval}`);
     }
-    
+
     // Add count if specified
     if (rule.count) {
       parts.push(`COUNT=${rule.count}`);
     }
-    
+
     // Add until date if specified
     if (rule.until) {
       const untilDate = new Date(rule.until);
-      parts.push(`UNTIL=${untilDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`);
+      parts.push(
+        `UNTIL=${untilDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
+      );
     }
-    
+
     // Add byweekday if specified
     if (rule.byweekday && rule.byweekday.length > 0) {
       parts.push(`BYDAY=${rule.byweekday.join(',')}`);
     }
-    
+
     // Add bymonthday if specified
     if (rule.bymonthday && rule.bymonthday.length > 0) {
       parts.push(`BYMONTHDAY=${rule.bymonthday.join(',')}`);
     }
-    
+
     // Add bymonth if specified
     if (rule.bymonth && rule.bymonth.length > 0) {
       parts.push(`BYMONTH=${rule.bymonth.join(',')}`);
     }
-    
+
     return `RRULE:${parts.join(';')}`;
   }
 

@@ -135,7 +135,7 @@ export class EventSeriesService {
       savedSeries.templateEventSlug = templateEvent.slug;
       await this.eventSeriesRepository.save(savedSeries);
 
-      // Return the full entity with relations
+      // Return the full entity with relations - use findById as defined in the interface
       const foundSeries = await this.eventSeriesRepository.findById(
         savedSeries.id,
       );

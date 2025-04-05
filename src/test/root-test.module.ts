@@ -1,5 +1,4 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventModule } from '../event/event.module';
 import { EventSeriesModule } from '../event-series/event-series.module';
 import { TenantModule } from '../tenant/tenant.module';
@@ -20,12 +19,17 @@ import { RecurrencePatternService } from '../event-series/services/recurrence-pa
 import { EventSeriesOccurrenceService } from '../event-series/services/event-series-occurrence.service';
 import { UserService } from '../user/user.service';
 import { mockUserService } from './mocks';
+import { ConfigModule } from '@nestjs/config';
 
 /**
  * Root test module that includes all modules and services for integration testing
  */
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [],
+    }),
     forwardRef(() => EventModule),
     forwardRef(() => EventSeriesModule),
     TenantModule,

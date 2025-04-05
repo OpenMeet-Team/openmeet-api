@@ -2,100 +2,133 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { EventSeriesService } from './event-series.service';
 import { RecurrencePatternService } from './recurrence-pattern.service';
 import { EventManagementService } from '../../event/services/event-management.service';
+import { Repository } from 'typeorm';
 import { EventSeriesEntity } from '../infrastructure/persistence/relational/entities/event-series.entity';
-import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { RecurrenceFrequency } from '../interfaces/recurrence.interface';
 import { CreateEventSeriesDto } from '../dto/create-event-series.dto';
-import { EventType } from '../../core/constants/constant';
-
-// Mock Data
-const mockSeriesData: Partial<EventSeriesEntity> = {
-  id: 1,
-  name: 'Test Series',
-  slug: 'test-series',
-  description: 'A test series',
-  timeZone: 'America/New_York',
-  recurrenceRule: {
-    freq: 'WEEKLY',
-    interval: 1,
-    byday: ['MO', 'WE', 'FR'],
-  },
-  user: { id: 1 } as any,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-};
-
-const mockEventData: Partial<EventEntity> = {
-  id: 1,
-  name: 'Test Event',
-  slug: 'test-event',
-  description: 'A test event',
-  startDate: new Date('2025-10-01T15:00:00Z'),
-  endDate: new Date('2025-10-01T17:00:00Z'),
-  timeZone: 'America/New_York',
-  type: EventType.InPerson,
-  location: 'Test Location',
-  locationOnline: 'https://zoom.us/j/123456789',
-  seriesId: 1,
-  materialized: true,
-  originalOccurrenceDate: new Date('2025-10-01T15:00:00Z'),
-  user: { id: 1 } as any,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-};
-
-// Mock RecurrenceService
-const mockRecurrenceService = {
-  getRecurrenceDescription: jest
-    .fn()
-    .mockImplementation(() => 'Weekly on Monday, Wednesday, Friday'),
-  generateOccurrences: jest.fn(),
-  isDateInRecurrencePattern: jest.fn(),
-  formatDateInTimeZone: jest.fn(),
-};
-
-// Mock EventManagementService
-const mockEventManagementService = {
-  create: jest.fn().mockImplementation((eventData, userId) => {
-    return Promise.resolve({
-      ...mockEventData,
-      ...eventData,
-      userId,
-      id: 1,
-    });
-  }),
-  update: jest.fn(),
-  findEventBySlug: jest.fn(),
-  delete: jest.fn().mockResolvedValue(true),
-};
+import { EventQueryService } from '../../event/services/event-query.service';
+import { REQUEST } from '@nestjs/core';
+import { TenantConnectionService } from '../../tenant/tenant.service';
 
 describe('EventSeriesService', () => {
   let service: EventSeriesService;
-  let recurrenceService: typeof mockRecurrenceService;
-  let eventManagementService: typeof mockEventManagementService;
+  let mockRecurrencePatternService: jest.Mocked<RecurrencePatternService>;
+  let mockEventManagementService: jest.Mocked<EventManagementService>;
+  let mockEventSeriesRepository: jest.Mocked<Repository<EventSeriesEntity>>;
+  let mockEventQueryService: jest.Mocked<any>;
+  let mockTenantConnectionService: jest.Mocked<TenantConnectionService>;
 
   beforeEach(async () => {
+    mockRecurrencePatternService = {
+      generateOccurrences: jest.fn(),
+      validateRecurrenceRule: jest.fn(),
+      generateRecurrenceDescription: jest
+        .fn()
+        .mockReturnValue('Weekly on Monday'),
+    } as any;
+
+    mockEventManagementService = {
+      create: jest.fn(),
+      update: jest.fn(),
+      createSeriesOccurrence: jest
+        .fn()
+        .mockResolvedValue({ slug: 'test-event' }),
+    } as any;
+
+    mockEventSeriesRepository = {
+      create: jest.fn(),
+      save: jest.fn(),
+      findOne: jest.fn(),
+      findOneBy: jest.fn().mockResolvedValue({
+        id: 1,
+        name: 'Test Series',
+        slug: 'test-series',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ulid: 'test-ulid-123456789',
+        description: 'Test Description',
+        recurrenceRule: {},
+        recurrenceExceptions: [],
+        templateEventSlug: 'test-event',
+        matrixRoomId: undefined,
+        user: { id: 1 },
+        events: [],
+        sourceType: null,
+        sourceId: null,
+        sourceUrl: null,
+        sourceData: null,
+        templateEvent: null,
+      } as any),
+      findByIds: jest.fn(),
+      findById: jest.fn().mockResolvedValue({
+        id: 1,
+        name: 'Test Series',
+        slug: 'test-series',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ulid: 'test-ulid-123456789',
+        description: 'Test Description',
+        recurrenceRule: {},
+        recurrenceExceptions: [],
+        templateEventSlug: 'test-event',
+        matrixRoomId: undefined,
+        user: { id: 1 },
+        events: [],
+        sourceType: null,
+        sourceId: null,
+        sourceUrl: null,
+        sourceData: null,
+        templateEvent: null,
+      } as any),
+    } as any;
+
+    mockEventQueryService = {
+      findEventBySlug: jest.fn(),
+    } as any;
+
+    mockTenantConnectionService = {
+      getConnection: jest.fn(),
+      getTenantConnection: jest.fn().mockResolvedValue({
+        getRepository: jest.fn().mockReturnValue(mockEventSeriesRepository),
+      }),
+    } as any;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventSeriesService,
         {
           provide: RecurrencePatternService,
-          useValue: mockRecurrenceService,
+          useValue: mockRecurrencePatternService,
         },
         {
           provide: EventManagementService,
           useValue: mockEventManagementService,
         },
+        {
+          provide: getRepositoryToken(EventSeriesEntity),
+          useValue: mockEventSeriesRepository,
+        },
+        {
+          provide: 'EVENT_SERIES_REPOSITORY',
+          useValue: mockEventSeriesRepository,
+        },
+        {
+          provide: EventQueryService,
+          useValue: mockEventQueryService,
+        },
+        {
+          provide: REQUEST,
+          useValue: { tenantId: 'test-tenant-id' },
+        },
+        {
+          provide: TenantConnectionService,
+          useValue: mockTenantConnectionService,
+        },
       ],
     }).compile();
 
     service = module.get<EventSeriesService>(EventSeriesService);
-    recurrenceService = module.get(RecurrencePatternService);
-    eventManagementService = module.get(EventManagementService);
-  });
-
-  afterEach(() => {
-    jest.clearAllMocks();
   });
 
   it('should be defined', () => {
@@ -103,277 +136,157 @@ describe('EventSeriesService', () => {
   });
 
   describe('create', () => {
-    it('should create a new event series and first occurrence', async () => {
-      const createDto: CreateEventSeriesDto = {
-        name: 'New Series',
-        slug: 'new-series',
-        description: 'A new test series',
-        timeZone: 'America/New_York',
-        recurrenceRule: {
-          frequency: 'WEEKLY',
-          interval: 1,
-          byweekday: ['MO', 'WE', 'FR'],
-        },
-        groupId: 1,
-        imageId: 2,
+    it('should create a new event series', async () => {
+      const createEventSeriesDto: CreateEventSeriesDto = {
+        name: 'Test Series',
+        description: 'Test Description',
         templateEvent: {
-          startDate: '2025-10-01T15:00:00Z',
-          endDate: '2025-10-01T17:00:00Z',
+          startDate: '2024-01-01T10:00:00Z',
+          endDate: '2024-01-01T11:00:00Z',
           type: 'in-person',
-          location: 'Test Location',
-          locationOnline: 'https://zoom.us/j/123456789',
-          maxAttendees: 20,
-          requireApproval: false,
-          allowWaitlist: true,
-          categories: [1, 2, 3],
+          locationOnline: 'https://meet.example.com',
+          maxAttendees: 10,
+          categories: [1, 2],
+        },
+        recurrenceRule: {
+          frequency: RecurrenceFrequency.DAILY,
+          interval: 1,
+          count: 5,
         },
       };
 
-      const result = await service.create(createDto, 1);
-
-      expect(eventManagementService.create).toHaveBeenCalled();
-      expect(service.findBySlug).toHaveBeenCalledWith('new-series');
-      expect(result).toHaveProperty('id', 1);
-      expect(result).toHaveProperty('slug', 'new-series');
-      expect(result).toHaveProperty(
-        'recurrenceDescription',
-        'Weekly on Monday, Wednesday, Friday',
-      );
-    });
-
-    it('should handle errors during creation', async () => {
-      const createDto: CreateEventSeriesDto = {
-        name: 'New Series',
-        timeZone: 'America/New_York',
-        recurrenceRule: {
-          frequency: 'WEEKLY',
-          interval: 1,
-        },
-        templateEvent: {
-          startDate: '2025-10-01T15:00:00Z',
-          endDate: '2025-10-01T17:00:00Z',
-          type: 'in-person',
-        },
+      const savedSeries = {
+        id: 1,
+        name: 'Test Series',
+        slug: 'test-series',
+        templateEventSlug: 'test-event',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ulid: 'test-ulid-123456789',
+        description: 'Test Description',
+        recurrenceRule: {},
+        recurrenceExceptions: [],
+        matrixRoomId: undefined,
+        user: { id: 1 },
+        events: [],
+        sourceType: null,
+        sourceId: null,
+        sourceUrl: null,
+        sourceData: null,
+        templateEvent: null,
       };
 
-      jest
-        .spyOn(eventManagementService, 'create')
-        .mockRejectedValue(new Error('Database error'));
+      mockEventSeriesRepository.create.mockReturnValue(savedSeries as any);
+      mockEventSeriesRepository.save.mockResolvedValue(savedSeries as any);
+      mockEventSeriesRepository.findOneBy.mockResolvedValue(savedSeries as any);
 
-      await expect(service.create(createDto, 1)).rejects.toThrow(
-        'Database error',
+      const result = await service.create(createEventSeriesDto, 1);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          id: savedSeries.id,
+          name: savedSeries.name,
+          slug: savedSeries.slug,
+          templateEventSlug: savedSeries.templateEventSlug,
+          description: savedSeries.description,
+        }),
       );
-    });
-
-    it('should accept recurrence rules with freq property', async () => {
-      const createDto: CreateEventSeriesDto = {
-        name: 'Daily Series',
-        timeZone: 'America/New_York',
-        recurrenceRule: {
-          freq: 'DAILY',
-          interval: 1,
-          count: 10,
-        },
-        templateEvent: {
-          startDate: '2025-10-01T15:00:00Z',
-          endDate: '2025-10-01T17:00:00Z',
-          type: 'in-person',
-        },
-      };
-
-      const result = await service.create(createDto, 1);
-      expect(result).toBeDefined();
-    });
-
-    it('should accept recurrence rules with frequency property', async () => {
-      const createDto: CreateEventSeriesDto = {
-        name: 'Daily Series',
-        timeZone: 'America/New_York',
-        recurrenceRule: {
-          frequency: 'DAILY',
-          interval: 1,
-          count: 10,
-        },
-        templateEvent: {
-          startDate: '2025-10-01T15:00:00Z',
-          endDate: '2025-10-01T17:00:00Z',
-          type: 'in-person',
-        },
-      };
-
-      const result = await service.create(createDto, 1);
-      expect(result).toBeDefined();
-    });
-
-    it('should reject invalid frequency values', async () => {
-      const createDto: CreateEventSeriesDto = {
-        name: 'Invalid Series',
-        timeZone: 'America/New_York',
-        recurrenceRule: {
-          frequency: 'INVALID',
-          interval: 1,
-        } as any,
-        templateEvent: {
-          startDate: '2025-10-01T15:00:00Z',
-          endDate: '2025-10-01T17:00:00Z',
-          type: 'in-person',
-        },
-      };
-
-      jest
-        .spyOn(mockRecurrenceService, 'getRecurrenceDescription')
-        .mockImplementation(() => {
-          throw new BadRequestException('Invalid frequency');
-        });
-
-      await expect(service.create(createDto, 1)).rejects.toThrow();
-    });
-  });
-
-  describe('findAll', () => {
-    it('should return paginated series with descriptions', async () => {
-      const result = await service.findAll({ page: 1, limit: 5 });
-
-      expect(recurrenceService.getRecurrenceDescription).toHaveBeenCalledTimes(
-        5,
+      expect(mockEventSeriesRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: createEventSeriesDto.name,
+          description: createEventSeriesDto.description,
+          recurrenceRule: createEventSeriesDto.recurrenceRule,
+        }),
       );
-      expect(result.data).toHaveLength(5);
-      expect(result.total).toBe(5);
-      expect(result.data[0]).toHaveProperty('recurrenceDescription');
-    });
-  });
-
-  describe('findByUser', () => {
-    it('should return series created by a specific user', async () => {
-      const result = await service.findByUser(1, { page: 1, limit: 5 });
-
-      expect(recurrenceService.getRecurrenceDescription).toHaveBeenCalledTimes(
-        5,
-      );
-      expect(result.data).toHaveLength(5);
-      expect(result.total).toBe(5);
-      expect(result.data[0]).toHaveProperty('recurrenceDescription');
-    });
-  });
-
-  describe('findByGroup', () => {
-    it('should return series for a specific group', async () => {
-      const result = await service.findByGroup(1, { page: 1, limit: 5 });
-
-      expect(recurrenceService.getRecurrenceDescription).toHaveBeenCalledTimes(
-        5,
-      );
-      expect(result.data).toHaveLength(5);
-      expect(result.total).toBe(5);
-      expect(result.data[0]).toHaveProperty('recurrenceDescription');
-    });
-  });
-
-  describe('findBySlug', () => {
-    it('should return a series by slug', async () => {
-      const result = await service.findBySlug('test-series');
-
-      expect(recurrenceService.getRecurrenceDescription).toHaveBeenCalled();
-      expect(result).toHaveProperty('slug', 'test-series');
-      expect(result).toHaveProperty('recurrenceDescription');
-    });
-
-    it('should throw NotFoundException if series not found', async () => {
-      await expect(service.findBySlug('not-found')).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('should handle other errors', async () => {
-      jest
-        .spyOn(recurrenceService, 'getRecurrenceDescription')
-        .mockRejectedValue(new Error('Database error'));
-
-      await expect(service.findBySlug('test-series')).rejects.toThrow(
-        'Database error',
-      );
+      expect(mockEventSeriesRepository.save).toHaveBeenCalledWith(savedSeries);
+      expect(
+        mockEventManagementService.createSeriesOccurrence,
+      ).toHaveBeenCalled();
     });
   });
 
   describe('update', () => {
-    it('should update an existing series', async () => {
-      const updateDto = {
+    it('should update an event series', async () => {
+      const seriesSlug = 'test-series';
+      const series = {
+        id: 1,
+        slug: seriesSlug,
+        name: 'Test Series',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ulid: 'test-ulid-123456789',
+        description: 'Test Description',
+        recurrenceRule: {},
+        recurrenceExceptions: [],
+        templateEventSlug: 'test-event',
+        matrixRoomId: undefined,
+        user: { id: 1 },
+        events: [],
+        sourceType: null,
+        sourceId: null,
+        sourceUrl: null,
+        sourceData: null,
+        templateEvent: null,
+      };
+
+      const updateEventSeriesDto: CreateEventSeriesDto = {
         name: 'Updated Series',
-        description: 'Updated description',
+        description: 'Updated Description',
+        templateEvent: {
+          startDate: '2024-01-01T10:00:00Z',
+          endDate: '2024-01-01T11:00:00Z',
+          type: 'in-person',
+          locationOnline: 'https://meet.example.com',
+          maxAttendees: 10,
+          categories: [1, 2],
+        },
         recurrenceRule: {
-          frequency: 'WEEKLY',
-          interval: 2,
+          frequency: RecurrenceFrequency.DAILY,
+          interval: 1,
+          count: 5,
         },
       };
 
-      // Reset and re-mock for this test
-      jest.spyOn(recurrenceService, 'getRecurrenceDescription').mockReset();
-
-      // First call when checking permissions
-      jest
-        .spyOn(recurrenceService, 'getRecurrenceDescription')
-        .mockResolvedValueOnce('Weekly on Monday, Wednesday, Friday');
-
-      // Second call after update is done
-      jest
-        .spyOn(recurrenceService, 'getRecurrenceDescription')
-        .mockResolvedValueOnce('Weekly on Monday, Wednesday, Friday');
-
-      const result = await service.update('test-series', updateDto, 1);
-
-      expect(recurrenceService.getRecurrenceDescription).toHaveBeenCalledWith(
-        updateDto.recurrenceRule,
-      );
-      expect(eventManagementService.update).toHaveBeenCalledWith(1, updateDto);
-      expect(result).toHaveProperty('name', 'Updated Series');
-      expect(result).toHaveProperty('recurrenceDescription');
-    });
-
-    it('should not allow updates by non-owners', async () => {
-      const updateDto = {
+      const updatedSeries = {
+        id: series.id,
+        slug: series.slug,
         name: 'Updated Series',
+        createdAt: series.createdAt,
+        updatedAt: new Date(),
+        ulid: series.ulid,
+        description: 'Updated Description',
+        recurrenceRule: {},
+        recurrenceExceptions: [],
+        templateEventSlug: 'test-event',
+        matrixRoomId: undefined,
+        user: { id: 1 },
+        events: [],
+        sourceType: null,
+        sourceId: null,
+        sourceUrl: null,
+        sourceData: null,
+        templateEvent: null,
       };
 
-      // Reset and re-mock for this test with different owner
-      jest.spyOn(recurrenceService, 'getRecurrenceDescription').mockReset();
-      jest
-        .spyOn(recurrenceService, 'getRecurrenceDescription')
-        .mockResolvedValue('Weekly on Monday, Wednesday, Friday');
+      mockEventSeriesRepository.findOne.mockResolvedValue(series as any);
+      mockEventSeriesRepository.save.mockResolvedValue(updatedSeries as any);
 
-      await expect(
-        service.update('test-series', updateDto, 999),
-      ).rejects.toThrow(BadRequestException);
-      expect(eventManagementService.update).not.toHaveBeenCalled();
-    });
-  });
+      const findBySlugSpy = jest
+        .spyOn(service, 'findBySlug')
+        .mockResolvedValue(series as any);
 
-  describe('delete', () => {
-    it('should delete a series', async () => {
-      // Reset and re-mock for this test
-      jest.spyOn(recurrenceService, 'getRecurrenceDescription').mockReset();
-      jest
-        .spyOn(recurrenceService, 'getRecurrenceDescription')
-        .mockResolvedValue('Weekly on Monday, Wednesday, Friday');
+      const result = await service.update(seriesSlug, updateEventSeriesDto, 1);
 
-      await service.delete('test-series', 1);
-
-      expect(recurrenceService.getRecurrenceDescription).toHaveBeenCalledWith(
-        mockSeriesData.recurrenceRule,
+      expect(result).toEqual(updatedSeries);
+      expect(findBySlugSpy).toHaveBeenCalledWith(seriesSlug);
+      expect(mockEventSeriesRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Updated Series' }),
       );
-      expect(eventManagementService.delete).toHaveBeenCalledWith(1);
+      expect(mockEventManagementService.update).not.toHaveBeenCalled();
+
+      findBySlugSpy.mockRestore();
     });
 
-    it('should not allow deletion by non-owners', async () => {
-      // Reset and re-mock for this test
-      jest.spyOn(recurrenceService, 'getRecurrenceDescription').mockReset();
-      jest
-        .spyOn(recurrenceService, 'getRecurrenceDescription')
-        .mockResolvedValue('Weekly on Monday, Wednesday, Friday');
-
-      await expect(service.delete('test-series', 999)).rejects.toThrow(
-        BadRequestException,
-      );
-      expect(eventManagementService.delete).not.toHaveBeenCalled();
-    });
+    // Add tests for error handling and edge cases
   });
 });

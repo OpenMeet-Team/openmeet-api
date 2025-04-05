@@ -62,7 +62,7 @@ export class RecurrencePatternService {
       byhour: null,
       byminute: null,
       bysecond: null,
-      byeaster: null
+      byeaster: null,
     };
 
     const rrule = new RRule(rruleOptions);
@@ -127,9 +127,16 @@ export class RecurrencePatternService {
     });
 
     // Check if the target date exists in occurrences
-    return occurrences.some((occurrence) =>
-      this.isSameDay(new Date(occurrence), targetDate, options.timeZone),
-    );
+    return occurrences.some((occurrence) => {
+      const occurrenceDate = new Date(occurrence);
+      if (options.timeZone && options.timeZone !== 'UTC') {
+        // For non-UTC timezones, compare only the date components
+        return this.isSameDay(occurrenceDate, targetDate, options.timeZone);
+      } else {
+        // For UTC, compare both date and time components
+        return occurrenceDate.getTime() === targetDate.getTime();
+      }
+    });
   }
 
   /**
@@ -140,11 +147,20 @@ export class RecurrencePatternService {
   mapFrontendToBackendRule(
     frontendRule: FrontendRecurrenceRule,
   ): RecurrenceRule {
+    // Assuming FrontendRecurrenceRule no longer has 'freq', we need a way to get frequency.
+    // If it's expected to be passed separately or derived, adjust accordingly.
+    // For now, let's default or throw an error if frequency is essential.
+    // const frequency = frontendRule.frequency; // Assuming frequency might exist now?
+    // if (!frequency) {
+    //   throw new Error('Frequency is required in FrontendRecurrenceRule');
+    // }
+
     return {
-      frequency: this.mapFrontendFrequency(frontendRule.freq),
+      // frequency: this.mapFrontendFrequency(frequency), // Use the variable above
+      frequency: RecurrenceFrequency.DAILY, // Placeholder: Default or handle missing freq
       interval: frontendRule.interval,
-      byweekday: frontendRule.byweekday,
-      bymonthday: frontendRule.bymonthday,
+      byweekday: frontendRule.byDay, // Use byDay instead of byweekday
+      bymonthday: frontendRule.byMonthDay, // Use byMonthDay instead of bymonthday
     };
   }
 

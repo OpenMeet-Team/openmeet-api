@@ -3,21 +3,16 @@ import { EventManagementService } from '../event/services/event-management.servi
 import { CreateEventDto } from '../event/dto/create-event.dto';
 import { EventType } from '../core/constants/constant';
 import { EventSeriesService } from './services/event-series.service';
-import { EventSeriesModule } from './event-series.module';
-import { EventModule } from '../event/event.module';
-import { TenantModule } from '../tenant/tenant.module';
-import { UserModule } from '../user/user.module';
-import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
-import { EventSeriesEntity } from './infrastructure/persistence/relational/entities/event-series.entity';
-import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { REQUEST } from '@nestjs/core';
 import {
   mockEventSeriesRepository,
   mockEventSeriesService,
 } from '../test/mocks';
 import { EVENT_SERIES_REPOSITORY } from './interfaces/event-series-repository.interface';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { EventSeriesEntity } from './infrastructure/persistence/relational/entities/event-series.entity';
+import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 
-// Use a proper module configuration for the integration test
 describe('EventSeries Module Integration', () => {
   let eventManagementService: EventManagementService;
   let eventSeriesService: EventSeriesService;
@@ -26,10 +21,7 @@ describe('EventSeries Module Integration', () => {
   beforeEach(async () => {
     // Create a proper module with all required dependencies
     module = await Test.createTestingModule({
-      imports: [
-        EventSeriesModule,
-        // Mock the dependencies instead of importing real modules
-      ],
+      imports: [],
       providers: [
         {
           provide: REQUEST,
@@ -61,44 +53,47 @@ describe('EventSeries Module Integration', () => {
             delete: jest.fn(),
           },
         },
+        {
+          provide: EventSeriesService,
+          useValue: mockEventSeriesService,
+        },
+        {
+          provide: EventManagementService,
+          useValue: {
+            create: jest.fn().mockResolvedValue({
+              id: 987,
+              slug: 'test-event',
+              name: 'Test Event',
+            }),
+            createSeriesOccurrenceBySlug: jest
+              .fn()
+              .mockImplementation((dto, _userId, _seriesSlug) => {
+                return Promise.resolve({
+                  id: 456,
+                  slug: 'test-series-event',
+                  name: dto.name,
+                  seriesId: 123,
+                  materialized: true,
+                });
+              }),
+            update: jest.fn().mockImplementation((slug, dto, _userId) => {
+              return Promise.resolve({
+                id: 456,
+                slug,
+                ...dto,
+              });
+            }),
+            findEventsBySeriesSlug: jest.fn().mockResolvedValue([
+              [
+                { id: 1, name: 'Event 1', slug: 'event-1' },
+                { id: 2, name: 'Event 2', slug: 'event-2' },
+              ],
+              2,
+            ]),
+          },
+        },
       ],
-    })
-      .overrideProvider(EventSeriesService)
-      .useValue(mockEventSeriesService)
-      .overrideProvider(EventManagementService)
-      .useValue({
-        create: jest.fn().mockResolvedValue({
-          id: 987,
-          slug: 'test-event',
-          name: 'Test Event',
-        }),
-        createSeriesOccurrenceBySlug: jest
-          .fn()
-          .mockImplementation((dto, _userId, _seriesSlug) => {
-            return Promise.resolve({
-              id: 456,
-              slug: 'test-series-event',
-              name: dto.name,
-              seriesId: 123,
-              materialized: true,
-            });
-          }),
-        update: jest.fn().mockImplementation((slug, dto, _userId) => {
-          return Promise.resolve({
-            id: 456,
-            slug,
-            ...dto,
-          });
-        }),
-        findEventsBySeriesSlug: jest.fn().mockResolvedValue([
-          [
-            { id: 1, name: 'Event 1', slug: 'event-1' },
-            { id: 2, name: 'Event 2', slug: 'event-2' },
-          ],
-          2,
-        ]),
-      })
-      .compile();
+    }).compile();
 
     eventManagementService = module.get<EventManagementService>(
       EventManagementService,
@@ -111,7 +106,9 @@ describe('EventSeries Module Integration', () => {
 
   afterEach(async () => {
     // Clean up after tests
-    await module.close();
+    if (module) {
+      await module.close();
+    }
   });
 
   describe('EventSeries Integration', () => {

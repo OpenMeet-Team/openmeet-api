@@ -48,7 +48,8 @@ export class EventOccurrenceService implements IEventOccurrenceService {
   @Trace('event-occurrence.initializeRepository')
   async initializeRepository() {
     const tenantId = this.request.tenantId;
-    const dataSource = await this.tenantConnectionService.getTenantConnection(tenantId);
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
     this.eventRepository = dataSource.getRepository(EventEntity);
     this.eventSeriesRepository = dataSource.getRepository(EventSeriesEntity);
   }
@@ -294,15 +295,16 @@ export class EventOccurrenceService implements IEventOccurrenceService {
     timeZone: string = 'UTC',
   ): Promise<Date[]> {
     try {
-      const occurrences = await this.recurrencePatternService.generateOccurrences(
-        startDate,
-        rule,
-        {
-          timeZone,
-          excludeDates: exdates,
-          until: endDate.toISOString(),
-        },
-      );
+      const occurrences =
+        await this.recurrencePatternService.generateOccurrences(
+          startDate,
+          rule,
+          {
+            timeZone,
+            excludeDates: exdates,
+            until: endDate.toISOString(),
+          },
+        );
       return occurrences.map((date) => new Date(date));
     } catch (error) {
       throw new Error(`Error generating occurrences: ${error.message}`);

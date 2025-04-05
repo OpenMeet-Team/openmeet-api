@@ -91,8 +91,8 @@ const mockICalendarService = {
 };
 
 const mockEventSeriesOccurrenceService = {
-  splitSeriesAt: jest.fn(),
   getEffectiveEventForDate: jest.fn(),
+  updateFutureOccurrences: jest.fn(),
 };
 
 // Discussion service mock has been moved to chat.controller.spec.ts
@@ -424,20 +424,27 @@ describe('EventController', () => {
   });
 
   describe('modifyThisAndFutureOccurrences', () => {
-    it('should call recurrenceModificationService.splitSeriesAt with correct parameters', async () => {
+    it('should call eventSeriesOccurrenceService.updateFutureOccurrences with correct parameters', async () => {
       const slug = 'weekly-meeting';
       const date = '2025-06-15T10:00:00.000Z';
       const updateEventDto = { name: 'Updated Weekly Meeting' };
       const mockUser = { id: 1, name: 'Test User' };
+      
+      // Create a valid EventEntity-compatible object
       const expectedResult = {
+        ...mockEvent,
         id: 2,
         name: 'Updated Weekly Meeting',
-        recurrenceSplitPoint: true,
-      };
+      } as EventEntity;
 
-      mockEventSeriesOccurrenceService.splitSeriesAt.mockResolvedValue(
-        expectedResult,
-      );
+      // Mock the eventManagementService.update method
+      jest.spyOn(eventManagementService, 'update').mockResolvedValue(expectedResult);
+      
+      // Mock the eventQueryService.findEventBySlug method
+      jest.spyOn(eventQueryService, 'findEventBySlug').mockResolvedValue(expectedResult);
+      
+      // Mock the eventSeriesOccurrenceService.updateFutureOccurrences method
+      mockEventSeriesOccurrenceService.updateFutureOccurrences.mockResolvedValue(2);
 
       const result = await controller.modifyThisAndFutureOccurrences(
         slug,
@@ -446,21 +453,30 @@ describe('EventController', () => {
         mockUser as any,
       );
 
-      expect(
-        mockEventSeriesOccurrenceService.splitSeriesAt,
-      ).toHaveBeenCalledWith(slug, date, mockUser.id, updateEventDto);
+      expect(eventManagementService.update).toHaveBeenCalledWith(
+        slug, 
+        updateEventDto, 
+        mockUser.id
+      );
+      expect(mockEventSeriesOccurrenceService.updateFutureOccurrences).toHaveBeenCalledWith(
+        slug, 
+        date, 
+        updateEventDto, 
+        mockUser.id
+      );
       expect(result).toEqual(expectedResult);
     });
   });
 
   describe('getEffectiveProperties', () => {
-    it('should call recurrenceModificationService.getEffectiveEventForDate with correct parameters', async () => {
+    it('should call eventSeriesOccurrenceService.getEffectiveEventForDate with correct parameters', async () => {
       const slug = 'weekly-meeting';
       const date = '2025-06-15T10:00:00.000Z';
       const expectedResult = {
+        ...mockEvent,
         id: 2,
         name: 'Weekly Meeting (June Update)',
-      };
+      } as EventEntity;
 
       mockEventSeriesOccurrenceService.getEffectiveEventForDate.mockResolvedValue(
         expectedResult,
@@ -468,9 +484,10 @@ describe('EventController', () => {
 
       const result = await controller.getEffectiveProperties(slug, date);
 
-      expect(
-        mockEventSeriesOccurrenceService.getEffectiveEventForDate,
-      ).toHaveBeenCalledWith(slug, date);
+      expect(mockEventSeriesOccurrenceService.getEffectiveEventForDate).toHaveBeenCalledWith(
+        slug,
+        date,
+      );
       expect(result).toEqual(expectedResult);
     });
 

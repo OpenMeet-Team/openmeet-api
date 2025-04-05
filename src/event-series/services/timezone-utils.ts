@@ -109,4 +109,21 @@ export class TimezoneUtils {
       return parseISO(formattedDate);
     });
   }
+
+  /**
+   * Gets the local timezone
+   * @returns The local timezone
+   */
+  static getLocalTimezone(): string {
+    try {
+      // Use Intl API, which is standard in modern JS environments
+      return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch /* istanbul ignore next: difficult to test reliably */ {
+      // Fallback or default if Intl API fails (less likely in Node/modern browsers)
+      console.warn(
+        'Could not automatically detect local timezone using Intl API. Falling back to UTC.',
+      );
+      return 'UTC'; // Default to UTC as a safe fallback
+    }
+  }
 }

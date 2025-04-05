@@ -252,16 +252,13 @@ describe('EventSeries Behavioral Tests', () => {
           }
 
           // Create new occurrence
-          const newOccurrence = {
-            name: series.name,
-            startDate: date,
-            seriesId: series.id,
-            materialized: true,
-            originalOccurrenceDate: date,
-            user: { id: 1 },
+          const event = {
+            id: 1,
+            seriesSlug: series.slug,
+            series: series,
           };
 
-          await mockEventRepo.save(newOccurrence);
+          await mockEventRepo.save(event);
           return mockEventQuery.findEventBySlug();
         },
 
@@ -273,21 +270,21 @@ describe('EventSeries Behavioral Tests', () => {
           const dates = mockRecurrenceService.generateOccurrences();
 
           // Map to occurrence objects
-          return dates.slice(0, count).map((date) => {
+          return dates.slice(0, count).map((occurrenceDate) => {
             // Check if date matches any materialized occurrence
             const existing = materializedOccurrences.find((occ) =>
-              this.isSameDay(occ.originalOccurrenceDate || occ.startDate, date),
+              this.isSameDay(occ.originalOccurrenceDate || occ.startDate, occurrenceDate),
             );
 
             if (existing) {
               return {
-                date: date.toISOString(),
+                date: occurrenceDate.toISOString(),
                 event: existing,
                 materialized: true,
               };
             } else {
               return {
-                date: date.toISOString(),
+                date: occurrenceDate.toISOString(),
                 materialized: false,
               };
             }
@@ -350,6 +347,20 @@ describe('EventSeries Behavioral Tests', () => {
       expect(results[0].event).toBeDefined();
       expect(results[1].materialized).toBeFalsy();
       expect(results[2].materialized).toBeFalsy();
+    });
+
+    // Test invalid date
+    test('should reject invalid date', () => {
+      const service = createService();
+      mockRecurrenceService.isDateInRecurrencePattern.mockReturnValueOnce(false);
+
+      return service.materializeOccurrence('test-series', '2025-02-30T10:00:00Z').catch(
+        (err) => {
+          expect(err).toBeDefined();
+          expect(err.message).toContain('Invalid occurrence date');
+          expect(mockRecurrenceService.isDateInRecurrencePattern).toHaveBeenCalled();
+        },
+      );
     });
   });
 });

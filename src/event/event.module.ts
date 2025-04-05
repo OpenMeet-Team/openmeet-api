@@ -21,6 +21,7 @@ import { EventRecommendationService } from './services/event-recommendation.serv
 import { ChatModule } from '../chat/chat.module';
 import { ICalendarService } from './services/ical/ical.service';
 import { EventSeriesModule } from '../event-series/event-series.module';
+import { ConfigModule } from '@nestjs/config';
 
 // Create a provider for the DiscussionService
 const discussionServiceProvider: Provider = {
@@ -30,6 +31,7 @@ const discussionServiceProvider: Provider = {
 
 @Module({
   imports: [
+    ConfigModule,
     TypeOrmModule.forFeature([EventEntity]),
     TenantModule,
     forwardRef(() => GroupMemberModule),
