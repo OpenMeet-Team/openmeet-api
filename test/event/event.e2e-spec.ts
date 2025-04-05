@@ -353,15 +353,15 @@ describe('EventController (e2e)', () => {
     expect(updatedEvent.seriesSlug).toBeDefined();
 
     // Get all events to check for occurrences
-    const myEvents = await getMyEvents(TESTING_APP_URL, token);
+    // const myEvents = await getMyEvents(TESTING_APP_URL, token);
 
     // Find events related to our series - it could be by series ID or slug
     // We can have either seriesId or seriesSlug, so we should check both
-    const seriesEvents = myEvents.filter(
+    /* const seriesEvents = myEvents.filter(
       (e) =>
         e.seriesSlug === updatedEvent.seriesSlug ||
         e.seriesId === updatedEvent.seriesId,
-    );
+    ); */
 
     // Instead of requiring a specific count, just expect a series to exist
     expect(updatedEvent.seriesId || updatedEvent.seriesSlug).toBeTruthy();
@@ -468,9 +468,6 @@ describe('EventController (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
 
-    // Removed unused seriesEvents variable and eslint comment
-    // TODO: Adjust assertion based on the actual structure returned by /event/series/:slug
-    // For now, just check if the endpoint returns something without error
     expect(seriesEventsResponse.body).toBeDefined(); // Basic check
   });
 

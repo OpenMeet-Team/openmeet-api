@@ -74,7 +74,7 @@ export class TimezoneUtils {
 
       // Compare the formatted strings
       return d1Str === d2Str;
-    } catch (error) {
+    } catch {
       // Fall back to default comparison if there's an error
       const d1Str = typeof date1 === 'string' ? date1 : date1.toISOString();
       const d2Str = typeof date2 === 'string' ? date2 : date2.toISOString();
@@ -118,12 +118,9 @@ export class TimezoneUtils {
     try {
       // Use Intl API, which is standard in modern JS environments
       return Intl.DateTimeFormat().resolvedOptions().timeZone;
-    } catch /* istanbul ignore next: difficult to test reliably */ {
-      // Fallback or default if Intl API fails (less likely in Node/modern browsers)
-      console.warn(
-        'Could not automatically detect local timezone using Intl API. Falling back to UTC.',
-      );
-      return 'UTC'; // Default to UTC as a safe fallback
+    } catch {
+      // Fallback to UTC if the timezone is invalid
+      return 'UTC';
     }
   }
 }

@@ -1,3 +1,5 @@
+import { EventSeriesEntity } from './infrastructure/persistence/relational/entities/event-series.entity';
+import { TESTING_USER_ID } from '../../test/utils/constants';
 // This test file focuses on the behavioral contracts of the EventSeries services
 // rather than implementation details, avoiding circular dependency issues
 
@@ -237,7 +239,6 @@ describe('EventSeries Behavioral Tests', () => {
 
         async materializeOccurrence(_seriesSlug, _occurrenceDate) {
           const series = await mockSeriesService.findBySlug();
-          const date = new Date(_occurrenceDate);
 
           // Validate date
           const isValid = mockRecurrenceService.isDateInRecurrencePattern();
@@ -263,7 +264,7 @@ describe('EventSeries Behavioral Tests', () => {
         },
 
         async getUpcomingOccurrences(seriesSlug, count = 10) {
-          await mockSeriesService.findBySlug();
+          await mockSeriesService.findBySlug(seriesSlug);
           const materializedOccurrences = await mockEventRepo.find();
 
           // Get recurrence dates
@@ -273,7 +274,10 @@ describe('EventSeries Behavioral Tests', () => {
           return dates.slice(0, count).map((occurrenceDate) => {
             // Check if date matches any materialized occurrence
             const existing = materializedOccurrences.find((occ) =>
-              this.isSameDay(occ.originalOccurrenceDate || occ.startDate, occurrenceDate),
+              this.isSameDay(
+                occ.originalOccurrenceDate || occ.startDate,
+                occurrenceDate,
+              ),
             );
 
             if (existing) {
@@ -352,15 +356,42 @@ describe('EventSeries Behavioral Tests', () => {
     // Test invalid date
     test('should reject invalid date', () => {
       const service = createService();
-      mockRecurrenceService.isDateInRecurrencePattern.mockReturnValueOnce(false);
+      mockRecurrenceService.isDateInRecurrencePattern.mockReturnValueOnce(
+        false,
+      );
 
-      return service.materializeOccurrence('test-series', '2025-02-30T10:00:00Z').catch(
-        (err) => {
+      return service
+        .materializeOccurrence('test-series', '2025-02-30T10:00:00Z')
+        .catch((err) => {
           expect(err).toBeDefined();
           expect(err.message).toContain('Invalid occurrence date');
-          expect(mockRecurrenceService.isDateInRecurrencePattern).toHaveBeenCalled();
-        },
-      );
+          expect(
+            mockRecurrenceService.isDateInRecurrencePattern,
+          ).toHaveBeenCalled();
+        });
+    });
+
+    it('should not find events if the series has no occurrences', async () => {
+      const service = createService();
+      // Create a plain object matching the expected structure for the mock
+      const series: Partial<EventSeriesEntity> = {
+        id: 1,
+        slug: 'no-occurrence-series',
+        name: 'test series',
+        recurrenceRule: { frequency: 'DAILY', count: 1 },
+        // timezone: 'UTC', // Removed as it's not a property of EventSeriesEntity
+        // Assuming organizerId is needed indirectly via the user relation
+        user: { id: TESTING_USER_ID } as any, // Add user object
+      };
+
+      mockSeriesService.findBySlug.mockResolvedValueOnce(series);
+      mockRecurrenceService.generateOccurrences.mockReturnValueOnce([]);
+
+      const results = await service.getUpcomingOccurrences(series.slug);
+
+      expect(results).toHaveLength(0);
+      expect(mockSeriesService.findBySlug).toHaveBeenCalledWith(series.slug);
+      expect(mockRecurrenceService.generateOccurrences).toHaveBeenCalled();
     });
   });
 });

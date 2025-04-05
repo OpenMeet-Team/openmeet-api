@@ -429,7 +429,7 @@ describe('EventController', () => {
       const date = '2025-06-15T10:00:00.000Z';
       const updateEventDto = { name: 'Updated Weekly Meeting' };
       const mockUser = { id: 1, name: 'Test User' };
-      
+
       // Create a valid EventEntity-compatible object
       const expectedResult = {
         ...mockEvent,
@@ -438,13 +438,19 @@ describe('EventController', () => {
       } as EventEntity;
 
       // Mock the eventManagementService.update method
-      jest.spyOn(eventManagementService, 'update').mockResolvedValue(expectedResult);
-      
+      jest
+        .spyOn(eventManagementService, 'update')
+        .mockResolvedValue(expectedResult);
+
       // Mock the eventQueryService.findEventBySlug method
-      jest.spyOn(eventQueryService, 'findEventBySlug').mockResolvedValue(expectedResult);
-      
+      jest
+        .spyOn(eventQueryService, 'findEventBySlug')
+        .mockResolvedValue(expectedResult);
+
       // Mock the eventSeriesOccurrenceService.updateFutureOccurrences method
-      mockEventSeriesOccurrenceService.updateFutureOccurrences.mockResolvedValue(2);
+      mockEventSeriesOccurrenceService.updateFutureOccurrences.mockResolvedValue(
+        2,
+      );
 
       const result = await controller.modifyThisAndFutureOccurrences(
         slug,
@@ -454,16 +460,13 @@ describe('EventController', () => {
       );
 
       expect(eventManagementService.update).toHaveBeenCalledWith(
-        slug, 
-        updateEventDto, 
-        mockUser.id
+        slug,
+        updateEventDto,
+        mockUser.id,
       );
-      expect(mockEventSeriesOccurrenceService.updateFutureOccurrences).toHaveBeenCalledWith(
-        slug, 
-        date, 
-        updateEventDto, 
-        mockUser.id
-      );
+      expect(
+        mockEventSeriesOccurrenceService.updateFutureOccurrences,
+      ).toHaveBeenCalledWith(slug, date, updateEventDto, mockUser.id);
       expect(result).toEqual(expectedResult);
     });
   });
@@ -484,10 +487,9 @@ describe('EventController', () => {
 
       const result = await controller.getEffectiveProperties(slug, date);
 
-      expect(mockEventSeriesOccurrenceService.getEffectiveEventForDate).toHaveBeenCalledWith(
-        slug,
-        date,
-      );
+      expect(
+        mockEventSeriesOccurrenceService.getEffectiveEventForDate,
+      ).toHaveBeenCalledWith(slug, date);
       expect(result).toEqual(expectedResult);
     });
 

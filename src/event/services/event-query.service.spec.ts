@@ -8,20 +8,14 @@ import {
   EventVisibility,
   EventType,
 } from '../../core/constants/constant';
-import {
-  mockTenantConnectionService,
-  mockRepository,
-  mockUser,
-  mockEventAttendeeService,
-} from '../../test/mocks';
+import { mockUser } from '../../../test/mocks';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { EventQueryService } from './event-query.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
 import { GroupMemberService } from '../../group-member/group-member.service';
-import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
-import { CategoryEntity } from '../../category/infrastructure/persistence/relational/entities/categories.entity';
+import { mockRepository } from '../../test/mocks';
 
 // Define a mock event entity for consistent use
 const mockEventEntity: EventEntity = {
@@ -98,7 +92,9 @@ describe('EventQueryService', () => {
             // Add mock methods used by EventQueryService
             showConfirmedEventAttendeesCount: jest.fn().mockResolvedValue(5),
             findEventAttendeeByUserId: jest.fn(),
-            showEventAttendees: jest.fn().mockResolvedValue({ data: [], meta: { total: 0 } }), // Add missing method
+            showEventAttendees: jest
+              .fn()
+              .mockResolvedValue({ data: [], meta: { total: 0 } }), // Add missing method
           },
         },
         {

@@ -211,9 +211,7 @@ describe('EventManagementService Integration with EventSeriesService', () => {
             getOrCreateOccurrence: jest
               .fn()
               .mockResolvedValue({ id: 123, name: 'Test Occurrence' }),
-            updateFutureOccurrences: jest
-              .fn()
-              .mockResolvedValue(2),
+            updateFutureOccurrences: jest.fn().mockResolvedValue(2),
             getEffectiveEventForDate: jest
               .fn()
               .mockResolvedValue({ id: 123, name: 'Test Event' }),

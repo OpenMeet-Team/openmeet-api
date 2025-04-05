@@ -6,14 +6,11 @@ import { EventQueryService } from '../../event/services/event-query.service';
 import { EventManagementService } from '../../event/services/event-management.service';
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { EventSeriesEntity } from '../infrastructure/persistence/relational/entities/event-series.entity';
 import { EventType } from '../../core/constants/constant';
 import { UserService } from '../../user/user.service';
 import { REQUEST } from '@nestjs/core';
-import { TESTING_USER_ID } from '../../../test/utils/constants';
-import { TenantConnectionService } from '../../tenant/tenant.service';
 
 // Define mockUser here
 const mockUser = {
@@ -187,14 +184,6 @@ describe('EventSeriesOccurrenceService', () => {
         {
           provide: REQUEST,
           useValue: { tenantId: 'test-tenant-id' },
-        },
-        {
-          provide: 'TenantConnectionService',
-          useValue: {
-            getConnection: jest.fn().mockReturnValue({
-              getRepository: jest.fn(() => mockEventRepository),
-            }),
-          },
         },
       ],
     }).compile();
