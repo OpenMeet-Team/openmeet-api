@@ -626,13 +626,13 @@ export class EventQueryService {
     if (events.length > 0) {
       const firstEvent = events[0];
       this.logger.debug(
-        `First event image before: ${firstEvent.image ? 'present' : 'missing'}`
+        `First event image before: ${firstEvent.image ? 'present' : 'missing'}`,
       );
 
       // If the event has an image, log some details about it
       if (firstEvent.image) {
         this.logger.debug(
-          `First event image details: id=${firstEvent.image.id}, path=${JSON.stringify(firstEvent.image.path)}`
+          `First event image details: id=${firstEvent.image.id}, path=${JSON.stringify(firstEvent.image.path)}`,
         );
       }
     }
@@ -649,7 +649,7 @@ export class EventQueryService {
 
     // Add recurrence descriptions
     let processedEvents = eventsWithCounts.map((event) =>
-      this.addRecurrenceInformation(event)
+      this.addRecurrenceInformation(event),
     );
 
     // Transform all images to ensure proper URL generation - exactly like in showAllEvents
@@ -659,11 +659,13 @@ export class EventQueryService {
         typeof event.image.path === 'object' &&
         Object.keys(event.image.path).length === 0
       ) {
-        this.logger.debug(`Transforming empty object image path for event ${event.id}`);
+        this.logger.debug(
+          `Transforming empty object image path for event ${event.id}`,
+        );
         // Use instanceToPlain to force the Transform decorator to run
         event.image = instanceToPlain(event.image) as any;
         this.logger.debug(
-          `Path after transformation: ${event.image ? typeof event.image.path : 'image is undefined'}`
+          `Path after transformation: ${event.image ? typeof event.image.path : 'image is undefined'}`,
         );
       }
       return event;
@@ -673,13 +675,13 @@ export class EventQueryService {
     if (processedEvents.length > 0) {
       const firstEvent = processedEvents[0];
       this.logger.debug(
-        `First event image after: ${firstEvent.image ? 'present' : 'missing'}`
+        `First event image after: ${firstEvent.image ? 'present' : 'missing'}`,
       );
 
       // Log image details again
       if (firstEvent.image) {
         this.logger.debug(
-          `First event image details after: path=${JSON.stringify(firstEvent.image.path)}`
+          `First event image details after: path=${JSON.stringify(firstEvent.image.path)}`,
         );
       }
     }
@@ -708,7 +710,7 @@ export class EventQueryService {
     // Debug image before processing
     if (event.image) {
       this.logger.debug(
-        `Next hosted event image before: path=${JSON.stringify(event.image.path)}`
+        `Next hosted event image before: path=${JSON.stringify(event.image.path)}`,
       );
     }
 
@@ -733,7 +735,7 @@ export class EventQueryService {
     // Final debug check
     if (processedEvent.image) {
       this.logger.debug(
-        `Next hosted event image after: path=${JSON.stringify(processedEvent.image.path)}`
+        `Next hosted event image after: path=${JSON.stringify(processedEvent.image.path)}`,
       );
     }
 
@@ -787,13 +789,13 @@ export class EventQueryService {
     if (events.length > 0) {
       const firstEvent = events[0];
       this.logger.debug(
-        `First user event image before: ${firstEvent.image ? 'present' : 'missing'}`
+        `First user event image before: ${firstEvent.image ? 'present' : 'missing'}`,
       );
 
       // If the event has an image, log details
       if (firstEvent.image) {
         this.logger.debug(
-          `First user event image details: id=${firstEvent.image.id}, path=${JSON.stringify(firstEvent.image.path)}`
+          `First user event image details: id=${firstEvent.image.id}, path=${JSON.stringify(firstEvent.image.path)}`,
         );
       }
     }
@@ -810,7 +812,7 @@ export class EventQueryService {
 
     // Add recurrence descriptions
     let processedEvents = eventsWithCounts.map((event) =>
-      this.addRecurrenceInformation(event)
+      this.addRecurrenceInformation(event),
     );
 
     // Transform all images - exactly like in showAllEvents method
@@ -820,11 +822,13 @@ export class EventQueryService {
         typeof event.image.path === 'object' &&
         Object.keys(event.image.path).length === 0
       ) {
-        this.logger.debug(`Transforming empty object image path for user event ${event.id}`);
+        this.logger.debug(
+          `Transforming empty object image path for user event ${event.id}`,
+        );
         // Use instanceToPlain to force the Transform decorator to run
         event.image = instanceToPlain(event.image) as any;
         this.logger.debug(
-          `User event path after transformation: ${event.image ? typeof event.image.path : 'image is undefined'}`
+          `User event path after transformation: ${event.image ? typeof event.image.path : 'image is undefined'}`,
         );
       }
       return event;
@@ -834,13 +838,13 @@ export class EventQueryService {
     if (processedEvents.length > 0) {
       const firstEvent = processedEvents[0];
       this.logger.debug(
-        `First user event image after: ${firstEvent.image ? 'present' : 'missing'}`
+        `First user event image after: ${firstEvent.image ? 'present' : 'missing'}`,
       );
 
       // Log image details again
       if (firstEvent.image) {
         this.logger.debug(
-          `First user event image details after: path=${JSON.stringify(firstEvent.image.path)}`
+          `First user event image details after: path=${JSON.stringify(firstEvent.image.path)}`,
         );
       }
     }

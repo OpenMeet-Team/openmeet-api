@@ -209,29 +209,30 @@ export class EventSeriesController {
     };
   }
 
-  @Post('promote/:eventSlug')
+  @Post('create-from-event/:eventSlug')
   @ApiOperation({
-    summary: 'Promote an existing event to a series',
+    summary: 'Create a new event series from an existing event',
     description: `
-      Promotes an existing single event to become a recurring event series.
-      The existing event becomes the template for the series.
+      Creates a new recurring event series using an existing event as the template.
+      The existing event becomes the first occurrence of the series.
       
-      Requires a recurrence rule and timezone to define how the event repeats.
+      The event must not already be part of another series.
+      Requires a recurrence rule to define how the event repeats.
     `,
   })
   @ApiParam({
     name: 'eventSlug',
     type: String,
-    description: 'Slug of the existing event to promote',
+    description: 'Slug of the existing event to use as template',
   })
   @ApiResponse({
     status: HttpStatus.CREATED,
-    description: 'The event has been successfully promoted to a series',
+    description: 'The event series has been successfully created',
     type: EventSeriesResponseDto,
   })
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
-    description: 'Invalid recurrence rule or the user does not have permission',
+    description: 'Invalid recurrence rule or the event is already part of a series',
   })
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,
@@ -241,27 +242,26 @@ export class EventSeriesController {
     status: HttpStatus.UNAUTHORIZED,
     description: 'User is not authenticated',
   })
-  async promoteToSeries(
+  async createSeriesFromEvent(
     @Param('eventSlug') eventSlug: string,
-    @Body() promoteData: { recurrenceRule: any },
+    @Body() createData: { recurrenceRule: any },
     @Request() req,
   ) {
     this.logger.log(
-      `Promoting event ${eventSlug} to a series by user ${req.user.id}`,
+      `Creating series from event ${eventSlug} by user ${req.user.id}`,
     );
 
     try {
       const eventSeries = await this.eventSeriesService.createFromExistingEvent(
         eventSlug,
-        promoteData.recurrenceRule,
-
+        createData.recurrenceRule,
         req.user.id,
       );
 
       return new EventSeriesResponseDto(eventSeries);
     } catch (error) {
       this.logger.error(
-        `Error promoting event to series: ${error.message}`,
+        `Error creating series from event: ${error.message}`,
         error.stack,
       );
       throw error;
@@ -703,15 +703,15 @@ export class EventSeriesController {
     return occurrence;
   }
 
-  @Post(':seriesSlug/associate-event/:eventSlug')
+  @Post(':seriesSlug/add-event/:eventSlug')
   @ApiOperation({
-    summary:
-      'Associate an existing event with an event series as a one-off occurrence',
+    summary: 'Add an existing event to a series as a one-off occurrence',
     description: `
-      Associates an existing event with an event series as a one-off occurrence.
+      Adds an existing event to an event series as a one-off occurrence.
       This allows the event to be part of the series without following its recurrence pattern.
       
       The event must not already be part of another series.
+      The event's date does not need to match the series pattern.
       The user must have permission to edit both the event and the series.
     `,
   })
@@ -723,17 +723,16 @@ export class EventSeriesController {
   @ApiParam({
     name: 'eventSlug',
     type: String,
-    description: 'The slug of the event to associate',
+    description: 'The slug of the event to add to the series',
   })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'The event has been successfully associated with the series',
+    description: 'The event has been successfully added to the series',
     type: EventResponseDto,
   })
   @ApiResponse({
     status: HttpStatus.BAD_REQUEST,
-    description:
-      'Invalid request or the event is already part of another series',
+    description: 'The event is already part of another series',
   })
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,
@@ -743,7 +742,7 @@ export class EventSeriesController {
     status: HttpStatus.UNAUTHORIZED,
     description: 'User is not authorized to perform this action',
   })
-  async associateEventWithSeries(
+  async addEventToSeries(
     @Param('seriesSlug') seriesSlug: string,
     @Param('eventSlug') eventSlug: string,
     @Request() req,
@@ -753,7 +752,7 @@ export class EventSeriesController {
       req.tenantId || (req.headers && req.headers['x-tenant-id']);
 
     this.logger.log(
-      `Associating event ${eventSlug} with series ${seriesSlug} in tenant ${tenantId} by user ${req.user.id}`,
+      `Adding event ${eventSlug} to series ${seriesSlug} in tenant ${tenantId} by user ${req.user.id}`,
     );
 
     try {
@@ -766,7 +765,7 @@ export class EventSeriesController {
       return event;
     } catch (error) {
       this.logger.error(
-        `Error associating event with series: ${error.message}`,
+        `Error adding event to series: ${error.message}`,
         error.stack,
       );
       throw error;

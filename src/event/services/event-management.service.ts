@@ -40,6 +40,7 @@ import { UpdateEventAttendeeDto } from '../../event-attendee/dto/update-eventAtt
 import { EventSeriesService } from '../../event-series/services/event-series.service';
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
 import { Not, IsNull } from 'typeorm';
+import { RecurrenceFrequency } from '../../event-series/interfaces/recurrence.interface';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventManagementService {
@@ -156,12 +157,8 @@ export class EventManagementService {
       timeZone: createEventDto.timeZone || 'UTC',
       recurrenceRule: {
         ...createEventDto.recurrenceRule,
-        until:
-          createEventDto.recurrenceUntil ||
-          createEventDto.recurrenceRule?.until,
-        count:
-          createEventDto.recurrenceCount ||
-          createEventDto.recurrenceRule?.count,
+        frequency: RecurrenceFrequency.WEEKLY,
+        interval: 1
       },
       recurrenceExceptions: createEventDto.recurrenceExceptions || [],
 
@@ -402,12 +399,8 @@ export class EventManagementService {
       mappedDto.timeZone = updateEventDto.timeZone || 'UTC';
       mappedDto.recurrenceRule = {
         ...updateEventDto.recurrenceRule,
-        until:
-          updateEventDto.recurrenceUntil ||
-          updateEventDto.recurrenceRule?.until,
-        count:
-          updateEventDto.recurrenceCount ||
-          updateEventDto.recurrenceRule?.count,
+        frequency: RecurrenceFrequency.WEEKLY,
+        interval: 1
       };
     } else if (updateEventDto.recurrenceRule === null) {
       // If recurrenceRule is explicitly set to null, disable recurring status
@@ -1077,7 +1070,7 @@ export class EventManagementService {
         name: createEventDto.name,
         description: createEventDto.description,
         recurrenceRule: createEventDto.recurrenceRule || {
-          frequency: 'WEEKLY',
+          frequency: RecurrenceFrequency.WEEKLY,
           interval: 1,
         },
         templateEvent,

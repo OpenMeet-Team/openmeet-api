@@ -1,1 +1,0 @@
-/home/tscanlan/projects/openmeet/openmeet-api/design-notes/recurring-events/consolidated-implementation-plan.md

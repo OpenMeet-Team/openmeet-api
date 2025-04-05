@@ -191,6 +191,15 @@ export class EventEntity
   @Index()
   seriesSlug: string;
 
+  /**
+   * Original date of the occurrence when it was created or modified.
+   * This is used to identify which date a modified occurrence belongs to
+   * in the recurrence pattern.
+   */
+  @Column({ type: 'timestamp', nullable: true })
+  @Index()
+  originalDate: Date;
+
   // Additional RFC 5545/7986 properties
   @Column({ nullable: true, type: 'varchar', length: 20 })
   securityClass: string;

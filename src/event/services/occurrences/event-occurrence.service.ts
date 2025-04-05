@@ -8,18 +8,16 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { Repository, Between } from 'typeorm';
-import { EventEntity } from '../../infrastructure/persistence/relational/entities/event.entity';
+import { Repository } from 'typeorm';
+import { EventEntity } from '../../../event/infrastructure/persistence/relational/entities/event.entity';
 import { TenantConnectionService } from '../../../tenant/tenant.service';
 import { EventSeriesOccurrenceService } from '../../../event-series/services/event-series-occurrence.service';
 import { RecurrencePatternService } from '../../../event-series/services/recurrence-pattern.service';
 import { IEventOccurrenceService } from './event-occurrence.interface';
-import { OccurrenceOptions } from '../../../event-series/interfaces/recurrence.interface';
-import { isAfter, isBefore, isEqual } from 'date-fns';
 import { Trace } from '../../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
-import { EventStatus } from '../../../core/constants/constant';
 import { EventSeriesEntity } from '../../../event-series/infrastructure/persistence/relational/entities/event-series.entity';
+import { OccurrenceOptions } from '../../../event-series/interfaces/recurrence.interface';
 
 /**
  * @deprecated This service is deprecated and will be removed in a future version.
@@ -50,8 +48,7 @@ export class EventOccurrenceService implements IEventOccurrenceService {
   @Trace('event-occurrence.initializeRepository')
   async initializeRepository() {
     const tenantId = this.request.tenantId;
-    const dataSource =
-      await this.tenantConnectionService.getTenantConnection(tenantId);
+    const dataSource = await this.tenantConnectionService.getTenantConnection(tenantId);
     this.eventRepository = dataSource.getRepository(EventEntity);
     this.eventSeriesRepository = dataSource.getRepository(EventSeriesEntity);
   }
@@ -274,7 +271,7 @@ export class EventOccurrenceService implements IEventOccurrenceService {
     }
 
     // Look for an existing materialized occurrence with this date
-    // Since we don't have originalOccurrenceDate, use startDate instead
+    // Since we use originalDate, use startDate as a fallback
     const matchingEvents = await this.eventRepository.find({
       where: {
         series: { id: parentEvent.series.id },
@@ -297,11 +294,16 @@ export class EventOccurrenceService implements IEventOccurrenceService {
     timeZone: string = 'UTC',
   ): Promise<Date[]> {
     try {
-      return await this.recurrencePatternService.generateOccurrences(
+      const occurrences = await this.recurrencePatternService.generateOccurrences(
         startDate,
         rule,
-        { timeZone, exdates, until: endDate },
+        {
+          timeZone,
+          excludeDates: exdates,
+          until: endDate.toISOString(),
+        },
       );
+      return occurrences.map((date) => new Date(date));
     } catch (error) {
       throw new Error(`Error generating occurrences: ${error.message}`);
     }

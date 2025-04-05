@@ -18,16 +18,16 @@ import { EventStatus, EventVisibility } from '../../core/constants/constant';
 import { FileEntity } from '../../file/infrastructure/persistence/relational/entities/file.entity';
 import { GroupEntity } from 'src/group/infrastructure/persistence/relational/entities/group.entity';
 import { SourceFields } from '../../core/interfaces/source-data.interface';
+import { RecurrenceFrequency } from '../../event-series/interfaces/recurrence.interface';
 
 export class RecurrenceRuleDto {
   @ApiProperty({
-    description: 'Frequency of the recurrence (DAILY, WEEKLY, MONTHLY, YEARLY)',
-    enum: ['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'],
-    example: 'WEEKLY',
+    description: 'Frequency of the recurrence',
+    enum: RecurrenceFrequency,
+    example: RecurrenceFrequency.WEEKLY,
   })
-  @IsString()
-  @IsIn(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'])
-  frequency: string;
+  @IsEnum(RecurrenceFrequency)
+  frequency: RecurrenceFrequency;
 
   @ApiPropertyOptional({
     description: 'Interval between recurrences (e.g., every 2 weeks)',

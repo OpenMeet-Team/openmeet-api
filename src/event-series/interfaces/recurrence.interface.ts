@@ -1,24 +1,47 @@
 /**
- * Represents the recurrence rule for an event
+ * Enum for recurrence frequency values
+ */
+export enum RecurrenceFrequency {
+  DAILY = 'DAILY',
+  WEEKLY = 'WEEKLY',
+  MONTHLY = 'MONTHLY',
+  YEARLY = 'YEARLY',
+}
+
+/**
+ * Represents the recurrence rule for an event series
+ * Following RFC 5545 standards for iCalendar
  */
 export interface RecurrenceRule {
-  frequency: string; // 'DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'
-  interval?: number; // e.g., every 2 weeks
-  count?: number; // number of occurrences
-  until?: Date | string; // end date
-  byweekday?: string[]; // e.g., ['MO', 'WE', 'FR']
-  bymonthday?: number[]; // e.g., [1, 15] for 1st and 15th of month
-  bymonth?: number[]; // e.g., [1, 6] for January and June
+  /** The frequency of recurrence (DAILY, WEEKLY, MONTHLY, YEARLY) */
+  frequency: RecurrenceFrequency | string;
+  /** How often the event repeats (e.g., every 2 weeks) */
+  interval?: number;
+  /** Number of occurrences in the series */
+  count?: number;
+  /** End date for the recurrence */
+  until?: Date | string;
+  /** Days of the week ('MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU') */
+  byweekday?: string[];
+  /** Days of the month (1-31 or -31 to -1 for counting from the end) */
+  bymonthday?: number[];
+  /** Months of the year (1-12) */
+  bymonth?: number[];
 }
 
 /**
  * Options for generating occurrences
  */
 export interface OccurrenceOptions {
+  /** Maximum number of occurrences to generate */
   count?: number;
+  /** Date until which to generate occurrences */
   until?: Date | string;
+  /** Exception dates excluded from the pattern */
   exdates?: Array<Date | string>;
+  /** Timezone identifier (e.g., "America/New_York") */
   timeZone?: string;
+  /** Whether to include excluded dates in the result */
   includeExcluded?: boolean;
 }
 
@@ -26,5 +49,6 @@ export interface OccurrenceOptions {
  * Options for formatting dates in a timezone
  */
 export interface DateFormatOptions {
+  /** Date format pattern */
   format?: string;
 }

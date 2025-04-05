@@ -14,6 +14,8 @@ import { EventEntity } from '../../event/infrastructure/persistence/relational/e
 import { Trace } from '../../utils/trace.decorator';
 import { RecurrencePatternService } from './recurrence-pattern.service';
 import { UserService } from '../../user/user.service';
+import { parseISO } from 'date-fns';
+import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
 
 @Injectable()
 export class EventSeriesOccurrenceService {
@@ -81,9 +83,6 @@ export class EventSeriesOccurrenceService {
     occurrenceDate: string,
   ): Promise<EventEntity | undefined> {
     try {
-      // Get the series
-      const series = await this.eventSeriesService.findBySlug(seriesSlug);
-
       // Convert occurrence date string to Date object
       const date = new Date(occurrenceDate);
 
@@ -188,9 +187,9 @@ export class EventSeriesOccurrenceService {
       const isValidOccurrence =
         this.recurrencePatternService.isDateInRecurrencePattern(
           date,
-          series.createdAt.toISOString(),
+          new Date(series.createdAt),
           series.recurrenceRule as RecurrenceRule,
-          'UTC',
+          { timeZone: 'UTC' },
         );
 
       if (!isValidOccurrence) {
@@ -303,24 +302,26 @@ export class EventSeriesOccurrenceService {
       }
 
       // If still no template event, use the series creation date and first occurrence date
-      let startDate = series.createdAt;
+      let startDate = new Date(series.createdAt);
       if (!templateEvent && series.recurrenceRule) {
         // Generate the first occurrence date from the recurrence rule
         const firstOccurrence =
           this.recurrencePatternService.generateOccurrences(
-            series.createdAt.toISOString(),
+            new Date(series.createdAt),
             series.recurrenceRule as RecurrenceRule,
             {
               timeZone: 'UTC',
               count: 1,
             },
           )[0];
-        startDate = firstOccurrence || series.createdAt;
+        startDate = firstOccurrence
+          ? new Date(firstOccurrence)
+          : new Date(series.createdAt);
       }
 
       // Generate all occurrence dates from the recurrence rule
       const generatedDates = this.recurrencePatternService.generateOccurrences(
-        startDate.toISOString(),
+        startDate,
         series.recurrenceRule as RecurrenceRule,
         {
           timeZone: 'UTC',
@@ -329,7 +330,9 @@ export class EventSeriesOccurrenceService {
       );
 
       // Filter dates to only include future dates
-      const futureDates = generatedDates.filter((date) => date >= now);
+      const futureDates = generatedDates
+        .map((date) => new Date(date))
+        .filter((date) => date >= now);
 
       // Map dates to either existing events or calculated placeholders
       const results = futureDates.slice(0, count).map((date) => {
@@ -350,7 +353,7 @@ export class EventSeriesOccurrenceService {
         // All other dates are not yet stored in the database
         return {
           date: date.toISOString(),
-          materialized: false, // We keep this flag for API compatibility
+          materialized: false,
         };
       });
 
@@ -786,9 +789,9 @@ export class EventSeriesOccurrenceService {
       const series = await this.eventSeriesService.findBySlug(seriesSlug);
       const isValid = this.recurrencePatternService.isDateInRecurrencePattern(
         new Date(date),
-        series.createdAt.toISOString(),
+        new Date(series.createdAt),
         series.recurrenceRule as RecurrenceRule,
-        'UTC',
+        { timeZone: 'UTC' },
       );
 
       if (!isValid) {
@@ -823,15 +826,44 @@ export class EventSeriesOccurrenceService {
   }
 
   /**
-   * Utility method to check if two dates are the same day in a specific timezone
+   * Properly converts a date to the specified timezone, accounting for DST
+   * @param date The date to convert
+   * @param timeZone The timezone to convert to
+   * @returns A date object in the specified timezone
+   */
+  private convertToTimeZone(date: Date | string, timeZone: string): Date {
+    const parsedDate = typeof date === 'string' ? parseISO(date) : date;
+    return toZonedTime(parsedDate, timeZone);
+  }
+
+  /**
+   * Formats a date in the specified timezone with the specified format
+   * @param date The date to format
+   * @param timeZone The timezone to format in
+   * @param formatStr The format string to use
+   * @returns A formatted date string
+   */
+  private formatInTimeZone(
+    date: Date | string,
+    timeZone: string,
+    formatStr = 'yyyy-MM-dd',
+  ): string {
+    const parsedDate = typeof date === 'string' ? parseISO(date) : date;
+    return formatInTimeZone(parsedDate, timeZone, formatStr);
+  }
+
+  /**
+   * Check if two dates represent the same day in the specified timezone
    */
   private isSameDay(
     date1: Date | string,
     date2: Date | string,
     timeZone: string,
   ): boolean {
-    const d1 = typeof date1 === 'string' ? new Date(date1) : date1;
-    const d2 = typeof date2 === 'string' ? new Date(date2) : date2;
-    return this.recurrencePatternService.isSameDay(d1, d2, timeZone);
+    // Format both dates as YYYY-MM-DD in the specified timezone
+    const d1Str = this.formatInTimeZone(date1, timeZone);
+    const d2Str = this.formatInTimeZone(date2, timeZone);
+    // Compare the formatted strings
+    return d1Str === d2Str;
   }
 }

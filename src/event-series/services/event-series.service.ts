@@ -179,6 +179,14 @@ export class EventSeriesService {
         throw new NotFoundException(`Event with slug ${eventSlug} not found`);
       }
 
+      // Check if the event is already part of a series
+      if (event.seriesId) {
+        this.logger.error(`Event ${eventSlug} is already part of a series`);
+        throw new BadRequestException(
+          `Event ${eventSlug} is already part of a series`,
+        );
+      }
+
       this.logger.debug('Found existing event', {
         eventId: event.id,
         eventSlug: event.slug,
@@ -266,6 +274,7 @@ export class EventSeriesService {
       const maxOccurrences = 5;
       const recurrencePattern = this.recurrencePatternService
         .generateOccurrences(event.startDate, recurrenceRule)
+        .map((date) => new Date(date))
         .slice(0, maxOccurrences);
       this.logger.debug('Generated occurrence pattern', {
         count: recurrencePattern.length,
