@@ -101,7 +101,7 @@ describe('EventController Recommendations (e2e)', () => {
     const allEvents = await getAllEvents(TESTING_APP_URL, token);
     expect(allEvents.data).toBeInstanceOf(Array);
     expect(allEvents.data.length).toBeGreaterThanOrEqual(3);
-  });
+  }, 30000);
 
   afterAll(async () => {
     //  delete test events

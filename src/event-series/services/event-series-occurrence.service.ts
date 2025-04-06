@@ -340,12 +340,12 @@ export class EventSeriesOccurrenceService {
         {
           includePast,
           pastEvents: existingOccurrences.filter(
-            (event) => new Date(event.startDate) < today
+            (event) => new Date(event.startDate) < today,
           ).length,
           futureEvents: existingOccurrences.filter(
-            (event) => new Date(event.startDate) >= today
-          ).length
-        }
+            (event) => new Date(event.startDate) >= today,
+          ).length,
+        },
       );
 
       // Get the template event to use its start date
@@ -381,25 +381,26 @@ export class EventSeriesOccurrenceService {
 
       // For past dates, we need to look back further in time
       let startDate = today;
-      
+
       // If includePast is true, start generating from the effective start date or an earlier date
       if (includePast) {
         // Use either the template event date or the first event's date or the series creation date
         // and subtract a reasonable buffer (e.g., 365 days) to catch early occurrences
-        const firstEventDate = existingOccurrences.length > 0 
-          ? new Date(existingOccurrences[0].startDate)
-          : new Date(series.createdAt);
-        
+        const firstEventDate =
+          existingOccurrences.length > 0
+            ? new Date(existingOccurrences[0].startDate)
+            : new Date(series.createdAt);
+
         // Get the earliest date we can find
         const potentialDates = [
           effectiveStartDate,
           firstEventDate,
-          new Date(series.createdAt)
-        ].filter(d => d instanceof Date);
-        
+          new Date(series.createdAt),
+        ].filter((d) => d instanceof Date);
+
         // Sort dates in ascending order and pick the earliest one
         potentialDates.sort((a, b) => a.getTime() - b.getTime());
-        
+
         if (potentialDates.length > 0) {
           const earliestDate = potentialDates[0];
           // Go back further to ensure we catch all possible occurrences
@@ -407,13 +408,13 @@ export class EventSeriesOccurrenceService {
           oneYearBefore.setFullYear(oneYearBefore.getFullYear() - 1);
           startDate = oneYearBefore;
         }
-        
+
         this.logger.debug(
           `[getUpcomingOccurrences] Including past dates, starting from: ${startDate.toISOString()}`,
         );
       }
 
-      // Generate all occurrence dates from the recurrence rule 
+      // Generate all occurrence dates from the recurrence rule
       const generatedDates = this.recurrencePatternService.generateOccurrences(
         effectiveStartDate, // Use the determined effective start date
         series.recurrenceRule as RecurrenceRule,
@@ -426,7 +427,7 @@ export class EventSeriesOccurrenceService {
 
       // Map the generated dates directly
       const allDates = generatedDates.map((date) => new Date(date));
-      
+
       // Keep debug logging to understand what times we're getting
       this.logger.debug('[getUpcomingOccurrences] Generated occurrence times', {
         timeZone: effectiveTimeZone,
@@ -439,7 +440,7 @@ export class EventSeriesOccurrenceService {
       });
 
       // Map dates to either existing events or calculated placeholders
-      let results = allDates.map((date) => {
+      const results = allDates.map((date) => {
         // Find an existing event matching this date
         const existingOccurrence = existingOccurrences.find((occurrence) =>
           this.isSameDay(occurrence.startDate, date, effectiveTimeZone),
@@ -460,10 +461,42 @@ export class EventSeriesOccurrenceService {
           materialized: false,
         };
       });
-      
+
+      // IMPORTANT: Make sure the template event is included in the results
+      // The template event might not match any of the generated occurrence dates
+      // but it should always be included in the results
+      if (templateEvent) {
+        // Check if the template event is already included in the results
+        const templateDate = new Date(templateEvent.startDate);
+        const templateDateStr = templateDate.toISOString();
+        const templateIncluded = results.some(
+          (result) =>
+            result.event?.id === templateEvent.id ||
+            this.isSameDay(
+              new Date(result.date),
+              templateDate,
+              effectiveTimeZone,
+            ),
+        );
+
+        // If not included, add it to the results
+        if (!templateIncluded) {
+          this.logger.debug(
+            `[getUpcomingOccurrences] Adding template event (${templateEvent.slug}) to the results`,
+          );
+          results.push({
+            date: templateDateStr,
+            event: templateEvent,
+            materialized: true,
+          });
+        }
+      }
+
       // If includePast is true, sort by date (ascending)
       if (includePast) {
-        results.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        results.sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+        );
       }
 
       // Limit to the requested count

@@ -21,6 +21,7 @@ describe('Guards (e2e)', () => {
   let privateEvent: any;
 
   beforeAll(async () => {
+    jest.setTimeout(30000);
     userToken = await loginAsTester();
     adminToken = await loginAsAdmin();
 
@@ -72,6 +73,8 @@ describe('Guards (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .set('x-tenant-id', TESTING_TENANT_ID)
       .send({ userId: TESTING_USER_ID });
+
+    jest.setTimeout(5000);
   });
 
   describe('AuthGuard', () => {

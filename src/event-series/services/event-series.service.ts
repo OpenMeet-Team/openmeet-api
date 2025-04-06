@@ -133,6 +133,45 @@ export class EventSeriesService {
       // Save the series first to ensure it has an ID
       const savedSeries = await this.eventSeriesRepository.save(eventSeries);
 
+      // IMPORTANT FIX: Link the template event to the series if it exists
+      if (templateSlugToLink) {
+        try {
+          this.logger.debug(
+            `Linking template event ${templateSlugToLink} to series ${savedSeries.slug}`,
+          );
+
+          // Get the template event
+          const templateEvent =
+            await this.eventQueryService.findEventBySlug(templateSlugToLink);
+
+          if (templateEvent) {
+            // Update the template event to link it to the series
+            await this.eventManagementService.update(
+              templateSlugToLink,
+              {
+                seriesId: savedSeries.id,
+                seriesSlug: savedSeries.slug,
+              },
+              userId,
+            );
+
+            this.logger.debug(
+              `Successfully linked template event ${templateSlugToLink} to series ${savedSeries.slug}`,
+            );
+          } else {
+            this.logger.warn(
+              `Template event with slug ${templateSlugToLink} not found for linking to series`,
+            );
+          }
+        } catch (error) {
+          // Log the error but don't fail the whole operation
+          this.logger.error(
+            `Error linking template event to series: ${error.message}`,
+            error.stack,
+          );
+        }
+      }
+
       // Return the full entity with relations - use findById as defined in the interface
       const foundSeries = await this.eventSeriesRepository.findById(
         savedSeries.id,

@@ -44,31 +44,6 @@ describe('EventSeriesController (e2e)', () => {
     futureDate.setDate(futureDate.getDate() + 2); // Change to 2 days ahead
     futureDate.setHours(10, 0, 0, 0); // Set a specific time
 
-    // Step 1: Create a standalone event first
-    const eventData = {
-      name: 'Template Event for Occurrences Test',
-      description: 'This event will be used as a template for a series',
-      type: EventType.Hybrid,
-      location: 'Test Location',
-      locationOnline: 'https://test-meeting.com',
-      maxAttendees: 15,
-      startDate: futureDate.toISOString(),
-      endDate: new Date(futureDate.getTime() + 3600000).toISOString(), // 1 hour after start
-      categories: [],
-      requireApproval: false,
-      allowWaitlist: true,
-    };
-
-    // Create the event
-    const createEventResponse = await request(TESTING_APP_URL)
-      .post('/api/events')
-      .set('Authorization', `Bearer ${token}`)
-      .set('x-tenant-id', TESTING_TENANT_ID)
-      .send(eventData);
-
-    expect(createEventResponse.status).toBe(201);
-    const templateEventSlug = createEventResponse.body.slug;
-
     // Create a new event series with proper ISO dates
     const seriesData = {
       name: 'Test Event Series',
@@ -80,7 +55,6 @@ describe('EventSeriesController (e2e)', () => {
         interval: 1,
         count: 5, // Reduced from 10 to 5 occurrences
       },
-      templateEventSlug: templateEventSlug,
     };
 
     // Create the event series
@@ -95,7 +69,6 @@ describe('EventSeriesController (e2e)', () => {
     expect(createResponse.body.slug).toBe(seriesData.slug);
 
     const seriesSlug = createResponse.body.slug;
-    const seriesId = createResponse.body.id;
 
     // Get occurrences to verify only the first one is materialized
     const occurrencesResponse = await request(TESTING_APP_URL)
@@ -126,7 +99,7 @@ describe('EventSeriesController (e2e)', () => {
 
     // Check directly if our template event is linked to the series
     const templateEventResponse = await request(TESTING_APP_URL)
-      .get(`/api/events/${templateEventSlug}`)
+      .get(`/api/events/${seriesData.templateEventSlug}`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
 
@@ -139,22 +112,50 @@ describe('EventSeriesController (e2e)', () => {
     });
 
     // Verify template event is properly linked to series
-    expect(templateEventResponse.body.seriesId).toBe(seriesId);
+    expect(templateEventResponse.body.seriesId).toBe(seriesData.id);
     expect(templateEventResponse.body.seriesSlug).toBe(seriesSlug);
 
-    // Instead of using the /events endpoint which isn't implemented yet,
-    // we'll verify the series-event link using the templateEventResponse we already have
+    // Get all events for this series using the dedicated endpoint
+    const eventsResponse = await request(TESTING_APP_URL)
+      .get(`/api/event-series/${seriesSlug}/events`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
 
-    // The template event should be linked to the series
-    expect(templateEventResponse.body.slug).toBe(templateEventSlug);
-    expect(templateEventResponse.body.seriesId).toBe(seriesId);
-    expect(templateEventResponse.body.seriesSlug).toBe(seriesSlug);
+    // Log the response shape to debug
+    console.log('Events response structure:', {
+      isArray: Array.isArray(eventsResponse.body),
+      hasData: eventsResponse.body && eventsResponse.body.data,
+      type: typeof eventsResponse.body,
+      keys: eventsResponse.body ? Object.keys(eventsResponse.body) : []
+    });
+    
+    // Handle both cases: direct array or object with data property
+    const eventsArray = Array.isArray(eventsResponse.body) 
+      ? eventsResponse.body 
+      : (eventsResponse.body.data || []);
+    
+    console.log(
+      'Events linked to series:',
+      eventsArray.map(event => ({
+        slug: event.slug,
+        name: event.name,
+        startDate: event.startDate,
+        seriesId: event.seriesId,
+        seriesSlug: event.seriesSlug
+      }))
+    );
+    
+    // There should be exactly ONE event linked to this series
+    expect(eventsArray.length).toBe(1);
+    expect(eventsArray[0].slug).toBe(seriesData.templateEventSlug);
+    expect(eventsArray[0].seriesId).toBe(seriesData.id);
+    expect(eventsArray[0].seriesSlug).toBe(seriesSlug);
 
     // Now that we've fixed the API, the template event should appear in occurrences results
     // The template event should be one of the materialized occurrences
     expect(materializedOccurrences.length).toBeGreaterThanOrEqual(1);
     const templateEventInOccurrences = materializedOccurrences.some(
-      (occ) => occ.event && occ.event.slug === templateEventSlug,
+      (occ) => occ.event && occ.event.slug === seriesData.templateEventSlug,
     );
     expect(templateEventInOccurrences).toBe(true);
 
@@ -573,6 +574,8 @@ describe('EventSeriesController (e2e)', () => {
   });
 
   it('should create an event series with only one initial event that is properly linked to the series', async () => {
+    // Approach 1: Create an event first, then create a series referencing it by slug
+
     // Create a fixed future start date
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + 2);
@@ -604,7 +607,19 @@ describe('EventSeriesController (e2e)', () => {
     const templateEventSlug = createEventResponse.body.slug;
 
     // Step 2: Create an event series using the event as a template
-    const seriesData = {
+    const seriesData: {
+      name: string;
+      description: string;
+      slug: string;
+      timeZone: string;
+      recurrenceRule: {
+        frequency: string;
+        interval: number;
+        count: number;
+      };
+      templateEventSlug: string;
+      id?: number;
+    } = {
       name: 'Single Event Series Test',
       description:
         'Testing that only one event is created when creating a series',
@@ -615,7 +630,7 @@ describe('EventSeriesController (e2e)', () => {
         interval: 1,
         count: 10,
       },
-      templateEventSlug,
+      templateEventSlug: templateEventSlug, // Reference the existing event
     };
 
     // Create the event series
@@ -630,6 +645,9 @@ describe('EventSeriesController (e2e)', () => {
 
     const seriesSlug = createSeriesResponse.body.slug;
     const seriesId = createSeriesResponse.body.id;
+    
+    // Store critical properties in seriesData for later assertions
+    seriesData.id = seriesId;
 
     // Get occurrences to verify only the first one is materialized
     const occurrencesResponse = await request(TESTING_APP_URL)
@@ -676,13 +694,41 @@ describe('EventSeriesController (e2e)', () => {
     expect(templateEventResponse.body.seriesId).toBe(seriesId);
     expect(templateEventResponse.body.seriesSlug).toBe(seriesSlug);
 
-    // Instead of using the /events endpoint which isn't implemented yet,
-    // we'll verify the series-event link using the templateEventResponse we already have
+    // Get all events for this series using the dedicated endpoint
+    const eventsResponse = await request(TESTING_APP_URL)
+      .get(`/api/event-series/${seriesSlug}/events`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
 
-    // The template event should be linked to the series
-    expect(templateEventResponse.body.slug).toBe(templateEventSlug);
-    expect(templateEventResponse.body.seriesId).toBe(seriesId);
-    expect(templateEventResponse.body.seriesSlug).toBe(seriesSlug);
+    // Log the response shape to debug
+    console.log('Events response structure:', {
+      isArray: Array.isArray(eventsResponse.body),
+      hasData: eventsResponse.body && eventsResponse.body.data,
+      type: typeof eventsResponse.body,
+      keys: eventsResponse.body ? Object.keys(eventsResponse.body) : []
+    });
+    
+    // Handle both cases: direct array or object with data property
+    const eventsArray = Array.isArray(eventsResponse.body) 
+      ? eventsResponse.body 
+      : (eventsResponse.body.data || []);
+    
+    console.log(
+      'Events linked to series:',
+      eventsArray.map(event => ({
+        slug: event.slug,
+        name: event.name,
+        startDate: event.startDate,
+        seriesId: event.seriesId,
+        seriesSlug: event.seriesSlug
+      }))
+    );
+    
+    // There should be exactly ONE event linked to this series
+    expect(eventsArray.length).toBe(1);
+    expect(eventsArray[0].slug).toBe(templateEventSlug);
+    expect(eventsArray[0].seriesId).toBe(seriesId);
+    expect(eventsArray[0].seriesSlug).toBe(seriesSlug);
 
     // Now that we've fixed the API, the template event should appear in occurrences results
     // The template event should be one of the materialized occurrences
