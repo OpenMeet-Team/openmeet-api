@@ -80,6 +80,12 @@ This document outlines the prioritized action items needed to complete the recur
    - Priority: High
    - Affected files: `event-series.service.ts`, `event.service.ts`
 
+6. when I use the create event button and fill in the form in the dialog, and publish, it creates an event that is not attached to the series, and then it creates the series with an event on the same date, with the same name, but it is in the series.  
+
+7. The recurrence has sunday and thursday in it... but only thursday select in the UI.
+8.  when I create a new event the event list behind it doesn't update.
+9.  
+
 ## Implementation Tasks
 
 ### Database & Schema

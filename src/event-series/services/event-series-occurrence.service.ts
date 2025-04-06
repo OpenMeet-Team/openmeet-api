@@ -310,6 +310,7 @@ export class EventSeriesOccurrenceService {
   async getUpcomingOccurrences(
     seriesSlug: string,
     count: number = 10,
+    includePast: boolean = false,
   ): Promise<{ date: string; event?: EventEntity; materialized: boolean }[]> {
     try {
       // Get the series
@@ -326,16 +327,25 @@ export class EventSeriesOccurrenceService {
         `[getUpcomingOccurrences] Today (in ${effectiveTimeZone}): ${today.toISOString()}`,
       );
 
-      // Get all events for this series with future dates
+      // Get all events for this series
       const [existingOccurrences] =
         await this.eventManagementService.findEventsBySeriesSlug(seriesSlug, {
           page: 1,
           limit: count * 2,
         });
 
-      // Filter to only include future dates
-      const futureOccurrences = existingOccurrences.filter(
-        (event) => event.startDate >= today,
+      // Log number of existing occurrences
+      this.logger.debug(
+        `[getUpcomingOccurrences] Found ${existingOccurrences.length} existing occurrences for series ${seriesSlug}`,
+        {
+          includePast,
+          pastEvents: existingOccurrences.filter(
+            (event) => new Date(event.startDate) < today
+          ).length,
+          futureEvents: existingOccurrences.filter(
+            (event) => new Date(event.startDate) >= today
+          ).length
+        }
       );
 
       // Get the template event to use its start date
@@ -345,7 +355,7 @@ export class EventSeriesOccurrenceService {
 
       // If no template event found by slug, try to find any event in the series
       if (!templateEvent) {
-        templateEvent = futureOccurrences[0];
+        templateEvent = existingOccurrences[0];
       }
 
       // Determine the correct start date and timezone for recurrence generation
@@ -369,68 +379,69 @@ export class EventSeriesOccurrenceService {
       const effectiveCount =
         recurrenceCount && recurrenceCount < count ? recurrenceCount : count;
 
-      // Generate all occurrence dates from the recurrence rule using the effective start date and timezone
+      // For past dates, we need to look back further in time
+      let startDate = today;
+      
+      // If includePast is true, start generating from the effective start date or an earlier date
+      if (includePast) {
+        // Use either the template event date or the first event's date or the series creation date
+        // and subtract a reasonable buffer (e.g., 365 days) to catch early occurrences
+        const firstEventDate = existingOccurrences.length > 0 
+          ? new Date(existingOccurrences[0].startDate)
+          : new Date(series.createdAt);
+        
+        // Get the earliest date we can find
+        const potentialDates = [
+          effectiveStartDate,
+          firstEventDate,
+          new Date(series.createdAt)
+        ].filter(d => d instanceof Date);
+        
+        // Sort dates in ascending order and pick the earliest one
+        potentialDates.sort((a, b) => a.getTime() - b.getTime());
+        
+        if (potentialDates.length > 0) {
+          const earliestDate = potentialDates[0];
+          // Go back further to ensure we catch all possible occurrences
+          const oneYearBefore = new Date(earliestDate);
+          oneYearBefore.setFullYear(oneYearBefore.getFullYear() - 1);
+          startDate = oneYearBefore;
+        }
+        
+        this.logger.debug(
+          `[getUpcomingOccurrences] Including past dates, starting from: ${startDate.toISOString()}`,
+        );
+      }
+
+      // Generate all occurrence dates from the recurrence rule 
       const generatedDates = this.recurrencePatternService.generateOccurrences(
         effectiveStartDate, // Use the determined effective start date
         series.recurrenceRule as RecurrenceRule,
         {
           timeZone: effectiveTimeZone, // Use the series timezone
           count: effectiveCount * 2, // Get more to account for filtered dates
-          startAfterDate: today, // <-- Generate only dates on or after today
+          startAfterDate: startDate, // Use today or earlier date if includePast is true
         },
       );
 
       // Map the generated dates directly
-      const futureDates = generatedDates.map((date) => new Date(date));
-
-      // REMOVING TIMEZONE ADJUSTMENT: The RecurrencePatternService.generateOccurrences
-      // function already handles timezone conversion correctly, so we don't need to
-      // adjust the dates again here.
-      /* 
-      // This code was causing redundant timezone adjustments:
-      if (effectiveTimeZone !== 'UTC') {
-        const targetLocalTime = formatInTimeZone(
-          effectiveStartDate, 
-          effectiveTimeZone, 
-          'HH:mm:ss'
-        );
-        
-        futureDates = futureDates.map(date => {
-          // Extract the local date in target timezone
-          const localDate = formatInTimeZone(date, effectiveTimeZone, 'yyyy-MM-dd');
-          
-          // Create string with local date and target time
-          const targetLocalDateTime = `${localDate} ${targetLocalTime}`;
-          
-          // Convert back to UTC to get the correct time
-          return toDate(targetLocalDateTime, { timeZone: effectiveTimeZone });
-        });
-        
-        // Log the adjustments for debugging
-        this.logger.debug('[getUpcomingOccurrences] Timezone adjustment applied', {
-          timeZone: effectiveTimeZone,
-          targetLocalTime,
-          sampleDates: futureDates.slice(0, 3).map(d => ({
-            utc: d.toISOString(),
-            local: formatInTimeZone(d, effectiveTimeZone, 'HH:mm')
-          }))
-        });
-      }
-      */
-
+      const allDates = generatedDates.map((date) => new Date(date));
+      
       // Keep debug logging to understand what times we're getting
       this.logger.debug('[getUpcomingOccurrences] Generated occurrence times', {
         timeZone: effectiveTimeZone,
-        sampleDates: futureDates.slice(0, 3).map((d) => ({
+        includePast,
+        totalDates: allDates.length,
+        sampleDates: allDates.slice(0, 3).map((d) => ({
           utc: d.toISOString(),
           local: formatInTimeZone(d, effectiveTimeZone, 'HH:mm'),
         })),
       });
 
       // Map dates to either existing events or calculated placeholders
-      const results = futureDates.slice(0, effectiveCount).map((date) => {
+      let results = allDates.map((date) => {
         // Find an existing event matching this date
-        const existingOccurrence = futureOccurrences.find((occurrence) =>
+        const existingOccurrence = existingOccurrences.find((occurrence) =>
           this.isSameDay(occurrence.startDate, date, effectiveTimeZone),
         );
 
@@ -449,11 +460,17 @@ export class EventSeriesOccurrenceService {
           materialized: false,
         };
       });
+      
+      // If includePast is true, sort by date (ascending)
+      if (includePast) {
+        results.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      }
 
-      return results;
+      // Limit to the requested count
+      return results.slice(0, effectiveCount);
     } catch (error) {
       this.logger.error(
-        `Error getting upcoming occurrences: ${error.message}`,
+        `Error getting occurrences: ${error.message}`,
         error.stack,
       );
       throw error;

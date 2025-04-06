@@ -337,17 +337,16 @@ export class EventSeriesController {
 
   @Get(':slug/occurrences')
   @ApiOperation({
-    summary: 'Get upcoming occurrences for an event series',
+    summary: 'Get upcoming occurrences for a series',
     description: `
-      Retrieves upcoming occurrences for a specific event series, based on its recurrence pattern.
+      Retrieves upcoming occurrences for an event series.
       
-      This endpoint returns both materialized occurrences (those with actual event records in the database)
-      and virtual occurrences (those that will be generated on-demand when accessed).
+      This endpoint returns both:
+      1. Materialized occurrences (events that already exist in the database)
+      2. Calculated future occurrences (dates that match the recurrence pattern)
       
-      The response includes occurrence dates and whether each occurrence has been materialized,
-      along with the full event data when available.
-      
-      For performance reasons, a limited number of occurrences are returned, controlled by the 'count' parameter.
+      The number of occurrences can be limited using the 'count' query parameter.
+      Past occurrences can be included by setting the 'includePast' parameter to true.
     `,
   })
   @ApiParam({
@@ -359,33 +358,18 @@ export class EventSeriesController {
     name: 'count',
     required: false,
     type: Number,
-    description: 'The maximum number of occurrences to return (default: 10)',
+    description: 'Number of occurrences to return',
+  })
+  @ApiQuery({
+    name: 'includePast',
+    required: false,
+    type: Boolean,
+    description: 'Whether to include past occurrences',
   })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'Returns upcoming occurrences for an event series',
-    schema: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          date: {
-            type: 'string',
-            format: 'date-time',
-            description: 'The date of the occurrence in ISO format',
-          },
-          materialized: {
-            type: 'boolean',
-            description:
-              'Whether this occurrence has been materialized (has an event record)',
-          },
-          event: {
-            type: 'object',
-            description: 'Full event data if materialized, otherwise null',
-          },
-        },
-      },
-    },
+    description: 'Returns upcoming occurrences for the series',
+    type: [Object],
   })
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,
@@ -394,19 +378,24 @@ export class EventSeriesController {
   async getUpcomingOccurrences(
     @Param('slug') slug: string,
     @Query('count') count = 10,
+    @Query('includePast') includePast: string | boolean = false,
     @Request() req,
   ) {
     // Extract tenant ID directly from request
     const tenantId =
       req.tenantId || (req.headers && req.headers['x-tenant-id']);
 
+    // Convert includePast to boolean properly
+    const includePastBool = includePast === true || includePast === 'true';
+
     this.logger.log(
-      `Getting upcoming occurrences for series ${slug} in tenant ${tenantId}`,
+      `Getting ${includePastBool ? 'all' : 'upcoming'} occurrences for series ${slug} in tenant ${tenantId}`,
     );
 
     return this.eventSeriesOccurrenceService.getUpcomingOccurrences(
       slug,
       +count,
+      includePastBool,
     );
   }
 
