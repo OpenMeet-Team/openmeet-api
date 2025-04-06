@@ -195,11 +195,10 @@ PATCH /api/event-series/{seriesSlug}
 
 4. Promote an existing event to a series:
 ```typescript
-POST /api/event-series/promote/{eventSlug}
+POST /api/event-series/create-from-event/{eventSlug}
 {
   "name": "New Book Club Series",
   "description": "Book club series description",
-  "timeZone": "America/New_York",
   "recurrenceRule": {
     "frequency": "WEEKLY",
     "interval": 1,
@@ -207,6 +206,10 @@ POST /api/event-series/promote/{eventSlug}
   }
 }
 ```
+
+// Note: As of 2025-04-05, there's a known issue where the original event (eventSlug)
+// is not reliably linked back to the newly created series (seriesId/seriesSlug properties 
+// might remain null on the original event after promotion).
 
 ## Implementation Details
 
@@ -343,3 +346,13 @@ This associates the event "special-guest-lecture" with the series "weekly-team-m
 - Ensure templates have all required properties
 - Validate template dates against recurrence pattern
 - Prevent invalid template transitions 
+
+## Action Plan (Post E2E Test Failures - 2025-04-05)
+
+Several issues were identified during E2E testing that need investigation:
+
+- **Timeouts in Setup Hooks:** Multiple test suites (`guards`, `event-attendees`, `event-recommendations`) are timing out in `beforeAll`/`beforeEach`. This suggests slow setup operations (DB seeding, API calls) or potentially hanging processes that need optimization or fixing.
+- **Occurrence Materialization Failures (400 Bad Request):** Tests in `event-series.e2e-spec.ts` frequently fail with a 400 error when attempting to fetch a specific occurrence by date (`GET /api/event-series/:slug/:occurrenceDate`). This likely points to persistent issues in the date/time validation logic within `EventSeriesOccurrenceService` or `RecurrencePatternService`, possibly related to timezone handling or exact time matching, especially after series updates or for future occurrences.
+- **Timezone/DST Specific Failures:** The `timezone-handling.e2e-spec.ts` suite shows specific errors (404, 422) when creating series or events around DST transitions. This requires a focused investigation into how dates near DST changes are handled during creation and recurrence generation.
+- **Incorrect Occurrence Count:** The `event-series.e2e-spec.ts` test `should create an event series and get its occurrences` fails because it receives 10 occurrences when expecting <= 5. The `/occurrences` endpoint might not be correctly limiting the count based on the `count` parameter or test setup, defaulting to 10.
+- **Event Linking on Promotion:** As noted previously, the original event is not reliably updated with `seriesId`/`seriesSlug` when promoted using `POST /api/event-series/create-from-event/:eventSlug`. 

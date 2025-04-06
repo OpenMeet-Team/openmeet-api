@@ -59,6 +59,14 @@ export class RedesignRecurringEvents1743371499235
             type: 'text',
             isNullable: true,
           },
+          // Add timeZone column
+          {
+            name: 'timeZone',
+            type: 'varchar',
+            length: '100',
+            isNullable: true,
+            default: "'UTC'", // Default to UTC
+          },
           // Recurrence fields moved from events to series
           {
             name: 'recurrenceRule',
@@ -132,12 +140,12 @@ export class RedesignRecurringEvents1743371499235
 
     // 2. Add timeZone and RFC properties to events table
     await queryRunner.addColumns(`${schema}.events`, [
-      new TableColumn({
-        name: 'timeZone',
-        type: 'varchar',
-        length: '50',
-        isNullable: true,
-      }),
+      // new TableColumn({
+      //   name: 'timeZone',
+      //   type: 'varchar',
+      //   length: '50',
+      //   isNullable: true,
+      // }),
       // Add RFC 5545/7986 properties
       new TableColumn({
         name: 'securityClass',
@@ -327,38 +335,12 @@ export class RedesignRecurringEvents1743371499235
   public async down(queryRunner: QueryRunner): Promise<void> {
     const schema = queryRunner.connection.options.name || 'public';
 
-    // 0. Add back materialized column if it was dropped
-    try {
-      await queryRunner.query(`
-        ALTER TABLE "${schema}"."events" 
-        ADD COLUMN IF NOT EXISTS "materialized" boolean NOT NULL DEFAULT false;
-      `);
+    // Reverse the operations in reverse order
 
-      // Re-add the index
-      await queryRunner.query(`
-        CREATE INDEX IF NOT EXISTS "IDX_events_materialized" 
-        ON "${schema}"."events" ("materialized");
-      `);
-    } catch (error) {
-      console.warn('Error adding back materialized column:', error.message);
-      // Continue with migration rollback even if adding the column fails
-    }
-
-    // 1. Drop foreign keys from events table
-    await queryRunner.dropForeignKey(
-      `${schema}.events`,
-      'FK_events_series_slug',
-    );
-    await queryRunner.dropForeignKey(`${schema}.events`, 'FK_events_series');
-
-    // 2. Drop foreign keys from eventSeries table
+    // Drop relationships first
     await queryRunner.dropForeignKey(
       `${schema}.eventSeries`,
-      'FK_eventSeries_template_event_slug',
-    );
-    await queryRunner.dropForeignKey(
-      `${schema}.eventSeries`,
-      'FK_eventSeries_file',
+      'FK_eventSeries_user',
     );
     await queryRunner.dropForeignKey(
       `${schema}.eventSeries`,
@@ -366,21 +348,13 @@ export class RedesignRecurringEvents1743371499235
     );
     await queryRunner.dropForeignKey(
       `${schema}.eventSeries`,
-      'FK_eventSeries_user',
+      'FK_eventSeries_image',
     );
 
-    // 3. Drop indexes from events table
-    await queryRunner.dropIndex(`${schema}.events`, 'IDX_events_series_slug');
-    await queryRunner.dropIndex(`${schema}.events`, 'IDX_events_series_id');
-
-    // 4. Drop indexes from eventSeries table
+    // Drop indexes
     await queryRunner.dropIndex(
       `${schema}.eventSeries`,
-      'IDX_eventSeries_template_event_slug',
-    );
-    await queryRunner.dropIndex(
-      `${schema}.eventSeries`,
-      'IDX_eventSeries_user_id',
+      'IDX_eventSeries_slug',
     );
     await queryRunner.dropIndex(
       `${schema}.eventSeries`,
@@ -388,20 +362,22 @@ export class RedesignRecurringEvents1743371499235
     );
     await queryRunner.dropIndex(
       `${schema}.eventSeries`,
-      'IDX_eventSeries_slug',
+      'IDX_eventSeries_user_id',
     );
+    await queryRunner.dropIndex(
+      `${schema}.eventSeries`,
+      'IDX_eventSeries_template_event_slug',
+    );
+    await queryRunner.dropIndex(`${schema}.events`, 'IDX_events_series_id');
+    await queryRunner.dropIndex(`${schema}.events`, 'IDX_events_series_slug');
 
-    // 5. Drop series relationship columns from events table
+    // Remove the added columns from events table
     await queryRunner.dropColumns(`${schema}.events`, [
       'seriesId',
       'seriesSlug',
       'isRecurrenceException',
       'originalDate',
-    ]);
-
-    // 6. Drop RFC properties from events table
-    await queryRunner.dropColumns(`${schema}.events`, [
-      'timeZone',
+      // 'timeZone', // Column no longer added in up(), so don't drop
       'securityClass',
       'priority',
       'blocksTime',
@@ -411,7 +387,24 @@ export class RedesignRecurringEvents1743371499235
       'conferenceData',
     ]);
 
-    // 7. Drop eventSeries table
+    // Drop timeZone column from eventSeries table
+    await queryRunner.dropColumn(`${schema}.eventSeries`, 'timeZone');
+
+    // Drop EventSeries table
     await queryRunner.dropTable(`${schema}.eventSeries`);
+
+    // Add back recurrence fields to events table (approximate reversal)
+    await queryRunner.addColumns(`${schema}.events`, [
+      new TableColumn({
+        name: 'recurrenceRule',
+        type: 'jsonb',
+        isNullable: true,
+      }),
+      new TableColumn({
+        name: 'recurrenceExceptions',
+        type: 'jsonb',
+        isNullable: true,
+      }),
+    ]);
   }
 }

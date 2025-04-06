@@ -7,6 +7,7 @@ import { EventSeriesEntity } from '../infrastructure/persistence/relational/enti
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { RecurrenceFrequency } from '../interfaces/recurrence.interface';
 import { CreateEventSeriesDto } from '../dto/create-event-series.dto';
+import { UpdateEventSeriesDto } from '../dto/update-event-series.dto';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../../tenant/tenant.service';
@@ -31,9 +32,7 @@ describe('EventSeriesService', () => {
     mockEventManagementService = {
       create: jest.fn(),
       update: jest.fn(),
-      createSeriesOccurrence: jest
-        .fn()
-        .mockResolvedValue({ slug: 'test-event' }),
+      createSeriesOccurrence: jest.fn(),
     } as any;
 
     mockEventSeriesRepository = {
@@ -140,14 +139,7 @@ describe('EventSeriesService', () => {
       const createEventSeriesDto: CreateEventSeriesDto = {
         name: 'Test Series',
         description: 'Test Description',
-        templateEvent: {
-          startDate: '2024-01-01T10:00:00Z',
-          endDate: '2024-01-01T11:00:00Z',
-          type: 'in-person',
-          locationOnline: 'https://meet.example.com',
-          maxAttendees: 10,
-          categories: [1, 2],
-        },
+        templateEventSlug: 'test-event', // Match the default mock
         recurrenceRule: {
           frequency: RecurrenceFrequency.DAILY,
           interval: 1,
@@ -159,7 +151,7 @@ describe('EventSeriesService', () => {
         id: 1,
         name: 'Test Series',
         slug: 'test-series',
-        templateEventSlug: 'test-event',
+        templateEventSlug: 'test-event', // Match the DTO and default mock
         createdAt: new Date(),
         updatedAt: new Date(),
         ulid: 'test-ulid-123456789',
@@ -196,12 +188,10 @@ describe('EventSeriesService', () => {
           name: createEventSeriesDto.name,
           description: createEventSeriesDto.description,
           recurrenceRule: createEventSeriesDto.recurrenceRule,
+          templateEventSlug: createEventSeriesDto.templateEventSlug,
         }),
       );
       expect(mockEventSeriesRepository.save).toHaveBeenCalledWith(savedSeries);
-      expect(
-        mockEventManagementService.createSeriesOccurrence,
-      ).toHaveBeenCalled();
     });
   });
 
@@ -229,22 +219,19 @@ describe('EventSeriesService', () => {
         templateEvent: null,
       };
 
-      const updateEventSeriesDto: CreateEventSeriesDto = {
+      const updateEventSeriesDto: UpdateEventSeriesDto = {
         name: 'Updated Series',
         description: 'Updated Description',
-        templateEvent: {
-          startDate: '2024-01-01T10:00:00Z',
-          endDate: '2024-01-01T11:00:00Z',
-          type: 'in-person',
-          locationOnline: 'https://meet.example.com',
-          maxAttendees: 10,
-          categories: [1, 2],
-        },
+        templateEventSlug: 'updated-template-slug',
+        locationOnline: 'https://meet.example.com',
+        maxAttendees: 10,
+        categories: [1, 2],
         recurrenceRule: {
           frequency: RecurrenceFrequency.DAILY,
           interval: 1,
           count: 5,
         },
+        propagateChanges: true,
       };
 
       const updatedSeries = {
@@ -282,7 +269,15 @@ describe('EventSeriesService', () => {
       expect(mockEventSeriesRepository.save).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'Updated Series' }),
       );
-      expect(mockEventManagementService.update).not.toHaveBeenCalled();
+      expect(mockEventManagementService.update).toHaveBeenCalledWith(
+        'updated-template-slug',
+        expect.objectContaining({
+          locationOnline: 'https://meet.example.com',
+          maxAttendees: 10,
+          categories: [1, 2],
+        }),
+        1,
+      );
 
       findBySlugSpy.mockRestore();
     });

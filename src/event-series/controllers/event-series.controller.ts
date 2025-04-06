@@ -25,6 +25,7 @@ import { EventSeriesOccurrenceService } from '../services/event-series-occurrenc
 import { CreateEventSeriesDto } from '../dto/create-event-series.dto';
 import { UpdateEventSeriesDto } from '../dto/update-event-series.dto';
 import { EventSeriesResponseDto } from '../dto/event-series-response.dto';
+import { CreateSeriesFromEventDto } from '../dto/create-series-from-event.dto';
 import { EventResponseDto } from '../../event/dto/event-response.dto';
 import { JWTAuthGuard } from '../../auth/auth.guard';
 import { TenantGuard } from '../../tenant/tenant.guard';
@@ -94,6 +95,7 @@ export class EventSeriesController {
     @Body() createEventSeriesDto: CreateEventSeriesDto,
     @Request() req,
   ) {
+    this.logger.log('Creating event series');
     // Extract tenant ID directly from request to avoid decorator issues
     const tenantId =
       req.tenantId || (req.headers && req.headers['x-tenant-id']);
@@ -245,7 +247,7 @@ export class EventSeriesController {
   })
   async createSeriesFromEvent(
     @Param('eventSlug') eventSlug: string,
-    @Body() createData: { recurrenceRule: any },
+    @Body() createData: CreateSeriesFromEventDto,
     @Request() req,
   ) {
     this.logger.log(
@@ -257,6 +259,9 @@ export class EventSeriesController {
         eventSlug,
         createData.recurrenceRule,
         req.user.id,
+        createData.name,
+        createData.description,
+        createData.timeZone,
       );
 
       return new EventSeriesResponseDto(eventSeries);

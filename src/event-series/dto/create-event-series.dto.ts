@@ -8,7 +8,6 @@ import {
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { RecurrenceRuleDto } from '../../event/dto/create-event.dto';
-import { TemplateEventDto } from './template-event.dto';
 
 export class CreateEventSeriesDto {
   @IsString()
@@ -46,14 +45,14 @@ export class CreateEventSeriesDto {
   })
   recurrenceRule: RecurrenceRuleDto;
 
-  @IsObject()
-  @ValidateNested()
-  @Type(() => TemplateEventDto)
+  @IsString()
+  @IsOptional()
   @ApiProperty({
-    description: 'The template event properties for the series',
-    type: TemplateEventDto,
+    description: 'The slug of the event to use as a template for this series',
+    example: 'my-template-event-slug',
+    required: false,
   })
-  templateEvent: TemplateEventDto;
+  templateEventSlug?: string;
 
   @IsNumber()
   @IsOptional()

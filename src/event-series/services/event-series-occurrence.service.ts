@@ -16,6 +16,7 @@ import { RecurrencePatternService } from './recurrence-pattern.service';
 import { UserService } from '../../user/user.service';
 import { parseISO } from 'date-fns';
 import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
+import { startOfDay } from 'date-fns';
 
 @Injectable()
 export class EventSeriesOccurrenceService {
@@ -156,7 +157,7 @@ export class EventSeriesOccurrenceService {
             startDate: new Date(occurrenceDate),
             timeZone: 'UTC',
             type: 'in-person',
-            location: '',
+            location: undefined,
             locationOnline: '',
             maxAttendees: 0,
             requireApproval: false,
@@ -182,21 +183,62 @@ export class EventSeriesOccurrenceService {
         updatedTemplateEvent = defaultTemplate;
       }
 
+      // Apply series properties to the template event if they exist
+      // This ensures updates to the series are propagated to new materializations
+      if (series['location'] !== undefined) {
+        updatedTemplateEvent.location = series['location'];
+      }
+      if (series['locationOnline'] !== undefined) {
+        updatedTemplateEvent.locationOnline = series['locationOnline'];
+      }
+      if (series['maxAttendees'] !== undefined) {
+        updatedTemplateEvent.maxAttendees = series['maxAttendees'];
+      }
+      if (series['requireApproval'] !== undefined) {
+        updatedTemplateEvent.requireApproval = series['requireApproval'];
+      }
+      if (series['approvalQuestion'] !== undefined) {
+        updatedTemplateEvent.approvalQuestion = series['approvalQuestion'];
+      }
+      if (series['allowWaitlist'] !== undefined) {
+        updatedTemplateEvent.allowWaitlist = series['allowWaitlist'];
+      }
+
       // Validate that the occurrence date is valid according to the recurrence rule
       const date = new Date(occurrenceDate);
+      this.logger.debug(
+        `[Materialize Debug] Validating date: ${date.toISOString()} (${occurrenceDate}) ` +
+          `against series ${series.slug} created at ${new Date(series.createdAt).toISOString()} ` +
+          `with rule ${JSON.stringify(series.recurrenceRule)} and timezone ${series.timeZone || 'UTC'}`,
+      );
+      const effectiveTimeZone = series.timeZone || 'UTC';
+      const occurrenceDateString = this.formatInTimeZone(
+        date,
+        effectiveTimeZone,
+      );
+
       const isValidOccurrence =
         this.recurrencePatternService.isDateInRecurrencePattern(
-          date,
+          occurrenceDateString,
           new Date(series.createdAt),
           series.recurrenceRule as RecurrenceRule,
-          { timeZone: 'UTC' },
+          { timeZone: effectiveTimeZone },
+          updatedTemplateEvent?.startDate
+            ? new Date(updatedTemplateEvent.startDate)
+            : undefined,
         );
 
       if (!isValidOccurrence) {
+        this.logger.error(
+          `[Materialize Debug] Validation FAILED for date ${occurrenceDate} in series ${series.slug}`,
+        );
         throw new BadRequestException(
           `Invalid occurrence date: ${occurrenceDate} is not part of the recurrence pattern`,
         );
       }
+      this.logger.debug(
+        `[Materialize Debug] Validation PASSED for date ${occurrenceDate} in series ${series.slug}`,
+      );
 
       // Calculate the duration of the template event
       let endDate: Date | undefined;
@@ -212,30 +254,26 @@ export class EventSeriesOccurrenceService {
         throw new NotFoundException('Template event not found');
       }
 
-      // Create a new event based on the template
+      // Create a new event using the template event data
+      const createDto = {
+        name: updatedTemplateEvent.name,
+        description: updatedTemplateEvent.description || '', // Use template description
+        startDate: date, // The calculated occurrence date
+        endDate: endDate, // Calculated based on template duration
+        timeZone: series.timeZone || 'UTC', // Use series timezone (could also use template's)
+        type: updatedTemplateEvent.type,
+        location: updatedTemplateEvent.location,
+        locationOnline: updatedTemplateEvent.locationOnline || '',
+        maxAttendees: updatedTemplateEvent.maxAttendees || 0,
+        requireApproval: updatedTemplateEvent.requireApproval || false,
+        approvalQuestion: updatedTemplateEvent.approvalQuestion || '',
+        allowWaitlist: updatedTemplateEvent.allowWaitlist || false,
+        categories: updatedTemplateEvent.categories?.map((cat) => cat.id) || [],
+        seriesSlug: series.slug, // Link to the parent series
+      };
+
       const newOccurrence = await this.eventManagementService.create(
-        {
-          name: updatedTemplateEvent.name,
-          description:
-            updatedTemplateEvent.description || series.description || '',
-          startDate: date,
-          endDate: endDate,
-          timeZone: 'UTC',
-          type: updatedTemplateEvent.type,
-          location: updatedTemplateEvent.location || '',
-          locationOnline: updatedTemplateEvent.locationOnline || '',
-          maxAttendees: updatedTemplateEvent.maxAttendees || 0,
-          requireApproval: updatedTemplateEvent.requireApproval || false,
-          approvalQuestion: updatedTemplateEvent.approvalQuestion || '',
-          allowWaitlist: updatedTemplateEvent.allowWaitlist || false,
-          categories:
-            updatedTemplateEvent.categories?.map((cat) => cat.id) || [],
-          seriesSlug: series.slug,
-          recurrenceRule: {
-            ...series.recurrenceRule,
-            frequency: series.recurrenceRule.frequency,
-          },
-        },
+        createDto,
         userId,
         {}, // Remove materialized flag
       );
@@ -277,18 +315,27 @@ export class EventSeriesOccurrenceService {
       // Get the series
       const series = await this.eventSeriesService.findBySlug(seriesSlug);
 
+      // Determine the effective timezone early
+      const effectiveTimeZone = series.timeZone || 'UTC';
+
+      // Get the start of today relative to the effective timezone
+      const today = startOfDay(
+        this.convertToTimeZone(new Date(), effectiveTimeZone),
+      );
+      this.logger.debug(
+        `[getUpcomingOccurrences] Today (in ${effectiveTimeZone}): ${today.toISOString()}`,
+      );
+
       // Get all events for this series with future dates
-      const now = new Date();
       const [existingOccurrences] =
         await this.eventManagementService.findEventsBySeriesSlug(seriesSlug, {
           page: 1,
           limit: count * 2,
         });
 
-      // Filter to only include future dates and exclude the template event
+      // Filter to only include future dates
       const futureOccurrences = existingOccurrences.filter(
-        (event) =>
-          event.startDate >= now && event.slug !== series.templateEventSlug,
+        (event) => event.startDate >= today,
       );
 
       // Get the template event to use its start date
@@ -301,44 +348,90 @@ export class EventSeriesOccurrenceService {
         templateEvent = futureOccurrences[0];
       }
 
-      // If still no template event, use the series creation date and first occurrence date
-      let startDate = new Date(series.createdAt);
-      if (!templateEvent && series.recurrenceRule) {
-        // Generate the first occurrence date from the recurrence rule
-        const firstOccurrence =
-          this.recurrencePatternService.generateOccurrences(
-            new Date(series.createdAt),
-            series.recurrenceRule as RecurrenceRule,
-            {
-              timeZone: 'UTC',
-              count: 1,
-            },
-          )[0];
-        startDate = firstOccurrence
-          ? new Date(firstOccurrence)
-          : new Date(series.createdAt);
+      // Determine the correct start date and timezone for recurrence generation
+      let effectiveStartDate: Date;
+
+      if (templateEvent?.startDate) {
+        effectiveStartDate = new Date(templateEvent.startDate);
+        this.logger.debug(
+          `[getUpcomingOccurrences] Using template event start date: ${effectiveStartDate.toISOString()}`,
+        );
+      } else {
+        // Fallback: If no template event found, this is likely an issue, but we'll use createdAt as a last resort.
+        effectiveStartDate = new Date(series.createdAt);
+        this.logger.warn(
+          `[getUpcomingOccurrences] Template event not found for series ${series.slug}. Falling back to series createdAt: ${effectiveStartDate.toISOString()}`,
+        );
       }
 
-      // Generate all occurrence dates from the recurrence rule
+      // Respect the recurrence rule count if it's set and less than requested count
+      const recurrenceCount = series.recurrenceRule?.count;
+      const effectiveCount =
+        recurrenceCount && recurrenceCount < count ? recurrenceCount : count;
+
+      // Generate all occurrence dates from the recurrence rule using the effective start date and timezone
       const generatedDates = this.recurrencePatternService.generateOccurrences(
-        startDate,
+        effectiveStartDate, // Use the determined effective start date
         series.recurrenceRule as RecurrenceRule,
         {
-          timeZone: 'UTC',
-          count: count * 2, // Get more to account for filtered dates
+          timeZone: effectiveTimeZone, // Use the series timezone
+          count: effectiveCount * 2, // Get more to account for filtered dates
+          startAfterDate: today, // <-- Generate only dates on or after today
         },
       );
 
-      // Filter dates to only include future dates
-      const futureDates = generatedDates
-        .map((date) => new Date(date))
-        .filter((date) => date >= now);
+      // Map the generated dates directly
+      const futureDates = generatedDates.map((date) => new Date(date));
+
+      // REMOVING TIMEZONE ADJUSTMENT: The RecurrencePatternService.generateOccurrences
+      // function already handles timezone conversion correctly, so we don't need to
+      // adjust the dates again here.
+      /* 
+      // This code was causing redundant timezone adjustments:
+      if (effectiveTimeZone !== 'UTC') {
+        const targetLocalTime = formatInTimeZone(
+          effectiveStartDate, 
+          effectiveTimeZone, 
+          'HH:mm:ss'
+        );
+        
+        futureDates = futureDates.map(date => {
+          // Extract the local date in target timezone
+          const localDate = formatInTimeZone(date, effectiveTimeZone, 'yyyy-MM-dd');
+          
+          // Create string with local date and target time
+          const targetLocalDateTime = `${localDate} ${targetLocalTime}`;
+          
+          // Convert back to UTC to get the correct time
+          return toDate(targetLocalDateTime, { timeZone: effectiveTimeZone });
+        });
+        
+        // Log the adjustments for debugging
+        this.logger.debug('[getUpcomingOccurrences] Timezone adjustment applied', {
+          timeZone: effectiveTimeZone,
+          targetLocalTime,
+          sampleDates: futureDates.slice(0, 3).map(d => ({
+            utc: d.toISOString(),
+            local: formatInTimeZone(d, effectiveTimeZone, 'HH:mm')
+          }))
+        });
+      }
+      */
+
+      // Keep debug logging to understand what times we're getting
+      this.logger.debug('[getUpcomingOccurrences] Generated occurrence times', {
+        timeZone: effectiveTimeZone,
+        sampleDates: futureDates.slice(0, 3).map((d) => ({
+          utc: d.toISOString(),
+          local: formatInTimeZone(d, effectiveTimeZone, 'HH:mm'),
+        })),
+      });
 
       // Map dates to either existing events or calculated placeholders
-      const results = futureDates.slice(0, count).map((date) => {
+      const results = futureDates.slice(0, effectiveCount).map((date) => {
         // Find an existing event matching this date
         const existingOccurrence = futureOccurrences.find((occurrence) =>
-          this.isSameDay(occurrence.startDate, date, 'UTC'),
+          this.isSameDay(occurrence.startDate, date, effectiveTimeZone),
         );
 
         // If we have an existing occurrence, it exists in the database already
@@ -787,11 +880,12 @@ export class EventSeriesOccurrenceService {
 
       // If no materialized occurrence exists, find the series and check if the date is valid
       const series = await this.eventSeriesService.findBySlug(seriesSlug);
+      const effectiveTimeZone = series.timeZone || 'UTC';
       const isValid = this.recurrencePatternService.isDateInRecurrencePattern(
-        new Date(date),
+        date,
         new Date(series.createdAt),
         series.recurrenceRule as RecurrenceRule,
-        { timeZone: 'UTC' },
+        { timeZone: effectiveTimeZone },
       );
 
       if (!isValid) {

@@ -45,7 +45,7 @@ describe('Recurring Event Tests (e2e)', () => {
     // 2. Promote the event to a series
     console.log('STEP 2: Promoting event to a series');
     const seriesResponse = await request(TESTING_APP_URL)
-      .post(`/api/event-series/promote/${eventSlug}`)
+      .post(`/api/event-series/create-from-event/${eventSlug}`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID)
       .send({

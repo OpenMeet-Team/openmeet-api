@@ -186,6 +186,9 @@ export class EventManagementService {
         const event = this.eventRepository.create(
           eventData as Partial<EventEntity>,
         );
+        this.logger.debug(
+          `[CREATE Pre-Save] Event location: ${event.location}`,
+        );
 
         // Generate ULID and slug before Bluesky creation
         event.generateUlid();
@@ -227,9 +230,14 @@ export class EventManagementService {
       const event = this.eventRepository.create(
         eventData as Partial<EventEntity>,
       );
+      this.logger.debug(`[CREATE Pre-Save] Event location: ${event.location}`);
       createdEvent = await this.eventRepository.save(event);
     }
 
+    this.logger.debug(
+      '[CREATE Post-Save] Event location:',
+      createdEvent.location,
+    );
     this.logger.debug('Saved event in database:', {
       id: createdEvent.id,
       sourceType: createdEvent.sourceType,
@@ -410,7 +418,13 @@ export class EventManagementService {
     }
 
     const updatedEvent = this.eventRepository.merge(event, mappedDto);
+    this.logger.debug(
+      `[UPDATE Pre-Save] Event location: ${updatedEvent.location}`,
+    );
     const savedEvent = await this.eventRepository.save(updatedEvent);
+    this.logger.debug(
+      `[UPDATE Post-Save] Event location: ${savedEvent.location}`,
+    );
 
     // If user has Bluesky credentials and event is published, update on Bluesky
     if (
@@ -1058,14 +1072,10 @@ export class EventManagementService {
     createEventDto: CreateEventDto,
     userId: number,
   ): Promise<EventEntity> {
-    // Convert dates to strings for the template event
-    const templateEvent = {
-      ...createEventDto,
-      startDate: createEventDto.startDate.toISOString(),
-      endDate: createEventDto.endDate?.toISOString(),
-    };
+    // First create the template event
+    const templateEvent = await this.create(createEventDto, userId);
 
-    // Create a series instead of a recurring event
+    // Create a series with the template event's slug
     const series = await this.eventSeriesService.create(
       {
         name: createEventDto.name,
@@ -1074,7 +1084,7 @@ export class EventManagementService {
           frequency: RecurrenceFrequency.WEEKLY,
           interval: 1,
         },
-        templateEvent,
+        templateEventSlug: templateEvent.slug,
         groupId: createEventDto.group?.id,
         imageId: createEventDto.image?.id,
         sourceType: createEventDto.sourceType

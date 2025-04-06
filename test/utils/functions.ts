@@ -127,7 +127,7 @@ async function createCategory(app, token, categoryData) {
 }
 
 async function createEvent(app: string, authToken: string, eventData: any) {
-  console.log('Creating event with data:', JSON.stringify(eventData, null, 2));
+  // console.log('Creating event with data:', JSON.stringify(eventData, null, 2));
 
   const response = await request(app)
     .post('/api/events')
@@ -135,10 +135,10 @@ async function createEvent(app: string, authToken: string, eventData: any) {
     .set('x-tenant-id', TESTING_TENANT_ID)
     .send(eventData);
 
-  console.log('Create event response:', {
-    status: response.status,
-    body: response.body,
-  });
+  // console.log('Create event response:', {
+  //  status: response.status,
+  //  body: response.body,
+  // });
 
   if (response.status !== 201) {
     console.error('Create event failed:', {

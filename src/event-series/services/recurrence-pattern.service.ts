@@ -6,10 +6,13 @@ import {
 } from '../interfaces/recurrence.interface';
 import { FrontendRecurrenceRule } from '../interfaces/frontend-recurrence-rule.interface';
 import { TimezoneUtils } from '../../common/utils/timezone.utils';
+import { toDate, formatInTimeZone } from 'date-fns-tz';
+import { addYears } from 'date-fns';
 
 interface RecurrenceOptions {
   count?: number;
   until?: string;
+  startAfterDate?: Date;
   excludeDates?: string[];
   timeZone?: string;
   includeExcluded?: boolean;
@@ -22,53 +25,117 @@ export class RecurrencePatternService {
 
   /**
    * Generates occurrences for a recurrence pattern.
-   * @param startDate The start date of the pattern
+   * @param startDate The start date of the pattern (used as dtstart in rrule)
    * @param rule The recurrence rule
-   * @param options Options for generating occurrences
-   * @returns An array of occurrence dates
+   * @param options Options for generating occurrences, including startAfterDate
+   * @returns An array of occurrence dates as ISO strings
    */
   generateOccurrences(
     startDate: Date,
     rule: RecurrenceRule,
     options: RecurrenceOptions = {},
   ): string[] {
-    const { count = 100, until, excludeDates = [], timeZone = 'UTC' } = options;
-    const startISO = startDate.toISOString();
+    const {
+      count = 100,
+      until,
+      startAfterDate,
+      excludeDates = [],
+      timeZone = 'UTC',
+    } = options;
 
-    const localStartDate =
-      timeZone === 'UTC'
-        ? startDate
-        : TimezoneUtils.parseInTimezone(startISO, timeZone);
+    // Ensure startDate is a valid Date object
+    const originalUtcStartDate =
+      startDate instanceof Date ? startDate : new Date();
 
-    // Get the local start time components to maintain in recurrences
-    const localHour = localStartDate.getHours();
-    const localMinute = localStartDate.getMinutes();
-    const localSecond = localStartDate.getSeconds();
+    // TIMEZONE HANDLING FIX:
+    // Instead of preserving the UTC time (which results in different local times across DST transitions),
+    // we want to preserve the local time in the target timezone.
+
+    // Get the target local time that we want to maintain
+    const localTimeStr = formatInTimeZone(
+      originalUtcStartDate,
+      timeZone,
+      'HH:mm:ss',
+    );
+
+    // Get the local date part
+    const localDateStr = formatInTimeZone(
+      originalUtcStartDate,
+      timeZone,
+      'yyyy-MM-dd',
+    );
+
+    // Construct the full local datetime string using the components
+    const targetLocalDateTime = `${localDateStr} ${localTimeStr}`;
+
+    // Convert the target local time back to UTC
+    const dtstartDateObject = toDate(targetLocalDateTime, { timeZone });
+
+    this.logger.debug('[generateOccurrences] Timezone conversion details', {
+      originalUTC: originalUtcStartDate.toISOString(),
+      originalLocalTime: formatInTimeZone(
+        originalUtcStartDate,
+        timeZone,
+        'HH:mm:ss',
+      ),
+      targetLocalTime: targetLocalDateTime,
+      correctedUTC: dtstartDateObject.toISOString(),
+      verifiedLocalTime: formatInTimeZone(
+        dtstartDateObject,
+        timeZone,
+        'HH:mm:ss',
+      ),
+      timeZone,
+    });
 
     const rruleOptions: Partial<Options> = {
       freq: this.mapFrequency(rule.frequency),
       interval: rule.interval || 1,
-      dtstart: TimezoneUtils.parseInTimezone(startISO, timeZone),
-      until: until ? TimezoneUtils.parseInTimezone(until, timeZone) : null,
-      count: until ? null : count,
+      dtstart: dtstartDateObject,
+      until: rule.until
+        ? toDate(rule.until, { timeZone })
+        : until
+          ? toDate(until, { timeZone })
+          : null,
       byweekday: rule.byweekday ? this.mapByWeekDay(rule.byweekday) : null,
       bymonthday: rule.bymonthday || null,
-      wkst: 0, // Default to Monday
-      tzid: timeZone,
-      bysetpos: null,
-      bymonth: null,
-      byyearday: null,
-      byweekno: null,
-      byhour: null,
-      byminute: null,
-      bysecond: null,
-      byeaster: null,
+      bymonth: rule.bymonth || null,
+      wkst: 0,
+      tzid: timeZone, // RRule's timezone handling for DST
     };
 
     const rrule = new RRule(rruleOptions);
-    let occurrences = rrule.all();
 
-    // Filter out excluded dates if any
+    // Determine the date range for generation
+    const effectiveStartDate =
+      startAfterDate instanceof Date ? startAfterDate : dtstartDateObject;
+    const effectiveEndDate =
+      rruleOptions.until instanceof Date
+        ? rruleOptions.until
+        : addYears(effectiveStartDate, 10);
+
+    this.logger.debug('[generateOccurrences] Generating between', {
+      start: effectiveStartDate.toISOString(),
+      end: effectiveEndDate.toISOString(),
+      rule: rrule.toString(),
+    });
+
+    let occurrences = rrule.between(
+      effectiveStartDate,
+      effectiveEndDate,
+      true, // Inclusive
+    );
+
+    this.logger.debug('[generateOccurrences] Occurrences after between', {
+      count: occurrences.length,
+    });
+
+    occurrences = occurrences.slice(0, count);
+
+    this.logger.debug('[generateOccurrences] Occurrences after count slice', {
+      count: occurrences.length,
+    });
+
     if (excludeDates.length > 0) {
       const excludeDateObjects = excludeDates.map((date) =>
         TimezoneUtils.parseInTimezone(date, timeZone),
@@ -79,26 +146,68 @@ export class RecurrencePatternService {
             this.isSameDay(occurrence, excludeDate, timeZone),
           ),
       );
+      this.logger.debug('[generateOccurrences] Occurrences after exclusion', {
+        count: occurrences.length,
+      });
     }
 
-    // Adjust each occurrence to maintain the same local time (accounting for DST)
-    return occurrences.map((occurrence) => {
-      // Create new date to preserve original occurrence date
-      const date = new Date(occurrence);
+    // Verify that all occurrences have consistent local time in the target timezone
+    if (occurrences.length > 0 && timeZone !== 'UTC') {
+      const localTimes = occurrences.map((occ) =>
+        formatInTimeZone(occ, timeZone, 'HH:mm'),
+      );
 
-      // Set to the same local time components as the start date
-      date.setHours(localHour, localMinute, localSecond, 0);
+      const firstLocalTime = localTimes[0];
+      const allSameTime = localTimes.every((time) => time === firstLocalTime);
 
-      // Convert back to UTC for storage
-      if (timeZone !== 'UTC') {
-        // Create a date string in the target timezone
-        const dateString = TimezoneUtils.formatInTimezone(date, timeZone);
-        // Parse it back to get the proper UTC time
-        return new Date(dateString).toISOString();
+      this.logger.debug('[generateOccurrences] Local time consistency check', {
+        allSameTime,
+        firstLocalTime,
+        sampleLocalTimes: localTimes.slice(0, 3),
+      });
+
+      if (!allSameTime) {
+        this.logger.warn(
+          '[generateOccurrences] Inconsistent local times detected across occurrences',
+          {
+            timeZone,
+            localTimes: localTimes.slice(0, 5),
+          },
+        );
       }
 
-      return date.toISOString();
-    });
+      // Always ensure consistent local times by applying the expected time to all occurrences
+      // This ensures that regardless of DST transitions, the local time remains constant
+      const expectedLocalTime = localTimeStr.substring(0, 8); // HH:mm:ss
+
+      // Fix the occurrences by ensuring they all have the correct local time
+      const fixedOccurrences = occurrences.map((occ) => {
+        // Get the date part in target timezone
+        const dateStr = formatInTimeZone(occ, timeZone, 'yyyy-MM-dd');
+        // Combine with the target time
+        const targetDateTime = `${dateStr} ${expectedLocalTime}`;
+        // Convert back to UTC
+        return toDate(targetDateTime, { timeZone });
+      });
+
+      // Replace the occurrences with the fixed ones
+      occurrences = fixedOccurrences;
+
+      // Log for debugging
+      this.logger.debug(
+        '[generateOccurrences] Ensured consistent local times',
+        {
+          timeZone,
+          expectedLocalTime,
+          sampleTimes: occurrences.slice(0, 3).map((occ) => ({
+            utc: occ.toISOString(),
+            local: formatInTimeZone(occ, timeZone, 'HH:mm'),
+          })),
+        },
+      );
+    }
+
+    return occurrences.map((occurrence) => occurrence.toISOString());
   }
 
   /**
@@ -107,36 +216,68 @@ export class RecurrencePatternService {
    * @param startDate The start date of the pattern
    * @param rule The recurrence rule
    * @param options Options for checking the date
+   * @param anchorDate Optional anchor date for generation
    * @returns Whether the date is part of the pattern
    */
   isDateInRecurrencePattern(
-    date: Date,
+    date: string,
     startDate: Date,
     rule: RecurrenceRule,
     options: RecurrenceOptions = {},
+    anchorDate?: Date,
   ): boolean {
-    // Get target date in UTC
-    const targetDate = new Date(date);
-    // Get occurrences until the target date
-    const until = targetDate.toISOString();
+    const effectiveTimeZone = options.timeZone || 'UTC';
 
-    // Generate occurrences up to the target date
-    const occurrences = this.generateOccurrences(startDate, rule, {
+    // 1. Calculate targetDate: Use toDate to interpret the start-of-day string in the effective timezone
+    const targetDateTimeString = `${date}T00:00:00`; // e.g., "2025-04-06T00:00:00"
+    const targetDate = toDate(targetDateTimeString, {
+      timeZone: effectiveTimeZone,
+    });
+
+    // 2. Calculate generationStartDate: Use toDate for the original start date's start-of-day in the effective timezone
+    const originalStartDate = anchorDate || startDate;
+    const startDateString = formatInTimeZone(
+      originalStartDate,
+      effectiveTimeZone,
+      'yyyy-MM-dd',
+    );
+    const generationStartDateTimeString = `${startDateString}T00:00:00`;
+    const generationStartDate = toDate(generationStartDateTimeString, {
+      timeZone: effectiveTimeZone, // Manually apply formatting
+    });
+
+    this.logger.debug(
+      `[isDateInRecurrencePattern Debug] Checking date: ${targetDate.toISOString()} (${date}) ` +
+        `against original start: ${originalStartDate.toISOString()}, using generation start: ${generationStartDate.toISOString()} with rule: ${JSON.stringify(
+          rule,
+        )} ` +
+        `and options: ${JSON.stringify(options)}, timezone: ${effectiveTimeZone}`,
+    );
+
+    // 3. Generate occurrences using the precise generationStartDate
+    const checkCount = rule.count || 100;
+    const occurrences = this.generateOccurrences(generationStartDate, rule, {
       ...options,
-      until,
+      count: checkCount,
+      timeZone: effectiveTimeZone,
     });
 
-    // Check if the target date exists in occurrences
-    return occurrences.some((occurrence) => {
-      const occurrenceDate = new Date(occurrence);
-      if (options.timeZone && options.timeZone !== 'UTC') {
-        // For non-UTC timezones, compare only the date components
-        return this.isSameDay(occurrenceDate, targetDate, options.timeZone);
-      } else {
-        // For UTC, compare both date and time components
-        return occurrenceDate.getTime() === targetDate.getTime();
-      }
+    this.logger.debug(
+      `[isDateInRecurrencePattern Debug] Generating occurrences: ${JSON.stringify(
+        occurrences,
+      )}`,
+    );
+
+    // 4. Check if targetDate exists in occurrences using isSameDay
+    const result = occurrences.some((occurrenceISOString) => {
+      const occurrenceDate = new Date(occurrenceISOString);
+      return this.isSameDay(occurrenceDate, targetDate, effectiveTimeZone);
     });
+
+    this.logger.debug(
+      `[isDateInRecurrencePattern Debug] Result for ${targetDate.toISOString()} (${date}): ${result}`,
+    );
+    return result;
   }
 
   /**
@@ -245,22 +386,12 @@ export class RecurrencePatternService {
         date1.getUTCMonth() === date2.getUTCMonth() &&
         date1.getUTCDate() === date2.getUTCDate()
       );
+    } else {
+      // Format both dates as YYYY-MM-DD in the target timezone and compare
+      const formatString = 'yyyy-MM-dd';
+      const date1Formatted = formatInTimeZone(date1, timeZone, formatString);
+      const date2Formatted = formatInTimeZone(date2, timeZone, formatString);
+      return date1Formatted === date2Formatted;
     }
-
-    // Otherwise, compare in the specified timezone
-    const date1InTZ = TimezoneUtils.parseInTimezone(
-      date1.toISOString(),
-      timeZone,
-    );
-    const date2InTZ = TimezoneUtils.parseInTimezone(
-      date2.toISOString(),
-      timeZone,
-    );
-
-    return (
-      date1InTZ.getFullYear() === date2InTZ.getFullYear() &&
-      date1InTZ.getMonth() === date2InTZ.getMonth() &&
-      date1InTZ.getDate() === date2InTZ.getDate()
-    );
   }
 }
