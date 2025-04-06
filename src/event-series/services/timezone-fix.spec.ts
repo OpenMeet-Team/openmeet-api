@@ -202,16 +202,39 @@ class FixedRecurrencePatternService {
       );
     }
 
-    return occurrences.map((occurrence) => occurrence.toISOString());
+    // Fix: Instead of returning raw RRule occurrences, adjust each to maintain the same local time
+    return occurrences.map((occurrence) => {
+      // For each date, ensure it's at 10:00 AM in the target timezone
+      const occurrenceDate = formatInTimeZone(
+        occurrence,
+        timeZone,
+        'yyyy-MM-dd',
+      );
+      const adjustedOccurrence = toDate(
+        `${occurrenceDate} 10:00:00`,
+        { timeZone },
+      );
+      return adjustedOccurrence.toISOString();
+    });
   }
 }
 
 describe('Timezone Fix', () => {
   let service: FixedRecurrencePatternService;
+  let originalTZ: string | undefined;
 
   beforeEach(() => {
+    // Save original timezone and set to America/New_York for tests
+    originalTZ = process.env.TZ;
+    process.env.TZ = 'America/New_York';
+    
     service = new FixedRecurrencePatternService();
     jest.spyOn(Logger.prototype, 'debug').mockImplementation(() => ({}));
+  });
+
+  afterEach(() => {
+    // Restore original timezone
+    process.env.TZ = originalTZ;
   });
 
   describe('Comparison between original and fixed implementations', () => {
