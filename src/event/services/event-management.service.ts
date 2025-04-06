@@ -187,7 +187,7 @@ export class EventManagementService {
           eventData as Partial<EventEntity>,
         );
         this.logger.debug(
-          `[CREATE Pre-Save] Event location: ${event.location}`,
+          `[CREATE Pre-Save] Event location: ${event?.location || 'undefined'}`,
         );
 
         // Generate ULID and slug before Bluesky creation
@@ -230,13 +230,15 @@ export class EventManagementService {
       const event = this.eventRepository.create(
         eventData as Partial<EventEntity>,
       );
-      this.logger.debug(`[CREATE Pre-Save] Event location: ${event.location}`);
+      this.logger.debug(
+        `[CREATE Pre-Save] Event location: ${event?.location || 'undefined'}`,
+      );
       createdEvent = await this.eventRepository.save(event);
     }
 
     this.logger.debug(
       '[CREATE Post-Save] Event location:',
-      createdEvent.location,
+      createdEvent?.location || 'undefined',
     );
     this.logger.debug('Saved event in database:', {
       id: createdEvent.id,

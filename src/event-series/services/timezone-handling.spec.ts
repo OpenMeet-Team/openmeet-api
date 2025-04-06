@@ -124,10 +124,15 @@ describe('Timezone Handling', () => {
           'America/New_York',
           'HH:mm',
         );
-        expect(localTime).toBe(
-          '10:00',
-          `Occurrence ${index} (${occurrence.toISOString()}) should be at 10:00 AM Eastern`,
-        );
+        expect(localTime).toBe('10:00');
+        // Also verify with a descriptive message
+        expect(localTime).toEqual('10:00');
+        // Record the occurrence for debugging
+        if (localTime !== '10:00') {
+          console.log(
+            `Occurrence ${index} (${occurrence.toISOString()}) should be at 10:00 AM Eastern but was ${localTime}`,
+          );
+        }
       });
     });
 
