@@ -691,10 +691,13 @@ describe('EventSeriesOccurrenceService', () => {
     it('should generate different occurrences when recurrence rule is changed', async () => {
       // Reset relevant mocks
       jest.clearAllMocks();
-      
+
       // Create mocks for the getUpcomingOccurrences method
-      const mockGetUpcomingOccurrences = jest.spyOn(service, 'getUpcomingOccurrences');
-      
+      const mockGetUpcomingOccurrences = jest.spyOn(
+        service,
+        'getUpcomingOccurrences',
+      );
+
       // Daily pattern results
       const dailyOccurrences = [
         { date: '2025-10-01T15:00:00Z', materialized: false },
@@ -703,7 +706,7 @@ describe('EventSeriesOccurrenceService', () => {
         { date: '2025-10-04T15:00:00Z', materialized: false },
         { date: '2025-10-05T15:00:00Z', materialized: false },
       ];
-      
+
       // Weekly pattern results
       const weeklyOccurrences = [
         { date: '2025-10-01T15:00:00Z', materialized: false }, // Wednesday
@@ -715,7 +718,7 @@ describe('EventSeriesOccurrenceService', () => {
 
       // Mock first call (daily pattern)
       mockGetUpcomingOccurrences.mockResolvedValueOnce(dailyOccurrences);
-      
+
       // Mock second call (weekly pattern)
       mockGetUpcomingOccurrences.mockResolvedValueOnce(weeklyOccurrences);
 
@@ -757,10 +760,7 @@ describe('EventSeriesOccurrenceService', () => {
 
       // Verify the service was called correctly
       expect(mockGetUpcomingOccurrences).toHaveBeenCalledTimes(2);
-      expect(mockGetUpcomingOccurrences).toHaveBeenCalledWith(
-        'test-series',
-        5,
-      );
+      expect(mockGetUpcomingOccurrences).toHaveBeenCalledWith('test-series', 5);
     });
 
     it('should handle materialized occurrences when recurrence rule changes', async () => {

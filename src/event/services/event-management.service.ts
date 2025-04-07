@@ -565,13 +565,9 @@ export class EventManagementService {
         );
       } else {
         this.logger.warn(
-          `discussionService.cleanupEventChatRooms is not available. This might cause FK constraint violations.`,
+          `Unable to clean up chat rooms: discussionService.cleanupEventChatRooms is not available.`,
         );
-
-        // Add this as a proper todo for the engineering team
-        this.logger.error(
-          `TODO: Implement proper chat room cleanup in the event management service that doesn't rely on discussionService`,
-        );
+        // We'll rely on the event listener to handle cleanup via events
       }
     } catch (chatCleanupError) {
       this.logger.error(
