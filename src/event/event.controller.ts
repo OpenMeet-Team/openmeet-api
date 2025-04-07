@@ -9,11 +9,14 @@ import {
   UseGuards,
   Req,
   Query,
+  Header,
+  Res,
+  NotFoundException,
 } from '@nestjs/common';
 // import { Response } from 'express'; - removed unused import
 
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
@@ -39,17 +42,24 @@ import { Trace } from '../utils/trace.decorator';
 import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
+import { ICalendarService } from './services/ical/ical.service';
+import { EventSeriesOccurrenceService } from '../event-series/services/event-series-occurrence.service';
+import { Logger } from '@nestjs/common';
 
 @ApiTags('Events')
 @Controller('events')
 @ApiBearerAuth()
 @UseGuards(JWTAuthGuard)
 export class EventController {
+  private readonly logger = new Logger(EventController.name);
+
   constructor(
     private readonly eventManagementService: EventManagementService,
     private readonly eventQueryService: EventQueryService,
     private readonly eventRecommendationService: EventRecommendationService,
     private readonly eventAttendeeService: EventAttendeeService,
+    private readonly iCalendarService: ICalendarService,
+    private readonly eventSeriesOccurrenceService: EventSeriesOccurrenceService,
   ) {}
 
   @Get()
@@ -121,7 +131,11 @@ export class EventController {
     @Param('slug') slug: string,
     @AuthUser() user: User,
   ): Promise<EventEntity> {
-    return this.eventQueryService.showEvent(slug, user?.id);
+    const event = await this.eventQueryService.showEvent(slug, user?.id);
+    if (!event) {
+      throw new NotFoundException(`Event with slug ${slug} not found`);
+    }
+    return event;
   }
 
   @Permissions({
@@ -252,5 +266,132 @@ export class EventController {
     return await this.eventRecommendationService.showRecommendedEventsByEventSlug(
       slug,
     );
+  }
+
+  @Public()
+  @UseGuards(JWTAuthGuard)
+  @Get(':slug/calendar')
+  @ApiOperation({
+    summary: 'Get iCalendar file for an event',
+  })
+  @Header('Content-Type', 'text/calendar')
+  @Header('Content-Disposition', 'attachment; filename=event.ics')
+  @Trace('event.getICalendar')
+  async getICalendar(
+    @Param('slug') slug: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const event = await this.eventQueryService.showEvent(slug);
+
+    if (!event) {
+      res.status(404).send('Event not found');
+      return;
+    }
+
+    const icalContent = this.iCalendarService.generateICalendar(event);
+
+    // Set Content-Disposition with event slug as filename
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=${event.slug}.ics`,
+    );
+
+    res.send(icalContent);
+  }
+
+  /**
+   * Modify this and future occurrences of a recurring event
+   *
+   * This endpoint allows modifying a recurring event from a specific date forward.
+   * It creates a new series starting at the specified date with the modified properties,
+   * while preserving the original series up to but not including that date.
+   */
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.ManageEvent],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Patch(':slug/occurrences/:date/future')
+  @ApiOperation({
+    summary: 'Modify this and all future occurrences of a recurring event',
+  })
+  @Trace('event.modifyThisAndFutureOccurrences')
+  async modifyThisAndFutureOccurrences(
+    @Param('slug') slug: string,
+    @Param('date') date: string,
+    @Body() updateEventDto: UpdateEventDto,
+    @AuthUser() _user: User,
+  ): Promise<EventEntity> {
+    // First update the current occurrence
+    await this.eventManagementService.update(slug, updateEventDto, _user.id);
+
+    // Then update all future occurrences
+    await this.eventSeriesOccurrenceService.updateFutureOccurrences(
+      slug,
+      date,
+      updateEventDto,
+      _user.id,
+    );
+
+    // Return the updated current occurrence
+    const event = await this.eventQueryService.findEventBySlug(slug);
+    if (!event) {
+      throw new NotFoundException(`Event with slug ${slug} not found`);
+    }
+    return event;
+  }
+
+  /**
+   * Get the effective event properties for a specific date
+   *
+   * This endpoint returns the event properties that apply to a specific date
+   * in a recurring series, considering any split points or modifications.
+   */
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.ViewEvent],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Get(':slug/effective-properties')
+  @ApiOperation({
+    summary: 'Get effective event properties for a specific date',
+  })
+  @Trace('event.getEffectiveProperties')
+  async getEffectiveProperties(
+    @Param('slug') slug: string,
+    @Query('date') date: string,
+  ): Promise<EventEntity> {
+    return this.eventSeriesOccurrenceService.getEffectiveEventForDate(
+      slug,
+      date || new Date().toISOString(),
+    );
+  }
+
+  @Public()
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
+  @Get('series/:seriesSlug/events')
+  @ApiOperation({ summary: 'Get events by series slug' })
+  @Trace('event.getEventsBySeries')
+  async getEventsBySeries(
+    @Param('seriesSlug') seriesSlug: string,
+    @Query() pagination: PaginationDto,
+    @Req() _req,
+  ): Promise<EventEntity[]> {
+    try {
+      this.logger.log(`Getting events for series ${seriesSlug}`);
+
+      const [events] = await this.eventManagementService.findEventsBySeriesSlug(
+        seriesSlug,
+        { page: +pagination.page || 1, limit: +pagination.limit || 10 },
+      );
+
+      return events;
+    } catch (error) {
+      this.logger.error(
+        `Error getting events for series ${seriesSlug}: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
   }
 }

@@ -4,8 +4,10 @@ import {
   Inject,
   Logger,
   UnprocessableEntityException,
+  NotFoundException,
   HttpStatus,
   forwardRef,
+  BadRequestException,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Repository } from 'typeorm';
@@ -35,6 +37,11 @@ import { Trace } from '../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
 import { CreateEventAttendeeDto } from '../../event-attendee/dto/create-eventAttendee.dto';
 import { UpdateEventAttendeeDto } from '../../event-attendee/dto/update-eventAttendee.dto';
+import { EventSeriesService } from '../../event-series/services/event-series.service';
+import { EventSeriesEntity } from '../../event-series/infrastructure/persistence/relational/entities/event-series.entity';
+import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
+import { Not, IsNull } from 'typeorm';
+import { RecurrenceFrequency } from '../../event-series/interfaces/recurrence.interface';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventManagementService {
@@ -53,9 +60,12 @@ export class EventManagementService {
     private readonly eventRoleService: EventRoleService,
     private readonly userService: UserService,
     private readonly eventMailService: EventMailService,
+    @Inject(forwardRef(() => BlueskyService))
     private readonly blueskyService: BlueskyService,
     @Inject(forwardRef(() => 'DiscussionService'))
     private readonly discussionService: any, // Using any here to avoid circular dependency issues
+    @Inject(forwardRef(() => EventSeriesService))
+    private readonly eventSeriesService: EventSeriesService,
   ) {
     void this.initializeRepository();
   }
@@ -73,10 +83,25 @@ export class EventManagementService {
   async create(
     createEventDto: CreateEventDto,
     userId: number,
+    _options: Record<string, unknown> = {},
   ): Promise<EventEntity> {
     this.logger.debug('Creating event with dto:', createEventDto);
 
     await this.initializeRepository();
+
+    // Handle series lookup if seriesSlug is provided
+    let seriesId: number | undefined;
+    if (createEventDto.seriesSlug) {
+      const series = await this.eventSeriesService.findBySlug(
+        createEventDto.seriesSlug,
+      );
+      if (!series) {
+        throw new NotFoundException(
+          `Event series with slug ${createEventDto.seriesSlug} not found`,
+        );
+      }
+      seriesId = series.id;
+    }
 
     // Handle categories
     let categories: CategoryEntity[] = [];
@@ -120,12 +145,33 @@ export class EventManagementService {
       lat: createEventDto.lat,
       lon: createEventDto.lon,
       locationPoint,
-      user: { id: userId },
+      user: { id: userId } as UserEntity,
       group: createEventDto.group
         ? { id: Number(createEventDto.group.id) }
         : null,
       image: createEventDto.image,
       categories,
+      seriesId,
+      seriesSlug: createEventDto.seriesSlug,
+
+      // Recurrence fields
+      isRecurring: !!createEventDto.recurrenceRule,
+      timeZone: createEventDto.timeZone || 'UTC',
+      recurrenceRule: {
+        ...createEventDto.recurrenceRule,
+        frequency: RecurrenceFrequency.WEEKLY,
+        interval: 1,
+      },
+      recurrenceExceptions: createEventDto.recurrenceExceptions || [],
+
+      // Additional RFC 5545/7986 properties
+      securityClass: createEventDto.securityClass,
+      priority: createEventDto.priority,
+      blocksTime: createEventDto.blocksTime ?? true,
+      isAllDay: createEventDto.isAllDay,
+      resources: createEventDto.resources,
+      color: createEventDto.color,
+      conferenceData: createEventDto.conferenceData,
     };
 
     let createdEvent;
@@ -140,6 +186,9 @@ export class EventManagementService {
         // Create the event entity
         const event = this.eventRepository.create(
           eventData as Partial<EventEntity>,
+        );
+        this.logger.debug(
+          `[CREATE Pre-Save] Event location: ${event?.location || 'undefined'}`,
         );
 
         // Generate ULID and slug before Bluesky creation
@@ -182,9 +231,16 @@ export class EventManagementService {
       const event = this.eventRepository.create(
         eventData as Partial<EventEntity>,
       );
+      this.logger.debug(
+        `[CREATE Pre-Save] Event location: ${event?.location || 'undefined'}`,
+      );
       createdEvent = await this.eventRepository.save(event);
     }
 
+    this.logger.debug(
+      '[CREATE Post-Save] Event location:',
+      createdEvent?.location || 'undefined',
+    );
     this.logger.debug('Saved event in database:', {
       id: createdEvent.id,
       sourceType: createdEvent.sourceType,
@@ -232,6 +288,9 @@ export class EventManagementService {
     );
 
     this.eventEmitter.emit('event.created', eventWithTenant);
+
+    // Note: Recurrence is now handled by EventSeries, not through EventEntity directly
+
     return createdEvent;
   }
 
@@ -291,8 +350,83 @@ export class EventManagementService {
       mappedDto,
     });
 
+    // Check if we need to update recurrence properties
+    if (updateEventDto.recurrenceRule) {
+      // If this is a new recurrence being added to a non-recurring event
+      if (!event.seriesSlug) {
+        // Check if the event is already being processed for series creation
+        const isProcessing = await this.eventRepository.findOne({
+          where: {
+            id: event.id,
+            seriesSlug: Not(IsNull()),
+          },
+        });
+
+        if (isProcessing) {
+          // If the event is already being processed, wait a bit and try again
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          return this.update(slug, updateEventDto, userId);
+        }
+
+        // Check if event already has a series slug to prevent loops
+        if (event.seriesSlug) {
+          this.logger.log(
+            `Event ${slug} already has a series, skipping series creation`,
+          );
+          const updatedEvent = this.eventRepository.merge(event, mappedDto);
+          await this.eventRepository.save(updatedEvent);
+          return updatedEvent;
+        }
+
+        // Create a new series from this event
+        const series = await this.eventSeriesService.createFromExistingEvent(
+          slug,
+          updateEventDto.recurrenceRule,
+          userId,
+        );
+
+        // Update the original event to be the first occurrence of the series
+        const updatedEvent = this.eventRepository.merge(event, {
+          seriesSlug: series.slug,
+          // Keep the original event name and other properties
+          name: event.name,
+          description: event.description,
+          type: event.type,
+          location: event.location,
+          locationOnline: event.locationOnline,
+          maxAttendees: event.maxAttendees,
+          requireApproval: event.requireApproval,
+          approvalQuestion: event.approvalQuestion,
+          allowWaitlist: event.allowWaitlist,
+          categories: event.categories,
+        });
+        await this.eventRepository.save(updatedEvent);
+
+        // Return the updated event
+        return updatedEvent;
+      }
+
+      // If the event is already part of a series, just update the recurrence rule
+      mappedDto.timeZone = updateEventDto.timeZone || 'UTC';
+      mappedDto.recurrenceRule = {
+        ...updateEventDto.recurrenceRule,
+        frequency: RecurrenceFrequency.WEEKLY,
+        interval: 1,
+      };
+    } else if (updateEventDto.recurrenceRule === null) {
+      // If recurrenceRule is explicitly set to null, disable recurring status
+      mappedDto.isRecurring = false;
+      mappedDto.recurrenceRule = null;
+    }
+
     const updatedEvent = this.eventRepository.merge(event, mappedDto);
+    this.logger.debug(
+      `[UPDATE Pre-Save] Event location: ${updatedEvent.location}`,
+    );
     const savedEvent = await this.eventRepository.save(updatedEvent);
+    this.logger.debug(
+      `[UPDATE Post-Save] Event location: ${savedEvent.location}`,
+    );
 
     // If user has Bluesky credentials and event is published, update on Bluesky
     if (
@@ -320,7 +454,10 @@ export class EventManagementService {
   async remove(slug: string): Promise<void> {
     await this.initializeRepository();
 
-    const event = await this.eventRepository.findOne({ where: { slug } });
+    const event = await this.eventRepository.findOne({
+      where: { slug },
+      relations: ['series'],
+    });
     if (!event) {
       throw new Error(`Event with slug ${slug} not found`);
     }
@@ -412,28 +549,42 @@ export class EventManagementService {
       }
     }
 
-    // IMPORTANT: Clean up chat rooms directly BEFORE emitting event or deleting
+    // Attempt to clean up chat rooms if the discussionService is available
     try {
-      this.logger.log(`Directly cleaning up chat rooms for event ${event.id}`);
-      await this.discussionService.cleanupEventChatRooms(
-        event.id,
-        this.request.tenantId,
-      );
-      this.logger.log(
-        `Successfully cleaned up chat rooms for event ${event.id}`,
-      );
+      if (
+        this.discussionService &&
+        typeof this.discussionService.cleanupEventChatRooms === 'function'
+      ) {
+        this.logger.log(`Cleaning up chat rooms for event ${event.id}`);
+        await this.discussionService.cleanupEventChatRooms(
+          event.id,
+          this.request.tenantId,
+        );
+        this.logger.log(
+          `Successfully cleaned up chat rooms for event ${event.id}`,
+        );
+      } else {
+        this.logger.warn(
+          `discussionService.cleanupEventChatRooms is not available. This might cause FK constraint violations.`,
+        );
 
-      // Make sure to clear Matrix room ID from event to avoid stale references
-      if (event.matrixRoomId) {
-        event.matrixRoomId = '';
-        await this.eventRepository.save(event);
+        // Add this as a proper todo for the engineering team
+        this.logger.error(
+          `TODO: Implement proper chat room cleanup in the event management service that doesn't rely on discussionService`,
+        );
       }
-    } catch (error) {
+    } catch (chatCleanupError) {
       this.logger.error(
-        `Error cleaning up chat rooms for event ${event.id}: ${error.message}`,
-        error.stack,
+        `Error cleaning up chat rooms for event ${event.id}: ${chatCleanupError.message}`,
+        chatCleanupError.stack,
       );
-      // Continue with deletion despite error - we'll still emit the event for other listeners
+      // Continue with deletion despite the error
+    }
+
+    // Make sure to clear Matrix room ID from event to avoid stale references
+    if (event.matrixRoomId) {
+      event.matrixRoomId = '';
+      await this.eventRepository.save(event);
     }
 
     // Emit the event with skipChatCleanup flag since we already did it
@@ -448,10 +599,271 @@ export class EventManagementService {
     // Delete related event attendees
     await this.eventAttendeeService.deleteEventAttendees(event.id);
 
+    // If this event is part of a series, update the series exceptions
+    if (event.seriesSlug) {
+      try {
+        this.logger.log(
+          `Adding deleted event date to series exceptions: ${event.id}`,
+        );
+
+        // Find the series either by slug
+        let series: EventSeriesEntity | null = null;
+
+        if (event.series) {
+          series = event.series;
+        } else if (event.seriesSlug) {
+          series = await this.eventSeriesService.findBySlug(event.seriesSlug);
+        }
+
+        if (series && event.startDate) {
+          // Get the event's date string
+          const exceptionDate = new Date(event.startDate).toISOString();
+
+          // Ensure the series has an exceptions array
+          if (!series.recurrenceExceptions) {
+            series.recurrenceExceptions = [];
+          }
+
+          // Add the date to the exceptions if not already there
+          if (!series.recurrenceExceptions.includes(exceptionDate)) {
+            series.recurrenceExceptions.push(exceptionDate);
+
+            // Save the updated series with the new exception
+            const dataSource =
+              await this.tenantConnectionService.getTenantConnection(
+                this.request.tenantId,
+              );
+            const eventSeriesRepository =
+              dataSource.getRepository(EventSeriesEntity);
+            await eventSeriesRepository.save(series);
+
+            this.logger.log(
+              `Added ${exceptionDate} to exceptions for series ${series.id}`,
+            );
+          }
+        }
+      } catch (error) {
+        this.logger.error(
+          `Error updating series exceptions for event ${event.id}: ${error.message}`,
+          error.stack,
+        );
+        // Continue with event deletion despite error
+      }
+    }
+
     // Now delete the event from our database
     await this.eventRepository.remove(event);
     this.eventEmitter.emit('event.deleted', eventCopy);
     this.auditLogger.log('event deleted', { event });
+  }
+
+  /**
+   * Create a new occurrence of a recurring event series
+   */
+  @Trace('event-management.createSeriesOccurrence')
+  async createSeriesOccurrence(
+    eventData: CreateEventDto,
+    userId: number,
+    seriesSlug: string,
+    occurrenceDate: Date,
+  ): Promise<EventEntity> {
+    await this.initializeRepository();
+
+    // Check if the series exists
+    const series = await this.eventSeriesService.findBySlug(seriesSlug);
+
+    if (!series) {
+      throw new NotFoundException(
+        `Event series with slug ${seriesSlug} not found`,
+      );
+    }
+
+    // Create the event with series relationship
+    const event = await this.create(
+      {
+        ...eventData,
+        startDate: occurrenceDate,
+        seriesSlug,
+      },
+      userId,
+      {}, // No options needed since materialized property is computed, not stored
+    );
+
+    // Reload the event to get the updated fields
+    const updatedEvent = await this.eventRepository.findOne({
+      where: { id: event.id },
+      relations: ['user', 'group', 'categories', 'image'],
+    });
+
+    if (!updatedEvent) {
+      throw new NotFoundException(
+        `Event with ID ${event.id} not found after update`,
+      );
+    }
+
+    return updatedEvent;
+  }
+
+  /**
+   * @deprecated Use createSeriesOccurrence with slug instead
+   */
+  @Trace('event-management.createSeriesOccurrenceBySlug')
+  async createSeriesOccurrenceBySlug(
+    createEventDto: CreateEventDto,
+    userId: number,
+    seriesSlug: string,
+    occurrenceDate: Date,
+  ): Promise<EventEntity> {
+    return this.createSeriesOccurrence(
+      createEventDto,
+      userId,
+      seriesSlug,
+      occurrenceDate,
+    );
+  }
+
+  /**
+   * Update an event occurrence that is part of a series
+   * This method uses the event's slug, which is the correct approach for user-facing code
+   */
+  @Trace('event-management.updateSeriesOccurrence')
+  async updateSeriesOccurrence(
+    slug: string,
+    updateEventDto: UpdateEventDto,
+    userId: number,
+    markAsModified: boolean = true,
+  ): Promise<EventEntity> {
+    try {
+      await this.initializeRepository();
+
+      // Use the EventQueryService to find events by slug
+      const event = await this.eventRepository.findOne({ where: { slug } });
+
+      if (!event) {
+        this.logger.error(`Event with slug ${slug} not found`);
+        throw new NotFoundException('Event not found');
+      }
+
+      // Check if user has permission to update the event
+      if (event.user?.id !== userId) {
+        // If the user is not the owner, check if they have admin rights
+        const user = await this.userService.findById(userId);
+        if (!user || !user.role || user.role.name !== 'admin') {
+          throw new UnprocessableEntityException(
+            'User is not authorized to modify this event',
+          );
+        }
+      }
+
+      // Update the event with the new data
+      const updatedEvent = await this.update(slug, updateEventDto, userId);
+
+      // If this is a series occurrence and need to mark as modified, we already have the needed data
+      if (event.seriesSlug && markAsModified) {
+        // No need to set materialized flag since it's computed, not stored
+
+        // Reload the event with the updated fields
+        const reloadedEvent = await this.eventRepository.findOne({
+          where: { id: event.id },
+          relations: ['user', 'group', 'categories', 'image'],
+        });
+
+        if (!reloadedEvent) {
+          throw new NotFoundException(
+            `Event with ID ${event.id} not found after update`,
+          );
+        }
+
+        // Log audit
+        this.auditLogger.log(
+          'Series occurrence modified',
+          {
+            context: {
+              eventId: event.id,
+              seriesSlug: event.seriesSlug,
+              userId,
+            },
+          },
+          userId,
+        );
+
+        return reloadedEvent;
+      }
+
+      return updatedEvent;
+    } catch (error) {
+      this.logger.error(
+        `Error updating series occurrence: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Find all events (occurrences) that belong to a series by ID
+   * @internal This method is primarily for internal use - prefer findEventsBySeriesSlug for user-facing code
+   */
+  @Trace('event-management.findEventsBySeriesId')
+  async findEventsBySeriesId(
+    seriesId: number,
+    options?: { page: number; limit: number },
+  ): Promise<[EventEntity[], number]> {
+    try {
+      await this.initializeRepository();
+
+      // First, find the series to get its slug
+      const dataSource = await this.tenantConnectionService.getTenantConnection(
+        this.request.tenantId,
+      );
+      const seriesRepository = dataSource.getRepository(EventSeriesEntity);
+      const series = await seriesRepository.findOne({
+        where: { id: seriesId },
+      });
+
+      if (!series) {
+        throw new NotFoundException(
+          `Event series with ID ${seriesId} not found`,
+        );
+      }
+
+      // Use the slug to find events using the existing method
+      return this.findEventsBySeriesSlug(series.slug, options);
+    } catch (error) {
+      this.logger.error(
+        `Error finding events by seriesId: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Find all events (occurrences) that belong to a series by the series slug
+   * This is the preferred method for user-facing code
+   */
+  @Trace('event-management.findEventsBySeriesSlug')
+  async findEventsBySeriesSlug(
+    seriesSlug: string,
+    options?: { page: number; limit: number },
+  ): Promise<[EventEntity[], number]> {
+    try {
+      // Get the series by slug using the EventSeriesService
+      const series = await this.eventSeriesService.findBySlug(seriesSlug);
+
+      if (!series) {
+        throw new NotFoundException(`Series with slug ${seriesSlug} not found`);
+      }
+
+      // Now find all events that belong to this series
+      return this.findEventsBySeriesId(series.id, options);
+    } catch (error) {
+      this.logger.error(
+        `Error finding events by series slug: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
   }
 
   @Trace('event-management.deleteEventsByGroup')
@@ -462,18 +874,75 @@ export class EventManagementService {
     const events = await this.eventRepository.find({
       where: { group: { id: groupId } },
       select: ['id', 'slug'],
+      relations: ['series'],
     });
 
     // Delete each event individually to ensure proper cleanup of related entities
     for (const event of events) {
       try {
         // Clean up chat rooms for this event (this handles the foreign key dependencies)
-        // If discussionService is available (injected), use it to clean up chat rooms
-        if (this.discussionService) {
-          await this.discussionService.cleanupEventChatRooms(event.id);
-          this.logger.log(
-            `Cleaned up chat rooms for event ${event.slug} (ID: ${event.id})`,
+        try {
+          if (
+            this.discussionService &&
+            typeof this.discussionService.cleanupEventChatRooms === 'function'
+          ) {
+            this.logger.log(`Cleaning up chat rooms for event ${event.id}`);
+            await this.discussionService.cleanupEventChatRooms(
+              event.id,
+              this.request.tenantId,
+            );
+            this.logger.log(
+              `Successfully cleaned up chat rooms for event ${event.id}`,
+            );
+          } else {
+            this.logger.warn(
+              `discussionService.cleanupEventChatRooms is not available. This might cause FK constraint violations.`,
+            );
+
+            // Add this as a proper todo for the engineering team
+            this.logger.error(
+              `TODO: Implement proper chat room cleanup in the event management service that doesn't rely on discussionService`,
+            );
+          }
+        } catch (chatCleanupError) {
+          this.logger.error(
+            `Error cleaning up chat rooms for event ${event.id}: ${chatCleanupError.message}`,
+            chatCleanupError.stack,
           );
+          // Continue with deletion despite the error
+        }
+
+        // Make sure to clear Matrix room ID from event to avoid stale references
+        if (event.matrixRoomId) {
+          event.matrixRoomId = '';
+          await this.eventRepository.save(event);
+        }
+
+        // Clean up occurrences if this is a recurring event
+        if (event.series) {
+          try {
+            // Find all events that belong to this series except the current one
+            const [events] = await this.findEventsBySeriesId(event.series.id);
+            const occurrencesToDelete = events.filter(
+              (occurrence) => occurrence.id !== event.id,
+            );
+
+            // Delete each occurrence
+            let deletedCount = 0;
+            for (const occurrence of occurrencesToDelete) {
+              await this.eventRepository.remove(occurrence);
+              deletedCount++;
+            }
+
+            this.logger.log(
+              `Deleted ${deletedCount} occurrences of event ${event.slug} (ID: ${event.id})`,
+            );
+          } catch (error) {
+            this.logger.error(
+              `Error cleaning up occurrences for event ${event.id}: ${error.message}`,
+              error.stack,
+            );
+          }
         }
 
         // Now that chat rooms are deleted, we can delete the event itself
@@ -596,5 +1065,148 @@ export class EventManagementService {
     await this.eventMailService.sendMailAttendeeStatusChanged(attendeeId);
 
     return await this.eventAttendeeService.showEventAttendee(attendeeId);
+  }
+
+  async delete(id: number): Promise<void> {
+    const event = await this.eventRepository.findOne({
+      where: { id },
+      relations: ['series'],
+    });
+
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${id} not found`);
+    }
+
+    // If this is part of a series, handle series deletion
+    if (event.series) {
+      // Get the current user id for proper series deletion
+      const userId = this.request?.user?.id;
+      await this.eventSeriesService.delete(event.series.slug, userId);
+    }
+
+    // Delete event attendees
+    await this.eventAttendeeService.deleteEventAttendees(id);
+
+    // Delete the event
+    await this.eventRepository.delete(id);
+  }
+
+  // Note: Recurrence management is now handled by EventSeries functionality
+  // The following methods are kept for backward compatibility but delegate to EventSeriesService
+
+  async createRecurringEvent(
+    createEventDto: CreateEventDto,
+    userId: number,
+  ): Promise<EventEntity> {
+    // First create the template event
+    const templateEvent = await this.create(createEventDto, userId);
+
+    // Create a series with the template event's slug
+    const series = await this.eventSeriesService.create(
+      {
+        name: createEventDto.name,
+        description: createEventDto.description,
+        recurrenceRule: createEventDto.recurrenceRule || {
+          frequency: RecurrenceFrequency.WEEKLY,
+          interval: 1,
+        },
+        templateEventSlug: templateEvent.slug,
+        groupId: createEventDto.group?.id,
+        imageId: createEventDto.image?.id,
+        sourceType: createEventDto.sourceType
+          ? String(createEventDto.sourceType)
+          : undefined,
+        sourceId: createEventDto.sourceId
+          ? String(createEventDto.sourceId)
+          : undefined,
+        sourceUrl: createEventDto.sourceUrl
+          ? String(createEventDto.sourceUrl)
+          : undefined,
+        sourceData: createEventDto.sourceData || undefined,
+        // Matrix room ID isn't in the CreateEventDto, so omit it
+      },
+      userId,
+    );
+
+    // Return the template event from the series
+    return series.templateEvent;
+  }
+
+  async updateRecurringEvent(
+    id: number,
+    updateEventDto: UpdateEventDto,
+    userId: number,
+  ): Promise<EventEntity> {
+    const event = await this.eventRepository.findOne({
+      where: { id },
+      relations: ['series'],
+    });
+
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${id} not found`);
+    }
+
+    if (!event.series) {
+      throw new BadRequestException(
+        `Event with ID ${id} is not part of a series`,
+      );
+    }
+
+    // Convert the UpdateEventDto to UpdateEventSeriesDto
+    const updateEventSeriesDto = {
+      name: updateEventDto.name,
+      description: updateEventDto.description,
+      recurrenceRule: updateEventDto.recurrenceRule,
+      location: updateEventDto.location,
+      locationOnline: updateEventDto.locationOnline,
+      maxAttendees: updateEventDto.maxAttendees,
+      requireApproval: updateEventDto.requireApproval,
+      approvalQuestion: updateEventDto.approvalQuestion,
+      allowWaitlist: updateEventDto.allowWaitlist,
+      categories: updateEventDto.categories,
+      groupId: updateEventDto.group?.id,
+      imageId: updateEventDto.image?.id,
+      sourceType: updateEventDto.sourceType
+        ? String(updateEventDto.sourceType)
+        : undefined,
+      sourceId: updateEventDto.sourceId
+        ? String(updateEventDto.sourceId)
+        : undefined,
+      sourceUrl: updateEventDto.sourceUrl
+        ? String(updateEventDto.sourceUrl)
+        : undefined,
+      sourceData: updateEventDto.sourceData || undefined,
+      // Matrix room ID isn't in the UpdateEventDto, so omit it
+    };
+
+    // Update the series instead of the recurring event
+    const updatedSeries = await this.eventSeriesService.update(
+      event.series.slug,
+      updateEventSeriesDto,
+      userId,
+    );
+
+    // Return the updated template event
+    return updatedSeries.templateEvent;
+  }
+
+  async deleteRecurringEvent(id: number, userId: number): Promise<void> {
+    const event = await this.eventRepository.findOne({
+      where: { id },
+      relations: ['series'],
+    });
+
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${id} not found`);
+    }
+
+    if (!event.series) {
+      throw new BadRequestException(
+        `Event with ID ${id} is not part of a series`,
+      );
+    }
+
+    // Delete the series instead of the recurring event
+    await this.eventSeriesService.delete(event.series.slug, userId);
   }
 }

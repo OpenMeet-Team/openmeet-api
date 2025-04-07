@@ -31,6 +31,7 @@ import slugify from 'slugify';
 import { generateShortCode } from '../../../../../utils/short-code';
 import { SourceFields } from '../../../../../core/interfaces/source-data.interface';
 import { EventSourceType } from '../../../../../core/constants/source-type.constant';
+import { EventSeriesEntity } from '../../../../../event-series/infrastructure/persistence/relational/entities/event-series.entity';
 
 @Entity({ name: 'events' })
 export class EventEntity
@@ -171,6 +172,52 @@ export class EventEntity
 
   @Column({ type: 'timestamp', nullable: true })
   lastSyncedAt: Date | null;
+
+  // Series-based recurrence model
+  @ManyToOne(
+    () => EventSeriesEntity,
+    (series: EventSeriesEntity) => series.events,
+    {
+      nullable: true,
+    },
+  )
+  @JoinColumn({ name: 'seriesSlug', referencedColumnName: 'slug' })
+  series: EventSeriesEntity;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Index()
+  seriesSlug: string;
+
+  /**
+   * Original date of the occurrence when it was created or modified.
+   * This is used to identify which date a modified occurrence belongs to
+   * in the recurrence pattern.
+   */
+  @Column({ type: 'timestamp', nullable: true })
+  @Index()
+  originalDate: Date;
+
+  // Additional RFC 5545/7986 properties
+  @Column({ nullable: true, type: 'varchar', length: 20 })
+  securityClass: string;
+
+  @Column({ nullable: true, type: 'integer', default: 0 })
+  priority: number;
+
+  @Column({ nullable: false, type: 'boolean', default: true })
+  blocksTime: boolean;
+
+  @Column({ nullable: true, type: 'boolean' })
+  isAllDay: boolean;
+
+  @Column({ nullable: true, type: 'jsonb' })
+  resources: string[];
+
+  @Column({ nullable: true, type: 'varchar', length: 20 })
+  color: string;
+
+  @Column({ nullable: true, type: 'jsonb' })
+  conferenceData: Record<string, any>;
 
   // @Expose()
   // get attendeesCount(): number {

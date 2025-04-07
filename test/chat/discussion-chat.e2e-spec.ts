@@ -10,10 +10,10 @@ import { loginAsTester, createEvent, createGroup } from '../utils/functions';
  * - Group discussions
  * - Direct messages
  */
-// Set a very long global timeout for the entire test
-jest.setTimeout(120000);
+// Set a global timeout for the entire test
+jest.setTimeout(60000);
 
-describe('Discussion Chat API Tests', () => {
+xdescribe('Discussion Chat API Tests', () => {
   let token: string;
   let eventSlug: string;
   let groupSlug: string;

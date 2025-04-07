@@ -7,8 +7,8 @@ import { loginAsTester } from '../utils/functions';
  *
  * These tests validate the basic Matrix integration functionality.
  */
-// Set a very long global timeout for this entire test file
-jest.setTimeout(120000);
+// Set a global timeout for this entire test file
+jest.setTimeout(60000);
 
 describe('Matrix Core API Tests', () => {
   let token: string;

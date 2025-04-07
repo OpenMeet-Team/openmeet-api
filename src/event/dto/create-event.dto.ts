@@ -7,6 +7,10 @@ import {
   IsString,
   IsEnum,
   IsBoolean,
+  ValidateNested,
+  IsObject,
+  IsIn,
+  Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -14,6 +18,88 @@ import { EventStatus, EventVisibility } from '../../core/constants/constant';
 import { FileEntity } from '../../file/infrastructure/persistence/relational/entities/file.entity';
 import { GroupEntity } from 'src/group/infrastructure/persistence/relational/entities/group.entity';
 import { SourceFields } from '../../core/interfaces/source-data.interface';
+import { RecurrenceFrequency } from '../../event-series/interfaces/recurrence.interface';
+
+export class RecurrenceRuleDto {
+  @ApiProperty({
+    description: 'Frequency of the recurrence',
+    enum: RecurrenceFrequency,
+    example: RecurrenceFrequency.WEEKLY,
+  })
+  @IsEnum(RecurrenceFrequency)
+  frequency: RecurrenceFrequency;
+
+  @ApiPropertyOptional({
+    description: 'Interval between recurrences (e.g., every 2 weeks)',
+    example: 1,
+    default: 1,
+    minimum: 1,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  interval?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Number of occurrences (either count or until should be specified, not both)',
+    example: 10,
+    minimum: 1,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  count?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'End date of recurrence (either count or until should be specified, not both)',
+    example: '2024-12-31T23:59:59Z',
+  })
+  @IsOptional()
+  @IsDateString()
+  until?: string;
+
+  @ApiPropertyOptional({
+    description: 'Days of the week (SU, MO, TU, WE, TH, FR, SA)',
+    example: ['MO', 'WE', 'FR'],
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  byweekday?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Months of the year (1-12)',
+    example: [1, 4, 7, 10],
+    type: [Number],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  bymonth?: number[];
+
+  @ApiPropertyOptional({
+    description: 'Days of the month (1-31 or -31 to -1)',
+    example: [1, 15],
+    type: [Number],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  bymonthday?: number[];
+
+  @ApiPropertyOptional({
+    description: 'Week start day (SU, MO, TU, WE, TH, FR, SA)',
+    example: 'MO',
+    default: 'MO',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'])
+  wkst?: string;
+}
 
 export class CreateEventDto implements SourceFields {
   @ApiProperty({
@@ -122,21 +208,23 @@ export class CreateEventDto implements SourceFields {
   @IsString()
   location?: string;
 
+  @IsNumber()
+  @IsOptional()
   @ApiProperty({
     description: 'The latitude of the event location',
+    example: 38.2527,
+    required: false,
   })
-  @IsOptional()
-  @IsNumber()
-  @Type(() => Number)
-  lat: number;
+  lat?: number;
 
+  @IsNumber()
+  @IsOptional()
   @ApiProperty({
     description: 'The longitude of the event location',
+    example: -85.7585,
+    required: false,
   })
-  @IsOptional()
-  @IsNumber()
-  @Type(() => Number)
-  lon: number;
+  lon?: number;
 
   @ApiPropertyOptional({
     description: 'The status of the event',
@@ -160,6 +248,127 @@ export class CreateEventDto implements SourceFields {
   @IsOptional()
   group?: { id: number } | GroupEntity;
 
+  // Recurrence fields
+  @ApiPropertyOptional({
+    description: 'Timezone identifier (e.g., "America/New_York")',
+    example: 'America/New_York',
+  })
+  @IsOptional()
+  @IsString()
+  timeZone?: string;
+
+  @ApiPropertyOptional({
+    description: 'Recurrence rule following RFC 5545 standards',
+    type: RecurrenceRuleDto,
+  })
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => RecurrenceRuleDto)
+  recurrenceRule?: RecurrenceRuleDto;
+
+  @ApiPropertyOptional({
+    description: 'Exception dates excluded from the recurrence pattern',
+    type: [String],
+    example: ['2024-12-25T09:00:00Z', '2025-01-01T09:00:00Z'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsDateString({}, { each: true })
+  recurrenceExceptions?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'End date of recurrence (alternative to setting in recurrenceRule)',
+    example: '2024-12-31T23:59:59Z',
+  })
+  @IsOptional()
+  @IsDateString()
+  recurrenceUntil?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Number of occurrences (alternative to setting in recurrenceRule)',
+    example: 10,
+    minimum: 1,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  recurrenceCount?: number;
+
+  // Additional RFC 5545/7986 properties
+  @ApiPropertyOptional({
+    description: 'Security classification (PUBLIC, PRIVATE, CONFIDENTIAL)',
+    enum: ['PUBLIC', 'PRIVATE', 'CONFIDENTIAL'],
+    example: 'PUBLIC',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['PUBLIC', 'PRIVATE', 'CONFIDENTIAL'])
+  securityClass?: string;
+
+  @ApiPropertyOptional({
+    description: 'Event priority (0-9, with 0 being undefined)',
+    example: 5,
+    minimum: 0,
+    maximum: 9,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  priority?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether the event blocks time on a calendar (OPAQUE) or not (TRANSPARENT)',
+    example: true,
+    default: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  blocksTime?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Whether the event is an all-day event',
+    example: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isAllDay?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Resources needed for the event (e.g., projector, conference room)',
+    type: [String],
+    example: ['Projector', 'Whiteboard'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  resources?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Color for the event (hex code or name)',
+    example: '#4A76B8',
+  })
+  @IsOptional()
+  @IsString()
+  color?: string;
+
+  @ApiPropertyOptional({
+    description: 'Conference data for virtual meetings',
+    example: {
+      type: 'zoom',
+      url: 'https://zoom.us/j/123456789',
+      password: 'meeting',
+    },
+  })
+  @IsOptional()
+  @IsObject()
+  conferenceData?: Record<string, any>;
+
+  // Source fields
   @ApiPropertyOptional({
     enum: [
       'bluesky',
@@ -203,6 +412,14 @@ export class CreateEventDto implements SourceFields {
   @ApiPropertyOptional()
   @IsOptional()
   lastSyncedAt?: Date | null;
+
+  @ApiPropertyOptional({
+    description: 'The slug of the event series this event belongs to',
+    example: 'weekly-team-meeting',
+  })
+  @IsOptional()
+  @IsString()
+  seriesSlug?: string;
 }
 
 export class CommentDto {

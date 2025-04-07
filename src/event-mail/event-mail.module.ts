@@ -5,8 +5,16 @@ import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 import { MailService } from '../mail/mail.service';
 import { MailerModule } from '../mailer/mailer.module';
 import { TenantModule } from '../tenant/tenant.module';
+import { ConfigModule } from '@nestjs/config';
+
 @Module({
-  imports: [MailModule, EventAttendeeModule, MailerModule, TenantModule],
+  imports: [
+    ConfigModule,
+    MailModule,
+    EventAttendeeModule,
+    MailerModule,
+    TenantModule,
+  ],
   providers: [EventMailService, MailService],
   exports: [EventMailService],
 })

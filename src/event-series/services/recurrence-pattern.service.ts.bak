@@ -1,0 +1,465 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { RRule, RRuleSet } from 'rrule';
+import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
+import { parseISO } from 'date-fns';
+import {
+  RecurrenceRule,
+  RecurrenceFrequency,
+  OccurrenceOptions,
+  DateFormatOptions,
+} from '../interfaces/recurrence.interface';
+
+/**
+ * Type definition for frontend RecurrenceRule
+ * This handles different naming conventions between frontend and backend
+ */
+export interface FrontendRecurrenceRule {
+  frequency: RecurrenceFrequency;
+  interval?: number;
+  count?: number;
+  until?: string;
+  byweekday?: string[]; // Days of the week (SU, MO, TU, WE, TH, FR, SA)
+  bymonthday?: number[];
+  bymonth?: number[];
+  wkst?: string;
+}
+
+/**
+ * Convert a backend RecurrenceRule to a frontend format with proper typing
+ * @param rule The backend RecurrenceRule to convert
+ * @returns A properly typed frontend RecurrenceRule
+ */
+export function toFrontendRecurrenceRule(rule?: RecurrenceRule): FrontendRecurrenceRule {
+  if (!rule) {
+    return { frequency: RecurrenceFrequency.WEEKLY };
+  }
+
+  // Validate that the frequency is a valid RecurrenceFrequency
+  const frequency = validateFrequency(rule.frequency);
+
+  return {
+    frequency,
+    interval: rule.interval,
+    count: rule.count,
+    until: rule.until as string,
+    byweekday: rule.byweekday,
+    bymonth: rule.bymonth,
+    bymonthday: rule.bymonthday,
+    wkst: rule.wkst as string,
+  };
+}
+
+/**
+ * Convert a frontend RecurrenceRule format to backend RecurrenceRule
+ * @param frontendRule The frontend RecurrenceRule to convert
+ * @returns A properly typed backend RecurrenceRule
+ */
+export function toBackendRecurrenceRule(frontendRule?: FrontendRecurrenceRule): RecurrenceRule {
+  if (!frontendRule) {
+    return { frequency: RecurrenceFrequency.WEEKLY };
+  }
+
+  // Validate that the frequency is a valid RecurrenceFrequency
+  const frequency = validateFrequency(frontendRule.frequency);
+
+  return {
+    frequency,
+    interval: frontendRule.interval,
+    count: frontendRule.count,
+    until: frontendRule.until,
+    byweekday: frontendRule.byweekday,
+    bymonth: frontendRule.bymonth,
+    bymonthday: frontendRule.bymonthday,
+  };
+}
+
+/**
+ * Validates that a frequency value is a valid RecurrenceFrequency
+ * @param frequency The frequency value to validate
+ * @returns A valid RecurrenceFrequency value
+ */
+function validateFrequency(frequency?: RecurrenceFrequency | string): RecurrenceFrequency {
+  if (!frequency) {
+    return RecurrenceFrequency.WEEKLY;
+  }
+
+  // Check if the frequency is a valid RecurrenceFrequency
+  if (Object.values(RecurrenceFrequency).includes(frequency as RecurrenceFrequency)) {
+    return frequency as RecurrenceFrequency;
+  }
+
+  // Default to WEEKLY if the frequency is invalid
+  return RecurrenceFrequency.WEEKLY;
+}
+
+/**
+ * Service for working with recurrence patterns
+ * Migrated from RecurrenceService to eliminate the dependency
+ */
+@Injectable()
+export class RecurrencePatternService {
+  private readonly logger = new Logger(RecurrencePatternService.name);
+
+  /**
+   * Generate occurrence dates for a recurring event based on a recurrence rule
+   * with proper timezone and DST transition handling
+   */
+  generateOccurrences(
+    startDate: Date | string,
+    recurrenceRule: RecurrenceRule,
+    _options: OccurrenceOptions = {},
+  ): Date[] {
+    // Parse start date if it's a string
+    const baseDate =
+      typeof startDate === 'string' ? parseISO(startDate) : startDate;
+
+    // Default timezone to UTC if not specified
+    const timeZone = _options.timeZone || 'UTC';
+
+    try {
+      // Build RRuleSet
+      const rruleSet = new RRuleSet();
+
+      // Convert base date to the specified timezone to properly handle DST
+      // RRule doesn't have timezone awareness so we need to ensure the base date
+      // is correctly adjusted for the specified timezone
+      const zonedBaseDate = toZonedTime(baseDate, timeZone);
+
+      // Create RRule from recurrence rule
+      const rruleOptions = this.buildRRuleOptions(zonedBaseDate, recurrenceRule, {
+        timeZone,
+      });
+      rruleSet.rrule(new RRule(rruleOptions));
+
+      // Add excluded dates if specified, properly converting them to the timezone
+      if (_options.exdates && !_options.includeExcluded) {
+        _options.exdates.forEach((exdate) => {
+          const dateToExclude = typeof exdate === 'string' ? parseISO(exdate) : exdate;
+          // Convert excluded date to the specified timezone
+          const zonedExcludeDate = toZonedTime(dateToExclude, timeZone);
+          rruleSet.exdate(zonedExcludeDate);
+        });
+      }
+
+      // Get all occurrences
+      let occurrences: Date[];
+
+      if (_options.count !== undefined) {
+        // Get a specific number of occurrences
+        occurrences = rruleSet.all((_, len) => len < _options.count!);
+      } else if (_options.until) {
+        // Get occurrences until a specific date
+        const untilDate =
+          typeof _options.until === 'string'
+            ? parseISO(_options.until)
+            : _options.until;
+        
+        // Convert until date to the specified timezone
+        const zonedUntilDate = toZonedTime(untilDate, timeZone);
+        occurrences = rruleSet.between(zonedBaseDate, zonedUntilDate);
+      } else {
+        // Default to 10 occurrences if no count or until date specified
+        occurrences = rruleSet.all((_, len) => len < 10);
+      }
+
+      // Convert occurrence dates back to properly timezone-adjusted dates
+      // This ensures each date properly accounts for DST transitions
+      const adjustedOccurrences = occurrences.map(date => {
+        // Format date in the specified timezone to ensure proper DST handling
+        const formattedDate = formatInTimeZone(
+          date,
+          timeZone,
+          "yyyy-MM-dd'T'HH:mm:ssXXX"
+        );
+        // Parse the formatted date back to a Date object
+        return parseISO(formattedDate);
+      });
+
+      return adjustedOccurrences;
+    } catch (error) {
+      this.logger.error(
+        `Error generating occurrences: ${error.message}`,
+        error.stack,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Build RRule options from recurrence rule
+   * With proper timezone handling
+   */
+  private buildRRuleOptions(
+    baseDate: Date,
+    recurrenceRule: RecurrenceRule,
+    _options: OccurrenceOptions = {},
+  ): any {
+    // Get the timezone
+    const timeZone = _options.timeZone || 'UTC';
+
+    // Convert frequency string to RRule frequency
+    const frequency = this.mapFrequencyToRRule(recurrenceRule.frequency);
+
+    // Extract options for the rule
+    const ruleOptions: any = {
+      freq: frequency,
+      interval: recurrenceRule.interval || 1,
+      dtstart: baseDate,
+    };
+
+    // Add count if specified
+    if (recurrenceRule.count) {
+      ruleOptions.count = recurrenceRule.count;
+    }
+
+    // Add until date if specified
+    if (recurrenceRule.until) {
+      const rawUntilDate =
+        typeof recurrenceRule.until === 'string'
+          ? parseISO(recurrenceRule.until)
+          : recurrenceRule.until;
+      
+      // Convert until date to the specified timezone
+      const untilDate = toZonedTime(rawUntilDate, timeZone);
+      ruleOptions.until = untilDate;
+    }
+
+    // Add byweekday if specified and frequency is weekly
+    if (recurrenceRule.byweekday && frequency === RRule['WEEKLY']) {
+      // Convert day names to RRule weekday constants
+      ruleOptions.byweekday = recurrenceRule.byweekday.map((day) =>
+        this.mapWeekdayToRRule(day),
+      );
+    }
+
+    // Add bymonthday if specified and frequency is monthly
+    if (recurrenceRule.bymonthday && frequency === RRule['MONTHLY']) {
+      ruleOptions.bymonthday = recurrenceRule.bymonthday;
+    }
+
+    // Add bymonth if specified
+    if (recurrenceRule.bymonth) {
+      ruleOptions.bymonth = recurrenceRule.bymonth;
+    }
+
+    return ruleOptions;
+  }
+
+  /**
+   * Check if a date is part of a recurrence pattern
+   * with proper timezone and DST transition handling
+   */
+  isDateInRecurrencePattern(
+    checkDate: Date | string,
+    startDate: Date | string,
+    recurrenceRule: RecurrenceRule,
+    timeZone: string = 'UTC',
+    exdates?: Array<string | Date>,
+  ): boolean {
+    try {
+      // Parse dates if they're strings
+      const baseDate =
+        typeof startDate === 'string' ? parseISO(startDate) : startDate;
+      const targetDate =
+        typeof checkDate === 'string' ? parseISO(checkDate) : checkDate;
+
+      // Convert to the specified timezone to properly handle DST
+      const zonedBaseDate = toZonedTime(baseDate, timeZone);
+      const zonedTargetDate = toZonedTime(targetDate, timeZone);
+
+      // Build RRuleSet
+      const rruleSet = new RRuleSet();
+
+      // Create RRule from recurrence rule
+      const rruleOptions = this.buildRRuleOptions(zonedBaseDate, recurrenceRule, {
+        timeZone,
+      });
+      rruleSet.rrule(new RRule(rruleOptions));
+
+      // Add excluded dates if specified
+      if (exdates) {
+        exdates.forEach((exdate) => {
+          const dateToExclude = typeof exdate === 'string' ? parseISO(exdate) : exdate;
+          // Convert excluded date to the specified timezone
+          const zonedExcludeDate = toZonedTime(dateToExclude, timeZone);
+          rruleSet.exdate(zonedExcludeDate);
+        });
+      }
+
+      // Check if the target date is in the recurrence pattern
+      // Get all occurrences within a day of the target date
+      const oneDayBefore = new Date(zonedTargetDate);
+      oneDayBefore.setDate(oneDayBefore.getDate() - 1);
+
+      const oneDayAfter = new Date(zonedTargetDate);
+      oneDayAfter.setDate(oneDayAfter.getDate() + 1);
+
+      const nearbyDates = rruleSet.between(oneDayBefore, oneDayAfter);
+
+      // Check if any occurrence is on the same day as the target date
+      return nearbyDates.some((date) =>
+        this.isSameDay(date, zonedTargetDate, timeZone),
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error checking date in recurrence pattern: ${error.message}`,
+        error.stack,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Build RRULE string from recurrence rule
+   */
+  buildRRuleString(recurrenceRule: RecurrenceRule): string {
+    try {
+      // Start with the frequency
+      let rruleString = `FREQ=${recurrenceRule.frequency}`;
+
+      // Add interval if specified
+      if (recurrenceRule.interval && recurrenceRule.interval > 1) {
+        rruleString += `;INTERVAL=${recurrenceRule.interval}`;
+      }
+
+      // Add count if specified
+      if (recurrenceRule.count) {
+        rruleString += `;COUNT=${recurrenceRule.count}`;
+      }
+
+      // Add until date if specified
+      if (recurrenceRule.until) {
+        const untilDate =
+          typeof recurrenceRule.until === 'string'
+            ? new Date(recurrenceRule.until)
+            : recurrenceRule.until;
+        // Format until date in UTC format required by iCalendar
+        const untilStr = formatInTimeZone(
+          untilDate,
+          'UTC',
+          'yyyyMMdd\\THHmmss\\Z',
+        );
+        rruleString += `;UNTIL=${untilStr}`;
+      }
+
+      // Add byweekday if specified
+      if (recurrenceRule.byweekday && recurrenceRule.byweekday.length > 0) {
+        rruleString += `;BYDAY=${recurrenceRule.byweekday.join(',')}`;
+      }
+
+      // Add bymonthday if specified
+      if (recurrenceRule.bymonthday && recurrenceRule.bymonthday.length > 0) {
+        rruleString += `;BYMONTHDAY=${recurrenceRule.bymonthday.join(',')}`;
+      }
+
+      // Add bymonth if specified
+      if (recurrenceRule.bymonth && recurrenceRule.bymonth.length > 0) {
+        rruleString += `;BYMONTH=${recurrenceRule.bymonth.join(',')}`;
+      }
+
+      return `RRULE:${rruleString}`;
+    } catch (error) {
+      this.logger.error(
+        `Error building RRULE string: ${error.message}`,
+        error.stack,
+      );
+      return '';
+    }
+  }
+
+  /**
+   * Format a date in a specific timezone
+   */
+  formatDateInTimeZone(
+    date: Date | string,
+    timeZone: string,
+    options: DateFormatOptions = {},
+  ): string {
+    try {
+      // Parse date if it's a string
+      const dateObj = typeof date === 'string' ? parseISO(date) : date;
+
+      // Default format is ISO
+      const formatStr = options.format || "yyyy-MM-dd'T'HH:mm:ssXXX";
+
+      // Format date in specified timezone
+      return formatInTimeZone(dateObj, timeZone, formatStr);
+    } catch (error) {
+      this.logger.error(
+        `Error formatting date in timezone: ${error.message}`,
+        error.stack,
+      );
+      return date.toString();
+    }
+  }
+
+  /**
+   * Utility function to check if two dates represent the same day in a specific timezone
+   * With enhanced DST handling
+   */
+  isSameDay(date1: Date, date2: Date, timeZone: string): boolean {
+    // Check for null/undefined dates
+    if (!date1 || !date2) {
+      return false;
+    }
+
+    try {
+      // Convert dates to the specified timezone
+      const d1 = toZonedTime(date1, timeZone);
+      const d2 = toZonedTime(date2, timeZone);
+      
+      // Format both dates as YYYY-MM-DD in the specified timezone
+      const d1Str = formatInTimeZone(d1, timeZone, 'yyyy-MM-dd');
+      const d2Str = formatInTimeZone(d2, timeZone, 'yyyy-MM-dd');
+      
+      // Compare formatted strings
+      return d1Str === d2Str;
+    } catch (error) {
+      this.logger.error(
+        `Error comparing dates in timezone: ${error.message}`,
+        error.stack,
+      );
+      
+      // Fall back to default comparison if there's an error
+      return date1.toISOString().substring(0, 10) === 
+             date2.toISOString().substring(0, 10);
+    }
+  }
+
+  /**
+   * Map frequency string to RRule constant
+   */
+  private mapFrequencyToRRule(frequency: string | RecurrenceFrequency): number {
+    const freqStr = typeof frequency === 'string' ? frequency.toUpperCase() : frequency;
+    
+    switch (freqStr) {
+      case RecurrenceFrequency.DAILY:
+        return RRule.DAILY;
+      case RecurrenceFrequency.WEEKLY:
+        return RRule.WEEKLY;
+      case RecurrenceFrequency.MONTHLY:
+        return RRule.MONTHLY;
+      case RecurrenceFrequency.YEARLY:
+        return RRule.YEARLY;
+      default:
+        return RRule.WEEKLY; // Default to weekly
+    }
+  }
+
+  /**
+   * Map weekday string to RRule constant
+   */
+  private mapWeekdayToRRule(day: string): number {
+    const weekdays = {
+      MO: RRule['MO'],
+      TU: RRule['TU'],
+      WE: RRule['WE'],
+      TH: RRule['TH'],
+      FR: RRule['FR'],
+      SA: RRule['SA'],
+      SU: RRule['SU'],
+    };
+
+    return weekdays[day.toUpperCase()] || RRule['MO'];
+  }
+}

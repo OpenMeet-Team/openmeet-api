@@ -52,6 +52,7 @@ import { AuditLoggerService } from './logger/audit-logger.provider';
 import { TracingModule } from './tracing/tracing.module';
 import { BlueskyModule } from './bluesky/bluesky.module';
 import { MatrixModule } from './matrix/matrix.module';
+import { EventSeriesModule } from './event-series/event-series.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -131,6 +132,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     BlueskyModule,
     TracingModule,
     MatrixModule,
+    EventSeriesModule,
   ],
   providers: [
     TenantConnectionService,

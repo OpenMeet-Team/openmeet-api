@@ -31,6 +31,8 @@ import { VisibilityGuard } from '../shared/guard/visibility.guard';
 import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
+import { ICalendarService } from './services/ical/ical.service';
+import { EventSeriesOccurrenceService } from '../event-series/services/event-series-occurrence.service';
 
 const createEventDto: CreateEventDto = {
   name: 'Test Event',
@@ -84,6 +86,15 @@ const mockEventRecommendationService = {
   showRecommendedEventsByEventSlug: jest.fn(),
 };
 
+const mockICalendarService = {
+  generateICalendar: jest.fn(),
+};
+
+const mockEventSeriesOccurrenceService = {
+  getEffectiveEventForDate: jest.fn(),
+  updateFutureOccurrences: jest.fn(),
+};
+
 // Discussion service mock has been moved to chat.controller.spec.ts
 
 describe('EventController', () => {
@@ -129,6 +140,14 @@ describe('EventController', () => {
         {
           provide: EventRecommendationService,
           useValue: mockEventRecommendationService,
+        },
+        {
+          provide: ICalendarService,
+          useValue: mockICalendarService,
+        },
+        {
+          provide: EventSeriesOccurrenceService,
+          useValue: mockEventSeriesOccurrenceService,
         },
         // EventDiscussionService has been moved to ChatController
         {
@@ -358,6 +377,139 @@ describe('EventController', () => {
       mockEventQueryService.showDashboardEvents.mockResolvedValue(mockEvents);
       const result = await controller.showDashboardEvents(mockUser);
       expect(result).toEqual(mockEvents);
+    });
+  });
+
+  describe('getICalendar', () => {
+    it('should return iCalendar content', async () => {
+      const mockEvent = { slug: 'test-event' };
+      const mockICalContent = 'BEGIN:VCALENDAR\nEND:VCALENDAR';
+      const mockResponse = {
+        status: jest.fn().mockReturnThis(),
+        send: jest.fn(),
+        setHeader: jest.fn(),
+      };
+
+      mockEventQueryService.showEvent.mockResolvedValue(mockEvent);
+      mockICalendarService.generateICalendar.mockReturnValue(mockICalContent);
+
+      await controller.getICalendar('test-event', mockResponse as any);
+
+      expect(mockEventQueryService.showEvent).toHaveBeenCalledWith(
+        'test-event',
+      );
+      expect(mockICalendarService.generateICalendar).toHaveBeenCalledWith(
+        mockEvent,
+      );
+      expect(mockResponse.setHeader).toHaveBeenCalledWith(
+        'Content-Disposition',
+        'attachment; filename=test-event.ics',
+      );
+      expect(mockResponse.send).toHaveBeenCalledWith(mockICalContent);
+    });
+
+    it('should return 404 if event not found', async () => {
+      const mockResponse = {
+        status: jest.fn().mockReturnThis(),
+        send: jest.fn(),
+      };
+
+      mockEventQueryService.showEvent.mockResolvedValue(null);
+
+      await controller.getICalendar('non-existent-event', mockResponse as any);
+
+      expect(mockResponse.status).toHaveBeenCalledWith(404);
+      expect(mockResponse.send).toHaveBeenCalledWith('Event not found');
+    });
+  });
+
+  describe('modifyThisAndFutureOccurrences', () => {
+    it('should call eventSeriesOccurrenceService.updateFutureOccurrences with correct parameters', async () => {
+      const slug = 'weekly-meeting';
+      const date = '2025-06-15T10:00:00.000Z';
+      const updateEventDto = { name: 'Updated Weekly Meeting' };
+      const mockUser = { id: 1, name: 'Test User' };
+
+      // Create a valid EventEntity-compatible object
+      const expectedResult = {
+        ...mockEvent,
+        id: 2,
+        name: 'Updated Weekly Meeting',
+      } as EventEntity;
+
+      // Mock the eventManagementService.update method
+      jest
+        .spyOn(eventManagementService, 'update')
+        .mockResolvedValue(expectedResult);
+
+      // Mock the eventQueryService.findEventBySlug method
+      jest
+        .spyOn(eventQueryService, 'findEventBySlug')
+        .mockResolvedValue(expectedResult);
+
+      // Mock the eventSeriesOccurrenceService.updateFutureOccurrences method
+      mockEventSeriesOccurrenceService.updateFutureOccurrences.mockResolvedValue(
+        2,
+      );
+
+      const result = await controller.modifyThisAndFutureOccurrences(
+        slug,
+        date,
+        updateEventDto,
+        mockUser as any,
+      );
+
+      expect(eventManagementService.update).toHaveBeenCalledWith(
+        slug,
+        updateEventDto,
+        mockUser.id,
+      );
+      expect(
+        mockEventSeriesOccurrenceService.updateFutureOccurrences,
+      ).toHaveBeenCalledWith(slug, date, updateEventDto, mockUser.id);
+      expect(result).toEqual(expectedResult);
+    });
+  });
+
+  describe('getEffectiveProperties', () => {
+    it('should call eventSeriesOccurrenceService.getEffectiveEventForDate with correct parameters', async () => {
+      const slug = 'weekly-meeting';
+      const date = '2025-06-15T10:00:00.000Z';
+      const expectedResult = {
+        ...mockEvent,
+        id: 2,
+        name: 'Weekly Meeting (June Update)',
+      } as EventEntity;
+
+      mockEventSeriesOccurrenceService.getEffectiveEventForDate.mockResolvedValue(
+        expectedResult,
+      );
+
+      const result = await controller.getEffectiveProperties(slug, date);
+
+      expect(
+        mockEventSeriesOccurrenceService.getEffectiveEventForDate,
+      ).toHaveBeenCalledWith(slug, date);
+      expect(result).toEqual(expectedResult);
+    });
+
+    it('should use current date when date parameter is not provided', async () => {
+      const slug = 'weekly-meeting';
+      const expectedResult = { id: 1, name: 'Weekly Meeting' };
+
+      mockEventSeriesOccurrenceService.getEffectiveEventForDate.mockResolvedValue(
+        expectedResult,
+      );
+
+      const result = await controller.getEffectiveProperties(slug, '');
+
+      expect(
+        mockEventSeriesOccurrenceService.getEffectiveEventForDate,
+      ).toHaveBeenCalledWith(
+        slug,
+        expect.any(String), // Should be the current date as ISO string
+      );
+      expect(result).toEqual(expectedResult);
     });
   });
 

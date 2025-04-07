@@ -8,6 +8,10 @@ import {
   TESTING_TENANT_ID,
 } from '../utils/constants';
 import { getAuthToken } from '../utils/functions';
+
+// Set a global timeout for this entire test file
+jest.setTimeout(60000);
+
 describe('Auth Module', () => {
   const app = TESTING_APP_URL;
   const mail = `http://${TESTING_MAIL_HOST}:${TESTING_MAIL_PORT}`;

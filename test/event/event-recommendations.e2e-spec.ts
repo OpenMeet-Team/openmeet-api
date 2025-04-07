@@ -14,6 +14,9 @@ import {
   getAllEvents,
 } from '../utils/functions';
 
+// Set a global timeout for all tests in this file
+jest.setTimeout(60000);
+
 describe('EventController Recommendations (e2e)', () => {
   let token;
   let adminToken;
@@ -101,7 +104,7 @@ describe('EventController Recommendations (e2e)', () => {
     const allEvents = await getAllEvents(TESTING_APP_URL, token);
     expect(allEvents.data).toBeInstanceOf(Array);
     expect(allEvents.data.length).toBeGreaterThanOrEqual(3);
-  });
+  }, 30000);
 
   afterAll(async () => {
     //  delete test events

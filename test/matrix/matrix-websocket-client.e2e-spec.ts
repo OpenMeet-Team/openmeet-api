@@ -1,6 +1,10 @@
 import request from 'supertest';
 import { io as Client, Socket } from 'socket.io-client';
-import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
+import {
+  TESTING_APP_URL,
+  TESTING_TENANT_ID,
+  TESTING_USER_ID,
+} from '../utils/constants';
 import { loginAsTester, createEvent } from '../utils/functions';
 import * as http from 'http';
 import * as https from 'https';
@@ -11,6 +15,9 @@ import * as https from 'https';
  * These tests verify the real-time WebSocket functionality using socket.io with Matrix.
  * Note: These tests require a running Matrix server in the test environment.
  */
+// Set a global timeout for this entire test file
+jest.setTimeout(60000);
+
 describe('Matrix WebSocket Client Tests', () => {
   let token: string;
   let eventSlug: string;

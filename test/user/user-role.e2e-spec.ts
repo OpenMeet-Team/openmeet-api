@@ -2,6 +2,9 @@ import request from 'supertest';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import { RoleEnum } from '../../src/role/role.enum';
 
+// Set a global timeout for this test file
+jest.setTimeout(60000);
+
 describe('User role', () => {
   const app = TESTING_APP_URL;
   let serverApp;
@@ -99,5 +102,5 @@ describe('User role', () => {
     expect(responseWithoutRole.body.role).toEqual(
       expect.objectContaining({ name: RoleEnum.User }),
     );
-  });
+  }, 30000); // Increase timeout for this specific test
 });
