@@ -174,9 +174,6 @@ export class EventEntity
   lastSyncedAt: Date | null;
 
   // Series-based recurrence model
-  @Column({ nullable: true })
-  seriesId: number;
-
   @ManyToOne(
     () => EventSeriesEntity,
     (series: EventSeriesEntity) => series.events,
@@ -184,7 +181,7 @@ export class EventEntity
       nullable: true,
     },
   )
-  @JoinColumn({ name: 'seriesId' })
+  @JoinColumn({ name: 'seriesSlug', referencedColumnName: 'slug' })
   series: EventSeriesEntity;
 
   @Column({ type: 'varchar', length: 255, nullable: true })

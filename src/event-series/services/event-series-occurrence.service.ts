@@ -37,8 +37,8 @@ export class EventSeriesOccurrenceService {
    * @private
    */
   private readonly materializationConfig = {
-    // For Bluesky events, materialize the next 5 future events
-    blueskyEventCount: 5,
+    // For Bluesky events, materialize the next 2 future events
+    blueskyEventCount: 2,
     // For normal events, materialize occurrences 2 months into the future
     normalEventMonths: 2,
   };
@@ -143,13 +143,27 @@ export class EventSeriesOccurrenceService {
         const [events] =
           await this.eventManagementService.findEventsBySeriesSlug(seriesSlug, {
             page: 1,
-            limit: 1,
+            limit: 100, // Get more events to find the most recent one
           });
-        updatedTemplateEvent = events[0];
+
+        if (events.length > 0) {
+          // Sort events by start date descending (most recent first)
+          events.sort(
+            (a, b) =>
+              new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
+          );
+          updatedTemplateEvent = events[0]; // Use the most recent event
+          this.logger.log(
+            `Using most recent event (${updatedTemplateEvent.slug}) as template for series ${seriesSlug}`,
+          );
+        }
       }
 
       // If still no template event, create a default one
       if (!updatedTemplateEvent) {
+        this.logger.warn(
+          `No template or events found for series ${seriesSlug}. Creating a new template event.`,
+        );
         const defaultTemplate = await this.eventManagementService.create(
           {
             name: series.name,
@@ -355,7 +369,105 @@ export class EventSeriesOccurrenceService {
 
       // If no template event found by slug, try to find any event in the series
       if (!templateEvent) {
-        templateEvent = existingOccurrences[0];
+        if (existingOccurrences.length > 0) {
+          // Sort events by start date descending (most recent first)
+          const sortedEvents = [...existingOccurrences].sort(
+            (a, b) =>
+              new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
+          );
+          templateEvent = sortedEvents[0]; // Use the most recent event
+          this.logger.log(
+            `Using most recent event (${templateEvent.slug}) as template for series ${seriesSlug}`,
+          );
+        } else {
+          // Handle case where template is missing and no events exist
+          this.logger.warn(
+            `Series ${seriesSlug} has no events. Attempting recovery...`,
+          );
+
+          try {
+            // Get the series to check if we have user information
+            const series = await this.eventSeriesService.findBySlug(seriesSlug);
+
+            // Find user ID - look for different properties that might have the creator ID
+            // or fallback to admin user ID 1 if not available
+            let userId = 1; // Default to admin user
+
+            // Try different properties that might contain the user ID
+            if (series['createdBy']) {
+              userId = series['createdBy'] as number;
+            } else if (series['createdById']) {
+              userId = series['createdById'] as number;
+            } else if (series['userId']) {
+              userId = series['userId'] as number;
+            } else if (series['ownerId']) {
+              userId = series['ownerId'] as number;
+            }
+
+            // Check if this is a Bluesky event - use type safety
+            const isBlueskyEvent: boolean =
+              series.sourceType === 'bluesky' ||
+              (series.sourceData &&
+                typeof series.sourceData === 'object' &&
+                series.sourceData['handle'] &&
+                ((typeof series.sourceData['handle'] === 'string' &&
+                  series.sourceData['handle'].includes('bsky')) ||
+                  series.sourceData['did']))
+                ? true
+                : false;
+
+            this.logger.log(
+              `Using user ID ${userId} for recovery materialization of series ${seriesSlug} (Bluesky: ${isBlueskyEvent})`,
+            );
+
+            // Auto-materialize to recover the series
+            await this.materializeNextNOccurrences(
+              seriesSlug,
+              userId,
+              isBlueskyEvent,
+            );
+
+            // Re-fetch occurrences
+            const [recoveredEvents] =
+              await this.eventManagementService.findEventsBySeriesSlug(
+                seriesSlug,
+                { page: 1, limit: count * 2 },
+              );
+
+            if (recoveredEvents.length > 0) {
+              existingOccurrences.push(...recoveredEvents);
+
+              // Sort by most recent again
+              const sortedRecovered = [...recoveredEvents].sort(
+                (a, b) =>
+                  new Date(b.startDate).getTime() -
+                  new Date(a.startDate).getTime(),
+              );
+              templateEvent = sortedRecovered[0];
+
+              // Update the series with the new template event
+              if (!series.templateEventSlug && templateEvent) {
+                this.logger.log(
+                  `Updating series ${seriesSlug} with new template event slug: ${templateEvent.slug}`,
+                );
+                await this.eventSeriesService.update(
+                  seriesSlug,
+                  { templateEventSlug: templateEvent.slug },
+                  userId,
+                );
+              }
+
+              this.logger.log(
+                `Successfully recovered series ${seriesSlug} by materializing occurrences`,
+              );
+            }
+          } catch (error) {
+            this.logger.error(
+              `Failed to recover series ${seriesSlug}: ${error.message}`,
+              error.stack,
+            );
+          }
+        }
       }
 
       // Determine the correct start date and timezone for recurrence generation
@@ -520,7 +632,33 @@ export class EventSeriesOccurrenceService {
     userId: number,
   ): Promise<EventEntity | undefined> {
     try {
-      // Get upcoming occurrences
+      // Check if any events exist in this series
+      const [existingEvents] =
+        await this.eventManagementService.findEventsBySeriesSlug(seriesSlug, {
+          page: 1,
+          limit: 1,
+        });
+
+      // If the series has no events (possibly due to template deletion),
+      // create new ones automatically
+      if (existingEvents.length === 0) {
+        this.logger.warn(
+          `Series ${seriesSlug} has no materialized events. Auto-materializing...`,
+        );
+
+        // Create at least 2 events
+        const materializedEvents = await this.materializeNextNOccurrences(
+          seriesSlug,
+          userId,
+          false,
+        );
+
+        if (materializedEvents.length > 0) {
+          return materializedEvents[0];
+        }
+      }
+
+      // Standard behavior: Get upcoming occurrences
       const upcomingOccurrences = await this.getUpcomingOccurrences(
         seriesSlug,
         5,
@@ -572,7 +710,7 @@ export class EventSeriesOccurrenceService {
       // Configure how many occurrences to materialize
       const count = isBlueskyEvent
         ? this.materializationConfig.blueskyEventCount
-        : 5; // Default to 5 for standard operations
+        : 2; // Default to 2 for standard operations
 
       // Get upcoming occurrences (both materialized and unmaterialized)
       const upcomingOccurrences = await this.getUpcomingOccurrences(

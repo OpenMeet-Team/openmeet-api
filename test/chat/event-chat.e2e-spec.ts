@@ -7,8 +7,8 @@ import { loginAsTester, createEvent } from '../utils/functions';
  *
  * These tests validate the Matrix-powered event chat functionality.
  */
-// Set a very long global timeout for the entire test
-jest.setTimeout(120000);
+// Set a global timeout for the entire test
+jest.setTimeout(60000);
 
 describe('Event Chat API Tests', () => {
   let token: string;

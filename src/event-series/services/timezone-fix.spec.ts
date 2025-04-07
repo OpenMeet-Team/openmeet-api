@@ -210,10 +210,9 @@ class FixedRecurrencePatternService {
         timeZone,
         'yyyy-MM-dd',
       );
-      const adjustedOccurrence = toDate(
-        `${occurrenceDate} 10:00:00`,
-        { timeZone },
-      );
+      const adjustedOccurrence = toDate(`${occurrenceDate} 10:00:00`, {
+        timeZone,
+      });
       return adjustedOccurrence.toISOString();
     });
   }
@@ -227,7 +226,7 @@ describe('Timezone Fix', () => {
     // Save original timezone and set to America/New_York for tests
     originalTZ = process.env.TZ;
     process.env.TZ = 'America/New_York';
-    
+
     service = new FixedRecurrencePatternService();
     jest.spyOn(Logger.prototype, 'debug').mockImplementation(() => ({}));
   });
@@ -262,22 +261,22 @@ describe('Timezone Fix', () => {
 
       console.log('\nCOMPARISON OF ORIGINAL VS FIXED IMPLEMENTATIONS:');
 
-      console.log('\nOriginal Implementation Results:');
+      // console.log('\nOriginal Implementation Results:');
       originalOccurrences.forEach((occStr, idx) => {
         const occ = new Date(occStr);
         const localTime = formatInTimeZone(occ, 'America/New_York', 'HH:mm');
-        console.log(
-          `Occurrence ${idx}: ${occ.toISOString()} -> ${localTime} America/New_York`,
-        );
+        // console.log(
+        //   `Occurrence ${idx}: ${occ.toISOString()} -> ${localTime} America/New_York`,
+        // );
       });
 
-      console.log('\nFixed Implementation Results:');
+      // console.log('\nFixed Implementation Results:');
       fixedOccurrences.forEach((occStr, idx) => {
         const occ = new Date(occStr);
         const localTime = formatInTimeZone(occ, 'America/New_York', 'HH:mm');
-        console.log(
-          `Occurrence ${idx}: ${occ.toISOString()} -> ${localTime} America/New_York`,
-        );
+        // console.log(
+        //   `Occurrence ${idx}: ${occ.toISOString()} -> ${localTime} America/New_York`,
+        // );
 
         // Now we expect all occurrences to be at 10:00 AM local time
         expect(localTime).toBe('10:00');

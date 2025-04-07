@@ -189,30 +189,32 @@ export class RedesignRecurringEvents1743371499235
     ]);
 
     // 3. Add event to series relationship fields
-    await queryRunner.addColumns(`${schema}.events`, [
-      new TableColumn({
-        name: 'seriesId',
-        type: 'integer',
-        isNullable: true,
-      }),
-      new TableColumn({
-        name: 'seriesSlug',
-        type: 'varchar',
-        length: '255',
-        isNullable: true,
-      }),
-      new TableColumn({
-        name: 'isRecurrenceException',
-        type: 'boolean',
-        default: false,
-        isNullable: false,
-      }),
-      new TableColumn({
-        name: 'originalDate',
-        type: 'timestamp',
-        isNullable: true,
-      }),
-    ]);
+    try {
+      await queryRunner.addColumns(`${schema}.events`, [
+        new TableColumn({
+          name: 'seriesSlug',
+          type: 'varchar',
+          length: '255',
+          isNullable: true,
+        }),
+        new TableColumn({
+          name: 'isRecurrenceException',
+          type: 'boolean',
+          default: false,
+          isNullable: false,
+        }),
+        new TableColumn({
+          name: 'originalDate',
+          type: 'timestamp',
+          isNullable: true,
+        }),
+      ]);
+    } catch (error) {
+      console.warn(
+        'Error adding series relationship columns to events table:',
+        error.message,
+      );
+    }
 
     // 4. Add unique constraint to events.slug if it doesn't exist
     try {
@@ -245,16 +247,16 @@ export class RedesignRecurringEvents1743371499235
     ]);
 
     // 6. Add indexes to events table
-    await queryRunner.createIndices(`${schema}.events`, [
-      new TableIndex({
-        name: 'IDX_events_series_id',
-        columnNames: ['seriesId'],
-      }),
-      new TableIndex({
-        name: 'IDX_events_series_slug',
-        columnNames: ['seriesSlug'],
-      }),
-    ]);
+    try {
+      await queryRunner.createIndices(`${schema}.events`, [
+        new TableIndex({
+          name: 'IDX_events_series_slug',
+          columnNames: ['seriesSlug'],
+        }),
+      ]);
+    } catch (error) {
+      console.warn('Error creating events series indexes:', error.message);
+    }
 
     // 7. Add foreign keys from EventSeries to other tables
     await queryRunner.createForeignKeys(`${schema}.eventSeries`, [
@@ -288,31 +290,56 @@ export class RedesignRecurringEvents1743371499235
       }),
     ]);
 
-    // 8. Add foreign key from events to series
-    await queryRunner.createForeignKey(
-      `${schema}.events`,
-      new TableForeignKey({
-        name: 'FK_events_series',
-        columnNames: ['seriesId'],
-        referencedTableName: `${schema}.eventSeries`,
-        referencedColumnNames: ['id'],
-        onDelete: 'CASCADE',
-      }),
-    );
+    // 8. Drop foreign key from events to series
+    try {
+      await queryRunner.dropForeignKey(`${schema}.events`, 'FK_events_series');
+    } catch (error) {
+      console.warn(
+        'Foreign key FK_events_series not found or already dropped:',
+        error.message,
+      );
+    }
 
-    // 9. Add foreign key from events to series by slug
-    await queryRunner.createForeignKey(
-      `${schema}.events`,
-      new TableForeignKey({
-        name: 'FK_events_series_slug',
-        columnNames: ['seriesSlug'],
-        referencedTableName: `${schema}.eventSeries`,
-        referencedColumnNames: ['slug'],
-        onDelete: 'SET NULL',
-      }),
-    );
+    // 9. Drop index on seriesId
+    try {
+      await queryRunner.dropIndex(`${schema}.events`, 'IDX_events_series_id');
+    } catch (error) {
+      console.warn(
+        'Index IDX_events_series_id not found or already dropped:',
+        error.message,
+      );
+    }
 
-    // 10. Drop materialized column which is no longer needed
+    // 10. Drop seriesId column
+    try {
+      await queryRunner.dropColumn(`${schema}.events`, 'seriesId');
+    } catch (error) {
+      console.warn(
+        'Column seriesId not found or already dropped:',
+        error.message,
+      );
+    }
+
+    // 11. Add foreign key from events to series by slug
+    try {
+      await queryRunner.createForeignKey(
+        `${schema}.events`,
+        new TableForeignKey({
+          name: 'FK_events_series_slug',
+          columnNames: ['seriesSlug'],
+          referencedTableName: `${schema}.eventSeries`,
+          referencedColumnNames: ['slug'],
+          onDelete: 'SET NULL',
+        }),
+      );
+    } catch (error) {
+      console.warn(
+        'Error creating FK_events_series_slug foreign key:',
+        error.message,
+      );
+    }
+
+    // 12. Drop materialized column which is no longer needed
     try {
       // First drop the index on the materialized column if it exists
       await queryRunner.query(`
@@ -368,12 +395,10 @@ export class RedesignRecurringEvents1743371499235
       `${schema}.eventSeries`,
       'IDX_eventSeries_template_event_slug',
     );
-    await queryRunner.dropIndex(`${schema}.events`, 'IDX_events_series_id');
     await queryRunner.dropIndex(`${schema}.events`, 'IDX_events_series_slug');
 
     // Remove the added columns from events table
     await queryRunner.dropColumns(`${schema}.events`, [
-      'seriesId',
       'seriesSlug',
       'isRecurrenceException',
       'originalDate',

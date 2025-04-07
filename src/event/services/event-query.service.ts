@@ -121,7 +121,7 @@ export class EventQueryService {
     }
 
     // If the event is part of a series, return it immediately without additional processing
-    if (event.seriesId) {
+    if (event.seriesSlug) {
       return event;
     }
 
@@ -957,7 +957,7 @@ export class EventQueryService {
     }
 
     // If the event is part of a series, it's already handled by EventSeriesOccurrenceService
-    if (event.seriesId) {
+    if (event.seriesSlug) {
       return event;
     }
 

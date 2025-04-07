@@ -80,11 +80,49 @@ This document outlines the prioritized action items needed to complete the recur
    - Priority: High
    - Affected files: `event-series.service.ts`, `event.service.ts`
 
-6. when I use the create event button and fill in the form in the dialog, and publish, it creates an event that is not attached to the series, and then it creates the series with an event on the same date, with the same name, but it is in the series.  
+6. ✅ **Event Not Attaching to Series When Created**
+   - Issue: When using the create event button and filling in the form, the event is not automatically attached to the series
+   - Fix: Update frontend to call the addEventToSeries endpoint after event creation
+   - Priority: High
+   - Affected files: Frontend event creation component
+   - **Status**: Fixed by modifying the event creation flow to add the event to the series
 
-7. The recurrence has sunday and thursday in it... but only thursday select in the UI.
-8.  when I create a new event the event list behind it doesn't update.
-9.  
+7. ⚠️ **UI/Backend Mismatch in Day Selection**
+   - Issue: The recurrence has Sunday and Thursday in it but only Thursday shows as selected in the UI
+   - Fix: Ensure UI properly reflects all days in the recurrence rule
+   - Priority: Medium
+   - Affected files: Frontend recurrence component
+
+8. ✅ **Event List Not Refreshing After Creation**
+   - Issue: When creating a new event, the event list behind it doesn't update
+   - Fix: Update frontend to refresh the list after event creation
+   - Priority: Medium
+   - Affected files: Frontend event list component
+   - **Status**: Fixed by adding list refresh after event creation
+
+9. ⚠️ **Recurrence Rule Changes Not Affecting Generated Occurrences**
+   - Issue: Changing the recurrence rule doesn't update the pattern of generated occurrences
+   - Fix: Implement proper cache invalidation and recalculation of occurrences when recurrence rule changes
+   - Priority: High
+   - Affected files: `event-series-occurrence.service.ts`, `recurrence-pattern.service.ts`
+
+10. ⚠️ **Missing Human-Readable Recurrence Description**
+    - Issue: Need to display the recurrence pattern in plain English in the event template section
+    - Fix: Add a formatter to convert RecurrenceRule to human-readable text
+    - Priority: Medium
+    - Affected files: Need to create a new utility and integrate with frontend
+
+11. ⚠️ **Materialized Events Missing Template Images**
+    - Issue: When materializing an event from the event-series page, the event image from the template isn't copied
+    - Fix: Ensure all template properties, including images, are properly propagated to materialized occurrences
+    - Priority: High
+    - Affected files: `event-series-occurrence.service.ts`, template propagation logic
+
+12. ⚠️ **Redundant Series Relationship Fields**
+    - Issue: Events have both seriesId and seriesSlug, creating potential for inconsistency (we use seriesSlug everywhere)
+    - Fix: Create a migration to remove the seriesId field and related foreign key/index, keeping only seriesSlug
+    - Priority: Medium
+    - Affected files: Event entity, event repository, migration file needed
 
 ## Implementation Tasks
 
@@ -192,6 +230,9 @@ This document outlines the prioritized action items needed to complete the recur
    - Move occurrence generation to background jobs
    - Implement batch processing for ATProtocol operations
    - Add monitoring for long-running tasks
+   - Decouple Matrix chat room creation from event creation process
+   - Implement asynchronous queue for Matrix room creation to prevent blocking event APIs
+   - Add system-wide toggle for disabling Matrix integration during tests
 
 ## Technical Decisions Needed
 

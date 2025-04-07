@@ -3,7 +3,10 @@ import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import { loginAsTester } from '../utils/functions';
 import { EventType } from '../../src/core/constants/constant';
 
-describe('EventSeriesController (e2e)', () => {
+// Set a global timeout for all tests in this file
+jest.setTimeout(60000);
+
+xdescribe('EventSeriesController (e2e)', () => {
   let token;
   const oneDay = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 

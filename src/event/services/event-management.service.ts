@@ -38,6 +38,7 @@ import { trace } from '@opentelemetry/api';
 import { CreateEventAttendeeDto } from '../../event-attendee/dto/create-eventAttendee.dto';
 import { UpdateEventAttendeeDto } from '../../event-attendee/dto/update-eventAttendee.dto';
 import { EventSeriesService } from '../../event-series/services/event-series.service';
+import { EventSeriesEntity } from '../../event-series/infrastructure/persistence/relational/entities/event-series.entity';
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
 import { Not, IsNull } from 'typeorm';
 import { RecurrenceFrequency } from '../../event-series/interfaces/recurrence.interface';
@@ -352,12 +353,12 @@ export class EventManagementService {
     // Check if we need to update recurrence properties
     if (updateEventDto.recurrenceRule) {
       // If this is a new recurrence being added to a non-recurring event
-      if (!event.seriesId && !event.seriesSlug) {
+      if (!event.seriesSlug) {
         // Check if the event is already being processed for series creation
         const isProcessing = await this.eventRepository.findOne({
           where: {
             id: event.id,
-            seriesId: Not(IsNull()),
+            seriesSlug: Not(IsNull()),
           },
         });
 
@@ -367,8 +368,8 @@ export class EventManagementService {
           return this.update(slug, updateEventDto, userId);
         }
 
-        // Check if event already has a series ID or slug to prevent loops
-        if (event.seriesId || event.seriesSlug) {
+        // Check if event already has a series slug to prevent loops
+        if (event.seriesSlug) {
           this.logger.log(
             `Event ${slug} already has a series, skipping series creation`,
           );
@@ -386,7 +387,6 @@ export class EventManagementService {
 
         // Update the original event to be the first occurrence of the series
         const updatedEvent = this.eventRepository.merge(event, {
-          seriesId: series.id,
           seriesSlug: series.slug,
           // Keep the original event name and other properties
           name: event.name,
@@ -599,32 +599,52 @@ export class EventManagementService {
     // Delete related event attendees
     await this.eventAttendeeService.deleteEventAttendees(event.id);
 
-    // Clean up occurrences if this is a recurring event
-    if (event.series) {
+    // If this event is part of a series, update the series exceptions
+    if (event.seriesSlug) {
       try {
         this.logger.log(
-          `Cleaning up occurrences for recurring event ${event.id}`,
+          `Adding deleted event date to series exceptions: ${event.id}`,
         );
 
-        // Find all events that belong to this series except the current one
-        const [events] = await this.findEventsBySeriesId(event.series.id);
-        const occurrencesToDelete = events.filter(
-          (occurrence) => occurrence.id !== event.id,
-        );
+        // Find the series either by slug
+        let series: EventSeriesEntity | null = null;
 
-        // Delete each occurrence
-        let deletedCount = 0;
-        for (const occurrence of occurrencesToDelete) {
-          await this.eventRepository.remove(occurrence);
-          deletedCount++;
+        if (event.series) {
+          series = event.series;
+        } else if (event.seriesSlug) {
+          series = await this.eventSeriesService.findBySlug(event.seriesSlug);
         }
 
-        this.logger.log(
-          `Deleted ${deletedCount} occurrences of event ${event.slug} (ID: ${event.id})`,
-        );
+        if (series && event.startDate) {
+          // Get the event's date string
+          const exceptionDate = new Date(event.startDate).toISOString();
+
+          // Ensure the series has an exceptions array
+          if (!series.recurrenceExceptions) {
+            series.recurrenceExceptions = [];
+          }
+
+          // Add the date to the exceptions if not already there
+          if (!series.recurrenceExceptions.includes(exceptionDate)) {
+            series.recurrenceExceptions.push(exceptionDate);
+
+            // Save the updated series with the new exception
+            const dataSource =
+              await this.tenantConnectionService.getTenantConnection(
+                this.request.tenantId,
+              );
+            const eventSeriesRepository =
+              dataSource.getRepository(EventSeriesEntity);
+            await eventSeriesRepository.save(series);
+
+            this.logger.log(
+              `Added ${exceptionDate} to exceptions for series ${series.id}`,
+            );
+          }
+        }
       } catch (error) {
         this.logger.error(
-          `Error cleaning up occurrences for event ${event.id}: ${error.message}`,
+          `Error updating series exceptions for event ${event.id}: ${error.message}`,
           error.stack,
         );
         // Continue with event deletion despite error
@@ -739,7 +759,7 @@ export class EventManagementService {
       const updatedEvent = await this.update(slug, updateEventDto, userId);
 
       // If this is a series occurrence and need to mark as modified, we already have the needed data
-      if (event.seriesId && markAsModified) {
+      if (event.seriesSlug && markAsModified) {
         // No need to set materialized flag since it's computed, not stored
 
         // Reload the event with the updated fields
@@ -760,7 +780,7 @@ export class EventManagementService {
           {
             context: {
               eventId: event.id,
-              seriesId: event.seriesId,
+              seriesSlug: event.seriesSlug,
               userId,
             },
           },
@@ -792,19 +812,23 @@ export class EventManagementService {
     try {
       await this.initializeRepository();
 
-      const page = options?.page || 1;
-      const limit = options?.limit || 10;
-      const skip = (page - 1) * limit;
-
-      const [events, total] = await this.eventRepository.findAndCount({
-        where: { seriesId },
-        skip,
-        take: limit,
-        order: { startDate: 'ASC' },
-        relations: ['user', 'group', 'categories', 'image'],
+      // First, find the series to get its slug
+      const dataSource = await this.tenantConnectionService.getTenantConnection(
+        this.request.tenantId,
+      );
+      const seriesRepository = dataSource.getRepository(EventSeriesEntity);
+      const series = await seriesRepository.findOne({
+        where: { id: seriesId },
       });
 
-      return [events, total];
+      if (!series) {
+        throw new NotFoundException(
+          `Event series with ID ${seriesId} not found`,
+        );
+      }
+
+      // Use the slug to find events using the existing method
+      return this.findEventsBySeriesSlug(series.slug, options);
     } catch (error) {
       this.logger.error(
         `Error finding events by seriesId: ${error.message}`,

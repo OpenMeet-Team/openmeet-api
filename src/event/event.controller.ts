@@ -44,12 +44,15 @@ import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
 import { ICalendarService } from './services/ical/ical.service';
 import { EventSeriesOccurrenceService } from '../event-series/services/event-series-occurrence.service';
+import { Logger } from '@nestjs/common';
 
 @ApiTags('Events')
 @Controller('events')
 @ApiBearerAuth()
 @UseGuards(JWTAuthGuard)
 export class EventController {
+  private readonly logger = new Logger(EventController.name);
+
   constructor(
     private readonly eventManagementService: EventManagementService,
     private readonly eventQueryService: EventQueryService,
@@ -362,5 +365,33 @@ export class EventController {
       slug,
       date || new Date().toISOString(),
     );
+  }
+
+  @Public()
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
+  @Get('series/:seriesSlug/events')
+  @ApiOperation({ summary: 'Get events by series slug' })
+  @Trace('event.getEventsBySeries')
+  async getEventsBySeries(
+    @Param('seriesSlug') seriesSlug: string,
+    @Query() pagination: PaginationDto,
+    @Req() _req,
+  ): Promise<EventEntity[]> {
+    try {
+      this.logger.log(`Getting events for series ${seriesSlug}`);
+
+      const [events] = await this.eventManagementService.findEventsBySeriesSlug(
+        seriesSlug,
+        { page: +pagination.page || 1, limit: +pagination.limit || 10 },
+      );
+
+      return events;
+    } catch (error) {
+      this.logger.error(
+        `Error getting events for series ${seriesSlug}: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
   }
 }

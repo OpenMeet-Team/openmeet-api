@@ -149,7 +149,6 @@ export class EventSeriesService {
             await this.eventManagementService.update(
               templateSlugToLink,
               {
-                seriesId: savedSeries.id,
                 seriesSlug: savedSeries.slug,
               },
               userId,
@@ -228,9 +227,9 @@ export class EventSeriesService {
       );
 
       // Check if the event is already part of a series
-      if (event.seriesId) {
+      if (event.seriesSlug) {
         this.logger.error(
-          `[Promote Debug] Event ${eventSlug} is already part of series ${event.seriesId}`,
+          `[Promote Debug] Event ${eventSlug} is already part of series ${event.seriesSlug}`,
         );
         throw new BadRequestException(
           `Event ${eventSlug} is already part of a series`,
@@ -278,7 +277,7 @@ export class EventSeriesService {
       }
 
       this.logger.debug(
-        `[Promote Debug] Event ${eventSlug} ready for linking. Current seriesId: ${eventToLink.seriesId}, seriesSlug: ${eventToLink.seriesSlug}`,
+        `[Promote Debug] Event ${eventSlug} ready for linking. Current seriesSlug: ${eventToLink.seriesSlug}`,
       );
 
       try {
@@ -292,13 +291,12 @@ export class EventSeriesService {
           await this.tenantConnectionService.getTenantConnection(tenantId);
         const eventRepository = dataSource.getRepository(EventEntity);
 
-        // Update event directly with seriesId and seriesSlug
+        // Update event directly with seriesSlug
         // We need a full entity to update with TypeORM
         const eventToUpdate = await eventRepository.findOne({
           where: { id: eventToLink.id },
         });
         if (eventToUpdate) {
-          eventToUpdate.seriesId = savedSeries.id;
           eventToUpdate.seriesSlug = savedSeries.slug;
           // isRecurring property isn't actually on the entity, it was part of a DTO
           await eventRepository.save(eventToUpdate);
@@ -651,7 +649,7 @@ export class EventSeriesService {
         for (const event of events) {
           await this.eventManagementService.update(
             event.slug,
-            { seriesId: undefined, seriesSlug: undefined },
+            { seriesSlug: undefined },
             userId,
           );
         }
@@ -887,7 +885,7 @@ export class EventSeriesService {
       );
     }
 
-    // Create the event with materialized and seriesId set
+    // Create the event with materialized and seriesSlug set
     const event = await this.eventManagementService.create(
       {
         ...eventData,
@@ -943,7 +941,7 @@ export class EventSeriesService {
       }
 
       // Check if the event is already part of a series
-      if (event.seriesId) {
+      if (event.seriesSlug) {
         throw new BadRequestException(
           `Event ${eventSlug} is already part of a series`,
         );
@@ -957,14 +955,12 @@ export class EventSeriesService {
       }
 
       // Associate the event with the series
-      event.seriesId = series.id;
       event.seriesSlug = series.slug;
 
       // Save the updated event
       const updatedEvent = await this.eventManagementService.update(
         event.slug,
         {
-          seriesId: series.id,
           seriesSlug: series.slug,
         },
         userId,

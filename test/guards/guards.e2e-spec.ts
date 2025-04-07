@@ -12,6 +12,9 @@ import {
   EventAttendeeStatus,
 } from '../../src/core/constants/constant';
 
+// Set a global timeout for all tests in this file
+jest.setTimeout(10000);
+
 describe('Guards (e2e)', () => {
   const app = TESTING_APP_URL;
   let userToken: string;

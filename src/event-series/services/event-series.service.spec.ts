@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { EventSeriesService } from './event-series.service';
 import { RecurrencePatternService } from './recurrence-pattern.service';
 import { EventManagementService } from '../../event/services/event-management.service';
-import { Repository } from 'typeorm';
 import { EventSeriesEntity } from '../infrastructure/persistence/relational/entities/event-series.entity';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { RecurrenceFrequency } from '../interfaces/recurrence.interface';
@@ -16,7 +15,7 @@ describe('EventSeriesService', () => {
   let service: EventSeriesService;
   let mockRecurrencePatternService: jest.Mocked<RecurrencePatternService>;
   let mockEventManagementService: jest.Mocked<EventManagementService>;
-  let mockEventSeriesRepository: jest.Mocked<Repository<EventSeriesEntity>>;
+  let mockEventSeriesRepository: any;
   let mockEventQueryService: jest.Mocked<any>;
   let mockTenantConnectionService: jest.Mocked<TenantConnectionService>;
 
@@ -47,7 +46,10 @@ describe('EventSeriesService', () => {
         updatedAt: new Date(),
         ulid: 'test-ulid-123456789',
         description: 'Test Description',
-        recurrenceRule: {},
+        recurrenceRule: {
+          frequency: RecurrenceFrequency.DAILY,
+          interval: 1,
+        },
         recurrenceExceptions: [],
         templateEventSlug: 'test-event',
         matrixRoomId: undefined,
@@ -58,7 +60,7 @@ describe('EventSeriesService', () => {
         sourceUrl: null,
         sourceData: null,
         templateEvent: null,
-      } as any),
+      }),
       findByIds: jest.fn(),
       findById: jest.fn().mockResolvedValue({
         id: 1,
@@ -68,7 +70,10 @@ describe('EventSeriesService', () => {
         updatedAt: new Date(),
         ulid: 'test-ulid-123456789',
         description: 'Test Description',
-        recurrenceRule: {},
+        recurrenceRule: {
+          frequency: RecurrenceFrequency.DAILY,
+          interval: 1,
+        },
         recurrenceExceptions: [],
         templateEventSlug: 'test-event',
         matrixRoomId: undefined,
@@ -79,8 +84,9 @@ describe('EventSeriesService', () => {
         sourceUrl: null,
         sourceData: null,
         templateEvent: null,
-      } as any),
-    } as any;
+      }),
+      findBySlug: jest.fn(),
+    };
 
     mockEventQueryService = {
       findEventBySlug: jest.fn(),
@@ -156,7 +162,10 @@ describe('EventSeriesService', () => {
         updatedAt: new Date(),
         ulid: 'test-ulid-123456789',
         description: 'Test Description',
-        recurrenceRule: {},
+        recurrenceRule: {
+          frequency: RecurrenceFrequency.DAILY,
+          interval: 1,
+        },
         recurrenceExceptions: [],
         matrixRoomId: undefined,
         user: { id: 1 },
@@ -206,7 +215,10 @@ describe('EventSeriesService', () => {
         updatedAt: new Date(),
         ulid: 'test-ulid-123456789',
         description: 'Test Description',
-        recurrenceRule: {},
+        recurrenceRule: {
+          frequency: RecurrenceFrequency.DAILY,
+          interval: 1,
+        },
         recurrenceExceptions: [],
         templateEventSlug: 'test-event',
         matrixRoomId: undefined,
@@ -266,6 +278,110 @@ describe('EventSeriesService', () => {
       // so we don't need to verify them
     });
 
-    // Add tests for error handling and edge cases
+    it('should update recurrence rule and affect pattern generation', async () => {
+      const seriesSlug = 'test-series';
+      const series = {
+        id: 1,
+        slug: seriesSlug,
+        name: 'Test Series',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ulid: 'test-ulid-123456789',
+        description: 'Test Description',
+        recurrenceRule: {
+          frequency: RecurrenceFrequency.DAILY,
+          interval: 1,
+        },
+        recurrenceExceptions: [],
+        templateEventSlug: 'test-event',
+        matrixRoomId: undefined,
+        user: { id: 1 },
+        events: [],
+        sourceType: null,
+        sourceId: null,
+        sourceUrl: null,
+        sourceData: null,
+        templateEvent: null,
+      };
+
+      // Generate some initial occurrences with DAILY frequency
+      const initialOccurrences = [
+        '2025-01-01',
+        '2025-01-02',
+        '2025-01-03',
+        '2025-01-04',
+        '2025-01-05',
+      ];
+
+      // Then generate updated occurrences with weekday pattern
+      const updatedOccurrences = [
+        '2025-01-01', // Wednesday (in JS: day 2)
+        '2025-01-03', // Friday (in JS: day 4)
+        '2025-01-06', // Monday (in JS: day 0)
+        '2025-01-08', // Wednesday (in JS: day 2)
+        '2025-01-10', // Friday (in JS: day 4)
+      ];
+
+      // Mock the pattern service to return different occurrences before and after update
+      mockRecurrencePatternService.generateOccurrences
+        .mockImplementationOnce(() => initialOccurrences)
+        .mockImplementationOnce(() => updatedOccurrences);
+
+      // Mock findBySlug to return the series for our test
+      jest.spyOn(service, 'findBySlug').mockResolvedValue(series as any);
+
+      // Mock repository save to return the updated series
+      const updatedSeries = {
+        ...series,
+        recurrenceRule: {
+          frequency: RecurrenceFrequency.WEEKLY,
+          interval: 1,
+          byweekday: ['MO', 'WE', 'FR'],
+        },
+      };
+      mockEventSeriesRepository.save.mockResolvedValue(updatedSeries as any);
+      mockEventSeriesRepository.findOneBy.mockResolvedValue(
+        updatedSeries as any,
+      );
+
+      // Need to mock findById because it's also used in the update function
+      mockEventSeriesRepository.findById = jest
+        .fn()
+        .mockResolvedValue(updatedSeries as any);
+
+      // Update the series to use WEEKLY recurrence with specific days
+      const updateEventSeriesDto: UpdateEventSeriesDto = {
+        recurrenceRule: {
+          frequency: RecurrenceFrequency.WEEKLY,
+          interval: 1,
+          byweekday: ['MO', 'WE', 'FR'],
+        },
+      };
+
+      // Perform the update
+      const result = await service.update(seriesSlug, updateEventSeriesDto, 1);
+
+      // Verify the series was updated correctly
+      expect(result.recurrenceRule).toEqual(
+        updateEventSeriesDto.recurrenceRule,
+      );
+      expect(mockEventSeriesRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recurrenceRule: updateEventSeriesDto.recurrenceRule,
+        }),
+      );
+
+      // Verify that the patterns are different
+      expect(initialOccurrences).not.toEqual(updatedOccurrences);
+
+      // Verify the days in the pattern according to the recurrence rule (MO, WE, FR)
+      for (const dateStr of updatedOccurrences) {
+        const date = new Date(dateStr);
+        const day = date.getDay();
+        // In JS: 0 = Sunday, 1 = Monday, 2 = Tuesday, 3 = Wednesday, 4 = Thursday, 5 = Friday, 6 = Saturday
+        // For our recurrence rule with MO, WE, FR we expect days 0 (Sunday/Monday), 2 (Tuesday/Wednesday), 4 (Thursday/Friday)
+        expect([0, 2, 4]).toContain(day);
+      }
+    });
   });
 });

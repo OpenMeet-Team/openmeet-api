@@ -356,3 +356,229 @@ Several issues were identified during E2E testing that need investigation:
 - **Timezone/DST Specific Failures:** The `timezone-handling.e2e-spec.ts` suite shows specific errors (404, 422) when creating series or events around DST transitions. This requires a focused investigation into how dates near DST changes are handled during creation and recurrence generation.
 - **Incorrect Occurrence Count:** The `event-series.e2e-spec.ts` test `should create an event series and get its occurrences` fails because it receives 10 occurrences when expecting <= 5. The `/occurrences` endpoint might not be correctly limiting the count based on the `count` parameter or test setup, defaulting to 10.
 - **Event Linking on Promotion:** As noted previously, the original event is not reliably updated with `seriesId`/`seriesSlug` when promoted using `POST /api/event-series/create-from-event/:eventSlug`. 
+
+## UI Improvements Action Plan (2025-04-06)
+
+Several UI issues with the EventSeriesPage have been identified that need to be addressed:
+
+### 1. Event Deletion Behavior Fix
+
+- **Issue:** When deleting a single event from a series, the code is incorrectly deleting all occurrences in the series
+- **Resolution Status:** ✅ Fixed in the backend by modifying `EventManagementService.remove()` to only delete the specific event and update the series exceptions
+- **Changes Made:**
+  - Removed code that was deleting all series occurrences
+  - Added code to mark the deleted date as an exception in the series' `recurrenceExceptions` array
+  - Ensured proper access to `EventSeriesEntity` by adding necessary imports
+- **Verification:** The fix should be tested by creating a series, materializing multiple occurrences, and verifying that deleting one occurrence doesn't affect others
+
+### 2. Template Event Section Improvements
+
+- **Issue:** Template event section in the EventSeriesPage doesn't display the recurrence rule in plain English next to the date
+- **Action Plan:**
+  - Add recurrence description in human-readable format next to the template event date
+  - Use the `recurrenceDescription` field that's already available in the API response
+  - Example implementation:
+    ```html
+    <div class="template-event-section">
+      <h3>Template Event</h3>
+      <div class="event-date-time">{{formatDateTime(templateEvent.startDate)}}</div>
+      <div class="recurrence-pattern">{{eventSeries.recurrenceDescription}}</div>
+      <!-- Other template event details -->
+    </div>
+    ```
+
+### 3. Recurrence Rule Update Issues
+
+- **Issue:** When changing the recurrence rule for an event series, the list of occurrences doesn't update properly
+- **Action Plan:**
+  - After updating the series with a new recurrence rule, immediately refresh the occurrences list
+  - Ensure both materialized and non-materialized events are displayed in the timeline
+  - Implementation steps:
+    1. After successful series update API call, immediately call the occurrences endpoint
+    2. Update the occurrences list with the fresh data
+    3. Mark materialized (existing DB events) vs calculated future occurrences differently in the UI
+    ```typescript
+    // Example implementation
+    async updateSeriesAndRefresh(series, updates) {
+      await updateEventSeries(series.slug, updates);
+      // Immediately refresh occurrences after update
+      this.occurrences = await getSeriesOccurrences(series.slug, { 
+        includePast: this.includePastEvents,
+        count: 20 
+      });
+      this.refreshTimeline();
+    }
+    ```
+
+### 4. Visualization Improvements
+
+- **Issue:** It's difficult to distinguish between materialized and non-materialized events in the timeline
+- **Action Plan:**
+  - Use visual cues to distinguish different types of events:
+    - Materialized events (solid styling)
+    - Non-materialized future events (lighter/dashed styling)
+    - Template events (highlighted/bordered)
+    - Deleted/exception dates (strike-through or red indicator)
+  - Add tooltips explaining the event's status in the series
+  - Include indicators for edited one-off occurrences
+  - Example styles:
+    ```css
+    .event-occurrence {
+      /* Base styles */
+    }
+    .event-occurrence.materialized {
+      border: 2px solid var(--primary-color);
+      opacity: 1;
+    }
+    .event-occurrence.non-materialized {
+      border: 2px dashed var(--primary-color);
+      opacity: 0.8;
+    }
+    .event-occurrence.template {
+      background-color: rgba(var(--primary-rgb), 0.1);
+      border-width: 3px;
+    }
+    .event-occurrence.exception {
+      text-decoration: line-through;
+      opacity: 0.6;
+    }
+    ```
+
+### 5. Edit Rights Clarification
+
+- **Issue:** Edit button on event series page is only visible to people with rights to edit the template event, but this isn't clear to users
+- **Action Plan:**
+  - Add clear permission indicators in the UI to show what actions a user can take
+  - If a user doesn't have edit rights, show an explanatory message
+  - Consider separating "view series" and "edit series" permissions for more granular control
+
+### 6. Testing Requirements
+
+- Create comprehensive test cases for all these scenarios:
+  - Creating a new series and verifying all occurrences are displayed correctly
+  - Editing a single occurrence and verifying other occurrences aren't affected
+  - Deleting a single occurrence and verifying it's marked as an exception without affecting other events
+  - Updating a recurrence rule and verifying the occurrences list updates correctly
+  - Verifying permissions are properly respected for different user roles
+
+### Implementation Timeline
+
+- **Phase 1** (1-2 days): 
+  - ✅ Fix backend deletion behavior
+  - Add recurrence description to template event section
+  - Implement immediate refresh after recurrence rule changes
+  
+- **Phase 2** (2-3 days):
+  - Add visual differentiation between event types
+  - Improve permission indicators
+  - Add tooltips/helper text
+  
+- **Phase 3** (1-2 days):
+  - Comprehensive testing across all scenarios
+  - Documentation updates for series management
+  - UI/UX polish
+
+## Technical Details and Design Observations
+
+### Database Design
+
+The recurring events system underwent a significant redesign with migration `1743371499235-RedesignRecurringEvents`, which:
+
+1. Created a separate `eventSeries` table to store recurrence information
+2. Added `seriesId` and `seriesSlug` to events for associating events with their series
+3. Moved recurrence fields (`recurrenceRule`, `recurrenceExceptions`) from events to the series
+4. Added RFC 5545/7986 calendar properties to events (securityClass, priority, etc.)
+5. Removed the `materialized` column in favor of a more sophisticated relationship model
+6. Added bidirectional foreign keys between events and series tables
+
+This design fundamentally separates the concerns of:
+- Series metadata and recurrence pattern (in the eventSeries table)
+- Individual event properties (in the events table)
+
+### Design Choices and Tradeoffs
+
+1. **Dual Reference with ID and Slug**
+   - Events reference their series with both `seriesId` (numeric) and `seriesSlug` (human-readable)
+   - Pros: Makes URLs and APIs more user-friendly, allows for easy external linking
+   - Cons: Requires maintaining consistency between both reference types, adds complexity to queries
+   - Decision Notes: This dual approach was chosen to support frontend routing with slugs while maintaining efficient database relations with IDs
+
+2. **Template Event Pattern**
+   - Series stores a reference to a template event using `templateEventSlug`
+   - The template serves as the source of truth for properties of future occurrences
+   - Makes a clear distinction between the "pattern" (series) and the "template" (reference event)
+   - Enables "this and all future occurrences" updates by changing templates
+
+3. **Exceptions vs. Deletion Approach**
+   - When deleting a single occurrence, the date is added to `recurrenceExceptions` array in the series
+   - The event is permanently deleted from the database
+   - This means "deleted" events cannot be restored without re-materializing them
+   - Alternative considered but not implemented: Soft deletion that preserves the event record
+
+4. **Lazy Materialization**
+   - Events are only created in the database ("materialized") when explicitly requested
+   - This reduces database size by not pre-creating all possible occurrences
+   - Tradeoff: Requires additional computation and API calls when viewing future occurrences
+
+5. **Cascading Deletion Behavior**
+   - Series deletion automatically cascades to all related events
+   - Single event deletion does not affect the series or other events
+   - Supports both "delete just this occurrence" and "delete entire series" operations
+
+### Known Issues and Challenges
+
+1. **Event Deletion Bug**
+   - **Issue:** Prior to the fix on 2025-04-06, deleting a single event would erroneously delete all occurrences in a series
+   - **Root Cause:** The `remove()` method in `EventManagementService` had code that explicitly found and deleted all related occurrences
+   - **Fix Applied:** Modified to only delete the specific event and update exceptions list in the series
+   - **Lesson:** Series-event relationship management requires careful handling of cascading operations
+
+2. **Timezone Complications**
+   - Recurrence generation respects timezone but Date objects lose timezone info
+   - Integration with the iCalendar format requires special handling for timezone-aware dates
+   - DST transitions can cause occurrences to appear at different clock times
+   - Current approach: Store UTC dates in the database but preserve local time pattern when generating occurrences
+
+3. **Template Event Updates**
+   - When a series' recurrence rule changes, template events need to be reapplied
+   - The system doesn't automatically regenerate the visual list of occurrences in the UI
+   - The backend supports this by clearing and regenerating occurrences for major pattern changes
+
+4. **Update Propagation Complexity**
+   - Multiple code paths for updating series/events lead to potential inconsistencies
+   - `updateFutureOccurrences` method handles the "this and all future occurrences" case
+   - Single occurrence updates modify just that event
+   - Series updates may affect template properties but not materialized occurrences
+
+5. **Circular Dependencies**
+   - The code has several circular dependencies between services (e.g., EventManagementService ↔ EventSeriesService)
+   - These are handled with `forwardRef()` but make the code harder to understand and test
+   - Future refactoring should consider a more hierarchical service architecture
+
+### Implementation Patterns and Best Practices
+
+1. **EventSeriesOccurrenceService as a Facade**
+   - This service coordinates between event management and series management
+   - Provides a single point of entry for occurrence-related operations
+   - Handles materialization, listing, and date calculation in one place
+
+2. **Proper Exception Handling**
+   - Operations that might fail (materialization, date calculations) are wrapped in try/catch
+   - Specific error types (NotFoundException, BadRequestException) for different failure modes
+   - Detailed error logging with context information
+
+3. **Graceful Degradation**
+   - When template events are missing, the system attempts to recover by:
+     - Finding the most recent event in the series to use as a template
+     - Creating a minimal default template if no events exist
+     - Materializing placeholder events based on available information
+
+4. **iCalendar Integration**
+   - Full support for iCalendar format (RFC 5545/7986)
+   - Proper handling of recurrence rules and exceptions
+   - Conversion of internal recurrence rule format to RRULE strings
+
+5. **Date Formatting Consistency**
+   - Dates stored as ISO strings in the database
+   - Timezone conversions performed at the edges (API in/out)
+   - Consistent use of date-fns-tz for timezone operations

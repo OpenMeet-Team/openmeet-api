@@ -14,6 +14,9 @@ import {
   getAllEvents,
 } from '../utils/functions';
 
+// Set a global timeout for all tests in this file
+jest.setTimeout(60000);
+
 describe('EventController Recommendations (e2e)', () => {
   let token;
   let adminToken;

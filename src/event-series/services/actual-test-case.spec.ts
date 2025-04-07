@@ -81,7 +81,7 @@ describe('Actual Test Case for Timezone Issue', () => {
         { timeZone: 'America/New_York' },
       );
 
-      console.log('\nGenerated occurrences:');
+      //   console.log('\nGenerated occurrences:');
       occurrences.forEach((occurrenceStr, index) => {
         const occurrence = new Date(occurrenceStr);
         const localTime = formatInTimeZone(
@@ -89,9 +89,9 @@ describe('Actual Test Case for Timezone Issue', () => {
           'America/New_York',
           'HH:mm',
         );
-        console.log(
-          `Occurrence ${index}: ${occurrence.toISOString()} -> ${localTime} America/New_York`,
-        );
+        // console.log(
+        //   `Occurrence ${index}: ${occurrence.toISOString()} -> ${localTime} America/New_York`,
+        // );
 
         // For debugging, we'll pass these tests even if they're wrong
         // Just to collect the data

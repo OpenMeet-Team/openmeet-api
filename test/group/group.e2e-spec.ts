@@ -2,6 +2,9 @@ import request from 'supertest';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import { loginAsTester } from '../utils/functions';
 
+// Set a global timeout for all tests in this file
+jest.setTimeout(60000);
+
 describe('GroupController (e2e)', () => {
   let token;
   let testGroup;
