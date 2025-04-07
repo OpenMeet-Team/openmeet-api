@@ -636,11 +636,25 @@ export class EventSeriesService {
       }
 
       if (deleteEvents) {
-        // Delete all events in the series
+        // Get all events in the series
         const [events] =
           await this.eventManagementService.findEventsBySeriesSlug(slug);
+
+        // Use proper event deletion through the event management service
+        // which handles proper chat room cleanup
         for (const event of events) {
-          await this.eventManagementService.remove(event.slug);
+          try {
+            // Use the eventManagementService.remove method which properly handles
+            // chat room cleanup through discussionService.cleanupEventChatRooms
+            await this.eventManagementService.remove(event.slug);
+            this.logger.log(`Successfully deleted event ${event.slug}`);
+          } catch (eventDeleteError) {
+            this.logger.error(
+              `Error deleting event ${event.slug}: ${eventDeleteError.message}`,
+              eventDeleteError.stack,
+            );
+            // Continue with other events despite error
+          }
         }
       } else {
         // Remove series association from events

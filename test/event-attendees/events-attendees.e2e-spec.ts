@@ -6,7 +6,6 @@ import {
   TESTING_TENANT_ID,
 } from '../utils/constants';
 import { EventType } from '../../src/core/constants/constant';
-import { loginAsTester, createEvent } from '../utils/functions';
 
 // Set a global timeout for this entire test file
 jest.setTimeout(60000);

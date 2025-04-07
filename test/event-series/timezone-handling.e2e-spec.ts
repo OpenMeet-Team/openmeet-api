@@ -11,7 +11,7 @@ import { formatInTimeZone } from 'date-fns-tz';
 // Set a global timeout for all tests in this file
 jest.setTimeout(120000);
 
-xdescribe('Timezone Handling in Recurring Events (e2e)', () => {
+describe('Timezone Handling in Recurring Events (e2e)', () => {
   let token: string;
 
   beforeAll(async () => {
