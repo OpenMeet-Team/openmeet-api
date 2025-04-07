@@ -315,11 +315,11 @@ describe('EventSeriesService', () => {
 
       // Then generate updated occurrences with weekday pattern
       const updatedOccurrences = [
-        '2025-01-01', // Wednesday (in JS: day 2)
-        '2025-01-03', // Friday (in JS: day 4)
-        '2025-01-06', // Monday (in JS: day 0)
-        '2025-01-08', // Wednesday (in JS: day 2)
-        '2025-01-10', // Friday (in JS: day 4)
+        '2025-01-01T12:00:00.000Z', // Wednesday
+        '2025-01-03T12:00:00.000Z', // Friday
+        '2025-01-06T12:00:00.000Z', // Monday
+        '2025-01-08T12:00:00.000Z', // Wednesday
+        '2025-01-10T12:00:00.000Z', // Friday
       ];
 
       // Mock the pattern service to return different occurrences before and after update
@@ -376,11 +376,12 @@ describe('EventSeriesService', () => {
 
       // Verify the days in the pattern according to the recurrence rule (MO, WE, FR)
       for (const dateStr of updatedOccurrences) {
+        // Using UTC date to ensure consistent day across environments
         const date = new Date(dateStr);
-        const day = date.getDay();
+        const day = date.getUTCDay();
         // In JS: 0 = Sunday, 1 = Monday, 2 = Tuesday, 3 = Wednesday, 4 = Thursday, 5 = Friday, 6 = Saturday
-        // For our recurrence rule with MO, WE, FR we expect days 0 (Sunday/Monday), 2 (Tuesday/Wednesday), 4 (Thursday/Friday)
-        expect([0, 2, 4]).toContain(day);
+        // For our recurrence rule with MO, WE, FR we expect days 1 (Monday), 3 (Wednesday), 5 (Friday)
+        expect([1, 3, 5]).toContain(day);
       }
     });
   });
