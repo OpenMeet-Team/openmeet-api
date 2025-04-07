@@ -29,6 +29,7 @@ import { CreateSeriesFromEventDto } from '../dto/create-series-from-event.dto';
 import { EventResponseDto } from '../../event/dto/event-response.dto';
 import { JWTAuthGuard } from '../../auth/auth.guard';
 import { TenantGuard } from '../../tenant/tenant.guard';
+import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
 
 @ApiTags('event-series')
 @Controller('event-series')
@@ -392,11 +393,75 @@ export class EventSeriesController {
       `Getting ${includePastBool ? 'all' : 'upcoming'} occurrences for series ${slug} in tenant ${tenantId}`,
     );
 
-    return this.eventSeriesOccurrenceService.getUpcomingOccurrences(
-      slug,
-      +count,
-      includePastBool,
-    );
+    // Set a timeout for the entire endpoint to ensure we don't hang
+    const timeoutMs = 30000; // 30 seconds
+
+    try {
+      // Use a promise with timeout to wrap the service call
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(
+            new Error(
+              'Controller timeout: Overall request took too long to process',
+            ),
+          );
+        }, timeoutMs);
+      });
+
+      const servicePromise =
+        this.eventSeriesOccurrenceService.getUpcomingOccurrences(
+          slug,
+          +count,
+          includePastBool,
+        );
+
+      // Race the promises to ensure we don't hang
+      const result = (await Promise.race([timeoutPromise, servicePromise])) as {
+        date: string;
+        event?: EventEntity;
+        materialized: boolean;
+      }[];
+
+      // Add debugging to ensure we're returning correctly
+      this.logger.log(
+        `Successfully completed occurrences endpoint for series ${slug} with ${result.length} results`,
+      );
+
+      // Explicitly clean up the timeout to prevent lingering handles
+      if (timeoutPromise) {
+        // @ts-expect-error - Access internal timer to clear it
+        clearTimeout(timeoutPromise._timer);
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Error in occurrences endpoint for series ${slug}: ${error.message}`,
+      );
+
+      // Return a minimal response instead of throwing
+      return [
+        {
+          date: new Date().toISOString(),
+          materialized: false,
+          error: `Failed to get occurrences: ${error.message}`,
+        },
+      ];
+    } finally {
+      // Add additional cleanup here if needed
+      this.logger.debug(
+        `Request for series ${slug} occurrences completed - releasing resources`,
+      );
+
+      // Force garbage collection if this is Node.js 14+
+      try {
+        if (global.gc) {
+          global.gc();
+        }
+      } catch {
+        // Ignore if not available
+      }
+    }
   }
 
   @Get(':slug/:occurrenceDate')

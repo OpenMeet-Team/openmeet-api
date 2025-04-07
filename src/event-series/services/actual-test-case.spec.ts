@@ -82,20 +82,9 @@ describe('Actual Test Case for Timezone Issue', () => {
       );
 
       //   console.log('\nGenerated occurrences:');
-      occurrences.forEach((occurrenceStr, index) => {
-        const occurrence = new Date(occurrenceStr);
-        const localTime = formatInTimeZone(
-          occurrence,
-          'America/New_York',
-          'HH:mm',
-        );
-        // console.log(
-        //   `Occurrence ${index}: ${occurrence.toISOString()} -> ${localTime} America/New_York`,
-        // );
-
-        // For debugging, we'll pass these tests even if they're wrong
-        // Just to collect the data
-        // expect(localTime).toBe('10:00');
+      occurrences.forEach((_occurrenceStr, _index) => {
+        // Remove unused variable
+        // console.log(`  ${formatISO(occurrence)} -> ${localTime}`);
       });
 
       // Try direct conversion of the first occurrence

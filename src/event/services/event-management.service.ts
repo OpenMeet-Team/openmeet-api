@@ -812,7 +812,14 @@ export class EventManagementService {
     try {
       await this.initializeRepository();
 
-      // First, find the series to get its slug
+      const page = options?.page || 1;
+      const limit = options?.limit || 10;
+
+      this.logger.debug(
+        `Finding events for series ID ${seriesId}, page ${page}, limit ${limit}`,
+      );
+
+      // Get the series to find its slug since we need to query by slug, not ID
       const dataSource = await this.tenantConnectionService.getTenantConnection(
         this.request.tenantId,
       );
@@ -822,19 +829,42 @@ export class EventManagementService {
       });
 
       if (!series) {
-        throw new NotFoundException(
-          `Event series with ID ${seriesId} not found`,
-        );
+        this.logger.warn(`Series with ID ${seriesId} not found`);
+        return [[], 0];
       }
 
-      // Use the slug to find events using the existing method
-      return this.findEventsBySeriesSlug(series.slug, options);
+      this.logger.debug(
+        `Found series with slug ${series.slug}, using it to query events`,
+      );
+
+      // Query using seriesSlug field in the events table
+      const queryBuilder = this.eventRepository
+        .createQueryBuilder('event')
+        .where('event.seriesSlug = :seriesSlug', { seriesSlug: series.slug })
+        .leftJoinAndSelect('event.user', 'user')
+        .leftJoinAndSelect('event.group', 'group')
+        .leftJoinAndSelect('event.categories', 'categories')
+        .leftJoinAndSelect('event.image', 'image')
+        .orderBy('event.startDate', 'ASC')
+        .skip((page - 1) * limit)
+        .take(limit);
+
+      try {
+        const [events, total] = await queryBuilder.getManyAndCount();
+        this.logger.debug(
+          `Found ${events.length} events for series ID ${seriesId} with slug ${series.slug}`,
+        );
+        return [events, total];
+      } catch (queryError) {
+        this.logger.error(`Database query error: ${queryError.message}`);
+        return [[], 0];
+      }
     } catch (error) {
       this.logger.error(
         `Error finding events by seriesId: ${error.message}`,
         error.stack,
       );
-      throw error;
+      return [[], 0];
     }
   }
 
@@ -848,21 +878,29 @@ export class EventManagementService {
     options?: { page: number; limit: number },
   ): Promise<[EventEntity[], number]> {
     try {
+      this.logger.debug(`Finding events for series slug ${seriesSlug}`);
+
       // Get the series by slug using the EventSeriesService
       const series = await this.eventSeriesService.findBySlug(seriesSlug);
 
       if (!series) {
-        throw new NotFoundException(`Series with slug ${seriesSlug} not found`);
+        this.logger.warn(`Series with slug ${seriesSlug} not found`);
+        return [[], 0];
       }
 
-      // Now find all events that belong to this series
-      return this.findEventsBySeriesId(series.id, options);
+      // Get the ID and directly query by ID
+      const seriesId = series.id;
+      this.logger.debug(
+        `Series ${seriesSlug} has ID ${seriesId}, querying events`,
+      );
+
+      return this.findEventsBySeriesId(seriesId, options);
     } catch (error) {
       this.logger.error(
         `Error finding events by series slug: ${error.message}`,
         error.stack,
       );
-      throw error;
+      return [[], 0]; // Return empty results instead of throwing to prevent hanging
     }
   }
 

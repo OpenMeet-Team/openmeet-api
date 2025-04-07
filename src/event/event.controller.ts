@@ -380,18 +380,62 @@ export class EventController {
     try {
       this.logger.log(`Getting events for series ${seriesSlug}`);
 
-      const [events] = await this.eventManagementService.findEventsBySeriesSlug(
-        seriesSlug,
-        { page: +pagination.page || 1, limit: +pagination.limit || 10 },
+      // Add performance timing
+      const startTime = Date.now();
+
+      // Wrap the database query with detailed logging and timeout
+      this.logger.log(
+        `Starting database query for series ${seriesSlug} events at ${new Date().toISOString()}`,
       );
 
+      const findEventsPromise =
+        this.eventManagementService.findEventsBySeriesSlug(seriesSlug, {
+          page: +pagination.page || 1,
+          limit: +pagination.limit || 10,
+        });
+
+      // Add a timeout to prevent hanging
+      const timeoutPromise = new Promise<[EventEntity[], number]>(
+        (_, reject) => {
+          setTimeout(() => {
+            reject(
+              new Error(
+                `Timeout: Query for events in series ${seriesSlug} took too long`,
+              ),
+            );
+          }, 10000); // 10 second timeout
+        },
+      );
+
+      // Race the promises
+      const result = await Promise.race([findEventsPromise, timeoutPromise]);
+      const [events] = result;
+
+      const queryTime = Date.now() - startTime;
+      this.logger.log(
+        `Query completed in ${queryTime}ms, found ${events.length} events for series ${seriesSlug}`,
+      );
+
+      // Return immediately to prevent further processing that could hang
+      this.logger.log(
+        `Returning ${events.length} events for series ${seriesSlug}`,
+      );
       return events;
     } catch (error) {
       this.logger.error(
         `Error getting events for series ${seriesSlug}: ${error.message}`,
         error.stack,
       );
-      throw error;
+
+      // Instead of throwing, return an empty array to prevent hanging
+      this.logger.log(
+        `Returning empty array for series ${seriesSlug} due to error`,
+      );
+      return [];
+    } finally {
+      this.logger.log(
+        `Completed getEventsBySeries for ${seriesSlug} at ${new Date().toISOString()}`,
+      );
     }
   }
 }

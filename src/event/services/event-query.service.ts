@@ -622,68 +622,40 @@ export class EventQueryService {
       .limit(5)
       .getMany();
 
-    // Check first event to ensure image is present for debugging
-    if (events.length > 0) {
-      const firstEvent = events[0];
-      this.logger.debug(
-        `First event image before: ${firstEvent.image ? 'present' : 'missing'}`,
-      );
+    this.logger.debug(`Found ${events.length} featured events`);
 
-      // If the event has an image, log some details about it
-      if (firstEvent.image) {
-        this.logger.debug(
-          `First event image details: id=${firstEvent.image.id}, path=${JSON.stringify(firstEvent.image.path)}`,
-        );
-      }
+    // Debug first event image before processing
+    if (events.length > 0 && events[0].image) {
+      this.logger.debug(
+        `First event image before processing: id=${events[0].image.id}, path type=${typeof events[0].image.path}`,
+      );
     }
 
-    const eventsWithCounts = (await Promise.all(
-      events.map(async (event) => ({
-        ...event,
-        attendeesCount:
+    // Step 1: Add attendee counts
+    const eventsWithCounts = await Promise.all(
+      events.map(async (event) => {
+        event.attendeesCount =
           await this.eventAttendeeService.showConfirmedEventAttendeesCount(
             event.id,
-          ),
-      })),
-    )) as EventEntity[];
+          );
+        return event;
+      }),
+    );
 
-    // Add recurrence descriptions
-    let processedEvents = eventsWithCounts.map((event) =>
+    // Step 2: Use the improved addRecurrenceInformation method
+    // which now handles serialization correctly
+    const processedEvents = eventsWithCounts.map((event) =>
       this.addRecurrenceInformation(event),
     );
 
-    // Transform all images to ensure proper URL generation - exactly like in showAllEvents
-    processedEvents = processedEvents.map((event) => {
-      if (
-        event.image &&
-        typeof event.image.path === 'object' &&
-        Object.keys(event.image.path).length === 0
-      ) {
-        this.logger.debug(
-          `Transforming empty object image path for event ${event.id}`,
-        );
-        // Use instanceToPlain to force the Transform decorator to run
-        event.image = instanceToPlain(event.image) as any;
-        this.logger.debug(
-          `Path after transformation: ${event.image ? typeof event.image.path : 'image is undefined'}`,
-        );
-      }
-      return event;
-    });
-
-    // Check an event after transformation for debugging
-    if (processedEvents.length > 0) {
-      const firstEvent = processedEvents[0];
+    // Debug final result
+    if (processedEvents.length > 0 && processedEvents[0].image) {
       this.logger.debug(
-        `First event image after: ${firstEvent.image ? 'present' : 'missing'}`,
+        `First event image after processing: path type=${typeof processedEvents[0].image.path}`,
       );
-
-      // Log image details again
-      if (firstEvent.image) {
-        this.logger.debug(
-          `First event image details after: path=${JSON.stringify(firstEvent.image.path)}`,
-        );
-      }
+      this.logger.debug(
+        `Image path sample: ${JSON.stringify(processedEvents[0].image.path).substring(0, 50)}...`,
+      );
     }
 
     return processedEvents;
@@ -776,8 +748,9 @@ export class EventQueryService {
     await this.initializeRepository();
     const events = await this.eventRepository
       .createQueryBuilder('event')
-      .leftJoin('event.attendees', 'attendee')
+      .leftJoinAndSelect('event.attendees', 'attendee')
       .leftJoinAndSelect('event.image', 'image')
+      .leftJoinAndSelect('attendee.user', 'user')
       .where('attendee.user.id = :userId', { userId })
       .andWhere('event.startDate > :now', { now: new Date() })
       .andWhere('event.status = :status', { status: EventStatus.Published })
@@ -785,68 +758,65 @@ export class EventQueryService {
       .limit(5)
       .getMany();
 
-    // Debug first event image
-    if (events.length > 0) {
-      const firstEvent = events[0];
-      this.logger.debug(
-        `First user event image before: ${firstEvent.image ? 'present' : 'missing'}`,
-      );
-
-      // If the event has an image, log details
-      if (firstEvent.image) {
-        this.logger.debug(
-          `First user event image details: id=${firstEvent.image.id}, path=${JSON.stringify(firstEvent.image.path)}`,
-        );
-      }
-    }
-
-    const eventsWithCounts = (await Promise.all(
-      events.map(async (event) => ({
-        ...event,
-        attendeesCount:
-          await this.eventAttendeeService.showConfirmedEventAttendeesCount(
-            event.id,
-          ),
-      })),
-    )) as EventEntity[];
-
-    // Add recurrence descriptions
-    let processedEvents = eventsWithCounts.map((event) =>
-      this.addRecurrenceInformation(event),
+    this.logger.debug(
+      `Found ${events.length} upcoming events for user ${userId}`,
     );
 
-    // Transform all images - exactly like in showAllEvents method
-    processedEvents = processedEvents.map((event) => {
-      if (
-        event.image &&
-        typeof event.image.path === 'object' &&
-        Object.keys(event.image.path).length === 0
-      ) {
-        this.logger.debug(
-          `Transforming empty object image path for user event ${event.id}`,
-        );
-        // Use instanceToPlain to force the Transform decorator to run
-        event.image = instanceToPlain(event.image) as any;
-        this.logger.debug(
-          `User event path after transformation: ${event.image ? typeof event.image.path : 'image is undefined'}`,
-        );
+    // Debug first event image
+    if (events.length > 0 && events[0].image) {
+      this.logger.debug(
+        `First event image before processing: id=${events[0].image.id}, path type=${typeof events[0].image.path}`,
+      );
+    }
+
+    // Step 1: Add attendee counts to all events
+    const eventsWithCounts = await Promise.all(
+      events.map(async (event) => {
+        event.attendeesCount =
+          await this.eventAttendeeService.showConfirmedEventAttendeesCount(
+            event.id,
+          );
+        return event;
+      }),
+    );
+
+    // Step 2: Serialize events first, then add recurrence info (following Attempt 10)
+    // This is the key to fixing the issue - serialize first, then modify
+    const processedEvents = eventsWithCounts.map((event) => {
+      // First, serialize the entire event (which correctly processes the image path)
+      const plainEvent = instanceToPlain(event);
+
+      // Now, add recurrence information to the already serialized plain object
+      if (!event.seriesSlug) {
+        const eventWithRecurrence = event as any;
+        if (
+          eventWithRecurrence.isRecurring &&
+          eventWithRecurrence.recurrenceRule
+        ) {
+          const rule = eventWithRecurrence.recurrenceRule;
+          const freq = rule.frequency?.toLowerCase() || 'weekly';
+          const interval = rule.interval || 1;
+
+          let recurrenceDescription = `Every ${interval > 1 ? interval : ''} ${freq}`;
+          if (interval > 1) {
+            recurrenceDescription += freq.endsWith('s') ? '' : 's';
+          }
+
+          plainEvent.recurrenceDescription = recurrenceDescription;
+        }
       }
-      return event;
+
+      return plainEvent as unknown as EventEntity; // Cast back to EventEntity for TypeScript
     });
 
-    // Final check
-    if (processedEvents.length > 0) {
-      const firstEvent = processedEvents[0];
+    // Debug final result
+    if (processedEvents.length > 0 && processedEvents[0].image) {
       this.logger.debug(
-        `First user event image after: ${firstEvent.image ? 'present' : 'missing'}`,
+        `First event image after processing: path type=${typeof processedEvents[0].image.path}`,
       );
-
-      // Log image details again
-      if (firstEvent.image) {
-        this.logger.debug(
-          `First user event image details after: path=${JSON.stringify(firstEvent.image.path)}`,
-        );
-      }
+      this.logger.debug(
+        `Image path value: ${JSON.stringify(processedEvents[0].image.path).substring(0, 50)}...`,
+      );
     }
 
     return processedEvents;

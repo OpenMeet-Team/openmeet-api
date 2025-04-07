@@ -262,16 +262,15 @@ describe('Timezone Fix', () => {
       console.log('\nCOMPARISON OF ORIGINAL VS FIXED IMPLEMENTATIONS:');
 
       // console.log('\nOriginal Implementation Results:');
-      originalOccurrences.forEach((occStr, idx) => {
-        const occ = new Date(occStr);
-        const localTime = formatInTimeZone(occ, 'America/New_York', 'HH:mm');
+      originalOccurrences.forEach((_occStr, _idx) => {
+        // Removed all unused variables
         // console.log(
         //   `Occurrence ${idx}: ${occ.toISOString()} -> ${localTime} America/New_York`,
         // );
       });
 
       // console.log('\nFixed Implementation Results:');
-      fixedOccurrences.forEach((occStr, idx) => {
+      fixedOccurrences.forEach((occStr, _idx) => {
         const occ = new Date(occStr);
         const localTime = formatInTimeZone(occ, 'America/New_York', 'HH:mm');
         // console.log(

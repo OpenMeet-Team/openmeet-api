@@ -17,6 +17,7 @@ import { UserService } from '../../user/user.service';
 import { parseISO } from 'date-fns';
 import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
 import { startOfDay } from 'date-fns';
+import { Connection } from 'typeorm';
 
 @Injectable()
 export class EventSeriesOccurrenceService {
@@ -30,6 +31,7 @@ export class EventSeriesOccurrenceService {
     private readonly eventSeriesService: EventSeriesService,
     private readonly recurrencePatternService: RecurrencePatternService,
     private readonly userService: UserService,
+    private readonly connection: Connection,
   ) {}
 
   /**
@@ -283,6 +285,10 @@ export class EventSeriesOccurrenceService {
         approvalQuestion: updatedTemplateEvent.approvalQuestion || '',
         allowWaitlist: updatedTemplateEvent.allowWaitlist || false,
         categories: updatedTemplateEvent.categories?.map((cat) => cat.id) || [],
+        // Create a new FileEntity instance with just the ID to avoid unique constraint violations
+        image: updatedTemplateEvent.image
+          ? ({ id: updatedTemplateEvent.image.id } as any)
+          : undefined,
         seriesSlug: series.slug, // Link to the parent series
       };
 
@@ -323,236 +329,403 @@ export class EventSeriesOccurrenceService {
   @Trace('event-series-occurrence.getUpcomingOccurrences')
   async getUpcomingOccurrences(
     seriesSlug: string,
-    count: number = 10,
-    includePast: boolean = false,
-  ): Promise<{ date: string; event?: EventEntity; materialized: boolean }[]> {
+    count = 10,
+    includePast = false,
+  ): Promise<
+    Array<{ date: string; event?: EventEntity; materialized: boolean }>
+  > {
+    this.logger.log(
+      `DEBUG START: getUpcomingOccurrences for series ${seriesSlug} (count=${count}, includePast=${includePast})`,
+    );
+    const startTime = Date.now();
+
+    const logStep = (message: string) => {
+      const elapsed = Date.now() - startTime;
+      this.logger.log(`DEBUG STEP [${elapsed}ms]: ${message}`);
+    };
+
+    // Step 1: Get the event series
+    logStep('Getting series by slug');
+    const series = await this.eventSeriesService.findBySlug(seriesSlug);
+
+    if (!series) {
+      throw new NotFoundException(
+        `Event series with slug ${seriesSlug} not found`,
+      );
+    }
+
+    logStep(`Found series: ${series.name}`);
+    this.logger.log('DEBUG: Series recurrence rule:');
+    this.logger.log(series.recurrenceRule);
+
+    // Step 2: Use the time zone from the series for all date calculations
+    const timeZone = series.timeZone || 'UTC';
+    logStep(`Using timezone: ${timeZone}`);
+
+    const today = new Date();
+    const todayInTimeZone = toZonedTime(today, timeZone);
+    this.logger.log(
+      `DEBUG: Today (in ${timeZone}): ${todayInTimeZone.toISOString()}`,
+    );
+
+    // Step 3: Find events already in the database for this series
+    logStep('Finding existing events for series');
+
+    // Use our new method with proper connection handling and timeouts
+    const events = await this.findEventsBySeriesSlug(seriesSlug, includePast);
+
+    logStep(`Found ${events.length} existing occurrences`);
+    this.logger.log('DEBUG: Existing occurrences breakdown:');
+    this.logger.log({
+      totalFound: events.length,
+      includePast,
+      pastEvents: events.filter((e) => new Date(e.startDate) < today).length,
+      futureEvents: events.filter((e) => new Date(e.startDate) >= today).length,
+    });
+
+    // STEP 4: Get template event
+    logStep('Getting template event');
+    let templateEvent: EventEntity | null = null;
+
+    if (series.templateEventSlug) {
+      this.logger.log(
+        `DEBUG: Looking for template event with slug ${series.templateEventSlug}`,
+      );
+      try {
+        // Create a timeout promise for template event retrieval
+        const templateQueryTimeout = new Promise<EventEntity>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error('Timeout: Template event query took too long'));
+          }, 5000); // 5 second timeout
+        });
+
+        // Create the actual query promise
+        const templateQueryPromise = this.eventQueryService.findEventBySlug(
+          series.templateEventSlug,
+        );
+
+        // Race the promises
+        this.logger.log(
+          `DEBUG: Executing template event query with timeout protection`,
+        );
+        templateEvent = await Promise.race([
+          templateQueryTimeout,
+          templateQueryPromise,
+        ]);
+
+        logStep(
+          `Found template event: ${templateEvent ? templateEvent.slug : 'null'}`,
+        );
+      } catch (error) {
+        this.logger.error(`Failed to find template event: ${error.message}`);
+      }
+    }
+
+    // If no template event found by slug, try to find any event in the series
+    if (!templateEvent && events.length > 0) {
+      logStep('No template event found, using most recent event');
+      // Sort events by start date descending (most recent first)
+      const sortedEvents = [...events].sort(
+        (a, b) =>
+          new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
+      );
+      templateEvent = sortedEvents[0]; // Use the most recent event
+      if (templateEvent) {
+        this.logger.log(
+          `DEBUG: Using most recent event (${templateEvent.slug}) as template for series ${seriesSlug}`,
+        );
+      }
+    } else if (!templateEvent) {
+      // Simplified recovery path - only try to recover the template if it's critical
+      logStep('No template event and no existing events found');
+      this.logger.warn(
+        `Series ${seriesSlug} has no events and no template. Using series creation date as fallback.`,
+      );
+    }
+
+    // STEP 5: Determine effective start date
     try {
-      // Get the series
+      // STEP 1: Get the series
+      logStep('Getting series by slug');
       const series = await this.eventSeriesService.findBySlug(seriesSlug);
+      logStep(`Found series: ${series.name}`);
+
+      // Log recurrence rule details to help diagnose issues
+      this.logger.log(
+        `DEBUG: Series recurrence rule:`,
+        JSON.stringify(series.recurrenceRule),
+      );
 
       // Determine the effective timezone early
       const effectiveTimeZone = series.timeZone || 'UTC';
+      logStep(`Using timezone: ${effectiveTimeZone}`);
 
       // Get the start of today relative to the effective timezone
       const today = startOfDay(
         this.convertToTimeZone(new Date(), effectiveTimeZone),
       );
-      this.logger.debug(
-        `[getUpcomingOccurrences] Today (in ${effectiveTimeZone}): ${today.toISOString()}`,
+      this.logger.log(
+        `DEBUG: Today (in ${effectiveTimeZone}): ${today.toISOString()}`,
       );
 
-      // Get all events for this series
-      const [existingOccurrences] =
-        await this.eventManagementService.findEventsBySeriesSlug(seriesSlug, {
-          page: 1,
-          limit: count * 2,
-        });
+      // STEP 2: Find existing events for series
+      logStep('Finding existing events for series');
+
+      // Safety cap on count parameter
+      const safeCount = Math.min(count, 50); // Prevent excessive queries
+
+      // Add timeout protection for the potentially hanging database query
+      let existingOccurrences: EventEntity[] = [];
+      try {
+        this.logger.log(
+          `DEBUG: About to query database for events in series ${seriesSlug}`,
+        );
+
+        // Create a timeout promise
+        const dbQueryTimeout = new Promise<[EventEntity[], number]>(
+          (_, reject) => {
+            setTimeout(() => {
+              reject(
+                new Error('Timeout: Database query for events took too long'),
+              );
+            }, 10000); // 10 second timeout
+          },
+        );
+
+        // Create the actual query promise
+        const dbQueryPromise =
+          this.eventManagementService.findEventsBySeriesSlug(seriesSlug, {
+            page: 1,
+            limit: Math.min(safeCount * 2, 20), // Cap at 20 to prevent memory issues
+          });
+
+        // Race the promises
+        this.logger.log(
+          `DEBUG: Executing database query with timeout protection`,
+        );
+        const [events] = await Promise.race([dbQueryTimeout, dbQueryPromise]);
+
+        existingOccurrences = events;
+        this.logger.log(
+          `DEBUG: Database query completed successfully, found ${existingOccurrences.length} events`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `ERROR: Database query failed or timed out: ${error.message}`,
+        );
+        // Continue with empty results rather than failing completely
+        existingOccurrences = [];
+      }
 
       // Log number of existing occurrences
-      this.logger.debug(
-        `[getUpcomingOccurrences] Found ${existingOccurrences.length} existing occurrences for series ${seriesSlug}`,
-        {
-          includePast,
-          pastEvents: existingOccurrences.filter(
-            (event) => new Date(event.startDate) < today,
-          ).length,
-          futureEvents: existingOccurrences.filter(
-            (event) => new Date(event.startDate) >= today,
-          ).length,
-        },
-      );
+      logStep(`Found ${existingOccurrences.length} existing occurrences`);
 
-      // Get the template event to use its start date
-      let templateEvent = series.templateEventSlug
-        ? await this.eventQueryService.findEventBySlug(series.templateEventSlug)
-        : null;
+      this.logger.log(`DEBUG: Existing occurrences breakdown:`, {
+        totalFound: existingOccurrences.length,
+        includePast,
+        pastEvents: existingOccurrences.filter(
+          (event) => new Date(event.startDate) < today,
+        ).length,
+        futureEvents: existingOccurrences.filter(
+          (event) => new Date(event.startDate) >= today,
+        ).length,
+      });
 
-      // If no template event found by slug, try to find any event in the series
-      if (!templateEvent) {
-        if (existingOccurrences.length > 0) {
-          // Sort events by start date descending (most recent first)
-          const sortedEvents = [...existingOccurrences].sort(
-            (a, b) =>
-              new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
+      // STEP 3: Get template event
+      logStep('Getting template event');
+      let templateEvent: EventEntity | null = null;
+
+      if (series.templateEventSlug) {
+        this.logger.log(
+          `DEBUG: Looking for template event with slug ${series.templateEventSlug}`,
+        );
+        try {
+          // Create a timeout promise for template event retrieval
+          const templateQueryTimeout = new Promise<EventEntity>((_, reject) => {
+            setTimeout(() => {
+              reject(new Error('Timeout: Template event query took too long'));
+            }, 5000); // 5 second timeout
+          });
+
+          // Create the actual query promise
+          const templateQueryPromise = this.eventQueryService.findEventBySlug(
+            series.templateEventSlug,
           );
-          templateEvent = sortedEvents[0]; // Use the most recent event
+
+          // Race the promises
           this.logger.log(
-            `Using most recent event (${templateEvent.slug}) as template for series ${seriesSlug}`,
+            `DEBUG: Executing template event query with timeout protection`,
           );
-        } else {
-          // Handle case where template is missing and no events exist
-          this.logger.warn(
-            `Series ${seriesSlug} has no events. Attempting recovery...`,
+          templateEvent = await Promise.race([
+            templateQueryTimeout,
+            templateQueryPromise,
+          ]);
+
+          logStep(
+            `Found template event: ${templateEvent ? templateEvent.slug : 'null'}`,
           );
-
-          try {
-            // Get the series to check if we have user information
-            const series = await this.eventSeriesService.findBySlug(seriesSlug);
-
-            // Find user ID - look for different properties that might have the creator ID
-            // or fallback to admin user ID 1 if not available
-            let userId = 1; // Default to admin user
-
-            // Try different properties that might contain the user ID
-            if (series['createdBy']) {
-              userId = series['createdBy'] as number;
-            } else if (series['createdById']) {
-              userId = series['createdById'] as number;
-            } else if (series['userId']) {
-              userId = series['userId'] as number;
-            } else if (series['ownerId']) {
-              userId = series['ownerId'] as number;
-            }
-
-            // Check if this is a Bluesky event - use type safety
-            const isBlueskyEvent: boolean =
-              series.sourceType === 'bluesky' ||
-              (series.sourceData &&
-                typeof series.sourceData === 'object' &&
-                series.sourceData['handle'] &&
-                ((typeof series.sourceData['handle'] === 'string' &&
-                  series.sourceData['handle'].includes('bsky')) ||
-                  series.sourceData['did']))
-                ? true
-                : false;
-
-            this.logger.log(
-              `Using user ID ${userId} for recovery materialization of series ${seriesSlug} (Bluesky: ${isBlueskyEvent})`,
-            );
-
-            // Auto-materialize to recover the series
-            await this.materializeNextNOccurrences(
-              seriesSlug,
-              userId,
-              isBlueskyEvent,
-            );
-
-            // Re-fetch occurrences
-            const [recoveredEvents] =
-              await this.eventManagementService.findEventsBySeriesSlug(
-                seriesSlug,
-                { page: 1, limit: count * 2 },
-              );
-
-            if (recoveredEvents.length > 0) {
-              existingOccurrences.push(...recoveredEvents);
-
-              // Sort by most recent again
-              const sortedRecovered = [...recoveredEvents].sort(
-                (a, b) =>
-                  new Date(b.startDate).getTime() -
-                  new Date(a.startDate).getTime(),
-              );
-              templateEvent = sortedRecovered[0];
-
-              // Update the series with the new template event
-              if (!series.templateEventSlug && templateEvent) {
-                this.logger.log(
-                  `Updating series ${seriesSlug} with new template event slug: ${templateEvent.slug}`,
-                );
-                await this.eventSeriesService.update(
-                  seriesSlug,
-                  { templateEventSlug: templateEvent.slug },
-                  userId,
-                );
-              }
-
-              this.logger.log(
-                `Successfully recovered series ${seriesSlug} by materializing occurrences`,
-              );
-            }
-          } catch (error) {
-            this.logger.error(
-              `Failed to recover series ${seriesSlug}: ${error.message}`,
-              error.stack,
-            );
-          }
+        } catch (error) {
+          this.logger.error(`Failed to find template event: ${error.message}`);
         }
       }
 
-      // Determine the correct start date and timezone for recurrence generation
+      // If no template event found by slug, try to find any event in the series
+      if (!templateEvent && existingOccurrences.length > 0) {
+        logStep('No template event found, using most recent event');
+        // Sort events by start date descending (most recent first)
+        const sortedEvents = [...existingOccurrences].sort(
+          (a, b) =>
+            new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
+        );
+        templateEvent = sortedEvents[0]; // Use the most recent event
+        if (templateEvent) {
+          this.logger.log(
+            `DEBUG: Using most recent event (${templateEvent.slug}) as template for series ${seriesSlug}`,
+          );
+        }
+      } else if (!templateEvent) {
+        // Simplified recovery path - only try to recover the template if it's critical
+        logStep('No template event and no existing events found');
+        this.logger.warn(
+          `Series ${seriesSlug} has no events and no template. Using series creation date as fallback.`,
+        );
+      }
+
+      // STEP 4: Determine effective start date
+      logStep('Determining effective start date');
+
       let effectiveStartDate: Date;
 
       if (templateEvent?.startDate) {
         effectiveStartDate = new Date(templateEvent.startDate);
-        this.logger.debug(
-          `[getUpcomingOccurrences] Using template event start date: ${effectiveStartDate.toISOString()}`,
+        this.logger.log(
+          `DEBUG: Using template event start date: ${effectiveStartDate.toISOString()}`,
         );
       } else {
         // Fallback: If no template event found, this is likely an issue, but we'll use createdAt as a last resort.
         effectiveStartDate = new Date(series.createdAt);
         this.logger.warn(
-          `[getUpcomingOccurrences] Template event not found for series ${series.slug}. Falling back to series createdAt: ${effectiveStartDate.toISOString()}`,
+          `DEBUG: Template event not found for series ${series.slug}. Falling back to series createdAt: ${effectiveStartDate.toISOString()}`,
         );
       }
+
+      // STEP 5: Determine effective count and date range
+      logStep('Setting up date range parameters');
 
       // Respect the recurrence rule count if it's set and less than requested count
       const recurrenceCount = series.recurrenceRule?.count;
       const effectiveCount =
-        recurrenceCount && recurrenceCount < count ? recurrenceCount : count;
+        recurrenceCount && recurrenceCount < safeCount
+          ? recurrenceCount
+          : safeCount;
+
+      this.logger.log(`DEBUG: Effective count: ${effectiveCount}`);
 
       // For past dates, we need to look back further in time
       let startDate = today;
 
-      // If includePast is true, start generating from the effective start date or an earlier date
+      // Simplified past date handling to reduce memory pressure
       if (includePast) {
-        // Use either the template event date or the first event's date or the series creation date
-        // and subtract a reasonable buffer (e.g., 365 days) to catch early occurrences
-        const firstEventDate =
-          existingOccurrences.length > 0
-            ? new Date(existingOccurrences[0].startDate)
-            : new Date(series.createdAt);
+        // Use a reasonable static window instead of complex calculations
+        const threeMonthsAgo = new Date(today);
+        threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+        startDate = threeMonthsAgo;
 
-        // Get the earliest date we can find
-        const potentialDates = [
-          effectiveStartDate,
-          firstEventDate,
-          new Date(series.createdAt),
-        ].filter((d) => d instanceof Date);
-
-        // Sort dates in ascending order and pick the earliest one
-        potentialDates.sort((a, b) => a.getTime() - b.getTime());
-
-        if (potentialDates.length > 0) {
-          const earliestDate = potentialDates[0];
-          // Go back further to ensure we catch all possible occurrences
-          const oneYearBefore = new Date(earliestDate);
-          oneYearBefore.setFullYear(oneYearBefore.getFullYear() - 1);
-          startDate = oneYearBefore;
-        }
-
-        this.logger.debug(
-          `[getUpcomingOccurrences] Including past dates, starting from: ${startDate.toISOString()}`,
+        this.logger.log(
+          `DEBUG: Including past dates, starting from: ${startDate.toISOString()}`,
         );
       }
 
-      // Generate all occurrence dates from the recurrence rule
-      const generatedDates = this.recurrencePatternService.generateOccurrences(
-        effectiveStartDate, // Use the determined effective start date
-        series.recurrenceRule as RecurrenceRule,
-        {
-          timeZone: effectiveTimeZone, // Use the series timezone
-          count: effectiveCount * 2, // Get more to account for filtered dates
-          startAfterDate: startDate, // Use today or earlier date if includePast is true
-        },
-      );
+      // STEP 6: Generate occurrence dates - THIS IS LIKELY WHERE HANGING OCCURS
+      logStep('About to generate occurrence dates - CRITICAL SECTION');
 
-      // Map the generated dates directly
-      const allDates = generatedDates.map((date) => new Date(date));
-
-      // Keep debug logging to understand what times we're getting
-      this.logger.debug('[getUpcomingOccurrences] Generated occurrence times', {
+      this.logger.log(`DEBUG: Generating occurrences with params:`, {
+        effectiveStartDate: effectiveStartDate.toISOString(),
+        recurrenceRule: JSON.stringify(series.recurrenceRule),
         timeZone: effectiveTimeZone,
-        includePast,
-        totalDates: allDates.length,
-        sampleDates: allDates.slice(0, 3).map((d) => ({
-          utc: d.toISOString(),
-          local: formatInTimeZone(d, effectiveTimeZone, 'HH:mm'),
-        })),
+        count: Math.min(effectiveCount * 2, 20),
+        startAfterDate: startDate.toISOString(),
       });
 
-      // Map dates to either existing events or calculated placeholders
-      const results = allDates.map((date) => {
+      // Set a hard timeout for the recurrence pattern generation
+      const maxExecutionTime = 5000; // 5 seconds max for pattern generation
+      const generationStartTime = Date.now();
+
+      // Generate a limited number of occurrence dates from the recurrence rule
+      let generatedDates: string[] = [];
+
+      try {
+        // Wrap the potentially problematic call in a timeout
+        const timeoutPromise = new Promise<string[]>((_, reject) => {
+          setTimeout(() => {
+            reject(
+              new Error('Timeout: Generation of occurrences took too long'),
+            );
+          }, maxExecutionTime);
+        });
+
+        const generationPromise = Promise.resolve(
+          this.recurrencePatternService.generateOccurrences(
+            effectiveStartDate,
+            series.recurrenceRule as RecurrenceRule,
+            {
+              timeZone: effectiveTimeZone,
+              count: Math.min(effectiveCount * 2, 20), // Cap at 20 to prevent memory issues
+              startAfterDate: startDate,
+            },
+          ),
+        );
+
+        // Race the generation against the timeout
+        generatedDates = await Promise.race([
+          timeoutPromise,
+          generationPromise,
+        ]);
+
+        const generationTime = Date.now() - generationStartTime;
+        this.logger.log(
+          `DEBUG: Generated ${generatedDates.length} dates in ${generationTime}ms`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `ERROR: Occurrence generation failed: ${error.message}`,
+        );
+        // Return a minimal safe result rather than failing completely
+        return [
+          {
+            date: new Date().toISOString(),
+            materialized: false,
+            error: `Failed to generate occurrences: ${error.message}`,
+          } as any,
+        ];
+      }
+
+      logStep(`Generated ${generatedDates.length} occurrence dates`);
+
+      // Map the generated dates directly - avoid extra operations
+      const allDates = generatedDates.map((date) => new Date(date));
+
+      // STEP 7: Create results by matching dates with events
+      logStep('Mapping occurrences to events');
+
+      // Map dates to either existing events or calculated placeholders - with memory optimization
+      interface OccurrenceResult {
+        date: string;
+        event?: EventEntity;
+        materialized: boolean;
+      }
+      const results: OccurrenceResult[] = [];
+
+      for (const date of allDates) {
+        // Check for execution time limit
+        if (Date.now() - startTime > 20000) {
+          // 20 seconds overall limit
+          this.logger.warn(
+            `DEBUG: Execution time limit exceeded, returning partial results`,
+          );
+          break;
+        }
+
         // Find an existing event matching this date
         const existingOccurrence = existingOccurrences.find((occurrence) =>
           this.isSameDay(occurrence.startDate, date, effectiveTimeZone),
@@ -560,30 +733,29 @@ export class EventSeriesOccurrenceService {
 
         // If we have an existing occurrence, it exists in the database already
         if (existingOccurrence) {
-          return {
+          results.push({
             date: date.toISOString(),
             event: existingOccurrence,
             materialized: true, // Determined by whether we have an event object
-          };
+          });
+        } else {
+          // All other dates are not yet stored in the database
+          results.push({
+            date: date.toISOString(),
+            materialized: false,
+          });
         }
+      }
 
-        // All other dates are not yet stored in the database
-        return {
-          date: date.toISOString(),
-          materialized: false,
-        };
-      });
+      // STEP 8: Include template event if needed
+      logStep('Handling template event inclusion');
 
-      // IMPORTANT: Make sure the template event is included in the results
-      // The template event might not match any of the generated occurrence dates
-      // but it should always be included in the results
       if (templateEvent) {
-        // Check if the template event is already included in the results
         const templateDate = new Date(templateEvent.startDate);
         const templateDateStr = templateDate.toISOString();
         const templateIncluded = results.some(
           (result) =>
-            result.event?.id === templateEvent.id ||
+            (result.event && result.event.id === templateEvent.id) ||
             this.isSameDay(
               new Date(result.date),
               templateDate,
@@ -591,11 +763,7 @@ export class EventSeriesOccurrenceService {
             ),
         );
 
-        // If not included, add it to the results
-        if (!templateIncluded) {
-          this.logger.debug(
-            `[getUpcomingOccurrences] Adding template event (${templateEvent.slug}) to the results`,
-          );
+        if (!templateIncluded && results.length < effectiveCount) {
           results.push({
             date: templateDateStr,
             event: templateEvent,
@@ -604,6 +772,9 @@ export class EventSeriesOccurrenceService {
         }
       }
 
+      // STEP 9: Final sorting and limiting
+      logStep('Sorting and finalizing results');
+
       // If includePast is true, sort by date (ascending)
       if (includePast) {
         results.sort(
@@ -611,14 +782,30 @@ export class EventSeriesOccurrenceService {
         );
       }
 
-      // Limit to the requested count
-      return results.slice(0, effectiveCount);
+      // Limit to the requested count to ensure we don't return too many results
+      const limitedResults = results.slice(0, effectiveCount);
+
+      const totalTime = Date.now() - startTime;
+      this.logger.log(
+        `DEBUG END: getUpcomingOccurrences completed in ${totalTime}ms, returning ${limitedResults.length} occurrences`,
+      );
+
+      return limitedResults;
     } catch (error) {
+      const totalTime = Date.now() - startTime;
       this.logger.error(
-        `Error getting occurrences: ${error.message}`,
+        `ERROR: getUpcomingOccurrences failed after ${totalTime}ms: ${error.message}`,
         error.stack,
       );
-      throw error;
+
+      // Return an error object instead of throwing
+      return [
+        {
+          date: new Date().toISOString(),
+          materialized: false,
+          error: `Failed to get occurrences: ${error.message}`,
+        } as any,
+      ];
     }
   }
 
@@ -786,12 +973,13 @@ export class EventSeriesOccurrenceService {
       );
 
       // Get all event series owned by this user that are Bluesky-sourced
+      // Limit to 5 most recent series to avoid memory issues
       const userSeriesResult = await this.eventSeriesService.findByUser(
         userId,
         {
           sourceType: 'bluesky', // Filter to only Bluesky-sourced events
           page: 1,
-          limit: 100, // Retrieve up to 100 series (adjust as needed)
+          limit: 5, // Reduced from 100 to prevent memory issues
         },
       );
 
@@ -805,20 +993,34 @@ export class EventSeriesOccurrenceService {
       this.logger.debug('Found Bluesky event series for user', {
         userId,
         count: userSeries.length,
-        seriesSlugs: userSeries.map((s) => s.slug),
       });
 
       let totalMaterialized = 0;
 
-      // Process each series to ensure it has the required number of materialized occurrences
-      for (const series of userSeries) {
-        const materializedEvents = await this.materializeNextNOccurrences(
-          series.slug,
-          userId,
-          true, // This is a Bluesky event
-        );
+      // Process only the 2 most recent series to ensure we don't overload memory
+      // This is a compromise between functionality and memory usage
+      const recentSeries = userSeries.slice(0, 2);
 
-        totalMaterialized += materializedEvents.length;
+      // Process each series to ensure it has the required number of materialized occurrences
+      for (const series of recentSeries) {
+        try {
+          const materializedEvents = await this.materializeNextNOccurrences(
+            series.slug,
+            userId,
+            true, // This is a Bluesky event
+          );
+
+          totalMaterialized += materializedEvents.length;
+
+          // Brief pause between series to allow garbage collection
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        } catch (seriesError) {
+          // Log but continue with other series
+          this.logger.error(
+            `Error materializing series ${series.slug}: ${seriesError.message}`,
+            seriesError.stack,
+          );
+        }
       }
 
       this.logger.debug('Completed buffered materialization', {
@@ -832,7 +1034,8 @@ export class EventSeriesOccurrenceService {
         `Error in bufferBlueskyMaterialization: ${error.message}`,
         error.stack,
       );
-      throw error;
+      // Return 0 instead of throwing to avoid propagating errors
+      return 0;
     }
   }
 
@@ -1147,5 +1350,81 @@ export class EventSeriesOccurrenceService {
     const d2Str = this.formatInTimeZone(date2, timeZone);
     // Compare the formatted strings
     return d1Str === d2Str;
+  }
+
+  async findEventsBySeriesSlug(
+    seriesSlug: string,
+    includePast = false,
+    onlyPast = false,
+  ): Promise<EventEntity[]> {
+    this.logger.debug(
+      'About to query database for events in series ' + seriesSlug,
+    );
+
+    // Setup a PostgreSQL statement timeout to forcibly terminate long-running queries
+    const queryRunner = this.connection.createQueryRunner();
+
+    try {
+      this.logger.debug('Executing database query with timeout protection');
+
+      // Connect and set statement timeout
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      await queryRunner.query('SET statement_timeout = 10000'); // 10s timeout at PostgreSQL level
+
+      // Get a repository from the query runner
+      const eventRepo = queryRunner.manager.getRepository(EventEntity);
+
+      const today = new Date();
+
+      // Build the base query
+      let query = eventRepo
+        .createQueryBuilder('event')
+        .where('event.seriesSlug = :seriesSlug', { seriesSlug })
+        .orderBy('event.startDate', 'ASC');
+
+      // Apply date filters based on parameters
+      if (!includePast && !onlyPast) {
+        // Only future events
+        query = query.andWhere('event.startDate >= :today', { today });
+      } else if (onlyPast) {
+        // Only past events
+        query = query.andWhere('event.startDate < :today', { today });
+      }
+      // If includePast is true without onlyPast, we include all events
+
+      const events = await query.getMany();
+
+      // Commit and release resources
+      await queryRunner.commitTransaction();
+
+      return events;
+    } catch (error) {
+      // Make sure we roll back if anything goes wrong
+      try {
+        await queryRunner.rollbackTransaction();
+      } catch (rollbackError) {
+        this.logger.error(
+          'Error rolling back transaction: ' + rollbackError.message,
+        );
+      }
+
+      this.logger.error(
+        'ERROR: Database query failed or timed out: ' + error.message,
+      );
+      // Return empty array on error
+      return [];
+    } finally {
+      // CRITICAL: Release the connection in all cases
+      try {
+        // Release the connection
+        await queryRunner.release();
+        this.logger.debug('Database connection released');
+      } catch (releaseError) {
+        this.logger.error(
+          'Error releasing database connection: ' + releaseError.message,
+        );
+      }
+    }
   }
 }

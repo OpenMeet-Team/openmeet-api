@@ -1,10 +1,6 @@
 import request from 'supertest';
 import { io as Client, Socket } from 'socket.io-client';
-import {
-  TESTING_APP_URL,
-  TESTING_TENANT_ID,
-  TESTING_USER_ID,
-} from '../utils/constants';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import { loginAsTester, createEvent } from '../utils/functions';
 import * as http from 'http';
 import * as https from 'https';

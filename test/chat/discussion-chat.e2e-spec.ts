@@ -13,7 +13,7 @@ import { loginAsTester, createEvent, createGroup } from '../utils/functions';
 // Set a global timeout for the entire test
 jest.setTimeout(60000);
 
-xdescribe('Discussion Chat API Tests', () => {
+describe('Discussion Chat API Tests', () => {
   let token: string;
   let eventSlug: string;
   let groupSlug: string;
