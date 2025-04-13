@@ -131,7 +131,9 @@ jobs:
           
           # Apply the patch to the dev environment
           cd openmeet-infrastructure
-          
+          aws sts get-caller-identity
+          kubectl get pods -A
+
           # First ensure namespace exists
           kubectl apply -f k8s/environments/dev/namespace.yaml --validate=false
           
