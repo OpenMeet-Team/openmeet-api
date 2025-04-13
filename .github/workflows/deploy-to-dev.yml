@@ -1,0 +1,251 @@
+name: Deploy API to Dev Environment
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    container:
+      image: node:18.16.1
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Dependencies
+        run: npm ci
+        
+      - name: Run Unit Tests
+        run: |
+          export $(cat env-example-relational | grep -v '^#' | xargs)
+          npm run test
+
+  e2e-test:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run e2e tests
+        id: relational
+        run: docker compose -f docker-compose.relational.ci.yaml --env-file env-example-relational -p ci-relational up --build --exit-code-from api
+
+      - name: Copy prod.log from container to host
+        if: ${{ failure() && steps.relational.conclusion == 'failure' }}
+        run: docker cp ci-relational-api-1:/usr/src/app/prod.log .
+
+      - name: Upload prod.log to artifacts for debugging
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-logs
+          path: prod.log
+
+  build-deploy-to-dev:
+    runs-on: ubuntu-latest
+    needs: [e2e-test]
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout API repository
+        uses: actions/checkout@v4
+
+      - name: Checkout infrastructure repository
+        uses: actions/checkout@v4
+        with:
+          repository: openmeet/openmeet-infrastructure
+          path: openmeet-infrastructure
+          token: ${{ secrets.GH_PAT_INFRASTRUCTURE }}  # Using the org-level secret
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Set image tags
+        run: |
+          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+          echo "BRANCH_NAME=$(echo ${{ github.head_ref }} | sed 's/\//-/g')" >> $GITHUB_ENV
+          echo "IMAGE_TAG=pr-${{ github.event.pull_request.number }}-$(date +%Y%m%d%H%M%S)" >> $GITHUB_ENV
+
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: openmeet-ecr/openmeet-api
+          GIT_REVISION: ${{ github.sha }}
+          GIT_BRANCH: ${{ github.ref_name }}
+        run: |
+          echo "Building image with tag: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          PACKAGE_JSON_B64=$(cat package.json | base64 -w 0)
+          docker build --build-arg GIT_REVISION=$GIT_REVISION --build-arg GIT_BRANCH=$GIT_BRANCH --build-arg PACKAGE_JSON_B64=$PACKAGE_JSON_B64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          
+          # Tag with PR-specific tag for reference
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:pr-$PR_NUMBER
+          
+          # Push both tags
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:pr-$PR_NUMBER
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.30.1'
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name openmeet-dev --region ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Deploy to dev environment with Kustomize
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: openmeet-ecr/openmeet-api
+        run: |
+          # Create a temporary patch file for the API deployment
+          cat > /tmp/api-deployment-patch.yaml << EOF
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: api
+          spec:
+            template:
+              spec:
+                containers:
+                - name: api
+                  image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          EOF
+          
+          # Apply the patch to the dev environment
+          cd openmeet-infrastructure
+          
+          # First ensure namespace exists
+          kubectl apply -f k8s/environments/dev/namespace.yaml
+          
+          # Apply the patch using kustomize
+          kubectl kustomize k8s/environments/dev | 
+            kubectl patch -f - --local -p "$(cat /tmp/api-deployment-patch.yaml)" --type=strategic -o yaml |
+            kubectl apply -f -
+          
+          # Update the infrastructure repository with the new image tag
+          # Update the API deployment patch in the infrastructure repository
+          sed -i "s|image: .*openmeet-ecr/openmeet-api:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG|" k8s/environments/dev/kustomization.yaml
+          
+          # Configure Git
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+          
+          # Commit and push the changes
+          git add k8s/environments/dev/kustomization.yaml
+          git commit -m "Update API image to $IMAGE_TAG for PR #$PR_NUMBER"
+          git push origin main
+          
+          # Wait for rollout to complete
+          kubectl rollout status deployment/api -n dev
+
+  deploy-to-main:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout API repository
+        uses: actions/checkout@v4
+
+      - name: Checkout infrastructure repository
+        uses: actions/checkout@v4
+        with:
+          repository: openmeet/openmeet-infrastructure
+          path: openmeet-infrastructure
+          token: ${{ secrets.GH_PAT_INFRASTRUCTURE }}  # Using the org-level secret
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: openmeet-ecr/openmeet-api
+          IMAGE_TAG: ${{ github.sha }}
+          GIT_REVISION: ${{ github.sha }}
+          GIT_BRANCH: ${{ github.ref_name }}
+        run: |
+          echo "Building image with tag: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          PACKAGE_JSON_B64=$(cat package.json | base64 -w 0)
+          docker build --build-arg GIT_REVISION=$GIT_REVISION --build-arg GIT_BRANCH=$GIT_BRANCH --build-arg PACKAGE_JSON_B64=$PACKAGE_JSON_B64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          
+          # Also tag as latest for main branch
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.30.1'
+
+      - name: Update kubeconfig and deploy to EKS
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: openmeet-ecr/openmeet-api
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          aws eks update-kubeconfig --name openmeet-dev --region ${{ vars.AWS_REGION || 'us-east-1' }}
+          
+          # Create a temporary patch file for the API deployment
+          cat > /tmp/api-deployment-patch.yaml << EOF
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: api
+          spec:
+            template:
+              spec:
+                containers:
+                - name: api
+                  image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          EOF
+          
+          # Apply the patch to the dev environment
+          cd openmeet-infrastructure
+          
+          # First ensure namespace exists
+          kubectl apply -f k8s/environments/dev/namespace.yaml
+          
+          # Apply the patch using kustomize
+          kubectl kustomize k8s/environments/dev | 
+            kubectl patch -f - --local -p "$(cat /tmp/api-deployment-patch.yaml)" --type=strategic -o yaml |
+            kubectl apply -f -
+          
+          # Update the infrastructure repository with the new image tag
+          # Update the API deployment patch in the infrastructure repository
+          sed -i "s|image: .*openmeet-ecr/openmeet-api:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG|" k8s/environments/dev/kustomization.yaml
+          
+          # Configure Git
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+          
+          # Commit and push the changes
+          git add k8s/environments/dev/kustomization.yaml
+          git commit -m "Update API image to $IMAGE_TAG from main branch"
+          git push origin main
+          
+          # Wait for rollout to complete
+          kubectl rollout status deployment/api -n dev 
