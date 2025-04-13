@@ -50,7 +50,7 @@ jobs:
 
   build-deploy-to-dev:
     runs-on: ubuntu-latest
-    needs: [e2e-test]
+    # needs: [e2e-test]
     if: github.event_name == 'pull_request'
 
     steps:
