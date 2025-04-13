@@ -147,8 +147,9 @@ jobs:
       - name: Checkout infrastructure repository
         uses: actions/checkout@v4
         with:
-          repository: openmeet/openmeet-infrastructure
+          repository: openmeet-team/openmeet-infrastructure
           path: openmeet-infrastructure
+          ref: main
           token: ${{ secrets.GH_PAT_INFRASTRUCTURE }}  # Using the org-level secret
 
       - name: Configure AWS credentials
