@@ -39,6 +39,10 @@ npm run start:prod > prod.log 2>&1 &
 # Wait for services to be fully ready
 echo "Waiting for Maildev to be ready..."
 /opt/wait-for-it.sh maildev:1080
+
+ps -ef || true
+tail -20 prod.log || true
+
 echo "Waiting for API to be ready..."
 /opt/wait-for-it.sh localhost:3000 -t 30
 
