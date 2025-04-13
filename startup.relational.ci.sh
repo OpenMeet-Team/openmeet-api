@@ -40,12 +40,13 @@ npm run start:prod > prod.log 2>&1 &
 echo "Waiting for Maildev to be ready..."
 /opt/wait-for-it.sh maildev:1080
 
+sleep 30
+
+netstat -tulpen | grep LISTEN || true
 ps -ef || true
-sleep 20
-tail -20 prod.log || true
 
 echo "Waiting for API to be ready..."
-/opt/wait-for-it.sh localhost:3000 -t 120
+/opt/wait-for-it.sh api:3000 -t 30
 
 # Run the E2E tests
 echo "Running E2E tests..."

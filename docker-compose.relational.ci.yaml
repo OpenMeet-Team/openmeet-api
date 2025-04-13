@@ -59,19 +59,19 @@ services:
     build:
       context: .
       dockerfile: relational.e2e.Dockerfile
+    expose:
+      - 3000
     env_file:
       - env-example-relational
-    environment:
-      MATRIX_HOMESERVER_URL: "http://matrix:8448"
-      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME:-matrix-ci.openmeet.test}
-      MATRIX_ADMIN_USERNAME: ${MATRIX_ADMIN_USERNAME:-admin}
-      MATRIX_ADMIN_PASSWORD: ${MATRIX_ADMIN_PASSWORD:-admin_secret_password}
-      MATRIX_REGISTRATION_SECRET: ${MATRIX_REGISTRATION_SECRET:-ci_test_registration_secret}
     volumes:
       - ./matrix-config:/matrix-config
     depends_on:
       matrix:
         condition: service_healthy
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
 
 volumes:
   matrix-data:
