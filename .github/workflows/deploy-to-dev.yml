@@ -112,33 +112,16 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: openmeet-ecr/openmeet-api
         run: |
-          # Create a temporary patch file for the API deployment
-          cat > /tmp/api-deployment-patch.yaml << EOF
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: api
-          spec:
-            template:
-              spec:
-                containers:
-                - name: api
-                  image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          EOF
-          
           # Apply the patch to the dev environment
           cd openmeet-infrastructure
 
           # First ensure namespace exists
           kubectl apply -f k8s/environments/dev/namespace.yaml --validate=false
           
-          # Apply the patch using kustomize
-          kubectl kustomize k8s/environments/dev | 
-            kubectl patch -f - --local -p "$(cat /tmp/api-deployment-patch.yaml)" --type=strategic -o yaml |
-            kubectl apply -f - --validate=false
+          # Update the deployment with the new image
+          kubectl set image deployment/api api=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -n dev
           
           # Update the infrastructure repository with the new image tag
-          # Update the API deployment patch in the infrastructure repository
           sed -i "s|image: .*openmeet-ecr/openmeet-api:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG|" k8s/environments/dev/kustomization.yaml
           
           # Configure Git
@@ -209,33 +192,16 @@ jobs:
         run: |
           aws eks update-kubeconfig --name openmeet-dev --region ${{ vars.AWS_REGION || 'us-east-1' }}
           
-          # Create a temporary patch file for the API deployment
-          cat > /tmp/api-deployment-patch.yaml << EOF
-          apiVersion: apps/v1
-          kind: Deployment
-          metadata:
-            name: api
-          spec:
-            template:
-              spec:
-                containers:
-                - name: api
-                  image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          EOF
-          
           # Apply the patch to the dev environment
           cd openmeet-infrastructure
           
           # First ensure namespace exists
           kubectl apply -f k8s/environments/dev/namespace.yaml --validate=false
           
-          # Apply the patch using kustomize
-          kubectl kustomize k8s/environments/dev | 
-            kubectl patch -f - --local -p "$(cat /tmp/api-deployment-patch.yaml)" --type=strategic -o yaml |
-            kubectl apply -f - --validate=false
+          # Update the deployment with the new image
+          kubectl set image deployment/api api=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -n dev
           
           # Update the infrastructure repository with the new image tag
-          # Update the API deployment patch in the infrastructure repository
           sed -i "s|image: .*openmeet-ecr/openmeet-api:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG|" k8s/environments/dev/kustomization.yaml
           
           # Configure Git
