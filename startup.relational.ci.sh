@@ -41,10 +41,11 @@ echo "Waiting for Maildev to be ready..."
 /opt/wait-for-it.sh maildev:1080
 
 ps -ef || true
+sleep 20
 tail -20 prod.log || true
 
 echo "Waiting for API to be ready..."
-/opt/wait-for-it.sh localhost:3000 -t 30
+/opt/wait-for-it.sh localhost:3000 -t 120
 
 # Run the E2E tests
 echo "Running E2E tests..."
