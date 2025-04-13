@@ -77,6 +77,7 @@ jobs:
 
       - name: Set image tags
         run: |
+          aws sts get-caller-identity
           echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
           echo "BRANCH_NAME=$(echo ${{ github.head_ref }} | sed 's/\//-/g')" >> $GITHUB_ENV
           echo "IMAGE_TAG=pr-${{ github.event.pull_request.number }}-$(date +%Y%m%d%H%M%S)" >> $GITHUB_ENV
@@ -105,7 +106,9 @@ jobs:
           version: 'v1.30.1'
 
       - name: Update kubeconfig
-        run: aws eks update-kubeconfig --name openmeet-prod --region ${{ vars.AWS_REGION || 'us-east-1' }}
+        run: |
+          aws eks update-kubeconfig --name openmeet-prod --region ${{ vars.AWS_REGION || 'us-east-1' }}
+          aws sts get-caller-identity
 
       - name: Deploy to dev environment with Kustomize
         env:
