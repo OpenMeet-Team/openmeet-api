@@ -8,7 +8,7 @@ echo "Waiting for Redis to be ready..."
 
 # Run database migrations and seed before setting up Matrix
 echo "Running database migrations..."
-npm run migration:run:prod
+npm run migration:run:tenants
 echo "Running database seeds..."
 npm run seed:run:prod
 
@@ -39,8 +39,14 @@ npm run start:prod > prod.log 2>&1 &
 # Wait for services to be fully ready
 echo "Waiting for Maildev to be ready..."
 /opt/wait-for-it.sh maildev:1080
+
+sleep 30
+
+netstat -tulpen | grep LISTEN || true
+ps -ef || true
+
 echo "Waiting for API to be ready..."
-/opt/wait-for-it.sh localhost:3000
+/opt/wait-for-it.sh api:3000 -t 30
 
 # Run the E2E tests
 echo "Running E2E tests..."

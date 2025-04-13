@@ -2,9 +2,6 @@ import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { TenantPublic } from '../tenant/tenant-public.decorator';
 import { TypeOrmHealthIndicator } from '@nestjs/terminus';
-import { Req } from '@nestjs/common';
-import { Request } from 'express';
-import { HealthIndicatorResult } from '@nestjs/terminus';
 import {
   HealthCheckService,
   HttpHealthIndicator,
@@ -24,30 +21,15 @@ export class HealthController {
   @HealthCheck()
   @Get('liveness')
   @ApiOperation({ summary: 'Liveness probe' })
-  async liveness(@Req() req: Request) {
-    const api_url = process.env.LIVENESS_PROBE_API_URL;
-    const docs_url = process.env.LIVENESS_PROBE_DOCS_URL;
-    // get the tenant_id from the request
-    const tenant_id = req.headers['x-tenant-id'] as string;
-
-    const checks: Array<() => Promise<HealthIndicatorResult>> = [];
-
-    if (api_url) {
-      checks.push(() =>
-        this.http.pingCheck('api-root', api_url, {
-          headers: {
-            'Tenant-Id': tenant_id,
-          },
-        }),
-      );
-    }
-
-    if (docs_url) {
-      checks.push(() => this.http.pingCheck('docs-root', docs_url));
-    }
-
-    const result = await this.health.check(checks);
-    return result;
+  liveness() {
+    // Always return OK for liveness probe
+    // This prevents the pod from being killed when external services are unreachable
+    return {
+      status: 'ok',
+      info: {
+        api: { status: 'up' },
+      },
+    };
   }
 
   @HealthCheck()
