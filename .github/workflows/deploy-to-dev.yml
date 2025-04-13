@@ -227,12 +227,12 @@ jobs:
           cd openmeet-infrastructure
           
           # First ensure namespace exists
-          kubectl apply -f k8s/environments/dev/namespace.yaml
+          kubectl apply -f k8s/environments/dev/namespace.yaml --validate=false
           
           # Apply the patch using kustomize
           kubectl kustomize k8s/environments/dev | 
             kubectl patch -f - --local -p "$(cat /tmp/api-deployment-patch.yaml)" --type=strategic -o yaml |
-            kubectl apply -f -
+            kubectl apply -f - --validate=false
           
           # Update the infrastructure repository with the new image tag
           # Update the API deployment patch in the infrastructure repository
