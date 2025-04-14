@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { AppDataSource } from '../database/data-source';
-import { getTenantConfig } from '../utils/tenant-config';
+import { getTenantConfig, fetchTenants } from '../utils/tenant-config';
 import { TenantConfig } from '../core/constants/constant';
 import { trace } from '@opentelemetry/api';
 import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
@@ -34,7 +34,9 @@ export class TenantConnectionService implements OnModuleInit {
           await dataSource.initialize();
           initSpan.end();
 
-          if (tenantId) {
+          // Only create schema for non-empty tenant IDs
+          // Empty tenant ID ('') uses the 'public' schema
+          if (tenantId && tenantId !== '') {
             const schemaSpan = this.tracer.startSpan('createSchema');
             await dataSource.query(
               `CREATE SCHEMA IF NOT EXISTS "tenant_${tenantId}"`,
@@ -74,5 +76,25 @@ export class TenantConnectionService implements OnModuleInit {
 
   getTenantConfig(tenantId: string): TenantConfig {
     return getTenantConfig(tenantId);
+  }
+
+  getAllTenants(): Promise<TenantConfig[]> {
+    return this.tracer.startActiveSpan(
+      'getAllTenants',
+      { kind: SpanKind.CLIENT },
+      (span) => {
+        try {
+          const tenants = fetchTenants();
+          span.setAttribute('tenantsCount', tenants.length);
+          return Promise.resolve(tenants);
+        } catch (error) {
+          span.recordException(error);
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw error;
+        } finally {
+          span.end();
+        }
+      },
+    );
   }
 }

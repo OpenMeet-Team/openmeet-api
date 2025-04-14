@@ -64,7 +64,7 @@ async function bootstrap() {
     startupLog('Shutdown hooks enabled');
 
     startupLog('Configuring global prefix and versioning');
-    const apiPrefix = configService.getOrThrow('app.apiPrefix', { 
+    const apiPrefix = configService.getOrThrow('app.apiPrefix', {
       infer: true,
     });
     app.setGlobalPrefix(
@@ -148,7 +148,7 @@ async function bootstrap() {
         exclude: ['/health/liveness', '/health/readiness', '/metrics', '/'],
       },
     );
-    startupLog('Health endpoints configured');
+    startupLog('Health and metrics endpoints configured');
 
     startupLog('Setting up global guards');
     app.useGlobalGuards(new TenantGuard(app.get(Reflector)));
@@ -169,23 +169,25 @@ async function bootstrap() {
     try {
       const port = configService.getOrThrow('app.port', { infer: true });
       startupLog(`Attempting to listen on port ${port}`);
-      
+
       // Set a timeout to detect hangs
       const serverStartTimeout = setTimeout(() => {
-        startupLog('WARNING: HTTP server startup is taking longer than 10 seconds. Possible hang detected.');
+        startupLog(
+          'WARNING: HTTP server startup is taking longer than 10 seconds. Possible hang detected.',
+        );
       }, 10000);
-      
+
       // Explicitly bind to 0.0.0.0 (all interfaces) to avoid DNS resolution issues
       startupLog('Binding to 0.0.0.0:' + port);
       const server = await app.listen(port, '0.0.0.0', () => {
         startupLog('HTTP server listen callback triggered');
       });
-      
+
       // Clear the timeout if we successfully started
       clearTimeout(serverStartTimeout);
-      
+
       startupLog(`HTTP server started successfully on port ${port}`);
-      
+
       // Add proper signal handlers for graceful shutdown
       process.on('SIGTERM', async () => {
         logger.log('SIGTERM signal received: closing HTTP server');
@@ -198,7 +200,7 @@ async function bootstrap() {
         await app.close();
         process.exit(0);
       });
-        
+
       // Handle unhandled promise rejections
       process.on('unhandledRejection', (reason: unknown, _promise) => {
         logger.error(`Unhandled Promise Rejection: ${String(reason)}`);
@@ -207,7 +209,7 @@ async function bootstrap() {
 
       logger.log(`Application is running on: ${await app.getUrl()}`);
       logger.log(`WebSocket server is running on Matrix namespace`);
-      
+
       return server;
     } catch (error) {
       startupLog(`ERROR starting HTTP server: ${error.message}`);
