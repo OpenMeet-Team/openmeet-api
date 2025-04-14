@@ -35,7 +35,6 @@ import { SubCategoryModule } from './sub-category/sub-category.module';
 import { GroupMemberModule } from './group-member/group-member.module';
 import { EventAttendeeModule } from './event-attendee/event-attendee.module';
 import { HealthModule } from './health/health.module';
-import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import { makeCounterProvider } from '@willsoto/nestjs-prometheus';
 import { RequestCounterInterceptor } from './interceptors/request-counter.interceptor';
 import { GroupRoleModule } from './group-role/group-role.module';
@@ -53,6 +52,7 @@ import { TracingModule } from './tracing/tracing.module';
 import { BlueskyModule } from './bluesky/bluesky.module';
 import { MatrixModule } from './matrix/matrix.module';
 import { EventSeriesModule } from './event-series/event-series.module';
+import { MetricsModule } from './metrics/metrics.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -102,9 +102,9 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       inject: [ConfigService],
     }),
     EventEmitterModule.forRoot(),
-    PrometheusModule.register(),
     HealthModule,
     TracingModule,
+    MetricsModule,
     // It's important that UserModule comes before MatrixModule to ensure it's initialized first
     UserModule,
     FileModule,
@@ -149,6 +149,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       name: 'http_requests_total',
       help: 'Total number of HTTP requests',
     }),
+    // Business metrics are now registered in metrics.module.ts
   ],
   exports: ['AUDIT_LOGGER'],
 })
