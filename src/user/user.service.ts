@@ -348,11 +348,11 @@ export class UserService {
 
   async findOrCreateUser(
     profile: SocialInterface,
-    provider: string,
+    authProvider: string,
     tenantId: string,
   ): Promise<UserEntity> {
     this.logger.debug(
-      `Finding or creating user for provider: ${provider}, tenantId: ${tenantId}`,
+      `Finding or creating user for provider: ${authProvider}, tenantId: ${tenantId}`,
     );
 
     if (!tenantId) {
@@ -365,7 +365,7 @@ export class UserService {
     const existingUser = await this.findBySocialIdAndProvider(
       {
         socialId: profile.id,
-        provider: provider,
+        provider: authProvider,
       },
       tenantId,
     );
@@ -374,6 +374,16 @@ export class UserService {
       this.logger.debug('findOrCreateUser: found existing user', {
         existingUser,
       });
+
+      // If the existing user has an email but the profile doesn't, update the profile
+      if (existingUser.email && !profile.email) {
+        this.logger.debug('Using existing email from database for user', {
+          userId: existingUser.id,
+          email: existingUser.email,
+        });
+        profile.email = existingUser.email;
+      }
+
       return existingUser as UserEntity;
     }
 
@@ -392,7 +402,7 @@ export class UserService {
     // Create new user with Bluesky preferences if applicable
     const createUserData: any = {
       socialId: profile.id,
-      provider: provider,
+      provider: authProvider,
       email: profile.email || null,
       firstName: profile.firstName || null,
       lastName: profile.lastName || null,
@@ -401,7 +411,7 @@ export class UserService {
     };
 
     // Set Bluesky preferences if user is logging in via Bluesky
-    if (provider === 'bluesky') {
+    if (authProvider === 'bluesky') {
       createUserData.preferences = {
         bluesky: {
           did: profile.id,
