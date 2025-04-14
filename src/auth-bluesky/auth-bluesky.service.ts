@@ -109,27 +109,36 @@ export class AuthBlueskyService {
     });
 
     // Get existing user if any to preserve preferences
-    // const _existingUser = await this.userService.findBySocialIdAndProvider(
-    //   {
-    //     socialId: profileData.did,
-    //     provider: 'bluesky',
-    //   },
-    //   tenantId,
-    // );
+    const existingUser = await this.userService.findBySocialIdAndProvider(
+      {
+        socialId: profileData.did,
+        provider: 'bluesky',
+      },
+      tenantId,
+    );
 
     this.logger.debug('Validating social login:', {
       did: profileData.did,
       displayName: profileData.displayName,
       handle: profileData.handle,
       tenantId,
+      existingUserEmail: existingUser?.email,
     });
+
+    if (existingUser) {
+      this.logger.debug('Found existing user:', {
+        id: existingUser.id,
+        email: existingUser.email,
+        provider: existingUser.provider,
+      });
+    }
 
     this.logger.debug('Validating social login with tenant ID:', { tenantId });
     const loginResponse = await this.authService.validateSocialLogin(
       'bluesky',
       {
         id: profileData.did,
-        email: '',
+        email: existingUser?.email || '',
         firstName: profileData.displayName || profileData.handle,
         lastName: '',
       },
@@ -169,9 +178,12 @@ export class AuthBlueskyService {
       token: loginResponse.token,
       refreshToken: loginResponse.refreshToken,
       tokenExpires: loginResponse.tokenExpires.toString(),
-      user: Buffer.from(JSON.stringify(loginResponse.user || {})).toString(
-        'base64',
-      ),
+      user: Buffer.from(
+        JSON.stringify({
+          ...loginResponse.user,
+          socialId: profileData.did,
+        }),
+      ).toString('base64'),
       profile: Buffer.from(JSON.stringify(profileData)).toString('base64'),
     });
 
