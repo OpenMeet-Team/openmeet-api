@@ -62,27 +62,32 @@ export class FileEntity extends EntityRelationalHelper {
   @Column()
   @Transform(
     ({ value }) => {
-      if ((fileConfig() as FileConfig).driver === FileDriver.LOCAL) {
+      const config = fileConfig() as FileConfig;
+      
+      if (config.driver === FileDriver.LOCAL) {
         return (appConfig() as AppConfig).backendDomain + value;
       } else if (
-        [FileDriver.S3_PRESIGNED, FileDriver.S3].includes(
-          (fileConfig() as FileConfig).driver,
-        )
+        [FileDriver.S3_PRESIGNED, FileDriver.S3].includes(config.driver)
       ) {
         const s3 = new S3Client({
-          region: (fileConfig() as FileConfig).awsS3Region ?? '',
+          region: config.awsS3Region ?? '',
           credentials: {
-            accessKeyId: (fileConfig() as FileConfig).accessKeyId ?? '',
-            secretAccessKey: (fileConfig() as FileConfig).secretAccessKey ?? '',
+            accessKeyId: config.accessKeyId ?? '',
+            secretAccessKey: config.secretAccessKey ?? '',
           },
         });
 
         const command = new GetObjectCommand({
-          Bucket: (fileConfig() as FileConfig).awsDefaultS3Bucket ?? '',
+          Bucket: config.awsDefaultS3Bucket ?? '',
           Key: value,
         });
 
         return getSignedUrl(s3, command, { expiresIn: 3600 });
+      } else if (config.driver === FileDriver.CLOUDFRONT) {
+        // For CloudFront, we use the CloudFront distribution domain
+        if (config.cloudfrontDistributionDomain) {
+          return `https://${config.cloudfrontDistributionDomain}/${value}`;
+        }
       }
 
       return value;

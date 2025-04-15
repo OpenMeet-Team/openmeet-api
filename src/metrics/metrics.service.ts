@@ -37,7 +37,7 @@ export class MetricsService implements OnModuleInit {
     console.log('Updating business metrics for all tenants...');
     try {
       // Get all tenant IDs
-      const allTenants = await this.tenantConnectionService.getAllTenants();
+      const allTenants = await (this.tenantConnectionService as any).getAllTenants();
       console.log(`Found ${allTenants.length} tenants to collect metrics from`);
       
       // Track totals across all tenants
