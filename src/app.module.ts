@@ -35,8 +35,6 @@ import { SubCategoryModule } from './sub-category/sub-category.module';
 import { GroupMemberModule } from './group-member/group-member.module';
 import { EventAttendeeModule } from './event-attendee/event-attendee.module';
 import { HealthModule } from './health/health.module';
-import { makeCounterProvider } from '@willsoto/nestjs-prometheus';
-import { RequestCounterInterceptor } from './interceptors/request-counter.interceptor';
 import { GroupRoleModule } from './group-role/group-role.module';
 import { RoleModule } from './role/role.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
@@ -53,6 +51,7 @@ import { BlueskyModule } from './bluesky/bluesky.module';
 import { MatrixModule } from './matrix/matrix.module';
 import { EventSeriesModule } from './event-series/event-series.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { InterceptorsModule } from './core/interceptors.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -105,6 +104,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     HealthModule,
     TracingModule,
     MetricsModule,
+    InterceptorsModule,
     // It's important that UserModule comes before MatrixModule to ensure it's initialized first
     UserModule,
     FileModule,
@@ -144,12 +144,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       provide: 'AUDIT_LOGGER',
       useValue: AuditLoggerService.getInstance(),
     },
-    RequestCounterInterceptor,
-    makeCounterProvider({
-      name: 'http_requests_total',
-      help: 'Total number of HTTP requests',
-    }),
-    // Business metrics are now registered in metrics.module.ts
+    // Interceptors and filters are now registered in InterceptorsModule
   ],
   exports: ['AUDIT_LOGGER'],
 })

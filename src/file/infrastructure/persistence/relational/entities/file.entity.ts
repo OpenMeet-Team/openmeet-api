@@ -63,7 +63,7 @@ export class FileEntity extends EntityRelationalHelper {
   @Transform(
     ({ value }) => {
       const config = fileConfig() as FileConfig;
-      
+
       if (config.driver === FileDriver.LOCAL) {
         return (appConfig() as AppConfig).backendDomain + value;
       } else if (
