@@ -88,6 +88,29 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           timestamp: new Date().toISOString(),
         };
 
+        // If it's a UnprocessableEntityException, add the original error data
+        if (
+          exception instanceof HttpException &&
+          status === HttpStatus.UNPROCESSABLE_ENTITY
+        ) {
+          try {
+            const exceptionResponse = exception.getResponse();
+            if (
+              typeof exceptionResponse === 'object' &&
+              exceptionResponse !== null
+            ) {
+              // If the exception contains an 'errors' field, include it in the response
+              if ('errors' in exceptionResponse) {
+                Object.assign(errorResponse, {
+                  errors: exceptionResponse['errors'],
+                });
+              }
+            }
+          } catch {
+            // Silently fail if we can't extract additional data
+          }
+        }
+
         response.status(status).json(errorResponse);
       } finally {
         span.end();

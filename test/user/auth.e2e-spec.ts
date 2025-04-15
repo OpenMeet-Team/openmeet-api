@@ -35,8 +35,8 @@ describe('Auth Module', () => {
   });
 
   describe('Registration', () => {
-    it('should fail with exists email: /api/v1/auth/email/register (POST)', () => {
-      return serverApp
+    it('should fail with exists email: /api/v1/auth/email/register (POST)', async () => {
+      const response = await serverApp
         .post('/api/v1/auth/email/register')
         .send({
           email: TESTING_USER_EMAIL,
@@ -44,10 +44,21 @@ describe('Auth Module', () => {
           firstName: 'Tester',
           lastName: 'E2E',
         })
-        .expect(422)
-        .expect(({ body }) => {
-          expect(body.errors.email).toBeDefined();
-        });
+        .expect(422);
+
+      console.log('response.body', response.body);
+      console.log('response.request.headers', response.request.headers);
+      console.log('response.request.body', response.request.body);
+
+      // Check the response format matches GlobalExceptionFilter
+      expect(response.body.statusCode).toBe(422);
+      expect(response.body.message).toBe('Unprocessable Entity Exception');
+      expect(response.body.path).toBe('/api/v1/auth/email/register');
+
+      // Check the specific error is preserved
+      expect(response.body.errors.email).toBe('emailAlreadyExists');
+
+      return response;
     });
 
     it('should successfully: /api/v1/auth/email/register (POST)', () => {
@@ -76,7 +87,7 @@ describe('Auth Module', () => {
     });
 
     describe.skip('Confirm email', () => {
-      it.skip('should successfully: /api/v1/auth/email/confirm (POST)', async () => {
+      it('should successfully: /api/v1/auth/email/confirm (POST)', async () => {
         const response = await serverEmail.get('/email');
 
         const hash = response.body
@@ -112,6 +123,7 @@ describe('Auth Module', () => {
 
         return request(app)
           .post('/api/v1/auth/email/confirm')
+          .set('x-tenant-id', TESTING_TENANT_ID)
           .send({
             hash,
           })
@@ -204,11 +216,13 @@ describe('Auth Module', () => {
     it('should fail on the second attempt to refresh token with the same token: /api/v1/auth/refresh (POST)', async () => {
       const newUserRefreshToken = await request(app)
         .post('/api/v1/auth/email/login')
+        .set('x-tenant-id', TESTING_TENANT_ID)
         .send({ email: newUserEmail, password: newUserPassword })
         .then(({ body }) => body.refreshToken);
 
       await request(app)
         .post('/api/v1/auth/refresh')
+        .set('x-tenant-id', TESTING_TENANT_ID)
         .auth(newUserRefreshToken, {
           type: 'bearer',
         })
@@ -216,6 +230,7 @@ describe('Auth Module', () => {
 
       await request(app)
         .post('/api/v1/auth/refresh')
+        .set('x-tenant-id', TESTING_TENANT_ID)
         .auth(newUserRefreshToken, {
           type: 'bearer',
         })
