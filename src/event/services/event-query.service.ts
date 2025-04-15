@@ -642,11 +642,34 @@ export class EventQueryService {
       }),
     );
 
-    // Step 2: Use the improved addRecurrenceInformation method
-    // which now handles serialization correctly
-    const processedEvents = eventsWithCounts.map((event) =>
-      this.addRecurrenceInformation(event),
-    );
+    // Step 2: Serialize events first using instanceToPlain, then add recurrence info
+    // This is the key to fixing the issue - serialize first, then modify
+    const processedEvents = eventsWithCounts.map((event) => {
+      // First, serialize the entire event (which correctly processes the image path)
+      const plainEvent = instanceToPlain(event);
+
+      // Now, add recurrence information to the already serialized plain object
+      if (!event.seriesSlug) {
+        const eventWithRecurrence = event as any;
+        if (
+          eventWithRecurrence.isRecurring &&
+          eventWithRecurrence.recurrenceRule
+        ) {
+          const rule = eventWithRecurrence.recurrenceRule;
+          const freq = rule.frequency?.toLowerCase() || 'weekly';
+          const interval = rule.interval || 1;
+
+          let recurrenceDescription = `Every ${interval > 1 ? interval : ''} ${freq}`;
+          if (interval > 1) {
+            recurrenceDescription += freq.endsWith('s') ? '' : 's';
+          }
+
+          plainEvent.recurrenceDescription = recurrenceDescription;
+        }
+      }
+
+      return plainEvent as unknown as EventEntity;
+    });
 
     // Debug final result
     if (processedEvents.length > 0 && processedEvents[0].image) {
