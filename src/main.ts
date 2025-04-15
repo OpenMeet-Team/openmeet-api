@@ -15,7 +15,6 @@ import { AllConfigType } from './config/config.type';
 import { ResolvePromisesInterceptor } from './utils/serializer.interceptor';
 import { AggregateByTenantContextIdStrategy } from './strategy/tenant.strategy';
 import { TenantGuard } from './tenant/tenant.guard';
-import { RequestCounterInterceptor } from './interceptors/request-counter.interceptor';
 import { getBuildInfo } from './utils/version';
 import { SimpleLogger } from './logger/simple.logger';
 import { IoAdapter } from '@nestjs/platform-socket.io';
@@ -154,10 +153,11 @@ async function bootstrap() {
     app.useGlobalGuards(new TenantGuard(app.get(Reflector)));
     startupLog('Global guards configured');
 
-    startupLog('Setting up request counter interceptor');
-    const requestCounterInterceptor = app.get(RequestCounterInterceptor);
-    app.useGlobalInterceptors(requestCounterInterceptor);
-    startupLog('Request counter interceptor configured');
+    // The RequestCounterInterceptor is now registered through APP_INTERCEPTOR in InterceptorsModule
+    // so we don't need to manually add it here anymore
+    startupLog(
+      'Using globally registered interceptors from InterceptorsModule',
+    );
 
     // Use the Socket.io adapter for WebSockets
     startupLog('Setting up WebSocket adapter');
