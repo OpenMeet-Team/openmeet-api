@@ -229,6 +229,15 @@ export class UserEntity extends EntityRelationalHelper {
   @Exclude({ toPlainOnly: true })
   matrixDeviceId?: string;
 
+  @ApiProperty({
+    type: Boolean,
+    description:
+      'Indicates if this is a shadow account created from Bluesky integration',
+  })
+  @Column({ type: Boolean, default: false })
+  @Expose({ groups: ['admin'] })
+  isShadowAccount: boolean;
+
   @Column('jsonb', { nullable: true })
   preferences: {
     bluesky?: {

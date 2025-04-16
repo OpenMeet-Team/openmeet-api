@@ -1,6 +1,8 @@
 
 # Bluesky User and External Events
 
+> **NOTE**: This document contains early design notes. For the authoritative and comprehensive design documentation, please refer to [ATProtocol Design](/design-notes/atprotocol-design.md).
+
 When a bluesky user logs in, we authenticate with the provider PDS and get a token.
 That token is usable to look up and create records in the PDS.
 We want the PDS to be the source of truth, and we're caching a copy in the local db.

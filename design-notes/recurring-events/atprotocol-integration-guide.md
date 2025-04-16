@@ -1,5 +1,7 @@
 # ATProtocol Integration Guide
 
+> **NOTE**: This document contains specific technical implementation details. For the authoritative and comprehensive ATProtocol integration design, please refer to [ATProtocol Design](/design-notes/atprotocol-design.md).
+
 This document provides a technical guide for integrating OpenMeet's Event Series with Bluesky's ATProtocol.
 
 ## Current State & Limitations

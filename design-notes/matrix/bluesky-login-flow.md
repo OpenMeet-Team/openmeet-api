@@ -1,5 +1,7 @@
 # Bluesky Login Flow Redesign
 
+> **NOTE**: This document focuses specifically on the login flow UI implementation. For the authoritative and comprehensive ATProtocol integration design, please refer to [ATProtocol Design](/design-notes/atprotocol-design.md).
+
 ## Problem
 We've been experiencing an issue with the Bluesky OAuth login flow where the popup window used to get credentials becomes the active window and focus doesn't properly return to the main window after authentication. This results in a suboptimal user experience where users may need to manually switch back to the main window.
 
