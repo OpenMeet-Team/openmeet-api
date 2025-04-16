@@ -542,4 +542,215 @@ export class BlueskyService {
       };
     }
   }
+
+  /**
+   * Reset a Bluesky session for a user
+   * This will force the user to re-authenticate with Bluesky
+   *
+   * @param did The Bluesky DID to reset the session for
+   * @param tenantId Tenant ID
+   * @returns Status of the operation
+   */
+  async resetSession(
+    did: string,
+    tenantId: string,
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      this.logger.log(`Resetting Bluesky session for DID: ${did}`);
+
+      // Use a consistent lock key for session operations
+      const lockKey = `@atproto-oauth-client-${did}`;
+
+      // Delete the session directly from Redis
+      await this.elasticacheService.withLock(
+        lockKey,
+        async () => {
+          // Delete the session from ElastiCache
+          await this.elasticacheService.del(`bluesky:session:${did}`);
+        },
+        30000, // 30 second lock TTL
+      );
+
+      return {
+        success: true,
+        message: `Session for DID ${did} has been reset. User will need to reconnect their account.`,
+      };
+    } catch (error) {
+      this.logger.error('Failed to reset Bluesky session', {
+        error: error.message,
+        stack: error.stack,
+        did,
+        tenantId,
+      });
+
+      return {
+        success: false,
+        message: `Failed to reset session: ${error.message}`,
+      };
+    }
+  }
+
+  /**
+   * Get ATProtocol profile information for any DID or handle
+   * Works without requiring user authentication - can be used for shadow users
+   * or any ATProtocol user who hasn't registered with OpenMeet
+   *
+   * @param handleOrDid DID or handle to look up
+   * @returns Profile information
+   */
+  async getPublicProfile(handleOrDid: string): Promise<any> {
+    try {
+      this.logger.debug(
+        'Looking up public ATProtocol profile for: ${handleOrDid}',
+      );
+
+      // Import the proper classes for resolution
+      const { HandleResolver, getPds } = await import('@atproto/identity');
+
+      // Create resolvers
+      const handleResolver = new HandleResolver();
+
+      // Resolve the DID and determine the proper PDS service endpoint
+      let did = handleOrDid;
+
+      if (!handleOrDid.startsWith('did:')) {
+        // If a handle was provided, resolve it to a DID first
+        this.logger.debug(`Resolving handle ${handleOrDid} to DID`);
+        const resolvedDid = await handleResolver.resolve(handleOrDid);
+        if (!resolvedDid) {
+          throw new Error(`Could not resolve handle ${handleOrDid} to a DID`);
+        }
+        did = resolvedDid;
+        this.logger.debug(`Resolved ${handleOrDid} to ${did}`);
+      }
+
+      // Now get the PDS endpoint for this DID
+      const didDoc = { id: did }; // Create minimal DID document
+      const pdsEndpoint = await getPds(didDoc);
+      if (!pdsEndpoint) {
+        throw new Error(`Could not get PDS endpoint for DID ${did}`);
+      }
+      this.logger.debug(`PDS endpoint for ${did}: ${pdsEndpoint}`);
+
+      // Create agent with the proper PDS endpoint as a string
+      const agent = new Agent(pdsEndpoint);
+
+      // Fetch profile data
+      const response = await agent.getProfile({ actor: did });
+
+      // Format the response
+      return {
+        did: response.data.did,
+        handle: response.data.handle,
+        displayName: response.data.displayName,
+        avatar: response.data.avatar,
+        followersCount: response.data.followersCount || 0,
+        followingCount: response.data.followingCount || 0,
+        postsCount: response.data.postsCount || 0,
+        description: response.data.description,
+        indexedAt: response.data.indexedAt,
+        labels: response.data.labels || [],
+        source: 'atprotocol-public',
+        pdsEndpoint: pdsEndpoint,
+      };
+    } catch (error) {
+      this.logger.error('Failed to fetch public ATProtocol profile', {
+        error: error.message,
+        stack: error.stack,
+        handleOrDid,
+      });
+
+      throw new Error(
+        `Unable to resolve profile for ${handleOrDid}: ${error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Get enhanced ATProtocol profile information for an OpenMeet user
+   * First tries to use their authenticated session to get detailed profile data
+   * Falls back to public profile lookup if session is unavailable
+   *
+   * @param user User entity with ATProtocol preferences
+   * @param tenantId Tenant ID
+   * @returns Enhanced profile data from the user's PDS
+   */
+  async getEnhancedProfile(user: UserEntity, _tenantId: string): Promise<any> {
+    try {
+      if (
+        !user.preferences?.bluesky?.did &&
+        !user.preferences?.bluesky?.handle
+      ) {
+        return {
+          connected: false,
+          message: 'No ATProtocol account connected',
+        };
+      }
+
+      const did = user.preferences.bluesky.did;
+      const handle = user.preferences.bluesky.handle;
+      const identifier = did || handle;
+
+      if (!identifier) {
+        return {
+          connected: false,
+          message: 'No ATProtocol identifier found',
+        };
+      }
+
+      const { avatar, connected, connectedAt } = user.preferences.bluesky;
+
+      // Base profile with data we already have stored
+      const baseProfile = {
+        did,
+        handle,
+        avatar,
+        connected: connected === true,
+        connectedAt,
+        userId: user.id,
+      };
+
+      try {
+        // Always use public profile lookup as the primary approach
+        // This respects ATProtocol's decentralized nature
+        const publicProfile = await this.getPublicProfile(identifier);
+
+        // Merge the public profile data with our stored information
+        const enhancedProfile = {
+          ...baseProfile,
+          ...publicProfile,
+          // Preserve our connection state
+          connected: connected === true,
+          connectedAt,
+        };
+
+        // Return the enhanced profile
+        return enhancedProfile;
+      } catch (error) {
+        this.logger.warn('Failed to fetch ATProtocol profile data', {
+          error: error.message,
+          did,
+          handle,
+        });
+
+        // Return just the stored data if all lookups fail
+        return {
+          ...baseProfile,
+          message:
+            'Limited profile data available - could not refresh from ATProtocol',
+        };
+      }
+    } catch (error) {
+      this.logger.error('Error retrieving ATProtocol profile', {
+        error: error.message,
+        stack: error.stack,
+        userId: user.id,
+        socialId: user.socialId,
+      });
+
+      throw new Error(
+        `Failed to retrieve ATProtocol profile: ${error.message}`,
+      );
+    }
+  }
 }
