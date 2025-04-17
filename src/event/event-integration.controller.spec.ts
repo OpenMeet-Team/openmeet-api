@@ -111,13 +111,13 @@ describe('EventIntegrationController', () => {
 
     it('should throw an error if tenant ID is missing', async () => {
       // Act & Assert
-      await expect(controller.ingestEvent('', mockEventDto))
-        .rejects
-        .toThrow(UnauthorizedException);
-      
-      await expect(controller.ingestEvent(null as any, mockEventDto))
-        .rejects
-        .toThrow(UnauthorizedException);
+      await expect(controller.ingestEvent('', mockEventDto)).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      await expect(
+        controller.ingestEvent(null as any, mockEventDto),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('should handle errors properly', async () => {

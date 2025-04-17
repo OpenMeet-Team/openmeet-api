@@ -44,6 +44,24 @@ export class BlueskyService {
     for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
       try {
         const client = await this.getOAuthClient(tenantId);
+        // Try direct restore first without locking
+        try {
+          const directSession = await client.restore(did);
+          if (directSession) {
+            const agent = new Agent(directSession);
+            // Verify the session is valid
+            await agent.getProfile({ actor: did });
+            this.logger.debug(
+              `Successfully restored session for DID ${did} directly`,
+            );
+            return agent;
+          }
+        } catch (directError) {
+          this.logger.debug(
+            `Direct session restore failed: ${directError.message}`,
+          );
+          // Fall through to try with lock
+        }
 
         // Use a consistent lock key for session operations
         const lockKey = `@atproto-oauth-client-${did}`;
@@ -299,6 +317,94 @@ export class BlueskyService {
     });
 
     try {
+      // Try to create the event record directly without a lock first
+      try {
+        const agent = await this.resumeSession(tenantId, did);
+        // Convert event type to Bluesky mode
+        const modeMap = {
+          'in-person': 'community.lexicon.calendar.event#inperson',
+          online: 'community.lexicon.calendar.event#virtual',
+          hybrid: 'community.lexicon.calendar.event#hybrid',
+        };
+
+        // Convert event status to Bluesky status
+        const statusMap = {
+          draft: 'community.lexicon.calendar.event#planned',
+          published: 'community.lexicon.calendar.event#scheduled',
+          cancelled: 'community.lexicon.calendar.event#cancelled',
+        };
+
+        const locations: BlueskyLocation[] = [];
+
+        // Add physical location if exists
+        if (event.location && event.lat && event.lon) {
+          locations.push({
+            type: 'community.lexicon.location.geo',
+            lat: event.lat,
+            lon: event.lon,
+            description: event.location,
+          });
+        }
+
+        // Add online location if exists
+        if (event.locationOnline) {
+          locations.push({
+            type: 'community.lexicon.calendar.event#uri',
+            uri: event.locationOnline,
+            name: 'Online Meeting Link',
+          });
+        }
+
+        // Generate a unique rkey from the event name
+        const baseName = this.generateBaseName(event.name);
+        const rkey = await this.generateUniqueRkey(agent, did, baseName);
+
+        // Prepare uris array with image if it exists
+        const uris: BlueskyEventUri[] = [];
+        if (event.image?.path) {
+          uris.push({
+            uri: event.image.path,
+            name: 'Event Image',
+          });
+        }
+
+        // Add online location to uris if it exists
+        if (event.locationOnline) {
+          uris.push({
+            uri: event.locationOnline,
+            name: 'Online Meeting Link',
+          });
+        }
+
+        const result = await agent.com.atproto.repo.putRecord({
+          repo: did,
+          collection: 'community.lexicon.calendar.event',
+          rkey,
+          record: {
+            $type: 'community.lexicon.calendar.event',
+            name: event.name,
+            description: event.description,
+            createdAt: event.createdAt,
+            startsAt: event.startDate,
+            endsAt: event.endDate,
+            mode: modeMap[event.type] || modeMap['in-person'],
+            status: statusMap[event.status] || statusMap['published'],
+            locations,
+            uris,
+          },
+        });
+        this.logger.debug(result);
+        this.logger.log(
+          `Event ${event.name} posted to Bluesky for user ${handle} (direct without lock)`,
+        );
+        return { rkey };
+      } catch (directError) {
+        this.logger.warn(
+          `Direct event creation failed: ${directError.message}, trying with lock`,
+        );
+        // Fall through to try with lock
+      }
+
       // Use a consistent lock key for session operations
       const lockKey = `@atproto-oauth-client-${did}`;
 
@@ -382,7 +488,7 @@ export class BlueskyService {
           });
           this.logger.debug(result);
           this.logger.log(
-            `Event ${event.name} posted to Bluesky for user ${handle}`,
+            `Event ${event.name} posted to Bluesky for user ${handle} (with lock)`,
           );
           return { rkey };
         },

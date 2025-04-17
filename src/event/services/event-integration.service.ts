@@ -5,10 +5,7 @@ import { Repository } from 'typeorm';
 import { ShadowAccountService } from '../../bluesky/shadow-account/shadow-account.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { EventSourceType } from '../../core/constants/source-type.constant';
-import {
-  EventStatus,
-  EventVisibility,
-} from '../../core/constants/constant';
+import { EventStatus, EventVisibility } from '../../core/constants/constant';
 import { EventQueryService } from './event-query.service';
 
 @Injectable()
@@ -34,13 +31,12 @@ export class EventIntegrationService {
     if (!tenantId) {
       throw new BadRequestException('Tenant ID is required');
     }
-    
-    this.logger.debug(
-      `Processing external event for tenant ${tenantId}`,
-    );
+
+    this.logger.debug(`Processing external event for tenant ${tenantId}`);
 
     // Get the tenant connection
-    const tenantConnection = await this.tenantService.getTenantConnection(tenantId);
+    const tenantConnection =
+      await this.tenantService.getTenantConnection(tenantId);
     const eventRepository = tenantConnection.getRepository(EventEntity);
 
     // Check if this event already exists (to avoid duplicates)
@@ -51,8 +47,15 @@ export class EventIntegrationService {
     );
 
     if (existingEvent) {
-      this.logger.debug(`Found existing event with ID ${existingEvent.id}, updating it`);
-      return this.updateExistingEvent(existingEvent, eventData, eventRepository, tenantId);
+      this.logger.debug(
+        `Found existing event with ID ${existingEvent.id}, updating it`,
+      );
+      return this.updateExistingEvent(
+        existingEvent,
+        eventData,
+        eventRepository,
+        tenantId,
+      );
     }
 
     // No existing event, create a new one
@@ -69,15 +72,19 @@ export class EventIntegrationService {
     tenantId: string,
   ): Promise<EventEntity | null> {
     try {
-      const existingEvents = await this.eventQueryService.findBySourceAttributes(
-        sourceId,
-        sourceType,
-        tenantId,
-      );
+      const existingEvents =
+        await this.eventQueryService.findBySourceAttributes(
+          sourceId,
+          sourceType,
+          tenantId,
+        );
 
       return existingEvents.length > 0 ? existingEvents[0] : null;
     } catch (error) {
-      this.logger.error(`Error finding existing event: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error finding existing event: ${error.message}`,
+        error.stack,
+      );
       return null;
     }
   }
@@ -98,16 +105,16 @@ export class EventIntegrationService {
     newEvent.name = eventData.name;
     newEvent.description = eventData.description;
     newEvent.startDate = new Date(eventData.startDate);
-    
+
     // Fix the null assignment to Date type
     if (eventData.endDate) {
       newEvent.endDate = new Date(eventData.endDate);
     }
-    
+
     newEvent.type = eventData.type;
     newEvent.status = eventData.status || EventStatus.Published;
     newEvent.visibility = eventData.visibility || EventVisibility.Public;
-    
+
     // Handle location
     if (eventData.location) {
       if (eventData.location.description) {
@@ -127,20 +134,23 @@ export class EventIntegrationService {
     newEvent.sourceId = eventData.source.id;
     newEvent.sourceUrl = eventData.source.url || null;
     newEvent.sourceData = eventData.source.metadata || {};
-    
+
     // If it's a Bluesky event, store the handle
-    if (eventData.source.type === EventSourceType.BLUESKY && eventData.source.handle) {
+    if (
+      eventData.source.type === EventSourceType.BLUESKY &&
+      eventData.source.handle
+    ) {
       newEvent.sourceData = {
         ...newEvent.sourceData,
         handle: eventData.source.handle,
       };
     }
-    
+
     newEvent.lastSyncedAt = new Date();
-    
+
     // Set the user (shadow account or real account)
     newEvent.user = user;
-    
+
     // Generate ULID and slug
     newEvent.generateUlid();
     newEvent.generateSlug();
@@ -152,7 +162,9 @@ export class EventIntegrationService {
 
     // Save the event
     const savedEvent = await eventRepository.save(newEvent);
-    this.logger.debug(`Created new event with ID ${savedEvent.id} for tenant ${tenantId}`);
+    this.logger.debug(
+      `Created new event with ID ${savedEvent.id} for tenant ${tenantId}`,
+    );
 
     return savedEvent;
   }
@@ -171,22 +183,24 @@ export class EventIntegrationService {
     eventRepository: Repository<EventEntity>,
     tenantId: string,
   ): Promise<EventEntity> {
-    this.logger.debug(`Updating event ${existingEvent.id} for tenant ${tenantId}`);
-    
+    this.logger.debug(
+      `Updating event ${existingEvent.id} for tenant ${tenantId}`,
+    );
+
     // Update basic fields
     existingEvent.name = eventData.name;
     existingEvent.description = eventData.description;
     existingEvent.startDate = new Date(eventData.startDate);
-    
+
     // Fix the null assignment to Date type
     if (eventData.endDate) {
       existingEvent.endDate = new Date(eventData.endDate);
     }
-    
+
     existingEvent.type = eventData.type;
     existingEvent.status = eventData.status || existingEvent.status;
     existingEvent.visibility = eventData.visibility || existingEvent.visibility;
-    
+
     // Handle location
     if (eventData.location) {
       if (eventData.location.description) {
@@ -224,7 +238,9 @@ export class EventIntegrationService {
 
     // Save the updated event
     const updatedEvent = await eventRepository.save(existingEvent);
-    this.logger.debug(`Updated event with ID ${updatedEvent.id} for tenant ${tenantId}`);
+    this.logger.debug(
+      `Updated event with ID ${updatedEvent.id} for tenant ${tenantId}`,
+    );
 
     return updatedEvent;
   }
@@ -232,7 +248,10 @@ export class EventIntegrationService {
   /**
    * Handle event creator (create shadow account if needed)
    */
-  private async handleEventCreator(eventData: ExternalEventDto, tenantId: string) {
+  private async handleEventCreator(
+    eventData: ExternalEventDto,
+    tenantId: string,
+  ) {
     // For Bluesky events, create shadow accounts if needed
     if (
       eventData.source.type === EventSourceType.BLUESKY &&
@@ -243,7 +262,7 @@ export class EventIntegrationService {
       this.logger.debug(
         `Creating shadow account for Bluesky user with DID ${eventData.source.id} and handle ${eventData.source.handle} for tenant ${tenantId}`,
       );
-      
+
       return this.shadowAccountService.findOrCreateShadowAccount(
         eventData.source.id,
         eventData.source.handle,

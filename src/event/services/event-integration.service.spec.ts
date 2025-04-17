@@ -246,27 +246,29 @@ describe('EventIntegrationService', () => {
     it('should validate the tenant ID requirement', async () => {
       // Act & Assert
       await expect(
-        service.processExternalEvent(mockEventDto, '')
+        service.processExternalEvent(mockEventDto, ''),
       ).rejects.toThrow('Tenant ID is required');
-      
+
       await expect(
-        service.processExternalEvent(mockEventDto, null as any)
+        service.processExternalEvent(mockEventDto, null as any),
       ).rejects.toThrow('Tenant ID is required');
     });
 
     it('should use the provided tenant ID for connection', async () => {
       // Arrange
       eventQueryService.findBySourceAttributes.mockResolvedValue([]);
-      
+
       // Mock EventEntity methods specifically for this test
       const entity = new EventEntity();
       eventRepository.create.mockReturnValue(entity);
-      
+
       // Act
       await service.processExternalEvent(mockEventDto, 'custom-tenant');
 
       // Assert
-      expect(tenantService.getTenantConnection).toHaveBeenCalledWith('custom-tenant');
+      expect(tenantService.getTenantConnection).toHaveBeenCalledWith(
+        'custom-tenant',
+      );
       expect(EventEntity.prototype.generateUlid).toHaveBeenCalled();
       expect(EventEntity.prototype.generateSlug).toHaveBeenCalled();
     });
@@ -309,10 +311,7 @@ describe('EventIntegrationService', () => {
       });
 
       // Act
-      await service.processExternalEvent(
-        eventWithLocation,
-        'tenant1',
-      );
+      await service.processExternalEvent(eventWithLocation, 'tenant1');
 
       // Assert
       expect(EventEntity.prototype.generateUlid).toHaveBeenCalled();

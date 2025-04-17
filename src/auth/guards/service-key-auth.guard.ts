@@ -19,7 +19,9 @@ export class ServiceKeyAuthGuard implements CanActivate {
 
   constructor(private readonly configService: ConfigService) {
     // Load API keys from configuration
-    const keys = this.configService.get<string>('SERVICE_API_KEYS', { infer: true });
+    const keys = this.configService.get<string>('SERVICE_API_KEYS', {
+      infer: true,
+    });
     this.apiKeys = keys ? keys.split(',').map((key) => key.trim()) : [];
 
     if (this.apiKeys.length === 0) {

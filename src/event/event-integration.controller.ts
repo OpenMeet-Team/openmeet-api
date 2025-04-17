@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Post,
-  Param,
   UseGuards,
   Logger,
   HttpCode,
@@ -15,7 +14,6 @@ import {
   ApiTags,
   ApiOperation,
   ApiBody,
-  ApiParam,
   ApiResponse,
   ApiHeader,
 } from '@nestjs/swagger';

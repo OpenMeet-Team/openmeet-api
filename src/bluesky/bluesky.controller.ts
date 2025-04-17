@@ -10,6 +10,7 @@ import {
   HttpException,
   HttpStatus,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { BlueskyService } from './bluesky.service';
 import { JWTAuthGuard } from '../auth/auth.guard';
@@ -170,27 +171,31 @@ export class BlueskyController {
     );
   }
 
-  @Post('session/reset/:did')
-  @ApiOperation({ summary: 'Reset a Bluesky session' })
-  async resetSession(
+  @Post('admin/session/reset/:did')
+  @ApiOperation({
+    summary: 'Admin-only endpoint to reset a Bluesky session',
+  })
+  async adminResetSession(
     @Param('did') did: string,
     @Req() req,
     @AuthUser() user: UserEntity,
   ) {
-    this.logger.log(`Request to reset Bluesky session for DID: ${did}`);
+    // Verify user is an admin - check both role name and id
+    const isAdmin = user.role?.name === RoleEnum.Admin || user.role?.id === 2;
 
-    // Check if user owns this DID or has admin permissions
-    const isOwner = user.preferences?.bluesky?.did === did;
-    const isAdmin = user.role?.name === RoleEnum.Admin;
-
-    if (!isOwner && !isAdmin) {
-      return {
-        success: false,
-        message: 'You do not have permission to reset this session',
-      };
+    if (!isAdmin) {
+      this.logger.warn(
+        `Non-admin user ${user.id} attempted to access admin-only endpoint`,
+        { role: user.role },
+      );
+      throw new ForbiddenException('Admin role required');
     }
 
-    // Use the service method to reset the session
+    this.logger.log(
+      `Admin ${user.id} is resetting Bluesky session for DID: ${did}`,
+    );
+
+    // Since we've verified admin permissions, we can proceed
     return await this.blueskyService.resetSession(did, req.tenantId);
   }
 }
