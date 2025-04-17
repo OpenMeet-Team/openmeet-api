@@ -42,6 +42,7 @@ import { EventSeriesEntity } from '../../event-series/infrastructure/persistence
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
 import { Not, IsNull } from 'typeorm';
 import { RecurrenceFrequency } from '../../event-series/interfaces/recurrence.interface';
+import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventManagementService {
@@ -549,108 +550,193 @@ export class EventManagementService {
       }
     }
 
-    // Attempt to clean up chat rooms if the discussionService is available
-    try {
-      if (
-        this.discussionService &&
-        typeof this.discussionService.cleanupEventChatRooms === 'function'
-      ) {
-        this.logger.log(`Cleaning up chat rooms for event ${event.id}`);
-        await this.discussionService.cleanupEventChatRooms(
-          event.id,
-          this.request.tenantId,
-        );
-        this.logger.log(
-          `Successfully cleaned up chat rooms for event ${event.id}`,
-        );
-      } else {
-        this.logger.warn(
-          `Unable to clean up chat rooms: discussionService.cleanupEventChatRooms is not available.`,
-        );
-        // We'll rely on the event listener to handle cleanup via events
-      }
-    } catch (chatCleanupError) {
-      this.logger.error(
-        `Error cleaning up chat rooms for event ${event.id}: ${chatCleanupError.message}`,
-        chatCleanupError.stack,
-      );
-      // Continue with deletion despite the error
-    }
+    // Get a database connection for transaction
+    const dataSource = await this.tenantConnectionService.getTenantConnection(
+      this.request.tenantId,
+    );
 
-    // Make sure to clear Matrix room ID from event to avoid stale references
-    if (event.matrixRoomId) {
-      event.matrixRoomId = '';
-      await this.eventRepository.save(event);
-    }
+    // Use a transaction to ensure atomicity
+    await dataSource
+      .transaction(async (transactionalEntityManager) => {
+        this.logger.log(`Starting transaction for event deletion: ${event.id}`);
 
-    // Emit the event with skipChatCleanup flag since we already did it
-    this.eventEmitter.emit('event.before_delete', {
-      eventId: event.id,
-      eventSlug: event.slug,
-      eventName: event.name,
-      tenantId: this.request?.tenantId,
-      skipChatCleanup: true, // Flag to indicate cleanup has already been done
-    });
-
-    // Delete related event attendees
-    await this.eventAttendeeService.deleteEventAttendees(event.id);
-
-    // If this event is part of a series, update the series exceptions
-    if (event.seriesSlug) {
-      try {
-        this.logger.log(
-          `Adding deleted event date to series exceptions: ${event.id}`,
-        );
-
-        // Find the series either by slug
-        let series: EventSeriesEntity | null = null;
-
-        if (event.series) {
-          series = event.series;
-        } else if (event.seriesSlug) {
-          series = await this.eventSeriesService.findBySlug(event.seriesSlug);
-        }
-
-        if (series && event.startDate) {
-          // Get the event's date string
-          const exceptionDate = new Date(event.startDate).toISOString();
-
-          // Ensure the series has an exceptions array
-          if (!series.recurrenceExceptions) {
-            series.recurrenceExceptions = [];
-          }
-
-          // Add the date to the exceptions if not already there
-          if (!series.recurrenceExceptions.includes(exceptionDate)) {
-            series.recurrenceExceptions.push(exceptionDate);
-
-            // Save the updated series with the new exception
-            const dataSource =
-              await this.tenantConnectionService.getTenantConnection(
-                this.request.tenantId,
-              );
-            const eventSeriesRepository =
-              dataSource.getRepository(EventSeriesEntity);
-            await eventSeriesRepository.save(series);
-
+        // Step 1: Cleanup chat rooms first to prevent foreign key constraint errors
+        try {
+          // First attempt to clean up via discussionService if available
+          if (
+            this.discussionService &&
+            typeof this.discussionService.cleanupEventChatRooms === 'function'
+          ) {
             this.logger.log(
-              `Added ${exceptionDate} to exceptions for series ${series.id}`,
+              `Cleaning up chat rooms for event ${event.id} via discussionService`,
             );
+            await this.discussionService.cleanupEventChatRooms(
+              event.id,
+              this.request.tenantId,
+            );
+            this.logger.log(
+              `Successfully cleaned up chat rooms for event ${event.id}`,
+            );
+          } else {
+            // Direct cleanup as fallback if discussionService is not available
+            this.logger.warn(
+              `discussionService not available, using direct SQL queries for chatroom cleanup`,
+            );
+
+            // Check if there are any chat rooms to clean up first
+            const chatRooms = await transactionalEntityManager.query(
+              'SELECT COUNT(*) as count FROM "chatRooms" WHERE "eventId" = $1',
+              [event.id],
+            );
+
+            const roomCount = parseInt(chatRooms[0]?.count || '0', 10);
+
+            if (roomCount > 0) {
+              this.logger.log(
+                `Found ${roomCount} chat rooms to clean up for event ${event.id}`,
+              );
+
+              // Delete chat room members first due to foreign key constraints
+              await transactionalEntityManager.query(
+                'DELETE FROM "userChatRooms" WHERE "chatRoomId" IN (SELECT id FROM "chatRooms" WHERE "eventId" = $1)',
+                [event.id],
+              );
+
+              // Then delete the chat rooms themselves
+              await transactionalEntityManager.query(
+                'DELETE FROM "chatRooms" WHERE "eventId" = $1',
+                [event.id],
+              );
+
+              this.logger.log(
+                `Successfully cleaned up chat rooms for event ${event.id} via direct queries`,
+              );
+            } else {
+              this.logger.log(
+                `No chat rooms found for event ${event.id}, skipping cleanup`,
+              );
+            }
+          }
+        } catch (chatCleanupError) {
+          this.logger.error(
+            `Error cleaning up chat rooms for event ${event.id}: ${chatCleanupError.message}`,
+            chatCleanupError.stack,
+          );
+          // Rethrow to trigger transaction rollback
+          throw new Error(
+            `Failed to clean up chat rooms: ${chatCleanupError.message}`,
+          );
+        }
+
+        // Step 2: Clear Matrix room ID reference
+        if (event.matrixRoomId) {
+          event.matrixRoomId = '';
+          await transactionalEntityManager.save(EventEntity, event);
+          this.logger.log(`Cleared Matrix room ID for event ${event.id}`);
+        }
+
+        // Step 3: Delete related event attendees
+        try {
+          const eventAttendeeRepo =
+            transactionalEntityManager.getRepository(EventAttendeesEntity);
+          await eventAttendeeRepo.delete({ event: { id: event.id } });
+          this.logger.log(`Deleted attendees for event ${event.id}`);
+        } catch (attendeeError) {
+          this.logger.error(
+            `Error deleting event attendees: ${attendeeError.message}`,
+            attendeeError.stack,
+          );
+          // Rethrow to trigger transaction rollback
+          throw new Error(
+            `Failed to delete event attendees: ${attendeeError.message}`,
+          );
+        }
+
+        // Step 4: Handle series exceptions if needed
+        if (event.seriesSlug) {
+          try {
+            this.logger.log(
+              `Adding deleted event date to series exceptions: ${event.id}`,
+            );
+
+            // Find the series by slug
+            let series: EventSeriesEntity | null = null;
+
+            if (event.series) {
+              series = event.series;
+            } else if (event.seriesSlug) {
+              series = await transactionalEntityManager.findOne(
+                EventSeriesEntity,
+                {
+                  where: { slug: event.seriesSlug },
+                },
+              );
+            }
+
+            if (series && event.startDate) {
+              // Get the event's date string
+              const exceptionDate = new Date(event.startDate).toISOString();
+
+              // Ensure the series has an exceptions array
+              if (!series.recurrenceExceptions) {
+                series.recurrenceExceptions = [];
+              }
+
+              // Add the date to the exceptions if not already there
+              if (!series.recurrenceExceptions.includes(exceptionDate)) {
+                series.recurrenceExceptions.push(exceptionDate);
+
+                // Save the series with the transaction manager
+                await transactionalEntityManager.save(
+                  EventSeriesEntity,
+                  series,
+                );
+
+                this.logger.log(
+                  `Added ${exceptionDate} to exceptions for series ${series.id}`,
+                );
+              }
+            }
+          } catch (seriesError) {
+            this.logger.error(
+              `Error updating series exceptions: ${seriesError.message}`,
+              seriesError.stack,
+            );
+            // Continue with event deletion despite error in series update
           }
         }
-      } catch (error) {
-        this.logger.error(
-          `Error updating series exceptions for event ${event.id}: ${error.message}`,
-          error.stack,
-        );
-        // Continue with event deletion despite error
-      }
-    }
 
-    // Now delete the event from our database
-    await this.eventRepository.remove(event);
-    this.eventEmitter.emit('event.deleted', eventCopy);
-    this.auditLogger.log('event deleted', { event });
+        // Step 5: Finally, delete the event itself
+        try {
+          await transactionalEntityManager.remove(EventEntity, event);
+          this.logger.log(`Successfully deleted event ${event.id}`);
+        } catch (deleteError) {
+          this.logger.error(
+            `Error deleting event: ${deleteError.message}`,
+            deleteError.stack,
+          );
+          // Rethrow to trigger transaction rollback
+          throw new Error(`Failed to delete event: ${deleteError.message}`);
+        }
+      })
+      .then(() => {
+        // Transaction succeeded - emit events and log
+        this.eventEmitter.emit('event.deleted', eventCopy);
+        this.auditLogger.log('event deleted', { event: eventCopy });
+        this.logger.log(
+          `Successfully completed deletion of event ${eventCopy.id}`,
+        );
+      })
+      .catch((transactionError) => {
+        // Transaction failed - log and rethrow
+        this.logger.error(
+          `Transaction failed for event deletion: ${transactionError.message}`,
+          transactionError.stack,
+        );
+        throw new UnprocessableEntityException(
+          `Failed to delete event: ${transactionError.message}`,
+        );
+      });
   }
 
   /**
