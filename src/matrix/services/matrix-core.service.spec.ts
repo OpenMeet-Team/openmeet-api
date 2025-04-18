@@ -157,7 +157,7 @@ describe('MatrixCoreService', () => {
       // Verify admin client was created
       expect(createClientSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          baseUrl: 'https://matrix.example.org',
+          baseUrl: 'http://matrix-local.openmeet.test:8448',
           userId: '@admin:example.org',
           accessToken: 'admin-token',
           useAuthorizationHeader: true,

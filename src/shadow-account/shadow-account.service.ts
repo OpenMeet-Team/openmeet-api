@@ -1,16 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
-import { TenantConnectionService } from '../../tenant/tenant.service';
-import { AuthProvidersEnum } from '../../auth/auth-providers.enum';
+import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { TenantConnectionService } from '../tenant/tenant.service';
+import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { ulid } from 'ulid';
 import slugify from 'slugify';
-import { generateShortCode } from '../../utils/short-code';
+import { generateShortCode } from '../utils/short-code';
 import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
 
 /**
- * Service for managing shadow accounts created from Bluesky integration
- * Shadow accounts are lightweight provisional accounts created for Bluesky users
- * who haven't yet registered with OpenMeet but have created events on Bluesky.
+ * Service for managing shadow accounts across different platforms
+ * Shadow accounts are lightweight provisional accounts created for external users
+ * who haven't yet registered with OpenMeet but have created content that is imported.
  */
 @Injectable()
 export class ShadowAccountService {
@@ -20,24 +20,29 @@ export class ShadowAccountService {
   constructor(private readonly tenantService: TenantConnectionService) {}
 
   /**
-   * Find or create a shadow account for a Bluesky user
-   * @param did Decentralized Identifier for the Bluesky user
-   * @param handle Handle for the Bluesky user
+   * Find or create a shadow account for an external user
+   * @param externalId External identifier for the user (e.g., DID for Bluesky)
+   * @param displayName Display name for the user (e.g., handle for Bluesky)
+   * @param provider Authentication provider (e.g., bluesky, matrix)
    * @param targetTenantId ID of the tenant to place the shadow account in
+   * @param preferences Additional provider-specific preferences
    * @returns The user entity for the shadow account
    */
   async findOrCreateShadowAccount(
-    did: string,
-    handle: string,
+    externalId: string,
+    displayName: string,
+    provider: AuthProvidersEnum,
     targetTenantId: string,
+    preferences?: Record<string, any>,
   ): Promise<UserEntity> {
     return this.tracer.startActiveSpan(
       'findOrCreateShadowAccount',
       { kind: SpanKind.CLIENT },
       async (span) => {
         try {
-          span.setAttribute('did', did);
-          span.setAttribute('handle', handle);
+          span.setAttribute('externalId', externalId);
+          span.setAttribute('displayName', displayName);
+          span.setAttribute('provider', provider);
           span.setAttribute('tenantId', targetTenantId);
 
           // Get connection for the specified tenant
@@ -49,8 +54,8 @@ export class ShadowAccountService {
           // Check if shadow account already exists
           let shadowUser = await userRepository.findOne({
             where: {
-              socialId: did,
-              provider: AuthProvidersEnum.bluesky,
+              socialId: externalId,
+              provider: provider,
               isShadowAccount: true,
             },
           });
@@ -65,34 +70,31 @@ export class ShadowAccountService {
 
           // Create a new shadow account
           shadowUser = new UserEntity();
-          shadowUser.socialId = did;
-          shadowUser.provider = AuthProvidersEnum.bluesky;
+          shadowUser.socialId = externalId;
+          shadowUser.provider = provider;
           shadowUser.isShadowAccount = true;
           shadowUser.email = null;
-          shadowUser.firstName = handle;
+          shadowUser.firstName = displayName;
           shadowUser.lastName = null;
           // Use empty string instead of null for password
           shadowUser.password = '';
           shadowUser.ulid = ulid().toLowerCase();
-          shadowUser.slug = `${slugify(handle.trim().toLowerCase(), {
-            strict: true,
-            lower: true,
-          })}-${generateShortCode().toLowerCase()}`;
-
-          // Set Bluesky preferences
-          shadowUser.preferences = {
-            bluesky: {
-              did: did,
-              handle: handle,
-              connected: false,
+          shadowUser.slug = `${slugify(
+            (displayName || 'shadow-user').trim().toLowerCase(),
+            {
+              strict: true,
+              lower: true,
             },
-          };
+          )}-${generateShortCode().toLowerCase()}`;
+
+          // Set provider-specific preferences
+          shadowUser.preferences = preferences || {};
 
           // Save the shadow account
           const savedUser = await userRepository.save(shadowUser);
 
           this.logger.log(
-            `Created shadow account for Bluesky user ${handle} (${did}) in tenant ${targetTenantId}`,
+            `Created shadow account for ${provider} user ${displayName} (${externalId}) in tenant ${targetTenantId}`,
           );
 
           return savedUser;
@@ -112,15 +114,67 @@ export class ShadowAccountService {
   }
 
   /**
-   * Claim a shadow account when a real user logs in with Bluesky
+   * Find shadow account by external ID and provider
+   * @param externalId External identifier (e.g., DID for Bluesky)
+   * @param provider Authentication provider (e.g., bluesky, matrix)
+   * @param tenantId ID of the tenant
+   * @returns The shadow user entity or null if not found
+   */
+  async findShadowAccountByExternalId(
+    externalId: string,
+    provider: AuthProvidersEnum,
+    tenantId: string,
+  ): Promise<UserEntity | null> {
+    return this.tracer.startActiveSpan(
+      'findShadowAccountByExternalId',
+      { kind: SpanKind.CLIENT },
+      async (span) => {
+        try {
+          span.setAttribute('externalId', externalId);
+          span.setAttribute('provider', provider);
+          span.setAttribute('tenantId', tenantId);
+
+          const tenantConnection =
+            await this.tenantService.getTenantConnection(tenantId);
+
+          const userRepository = tenantConnection.getRepository(UserEntity);
+
+          const shadowUser = await userRepository.findOne({
+            where: {
+              socialId: externalId,
+              provider: provider,
+              isShadowAccount: true,
+            },
+          });
+
+          return shadowUser || null;
+        } catch (error) {
+          span.recordException(error);
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          this.logger.error(
+            `Error finding shadow account: ${error.message}`,
+            error.stack,
+          );
+          throw error;
+        } finally {
+          span.end();
+        }
+      },
+    );
+  }
+
+  /**
+   * Claim a shadow account when a real user logs in
    * @param userId ID of the real user
-   * @param did Decentralized Identifier for the Bluesky user
+   * @param externalId External identifier (e.g., DID for Bluesky)
+   * @param provider Authentication provider (e.g., bluesky, matrix)
    * @param tenantId ID of the tenant
    * @returns The updated user entity or null if no shadow account exists
    */
   async claimShadowAccount(
     userId: number,
-    did: string,
+    externalId: string,
+    provider: AuthProvidersEnum,
     tenantId: string,
   ): Promise<UserEntity | null> {
     return this.tracer.startActiveSpan(
@@ -129,7 +183,8 @@ export class ShadowAccountService {
       async (span) => {
         try {
           span.setAttribute('userId', userId);
-          span.setAttribute('did', did);
+          span.setAttribute('externalId', externalId);
+          span.setAttribute('provider', provider);
           span.setAttribute('tenantId', tenantId);
 
           // Get tenant connection
@@ -141,8 +196,8 @@ export class ShadowAccountService {
           // Find the shadow account
           const shadowUser = await userRepository.findOne({
             where: {
-              socialId: did,
-              provider: AuthProvidersEnum.bluesky,
+              socialId: externalId,
+              provider: provider,
               isShadowAccount: true,
             },
           });
@@ -185,7 +240,7 @@ export class ShadowAccountService {
             await queryRunner.commitTransaction();
 
             this.logger.log(
-              `Claimed shadow account for ${did} by user ${userId} in tenant ${tenantId}`,
+              `Claimed shadow account for ${provider} user ${externalId} by user ${userId} in tenant ${tenantId}`,
             );
 
             return realUser;
@@ -255,9 +310,9 @@ export class ShadowAccountService {
   }
 
   /**
-   * Find all shadow accounts in a tenant
+   * Find all shadow accounts for a tenant
    * @param tenantId ID of the tenant
-   * @returns Array of shadow user entities
+   * @returns List of shadow account user entities
    */
   async findAllShadowAccounts(tenantId: string): Promise<UserEntity[]> {
     return this.tracer.startActiveSpan(
@@ -267,21 +322,19 @@ export class ShadowAccountService {
         try {
           span.setAttribute('tenantId', tenantId);
 
-          // Get tenant connection
           const tenantConnection =
             await this.tenantService.getTenantConnection(tenantId);
 
           const userRepository = tenantConnection.getRepository(UserEntity);
 
-          // Find all shadow accounts
           const shadowUsers = await userRepository.find({
             where: {
               isShadowAccount: true,
-              provider: AuthProvidersEnum.bluesky,
+            },
+            order: {
+              createdAt: 'DESC',
             },
           });
-
-          span.setAttribute('shadowAccountsCount', shadowUsers.length);
 
           return shadowUsers;
         } catch (error) {
@@ -289,6 +342,55 @@ export class ShadowAccountService {
           span.setStatus({ code: SpanStatusCode.ERROR });
           this.logger.error(
             `Error finding shadow accounts: ${error.message}`,
+            error.stack,
+          );
+          throw error;
+        } finally {
+          span.end();
+        }
+      },
+    );
+  }
+
+  /**
+   * Find all shadow accounts for a specific provider
+   * @param provider Authentication provider (e.g., bluesky, matrix)
+   * @param tenantId ID of the tenant
+   * @returns List of shadow account user entities
+   */
+  async findShadowAccountsByProvider(
+    provider: AuthProvidersEnum,
+    tenantId: string,
+  ): Promise<UserEntity[]> {
+    return this.tracer.startActiveSpan(
+      'findShadowAccountsByProvider',
+      { kind: SpanKind.CLIENT },
+      async (span) => {
+        try {
+          span.setAttribute('provider', provider);
+          span.setAttribute('tenantId', tenantId);
+
+          const tenantConnection =
+            await this.tenantService.getTenantConnection(tenantId);
+
+          const userRepository = tenantConnection.getRepository(UserEntity);
+
+          const shadowUsers = await userRepository.find({
+            where: {
+              isShadowAccount: true,
+              provider: provider,
+            },
+            order: {
+              createdAt: 'DESC',
+            },
+          });
+
+          return shadowUsers;
+        } catch (error) {
+          span.recordException(error);
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          this.logger.error(
+            `Error finding shadow accounts by provider: ${error.message}`,
             error.stack,
           );
           throw error;

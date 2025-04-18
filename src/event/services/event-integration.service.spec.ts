@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { EventIntegrationService } from './event-integration.service';
 import { EventQueryService } from './event-query.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
-import { ShadowAccountService } from '../../bluesky/shadow-account/shadow-account.service';
+import { ShadowAccountService } from '../../shadow-account/shadow-account.service';
 import { ExternalEventDto } from '../dto/external-event.dto';
 import { EventSourceType } from '../../core/constants/source-type.constant';
 import { EventEntity } from '../infrastructure/persistence/relational/entities/event.entity';
@@ -13,6 +13,7 @@ import {
 } from '../../core/constants/constant';
 import { Repository } from 'typeorm';
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
+import { AuthProvidersEnum } from '../../auth/auth-providers.enum';
 
 describe('EventIntegrationService', () => {
   let service: EventIntegrationService;
@@ -232,7 +233,11 @@ describe('EventIntegrationService', () => {
       ).toHaveBeenCalledWith(
         mockEventDto.source.id,
         mockEventDto.source.handle,
+        AuthProvidersEnum.bluesky,
         'tenant1',
+        expect.objectContaining({
+          bluesky: expect.any(Object),
+        }),
       );
 
       // Verify the entity methods were called

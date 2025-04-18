@@ -18,6 +18,7 @@ This document serves as the authoritative source of truth for the design and imp
   - [2. Bluesky → OpenMeet](#2-bluesky--openmeet)
 - [Shadow Account Management](#shadow-account-management)
   - [1. Account Creation Process](#1-account-creation-process)
+  - [2. Architectural Principles](#2-architectural-principles)
 - [Data Models](#data-models)
   - [1. User Entity](#1-user-entity)
   - [2. Event Entity](#2-event-entity)
@@ -31,13 +32,13 @@ This document serves as the authoritative source of truth for the design and imp
   - [Design Decision](#design-decision)
   - [Benefits](#benefits)
   - [Implementation Plan](#implementation-plan)
-  - [References](#references-1)
+  - [References](#references)
 - [Comprehensive Event Ingestion Flow Architecture](#comprehensive-event-ingestion-flow-architecture)
   - [Architecture Components](#architecture-components-1)
   - [Event Processing Flow](#event-processing-flow)
   - [Data Flow Diagram](#data-flow-diagram)
   - [Error Handling Strategy](#error-handling-strategy)
-- [References](#references)
+- [References](#references-1)
 
 ## Introduction and Overview
 
@@ -176,20 +177,6 @@ For events discovered from users who haven't joined OpenMeet:
 
 ### 1. Account Creation Process
 
-```typescript
-// ShadowAccountService
-class ShadowAccountService {
-  // Create or find shadow account by DID
-  async findOrCreateShadowAccount(did: string, handle: string): Promise<User>;
-  
-  // Claim a shadow account when user logs in with Bluesky
-  async claimShadowAccount(userId: string, did: string): Promise<User>;
-  
-  // Transfer ownership of events from shadow to real account
-  private transferEventOwnership(shadowId: string, userId: string): Promise<void>;
-}
-```
-
 The shadow account process follows these steps:
 
 1. **Discovery**
@@ -218,6 +205,36 @@ The shadow account process follows these steps:
      - email is null
      - provider is 'bluesky'
    - UI clearly marks content from shadow accounts
+
+### 2. Architectural Principles
+
+The Shadow Account functionality follows a clear separation of concerns according to domain-driven design principles:
+
+1. **Service Layer Responsibilities**
+   - Contains all business logic and validation rules
+   - Manages transaction boundaries for data consistency
+   - Provides observability through logging and tracing
+   - Coordinates with other domain services as needed
+   - Works with repository abstractions for testability
+
+2. **Controller Layer Responsibilities**
+   - Handles HTTP request/response concerns only
+   - Maps DTOs to domain models and back
+   - Enforces access control via guards
+   - Delegates all business logic to the service layer
+   - Contains no business rules or complex logic
+
+3. **DTO Layer Responsibilities**
+   - Provides clear contract for API consumers
+   - Handles validation and documentation
+   - Separates internal domain model from external representation
+
+This architectural approach provides several benefits:
+- Improved testability through clear separation of concerns
+- Ability to reuse shadow account logic from multiple entry points
+- Consistent error handling and observability patterns
+- Enhanced maintainability through single responsibility principle
+- Clearer boundaries between infrastructure and domain logic
 
 Reference: [Bluesky Integration Implementation Plan](/design-notes/recurring-events/bluesky-integration-implementation.md)
 

@@ -2,11 +2,12 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ExternalEventDto } from '../dto/external-event.dto';
 import { EventEntity } from '../infrastructure/persistence/relational/entities/event.entity';
 import { Repository } from 'typeorm';
-import { ShadowAccountService } from '../../bluesky/shadow-account/shadow-account.service';
+import { ShadowAccountService } from '../../shadow-account/shadow-account.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { EventSourceType } from '../../core/constants/source-type.constant';
 import { EventStatus, EventVisibility } from '../../core/constants/constant';
 import { EventQueryService } from './event-query.service';
+import { AuthProvidersEnum } from '../../auth/auth-providers.enum';
 
 @Injectable()
 export class EventIntegrationService {
@@ -246,12 +247,19 @@ export class EventIntegrationService {
   }
 
   /**
-   * Handle event creator (create shadow account if needed)
+   * Handle event creator - create shadow account if needed for external sources
+   * @param eventData External event data
+   * @param tenantId Tenant ID
+   * @returns User entity
    */
   private async handleEventCreator(
     eventData: ExternalEventDto,
     tenantId: string,
   ) {
+    if (!eventData.source || !eventData.source.type || !eventData.source.id) {
+      throw new Error('Event source information is required');
+    }
+
     // For Bluesky events, create shadow accounts if needed
     if (
       eventData.source.type === EventSourceType.BLUESKY &&
@@ -266,11 +274,19 @@ export class EventIntegrationService {
       return this.shadowAccountService.findOrCreateShadowAccount(
         eventData.source.id,
         eventData.source.handle,
+        AuthProvidersEnum.bluesky,
         tenantId,
+        {
+          bluesky: {
+            did: eventData.source.id,
+            handle: eventData.source.handle,
+            connected: false,
+          },
+        },
       );
     }
 
-    // For other types, we would need different logic
+    // For other types, we can extend this method with additional providers
     throw new Error(
       `Unsupported source type for event creator: ${eventData.source.type}`,
     );

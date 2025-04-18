@@ -294,6 +294,7 @@ export class UserService {
     await this.getTenantSpecificRepository(tenantId);
     return this.usersRepository.findOne({
       where: { email },
+      relations: ['role', 'role.permissions'],
     });
   }
 
@@ -318,6 +319,7 @@ export class UserService {
 
     const user = await this.usersRepository.findOne({
       where: { socialId, provider },
+      relations: ['role', 'role.permissions'],
     });
     this.logger.debug('findBySocialIdAndProvider result', {
       user,

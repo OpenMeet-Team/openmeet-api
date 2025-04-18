@@ -15,7 +15,7 @@ import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
 import { EventMailModule } from '../event-mail/event-mail.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
-import { ShadowAccountModule } from '../bluesky/shadow-account/shadow-account.module';
+import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
 import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';

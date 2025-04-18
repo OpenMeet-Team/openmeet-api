@@ -24,6 +24,11 @@ import { LoginResponseDto } from './dto/login-response.dto';
 import { NullableType } from '../utils/types/nullable.type';
 import { User } from '../user/domain/user';
 import { RefreshResponseDto } from './dto/refresh-response.dto';
+import { ShadowAccountService } from '../shadow-account/shadow-account.service';
+import { ClaimShadowAccountDto } from './dto/claim-shadow-account.dto';
+import { Roles } from './decorators/roles.decorator';
+import { RoleEnum } from '../role/role.enum';
+import { RolesGuard } from '../role/role.guard';
 
 @ApiTags('Auth')
 @Controller({
@@ -31,7 +36,10 @@ import { RefreshResponseDto } from './dto/refresh-response.dto';
   version: '1',
 })
 export class AuthController {
-  constructor(private readonly service: AuthService) {}
+  constructor(
+    private readonly service: AuthService,
+    private readonly shadowAccountService: ShadowAccountService,
+  ) {}
 
   @SerializeOptions({
     groups: ['me'],
@@ -45,23 +53,37 @@ export class AuthController {
     return this.service.validateLogin(loginDto);
   }
 
+  @SerializeOptions({
+    groups: ['me'],
+  })
+  @Post('admin/email/login')
+  @ApiOkResponse({
+    type: LoginResponseDto,
+  })
+  @HttpCode(HttpStatus.OK)
+  public adminLogin(
+    @Body() loginDto: AuthEmailLoginDto,
+  ): Promise<LoginResponseDto> {
+    return this.service.validateLogin(loginDto);
+  }
+
   @Post('email/register')
   @ApiOkResponse({
     type: LoginResponseDto,
   })
-  @HttpCode(HttpStatus.CREATED)
-  async register(
+  @HttpCode(HttpStatus.OK)
+  public register(
     @Body() createUserDto: AuthRegisterLoginDto,
   ): Promise<LoginResponseDto> {
-    const result = await this.service.register(createUserDto);
-    return result;
+    return this.service.register(createUserDto);
   }
 
   @Post('email/confirm')
+  @ApiOkResponse({
+    type: void 0,
+  })
   @HttpCode(HttpStatus.NO_CONTENT)
-  async confirmEmail(
-    @Body() confirmEmailDto: AuthConfirmEmailDto,
-  ): Promise<void> {
+  public confirmEmail(@Body() confirmEmailDto: AuthConfirmEmailDto) {
     return this.service.confirmEmail(confirmEmailDto.hash);
   }
 
@@ -74,16 +96,20 @@ export class AuthController {
   }
 
   @Post('forgot/password')
+  @ApiOkResponse({
+    type: void 0,
+  })
   @HttpCode(HttpStatus.NO_CONTENT)
-  async forgotPassword(
-    @Body() forgotPasswordDto: AuthForgotPasswordDto,
-  ): Promise<void> {
+  public forgotPassword(@Body() forgotPasswordDto: AuthForgotPasswordDto) {
     return this.service.forgotPassword(forgotPasswordDto.email);
   }
 
   @Post('reset/password')
+  @ApiOkResponse({
+    type: void 0,
+  })
   @HttpCode(HttpStatus.NO_CONTENT)
-  resetPassword(@Body() resetPasswordDto: AuthResetPasswordDto): Promise<void> {
+  public resetPassword(@Body() resetPasswordDto: AuthResetPasswordDto) {
     return this.service.resetPassword(
       resetPasswordDto.hash,
       resetPasswordDto.password,
@@ -105,20 +131,20 @@ export class AuthController {
   }
 
   @ApiBearerAuth()
-  @ApiOkResponse({
-    type: RefreshResponseDto,
-  })
   @SerializeOptions({
     groups: ['me'],
   })
-  @Post('refresh')
-  @UseGuards(AuthGuard('jwt-refresh'))
+  @Patch('me')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiOkResponse({
+    type: User,
+  })
   @HttpCode(HttpStatus.OK)
-  public refresh(@Request() request): Promise<RefreshResponseDto> {
-    return this.service.refreshToken({
-      sessionId: request.user.sessionId,
-      hash: request.user.hash,
-    });
+  public update(
+    @Request() request,
+    @Body() userDto: AuthUpdateDto,
+  ): Promise<NullableType<User>> {
+    return this.service.update(request.user, userDto);
   }
 
   @ApiBearerAuth()
@@ -131,21 +157,18 @@ export class AuthController {
     });
   }
 
-  @ApiBearerAuth()
-  @SerializeOptions({
-    groups: ['me'],
-  })
-  @Patch('me')
-  @UseGuards(AuthGuard('jwt'))
-  @HttpCode(HttpStatus.OK)
   @ApiOkResponse({
-    type: User,
+    type: RefreshResponseDto,
   })
-  public update(
-    @Request() request,
-    @Body() userDto: AuthUpdateDto,
-  ): Promise<NullableType<User>> {
-    return this.service.update(request.user, userDto);
+  @ApiBearerAuth()
+  @Post('refresh')
+  @UseGuards(AuthGuard('jwt-refresh'))
+  @HttpCode(HttpStatus.OK)
+  public refresh(@Request() request): Promise<RefreshResponseDto> {
+    return this.service.refreshToken({
+      sessionId: request.user.sessionId,
+      hash: request.user.hash,
+    });
   }
 
   @ApiBearerAuth()
@@ -154,5 +177,33 @@ export class AuthController {
   @HttpCode(HttpStatus.NO_CONTENT)
   public async delete(@Request() request): Promise<void> {
     return this.service.softDelete(request.user);
+  }
+
+  @ApiBearerAuth()
+  @Post('internal/claim-shadow-account')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(RoleEnum.Admin)
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({
+    description: 'Shadow account claimed successfully',
+  })
+  public async claimShadowAccount(
+    @Body() claimDto: ClaimShadowAccountDto,
+    @Request() request,
+  ) {
+    const result = await this.shadowAccountService.claimShadowAccount(
+      claimDto.userId,
+      claimDto.externalId,
+      claimDto.provider,
+      request.tenantId,
+    );
+
+    return {
+      success: !!result,
+      message: result
+        ? 'Shadow account claimed successfully'
+        : 'No shadow account found to claim',
+      userId: claimDto.userId,
+    };
   }
 }

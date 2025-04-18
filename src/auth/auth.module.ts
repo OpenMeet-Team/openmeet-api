@@ -15,6 +15,7 @@ import { EventModule } from '../event/event.module';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 import { CategoryModule } from '../category/category.module';
 import { AuthBlueskyModule } from '../auth-bluesky/auth-bluesky.module';
+import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { AuthBlueskyModule } from '../auth-bluesky/auth-bluesky.module';
     RoleModule,
     JwtModule.register({}),
     forwardRef(() => AuthBlueskyModule),
+    forwardRef(() => ShadowAccountModule),
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, JwtRefreshStrategy, AnonymousStrategy],
