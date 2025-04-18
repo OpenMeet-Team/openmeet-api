@@ -89,7 +89,22 @@ describe('EventSeriesService', () => {
     };
 
     mockEventQueryService = {
-      findEventBySlug: jest.fn(),
+      findEventBySlug: jest.fn().mockImplementation((slug) => {
+        if (slug === 'test-event') {
+          return Promise.resolve({
+            id: 123,
+            slug: 'test-event',
+            name: 'Test Event',
+            description: 'Test Event Description',
+            startDate: new Date(),
+            timeZone: 'UTC',
+            user: { id: 1 },
+            categories: []
+          });
+        }
+        return null;
+      }),
+      findEventByDateAndSeries: jest.fn().mockResolvedValue(null)
     } as any;
 
     mockTenantConnectionService = {

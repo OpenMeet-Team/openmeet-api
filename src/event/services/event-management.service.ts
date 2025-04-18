@@ -315,6 +315,22 @@ export class EventManagementService {
       group: updateEventDto.group ? { id: Number(updateEventDto.group) } : null,
     };
 
+    // Explicit check for seriesSlug updates - add debug logging
+    if (updateEventDto.seriesSlug !== undefined) {
+      this.logger.debug(
+        `Updating event ${slug} with seriesSlug: ${updateEventDto.seriesSlug}`,
+      );
+      // Ensure seriesSlug is explicitly set in mappedDto
+      mappedDto.seriesSlug = updateEventDto.seriesSlug;
+    } else if (event.seriesSlug) {
+      // Explicitly preserve the existing seriesSlug if it's not being intentionally updated
+      // This prevents unintentional disconnection from series
+      this.logger.debug(
+        `Preserving existing seriesSlug: ${event.seriesSlug} for event ${slug}`,
+      );
+      mappedDto.seriesSlug = event.seriesSlug;
+    }
+
     // Handle categories separately
     if (updateEventDto.categories?.length) {
       const categories = await this.categoryService.findByIds(
@@ -424,9 +440,17 @@ export class EventManagementService {
     this.logger.debug(
       `[UPDATE Pre-Save] Event location: ${updatedEvent.location}`,
     );
+    // Add debug for seriesSlug pre-save
+    this.logger.debug(
+      `[UPDATE Pre-Save] Event seriesSlug: ${updatedEvent.seriesSlug}`,
+    );
     const savedEvent = await this.eventRepository.save(updatedEvent);
     this.logger.debug(
       `[UPDATE Post-Save] Event location: ${savedEvent.location}`,
+    );
+    // Add debug for seriesSlug post-save
+    this.logger.debug(
+      `[UPDATE Post-Save] Event seriesSlug: ${savedEvent.seriesSlug}`,
     );
 
     // If user has Bluesky credentials and event is published, update on Bluesky

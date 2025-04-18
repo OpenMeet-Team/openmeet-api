@@ -96,29 +96,7 @@ export class EventSeriesController {
     @Body() createEventSeriesDto: CreateEventSeriesDto,
     @Request() req,
   ) {
-    this.logger.log('Creating event series');
-    // Extract tenant ID directly from request to avoid decorator issues
-    const tenantId =
-      req.tenantId || (req.headers && req.headers['x-tenant-id']);
-
-    this.logger.log(
-      `Creating event series in tenant ${tenantId} by user ${req.user.id}`,
-    );
-
-    // Verify the user ID and tenant info
-    this.logger.debug(
-      `User information: ${JSON.stringify({
-        id: req.user.id,
-        tenantId,
-        headers: req.headers && req.headers['x-tenant-id'],
-        hasUser: !!req.user,
-      })}`,
-    );
-
-    // Log the received DTO
-    this.logger.log(
-      `Received event series DTO: ${JSON.stringify(createEventSeriesDto, null, 2)}`,
-    );
+    this.logger.log(`Creating event series by user ${req.user.id}`);
 
     try {
       const eventSeries = await this.eventSeriesService.create(
@@ -256,14 +234,13 @@ export class EventSeriesController {
     );
 
     try {
-      const eventSeries = await this.eventSeriesService.createFromExistingEvent(
-        eventSlug,
-        createData.recurrenceRule,
-        req.user.id,
-        createData.name,
-        createData.description,
-        createData.timeZone,
-      );
+      // Use the new simplified service method
+      const eventSeries =
+        await this.eventSeriesService.createSeriesFromEventDto(
+          eventSlug,
+          createData,
+          req.user.id,
+        );
 
       return new EventSeriesResponseDto(eventSeries);
     } catch (error) {

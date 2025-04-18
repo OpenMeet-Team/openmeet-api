@@ -1171,6 +1171,9 @@ export class EventSeriesOccurrenceService {
         `Processed template updates: ${JSON.stringify(templateUpdates)}`,
       );
 
+      // Explicitly preserve the seriesSlug to prevent it from being lost during update
+      templateUpdates.seriesSlug = seriesSlug;
+
       // Only update if we have properties to update
       if (Object.keys(templateUpdates).length > 0) {
         this.logger.debug(
@@ -1211,6 +1214,8 @@ export class EventSeriesOccurrenceService {
             allowWaitlist: updatedTemplateEvent.allowWaitlist,
             categories:
               updatedTemplateEvent.categories?.map((cat) => cat.id) || [],
+            // Explicitly preserve the seriesSlug to prevent it from being lost during update
+            seriesSlug: seriesSlug,
           };
 
           this.logger.log(
