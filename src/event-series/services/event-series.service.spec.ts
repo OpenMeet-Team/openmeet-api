@@ -99,12 +99,12 @@ describe('EventSeriesService', () => {
             startDate: new Date(),
             timeZone: 'UTC',
             user: { id: 1 },
-            categories: []
+            categories: [],
           });
         }
         return null;
       }),
-      findEventByDateAndSeries: jest.fn().mockResolvedValue(null)
+      findEventByDateAndSeries: jest.fn().mockResolvedValue(null),
     } as any;
 
     mockTenantConnectionService = {

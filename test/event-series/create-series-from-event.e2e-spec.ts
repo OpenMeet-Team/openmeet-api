@@ -74,11 +74,11 @@ describe('Create Series From Event Tests (e2e)', () => {
     expect(createdSeries.name).toBe(seriesData.name);
     expect(createdSeries.description).toBe(seriesData.description);
     expect(createdSeries.templateEventSlug).toBe(templateEventSlug);
-    
+
     // STEP 3: Verify the event is properly linked to the series
     // Give the backend a moment to complete any async operations
     await waitForBackend(1000);
-    
+
     console.log('STEP 3: Verifying the event is properly linked to the series');
     const templateEventResponse = await request(TESTING_APP_URL)
       .get(`/api/events/${templateEventSlug}`)
@@ -87,7 +87,9 @@ describe('Create Series From Event Tests (e2e)', () => {
 
     expect(templateEventResponse.status).toBe(200);
     expect(templateEventResponse.body.seriesSlug).toBe(seriesSlug);
-    console.log(`Template event ${templateEventSlug} is confirmed as linked to series ${seriesSlug}`);
+    console.log(
+      `Template event ${templateEventSlug} is confirmed as linked to series ${seriesSlug}`,
+    );
 
     // STEP 4: Clean up - delete the series
     console.log('STEP 4: Cleaning up by deleting the series');
@@ -103,11 +105,11 @@ describe('Create Series From Event Tests (e2e)', () => {
   it('should create a series directly with a template event in a single call', async () => {
     // STEP 1: First create a template event
     console.log('STEP 1: Creating a template event for direct series creation');
-    
+
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(10, 0, 0, 0);
-    
+
     const templateEventData = {
       name: 'Template Event for Direct Series',
       description: 'A template event that will be used to create a series',
@@ -121,7 +123,7 @@ describe('Create Series From Event Tests (e2e)', () => {
       categories: [],
       timeZone: 'America/New_York',
     };
-    
+
     const templateEvent = await createEvent(
       TESTING_APP_URL,
       token,
@@ -130,12 +132,12 @@ describe('Create Series From Event Tests (e2e)', () => {
     expect(templateEvent).toBeDefined();
     const templateEventSlug = templateEvent.slug;
     console.log(`Template event created with slug: ${templateEventSlug}`);
-    
+
     // STEP 2: Now create a series with the template event
     console.log(
       'STEP 2: Creating a series with the template event in a single call',
     );
-    
+
     const seriesData = {
       name: 'Direct Series Creation Test',
       description: 'Series created directly with a template event',
@@ -164,11 +166,11 @@ describe('Create Series From Event Tests (e2e)', () => {
     expect(createdSeries.name).toBe(seriesData.name);
     expect(createdSeries.description).toBe(seriesData.description);
     expect(createdSeries.templateEventSlug).toBe(templateEventSlug);
-    
-    // STEP 3: Verify the template event is linked to the series 
+
+    // STEP 3: Verify the template event is linked to the series
     // Give the backend a moment to complete any async operations
     await waitForBackend(1000);
-    
+
     console.log('STEP 3: Verifying the template event is linked to the series');
     const templateEventResponse = await request(TESTING_APP_URL)
       .get(`/api/events/${templateEventSlug}`)
@@ -177,7 +179,9 @@ describe('Create Series From Event Tests (e2e)', () => {
 
     expect(templateEventResponse.status).toBe(200);
     expect(templateEventResponse.body.seriesSlug).toBe(seriesSlug);
-    console.log(`Template event ${templateEventSlug} is confirmed as linked to series ${seriesSlug}`);
+    console.log(
+      `Template event ${templateEventSlug} is confirmed as linked to series ${seriesSlug}`,
+    );
 
     // STEP 4: Clean up - delete the series
     console.log('STEP 4: Cleaning up by deleting the series');
