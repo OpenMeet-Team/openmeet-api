@@ -63,6 +63,9 @@ export class AuthService {
       });
     }
 
+    console.log('[DEBUG] validateLogin - user loaded from database:', user);
+    console.log('[DEBUG] validateLogin - user.role:', user.role);
+
     if (user.provider !== AuthProvidersEnum.email) {
       throw new UnprocessableEntityException({
         status: HttpStatus.UNPROCESSABLE_ENTITY,
@@ -573,6 +576,11 @@ export class AuthService {
 
     const tokenExpires = Date.now() + ms(tokenExpiresIn);
 
+    console.log(
+      '[DEBUG] getTokensData - role before token creation:',
+      data.role,
+    );
+
     const [token, refreshToken] = await Promise.all([
       await this.jwtService.signAsync(
         {
@@ -600,6 +608,10 @@ export class AuthService {
         },
       ),
     ]);
+
+    // Decode the token to see what was actually put in it
+    const decoded = this.jwtService.decode(token);
+    console.log('[DEBUG] getTokensData - decoded token payload:', decoded);
 
     return {
       token,

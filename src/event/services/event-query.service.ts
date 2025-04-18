@@ -1019,4 +1019,38 @@ export class EventQueryService {
 
     return events;
   }
+
+  /**
+   * Find events by source information (sourceId and sourceType)
+   */
+  @Trace('event-query.findBySourceAttributes')
+  async findBySourceAttributes(
+    sourceId: string,
+    sourceType: string,
+    tenantId: string,
+  ): Promise<EventEntity[]> {
+    // Get tenant connection for the specified tenant
+    const tenantConnection =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    const eventRepo = tenantConnection.getRepository(EventEntity);
+
+    this.logger.debug(
+      `Finding events with sourceId: ${sourceId} and sourceType: ${sourceType} in tenant: ${tenantId}`,
+    );
+
+    const queryBuilder = eventRepo.createQueryBuilder('event');
+
+    queryBuilder
+      .where('event.sourceType = :sourceType', { sourceType })
+      .andWhere('event.sourceId = :sourceId', { sourceId })
+      .leftJoinAndSelect('event.user', 'user')
+      .leftJoinAndSelect('event.categories', 'categories')
+      .leftJoinAndSelect('event.image', 'image')
+      .leftJoinAndSelect('event.series', 'series');
+
+    const events = await queryBuilder.getMany();
+    this.logger.debug(`Found ${events.length} events matching source criteria`);
+
+    return events;
+  }
 }

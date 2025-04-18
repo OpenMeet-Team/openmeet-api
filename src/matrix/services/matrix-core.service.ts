@@ -52,45 +52,49 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       infer: true,
     });
 
-    if (!matrixConfig) {
-      this.logger.warn(
-        'Matrix configuration is missing - Matrix functionality will be limited',
-      );
-      // Set defaults for required fields to prevent crashes
-      const serverName = process.env.MATRIX_SERVER_NAME || 'openmeet.net';
-      const baseUrl =
-        process.env.MATRIX_BASE_URL ||
-        process.env.MATRIX_SERVER_URL ||
-        `https://matrix-dev.${serverName}`;
+    // Log actual environment variables for debugging
+    this.logger.debug('Matrix environment variables:', {
+      MATRIX_HOMESERVER_URL: process.env.MATRIX_HOMESERVER_URL,
+      MATRIX_BASE_URL: process.env.MATRIX_BASE_URL,
+      MATRIX_SERVER_URL: process.env.MATRIX_SERVER_URL,
+      MATRIX_SERVER_NAME: process.env.MATRIX_SERVER_NAME,
+      MATRIX_ADMIN_USERNAME: process.env.MATRIX_ADMIN_USERNAME,
+    });
 
-      this.logger.log(
-        `Using Matrix server name: ${serverName} with base URL: ${baseUrl}`,
-      );
+    // Always prioritize environment variables over defaults or nestjs config
+    const serverName =
+      process.env.MATRIX_SERVER_NAME ||
+      (matrixConfig?.serverName ? matrixConfig.serverName : 'openmeet.net');
 
-      // Set default configuration
-      this.baseUrl = baseUrl;
-      const adminUsername = process.env.MATRIX_ADMIN_USERNAME || 'admin';
-      this.adminUserId = `@${adminUsername}:${serverName}`;
-      this.serverName = serverName;
-      this.defaultDeviceId = 'OPENMEET_SERVER';
-      this.defaultInitialDeviceDisplayName = 'OpenMeet Server';
-      // Initialize with empty token, will be generated in onModuleInit
-      this.adminAccessToken = '';
-      return; // Skip logging
-    }
+    const baseUrl =
+      process.env.MATRIX_HOMESERVER_URL ||
+      process.env.MATRIX_BASE_URL ||
+      process.env.MATRIX_SERVER_URL ||
+      (matrixConfig?.baseUrl
+        ? matrixConfig.baseUrl
+        : `https://matrix-dev.${serverName}`);
 
-    this.baseUrl = matrixConfig.baseUrl;
-    // Always construct the full matrix ID for the admin user
-    const adminUsername = matrixConfig.adminUser;
-    this.adminUserId = `@${adminUsername}:${matrixConfig.serverName}`;
-    this.serverName = matrixConfig.serverName;
-    this.defaultDeviceId = matrixConfig.defaultDeviceId;
+    const adminUsername =
+      process.env.MATRIX_ADMIN_USERNAME ||
+      (matrixConfig?.adminUser ? matrixConfig.adminUser : 'admin');
+
+    // Log the determined values
+    this.logger.log(`Using Matrix configuration:`, {
+      serverName,
+      baseUrl,
+      adminUsername,
+    });
+
+    // Set the properties consistently
+    this.baseUrl = baseUrl;
+    this.serverName = serverName;
+    this.adminUserId = `@${adminUsername}:${serverName}`;
+    this.defaultDeviceId = matrixConfig?.defaultDeviceId || 'OPENMEET_SERVER';
     this.defaultInitialDeviceDisplayName =
-      matrixConfig.defaultInitialDeviceDisplayName;
-    // Initialize with token from config or empty string, will be generated if empty
-    this.adminAccessToken = matrixConfig.adminAccessToken || '';
+      matrixConfig?.defaultInitialDeviceDisplayName || 'OpenMeet Server';
 
-    this.logger.log('Matrix core service initialized with configuration');
+    // Initialize with token from config or empty string, will be generated if empty
+    this.adminAccessToken = matrixConfig?.adminAccessToken || '';
   }
 
   async onModuleInit() {

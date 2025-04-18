@@ -15,6 +15,7 @@ import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
 import { EventMailModule } from '../event-mail/event-mail.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
+import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
 import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
@@ -22,6 +23,8 @@ import { ChatModule } from '../chat/chat.module';
 import { ICalendarService } from './services/ical/ical.service';
 import { EventSeriesModule } from '../event-series/event-series.module';
 import { ConfigModule } from '@nestjs/config';
+import { EventIntegrationController } from './event-integration.controller';
+import { EventIntegrationService } from './services/event-integration.service';
 
 // Create a provider for the DiscussionService
 const discussionServiceProvider: Provider = {
@@ -43,10 +46,11 @@ const discussionServiceProvider: Provider = {
     forwardRef(() => GroupModule),
     EventMailModule,
     BlueskyModule,
+    ShadowAccountModule,
     forwardRef(() => ChatModule),
     forwardRef(() => EventSeriesModule),
   ],
-  controllers: [EventController],
+  controllers: [EventController, EventIntegrationController],
   providers: [
     EventManagementService,
     EventQueryService,
@@ -55,12 +59,14 @@ const discussionServiceProvider: Provider = {
     EventListener,
     EventRoleService,
     ICalendarService,
+    EventIntegrationService,
     discussionServiceProvider,
   ],
   exports: [
     EventManagementService,
     EventQueryService,
     EventRecommendationService,
+    EventIntegrationService,
   ],
 })
 export class EventModule {}

@@ -52,6 +52,7 @@ import { MatrixModule } from './matrix/matrix.module';
 import { EventSeriesModule } from './event-series/event-series.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { InterceptorsModule } from './core/interceptors.module';
+import { ShadowAccountModule } from './shadow-account/shadow-account.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -130,6 +131,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     EventMailModule,
     ChatMailModule,
     AuthBlueskyModule,
+    ShadowAccountModule,
     BlueskyModule,
     MatrixModule,
     EventSeriesModule,

@@ -203,53 +203,6 @@ export class UserService {
       where: {
         slug,
       },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        name: true,
-        bio: true,
-        provider: true,
-        socialId: true,
-        photo: {
-          path: true,
-        },
-        interests: {
-          id: true,
-          title: true,
-        },
-        groups: {
-          id: true,
-          name: true,
-          slug: true,
-          image: {
-            path: true,
-          },
-        },
-        events: {
-          id: true,
-          name: true,
-          slug: true,
-          image: {
-            path: true,
-          },
-        },
-        groupMembers: {
-          id: true,
-          group: {
-            id: true,
-            name: true,
-            slug: true,
-            image: {
-              path: true,
-            },
-          },
-          groupRole: {
-            id: true,
-            name: true,
-          },
-        },
-      },
       relations: {
         photo: true,
         interests: true,
@@ -261,6 +214,32 @@ export class UserService {
         },
       },
     });
+
+    // Transform the user object to include formatted Bluesky profile information
+    if (user && user.preferences?.bluesky) {
+      const { bluesky } = user.preferences;
+
+      // Add formatted ATProtocol profile data for easier consumption by the frontend
+      user['socialProfiles'] = {
+        ...user['socialProfiles'], // Preserve any existing social profiles
+        atprotocol: {
+          did: bluesky.did,
+          handle: bluesky.handle,
+          avatarUrl: bluesky.avatar,
+          connected: bluesky.connected === true,
+          connectedAt: bluesky.connectedAt,
+        },
+      };
+
+      // Add an endpoint for getting detailed profile info
+      if (bluesky.did || bluesky.handle) {
+        user['profileEndpoints'] = {
+          ...user['profileEndpoints'],
+          atprotocol: `/api/bluesky/user-profile/${user.slug}`,
+        };
+      }
+    }
+
     return user;
   }
 
@@ -315,6 +294,7 @@ export class UserService {
     await this.getTenantSpecificRepository(tenantId);
     return this.usersRepository.findOne({
       where: { email },
+      relations: ['role', 'role.permissions'],
     });
   }
 
@@ -339,6 +319,7 @@ export class UserService {
 
     const user = await this.usersRepository.findOne({
       where: { socialId, provider },
+      relations: ['role', 'role.permissions'],
     });
     this.logger.debug('findBySocialIdAndProvider result', {
       user,
