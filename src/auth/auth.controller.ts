@@ -12,7 +12,7 @@ import {
   SerializeOptions,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiTags, ApiResponse } from '@nestjs/swagger';
 import { AuthEmailLoginDto } from './dto/auth-email-login.dto';
 import { AuthForgotPasswordDto } from './dto/auth-forgot-password.dto';
 import { AuthConfirmEmailDto } from './dto/auth-confirm-email.dto';
@@ -68,10 +68,12 @@ export class AuthController {
   }
 
   @Post('email/register')
-  @ApiOkResponse({
+  @ApiResponse({
+    status: 201,
+    description: 'User successfully registered',
     type: LoginResponseDto,
   })
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.CREATED)
   public register(
     @Body() createUserDto: AuthRegisterLoginDto,
   ): Promise<LoginResponseDto> {

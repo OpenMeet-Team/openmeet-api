@@ -7,6 +7,8 @@ import {
   Query,
   UseGuards,
   Logger,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ShadowAccountService } from './shadow-account.service';
 import { JWTAuthGuard } from '../auth/auth.guard';
@@ -93,6 +95,7 @@ export class ShadowAccountController {
     description: 'Shadow account created successfully',
     type: ShadowAccountDto,
   })
+  @HttpCode(HttpStatus.CREATED)
   @ApiHeader({
     name: 'x-tenant-id',
     description: 'Tenant ID',
