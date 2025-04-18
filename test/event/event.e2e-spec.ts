@@ -311,7 +311,7 @@ describe('EventController (e2e)', () => {
     ]);
   });
 
-  xit('should create a recurring event from an existing event', async () => {
+  it('should create a recurring event from an existing event', async () => {
     // Create a regular event
     const eventData = {
       name: 'Test Event for Recurring',
@@ -392,6 +392,34 @@ describe('EventController (e2e)', () => {
   });
 
   it('should create a single event as part of a series using series slug', async () => {
+    // First create a template event
+    const templateEventData = {
+      name: 'Template Event for Series',
+      description: 'Template Event Description',
+      startDate: new Date('2025-03-03T10:00:00Z'),
+      endDate: new Date('2025-03-03T11:00:00Z'),
+      type: EventType.Hybrid,
+      location: 'Template Location',
+      locationOnline: 'https://template-event.com',
+      maxAttendees: 10,
+      categories: [],
+      lat: 0.0,
+      lon: 0.0,
+      status: 'published',
+      group: null,
+    };
+
+    // Create the template event
+    const templateResponse = await request(TESTING_APP_URL)
+      .post('/api/events')
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID)
+      .send(templateEventData)
+      .expect(201);
+
+    const templateEventSlug = templateResponse.body.slug;
+
+    // Now create the series with the template event slug
     const seriesResponse = await request(TESTING_APP_URL)
       .post('/api/event-series')
       .set('Authorization', `Bearer ${token}`)
@@ -406,6 +434,7 @@ describe('EventController (e2e)', () => {
           byweekday: ['MO', 'WE', 'FR'],
         },
         timeZone: 'America/New_York',
+        templateEventSlug: templateEventSlug,
       });
 
     console.log('seriesResponse.body', seriesResponse.body);
@@ -503,7 +532,34 @@ describe('EventController (e2e)', () => {
   });
 
   it('should create an independent event and add it to a series as a one-off occurrence', async () => {
-    // 1. Create the series
+    // First create a template event
+    const templateEventData = {
+      name: 'Template Event for One-Off Series',
+      description: 'Template Event Description for One-Off Series',
+      startDate: new Date('2025-03-15T10:00:00Z'),
+      endDate: new Date('2025-03-15T11:00:00Z'),
+      type: EventType.Hybrid,
+      location: 'Template Location',
+      locationOnline: 'https://template-event.com',
+      maxAttendees: 10,
+      categories: [],
+      lat: 0.0,
+      lon: 0.0,
+      status: 'published',
+      group: null,
+    };
+
+    // Create the template event
+    const templateResponse = await request(TESTING_APP_URL)
+      .post('/api/events')
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID)
+      .send(templateEventData)
+      .expect(201);
+
+    const templateEventSlug = templateResponse.body.slug;
+
+    // 1. Create the series with the template event
     const seriesResponse = await request(TESTING_APP_URL)
       .post('/api/event-series')
       .set('Authorization', `Bearer ${token}`)
@@ -518,8 +574,10 @@ describe('EventController (e2e)', () => {
           byweekday: ['MO', 'WE', 'FR'],
         },
         timeZone: 'America/New_York',
+        templateEventSlug: templateEventSlug,
       });
 
+    console.log('seriesResponse.body', seriesResponse.body);
     expect(seriesResponse.status).toBe(201);
     const seriesSlug = seriesResponse.body.slug;
 

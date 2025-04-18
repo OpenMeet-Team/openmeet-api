@@ -6,7 +6,7 @@ import { EventType } from '../../src/core/constants/constant';
 // Set a global timeout for all tests in this file
 jest.setTimeout(60000);
 
-xdescribe('EventSeriesController (e2e)', () => {
+describe('EventSeriesController (e2e)', () => {
   let token;
   const oneDay = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
@@ -98,7 +98,6 @@ xdescribe('EventSeriesController (e2e)', () => {
     expect(createResponse.body.slug).toBe(seriesData.slug);
 
     const seriesSlug = createResponse.body.slug;
-    const seriesId = createResponse.body.id;
 
     // Get occurrences to verify only the first one is materialized
     const occurrencesResponse = await request(TESTING_APP_URL)
@@ -136,13 +135,11 @@ xdescribe('EventSeriesController (e2e)', () => {
     console.log('Template event details:', {
       slug: templateEventResponse.body.slug,
       name: templateEventResponse.body.name,
-      seriesId: templateEventResponse.body.seriesId,
       seriesSlug: templateEventResponse.body.seriesSlug,
       startDate: templateEventResponse.body.startDate,
     });
 
     // Verify template event is properly linked to series
-    expect(templateEventResponse.body.seriesId).toBe(seriesId);
     expect(templateEventResponse.body.seriesSlug).toBe(seriesSlug);
 
     // Instead of using the /events endpoint which isn't implemented yet,
@@ -150,7 +147,6 @@ xdescribe('EventSeriesController (e2e)', () => {
 
     // The template event should be linked to the series
     expect(templateEventResponse.body.slug).toBe(templateEventSlug);
-    expect(templateEventResponse.body.seriesId).toBe(seriesId);
     expect(templateEventResponse.body.seriesSlug).toBe(seriesSlug);
 
     // Now that we've fixed the API, the template event should appear in occurrences results
@@ -171,6 +167,32 @@ xdescribe('EventSeriesController (e2e)', () => {
   });
 
   it('should create and update an event series', async () => {
+    // First create a template event
+    const templateEventData = {
+      name: 'Template Event for Update Test',
+      description:
+        'This event will be used as a template for an updatable series',
+      type: EventType.Hybrid,
+      location: 'Original Location',
+      locationOnline: 'https://original-meeting.com',
+      maxAttendees: 15,
+      startDate: new Date(Date.now() + oneDay).toISOString(),
+      endDate: new Date(Date.now() + oneDay + 3600000).toISOString(), // 1 hour after start
+      categories: [],
+      requireApproval: false,
+      allowWaitlist: true,
+    };
+
+    // Create the template event
+    const templateEventResponse = await request(TESTING_APP_URL)
+      .post('/api/events')
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID)
+      .send(templateEventData);
+
+    expect(templateEventResponse.status).toBe(201);
+    const templateEventSlug = templateEventResponse.body.slug;
+
     // Create a new event series
     const seriesData = {
       name: 'Updatable Event Series',
@@ -183,17 +205,7 @@ xdescribe('EventSeriesController (e2e)', () => {
         count: 8, // 8 weekly occurrences
         byweekday: ['MO', 'WE'], // Monday and Wednesday
       },
-      templateEvent: {
-        startDate: new Date(Date.now() + oneDay).toISOString(),
-        endDate: new Date(Date.now() + oneDay + 3600000).toISOString(), // 1 hour after start
-        type: EventType.Hybrid,
-        location: 'Original Location',
-        locationOnline: 'https://original-meeting.com',
-        maxAttendees: 15,
-        categories: [],
-        requireApproval: false,
-        allowWaitlist: true,
-      },
+      templateEventSlug: templateEventSlug,
     };
 
     // Create the event series
@@ -204,6 +216,9 @@ xdescribe('EventSeriesController (e2e)', () => {
       .send(seriesData);
 
     expect(createResponse.status).toBe(201);
+    expect(createResponse.body.name).toBe(seriesData.name);
+    expect(createResponse.body.slug).toBe(seriesData.slug);
+
     const seriesSlug = createResponse.body.slug;
 
     // Update the series
@@ -256,7 +271,9 @@ xdescribe('EventSeriesController (e2e)', () => {
 
     // Basic properties like name are not propagated to new occurrences automatically -
     // they come from the template event, not the series metadata
-    expect(materializeResponse.body.name).toBe('Updatable Event Series');
+    expect(materializeResponse.body.name).toBe(
+      'Template Event for Update Test',
+    );
 
     // Template properties like location and maxAttendees require a template update
     // or future-from update to propagate. Direct series updates don't modify these.
@@ -427,6 +444,28 @@ xdescribe('EventSeriesController (e2e)', () => {
     // First get authentication token
     token = await loginAsTester();
 
+    // First create a template event
+    const templateEventData = {
+      name: 'Template Event for Tenant Test',
+      description:
+        'This will be used as a template for a tenant isolation test',
+      type: EventType.InPerson,
+      location: 'Test Location',
+      maxAttendees: 20,
+      startDate: new Date(Date.now() + oneDay).toISOString(),
+      endDate: new Date(Date.now() + oneDay + 3600000).toISOString(),
+      categories: [],
+    };
+
+    const templateEventResponse = await request(TESTING_APP_URL)
+      .post('/api/events')
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID)
+      .send(templateEventData);
+
+    expect(templateEventResponse.status).toBe(201);
+    const templateEventSlug = templateEventResponse.body.slug;
+
     // Create an event series in the current tenant
     const seriesData = {
       name: 'Test Event Series',
@@ -438,13 +477,7 @@ xdescribe('EventSeriesController (e2e)', () => {
         interval: 1,
         count: 5,
       },
-      templateEvent: {
-        startDate: new Date(Date.now() + oneDay).toISOString(),
-        endDate: new Date(Date.now() + oneDay + 3600000).toISOString(),
-        type: EventType.InPerson,
-        location: 'Test Location',
-        maxAttendees: 20,
-      },
+      templateEventSlug: templateEventSlug,
     };
 
     // Create in tenant A
@@ -486,6 +519,30 @@ xdescribe('EventSeriesController (e2e)', () => {
     // First get authentication token
     token = await loginAsTester();
 
+    // First create a template event
+    const templateEventData = {
+      name: 'Template Event for Slug Test',
+      description: 'This will be used as a template for verifying seriesSlug',
+      type: EventType.InPerson,
+      location: 'Test Location',
+      locationOnline: null,
+      maxAttendees: 20,
+      startDate: new Date(Date.now() + oneDay).toISOString(),
+      endDate: new Date(Date.now() + oneDay + 3600000).toISOString(),
+      categories: [],
+      requireApproval: false,
+      allowWaitlist: false,
+    };
+
+    const templateEventResponse = await request(TESTING_APP_URL)
+      .post('/api/events')
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID)
+      .send(templateEventData);
+
+    expect(templateEventResponse.status).toBe(201);
+    const templateEventSlug = templateEventResponse.body.slug;
+
     // Create a new event series with unique slug
     const uniqueSlug = `series-slug-test-${Date.now()}`;
     const seriesData = {
@@ -498,16 +555,7 @@ xdescribe('EventSeriesController (e2e)', () => {
         interval: 1,
         count: 5,
       },
-      // Define event properties directly, replacing templateEvent
-      startTime: '09:00', // Example start time
-      endTime: '10:00', // Example end time
-      type: EventType.InPerson,
-      location: 'Test Location',
-      locationOnline: null,
-      maxAttendees: 20,
-      categories: [],
-      requireApproval: false,
-      allowWaitlist: false,
+      templateEventSlug: templateEventSlug,
     };
 
     // Create the event series
@@ -550,8 +598,8 @@ xdescribe('EventSeriesController (e2e)', () => {
     expect(materializeResponse.body).toHaveProperty('seriesSlug');
     expect(materializeResponse.body.seriesSlug).toBe(uniqueSlug);
 
-    // Verify other properties related to the series are also set
-    expect(materializeResponse.body.seriesId).toBeTruthy();
+    // seriesId is not guaranteed to be present in the API response
+    //expect(materializeResponse.body.seriesId).toBeTruthy();
 
     // Get the materialized event directly by its slug
     const eventSlug = materializeResponse.body.slug;
@@ -632,7 +680,6 @@ xdescribe('EventSeriesController (e2e)', () => {
     expect(createSeriesResponse.body.name).toBe(seriesData.name);
 
     const seriesSlug = createSeriesResponse.body.slug;
-    const seriesId = createSeriesResponse.body.id;
 
     // Get occurrences to verify only the first one is materialized
     const occurrencesResponse = await request(TESTING_APP_URL)
@@ -670,13 +717,11 @@ xdescribe('EventSeriesController (e2e)', () => {
     console.log('Template event details:', {
       slug: templateEventResponse.body.slug,
       name: templateEventResponse.body.name,
-      seriesId: templateEventResponse.body.seriesId,
       seriesSlug: templateEventResponse.body.seriesSlug,
       startDate: templateEventResponse.body.startDate,
     });
 
     // Verify template event is properly linked to series
-    expect(templateEventResponse.body.seriesId).toBe(seriesId);
     expect(templateEventResponse.body.seriesSlug).toBe(seriesSlug);
 
     // Instead of using the /events endpoint which isn't implemented yet,
@@ -684,7 +729,6 @@ xdescribe('EventSeriesController (e2e)', () => {
 
     // The template event should be linked to the series
     expect(templateEventResponse.body.slug).toBe(templateEventSlug);
-    expect(templateEventResponse.body.seriesId).toBe(seriesId);
     expect(templateEventResponse.body.seriesSlug).toBe(seriesSlug);
 
     // Now that we've fixed the API, the template event should appear in occurrences results

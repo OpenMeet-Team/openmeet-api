@@ -6,11 +6,8 @@ import {
   forwardRef,
   Logger,
   UnauthorizedException,
+  Scope,
 } from '@nestjs/common';
-import {
-  EventSeriesRepository,
-  EVENT_SERIES_REPOSITORY,
-} from '../interfaces/event-series-repository.interface';
 import { EventSeriesEntity } from '../infrastructure/persistence/relational/entities/event-series.entity';
 import { CreateEventSeriesDto } from '../dto/create-event-series.dto';
 import { UpdateEventSeriesDto } from '../dto/update-event-series.dto';
@@ -18,19 +15,19 @@ import { RecurrencePatternService } from './recurrence-pattern.service';
 import { EventManagementService } from '../../event/services/event-management.service';
 import { Trace } from '../../utils/trace.decorator';
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
-import { CreateEventDto } from '../../event/dto/create-event.dto';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { CreateSeriesFromEventDto } from '../dto/create-series-from-event.dto';
+import { Repository } from 'typeorm';
+import { CreateEventDto } from '../../event/dto/create-event.dto';
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class EventSeriesService {
   private readonly logger = new Logger(EventSeriesService.name);
+  private eventSeriesRepository: Repository<EventSeriesEntity>;
 
   constructor(
-    @Inject(EVENT_SERIES_REPOSITORY)
-    private readonly eventSeriesRepository: EventSeriesRepository,
     private readonly recurrencePatternService: RecurrencePatternService,
     @Inject(forwardRef(() => EventManagementService))
     private readonly eventManagementService: EventManagementService,
@@ -38,7 +35,36 @@ export class EventSeriesService {
     private readonly eventQueryService: EventQueryService,
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
-  ) {}
+  ) {
+    // Initialize repository lazily when methods are called
+  }
+
+  @Trace('event-series.initializeRepository')
+  private async initializeRepository(tenantId?: string) {
+    try {
+      // Check if repository is already initialized
+      if (this.eventSeriesRepository) {
+        return;
+      }
+
+      const effectiveTenantId = tenantId || this.request?.tenantId;
+      if (!effectiveTenantId) {
+        throw new Error('Tenant ID is required');
+      }
+
+      const dataSource =
+        await this.tenantConnectionService.getTenantConnection(
+          effectiveTenantId,
+        );
+      this.eventSeriesRepository = dataSource.getRepository(EventSeriesEntity);
+    } catch (error) {
+      this.logger.error(
+        `Failed to initialize repository: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
 
   /**
    * Create a new event series
@@ -48,8 +74,11 @@ export class EventSeriesService {
     createEventSeriesDto: CreateEventSeriesDto,
     userId: number,
     generateFutureEvents: boolean = false,
+    tenantId?: string,
   ): Promise<EventSeriesEntity> {
     try {
+      await this.initializeRepository(tenantId);
+
       // Validate the recurrence rule
       this.validateRecurrenceRule(createEventSeriesDto.recurrenceRule);
 
@@ -98,11 +127,8 @@ export class EventSeriesService {
         timeZone: (templateEvent as any).timeZone || 'UTC',
       };
 
-      // Use the repository's create method to initialize the entity
-      const eventSeries =
-        await this.eventSeriesRepository.create(eventSeriesData);
-
-      // Save the series first to ensure it has an ID
+      // Create and save the entity
+      const eventSeries = this.eventSeriesRepository.create(eventSeriesData);
       const savedSeries = await this.eventSeriesRepository.save(eventSeries);
 
       // Link the template event to the series
@@ -138,6 +164,7 @@ export class EventSeriesService {
           savedSeries,
           savedSeries.recurrenceRule,
           userId,
+          tenantId,
         );
       } else {
         this.logger.debug(
@@ -147,10 +174,8 @@ export class EventSeriesService {
         // For example: this.eventEmitter.emit('series.created', { seriesId: savedSeries.id, userId });
       }
 
-      // Return the full entity with relations - use findById as defined in the interface
-      const foundSeries = await this.eventSeriesRepository.findById(
-        savedSeries.id,
-      );
+      // Return the full entity with relations
+      const foundSeries = await this.findById(savedSeries.id, tenantId);
       if (!foundSeries) {
         throw new Error(
           `Failed to find event series with id ${savedSeries.id} after creation`,
@@ -167,6 +192,24 @@ export class EventSeriesService {
   }
 
   /**
+   * Find an event series by ID with relations loaded
+   */
+  @Trace('event-series.findById')
+  async findById(
+    id: number,
+    tenantId?: string,
+  ): Promise<EventSeriesEntity | undefined> {
+    await this.initializeRepository(tenantId);
+
+    const result = await this.eventSeriesRepository.findOne({
+      where: { id },
+      relations: ['user', 'group', 'image'],
+    });
+
+    return result || undefined;
+  }
+
+  /**
    * Helper method to create a series from a DTO object coming from controller
    * This simplifies the controller code by moving processing logic to the service
    */
@@ -176,12 +219,14 @@ export class EventSeriesService {
     createData: CreateSeriesFromEventDto,
     userId: number,
     generateFutureEvents: boolean = false,
+    tenantId?: string,
   ): Promise<EventSeriesEntity> {
     this.logger.debug('Creating event series from DTO object', {
       eventSlug,
       userId,
       dto: createData,
       generateFutureEvents,
+      tenantId,
     });
 
     return this.createFromExistingEvent(
@@ -192,6 +237,7 @@ export class EventSeriesService {
       createData.description,
       createData.timeZone,
       { generateOccurrences: generateFutureEvents },
+      tenantId,
     );
   }
 
@@ -218,8 +264,13 @@ export class EventSeriesService {
       generateOccurrences?: boolean;
       slug?: string;
     },
+    tenantId?: string,
   ): Promise<EventSeriesEntity> {
     try {
+      // Use the tenant ID from the request if available, or the provided one
+      const effectiveTenantId = tenantId || this.request?.tenantId;
+      await this.initializeRepository(effectiveTenantId);
+
       this.logger.debug('Starting createFromExistingEvent', {
         eventSlug,
         userId,
@@ -228,6 +279,7 @@ export class EventSeriesService {
         description,
         timeZone,
         options,
+        tenantId: effectiveTenantId,
       });
 
       // Validate the recurrence rule
@@ -285,7 +337,7 @@ export class EventSeriesService {
 
       // Save the series with all properties set
       this.logger.debug('Saving new series');
-      const savedSeries = await this.eventSeriesRepository.save(series);
+      const savedSeries = await this.save(series, effectiveTenantId);
       this.logger.debug(
         `Series saved with ID ${savedSeries.id} and slug ${savedSeries.slug}`,
       );
@@ -337,6 +389,7 @@ export class EventSeriesService {
           savedSeries,
           recurrenceRule,
           userId,
+          effectiveTenantId,
         );
       } else {
         this.logger.debug(
@@ -348,8 +401,9 @@ export class EventSeriesService {
 
       // Return the complete entity after updates
       this.logger.debug('Finding complete series entity after updates');
-      const updatedSeries = await this.eventSeriesRepository.findById(
+      const updatedSeries = await this.findById(
         savedSeries.id,
+        effectiveTenantId,
       );
 
       if (!updatedSeries) {
@@ -374,6 +428,18 @@ export class EventSeriesService {
   }
 
   /**
+   * Save an event series entity
+   */
+  @Trace('event-series.save')
+  async save(
+    eventSeries: Partial<EventSeriesEntity>,
+    tenantId?: string,
+  ): Promise<EventSeriesEntity> {
+    await this.initializeRepository(tenantId);
+    return this.eventSeriesRepository.save(eventSeries);
+  }
+
+  /**
    * Helper method to generate future occurrences for a series
    * Extracted to improve code organization
    */
@@ -382,6 +448,7 @@ export class EventSeriesService {
     series: EventSeriesEntity,
     recurrenceRule: any,
     userId: number,
+    tenantId?: string,
   ): Promise<void> {
     this.logger.debug('Generating future occurrences');
     const maxOccurrences = 5;
@@ -406,6 +473,7 @@ export class EventSeriesService {
         batchIndex: i,
         batchSize: batch.length,
         dates: batch.map((d) => d.toISOString()),
+        tenantId,
       });
 
       await Promise.all(
@@ -429,6 +497,7 @@ export class EventSeriesService {
           try {
             this.logger.debug('Creating occurrence', {
               date: occurrenceDate.toISOString(),
+              tenantId,
             });
             await Promise.race([
               this.eventManagementService.createSeriesOccurrence(
@@ -477,6 +546,167 @@ export class EventSeriesService {
   }
 
   /**
+   * Find an event series by slug
+   */
+  @Trace('event-series.findBySlug')
+  async findBySlug(
+    slug: string,
+    tenantId?: string,
+  ): Promise<EventSeriesEntity> {
+    try {
+      await this.initializeRepository(tenantId);
+
+      const series = await this.eventSeriesRepository.findOne({
+        where: { slug },
+        relations: ['user', 'group', 'image'],
+      });
+
+      if (!series) {
+        throw new NotFoundException(`Event series with slug ${slug} not found`);
+      }
+      return series;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      this.logger.error(
+        `Error finding event series by slug: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Find all event series
+   */
+  @Trace('event-series.findAll')
+  async findAll(
+    options?: {
+      page: number;
+      limit: number;
+    },
+    tenantId?: string,
+  ): Promise<{ data: EventSeriesEntity[]; total: number }> {
+    try {
+      await this.initializeRepository(tenantId);
+
+      const page = options?.page || 1;
+      const limit = options?.limit || 10;
+      const skip = (page - 1) * limit;
+
+      // Use the repository to find all series with pagination
+      const [data, total] = await this.eventSeriesRepository.findAndCount({
+        relations: ['user', 'group', 'image'],
+        skip,
+        take: limit,
+        order: { createdAt: 'DESC' },
+      });
+
+      return { data, total };
+    } catch (error) {
+      this.logger.error(
+        `Error finding all event series: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Find event series by user ID
+   */
+  @Trace('event-series.findByUser')
+  async findByUser(
+    userId: number,
+    options?: {
+      page: number;
+      limit: number;
+      sourceType?: string;
+    },
+    tenantId?: string,
+  ): Promise<{ data: EventSeriesEntity[]; total: number }> {
+    try {
+      // Initialize repository with provided tenant ID if available
+      await this.initializeRepository(tenantId);
+
+      const page = options?.page || 1;
+      const limit = options?.limit || 10;
+      const skip = (page - 1) * limit;
+
+      const query: any = {
+        relations: ['user', 'group', 'image'],
+        skip,
+        take: limit,
+        order: { createdAt: 'DESC' },
+      };
+
+      // Build where clause based on filters
+      const whereClause: any = {};
+
+      // If userId is provided, filter by user
+      if (userId !== null) {
+        whereClause.user = { id: userId };
+      }
+
+      // If sourceType is provided, filter by sourceType
+      if (options?.sourceType) {
+        whereClause.sourceType = options.sourceType;
+      }
+
+      // Only add where clause if we have filters
+      if (Object.keys(whereClause).length > 0) {
+        query.where = whereClause;
+      }
+
+      const [data, total] =
+        await this.eventSeriesRepository.findAndCount(query);
+
+      return { data, total };
+    } catch (error) {
+      this.logger.error(
+        `Error finding event series by user: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Find event series by group ID
+   */
+  @Trace('event-series.findByGroup')
+  async findByGroup(
+    groupId: number,
+    options?: { page: number; limit: number },
+    tenantId?: string,
+  ): Promise<{ data: EventSeriesEntity[]; total: number }> {
+    try {
+      await this.initializeRepository(tenantId);
+
+      const page = options?.page || 1;
+      const limit = options?.limit || 10;
+      const skip = (page - 1) * limit;
+
+      const [data, total] = await this.eventSeriesRepository.findAndCount({
+        where: { group: { id: groupId } },
+        relations: ['user', 'group', 'image'],
+        skip,
+        take: limit,
+        order: { createdAt: 'DESC' },
+      });
+
+      return { data, total };
+    } catch (error) {
+      this.logger.error(
+        `Error finding event series by group: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
    * Update an event series
    */
   @Trace('event-series.update')
@@ -484,10 +714,11 @@ export class EventSeriesService {
     slug: string,
     updateEventSeriesDto: UpdateEventSeriesDto,
     userId: number,
+    tenantId?: string,
   ): Promise<EventSeriesEntity> {
     try {
       // Find the series by slug
-      const series = await this.findBySlug(slug);
+      const series = await this.findBySlug(slug, tenantId);
 
       // Check if user has permission to update the series
       if (series.user.id !== userId) {
@@ -524,9 +755,7 @@ export class EventSeriesService {
       );
 
       // Re-fetch to ensure all relations are loaded correctly after save
-      const reFetchedSeries = await this.eventSeriesRepository.findById(
-        updatedSeries.id,
-      );
+      const reFetchedSeries = await this.findById(updatedSeries.id, tenantId);
 
       if (!reFetchedSeries) {
         this.logger.error(
@@ -550,107 +779,6 @@ export class EventSeriesService {
   }
 
   /**
-   * Find an event series by slug
-   */
-  @Trace('event-series.findBySlug')
-  async findBySlug(slug: string): Promise<EventSeriesEntity> {
-    try {
-      const series = await this.eventSeriesRepository.findBySlug(slug);
-      if (!series) {
-        throw new NotFoundException(`Event series with slug ${slug} not found`);
-      }
-      return series;
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      this.logger.error(
-        `Error finding event series by slug: ${error.message}`,
-        error.stack,
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * Find all event series
-   */
-  @Trace('event-series.findAll')
-  async findAll(options?: {
-    page: number;
-    limit: number;
-  }): Promise<{ data: EventSeriesEntity[]; total: number }> {
-    try {
-      const page = options?.page || 1;
-      const limit = options?.limit || 10;
-
-      // Use the repository to find all series with pagination
-      const [data, total] = await this.eventSeriesRepository.findByUser(null, {
-        page,
-        limit,
-      });
-
-      return { data, total };
-    } catch (error) {
-      this.logger.error(
-        `Error finding all event series: ${error.message}`,
-        error.stack,
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * Find event series by user ID
-   */
-  @Trace('event-series.findByUser')
-  async findByUser(
-    userId: number,
-    options?: {
-      page: number;
-      limit: number;
-      sourceType?: string; // Add sourceType parameter for filtering Bluesky events
-    },
-  ): Promise<{ data: EventSeriesEntity[]; total: number }> {
-    try {
-      const [data, total] = await this.eventSeriesRepository.findByUser(
-        userId,
-        options,
-      );
-      return { data, total };
-    } catch (error) {
-      this.logger.error(
-        `Error finding event series by user: ${error.message}`,
-        error.stack,
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * Find event series by group ID
-   */
-  @Trace('event-series.findByGroup')
-  async findByGroup(
-    groupId: number,
-    options?: { page: number; limit: number },
-  ): Promise<{ data: EventSeriesEntity[]; total: number }> {
-    try {
-      const [data, total] = await this.eventSeriesRepository.findByGroup(
-        groupId,
-        options,
-      );
-      return { data, total };
-    } catch (error) {
-      this.logger.error(
-        `Error finding event series by group: ${error.message}`,
-        error.stack,
-      );
-      throw error;
-    }
-  }
-
-  /**
    * Delete an event series
    */
   @Trace('event-series.delete')
@@ -658,10 +786,11 @@ export class EventSeriesService {
     slug: string,
     userId: number,
     deleteEvents: boolean = false,
+    tenantId?: string,
   ): Promise<void> {
     try {
       // Find the series by slug
-      const series = await this.findBySlug(slug);
+      const series = await this.findBySlug(slug, tenantId);
 
       // Check if user has permission to delete the series
       if (series.user.id !== userId) {
@@ -976,7 +1105,7 @@ export class EventSeriesService {
   ): Promise<EventEntity> {
     try {
       // Get the series
-      const series = await this.eventSeriesRepository.findBySlug(seriesSlug);
+      const series = await this.findBySlug(seriesSlug);
       if (!series) {
         throw new NotFoundException(
           `Event series with slug ${seriesSlug} not found`,

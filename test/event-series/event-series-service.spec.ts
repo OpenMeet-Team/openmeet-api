@@ -4,7 +4,6 @@ import { RecurrencePatternService } from '../../src/event-series/services/recurr
 import { EventManagementService } from '../../src/event/services/event-management.service';
 import { EventQueryService } from '../../src/event/services/event-query.service';
 import { TenantConnectionService } from '../../src/tenant/tenant.service';
-import { EVENT_SERIES_REPOSITORY } from '../../src/event-series/interfaces/event-series-repository.interface';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 
 describe('EventSeriesService', () => {
@@ -41,7 +40,7 @@ describe('EventSeriesService', () => {
       providers: [
         EventSeriesService,
         {
-          provide: EVENT_SERIES_REPOSITORY,
+          provide: 'EventSeriesRepository',
           useValue: eventSeriesRepository,
         },
         {
