@@ -6,6 +6,7 @@ import { ElastiCacheModule } from '../elasticache/elasticache.module';
 import { EventModule } from '../event/event.module';
 import { ConfigModule } from '@nestjs/config';
 import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
+import { TenantModule } from '../tenant/tenant.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
     UserModule,
     ElastiCacheModule,
     ShadowAccountModule,
+    TenantModule,
     forwardRef(() => EventModule),
   ],
   controllers: [BlueskyController],
