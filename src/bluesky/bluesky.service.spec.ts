@@ -8,6 +8,8 @@ import { EventQueryService } from '../event/services/event-query.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { EventType, EventStatus } from '../core/constants/constant';
+import { TenantConnectionService } from '../tenant/tenant.service';
+import { REQUEST } from '@nestjs/core';
 
 // Mock modules first before creating mock implementations
 jest.mock('@atproto/api', () => ({
@@ -50,6 +52,14 @@ const mockEventQueryService = {
 
 const mockConfigService = {
   get: jest.fn(),
+};
+
+const mockTenantConnectionService = {
+  getTenantConnection: jest.fn().mockResolvedValue({}),
+};
+
+const mockRequest = {
+  tenantId: 'test-tenant',
 };
 
 // Mock Agent implementation to return in tests
@@ -106,6 +116,8 @@ describe('BlueskyService', () => {
           useValue: mockEventManagementService,
         },
         { provide: EventQueryService, useValue: mockEventQueryService },
+        { provide: TenantConnectionService, useValue: mockTenantConnectionService },
+        { provide: REQUEST, useValue: mockRequest },
       ],
     }).compile();
 

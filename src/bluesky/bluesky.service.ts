@@ -11,6 +11,8 @@ import { delay } from '../utils/delay';
 import { BlueskyLocation, BlueskyEventUri } from './BlueskyTypes';
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventQueryService } from '../event/services/event-query.service';
+import { REQUEST } from '@nestjs/core';
+import { TenantConnectionService } from '../tenant/tenant.service';
 
 @Injectable()
 export class BlueskyService {
@@ -27,6 +29,8 @@ export class BlueskyService {
     private readonly eventManagementService: EventManagementService,
     @Inject(forwardRef(() => EventQueryService))
     private readonly eventQueryService: EventQueryService,
+    private readonly tenantConnectionService: TenantConnectionService,
+    @Inject(REQUEST) private readonly request: any,
   ) {}
 
   private async getOAuthClient(tenantId: string): Promise<NodeOAuthClient> {
@@ -316,7 +320,34 @@ export class BlueskyService {
       tenantId,
     });
 
+    // Store the original seriesSlug to verify it's not lost during operation
+    const originalSeriesSlug = event.seriesSlug;
+    if (originalSeriesSlug) {
+      this.logger.debug('Event belongs to series, noting relationship', {
+        eventId: event.id,
+        seriesSlug: originalSeriesSlug,
+      });
+    }
+
     try {
+      // First prepare sections
+      if (event.image && typeof event.image.path === 'object' && Object.keys(event.image.path).length === 0) {
+        // Image path is an empty object, which likely means it needs transformation
+        this.logger.debug('Transforming empty image path object', {
+          eventId: event.id,
+          imageBefore: event.image
+        });
+        
+        // Use instanceToPlain to force the Transform decorator to run (same as in EventQueryService)
+        const { instanceToPlain } = await import('class-transformer');
+        event.image = instanceToPlain(event.image) as any;
+        
+        this.logger.debug('Transformed image', {
+          eventId: event.id,
+          imageAfter: event.image
+        });
+      }
+
       // Try to create the event record directly without a lock first
       try {
         const agent = await this.resumeSession(tenantId, did);
@@ -366,6 +397,12 @@ export class BlueskyService {
             uri: event.image.path,
             name: 'Event Image',
           });
+        } else if (event.image) {
+          // Log a warning if we have an image but no path
+          this.logger.warn('Event has image but no path', {
+            eventId: event.id,
+            image: event.image
+          });
         }
 
         // Add online location to uris if it exists
@@ -376,27 +413,55 @@ export class BlueskyService {
           });
         }
 
+        // Add additional metadata about the series to the Bluesky record if applicable
+        const recordData: any = {
+          $type: 'community.lexicon.calendar.event',
+          name: event.name,
+          description: event.description,
+          createdAt: event.createdAt,
+          startsAt: event.startDate,
+          endsAt: event.endDate,
+          mode: modeMap[event.type] || modeMap['in-person'],
+          status: statusMap[event.status] || statusMap['published'],
+          locations,
+          uris,
+        };
+
+        // Add openmeet-specific metadata in record
+        if (originalSeriesSlug) {
+          // Add series information to help with discovery
+          recordData.openMeetMeta = {
+            seriesSlug: originalSeriesSlug,
+            isRecurring: true,
+          };
+        }
+
         const result = await agent.com.atproto.repo.putRecord({
           repo: did,
           collection: 'community.lexicon.calendar.event',
           rkey,
-          record: {
-            $type: 'community.lexicon.calendar.event',
-            name: event.name,
-            description: event.description,
-            createdAt: event.createdAt,
-            startsAt: event.startDate,
-            endsAt: event.endDate,
-            mode: modeMap[event.type] || modeMap['in-person'],
-            status: statusMap[event.status] || statusMap['published'],
-            locations,
-            uris,
-          },
+          record: recordData,
         });
+        
         this.logger.debug(result);
         this.logger.log(
           `Event ${event.name} posted to Bluesky for user ${handle} (direct without lock)`,
         );
+
+        // Check if seriesSlug was lost - this is just a verification check, not a fix
+        if (originalSeriesSlug && event.seriesSlug !== originalSeriesSlug) {
+          // This is a programming error/bug that should be fixed, not silently corrected
+          this.logger.error('Bug detected: seriesSlug lost during Bluesky operation', {
+            eventId: event.id,
+            expected: originalSeriesSlug,
+            actual: event.seriesSlug,
+          });
+          
+          // Restore the value in memory but don't touch the database
+          // This ensures the caller gets back the expected state
+          event.seriesSlug = originalSeriesSlug;
+        }
+        
         return { rkey };
       } catch (directError) {
         this.logger.warn(
@@ -413,6 +478,25 @@ export class BlueskyService {
         lockKey,
         async () => {
           const agent = await this.resumeSession(tenantId, did);
+          
+          // Transform image if needed (same as in direct section)
+          if (event.image && typeof event.image.path === 'object' && Object.keys(event.image.path).length === 0) {
+            // Image path is an empty object, which likely means it needs transformation
+            this.logger.debug('Transforming empty image path object (lock-based)', {
+              eventId: event.id,
+              imageBefore: event.image
+            });
+            
+            // Use instanceToPlain to force the Transform decorator to run
+            const { instanceToPlain } = await import('class-transformer');
+            event.image = instanceToPlain(event.image) as any;
+            
+            this.logger.debug('Transformed image (lock-based)', {
+              eventId: event.id,
+              imageAfter: event.image
+            });
+          }
+          
           // Convert event type to Bluesky mode
           const modeMap = {
             'in-person': 'community.lexicon.calendar.event#inperson',
@@ -459,6 +543,12 @@ export class BlueskyService {
               uri: event.image.path,
               name: 'Event Image',
             });
+          } else if (event.image) {
+            // Log a warning if we have an image but no path
+            this.logger.warn('Event has image but no path', {
+              eventId: event.id,
+              image: event.image
+            });
           }
 
           // Add online location to uris if it exists
@@ -469,23 +559,36 @@ export class BlueskyService {
             });
           }
 
+          // Add additional metadata about the series to the Bluesky record if applicable
+          const recordData: any = {
+            $type: 'community.lexicon.calendar.event',
+            name: event.name,
+            description: event.description,
+            createdAt: event.createdAt,
+            startsAt: event.startDate,
+            endsAt: event.endDate,
+            mode: modeMap[event.type] || modeMap['in-person'],
+            status: statusMap[event.status] || statusMap['published'],
+            locations,
+            uris,
+          };
+
+          // Add openmeet-specific metadata in record
+          if (originalSeriesSlug) {
+            // Add series information to help with discovery
+            recordData.openMeetMeta = {
+              seriesSlug: originalSeriesSlug,
+              isRecurring: true,
+            };
+          }
+
           const result = await agent.com.atproto.repo.putRecord({
             repo: did,
             collection: 'community.lexicon.calendar.event',
             rkey,
-            record: {
-              $type: 'community.lexicon.calendar.event',
-              name: event.name,
-              description: event.description,
-              createdAt: event.createdAt,
-              startsAt: event.startDate,
-              endsAt: event.endDate,
-              mode: modeMap[event.type] || modeMap['in-person'],
-              status: statusMap[event.status] || statusMap['published'],
-              locations,
-              uris,
-            },
+            record: recordData,
           });
+          
           this.logger.debug(result);
           this.logger.log(
             `Event ${event.name} posted to Bluesky for user ${handle} (with lock)`,
@@ -502,6 +605,19 @@ export class BlueskyService {
         );
       }
 
+      // Check if seriesSlug was lost during lock-based operation
+      if (originalSeriesSlug && event.seriesSlug !== originalSeriesSlug) {
+        // Log an error but restore the in-memory value
+        this.logger.error('Bug detected: seriesSlug lost during lock-based Bluesky operation', {
+          eventId: event.id,
+          expected: originalSeriesSlug,
+          actual: event.seriesSlug,
+        });
+        
+        // Restore just the in-memory value
+        event.seriesSlug = originalSeriesSlug;
+      }
+
       return result;
     } catch (error: any) {
       this.logger.error('Failed to create Bluesky event:', {
@@ -511,6 +627,18 @@ export class BlueskyService {
         did,
         errorObject: error,
       });
+
+      // Also check for seriesSlug loss in error case
+      if (originalSeriesSlug && event.seriesSlug !== originalSeriesSlug) {
+        this.logger.error('Bug detected: seriesSlug lost during Bluesky error handling', {
+          eventId: event.id,
+          expected: originalSeriesSlug,
+          actual: event.seriesSlug,
+        });
+        
+        // Just restore the in-memory value
+        event.seriesSlug = originalSeriesSlug;
+      }
 
       // Enhance error message for debugging
       const enhancedError = new Error(

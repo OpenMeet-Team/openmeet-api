@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventSeriesService } from './services/event-series.service';
-import { EVENT_SERIES_REPOSITORY } from './interfaces/event-series-repository.interface';
 import {
   mockEventSeriesRepository,
   mockEventSeriesService,
@@ -177,27 +176,8 @@ describe('EventManagementService Integration with EventSeriesService', () => {
           },
         },
         {
-          provide: EVENT_SERIES_REPOSITORY,
-          useValue: mockEventSeriesRepository,
-        },
-        {
           provide: getRepositoryToken(EventSeriesEntity),
-          useValue: {
-            findOne: jest.fn().mockResolvedValue({
-              id: 1,
-              slug: 'test-series',
-              name: 'Test Series',
-            }),
-            find: jest
-              .fn()
-              .mockResolvedValue([
-                { id: 1, slug: 'test-series', name: 'Test Series' },
-              ]),
-            create: jest.fn((entity) => entity),
-            save: jest.fn((entity) => ({ id: 1, ...entity })),
-            update: jest.fn(),
-            delete: jest.fn(),
-          },
+          useValue: mockEventSeriesRepository,
         },
         {
           provide: getRepositoryToken(EventEntity),

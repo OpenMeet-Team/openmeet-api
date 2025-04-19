@@ -11,6 +11,7 @@ import { EventSeriesEntity } from '../infrastructure/persistence/relational/enti
 import { UserService } from '../../user/user.service';
 import { REQUEST } from '@nestjs/core';
 import { Connection } from 'typeorm';
+import { TenantConnectionService } from '../../tenant/tenant.service';
 
 // Define mockUser here
 const mockUser = {
@@ -146,8 +147,16 @@ const mockUserService = {
   }),
 };
 
+// Create mock for TenantConnectionService
+const mockTenantConnectionService = {
+  getTenantConnection: jest.fn().mockResolvedValue({
+    getRepository: jest.fn().mockImplementation(() => mockEventRepository),
+  }),
+};
+
 describe('EventSeriesOccurrenceService', () => {
   let service: EventSeriesOccurrenceService;
+  let module: TestingModule;
   let eventRepository: any;
   let eventSeriesService: any;
   let recurrenceService: any;
@@ -156,7 +165,7 @@ describe('EventSeriesOccurrenceService', () => {
   let userService: any;
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         EventSeriesOccurrenceService,
         {
@@ -210,10 +219,14 @@ describe('EventSeriesOccurrenceService', () => {
             }),
           },
         },
+        {
+          provide: TenantConnectionService,
+          useValue: mockTenantConnectionService,
+        },
       ],
     }).compile();
 
-    service = module.get<EventSeriesOccurrenceService>(
+    service = await module.resolve<EventSeriesOccurrenceService>(
       EventSeriesOccurrenceService,
     );
     eventRepository = module.get(getRepositoryToken(EventEntity));
@@ -253,6 +266,7 @@ describe('EventSeriesOccurrenceService', () => {
       expect(service.findOccurrence).toHaveBeenCalledWith(
         'test-series',
         occurrenceDate,
+        undefined,
       );
       expect(result).toEqual(mockTemplateEvent);
     });
@@ -283,11 +297,13 @@ describe('EventSeriesOccurrenceService', () => {
       expect(service.findOccurrence).toHaveBeenCalledWith(
         'test-series',
         occurrenceDate,
+        undefined,
       );
       expect(service.materializeOccurrence).toHaveBeenCalledWith(
         'test-series',
         occurrenceDate,
         1,
+        undefined,
       );
       expect(result.id).toBe(2);
     });
@@ -335,7 +351,7 @@ describe('EventSeriesOccurrenceService', () => {
       // Assert the correct service method was called
       expect(
         eventManagementService.findEventsBySeriesSlug,
-      ).toHaveBeenCalledWith('test-series', { page: 1, limit: 1 });
+      ).toHaveBeenCalledWith('test-series', { page: 1, limit: 100 }, undefined);
       // Ensure isSameDay was called during the find operation with the correct dates
       expect(isSameDaySpy).toHaveBeenCalledWith(
         mockFoundOccurrence.startDate,
@@ -407,10 +423,14 @@ describe('EventSeriesOccurrenceService', () => {
       );
 
       // Verify mocks were called correctly
-      expect(eventSeriesService.findBySlug).toHaveBeenCalledWith('test-series');
+      expect(eventSeriesService.findBySlug).toHaveBeenCalledWith(
+        'test-series',
+        undefined,
+      );
       expect(recurrenceService.isDateInRecurrencePattern).toHaveBeenCalled();
       expect(userService.findById).toHaveBeenCalledWith(1);
-      // Verify the create call
+
+      // Verify the create call - remove the undefined parameter expectation
       expect(eventManagementService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           name: mockTemplateEvent.name,
@@ -420,6 +440,7 @@ describe('EventSeriesOccurrenceService', () => {
         1, // userId
         {},
       );
+
       // Verify the final lookup
       expect(eventQueryService.findEventBySlug).toHaveBeenCalledWith(
         newOccurrence.slug,
@@ -551,11 +572,14 @@ describe('EventSeriesOccurrenceService', () => {
       expect(service.getUpcomingOccurrences).toHaveBeenCalledWith(
         'test-series',
         5,
+        false,
+        undefined,
       );
       expect(service.materializeOccurrence).toHaveBeenCalledWith(
         'test-series',
         '2025-10-05T15:00:00Z',
         1,
+        undefined,
       );
       expect(result).toEqual(nextOccurrence);
     });

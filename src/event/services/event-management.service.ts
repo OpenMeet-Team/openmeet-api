@@ -235,16 +235,40 @@ export class EventManagementService {
       this.logger.debug(
         `[CREATE Pre-Save] Event location: ${event?.location || 'undefined'}`,
       );
+
+      // Explicitly log seriesSlug before saving
+      if (createEventDto.seriesSlug) {
+        this.logger.debug(
+          `[CREATE Pre-Save] Event seriesSlug: ${event.seriesSlug}`,
+        );
+      }
+
       createdEvent = await this.eventRepository.save(event);
+
+      // Verify seriesSlug was preserved after saving
+      if (createEventDto.seriesSlug && !createdEvent.seriesSlug) {
+        this.logger.warn(
+          `SeriesSlug lost during save! Restoring seriesSlug: ${createEventDto.seriesSlug}`,
+        );
+        // Restore the seriesSlug if it was lost
+        createdEvent.seriesSlug = createEventDto.seriesSlug;
+        createdEvent = await this.eventRepository.save(createdEvent);
+      }
     }
 
     this.logger.debug(
       '[CREATE Post-Save] Event location:',
       createdEvent?.location || 'undefined',
     );
+    // Also log seriesSlug status after save
+    this.logger.debug(
+      '[CREATE Post-Save] Event seriesSlug:',
+      createdEvent?.seriesSlug || 'null',
+    );
     this.logger.debug('Saved event in database:', {
       id: createdEvent.id,
       sourceType: createdEvent.sourceType,
+      seriesSlug: createdEvent.seriesSlug,
     });
 
     // Add host as first attendee
@@ -303,9 +327,21 @@ export class EventManagementService {
   ): Promise<EventEntity> {
     await this.initializeRepository();
 
+    this.logger.debug(`Starting update for event ${slug} by user ${userId}`);
+    this.logger.debug(
+      `UpdateEventDto contains: ${JSON.stringify(updateEventDto, null, 2)}`,
+    );
+
     const event = await this.eventRepository.findOneOrFail({
       where: { slug },
     });
+
+    this.logger.debug(
+      `Found event ${slug} (ID: ${event.id}) with current seriesSlug: ${event.seriesSlug || 'null'}`,
+    );
+
+    // Store the original seriesSlug for validation after update
+    const originalSeriesSlug = event.seriesSlug;
 
     // Create a base update object without categories
     const mappedDto: any = {
@@ -314,6 +350,22 @@ export class EventManagementService {
       user: { id: userId },
       group: updateEventDto.group ? { id: Number(updateEventDto.group) } : null,
     };
+
+    // Explicit check for seriesSlug updates - add debug logging
+    if (updateEventDto.seriesSlug !== undefined) {
+      this.logger.debug(
+        `Updating event ${slug} with seriesSlug: ${updateEventDto.seriesSlug}`,
+      );
+      // Ensure seriesSlug is explicitly set in mappedDto
+      mappedDto.seriesSlug = updateEventDto.seriesSlug;
+    } else if (event.seriesSlug) {
+      // Explicitly preserve the existing seriesSlug if it's not being intentionally updated
+      // This prevents unintentional disconnection from series
+      this.logger.debug(
+        `Preserving existing seriesSlug: ${event.seriesSlug} for event ${slug}`,
+      );
+      mappedDto.seriesSlug = event.seriesSlug;
+    }
 
     // Handle categories separately
     if (updateEventDto.categories?.length) {
@@ -347,8 +399,10 @@ export class EventManagementService {
     }
 
     this.auditLogger.log('event updated', {
-      event,
-      mappedDto,
+      context: {
+        event,
+        mappedDto,
+      },
     });
 
     // Check if we need to update recurrence properties
@@ -420,14 +474,52 @@ export class EventManagementService {
       mappedDto.recurrenceRule = null;
     }
 
+    // Before saving, make sure seriesSlug is explicitly set in the event object
+    // if it should be preserved
+    const expectedSeriesSlug =
+      mappedDto.seriesSlug !== undefined
+        ? mappedDto.seriesSlug
+        : originalSeriesSlug;
+
     const updatedEvent = this.eventRepository.merge(event, mappedDto);
+
+    // Double-check that seriesSlug is still set correctly before saving
+    if (expectedSeriesSlug && updatedEvent.seriesSlug !== expectedSeriesSlug) {
+      this.logger.warn(
+        `SeriesSlug was unexpectedly changed during merge! Restoring to ${expectedSeriesSlug}`,
+      );
+      updatedEvent.seriesSlug = expectedSeriesSlug;
+    }
+
     this.logger.debug(
       `[UPDATE Pre-Save] Event location: ${updatedEvent.location}`,
     );
-    const savedEvent = await this.eventRepository.save(updatedEvent);
+    // Add debug for seriesSlug pre-save
     this.logger.debug(
-      `[UPDATE Post-Save] Event location: ${savedEvent.location}`,
+      `[UPDATE Pre-Save] Event ${updatedEvent.id} (${updatedEvent.slug}) seriesSlug: ${updatedEvent.seriesSlug}`,
     );
+
+    const savedEvent = await this.eventRepository.save(updatedEvent);
+
+    // Add debug for seriesSlug post-save
+    this.logger.debug(
+      `[UPDATE Post-Save] Event ${savedEvent.id} (${savedEvent.slug}) seriesSlug: ${savedEvent.seriesSlug}`,
+    );
+
+    // Additional validation: check if seriesSlug was unexpectedly lost during save
+    // and restore it if necessary
+    if (expectedSeriesSlug && !savedEvent.seriesSlug) {
+      this.logger.warn(
+        `SeriesSlug lost during save operation! Restoring seriesSlug: ${expectedSeriesSlug}`,
+      );
+      // Directly update the seriesSlug field and save again
+      savedEvent.seriesSlug = expectedSeriesSlug;
+      await this.eventRepository.save(savedEvent);
+
+      this.logger.debug(
+        `[UPDATE Post-Fix] Event ${savedEvent.id} (${savedEvent.slug}) seriesSlug: ${savedEvent.seriesSlug}`,
+      );
+    }
 
     // If user has Bluesky credentials and event is published, update on Bluesky
     if (
@@ -958,12 +1050,16 @@ export class EventManagementService {
   async findEventsBySeriesSlug(
     seriesSlug: string,
     options?: { page: number; limit: number },
+    tenantId?: string,
   ): Promise<[EventEntity[], number]> {
     try {
       this.logger.debug(`Finding events for series slug ${seriesSlug}`);
 
       // Get the series by slug using the EventSeriesService
-      const series = await this.eventSeriesService.findBySlug(seriesSlug);
+      const series = await this.eventSeriesService.findBySlug(
+        seriesSlug,
+        tenantId,
+      );
 
       if (!series) {
         this.logger.warn(`Series with slug ${seriesSlug} not found`);

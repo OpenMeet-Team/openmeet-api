@@ -27,20 +27,17 @@ export class MetricsService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    console.log('MetricsService onModuleInit called - initializing metrics...');
     // Initialize metrics on startup
     await this.updateMetrics();
   }
 
   @Cron(CronExpression.EVERY_5_MINUTES)
   public async updateMetrics() {
-    console.log('Updating business metrics for all tenants...');
     try {
       // Get all tenant IDs
       const allTenants = await (
         this.tenantConnectionService as any
       ).getAllTenants();
-      console.log(`Found ${allTenants.length} tenants to collect metrics from`);
 
       // Track totals across all tenants
       let totalUsers = 0;
@@ -53,7 +50,6 @@ export class MetricsService implements OnModuleInit {
       // Update metrics for each tenant connection
       for (const tenant of allTenants) {
         const tenantId = tenant.id;
-        console.log(`Updating metrics for tenant: ${tenantId}`);
         // Get the connection for this tenant
         const connection =
           await this.tenantConnectionService.getTenantConnection(tenantId);
@@ -79,12 +75,6 @@ export class MetricsService implements OnModuleInit {
       this.groupsGauge.set({ tenant: 'all' }, totalGroups);
       this.eventAttendeesGauge.set({ tenant: 'all' }, totalEventAttendees);
       this.groupMembersGauge.set({ tenant: 'all' }, totalGroupMembers);
-
-      console.log(
-        `Aggregated metrics - Users: ${totalUsers}, Active Users: ${totalActiveUsers}, Events: ${totalEvents}, Groups: ${totalGroups}, Attendees: ${totalEventAttendees}, Members: ${totalGroupMembers}`,
-      );
-
-      console.log('Business metrics updated successfully for all tenants');
     } catch (error) {
       console.error('Error updating metrics', error);
     }
@@ -114,9 +104,6 @@ export class MetricsService implements OnModuleInit {
       );
       metrics.users = parseInt(userCount[0].count, 10);
       this.usersGauge.set({ tenant: tenantId }, metrics.users);
-      console.log(
-        `Setting users_total metric for tenant ${tenantId} to ${metrics.users}`,
-      );
 
       // Active users
       const activeUserQuery = `
@@ -127,9 +114,6 @@ export class MetricsService implements OnModuleInit {
       const activeUserCount = await connection.query(activeUserQuery);
       metrics.activeUsers = parseInt(activeUserCount[0].count, 10);
       this.activeUsers30dGauge.set({ tenant: tenantId }, metrics.activeUsers);
-      console.log(
-        `Setting active_users_30d metric for tenant ${tenantId} to ${metrics.activeUsers}`,
-      );
 
       // Events
       const eventCount = await connection.query(
@@ -137,9 +121,6 @@ export class MetricsService implements OnModuleInit {
       );
       metrics.events = parseInt(eventCount[0].count, 10);
       this.eventsGauge.set({ tenant: tenantId }, metrics.events);
-      console.log(
-        `Setting events_total metric for tenant ${tenantId} to ${metrics.events}`,
-      );
 
       // Groups
       const groupCount = await connection.query(
@@ -147,9 +128,6 @@ export class MetricsService implements OnModuleInit {
       );
       metrics.groups = parseInt(groupCount[0].count, 10);
       this.groupsGauge.set({ tenant: tenantId }, metrics.groups);
-      console.log(
-        `Setting groups_total metric for tenant ${tenantId} to ${metrics.groups}`,
-      );
 
       // Event attendees
       const attendeeCount = await connection.query(
@@ -160,9 +138,6 @@ export class MetricsService implements OnModuleInit {
         { tenant: tenantId },
         metrics.eventAttendees,
       );
-      console.log(
-        `Setting event_attendees_total metric for tenant ${tenantId} to ${metrics.eventAttendees}`,
-      );
 
       // Group members
       const memberCount = await connection.query(
@@ -170,9 +145,6 @@ export class MetricsService implements OnModuleInit {
       );
       metrics.groupMembers = parseInt(memberCount[0].count, 10);
       this.groupMembersGauge.set({ tenant: tenantId }, metrics.groupMembers);
-      console.log(
-        `Setting group_members_total metric for tenant ${tenantId} to ${metrics.groupMembers}`,
-      );
     } catch (error) {
       console.error(`Error collecting metrics for tenant ${tenantId}`, error);
     }

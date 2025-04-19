@@ -96,34 +96,18 @@ export class EventSeriesController {
     @Body() createEventSeriesDto: CreateEventSeriesDto,
     @Request() req,
   ) {
-    this.logger.log('Creating event series');
-    // Extract tenant ID directly from request to avoid decorator issues
+    this.logger.log(`Creating event series by user ${req.user.id}`);
+    // Extract tenant ID directly from request
     const tenantId =
       req.tenantId || (req.headers && req.headers['x-tenant-id']);
-
-    this.logger.log(
-      `Creating event series in tenant ${tenantId} by user ${req.user.id}`,
-    );
-
-    // Verify the user ID and tenant info
-    this.logger.debug(
-      `User information: ${JSON.stringify({
-        id: req.user.id,
-        tenantId,
-        headers: req.headers && req.headers['x-tenant-id'],
-        hasUser: !!req.user,
-      })}`,
-    );
-
-    // Log the received DTO
-    this.logger.log(
-      `Received event series DTO: ${JSON.stringify(createEventSeriesDto, null, 2)}`,
-    );
+    this.logger.debug(`Using tenant ID: ${tenantId} for event series creation`);
 
     try {
       const eventSeries = await this.eventSeriesService.create(
         createEventSeriesDto,
         req.user.id,
+        false, // generateFutureEvents
+        tenantId,
       );
 
       return new EventSeriesResponseDto(eventSeries);
@@ -158,10 +142,13 @@ export class EventSeriesController {
       `Getting all event series in tenant ${tenantId} by user ${req.user.id}`,
     );
 
-    const { data, total } = await this.eventSeriesService.findAll({
-      page: +page,
-      limit: +limit,
-    });
+    const { data, total } = await this.eventSeriesService.findAll(
+      {
+        page: +page,
+        limit: +limit,
+      },
+      tenantId,
+    );
 
     return {
       data: data.map((series) => new EventSeriesResponseDto(series)),
@@ -197,10 +184,14 @@ export class EventSeriesController {
       `Getting event series for user ${userId} in tenant ${tenantId}`,
     );
 
-    const { data, total } = await this.eventSeriesService.findByUser(+userId, {
-      page: +page,
-      limit: +limit,
-    });
+    const { data, total } = await this.eventSeriesService.findByUser(
+      +userId,
+      {
+        page: +page,
+        limit: +limit,
+      },
+      tenantId,
+    );
 
     return {
       data: data.map((series) => new EventSeriesResponseDto(series)),
@@ -255,15 +246,23 @@ export class EventSeriesController {
       `Creating series from event ${eventSlug} by user ${req.user.id}`,
     );
 
+    // Extract tenant ID directly from request
+    const tenantId =
+      req.tenantId || (req.headers && req.headers['x-tenant-id']);
+    this.logger.debug(
+      `Using tenant ID: ${tenantId} for event series creation from event ${eventSlug}`,
+    );
+
     try {
-      const eventSeries = await this.eventSeriesService.createFromExistingEvent(
-        eventSlug,
-        createData.recurrenceRule,
-        req.user.id,
-        createData.name,
-        createData.description,
-        createData.timeZone,
-      );
+      // Use the new simplified service method
+      const eventSeries =
+        await this.eventSeriesService.createSeriesFromEventDto(
+          eventSlug,
+          createData,
+          req.user.id,
+          false, // generateFutureEvents
+          tenantId,
+        );
 
       return new EventSeriesResponseDto(eventSeries);
     } catch (error) {
@@ -305,6 +304,7 @@ export class EventSeriesController {
         page: +page,
         limit: +limit,
       },
+      tenantId,
     );
 
     return {
@@ -332,7 +332,10 @@ export class EventSeriesController {
 
     this.logger.log(`Getting event series ${slug} in tenant ${tenantId}`);
 
-    const eventSeries = await this.eventSeriesService.findBySlug(slug);
+    const eventSeries = await this.eventSeriesService.findBySlug(
+      slug,
+      tenantId,
+    );
     return new EventSeriesResponseDto(eventSeries);
   }
 
@@ -523,6 +526,7 @@ export class EventSeriesController {
         slug,
         occurrenceDate,
         req.user.id,
+        tenantId,
       );
 
     return occurrence;
@@ -589,6 +593,7 @@ export class EventSeriesController {
       slug,
       updateEventSeriesDto,
       req.user.id,
+      tenantId,
     );
 
     return new EventSeriesResponseDto(eventSeries);
@@ -639,7 +644,12 @@ export class EventSeriesController {
     );
 
     try {
-      await this.eventSeriesService.delete(slug, req.user.id, deleteEvents);
+      await this.eventSeriesService.delete(
+        slug,
+        req.user.id,
+        deleteEvents,
+        tenantId,
+      );
       // Return nothing with 204 No Content status
       return;
     } catch (error) {
