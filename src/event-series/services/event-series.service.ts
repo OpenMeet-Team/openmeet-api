@@ -137,7 +137,26 @@ export class EventSeriesService {
           `Linking template event ${templateSlugToLink} to series ${savedSeries.slug}`,
         );
 
+        // Fetch the template event
+        const eventToLink = await this.eventQueryService.findEventBySlug(templateSlugToLink);
+        if (!eventToLink) {
+          throw new NotFoundException(
+            `Template event ${templateSlugToLink} not found`,
+          );
+        }
+
+        // Get the event repository
+        const tenantConnection = await this.tenantConnectionService.getTenantConnection(
+          tenantId || this.request?.tenantId,
+        );
+        const eventRepository = tenantConnection.getRepository(EventEntity);
+
         // Update the template event to link it to the series
+        eventToLink.seriesSlug = savedSeries.slug;
+        eventToLink.series = savedSeries;
+        await eventRepository.save(eventToLink);
+
+        // Also update via the service to ensure proper handling
         await this.eventManagementService.update(
           templateSlugToLink,
           {
@@ -361,6 +380,18 @@ export class EventSeriesService {
 
       // Use EventManagementService to properly update the event with the series slug
       try {
+        // Get a direct reference to the event repository
+        const tenantConnection = await this.tenantConnectionService.getTenantConnection(
+          effectiveTenantId,
+        );
+        const eventRepository = tenantConnection.getRepository(EventEntity);
+
+        // Update the event directly to set both seriesSlug and series relationship
+        eventToLink.seriesSlug = savedSeries.slug;
+        eventToLink.series = savedSeries;
+        await eventRepository.save(eventToLink);
+
+        // Also update via the EventManagementService to ensure proper handling
         await this.eventManagementService.update(
           eventSlug,
           { seriesSlug: savedSeries.slug },
@@ -370,6 +401,38 @@ export class EventSeriesService {
         this.logger.log(
           `Successfully linked event ${eventSlug} (ID: ${eventToLink.id}) to series ${savedSeries.slug} (ID: ${savedSeries.id})`,
         );
+        
+        // Verify the link was successful by re-fetching the event
+        const verifiedEvent = await this.eventQueryService.findEventBySlug(eventSlug);
+        if (!verifiedEvent || verifiedEvent.seriesSlug !== savedSeries.slug) {
+          this.logger.warn(
+            `⚠️ Verification failed: Event ${eventSlug} does not have correct seriesSlug. Expected: ${savedSeries.slug}, Actual: ${verifiedEvent?.seriesSlug}`,
+          );
+          
+          // Force update the event again with the correct seriesSlug
+          this.logger.debug(
+            `Attempting to re-link event ${eventSlug} to series ${savedSeries.slug}`,
+          );
+          await this.eventManagementService.update(
+            eventSlug,
+            {
+              seriesSlug: savedSeries.slug,
+              // Include the event's other properties to make sure nothing gets lost
+              name: verifiedEvent?.name,
+              description: verifiedEvent?.description,
+              type: verifiedEvent?.type,
+              location: verifiedEvent?.location,
+              locationOnline: verifiedEvent?.locationOnline,
+            },
+            userId,
+          );
+          
+          // Final verification
+          const finalVerification = await this.eventQueryService.findEventBySlug(eventSlug);
+          this.logger.debug(
+            `After re-linking: Event ${eventSlug} seriesSlug = ${finalVerification?.seriesSlug}`,
+          );
+        }
       } catch (updateError) {
         this.logger.error(
           `Error linking event ${eventSlug} to series: ${updateError.message}`,

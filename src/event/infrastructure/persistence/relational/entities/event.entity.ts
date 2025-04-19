@@ -179,6 +179,8 @@ export class EventEntity
     (series: EventSeriesEntity) => series.events,
     {
       nullable: true,
+      onDelete: 'SET NULL',
+      onUpdate: 'CASCADE'
     },
   )
   @JoinColumn({ name: 'seriesSlug', referencedColumnName: 'slug' })
