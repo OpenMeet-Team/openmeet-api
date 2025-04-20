@@ -116,7 +116,10 @@ describe('BlueskyService', () => {
           useValue: mockEventManagementService,
         },
         { provide: EventQueryService, useValue: mockEventQueryService },
-        { provide: TenantConnectionService, useValue: mockTenantConnectionService },
+        {
+          provide: TenantConnectionService,
+          useValue: mockTenantConnectionService,
+        },
         { provide: REQUEST, useValue: mockRequest },
       ],
     }).compile();

@@ -320,31 +320,41 @@ export class BlueskyService {
       tenantId,
     });
 
-    // Store the original seriesSlug to verify it's not lost during operation
-    const originalSeriesSlug = event.seriesSlug;
-    if (originalSeriesSlug) {
+    // Create a clone of critical properties to ensure they're preserved
+    const originalValues = {
+      seriesSlug: event.seriesSlug,
+      id: event.id,
+      slug: event.slug,
+    };
+
+    // Log the original state
+    if (originalValues.seriesSlug) {
       this.logger.debug('Event belongs to series, noting relationship', {
-        eventId: event.id,
-        seriesSlug: originalSeriesSlug,
+        eventId: originalValues.id,
+        seriesSlug: originalValues.seriesSlug,
       });
     }
 
     try {
       // First prepare sections
-      if (event.image && typeof event.image.path === 'object' && Object.keys(event.image.path).length === 0) {
+      if (
+        event.image &&
+        typeof event.image.path === 'object' &&
+        Object.keys(event.image.path).length === 0
+      ) {
         // Image path is an empty object, which likely means it needs transformation
         this.logger.debug('Transforming empty image path object', {
           eventId: event.id,
-          imageBefore: event.image
+          imageBefore: event.image,
         });
-        
+
         // Use instanceToPlain to force the Transform decorator to run (same as in EventQueryService)
         const { instanceToPlain } = await import('class-transformer');
         event.image = instanceToPlain(event.image) as any;
-        
+
         this.logger.debug('Transformed image', {
           eventId: event.id,
-          imageAfter: event.image
+          imageAfter: event.image,
         });
       }
 
@@ -401,7 +411,7 @@ export class BlueskyService {
           // Log a warning if we have an image but no path
           this.logger.warn('Event has image but no path', {
             eventId: event.id,
-            image: event.image
+            image: event.image,
           });
         }
 
@@ -428,10 +438,10 @@ export class BlueskyService {
         };
 
         // Add openmeet-specific metadata in record
-        if (originalSeriesSlug) {
+        if (originalValues.seriesSlug) {
           // Add series information to help with discovery
           recordData.openMeetMeta = {
-            seriesSlug: originalSeriesSlug,
+            seriesSlug: originalValues.seriesSlug,
             isRecurring: true,
           };
         }
@@ -442,26 +452,65 @@ export class BlueskyService {
           rkey,
           record: recordData,
         });
-        
+
         this.logger.debug(result);
         this.logger.log(
           `Event ${event.name} posted to Bluesky for user ${handle} (direct without lock)`,
         );
 
-        // Check if seriesSlug was lost - this is just a verification check, not a fix
-        if (originalSeriesSlug && event.seriesSlug !== originalSeriesSlug) {
-          // This is a programming error/bug that should be fixed, not silently corrected
-          this.logger.error('Bug detected: seriesSlug lost during Bluesky operation', {
-            eventId: event.id,
-            expected: originalSeriesSlug,
-            actual: event.seriesSlug,
-          });
-          
-          // Restore the value in memory but don't touch the database
-          // This ensures the caller gets back the expected state
-          event.seriesSlug = originalSeriesSlug;
+        // Check if seriesSlug was lost - apply a fix, not just a verification
+        if (
+          originalValues.seriesSlug &&
+          event.seriesSlug !== originalValues.seriesSlug
+        ) {
+          // This is a programming error/bug that we're fixing
+          this.logger.warn(
+            'seriesSlug lost during Bluesky operation, restoring it',
+            {
+              eventId: originalValues.id,
+              expected: originalValues.seriesSlug,
+              actual: event.seriesSlug,
+            },
+          );
+
+          // Restore the value in memory
+          event.seriesSlug = originalValues.seriesSlug;
+
+          // Also fix it in the database
+          try {
+            const effectiveTenantId = tenantId || this.request?.tenantId;
+            if (effectiveTenantId) {
+              const dataSource =
+                await this.tenantConnectionService.getTenantConnection(
+                  effectiveTenantId,
+                );
+
+              // Direct database update to ensure the seriesSlug is correct
+              await dataSource.query(
+                `UPDATE events SET "seriesSlug" = $1 WHERE id = $2 OR slug = $3`,
+                [
+                  originalValues.seriesSlug,
+                  originalValues.id,
+                  originalValues.slug,
+                ],
+              );
+
+              this.logger.debug('Database updated to restore seriesSlug', {
+                eventId: originalValues.id,
+                seriesSlug: originalValues.seriesSlug,
+              });
+            }
+          } catch (dbError) {
+            this.logger.error(
+              'Failed to update database with correct seriesSlug:',
+              {
+                error: dbError.message,
+                eventId: originalValues.id,
+              },
+            );
+          }
         }
-        
+
         return { rkey };
       } catch (directError) {
         this.logger.warn(
@@ -478,25 +527,32 @@ export class BlueskyService {
         lockKey,
         async () => {
           const agent = await this.resumeSession(tenantId, did);
-          
+
           // Transform image if needed (same as in direct section)
-          if (event.image && typeof event.image.path === 'object' && Object.keys(event.image.path).length === 0) {
+          if (
+            event.image &&
+            typeof event.image.path === 'object' &&
+            Object.keys(event.image.path).length === 0
+          ) {
             // Image path is an empty object, which likely means it needs transformation
-            this.logger.debug('Transforming empty image path object (lock-based)', {
-              eventId: event.id,
-              imageBefore: event.image
-            });
-            
+            this.logger.debug(
+              'Transforming empty image path object (lock-based)',
+              {
+                eventId: event.id,
+                imageBefore: event.image,
+              },
+            );
+
             // Use instanceToPlain to force the Transform decorator to run
             const { instanceToPlain } = await import('class-transformer');
             event.image = instanceToPlain(event.image) as any;
-            
+
             this.logger.debug('Transformed image (lock-based)', {
               eventId: event.id,
-              imageAfter: event.image
+              imageAfter: event.image,
             });
           }
-          
+
           // Convert event type to Bluesky mode
           const modeMap = {
             'in-person': 'community.lexicon.calendar.event#inperson',
@@ -547,7 +603,7 @@ export class BlueskyService {
             // Log a warning if we have an image but no path
             this.logger.warn('Event has image but no path', {
               eventId: event.id,
-              image: event.image
+              image: event.image,
             });
           }
 
@@ -574,10 +630,10 @@ export class BlueskyService {
           };
 
           // Add openmeet-specific metadata in record
-          if (originalSeriesSlug) {
+          if (originalValues.seriesSlug) {
             // Add series information to help with discovery
             recordData.openMeetMeta = {
-              seriesSlug: originalSeriesSlug,
+              seriesSlug: originalValues.seriesSlug,
               isRecurring: true,
             };
           }
@@ -588,7 +644,7 @@ export class BlueskyService {
             rkey,
             record: recordData,
           });
-          
+
           this.logger.debug(result);
           this.logger.log(
             `Event ${event.name} posted to Bluesky for user ${handle} (with lock)`,
@@ -606,16 +662,59 @@ export class BlueskyService {
       }
 
       // Check if seriesSlug was lost during lock-based operation
-      if (originalSeriesSlug && event.seriesSlug !== originalSeriesSlug) {
-        // Log an error but restore the in-memory value
-        this.logger.error('Bug detected: seriesSlug lost during lock-based Bluesky operation', {
-          eventId: event.id,
-          expected: originalSeriesSlug,
-          actual: event.seriesSlug,
-        });
-        
-        // Restore just the in-memory value
-        event.seriesSlug = originalSeriesSlug;
+      if (
+        originalValues.seriesSlug &&
+        event.seriesSlug !== originalValues.seriesSlug
+      ) {
+        // Log and fix the issue
+        this.logger.warn(
+          'seriesSlug lost during lock-based Bluesky operation, restoring it',
+          {
+            eventId: originalValues.id,
+            expected: originalValues.seriesSlug,
+            actual: event.seriesSlug,
+          },
+        );
+
+        // Restore the in-memory value
+        event.seriesSlug = originalValues.seriesSlug;
+
+        // Also fix it in the database
+        try {
+          const effectiveTenantId = tenantId || this.request?.tenantId;
+          if (effectiveTenantId) {
+            const dataSource =
+              await this.tenantConnectionService.getTenantConnection(
+                effectiveTenantId,
+              );
+
+            // Direct database update to ensure the seriesSlug is correct
+            await dataSource.query(
+              `UPDATE events SET "seriesSlug" = $1 WHERE id = $2 OR slug = $3`,
+              [
+                originalValues.seriesSlug,
+                originalValues.id,
+                originalValues.slug,
+              ],
+            );
+
+            this.logger.debug(
+              'Database updated to restore seriesSlug after lock-based operation',
+              {
+                eventId: originalValues.id,
+                seriesSlug: originalValues.seriesSlug,
+              },
+            );
+          }
+        } catch (dbError) {
+          this.logger.error(
+            'Failed to update database with correct seriesSlug after lock-based operation:',
+            {
+              error: dbError.message,
+              eventId: originalValues.id,
+            },
+          );
+        }
       }
 
       return result;
@@ -629,15 +728,58 @@ export class BlueskyService {
       });
 
       // Also check for seriesSlug loss in error case
-      if (originalSeriesSlug && event.seriesSlug !== originalSeriesSlug) {
-        this.logger.error('Bug detected: seriesSlug lost during Bluesky error handling', {
-          eventId: event.id,
-          expected: originalSeriesSlug,
-          actual: event.seriesSlug,
-        });
-        
-        // Just restore the in-memory value
-        event.seriesSlug = originalSeriesSlug;
+      if (
+        originalValues.seriesSlug &&
+        event.seriesSlug !== originalValues.seriesSlug
+      ) {
+        this.logger.warn(
+          'seriesSlug lost during Bluesky error handling, restoring it',
+          {
+            eventId: originalValues.id,
+            expected: originalValues.seriesSlug,
+            actual: event.seriesSlug,
+          },
+        );
+
+        // Restore the in-memory value
+        event.seriesSlug = originalValues.seriesSlug;
+
+        // Also fix it in the database
+        try {
+          const effectiveTenantId = tenantId || this.request?.tenantId;
+          if (effectiveTenantId) {
+            const dataSource =
+              await this.tenantConnectionService.getTenantConnection(
+                effectiveTenantId,
+              );
+
+            // Direct database update to ensure the seriesSlug is correct
+            await dataSource.query(
+              `UPDATE events SET "seriesSlug" = $1 WHERE id = $2 OR slug = $3`,
+              [
+                originalValues.seriesSlug,
+                originalValues.id,
+                originalValues.slug,
+              ],
+            );
+
+            this.logger.debug(
+              'Database updated to restore seriesSlug after error',
+              {
+                eventId: originalValues.id,
+                seriesSlug: originalValues.seriesSlug,
+              },
+            );
+          }
+        } catch (dbError) {
+          this.logger.error(
+            'Failed to update database with correct seriesSlug after error:',
+            {
+              error: dbError.message,
+              eventId: originalValues.id,
+            },
+          );
+        }
       }
 
       // Enhance error message for debugging

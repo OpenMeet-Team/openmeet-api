@@ -180,7 +180,7 @@ export class EventEntity
     {
       nullable: true,
       onDelete: 'SET NULL',
-      onUpdate: 'CASCADE'
+      onUpdate: 'CASCADE',
     },
   )
   @JoinColumn({ name: 'seriesSlug', referencedColumnName: 'slug' })
@@ -220,6 +220,12 @@ export class EventEntity
 
   @Column({ nullable: true, type: 'jsonb' })
   conferenceData: Record<string, any>;
+
+  /**
+   * Virtual property to indicate if an event is part of a recurring series
+   * Not stored in database, computed from seriesSlug
+   */
+  isRecurring?: boolean;
 
   // @Expose()
   // get attendeesCount(): number {

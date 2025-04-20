@@ -217,7 +217,10 @@ export class EventResponseDto {
       this.recurrenceExceptions = partial.recurrenceExceptions;
       this.recurrenceUntil = partial.recurrenceUntil;
       this.recurrenceCount = partial.recurrenceCount;
-      this.isRecurring = partial.isRecurring;
+
+      // Explicitly calculate isRecurring based on seriesSlug or provided value
+      this.isRecurring = partial.seriesSlug ? true : !!partial.isRecurring;
+
       this.parentEventId = partial.parentEventId;
       this.isRecurrenceException = partial.isRecurrenceException;
       this.originalDate = partial.originalDate;

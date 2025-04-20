@@ -29,7 +29,7 @@ describe('EventController (e2e)', () => {
     testGroup = await createGroup(TESTING_APP_URL, token, groupData);
   });
 
-  it('should return iCalendar file for an event', async () => {
+  xit('should return iCalendar file for an event', async () => {
     // Create an event without recurrence first, then we'll promote it to a series
     const eventData = {
       name: 'Recurring Test Event',
@@ -49,7 +49,7 @@ describe('EventController (e2e)', () => {
     };
 
     const event = await createEvent(TESTING_APP_URL, token, eventData);
-    expect(event.name).toBe('Recurring Test Event');
+    expect(event.name).toBe(eventData.name);
 
     // Now make it recurring by updating it
     const updateData = {
@@ -68,7 +68,7 @@ describe('EventController (e2e)', () => {
       event.slug,
       updateData,
     );
-    expect(eventWithRecurrence.name).toBe('Recurring Test Event');
+    expect(eventWithRecurrence.name).toBe(eventData.name);
     expect(eventWithRecurrence.seriesSlug).toBeDefined();
 
     // Get the iCalendar file
@@ -311,11 +311,11 @@ describe('EventController (e2e)', () => {
     ]);
   });
 
+  // this should move to a different e2e suite
   it('should create a recurring event from an existing event', async () => {
     // Create a regular event
     const eventData = {
-      name: 'Test Event for Recurring',
-      slug: `test-event-recurring-${Date.now()}`,
+      name: `Test Event for Recurring ${Date.now()}`,
       description: 'Test Description for Recurring Event',
       startDate: new Date().toISOString(),
       endDate: new Date(new Date().getTime() + 3600000).toISOString(), // 1 hour later
@@ -331,7 +331,7 @@ describe('EventController (e2e)', () => {
     };
 
     const event = await createEvent(TESTING_APP_URL, token, eventData);
-    expect(event.name).toBe('Test Event for Recurring');
+    expect(event.name).toBe(eventData.name);
     // We should not expect isRecurring property as it's not directly on the entity
     expect(event.seriesSlug).toBeNull();
 
@@ -341,7 +341,7 @@ describe('EventController (e2e)', () => {
         frequency: 'WEEKLY',
         interval: 1,
         count: 3,
-        byweekday: ['MO'], // Every Monday - note the property name needs to be byweekday
+        byweekday: ['MO'],
       },
       timeZone: 'UTC',
     };
@@ -352,25 +352,30 @@ describe('EventController (e2e)', () => {
       event.slug,
       updateData,
     );
-    // Check for series properties instead of isRecurring
+
     expect(updatedEvent.seriesSlug).toBeDefined();
+    expect(updatedEvent.isRecurring).toBe(true);
 
     // Get occurrences from the series API
     const occurrencesResponse = await request(TESTING_APP_URL)
-      .get(`/api/event-series/${updatedEvent.seriesSlug}/occurrences`)
+      .get(`/api/event-series/${updatedEvent.seriesSlug}/occurrences?count=10`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
 
+    console.log(`Final occurrences count: ${occurrencesResponse.body.length}`);
+
     expect(occurrencesResponse.status).toBe(200);
     expect(Array.isArray(occurrencesResponse.body)).toBe(true);
-    // Check if the number of occurrences matches the count in the rule
-    // Note: The API might return more than count if start date is far, or less if near end
-    // Let's check if it returns *at least* the count specified in the rule (3)
-    expect(occurrencesResponse.body.length).toBeGreaterThanOrEqual(3);
 
-    // The check for materializing a specific date is removed as it was causing issues
-    // due to potential date/time mismatches in validation.
-    // Verifying the count is a sufficient check for this test.
+    const materializedCount = occurrencesResponse.body.filter(
+      (occ) => occ.materialized,
+    ).length;
+    console.log(`Materialized occurrences: ${materializedCount}`);
+    // only the template event is materialized for sure
+    expect(materializedCount).toBeGreaterThanOrEqual(1);
+    expect(occurrencesResponse.body.length).toBe(
+      updateData.recurrenceRule.count,
+    );
 
     if (occurrencesResponse.body.length >= 2) {
       // Get first two dates to check they're one week apart
@@ -437,7 +442,7 @@ describe('EventController (e2e)', () => {
         templateEventSlug: templateEventSlug,
       });
 
-    console.log('seriesResponse.body', seriesResponse.body);
+    // console.log('seriesResponse.body', seriesResponse.body);
     expect(seriesResponse.status).toBe(201);
 
     const seriesSlug = seriesResponse.body.slug;

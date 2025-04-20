@@ -21,7 +21,6 @@ import { TenantConnectionService } from '../../tenant/tenant.service';
 import { CreateSeriesFromEventDto } from '../dto/create-series-from-event.dto';
 import { Repository } from 'typeorm';
 import { CreateEventDto } from '../../event/dto/create-event.dto';
-import { generateShortCode } from '../../utils/short-code';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventSeriesService {
@@ -83,11 +82,6 @@ export class EventSeriesService {
       // Validate the recurrence rule
       this.validateRecurrenceRule(createEventSeriesDto.recurrenceRule);
 
-      // Generate a human-readable description of the recurrence pattern
-      const recurrenceDescription = this.generateRecurrenceDescription(
-        createEventSeriesDto.recurrenceRule,
-      );
-
       // Get the template event slug
       const templateSlugToLink: string | undefined =
         createEventSeriesDto.templateEventSlug;
@@ -96,112 +90,27 @@ export class EventSeriesService {
         throw new BadRequestException('No templateEventSlug provided');
       }
 
-      // Verify the template event exists
-      const templateEvent =
-        await this.eventQueryService.findEventBySlug(templateSlugToLink);
-      if (!templateEvent) {
-        throw new NotFoundException(
-          `Template event with slug ${templateSlugToLink} not found`,
-        );
-      }
-
-      // Create a complete entity including the user relation
-      const eventSeriesData = {
-        name: createEventSeriesDto.name,
-        description: createEventSeriesDto.description || '',
-        slug: createEventSeriesDto.slug || '',
-        recurrenceRule: createEventSeriesDto.recurrenceRule,
-        recurrenceDescription,
-        user: { id: userId } as any,
-        group: createEventSeriesDto.groupId
-          ? ({ id: createEventSeriesDto.groupId } as any)
-          : null,
-        image: createEventSeriesDto.imageId
-          ? ({ id: createEventSeriesDto.imageId } as any)
-          : undefined,
-        sourceType: createEventSeriesDto.sourceType,
-        sourceId: createEventSeriesDto.sourceId,
-        sourceUrl: createEventSeriesDto.sourceUrl,
-        sourceData: createEventSeriesDto.sourceData,
-        matrixRoomId: createEventSeriesDto.matrixRoomId,
-        templateEventSlug: templateSlugToLink, // Use the determined slug
-        timeZone: (templateEvent as any).timeZone || 'UTC',
-      };
-
-      // Create and save the entity
-      const eventSeries = this.eventSeriesRepository.create(eventSeriesData);
-      const savedSeries = await this.eventSeriesRepository.save(eventSeries);
-
-      // Link the template event to the series
-      try {
-        this.logger.debug(
-          `Linking template event ${templateSlugToLink} to series ${savedSeries.slug}`,
-        );
-
-        // Fetch the template event
-        const eventToLink = await this.eventQueryService.findEventBySlug(templateSlugToLink);
-        if (!eventToLink) {
-          throw new NotFoundException(
-            `Template event ${templateSlugToLink} not found`,
-          );
-        }
-
-        // Get the event repository
-        const tenantConnection = await this.tenantConnectionService.getTenantConnection(
-          tenantId || this.request?.tenantId,
-        );
-        const eventRepository = tenantConnection.getRepository(EventEntity);
-
-        // Update the template event to link it to the series
-        eventToLink.seriesSlug = savedSeries.slug;
-        eventToLink.series = savedSeries;
-        await eventRepository.save(eventToLink);
-
-        // Also update via the service to ensure proper handling
-        await this.eventManagementService.update(
-          templateSlugToLink,
-          {
-            seriesSlug: savedSeries.slug,
-          },
-          userId,
-        );
-
-        this.logger.debug(
-          `Successfully linked template event ${templateSlugToLink} to series ${savedSeries.slug}`,
-        );
-      } catch (error) {
-        // Log the error but don't fail the whole operation
-        this.logger.error(
-          `Error linking template event to series: ${error.message}`,
-          error.stack,
-        );
-      }
-
-      // Generate future occurrences if requested
-      if (generateFutureEvents) {
-        await this.generateFutureOccurrences(
-          templateEvent,
-          savedSeries,
-          savedSeries.recurrenceRule,
-          userId,
-          tenantId,
-        );
-      } else {
-        this.logger.debug(
-          'Skipping immediate generation of future occurrences. Will be handled asynchronously.',
-        );
-        // Here we would emit an event to generate the occurrences asynchronously later
-        // For example: this.eventEmitter.emit('series.created', { seriesId: savedSeries.id, userId });
-      }
-
-      // Return the full entity with relations
-      const foundSeries = await this.findById(savedSeries.id, tenantId);
-      if (!foundSeries) {
-        throw new Error(
-          `Failed to find event series with id ${savedSeries.id} after creation`,
-        );
-      }
-      return foundSeries;
+      // Call the common helper method
+      return this.createSeriesWithTemplateEvent(
+        templateSlugToLink,
+        createEventSeriesDto.recurrenceRule,
+        userId,
+        createEventSeriesDto.name,
+        createEventSeriesDto.description,
+        undefined,
+        {
+          imageId: createEventSeriesDto.imageId,
+          groupId: createEventSeriesDto.groupId,
+          matrixRoomId: createEventSeriesDto.matrixRoomId,
+          sourceType: createEventSeriesDto.sourceType,
+          sourceId: createEventSeriesDto.sourceId,
+          sourceUrl: createEventSeriesDto.sourceUrl,
+          sourceData: createEventSeriesDto.sourceData,
+          generateOccurrences: generateFutureEvents,
+          slug: createEventSeriesDto.slug,
+        },
+        tenantId,
+      );
     } catch (error) {
       this.logger.error(
         `Error creating event series: ${error.message}`,
@@ -285,250 +194,23 @@ export class EventSeriesService {
     },
     tenantId?: string,
   ): Promise<EventSeriesEntity> {
-    await this.initializeRepository(tenantId);
-
     try {
-      // Validate the recurrence rule before proceeding
+      await this.initializeRepository(tenantId);
+
+      // Validate the recurrence rule
       this.validateRecurrenceRule(recurrenceRule);
 
-      // Get the event to use as a template
-      const event = await this.eventQueryService.findEventBySlug(eventSlug);
-      this.logger.debug(`[PRE-OPERATION] Original event state:`, {
-        id: event?.id,
-        slug: event?.slug,
-        seriesSlug: event?.seriesSlug,
-      });
-      
-      if (!event) {
-        throw new NotFoundException(`Event with slug ${eventSlug} not found`);
-      }
-
-      // Check if the event is already part of a series
-      if (event.seriesSlug) {
-        throw new BadRequestException(
-          `Event ${eventSlug} is already part of a series`,
-        );
-      }
-
-      // Use event data for the series if not provided
-      const seriesName = name || `${event.name} Series`;
-      const seriesDescription = description || event.description;
-      const seriesTimeZone = timeZone || (event as any).timeZone || 'UTC';
-
-      // Create the series entity
-      const series = new EventSeriesEntity();
-
-      // Generate a unique slug for the series
-      const baseSlug = options?.slug ? options.slug : `${event.slug}-series`;
-      series.slug = baseSlug + '-' + generateShortCode().toLowerCase();
-
-      series.name = seriesName;
-      series.description = seriesDescription;
-      series.recurrenceRule = recurrenceRule;
-      series.timeZone = seriesTimeZone;
-      series.templateEventSlug = event.slug;
-      series.user = { id: userId } as any;
-
-      // Add optional fields if provided
-      if (options?.groupId) {
-        series.group = { id: options.groupId } as any;
-      } else if (event.group) {
-        series.group = { id: event.group.id } as any;
-      }
-
-      if (options?.imageId) {
-        series.image = { id: options.imageId } as any;
-      } else if (event.image) {
-        series.image = { id: event.image.id } as any;
-      }
-
-      if (options?.matrixRoomId) {
-        series.matrixRoomId = options.matrixRoomId;
-      } else if (event.matrixRoomId) {
-        series.matrixRoomId = event.matrixRoomId;
-      }
-
-      // Add source data if provided
-      series.sourceType = options?.sourceType || event.sourceType;
-      series.sourceId = options?.sourceId || event.sourceId;
-      series.sourceUrl = options?.sourceUrl || event.sourceUrl;
-      series.sourceData = options?.sourceData || event.sourceData;
-
-      // Generate a human-readable description of the recurrence pattern
-      series.recurrenceDescription =
-        this.generateRecurrenceDescription(recurrenceRule);
-
-      // Save the series
-      this.logger.debug(`Creating new series with data:`, {
-        slug: series.slug,
-        name: series.name,
-        templateEventSlug: series.templateEventSlug
-      });
-      
-      const savedSeries = await this.eventSeriesRepository.save(series);
-      this.logger.log(
-        `Created series ${savedSeries.slug} from event ${eventSlug}`,
+      // Call the common helper method
+      return this.createSeriesWithTemplateEvent(
+        eventSlug,
+        recurrenceRule,
+        userId,
+        name,
+        description,
+        timeZone,
+        options,
+        tenantId,
       );
-
-      // Update the template event to link it to the series with a transaction
-      try {
-        // Get effective tenant ID
-        const effectiveTenantId = tenantId || this.request?.tenantId;
-        if (!effectiveTenantId) {
-          throw new Error('No tenant ID available for transaction');
-        }
-        
-        this.logger.debug(`[LINKING] Attempting to link event to series using transaction`, {
-          eventSlug,
-          seriesSlug: savedSeries.slug,
-          effectiveTenantId
-        });
-        
-        // Get connection and start transaction
-        const dataSource = await this.tenantConnectionService.getTenantConnection(effectiveTenantId);
-        
-        await dataSource.transaction(async (transactionalEntityManager) => {
-          // Debug current connection state
-          this.logger.debug(`[TRANSACTION] Transaction started for linking event to series`);
-          
-          // Get repository within transaction
-          const eventRepo = transactionalEntityManager.getRepository(EventEntity);
-          
-          // Re-fetch event inside transaction to ensure we have fresh data
-          const freshEvent = await eventRepo.findOne({
-            where: { slug: eventSlug },
-          });
-          
-          if (!freshEvent) {
-            throw new NotFoundException(`Event ${eventSlug} not found in transaction`);
-          }
-          
-          this.logger.debug(`[TRANSACTION] Event found within transaction`, {
-            id: freshEvent.id,
-            slug: freshEvent.slug,
-            currentSeriesSlug: freshEvent.seriesSlug
-          });
-          
-          // Update the event with the series slug
-          freshEvent.seriesSlug = savedSeries.slug;
-          
-          // Save event with updated series relationship
-          const result = await eventRepo.save(freshEvent);
-          
-          this.logger.debug(`[TRANSACTION] Event updated within transaction`, {
-            id: result.id,
-            slug: result.slug,
-            updatedSeriesSlug: result.seriesSlug
-          });
-        });
-        
-        this.logger.log(`Transaction completed successfully for linking event ${eventSlug} to series ${savedSeries.slug}`);
-        
-        // Wait a moment to allow any pending database operations to complete
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        
-        // Verify the link was established by fetching the event again
-        const verificationEvent = await this.eventQueryService.findEventBySlug(eventSlug);
-        
-        this.logger.debug(`[VERIFICATION] Event state after linking:`, {
-          eventId: verificationEvent?.id,
-          eventSlug,
-          expectedSeriesSlug: savedSeries.slug,
-          actualSeriesSlug: verificationEvent?.seriesSlug || 'null'
-        });
-        
-        if (!verificationEvent || verificationEvent.seriesSlug !== savedSeries.slug) {
-          this.logger.warn(`[VERIFICATION FAILED] Event ${eventSlug} does not have the expected seriesSlug`, {
-            expected: savedSeries.slug,
-            actual: verificationEvent?.seriesSlug || 'null'
-          });
-          
-          // Emergency direct update as last resort
-          this.logger.log(`[EMERGENCY] Attempting direct database update as last resort`);
-          
-          try {
-            const connection = await this.tenantConnectionService.getTenantConnection(effectiveTenantId);
-            
-            // Directly update the database with SQL
-            await connection.query(
-              `UPDATE events SET "seriesSlug" = $1 WHERE slug = $2`,
-              [savedSeries.slug, eventSlug]
-            );
-            
-            this.logger.log(`[EMERGENCY] Direct database update completed for event ${eventSlug}`);
-            
-            // Final verification
-            const finalCheck = await this.eventQueryService.findEventBySlug(eventSlug);
-            this.logger.debug(`[FINAL CHECK] Event state after direct update:`, {
-              seriesSlug: finalCheck?.seriesSlug
-            });
-          } catch (directUpdateError) {
-            this.logger.error(`[EMERGENCY] Direct update failed:`, {
-              error: directUpdateError.message
-            });
-          }
-        } else {
-          this.logger.log(`[VERIFICATION SUCCESS] Event ${eventSlug} is correctly linked to series ${savedSeries.slug}`);
-        }
-        
-        // Schedule a delayed verification to detect if something is changing the seriesSlug after our update
-        setTimeout(async () => {
-          try {
-            const delayedCheck = await this.eventQueryService.findEventBySlug(eventSlug);
-            this.logger.debug(`[DELAYED CHECK - 5s] Event state after 5 seconds:`, {
-              eventId: delayedCheck?.id,
-              eventSlug: delayedCheck?.slug,
-              seriesSlug: delayedCheck?.seriesSlug || 'null',
-              expectedSeriesSlug: savedSeries.slug,
-              isStillLinked: delayedCheck?.seriesSlug === savedSeries.slug
-            });
-            
-            if (!delayedCheck || delayedCheck.seriesSlug !== savedSeries.slug) {
-              this.logger.warn(`[DELAYED CHECK WARNING] After 5 seconds, event ${eventSlug} is no longer linked to series ${savedSeries.slug}`, {
-                expected: savedSeries.slug,
-                actual: delayedCheck?.seriesSlug || 'null'
-              });
-              
-              // Log current active request info for debugging
-              this.logger.debug(`[DELAYED CHECK] Current request info:`, {
-                hasRequest: !!this.request,
-                requestId: this.request?.id,
-                requestPath: this.request?.path,
-                requestMethod: this.request?.method,
-                requestTenant: this.request?.tenantId
-              });
-            }
-          } catch (error) {
-            this.logger.error(`[DELAYED CHECK] Error checking event state after delay:`, {
-              error: error.message
-            });
-          }
-        }, 5000);
-      } catch (error) {
-        this.logger.error(`[ERROR] Failed to link template event to series:`, {
-          error: error.message,
-          stack: error.stack
-        });
-        throw error;
-      }
-
-      // Generate future occurrences if requested
-      const shouldGenerateOccurrences =
-        options?.generateOccurrences !== undefined
-          ? options.generateOccurrences
-          : false;
-
-      if (shouldGenerateOccurrences) {
-        await this.generateFutureOccurrences(
-          event,
-          savedSeries,
-          recurrenceRule,
-          userId,
-          tenantId,
-        );
-      }
-
-      return savedSeries;
     } catch (error) {
       this.logger.error(
         `Error creating series from event: ${error.message}`,
@@ -536,6 +218,296 @@ export class EventSeriesService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Common helper method that handles the creation of a series with a template event
+   * Extracts common functionality from create() and createFromExistingEvent()
+   */
+  @Trace('event-series.createSeriesWithTemplateEvent')
+  private async createSeriesWithTemplateEvent(
+    templateEventSlug: string,
+    recurrenceRule: any,
+    userId: number,
+    name?: string,
+    description?: string,
+    timeZone?: string,
+    options?: {
+      imageId?: number;
+      groupId?: number;
+      matrixRoomId?: string;
+      sourceType?: string;
+      sourceId?: string;
+      sourceUrl?: string;
+      sourceData?: Record<string, unknown>;
+      generateOccurrences?: boolean;
+      slug?: string;
+    },
+    tenantId?: string,
+  ): Promise<EventSeriesEntity> {
+    // Use the template event first to find details
+    const templateEvent =
+      await this.eventQueryService.findEventBySlug(templateEventSlug);
+    if (!templateEvent) {
+      throw new NotFoundException(
+        `Event with slug ${templateEventSlug} not found`,
+      );
+    }
+
+    // Check if template event is already part of a series
+    if (templateEvent.seriesSlug) {
+      this.logger.debug(
+        `Template event ${templateEventSlug} is already part of series ${templateEvent.seriesSlug}`,
+      );
+      const existingSeries = await this.findBySlug(
+        templateEvent.seriesSlug,
+        tenantId,
+      );
+      return existingSeries;
+    }
+
+    // Create the series
+    const seriesOptions = options || {};
+    const seriesSlug = seriesOptions.slug || `${templateEvent.slug}-series`;
+
+    this.logger.debug(
+      `Creating series with slug ${seriesSlug} from event ${templateEventSlug}`,
+    );
+
+    // Generate a human-readable description of the recurrence pattern
+    const recurrenceDescription =
+      this.generateRecurrenceDescription(recurrenceRule);
+
+    // Get effective tenant ID
+    const effectiveTenantId = tenantId || this.request?.tenantId;
+    if (!effectiveTenantId) {
+      throw new Error('No tenant ID available for transaction');
+    }
+
+    // Get connection for transaction
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(effectiveTenantId);
+
+    // Execute everything in a single transaction to ensure atomicity
+    const series = await dataSource.transaction(
+      async (transactionalEntityManager) => {
+        this.logger.debug(
+          `Starting transaction for series creation from event ${templateEventSlug}`,
+        );
+
+        // Get repositories within transaction
+        const eventRepo = transactionalEntityManager.getRepository(EventEntity);
+        const seriesRepo =
+          transactionalEntityManager.getRepository(EventSeriesEntity);
+
+        // Verify the template event exists within the transaction
+        const eventInTransaction = await eventRepo.findOne({
+          where: { slug: templateEventSlug },
+          relations: ['image', 'group'],
+        });
+
+        if (!eventInTransaction) {
+          throw new NotFoundException(
+            `Template event with slug ${templateEventSlug} not found in transaction`,
+          );
+        }
+
+        // Create a complete entity including the user relation
+        const eventSeriesData = {
+          name: name || templateEvent.name,
+          description: description || templateEvent.description || '',
+          slug: seriesSlug,
+          recurrenceRule,
+          recurrenceDescription,
+          user: { id: userId } as any,
+          group: seriesOptions.groupId
+            ? ({ id: seriesOptions.groupId } as any)
+            : templateEvent.group
+              ? { id: templateEvent.group.id }
+              : null,
+          image: seriesOptions.imageId
+            ? ({ id: seriesOptions.imageId } as any)
+            : templateEvent.image
+              ? { id: templateEvent.image.id }
+              : undefined,
+          sourceType: seriesOptions.sourceType || templateEvent.sourceType,
+          sourceId: seriesOptions.sourceId || templateEvent.sourceId,
+          sourceUrl: seriesOptions.sourceUrl || templateEvent.sourceUrl,
+          sourceData: seriesOptions.sourceData || templateEvent.sourceData,
+          matrixRoomId: seriesOptions.matrixRoomId,
+          templateEventSlug: templateEventSlug,
+          timeZone: timeZone || (templateEvent as any).timeZone || 'UTC',
+        };
+
+        // Create and save the entity
+        const eventSeries = seriesRepo.create(eventSeriesData);
+        const savedSeries = await seriesRepo.save(eventSeries);
+
+        // Refresh the series to make sure we have the most up-to-date entity
+        const refreshedSeries = await seriesRepo.findOne({
+          where: { id: savedSeries.id },
+        });
+
+        if (!refreshedSeries) {
+          throw new Error(
+            `Failed to find series with ID ${savedSeries.id} after creating it`,
+          );
+        }
+
+        // Update the template event to link it to the series
+        this.logger.debug(
+          `Updating template event ${templateEventSlug} to set seriesSlug to ${refreshedSeries.slug}`,
+        );
+        eventInTransaction.seriesSlug = refreshedSeries.slug;
+        await eventRepo.save(eventInTransaction);
+
+        // Now verify the event was updated correctly by fetching it again
+        const updatedEvent = await eventRepo.findOne({
+          where: { id: eventInTransaction.id },
+        });
+
+        if (!updatedEvent) {
+          throw new Error(
+            `Failed to find event with ID ${eventInTransaction.id} after updating it`,
+          );
+        }
+
+        if (updatedEvent.seriesSlug !== refreshedSeries.slug) {
+          this.logger.error(
+            `[SERIES_SLUG_LOST] Event seriesSlug was not updated correctly in transaction! Expected: ${refreshedSeries.slug}, Got: ${updatedEvent.seriesSlug || 'null'}`,
+          );
+
+          // Try one more time with a direct update
+          await eventRepo.update(
+            { id: eventInTransaction.id },
+            { seriesSlug: refreshedSeries.slug },
+          );
+
+          this.logger.debug(
+            `Attempted direct update of event ${templateEventSlug} with seriesSlug ${refreshedSeries.slug}`,
+          );
+        } else {
+          this.logger.debug(
+            `Successfully verified event ${templateEventSlug} has seriesSlug ${updatedEvent.seriesSlug}`,
+          );
+        }
+
+        // Generate future occurrences if requested
+        if (seriesOptions.generateOccurrences) {
+          this.logger.debug(
+            `Generating future occurrences for series ${refreshedSeries.slug}`,
+          );
+          await this.generateFutureOccurrencesInTransaction(
+            eventInTransaction,
+            refreshedSeries,
+            recurrenceRule,
+            userId,
+            transactionalEntityManager,
+          );
+        }
+
+        return refreshedSeries;
+      },
+    );
+
+    // After transaction completes, verify the seriesSlug was properly set on the template event
+    const templateEventAfterSeries =
+      await this.eventQueryService.findEventBySlug(templateEventSlug);
+
+    this.logger.debug('Template event after series', {
+      templateEventAfterSeries,
+    });
+
+    if (!templateEventAfterSeries) {
+      this.logger.error(
+        `[SERIES_SLUG_LOST] Could not find template event ${templateEventSlug} after series creation`,
+      );
+    } else if (templateEventAfterSeries.seriesSlug !== series.slug) {
+      this.logger.error(
+        `[SERIES_SLUG_LOST] SeriesSlug mismatch after transaction! Expected: ${series.slug}, Got: ${templateEventAfterSeries.seriesSlug || 'null'}`,
+      );
+
+      // Apply a fix after the transaction if needed
+      try {
+        this.logger.debug(
+          `Attempting post-transaction fix for event ${templateEventSlug} with series ${series.slug}`,
+        );
+
+        // Initialize repository if needed
+        await this.initializeRepository(tenantId);
+
+        // Get a direct connection to run the update
+        const dataSource =
+          await this.tenantConnectionService.getTenantConnection(
+            tenantId || this.request?.tenantId,
+          );
+
+        // Update the event directly
+        await dataSource
+          .createQueryBuilder()
+          .update(EventEntity)
+          .set({ seriesSlug: series.slug })
+          .where('id = :id', { id: templateEventAfterSeries.id })
+          .execute();
+
+        this.logger.debug(
+          `Applied post-transaction fix for event ${templateEventSlug} with series ${series.slug}`,
+        );
+
+        // Verify the fix worked
+        const verifiedEvent =
+          await this.eventQueryService.findEventBySlug(templateEventSlug);
+        if (verifiedEvent?.seriesSlug === series.slug) {
+          this.logger.debug(
+            `[POST-TRANSACTION VERIFICATION SUCCESS] Successfully fixed association for event ${templateEventSlug} with series ${series.slug}`,
+          );
+        } else {
+          this.logger.error(
+            `[POST-TRANSACTION VERIFICATION FAILED] Unable to fix association for event ${templateEventSlug} with series ${series.slug}`,
+          );
+        }
+      } catch (fixError) {
+        this.logger.error(
+          `Error applying post-transaction fix: ${fixError.message}`,
+          fixError.stack,
+        );
+      }
+    } else {
+      this.logger.debug(
+        `SeriesSlug correctly set on template event after transaction: ${templateEventAfterSeries.seriesSlug}`,
+      );
+    }
+
+    // Additional verification to check if findEventsBySeriesSlug can find the event
+    this.logger.debug(
+      `[POST-TRANSACTION] Performing additional verification to ensure event ${templateEventSlug} is properly associated with series ${series.slug}`,
+    );
+
+    try {
+      const [eventsInSeries] =
+        await this.eventQueryService.findEventsBySeriesSlug(series.slug);
+
+      const eventFound = eventsInSeries.some(
+        (e) => e.slug === templateEventSlug,
+      );
+
+      if (!eventFound) {
+        this.logger.warn(
+          `[POST-TRANSACTION VERIFICATION FAILED] Event ${templateEventSlug} was not found in series query results after transaction.`,
+        );
+      } else {
+        this.logger.debug(
+          `[POST-TRANSACTION VERIFICATION SUCCESS] Event ${templateEventSlug} is properly associated with series ${series.slug}`,
+        );
+      }
+    } catch (verifyError) {
+      this.logger.error(
+        `Error in post-transaction verification: ${verifyError.message}`,
+        verifyError.stack,
+      );
+    }
+
+    return series;
   }
 
   /**
@@ -657,14 +629,26 @@ export class EventSeriesService {
   }
 
   /**
-   * Find an event series by slug
+   * Utility method to validate slug parameters
+   * @throws BadRequestException for invalid slugs
    */
+  private validateSlug(slug: string): void {
+    if (!slug || slug === 'null' || slug === 'undefined') {
+      throw new BadRequestException('Invalid series slug provided');
+    } else {
+      this.logger.debug(`Validated slug: ${slug}`);
+    }
+  }
+
   @Trace('event-series.findBySlug')
   async findBySlug(
     slug: string,
     tenantId?: string,
   ): Promise<EventSeriesEntity> {
     try {
+      // Validate slug parameter
+      this.validateSlug(slug);
+
       await this.initializeRepository(tenantId);
 
       const series = await this.eventSeriesRepository.findOne({
@@ -913,7 +897,7 @@ export class EventSeriesService {
       if (deleteEvents) {
         // Get all events in the series
         const [events] =
-          await this.eventManagementService.findEventsBySeriesSlug(slug);
+          await this.eventQueryService.findEventsBySeriesSlug(slug);
 
         // Use proper event deletion through the event management service
         // which handles proper chat room cleanup
@@ -934,7 +918,7 @@ export class EventSeriesService {
       } else {
         // Remove series association from events
         const [events] =
-          await this.eventManagementService.findEventsBySeriesSlug(slug);
+          await this.eventQueryService.findEventsBySeriesSlug(slug);
         for (const event of events) {
           await this.eventManagementService.update(
             event.slug,
@@ -1124,34 +1108,145 @@ export class EventSeriesService {
     return days[abbreviation] || abbreviation;
   }
 
-  // Fix for the event series association when updating past events
-  // in the delete method
-  @Trace('event-series.updatePastEventForSeriesRemoval')
-  private async updatePastEventForSeriesRemoval(
-    event: EventEntity,
+  /**
+   * Version of generateFutureOccurrences that works within an existing transaction
+   * to avoid creating a new transaction.
+   */
+  @Trace('event-series.generateFutureOccurrencesInTransaction')
+  private async generateFutureOccurrencesInTransaction(
+    templateEvent: EventEntity,
+    series: EventSeriesEntity,
+    recurrenceRule: any,
     userId: number,
+    transactionalEntityManager: any,
   ): Promise<void> {
-    try {
-      // Update the event to remove the series association - only modify the necessary fields
-      await this.eventManagementService.update(
-        event.slug,
-        {
-          seriesSlug: undefined,
-        },
-        userId,
-      );
+    this.logger.debug('Generating future occurrences within transaction');
+    const maxOccurrences = 5;
+    const recurrencePattern = this.recurrencePatternService
+      .generateOccurrences(templateEvent.startDate, recurrenceRule, {
+        timeZone: series.timeZone,
+      })
+      .map((date) => new Date(date))
+      .slice(0, maxOccurrences);
 
-      this.logger.log(
-        `Successfully preserved past event ${event.slug} (ID: ${event.id}) by removing series association`,
+    this.logger.debug('Generated occurrence pattern', {
+      count: recurrencePattern.length,
+      dates: recurrencePattern.map((d) => d.toISOString()),
+      timeZone: series.timeZone,
+    });
+
+    // Get the event repository from the transaction
+    const eventRepository =
+      transactionalEntityManager.getRepository(EventEntity);
+
+    // Create future occurrences in smaller batches
+    const batchSize = 2;
+    for (let i = 0; i < recurrencePattern.length; i += batchSize) {
+      const batch = recurrencePattern.slice(i, i + batchSize);
+      this.logger.debug('Processing batch of occurrences', {
+        batchIndex: i,
+        batchSize: batch.length,
+        dates: batch.map((d) => d.toISOString()),
+      });
+
+      await Promise.all(
+        batch.map(async (occurrenceDate) => {
+          // Skip the template event's date
+          if (
+            occurrenceDate.getTime() ===
+            new Date(templateEvent.startDate).getTime()
+          ) {
+            this.logger.debug('Skipping template event date', {
+              date: occurrenceDate.toISOString(),
+            });
+            return;
+          }
+
+          // Check if occurrence already exists
+          const existingOccurrences = await eventRepository.find({
+            where: {
+              seriesSlug: series.slug,
+              startDate: occurrenceDate,
+            },
+          });
+
+          if (existingOccurrences && existingOccurrences.length > 0) {
+            this.logger.debug('Occurrence already exists, skipping creation', {
+              date: occurrenceDate.toISOString(),
+              slug: existingOccurrences[0].slug,
+            });
+            return;
+          }
+
+          // Create a new occurrence using the template event as a base
+          this.logger.debug('Creating occurrence', {
+            date: occurrenceDate.toISOString(),
+          });
+
+          try {
+            // Create a new event based on the template
+            const newOccurrence = new EventEntity();
+
+            // Copy properties from the template event
+            Object.assign(newOccurrence, {
+              name: templateEvent.name,
+              description: templateEvent.description,
+              type: templateEvent.type,
+              location: templateEvent.location,
+              locationOnline: templateEvent.locationOnline,
+              maxAttendees: templateEvent.maxAttendees,
+              visibility: templateEvent.visibility,
+              status: templateEvent.status,
+              lat: templateEvent.lat,
+              lon: templateEvent.lon,
+              startDate: occurrenceDate,
+              endDate: templateEvent.endDate
+                ? new Date(
+                    occurrenceDate.getTime() +
+                      (templateEvent.endDate.getTime() -
+                        templateEvent.startDate.getTime()),
+                  )
+                : null,
+              seriesSlug: series.slug,
+              series: series, // Set the relationship explicitly
+              requireApproval: templateEvent.requireApproval,
+              approvalQuestion: templateEvent.approvalQuestion,
+              requireGroupMembership: templateEvent.requireGroupMembership,
+              allowWaitlist: templateEvent.allowWaitlist,
+              user: { id: userId },
+              matrixRoomId: templateEvent.matrixRoomId,
+              group: templateEvent.group,
+              image: templateEvent.image,
+            });
+
+            // Generate ULID and slug
+            newOccurrence.generateUlid();
+            newOccurrence.generateSlug();
+
+            // Save the new occurrence
+            await eventRepository.save(newOccurrence);
+
+            this.logger.debug('Occurrence created successfully', {
+              slug: newOccurrence.slug,
+              date: occurrenceDate.toISOString(),
+              seriesSlug: newOccurrence.seriesSlug,
+            });
+          } catch (error) {
+            this.logger.error(
+              `Error creating occurrence: ${error.message}`,
+              error.stack,
+            );
+            throw error;
+          }
+        }),
       );
-    } catch (error) {
-      this.logger.error(
-        `Error preserving past event ${event.slug} (ID: ${event.id}): ${error.message}`,
-      );
-      throw error;
     }
   }
 
+  /**
+   * Create a series occurrence
+   * @deprecated Use EventSeriesOccurrenceService.getOrCreateOccurrence instead
+   */
   @Trace('event-series.createSeriesOccurrence')
   async createSeriesOccurrence(
     eventData: CreateEventDto,
@@ -1159,6 +1254,9 @@ export class EventSeriesService {
     seriesSlug: string,
     occurrenceDate: Date,
   ): Promise<EventEntity> {
+    this.logger.warn(
+      'createSeriesOccurrence is deprecated. Use EventSeriesOccurrenceService.getOrCreateOccurrence instead',
+    );
     this.logger.debug('Creating series occurrence:', {
       eventData,
       userId,

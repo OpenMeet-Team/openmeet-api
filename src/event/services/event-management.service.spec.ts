@@ -32,6 +32,8 @@ import { EventQueryService } from './event-query.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
 import { RoleEnum } from '../../role/role.enum';
 import { EventSeriesEntity } from '../../event-series/infrastructure/persistence/relational/entities/event-series.entity';
+import { UpdateEventDto } from '../dto/update-event.dto';
+import { RecurrenceFrequency } from '../../event-series/interfaces/recurrence-frequency.enum';
 
 describe('EventManagementService', () => {
   let service: EventManagementService;
@@ -163,6 +165,10 @@ describe('EventManagementService', () => {
       findEventById: jest.fn(),
       findEventByDateAndSeries: jest.fn(),
       findByBlueskySource: jest.fn(),
+      findEventsBySeriesSlug: jest
+        .fn()
+        .mockResolvedValue([[fullMockEvent1, fullMockEvent2], 2]),
+      findEventsBySeriesId: jest.fn(),
     } as any;
 
     mockGroupMemberService = {
@@ -393,29 +399,32 @@ describe('EventManagementService', () => {
       ]);
     });
 
-    xit('should find events by series ID (internal method)', async () => {
-      const [events, count] = await service.findEventsBySeriesId(mockSeriesId);
-      expect(mockRepository.findAndCount).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { seriesId: mockSeriesId } }),
+    it('should find events by series slug (preferred method)', async () => {
+      const seriesSlug = mockSeriesSlug;
+      const options = { page: 1, limit: 10 };
+
+      // Call the actual method which delegates to eventQueryService
+      const [events, count] = await service.findEventsBySeriesSlug(
+        seriesSlug,
+        options,
       );
+
+      // Verify results
       expect(events).toHaveLength(2);
       expect(count).toBe(2);
+      expect(events[0].id).toBe(fullMockEvent1.id);
+      expect(events[1].id).toBe(fullMockEvent2.id);
+      expect(events[0].seriesSlug).toBe(mockSeriesSlug);
+      expect(events[1].seriesSlug).toBe(mockSeriesSlug);
+
+      // Verify the eventQueryService.findEventsBySeriesSlug was called
+      expect(mockEventQueryService.findEventsBySeriesSlug).toHaveBeenCalledWith(
+        seriesSlug,
+        options,
+      );
     });
 
-    xit('should find events by series slug (preferred method)', async () => {
-      const [events, count] =
-        await service.findEventsBySeriesSlug(mockSeriesSlug);
-      expect(mockEventSeriesService.findBySlug).toHaveBeenCalledWith(
-        mockSeriesSlug,
-      );
-      expect(mockRepository.findAndCount).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { seriesId: mockSeriesId } }),
-      );
-      expect(events).toHaveLength(2);
-      expect(count).toBe(2);
-    });
-
-    it('should create an event as part of a series using slug (preferred method)', async () => {
+    it('should create an event occurence as part of a series using slug (preferred method)', async () => {
       const createdEvent = {
         ...findOneMockEventEntity,
         id: 999,
@@ -438,7 +447,7 @@ describe('EventManagementService', () => {
         lon: 0,
       };
 
-      const result = await service.createSeriesOccurrenceBySlug(
+      const result = await service.createSeriesOccurrence(
         createDto,
         mockUser.id,
         mockSeriesSlug,
@@ -459,6 +468,232 @@ describe('EventManagementService', () => {
       );
       expect(mockRepository.findOne).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: createdEvent.id } }),
+      );
+    });
+
+    it('should create an event with recurrence rule and create a series', async () => {
+      // Mock for the created event
+      const eventWithoutSeries = {
+        ...findOneMockEventEntity,
+        id: 900,
+        seriesSlug: null,
+        series: null,
+      } as unknown as EventEntity;
+
+      // Mock for the event after series is created
+      const eventWithSeries = {
+        ...findOneMockEventEntity,
+        id: 900,
+        seriesSlug: mockSeriesSlug,
+        series: { id: mockSeriesId, slug: mockSeriesSlug } as any,
+      } as unknown as EventEntity;
+
+      // Mock series for the createRecurringEvent method
+      const mockSeries = {
+        id: mockSeriesId,
+        slug: mockSeriesSlug,
+        templateEvent: eventWithSeries,
+      };
+
+      // First create returns event without series
+      jest.spyOn(service, 'create').mockResolvedValueOnce(eventWithoutSeries);
+
+      // Mock the eventSeriesService.create to return a series with the template event
+      mockEventSeriesService.create = jest.fn().mockResolvedValue(mockSeries);
+
+      // Initial event creation data with recurrence rule
+      const createDto: CreateEventDto = {
+        name: 'Recurring Test Event',
+        description: 'Test Description for Recurring Event',
+        type: EventType.InPerson,
+        startDate: new Date('2023-10-01T12:00:00Z'),
+        endDate: new Date('2023-10-01T13:00:00Z'),
+        categories: [],
+        locationOnline: 'false',
+        maxAttendees: 100,
+        lat: 0,
+        lon: 0,
+        recurrenceRule: {
+          frequency: RecurrenceFrequency.WEEKLY,
+          interval: 1,
+          count: 5,
+          byweekday: ['MO', 'WE', 'FR'],
+        },
+        timeZone: 'America/New_York',
+      };
+
+      // Call the createRecurringEvent method
+      const result = await service.createRecurringEvent(createDto, mockUser.id);
+
+      // Verify the result
+      expect(result).toBeDefined();
+      expect(result.id).toBe(eventWithSeries.id);
+      expect(result.seriesSlug).toBe(mockSeriesSlug);
+
+      // Verify create was called with the initial event data
+      expect(service.create).toHaveBeenCalledWith(createDto, mockUser.id);
+
+      // Verify eventSeriesService.create was called with correct data
+      expect(mockEventSeriesService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: createDto.name,
+          description: createDto.description,
+          recurrenceRule: createDto.recurrenceRule,
+          templateEventSlug: eventWithoutSeries.slug,
+        }),
+        mockUser.id,
+      );
+    });
+
+    it('should update an event to add recurrence rule and create a series', async () => {
+      // Setup an existing event with an existing series
+      const existingEvent = {
+        ...findOneMockEventEntity,
+        id: 800,
+        seriesSlug: 'existing-series',
+        series: { id: 999, slug: 'existing-series' } as any,
+      } as unknown as EventEntity;
+
+      // Mock for the event after updating with series
+      const updatedEventWithSeries = {
+        ...existingEvent,
+        name: 'Updated Recurring Event',
+        seriesSlug: 'existing-series',
+        series: { id: 999, slug: 'existing-series' } as any,
+      } as unknown as EventEntity;
+
+      // Mock series for the updateRecurringEvent method
+      const mockSeries = {
+        id: 999,
+        slug: 'existing-series',
+        templateEvent: updatedEventWithSeries,
+      };
+
+      // Initialize service.eventRepository
+      await service['initializeRepository']();
+
+      // Mock repository.findOne to return the existing event with series
+      mockRepository.findOne.mockResolvedValueOnce(existingEvent);
+
+      // Mock eventSeriesService.update to return a series with the updated event
+      mockEventSeriesService.update = jest.fn().mockResolvedValue(mockSeries);
+
+      // Update data with recurrence rule
+      const updateDto: UpdateEventDto = {
+        name: 'Updated Recurring Event',
+        recurrenceRule: {
+          frequency: RecurrenceFrequency.WEEKLY,
+          interval: 1,
+          count: 3,
+          byweekday: ['TU', 'TH'],
+        },
+        timeZone: 'Europe/London',
+      };
+
+      // Call the updateRecurringEvent method
+      const result = await service.updateRecurringEvent(
+        existingEvent.id,
+        updateDto,
+        mockUser.id,
+      );
+
+      // Verify the result
+      expect(result).toBeDefined();
+      expect(result.id).toBe(updatedEventWithSeries.id);
+      expect(result.name).toBe(updateDto.name);
+      expect(result.seriesSlug).toBe('existing-series');
+
+      // Verify repository.findOne was called with the event ID
+      expect(mockRepository.findOne).toHaveBeenCalledWith({
+        where: { id: existingEvent.id },
+        relations: ['series'],
+      });
+
+      // Verify eventSeriesService.update was called with correct data
+      expect(mockEventSeriesService.update).toHaveBeenCalledWith(
+        'existing-series',
+        expect.objectContaining({
+          name: updateDto.name,
+          recurrenceRule: updateDto.recurrenceRule,
+        }),
+        mockUser.id,
+      );
+    });
+
+    it('should update an event and add recurrence rule through the update method', async () => {
+      // Setup an existing event (no series yet)
+      const existingEvent = {
+        ...findOneMockEventEntity,
+        id: 700,
+        slug: 'event-to-make-recurring',
+        seriesSlug: null,
+        series: null,
+      } as unknown as EventEntity;
+
+      // Initialize repositories
+      await service['initializeRepository']();
+
+      // Mock findOne to return our existing event
+      mockRepository.findOne.mockResolvedValueOnce(existingEvent);
+
+      // Mock save to return the updated event with series info
+      const updatedEvent = {
+        ...existingEvent,
+        name: 'Now a Recurring Event',
+        seriesSlug: 'new-series-slug',
+        series: { id: 555, slug: 'new-series-slug' } as any,
+        recurrenceRule: {
+          frequency: RecurrenceFrequency.WEEKLY,
+          interval: 1,
+          count: 4,
+        },
+      } as unknown as EventEntity;
+
+      mockRepository.save.mockResolvedValueOnce(updatedEvent);
+
+      // Create a mock series that would be created by EventSeriesService
+      const mockSeries = {
+        id: 555,
+        slug: 'new-series-slug',
+        templateEventSlug: updatedEvent.slug,
+      } as EventSeriesEntity;
+
+      // Mock the EventSeriesService.create method
+      mockEventSeriesService.create = jest.fn().mockResolvedValue(mockSeries);
+
+      // Create the update DTO with recurrence rule
+      const updateDto: UpdateEventDto = {
+        name: 'Now a Recurring Event',
+        recurrenceRule: {
+          frequency: RecurrenceFrequency.WEEKLY,
+          interval: 1,
+          count: 4,
+          byweekday: ['MO', 'WE'],
+        },
+        timeZone: 'America/Chicago',
+        isRecurring: true, // Flag to indicate this should become a recurring event
+      };
+
+      // Call the update method
+      const result = await service.update('event-to-make-recurring', updateDto);
+
+      // Verify the result
+      expect(result).toBeDefined();
+      expect(result.name).toBe('Now a Recurring Event');
+      expect(result.seriesSlug).toBe('new-series-slug');
+
+      // Verify findOne was called with the correct slug
+      expect(mockRepository.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { slug: 'event-to-make-recurring' },
+        }),
+      );
+
+      // Verify the save method was called with the updated event data
+      expect(mockRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Now a Recurring Event',
+        }),
       );
     });
   });

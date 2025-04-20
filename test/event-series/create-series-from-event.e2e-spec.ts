@@ -8,7 +8,7 @@ import {
 } from '../../src/core/constants/constant';
 
 // Set a global timeout for all tests in this file
-jest.setTimeout(60000);
+jest.setTimeout(20000);
 
 describe('Create Series From Event Tests (e2e)', () => {
   let token: string;
@@ -18,13 +18,13 @@ describe('Create Series From Event Tests (e2e)', () => {
   });
 
   // Helper function to wait a short time for backend operations to complete
-  const waitForBackend = async (ms = 500) => {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  };
+  //   const waitForBackend = async (ms = 500) => {
+  //     return new Promise((resolve) => setTimeout(resolve, ms));
+  //   };
 
-  it('should create a series from an existing event and verify the event is linked to the series', async () => {
+  it('should create a series from an existing event using create-from-event', async () => {
     // STEP 1: Create a regular standalone event first
-    console.log('STEP 1: Creating a standalone event as template');
+    // console.log('STEP 1: Creating a standalone event as template');
     const eventData = {
       name: 'Template Event for Series Creation',
       description: 'Event that will become the first occurrence in a series',
@@ -44,10 +44,10 @@ describe('Create Series From Event Tests (e2e)', () => {
     const templateEventSlug = templateEvent.slug;
     expect(templateEvent).toBeDefined();
     expect(templateEventSlug).toBeDefined();
-    console.log(`Template event created with slug: ${templateEventSlug}`);
+    // console.log(`Template event created with slug: ${templateEventSlug}`);
 
     // STEP 2: Create a series from the event
-    console.log('STEP 2: Creating a series from the event');
+    // console.log('STEP 2: Creating a series from the event');
     const seriesData = {
       name: `${eventData.name} Series`,
       description: eventData.description,
@@ -55,7 +55,7 @@ describe('Create Series From Event Tests (e2e)', () => {
       recurrenceRule: {
         frequency: 'WEEKLY',
         interval: 1,
-        count: 5, // Create 5 occurrences
+        count: 5,
       },
     };
 
@@ -68,7 +68,7 @@ describe('Create Series From Event Tests (e2e)', () => {
     expect(seriesResponse.status).toBe(201);
     const createdSeries = seriesResponse.body;
     const seriesSlug = createdSeries.slug;
-    console.log(`Series created with slug: ${seriesSlug}`);
+    // console.log(`Series created with slug: ${seriesSlug}`);
 
     // Verify basic series properties
     expect(createdSeries.name).toBe(seriesData.name);
@@ -77,9 +77,9 @@ describe('Create Series From Event Tests (e2e)', () => {
 
     // STEP 3: Verify the event is properly linked to the series
     // Give the backend a moment to complete any async operations
-    await waitForBackend(1000);
+    // await waitForBackend(10000);
 
-    console.log('STEP 3: Verifying the event is properly linked to the series');
+    // console.log('STEP 3: Verifying the event is properly linked to the series');
     const templateEventResponse = await request(TESTING_APP_URL)
       .get(`/api/events/${templateEventSlug}`)
       .set('Authorization', `Bearer ${token}`)
@@ -87,24 +87,38 @@ describe('Create Series From Event Tests (e2e)', () => {
 
     expect(templateEventResponse.status).toBe(200);
     expect(templateEventResponse.body.seriesSlug).toBe(seriesSlug);
-    console.log(
-      `Template event ${templateEventSlug} is confirmed as linked to series ${seriesSlug}`,
-    );
+    // console.log(
+    //   `Template event ${templateEventSlug} is confirmed as linked to series ${seriesSlug}`,
+    // );
+
+    // await waitForBackend(10000);
+
+    // get the event again and verify that the series slug is linked
+    const templateEventResponse2 = await request(TESTING_APP_URL)
+      .get(`/api/events/${templateEventSlug}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
+
+    expect(templateEventResponse2.status).toBe(200);
+    expect(templateEventResponse2.body.seriesSlug).toBe(seriesSlug);
+    // console.log(
+    //   `Template event ${templateEventSlug} is still confirmed as linked to series ${seriesSlug}`,
+    // );
 
     // STEP 4: Clean up - delete the series
-    console.log('STEP 4: Cleaning up by deleting the series');
+    // console.log('STEP 4: Cleaning up by deleting the series');
     const deleteResponse = await request(TESTING_APP_URL)
       .delete(`/api/event-series/${seriesSlug}?deleteEvents=true`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
 
     expect(deleteResponse.status).toBe(204);
-    console.log('Series deleted successfully with all its events');
-  }, 60000); // Specify timeout of 60 seconds
+    // console.log('Series deleted successfully with all its events');
+  }, 45000);
 
-  it('should create a series directly with a template event in a single call', async () => {
+  it('should create an event, use event-series to create a series from it', async () => {
     // STEP 1: First create a template event
-    console.log('STEP 1: Creating a template event for direct series creation');
+    // console.log('STEP 1: Creating a template event for direct series creation');
 
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -131,12 +145,12 @@ describe('Create Series From Event Tests (e2e)', () => {
     );
     expect(templateEvent).toBeDefined();
     const templateEventSlug = templateEvent.slug;
-    console.log(`Template event created with slug: ${templateEventSlug}`);
+    // console.log(`Template event created with slug: ${templateEventSlug}`);
 
     // STEP 2: Now create a series with the template event
-    console.log(
-      'STEP 2: Creating a series with the template event in a single call',
-    );
+    // console.log(
+    //   'STEP 2: Creating a series with the template event in a single call',
+    // );
 
     const seriesData = {
       name: 'Direct Series Creation Test',
@@ -148,7 +162,7 @@ describe('Create Series From Event Tests (e2e)', () => {
         interval: 1,
         count: 5,
       },
-      templateEventSlug: templateEventSlug, // Specify the template event slug
+      templateEventSlug: templateEventSlug,
     };
 
     const seriesResponse = await request(TESTING_APP_URL)
@@ -160,7 +174,7 @@ describe('Create Series From Event Tests (e2e)', () => {
     expect(seriesResponse.status).toBe(201);
     const createdSeries = seriesResponse.body;
     const seriesSlug = createdSeries.slug;
-    console.log(`Series created directly with slug: ${seriesSlug}`);
+    // console.log(`Series created directly with slug: ${seriesSlug}`);
 
     // Verify series properties
     expect(createdSeries.name).toBe(seriesData.name);
@@ -169,28 +183,37 @@ describe('Create Series From Event Tests (e2e)', () => {
 
     // STEP 3: Verify the template event is linked to the series
     // Give the backend a moment to complete any async operations
-    await waitForBackend(1000);
+    // await waitForBackend(5000);
 
-    console.log('STEP 3: Verifying the template event is linked to the series');
+    // console.log('STEP 3: Verifying the template event is linked to the series');
     const templateEventResponse = await request(TESTING_APP_URL)
       .get(`/api/events/${templateEventSlug}`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
 
+    // console.log(
+    //   'Template event response status:',
+    //   templateEventResponse.status,
+    // );
+    // console.log(
+    //   'Template event full response:',
+    //   JSON.stringify(templateEventResponse.body, null, 2),
+    // );
+
     expect(templateEventResponse.status).toBe(200);
     expect(templateEventResponse.body.seriesSlug).toBe(seriesSlug);
-    console.log(
-      `Template event ${templateEventSlug} is confirmed as linked to series ${seriesSlug}`,
-    );
+    // console.log(
+    //   `Template event ${templateEventSlug} is confirmed as linked to series ${seriesSlug}`,
+    // );
 
     // STEP 4: Clean up - delete the series
-    console.log('STEP 4: Cleaning up by deleting the series');
+    // console.log('STEP 4: Cleaning up by deleting the series');
     const deleteResponse = await request(TESTING_APP_URL)
       .delete(`/api/event-series/${seriesSlug}?deleteEvents=true`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
 
     expect(deleteResponse.status).toBe(204);
-    console.log('Series deleted successfully with all its events');
-  }, 60000); // Specify timeout of 60 seconds
+    // console.log('Series deleted successfully with all its events');
+  }, 45000);
 });
