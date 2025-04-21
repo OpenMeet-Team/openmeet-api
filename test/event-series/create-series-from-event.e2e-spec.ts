@@ -303,6 +303,7 @@ describe('Create Series From Event Tests (e2e)', () => {
 
     expect(seriesEventsResponse.status).toBe(200);
     const seriesEvents = seriesEventsResponse.body;
+    expect(seriesEvents.length).toBe(10);
 
     // Verify the original event is part of the series occurrences
     const eventInSeries = seriesEvents.some(

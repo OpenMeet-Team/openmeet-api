@@ -124,7 +124,7 @@ describe('EventSeriesController (e2e)', () => {
       (occ) => occ.materialized === true,
     );
 
-    console.log('Materialized occurrences:', materializedOccurrences);
+    console.log('Materialized occurrences:', materializedOccurrences.length);
 
     // Check directly if our template event is linked to the series
     const templateEventResponse = await request(TESTING_APP_URL)
@@ -591,7 +591,7 @@ describe('EventSeriesController (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
 
-    console.log('materializeResponse', materializeResponse.body);
+    console.log('materializeResponse', materializeResponse.body.length);
     expect(materializeResponse.status).toBe(200);
 
     // The key test: verify the seriesSlug field is set to the parent series slug
@@ -692,21 +692,21 @@ describe('EventSeriesController (e2e)', () => {
     expect(occurrencesResponse.status).toBe(200);
 
     // Log all occurrences for debugging
-    console.log(
-      'All occurrences:',
-      occurrencesResponse.body.map((occ) => ({
-        date: occ.date,
-        materialized: occ.materialized,
-        eventSlug: occ.event?.slug || 'none',
-      })),
-    );
+    // console.log(
+    //   'All occurrences:',
+    //   occurrencesResponse.body.map((occ) => ({
+    //     date: occ.date,
+    //     materialized: occ.materialized,
+    //     eventSlug: occ.event?.slug || 'none',
+    //   })),
+    // );
 
     // Find materialized occurrences
     const materializedOccurrences = occurrencesResponse.body.filter(
       (occ) => occ.materialized === true,
     );
 
-    console.log('Materialized occurrences:', materializedOccurrences);
+    console.log('Materialized occurrences:', materializedOccurrences.length);
 
     // Check directly if our template event is linked to the series
     const templateEventResponse = await request(TESTING_APP_URL)
