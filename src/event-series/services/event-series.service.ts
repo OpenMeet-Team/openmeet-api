@@ -158,7 +158,22 @@ export class EventSeriesService {
       tenantId,
     });
 
-    return this.createFromExistingEvent(
+    // Verify the event exists before attempting to create series
+    const originalEvent =
+      await this.eventQueryService.findEventBySlug(eventSlug);
+    if (!originalEvent) {
+      this.logger.error(
+        `Cannot create series: Event with slug ${eventSlug} not found`,
+      );
+      throw new NotFoundException(`Event with slug ${eventSlug} not found`);
+    }
+
+    this.logger.debug(
+      `Found original event ${eventSlug} (ID: ${originalEvent.id}) to convert to series`,
+    );
+
+    // Create the series from the existing event
+    const series = await this.createFromExistingEvent(
       eventSlug,
       createData.recurrenceRule,
       userId,
@@ -168,6 +183,57 @@ export class EventSeriesService {
       { generateOccurrences: generateFutureEvents },
       tenantId,
     );
+
+    // Verify the original event was properly linked to the series
+    const updatedEvent =
+      await this.eventQueryService.findEventBySlug(eventSlug);
+    if (!updatedEvent) {
+      this.logger.error(
+        `Original event ${eventSlug} disappeared during series creation`,
+      );
+      throw new Error(
+        `Original event ${eventSlug} could not be found after series creation`,
+      );
+    }
+
+    if (!updatedEvent.seriesSlug || updatedEvent.seriesSlug !== series.slug) {
+      this.logger.error(
+        `Original event ${eventSlug} (ID: ${updatedEvent.id}) was not properly linked to series ${series.slug}. Current seriesSlug: ${updatedEvent.seriesSlug || 'null'}`,
+      );
+
+      // Force update the event to link it to the series
+      try {
+        const dataSource =
+          await this.tenantConnectionService.getTenantConnection(
+            tenantId || this.request?.tenantId,
+          );
+        const eventRepo = dataSource.getRepository(EventEntity);
+
+        // Update the event directly
+        await eventRepo.update(
+          { id: updatedEvent.id },
+          {
+            seriesSlug: series.slug,
+            isRecurring: true,
+          },
+        );
+
+        this.logger.debug(
+          `Applied emergency fix to link event ${eventSlug} (ID: ${updatedEvent.id}) to series ${series.slug}`,
+        );
+      } catch (err) {
+        this.logger.error(
+          `Failed to apply emergency fix: ${err.message}`,
+          err.stack,
+        );
+      }
+    } else {
+      this.logger.debug(
+        `Event ${eventSlug} successfully linked to series ${series.slug}`,
+      );
+    }
+
+    return series;
   }
 
   /**
@@ -254,16 +320,35 @@ export class EventSeriesService {
       );
     }
 
-    // Check if template event is already part of a series
+    // IMPORTANT: Check if the template event is already associated with another series
+    // If so, return that series instead of trying to create a new one
     if (templateEvent.seriesSlug) {
       this.logger.debug(
         `Template event ${templateEventSlug} is already part of series ${templateEvent.seriesSlug}`,
       );
-      const existingSeries = await this.findBySlug(
-        templateEvent.seriesSlug,
-        tenantId,
-      );
-      return existingSeries;
+      try {
+        const existingSeries = await this.findBySlug(
+          templateEvent.seriesSlug,
+          tenantId,
+        );
+        
+        // Log the discovery to help with debugging
+        this.logger.debug(
+          `Found existing series: ${JSON.stringify({
+            id: existingSeries.id,
+            slug: existingSeries.slug,
+            templateEventSlug: existingSeries.templateEventSlug,
+          })}`,
+        );
+        
+        return existingSeries;
+      } catch (err) {
+        // If the series can't be found (which shouldn't happen), log it and continue with creation
+        this.logger.warn(
+          `Event ${templateEventSlug} references series ${templateEvent.seriesSlug}, but that series couldn't be found: ${err.message}`,
+        );
+        // Fall through to create a new series and fix the inconsistency
+      }
     }
 
     // Create the series
@@ -354,42 +439,110 @@ export class EventSeriesService {
           );
         }
 
+        // CRITICAL FIX: If the event in transaction already has a seriesSlug that's different from
+        // the one we're creating, we need to be careful about how we proceed
+        if (
+          eventInTransaction.seriesSlug && 
+          eventInTransaction.seriesSlug !== refreshedSeries.slug
+        ) {
+          this.logger.warn(
+            `Event ${templateEventSlug} already has seriesSlug ${eventInTransaction.seriesSlug}, ` +
+            `but we're about to change it to ${refreshedSeries.slug}. This could create inconsistencies.`,
+          );
+          
+          // Check if this is an intended re-association (advanced use case)
+          // For now, log the warning but proceed with the update
+        }
+
         // Update the template event to link it to the series
         this.logger.debug(
           `Updating template event ${templateEventSlug} to set seriesSlug to ${refreshedSeries.slug}`,
         );
-        eventInTransaction.seriesSlug = refreshedSeries.slug;
-        await eventRepo.save(eventInTransaction);
 
-        // Now verify the event was updated correctly by fetching it again
-        const updatedEvent = await eventRepo.findOne({
-          where: { id: eventInTransaction.id },
-        });
-
-        if (!updatedEvent) {
+        if (!eventInTransaction) {
+          this.logger.error(
+            `eventInTransaction is null when trying to update with seriesSlug`,
+          );
           throw new Error(
-            `Failed to find event with ID ${eventInTransaction.id} after updating it`,
+            'Failed to find event in transaction for linking to series',
           );
         }
 
-        if (updatedEvent.seriesSlug !== refreshedSeries.slug) {
+        if (!refreshedSeries) {
           this.logger.error(
-            `[SERIES_SLUG_LOST] Event seriesSlug was not updated correctly in transaction! Expected: ${refreshedSeries.slug}, Got: ${updatedEvent.seriesSlug || 'null'}`,
+            `refreshedSeries is null when trying to link to event`,
           );
+          throw new Error('Series was not properly created');
+        }
 
-          // Try one more time with a direct update
-          await eventRepo.update(
-            { id: eventInTransaction.id },
-            { seriesSlug: refreshedSeries.slug },
-          );
+        // Set the series association properties
+        eventInTransaction.seriesSlug = refreshedSeries.slug;
+        eventInTransaction.isRecurring = true; // Explicitly set isRecurring flag
+        
+        // Log the update operation for debugging
+        this.logger.debug(
+          `About to save event ${eventInTransaction.id} (${templateEventSlug}) with seriesSlug ${refreshedSeries.slug}`,
+          {
+            eventBeforeSave: {
+              id: eventInTransaction.id,
+              slug: eventInTransaction.slug,
+              seriesSlug: eventInTransaction.seriesSlug,
+              isRecurring: eventInTransaction.isRecurring,
+            },
+          },
+        );
+
+        try {
+          await eventRepo.save(eventInTransaction);
+
+          // Now verify the event was updated correctly by fetching it again
+          const updatedEvent = await eventRepo.findOne({
+            where: { id: eventInTransaction.id },
+          });
+
+          if (!updatedEvent) {
+            throw new Error(
+              `Failed to find event with ID ${eventInTransaction.id} after updating it`,
+            );
+          }
 
           this.logger.debug(
-            `Attempted direct update of event ${templateEventSlug} with seriesSlug ${refreshedSeries.slug}`,
+            `Verification after save: Event ${eventInTransaction.id} (${templateEventSlug}) seriesSlug=${updatedEvent.seriesSlug}`,
+            {
+              eventAfterSave: {
+                id: updatedEvent.id,
+                slug: updatedEvent.slug,
+                seriesSlug: updatedEvent.seriesSlug,
+                isRecurring: updatedEvent.isRecurring,
+              },
+            },
           );
-        } else {
-          this.logger.debug(
-            `Successfully verified event ${templateEventSlug} has seriesSlug ${updatedEvent.seriesSlug}`,
+
+          if (updatedEvent.seriesSlug !== refreshedSeries.slug) {
+            this.logger.error(
+              `[SERIES_SLUG_LOST] Event seriesSlug was not updated correctly in transaction! Expected: ${refreshedSeries.slug}, Got: ${updatedEvent.seriesSlug || 'null'}`,
+            );
+          } else {
+            this.logger.debug(
+              `Successfully verified event ${templateEventSlug} has seriesSlug ${updatedEvent.seriesSlug}`,
+            );
+          }
+        } catch (saveError) {
+          this.logger.error(
+            `[CRITICAL] Error saving event with seriesSlug link: ${saveError.message}`,
+            {
+              stack: saveError.stack,
+              eventInTransaction: {
+                id: eventInTransaction.id,
+                slug: eventInTransaction.slug,
+              },
+              series: {
+                id: refreshedSeries.id,
+                slug: refreshedSeries.slug,
+              },
+            },
           );
+          throw saveError;
         }
 
         // Generate future occurrences if requested
@@ -1158,22 +1311,29 @@ export class EventSeriesService {
           ) {
             this.logger.debug('Skipping template event date', {
               date: occurrenceDate.toISOString(),
+              templateEventSlug: templateEvent.slug,
+              templateEventId: templateEvent.id,
             });
             return;
           }
 
-          // Check if occurrence already exists
+          // Check if occurrence already exists by comparing dates
           const existingOccurrences = await eventRepository.find({
             where: {
               seriesSlug: series.slug,
-              startDate: occurrenceDate,
             },
           });
 
-          if (existingOccurrences && existingOccurrences.length > 0) {
+          // Check if there's already an event at this exact date in the series
+          const existingEventOnDate = existingOccurrences.find(
+            (e) => new Date(e.startDate).getTime() === occurrenceDate.getTime(),
+          );
+
+          if (existingEventOnDate) {
             this.logger.debug('Occurrence already exists, skipping creation', {
               date: occurrenceDate.toISOString(),
-              slug: existingOccurrences[0].slug,
+              slug: existingEventOnDate.slug,
+              id: existingEventOnDate.id,
             });
             return;
           }

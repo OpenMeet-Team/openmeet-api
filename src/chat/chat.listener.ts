@@ -259,6 +259,14 @@ export class ChatListener {
         throw new Error('Event slug is required');
       }
 
+      if (!params.userSlug && !params.userId) {
+        // Just log a warning instead of throwing an error, and return early
+        this.logger.warn(
+          'Missing both userSlug and userId for event creation, skipping chat room creation',
+        );
+        return;
+      }
+
       let eventId: number | null = null;
       let userId: number | null = null;
 
@@ -291,9 +299,15 @@ export class ChatListener {
 
         eventId = result.eventId;
         userId = result.userId;
+      } else if (params.userId) {
+        // We have userId but no userSlug
+        userId = params.userId;
       } else {
-        this.logger.error('Either userSlug or userId is required');
-        throw new Error('Either userSlug or userId is required');
+        // Instead of throwing an error, just log a warning and exit
+        this.logger.warn(
+          'Either userSlug or userId is required for chat room creation, skipping',
+        );
+        return;
       }
 
       if (eventId && userId) {

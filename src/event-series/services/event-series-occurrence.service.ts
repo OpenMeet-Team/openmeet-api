@@ -281,11 +281,11 @@ export class EventSeriesOccurrenceService {
         name: updatedTemplateEvent.name,
         description: updatedTemplateEvent.description || '',
         startDate: new Date(occurrenceDate),
-        endDate: new Date(
+        endDate: updatedTemplateEvent.endDate ? new Date(
           new Date(occurrenceDate).getTime() +
             (updatedTemplateEvent.endDate.getTime() -
               updatedTemplateEvent.startDate.getTime()),
-        ),
+        ) : new Date(new Date(occurrenceDate).getTime() + 60 * 60 * 1000), // 1 hour default duration if no endDate
         type: updatedTemplateEvent.type,
         location: updatedTemplateEvent.location,
         lat: updatedTemplateEvent.lat,
@@ -719,17 +719,18 @@ export class EventSeriesOccurrenceService {
     if (templateEvent) {
       const templateDate = new Date(templateEvent.startDate);
       const templateDateStr = templateDate.toISOString();
+
+      // Check if the actual template event is included in the results
+      // We need to verify that the event with matching ID is in the results
       const templateIncluded = results.some(
-        (result) =>
-          (result.event && result.event.id === templateEvent.id) ||
-          this.isSameDay(
-            new Date(result.date),
-            templateDate,
-            effectiveTimeZone,
-          ),
+        (result) => result.event && result.event.id === templateEvent.id,
       );
 
       if (!templateIncluded && results.length < effectiveCount) {
+        this.logger.log(
+          `DEBUG: Template event ${templateEvent.slug} not found in results. Adding it explicitly.`,
+        );
+
         results.push({
           date: templateDateStr,
           event: templateEvent,

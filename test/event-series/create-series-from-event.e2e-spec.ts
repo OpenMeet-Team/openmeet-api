@@ -216,4 +216,106 @@ describe('Create Series From Event Tests (e2e)', () => {
     expect(deleteResponse.status).toBe(204);
     // console.log('Series deleted successfully with all its events');
   }, 45000);
+
+  it('should convert an existing event to a recurring event through the update endpoint', async () => {
+    // STEP 1: Create a standalone event first
+    const dayAfterTomorrow = new Date();
+    dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2);
+    dayAfterTomorrow.setHours(14, 0, 0, 0);
+
+    const eventData = {
+      name: 'Standalone Event to Convert to Recurring',
+      description:
+        'This event will be converted to recurring via update endpoint',
+      type: EventType.InPerson,
+      location: 'Test Location',
+      maxAttendees: 25,
+      visibility: EventVisibility.Public,
+      status: EventStatus.Published,
+      startDate: dayAfterTomorrow.toISOString(),
+      endDate: new Date(dayAfterTomorrow.getTime() + 3600000).toISOString(), // 1 hour after start
+      categories: [],
+      timeZone: 'America/Los_Angeles',
+    };
+
+    // Create the standalone event
+    const standaloneEvent = await createEvent(
+      TESTING_APP_URL,
+      token,
+      eventData,
+    );
+    expect(standaloneEvent).toBeDefined();
+    const eventSlug = standaloneEvent.slug;
+
+    // Verify it's not part of a series yet
+    expect(standaloneEvent.seriesSlug).toBeNull();
+    expect(standaloneEvent.isRecurring).toBeFalsy();
+
+    // STEP 2: Update the event to add recurrence
+    const recurrenceUpdateData = {
+      recurrenceRule: {
+        frequency: 'WEEKLY',
+        interval: 1,
+        byweekday: ['TU', 'TH'],
+        count: 10,
+      },
+      timeZone: 'America/Los_Angeles',
+    };
+
+    const updateResponse = await request(TESTING_APP_URL)
+      .patch(`/api/events/${eventSlug}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID)
+      .send(recurrenceUpdateData);
+
+    expect(updateResponse.status).toBe(200);
+    const updatedEvent = updateResponse.body;
+
+    // Verify the event is now connected to a series
+    expect(updatedEvent.seriesSlug).toBeDefined();
+    expect(updatedEvent.isRecurring).toBe(true);
+
+    const seriesSlug = updatedEvent.seriesSlug;
+
+    // STEP 3: Verify the series exists and has the right properties
+    const seriesResponse = await request(TESTING_APP_URL)
+      .get(`/api/event-series/${seriesSlug}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
+
+    expect(seriesResponse.status).toBe(200);
+    const series = seriesResponse.body;
+
+    // Verify series properties
+    expect(series.templateEventSlug).toBe(eventSlug);
+    expect(series.name).toBe(eventData.name);
+    expect(series.recurrenceRule.frequency).toBe(
+      recurrenceUpdateData.recurrenceRule.frequency,
+    );
+
+    // STEP 4: Get all events in the series to verify original event is included
+    const seriesEventsResponse = await request(TESTING_APP_URL)
+      .get(
+        `/api/event-series/${seriesSlug}/occurrences?includePast=true&count=20`,
+      )
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
+
+    expect(seriesEventsResponse.status).toBe(200);
+    const seriesEvents = seriesEventsResponse.body;
+
+    // Verify the original event is part of the series occurrences
+    const eventInSeries = seriesEvents.some(
+      (occurrence) => occurrence.event && occurrence.event.slug === eventSlug,
+    );
+    expect(eventInSeries).toBe(true);
+
+    // STEP 5: Clean up - delete the series
+    const deleteResponse = await request(TESTING_APP_URL)
+      .delete(`/api/event-series/${seriesSlug}?deleteEvents=true`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
+
+    expect(deleteResponse.status).toBe(204);
+  }, 45000);
 });

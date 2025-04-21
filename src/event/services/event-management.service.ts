@@ -9,7 +9,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { Repository, DataSource } from 'typeorm';
+import { Repository } from 'typeorm';
 import { EventEntity } from '../infrastructure/persistence/relational/entities/event.entity';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { CategoryService } from '../../category/category.service';
@@ -366,11 +366,20 @@ export class EventManagementService {
       );
 
       try {
+        this.logger.debug(
+          `Starting process to convert event ${slug} (ID: ${event.id}) to recurring event`,
+        );
+
         // First apply any other updates to the event
         const basicUpdates = { ...updateEventDto };
         delete basicUpdates.recurrenceRule; // Remove recurrenceRule to handle it separately
 
         if (Object.keys(basicUpdates).length > 0) {
+          this.logger.debug(
+            `Applying basic updates to event ${slug} before making it recurring`,
+            { basicUpdates },
+          );
+
           // Update basic event properties first
           await this.update(slug, basicUpdates, userId);
           // Reload the event with the updated properties
@@ -380,9 +389,29 @@ export class EventManagementService {
           if (!updatedEvent) {
             throw new Error(`Failed to find event ${slug} after basic updates`);
           }
+
+          this.logger.debug(
+            `Event ${slug} successfully updated with basic properties before adding recurrence`,
+            {
+              eventAfterBasicUpdates: {
+                id: updatedEvent.id,
+                slug: updatedEvent.slug,
+                name: updatedEvent.name,
+              },
+            },
+          );
         }
 
+        this.logger.debug(
+          `Creating series from event ${slug} with recurrence rule`,
+          {
+            recurrenceRule: updateEventDto.recurrenceRule,
+            userId: userId || this.request.user?.id,
+          },
+        );
+
         // Then delegate to EventSeriesService to create a series from this event
+        // IMPORTANT: This is the critical path where we convert the existing event to recurring
         const series = await this.eventSeriesService.createFromExistingEvent(
           slug,
           updateEventDto.recurrenceRule,
@@ -390,11 +419,18 @@ export class EventManagementService {
           undefined, // Use event name (already updated if needed)
           undefined, // Use event description (already updated if needed)
           updateEventDto.timeZone || 'UTC',
-          { generateOccurrences: true },
+          { generateOccurrences: false },
         );
 
         this.logger.debug(
           `Successfully created series ${series.slug} from event ${slug}`,
+          {
+            seriesDetails: {
+              id: series.id,
+              slug: series.slug,
+              templateEventSlug: series.templateEventSlug,
+            },
+          },
         );
 
         // Get the updated event to return
@@ -412,10 +448,15 @@ export class EventManagementService {
         return convertedEvent;
       } catch (error) {
         this.logger.error(
-          `Failed to convert event ${slug} to recurring: ${error.message}`,
-          error.stack,
+          `Error converting event ${slug} to recurring event: ${error.message}`,
+          {
+            stack: error.stack,
+            eventId: event.id,
+            eventSlug: slug,
+            recurrenceRule: updateEventDto.recurrenceRule,
+          },
         );
-        // Continue with normal update if conversion fails
+        throw error;
       }
     }
 

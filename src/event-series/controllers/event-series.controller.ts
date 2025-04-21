@@ -252,7 +252,7 @@ export class EventSeriesController {
           eventSlug,
           createData,
           req.user.id,
-          false, // generateFutureEvents
+          false, // generateFutureEvents - set to false to prevent auto-generating duplicate events
           tenantId,
         );
 
