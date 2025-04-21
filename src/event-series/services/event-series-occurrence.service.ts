@@ -281,11 +281,13 @@ export class EventSeriesOccurrenceService {
         name: updatedTemplateEvent.name,
         description: updatedTemplateEvent.description || '',
         startDate: new Date(occurrenceDate),
-        endDate: updatedTemplateEvent.endDate ? new Date(
-          new Date(occurrenceDate).getTime() +
-            (updatedTemplateEvent.endDate.getTime() -
-              updatedTemplateEvent.startDate.getTime()),
-        ) : new Date(new Date(occurrenceDate).getTime() + 60 * 60 * 1000), // 1 hour default duration if no endDate
+        endDate: updatedTemplateEvent.endDate
+          ? new Date(
+              new Date(occurrenceDate).getTime() +
+                (updatedTemplateEvent.endDate.getTime() -
+                  updatedTemplateEvent.startDate.getTime()),
+            )
+          : new Date(new Date(occurrenceDate).getTime() + 60 * 60 * 1000), // 1 hour default duration if no endDate
         type: updatedTemplateEvent.type,
         location: updatedTemplateEvent.location,
         lat: updatedTemplateEvent.lat,

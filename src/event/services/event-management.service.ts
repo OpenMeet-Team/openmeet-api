@@ -1062,8 +1062,8 @@ export class EventManagementService {
   async findEventsBySeriesSlug(
     seriesSlug: string,
     options?: { page: number; limit: number },
-    tenantId?: string,
-    skipSeriesVerification?: boolean,
+    _tenantId?: string,
+    _skipSeriesVerification?: boolean,
   ): Promise<[EventEntity[], number]> {
     this.logger.warn(
       'This method is deprecated. Use EventQueryService.findEventsBySeriesSlug instead',

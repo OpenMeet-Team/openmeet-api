@@ -331,7 +331,7 @@ export class EventSeriesService {
           templateEvent.seriesSlug,
           tenantId,
         );
-        
+
         // Log the discovery to help with debugging
         this.logger.debug(
           `Found existing series: ${JSON.stringify({
@@ -340,7 +340,7 @@ export class EventSeriesService {
             templateEventSlug: existingSeries.templateEventSlug,
           })}`,
         );
-        
+
         return existingSeries;
       } catch (err) {
         // If the series can't be found (which shouldn't happen), log it and continue with creation
@@ -442,14 +442,14 @@ export class EventSeriesService {
         // CRITICAL FIX: If the event in transaction already has a seriesSlug that's different from
         // the one we're creating, we need to be careful about how we proceed
         if (
-          eventInTransaction.seriesSlug && 
+          eventInTransaction.seriesSlug &&
           eventInTransaction.seriesSlug !== refreshedSeries.slug
         ) {
           this.logger.warn(
             `Event ${templateEventSlug} already has seriesSlug ${eventInTransaction.seriesSlug}, ` +
-            `but we're about to change it to ${refreshedSeries.slug}. This could create inconsistencies.`,
+              `but we're about to change it to ${refreshedSeries.slug}. This could create inconsistencies.`,
           );
-          
+
           // Check if this is an intended re-association (advanced use case)
           // For now, log the warning but proceed with the update
         }
@@ -478,7 +478,7 @@ export class EventSeriesService {
         // Set the series association properties
         eventInTransaction.seriesSlug = refreshedSeries.slug;
         eventInTransaction.isRecurring = true; // Explicitly set isRecurring flag
-        
+
         // Log the update operation for debugging
         this.logger.debug(
           `About to save event ${eventInTransaction.id} (${templateEventSlug}) with seriesSlug ${refreshedSeries.slug}`,
