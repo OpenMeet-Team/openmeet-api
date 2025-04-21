@@ -633,10 +633,14 @@ describe('EventManagementService', () => {
       // Initialize repositories
       await service['initializeRepository']();
 
-      // Mock findOne to return our existing event
-      mockRepository.findOne.mockResolvedValueOnce(existingEvent);
+      // Create a mock series that would be created by EventSeriesService
+      const mockSeries = {
+        id: 555,
+        slug: 'new-series-slug',
+        templateEventSlug: existingEvent.slug,
+      } as EventSeriesEntity;
 
-      // Mock save to return the updated event with series info
+      // Mock updated event with series info that should be returned after the update
       const updatedEvent = {
         ...existingEvent,
         name: 'Now a Recurring Event',
@@ -649,17 +653,28 @@ describe('EventManagementService', () => {
         },
       } as unknown as EventEntity;
 
-      mockRepository.save.mockResolvedValueOnce(updatedEvent);
+      // Reset mocks
+      mockRepository.findOne.mockReset();
+      mockEventSeriesService.createFromExistingEvent = jest
+        .fn()
+        .mockResolvedValue(mockSeries);
 
-      // Create a mock series that would be created by EventSeriesService
-      const mockSeries = {
-        id: 555,
-        slug: 'new-series-slug',
-        templateEventSlug: updatedEvent.slug,
-      } as EventSeriesEntity;
+      // Mock multiple findOne calls for different stages of the update process
+      mockRepository.findOne.mockImplementation((options: any) => {
+        const whereOptions = options.where || {};
+        const slugToFind =
+          typeof whereOptions === 'object' ? whereOptions.slug : null;
 
-      // Mock the EventSeriesService.create method
-      mockEventSeriesService.create = jest.fn().mockResolvedValue(mockSeries);
+        // First call will return the original event
+        if (slugToFind === 'event-to-make-recurring') {
+          // If relations include 'series' or 'user', etc., this is the second call after updating
+          if (options.relations && options.relations.includes('user')) {
+            return Promise.resolve(updatedEvent);
+          }
+          return Promise.resolve(existingEvent);
+        }
+        return Promise.resolve(null);
+      });
 
       // Create the update DTO with recurrence rule
       const updateDto: UpdateEventDto = {
@@ -689,11 +704,22 @@ describe('EventManagementService', () => {
         }),
       );
 
-      // Verify the save method was called with the updated event data
-      expect(mockRepository.save).toHaveBeenCalledWith(
+      // Verify the eventSeriesService.createFromExistingEvent was called
+      expect(
+        mockEventSeriesService.createFromExistingEvent,
+      ).toHaveBeenCalledWith(
+        'event-to-make-recurring',
         expect.objectContaining({
-          name: 'Now a Recurring Event',
+          frequency: RecurrenceFrequency.WEEKLY,
+          interval: 1,
+          count: 4,
+          byweekday: ['MO', 'WE'],
         }),
+        expect.any(Number),
+        undefined,
+        undefined,
+        'America/Chicago',
+        expect.any(Object),
       );
     });
   });

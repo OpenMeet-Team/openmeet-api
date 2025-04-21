@@ -41,34 +41,12 @@ export class BlueskyService {
     );
   }
 
-  private async tryResumeSession(
-    tenantId: string,
-    did: string,
-  ): Promise<Agent> {
+  private async resumeSession(tenantId: string, did: string): Promise<Agent> {
     for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
       try {
         const client = await this.getOAuthClient(tenantId);
-        // Try direct restore first without locking
-        try {
-          const directSession = await client.restore(did);
-          if (directSession) {
-            const agent = new Agent(directSession);
-            // Verify the session is valid
-            await agent.getProfile({ actor: did });
-            this.logger.debug(
-              `Successfully restored session for DID ${did} directly`,
-            );
-            return agent;
-          }
-        } catch (directError) {
-          this.logger.debug(
-            `Direct session restore failed: ${directError.message}`,
-          );
-          // Fall through to try with lock
-        }
-
-        // Use a consistent lock key for session operations
         const lockKey = `@atproto-oauth-client-${did}`;
+
         // Wrap the restore operation in a lock
         const session = await this.elasticacheService.withLock(
           lockKey,
@@ -320,35 +298,19 @@ export class BlueskyService {
       tenantId,
     });
 
-    // Create a clone of critical properties to ensure they're preserved
-    const originalValues = {
-      seriesSlug: event.seriesSlug,
-      id: event.id,
-      slug: event.slug,
-    };
-
-    // Log the original state
-    if (originalValues.seriesSlug) {
-      this.logger.debug('Event belongs to series, noting relationship', {
-        eventId: originalValues.id,
-        seriesSlug: originalValues.seriesSlug,
-      });
-    }
-
     try {
-      // First prepare sections
+      // Transform image if needed
       if (
         event.image &&
         typeof event.image.path === 'object' &&
         Object.keys(event.image.path).length === 0
       ) {
-        // Image path is an empty object, which likely means it needs transformation
         this.logger.debug('Transforming empty image path object', {
           eventId: event.id,
           imageBefore: event.image,
         });
 
-        // Use instanceToPlain to force the Transform decorator to run (same as in EventQueryService)
+        // Use instanceToPlain to force the Transform decorator to run
         const { instanceToPlain } = await import('class-transformer');
         event.image = instanceToPlain(event.image) as any;
 
@@ -356,167 +318,6 @@ export class BlueskyService {
           eventId: event.id,
           imageAfter: event.image,
         });
-      }
-
-      // Try to create the event record directly without a lock first
-      try {
-        const agent = await this.resumeSession(tenantId, did);
-        // Convert event type to Bluesky mode
-        const modeMap = {
-          'in-person': 'community.lexicon.calendar.event#inperson',
-          online: 'community.lexicon.calendar.event#virtual',
-          hybrid: 'community.lexicon.calendar.event#hybrid',
-        };
-
-        // Convert event status to Bluesky status
-        const statusMap = {
-          draft: 'community.lexicon.calendar.event#planned',
-          published: 'community.lexicon.calendar.event#scheduled',
-          cancelled: 'community.lexicon.calendar.event#cancelled',
-        };
-
-        const locations: BlueskyLocation[] = [];
-
-        // Add physical location if exists
-        if (event.location && event.lat && event.lon) {
-          locations.push({
-            type: 'community.lexicon.location.geo',
-            lat: event.lat,
-            lon: event.lon,
-            description: event.location,
-          });
-        }
-
-        // Add online location if exists
-        if (event.locationOnline) {
-          locations.push({
-            type: 'community.lexicon.calendar.event#uri',
-            uri: event.locationOnline,
-            name: 'Online Meeting Link',
-          });
-        }
-
-        // Generate a unique rkey from the event name
-        const baseName = this.generateBaseName(event.name);
-        const rkey = await this.generateUniqueRkey(agent, did, baseName);
-
-        // Prepare uris array with image if it exists
-        const uris: BlueskyEventUri[] = [];
-        if (event.image?.path) {
-          uris.push({
-            uri: event.image.path,
-            name: 'Event Image',
-          });
-        } else if (event.image) {
-          // Log a warning if we have an image but no path
-          this.logger.warn('Event has image but no path', {
-            eventId: event.id,
-            image: event.image,
-          });
-        }
-
-        // Add online location to uris if it exists
-        if (event.locationOnline) {
-          uris.push({
-            uri: event.locationOnline,
-            name: 'Online Meeting Link',
-          });
-        }
-
-        // Add additional metadata about the series to the Bluesky record if applicable
-        const recordData: any = {
-          $type: 'community.lexicon.calendar.event',
-          name: event.name,
-          description: event.description,
-          createdAt: event.createdAt,
-          startsAt: event.startDate,
-          endsAt: event.endDate,
-          mode: modeMap[event.type] || modeMap['in-person'],
-          status: statusMap[event.status] || statusMap['published'],
-          locations,
-          uris,
-        };
-
-        // Add openmeet-specific metadata in record
-        if (originalValues.seriesSlug) {
-          // Add series information to help with discovery
-          recordData.openMeetMeta = {
-            seriesSlug: originalValues.seriesSlug,
-            isRecurring: true,
-          };
-        }
-
-        const result = await agent.com.atproto.repo.putRecord({
-          repo: did,
-          collection: 'community.lexicon.calendar.event',
-          rkey,
-          record: recordData,
-        });
-
-        this.logger.debug(result);
-        this.logger.log(
-          `Event ${event.name} posted to Bluesky for user ${handle} (direct without lock)`,
-        );
-
-        // Check if seriesSlug was lost - apply a fix, not just a verification
-        if (
-          originalValues.seriesSlug &&
-          event.seriesSlug !== originalValues.seriesSlug
-        ) {
-          // This is a programming error/bug that we're fixing
-          this.logger.warn(
-            'seriesSlug lost during Bluesky operation, restoring it',
-            {
-              eventId: originalValues.id,
-              expected: originalValues.seriesSlug,
-              actual: event.seriesSlug,
-            },
-          );
-
-          // Restore the value in memory
-          event.seriesSlug = originalValues.seriesSlug;
-
-          // Also fix it in the database
-          try {
-            const effectiveTenantId = tenantId || this.request?.tenantId;
-            if (effectiveTenantId) {
-              const dataSource =
-                await this.tenantConnectionService.getTenantConnection(
-                  effectiveTenantId,
-                );
-
-              // Direct database update to ensure the seriesSlug is correct
-              await dataSource.query(
-                `UPDATE events SET "seriesSlug" = $1 WHERE id = $2 OR slug = $3`,
-                [
-                  originalValues.seriesSlug,
-                  originalValues.id,
-                  originalValues.slug,
-                ],
-              );
-
-              this.logger.debug('Database updated to restore seriesSlug', {
-                eventId: originalValues.id,
-                seriesSlug: originalValues.seriesSlug,
-              });
-            }
-          } catch (dbError) {
-            this.logger.error(
-              'Failed to update database with correct seriesSlug:',
-              {
-                error: dbError.message,
-                eventId: originalValues.id,
-              },
-            );
-          }
-        }
-
-        return { rkey };
-      } catch (directError) {
-        this.logger.warn(
-          `Direct event creation failed: ${directError.message}, trying with lock`,
-        );
-        // Fall through to try with lock
       }
 
       // Use a consistent lock key for session operations
@@ -527,31 +328,6 @@ export class BlueskyService {
         lockKey,
         async () => {
           const agent = await this.resumeSession(tenantId, did);
-
-          // Transform image if needed (same as in direct section)
-          if (
-            event.image &&
-            typeof event.image.path === 'object' &&
-            Object.keys(event.image.path).length === 0
-          ) {
-            // Image path is an empty object, which likely means it needs transformation
-            this.logger.debug(
-              'Transforming empty image path object (lock-based)',
-              {
-                eventId: event.id,
-                imageBefore: event.image,
-              },
-            );
-
-            // Use instanceToPlain to force the Transform decorator to run
-            const { instanceToPlain } = await import('class-transformer');
-            event.image = instanceToPlain(event.image) as any;
-
-            this.logger.debug('Transformed image (lock-based)', {
-              eventId: event.id,
-              imageAfter: event.image,
-            });
-          }
 
           // Convert event type to Bluesky mode
           const modeMap = {
@@ -615,7 +391,7 @@ export class BlueskyService {
             });
           }
 
-          // Add additional metadata about the series to the Bluesky record if applicable
+          // Create record data
           const recordData: any = {
             $type: 'community.lexicon.calendar.event',
             name: event.name,
@@ -630,10 +406,10 @@ export class BlueskyService {
           };
 
           // Add openmeet-specific metadata in record
-          if (originalValues.seriesSlug) {
+          if (event.seriesSlug) {
             // Add series information to help with discovery
             recordData.openMeetMeta = {
-              seriesSlug: originalValues.seriesSlug,
+              seriesSlug: event.seriesSlug,
               isRecurring: true,
             };
           }
@@ -647,7 +423,7 @@ export class BlueskyService {
 
           this.logger.debug(result);
           this.logger.log(
-            `Event ${event.name} posted to Bluesky for user ${handle} (with lock)`,
+            `Event ${event.name} posted to Bluesky for user ${handle}`,
           );
           return { rkey };
         },
@@ -661,62 +437,6 @@ export class BlueskyService {
         );
       }
 
-      // Check if seriesSlug was lost during lock-based operation
-      if (
-        originalValues.seriesSlug &&
-        event.seriesSlug !== originalValues.seriesSlug
-      ) {
-        // Log and fix the issue
-        this.logger.warn(
-          'seriesSlug lost during lock-based Bluesky operation, restoring it',
-          {
-            eventId: originalValues.id,
-            expected: originalValues.seriesSlug,
-            actual: event.seriesSlug,
-          },
-        );
-
-        // Restore the in-memory value
-        event.seriesSlug = originalValues.seriesSlug;
-
-        // Also fix it in the database
-        try {
-          const effectiveTenantId = tenantId || this.request?.tenantId;
-          if (effectiveTenantId) {
-            const dataSource =
-              await this.tenantConnectionService.getTenantConnection(
-                effectiveTenantId,
-              );
-
-            // Direct database update to ensure the seriesSlug is correct
-            await dataSource.query(
-              `UPDATE events SET "seriesSlug" = $1 WHERE id = $2 OR slug = $3`,
-              [
-                originalValues.seriesSlug,
-                originalValues.id,
-                originalValues.slug,
-              ],
-            );
-
-            this.logger.debug(
-              'Database updated to restore seriesSlug after lock-based operation',
-              {
-                eventId: originalValues.id,
-                seriesSlug: originalValues.seriesSlug,
-              },
-            );
-          }
-        } catch (dbError) {
-          this.logger.error(
-            'Failed to update database with correct seriesSlug after lock-based operation:',
-            {
-              error: dbError.message,
-              eventId: originalValues.id,
-            },
-          );
-        }
-      }
-
       return result;
     } catch (error: any) {
       this.logger.error('Failed to create Bluesky event:', {
@@ -726,61 +446,6 @@ export class BlueskyService {
         did,
         errorObject: error,
       });
-
-      // Also check for seriesSlug loss in error case
-      if (
-        originalValues.seriesSlug &&
-        event.seriesSlug !== originalValues.seriesSlug
-      ) {
-        this.logger.warn(
-          'seriesSlug lost during Bluesky error handling, restoring it',
-          {
-            eventId: originalValues.id,
-            expected: originalValues.seriesSlug,
-            actual: event.seriesSlug,
-          },
-        );
-
-        // Restore the in-memory value
-        event.seriesSlug = originalValues.seriesSlug;
-
-        // Also fix it in the database
-        try {
-          const effectiveTenantId = tenantId || this.request?.tenantId;
-          if (effectiveTenantId) {
-            const dataSource =
-              await this.tenantConnectionService.getTenantConnection(
-                effectiveTenantId,
-              );
-
-            // Direct database update to ensure the seriesSlug is correct
-            await dataSource.query(
-              `UPDATE events SET "seriesSlug" = $1 WHERE id = $2 OR slug = $3`,
-              [
-                originalValues.seriesSlug,
-                originalValues.id,
-                originalValues.slug,
-              ],
-            );
-
-            this.logger.debug(
-              'Database updated to restore seriesSlug after error',
-              {
-                eventId: originalValues.id,
-                seriesSlug: originalValues.seriesSlug,
-              },
-            );
-          }
-        } catch (dbError) {
-          this.logger.error(
-            'Failed to update database with correct seriesSlug after error:',
-            {
-              error: dbError.message,
-              eventId: originalValues.id,
-            },
-          );
-        }
-      }
 
       // Enhance error message for debugging
       const enhancedError = new Error(
@@ -793,7 +458,7 @@ export class BlueskyService {
 
   async listEvents(did: string, tenantId: string): Promise<any[]> {
     try {
-      const agent = await this.tryResumeSession(tenantId, did);
+      const agent = await this.resumeSession(tenantId, did);
 
       const response = await agent.com.atproto.repo.listRecords({
         repo: did,
@@ -809,9 +474,9 @@ export class BlueskyService {
     }
   }
 
-  async resumeSession(tenantId: string, did: string): Promise<Agent> {
+  async tryResumeSession(tenantId: string, did: string): Promise<Agent> {
     try {
-      return await this.tryResumeSession(tenantId, did);
+      return await this.resumeSession(tenantId, did);
     } catch (error) {
       // Log the error but with a cleaner message
       this.logger.error(`Failed to resume Bluesky session for DID ${did}:`, {
@@ -837,7 +502,7 @@ export class BlueskyService {
       throw new Error('No Bluesky record key found in event sourceData');
     }
 
-    const agent = await this.tryResumeSession(tenantId, did);
+    const agent = await this.resumeSession(tenantId, did);
     const response = await agent.com.atproto.repo.deleteRecord({
       repo: did,
       collection: 'community.lexicon.calendar.event',
@@ -1087,8 +752,7 @@ export class BlueskyService {
       };
 
       try {
-        // Always use public profile lookup as the primary approach
-        // This respects ATProtocol's decentralized nature
+        // Use public profile lookup as the primary approach
         const publicProfile = await this.getPublicProfile(identifier);
 
         // Merge the public profile data with our stored information

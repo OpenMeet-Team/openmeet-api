@@ -208,6 +208,6 @@ export class AuthBlueskyService {
   }
 
   async resumeSession(tenantId: string, did: string) {
-    return await this.blueskyService.resumeSession(tenantId, did);
+    return await this.blueskyService.tryResumeSession(tenantId, did);
   }
 }

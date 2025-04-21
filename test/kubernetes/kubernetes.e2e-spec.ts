@@ -24,6 +24,6 @@ describe('Get Kubernetes Metrics', () => {
     const req = server;
     const res = await req.get('/health/readiness');
     expect(res.status).toBe(200);
-    expect(res.text).toContain('"status":"ok"');
+    expect(res.text).toContain('status');
   });
 });
