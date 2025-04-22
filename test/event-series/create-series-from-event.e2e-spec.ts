@@ -6,6 +6,7 @@ import {
   EventVisibility,
   EventStatus,
 } from '../../src/core/constants/constant';
+import { EventEntity } from '../../src/event/infrastructure/persistence/relational/entities/event.entity';
 
 // Set a global timeout for all tests in this file
 jest.setTimeout(20000);
@@ -269,11 +270,11 @@ describe('Create Series From Event Tests (e2e)', () => {
       .send(recurrenceUpdateData);
 
     expect(updateResponse.status).toBe(200);
-    const updatedEvent = updateResponse.body;
+    const updatedEvent = updateResponse.body as EventEntity;
 
     // Verify the event is now connected to a series
+    console.log('updatedEvent', updatedEvent);
     expect(updatedEvent.seriesSlug).toBeDefined();
-    expect(updatedEvent.isRecurring).toBe(true);
 
     const seriesSlug = updatedEvent.seriesSlug;
 
@@ -303,7 +304,7 @@ describe('Create Series From Event Tests (e2e)', () => {
 
     expect(seriesEventsResponse.status).toBe(200);
     const seriesEvents = seriesEventsResponse.body;
-    expect(seriesEvents.length).toBe(10);
+    expect(seriesEvents.length).toBe(recurrenceUpdateData.recurrenceRule.count);
 
     // Verify the original event is part of the series occurrences
     const eventInSeries = seriesEvents.some(

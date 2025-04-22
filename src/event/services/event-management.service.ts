@@ -106,7 +106,6 @@ export class EventManagementService {
     }
 
     // Handle series lookup if seriesSlug is provided
-    let seriesId: number | undefined;
     if (originalSeriesSlug) {
       const series =
         await this.eventSeriesService.findBySlug(originalSeriesSlug);
@@ -115,8 +114,7 @@ export class EventManagementService {
           `Event series with slug ${originalSeriesSlug} not found`,
         );
       }
-      seriesId = series.id;
-      this.logger.debug(`Found series with ID: ${seriesId}`);
+      this.logger.debug(`Found series with ID: ${series.id}`);
     }
 
     // Handle categories
@@ -167,8 +165,9 @@ export class EventManagementService {
         : null,
       image: createEventDto.image,
       categories,
-      seriesId,
-      seriesSlug: originalSeriesSlug,
+      series: originalSeriesSlug
+        ? ({ slug: originalSeriesSlug } as EventSeriesEntity)
+        : undefined,
 
       // Recurrence fields
       isRecurring: !!createEventDto.recurrenceRule,
@@ -373,6 +372,7 @@ export class EventManagementService {
         // First apply any other updates to the event
         const basicUpdates = { ...updateEventDto };
         delete basicUpdates.recurrenceRule; // Remove recurrenceRule to handle it separately
+        delete basicUpdates.timeZone; // Remove timeZone as it doesn't exist in EventEntity
 
         if (Object.keys(basicUpdates).length > 0) {
           this.logger.debug(
@@ -380,8 +380,9 @@ export class EventManagementService {
             { basicUpdates },
           );
 
-          // Update basic event properties first
-          await this.update(slug, basicUpdates, userId);
+          // Update basic event properties directly without recursive call to update
+          await this.eventRepository.update({ slug }, basicUpdates as any);
+
           // Reload the event with the updated properties
           const updatedEvent = await this.eventRepository.findOne({
             where: { slug },
@@ -460,14 +461,6 @@ export class EventManagementService {
       }
     }
 
-    // Store the original seriesSlug for preservation and verification
-    const originalSeriesSlug = event.seriesSlug;
-    if (originalSeriesSlug) {
-      this.logger.debug(
-        `Original seriesSlug before update: ${originalSeriesSlug}`,
-      );
-    }
-
     // Update basic event information
     const updatedEventData: Partial<EventEntity> = {
       name: updateEventDto.name,
@@ -509,9 +502,6 @@ export class EventManagementService {
     }
 
     // Handle series association changes
-    let seriesId: number | undefined;
-
-    // Only update seriesSlug if explicitly provided in the update DTO
     if (updateEventDto.seriesSlug !== undefined) {
       // If the seriesSlug is being changed or set
       if (updateEventDto.seriesSlug) {
@@ -523,25 +513,20 @@ export class EventManagementService {
             `Event series with slug ${updateEventDto.seriesSlug} not found`,
           );
         }
-        seriesId = series.id;
-        updatedEventData.seriesSlug = updateEventDto.seriesSlug;
-        updatedEventData.series = { id: seriesId } as any;
+        // Set the series relationship, not the individual fields
+        updatedEventData.series = series;
 
         this.logger.debug(
-          `Explicitly updating seriesSlug to: ${updateEventDto.seriesSlug}`,
+          `Explicitly updating series relationship to: ${updateEventDto.seriesSlug}`,
         );
       } else {
-        // If seriesSlug is being explicitly cleared
-        updatedEventData.seriesSlug = undefined;
-        updatedEventData.series = undefined;
-        this.logger.debug(`Explicitly clearing seriesSlug`);
+        // If series is being explicitly cleared
+        // For consistency with our approach elsewhere, use null instead of undefined
+        // Use type assertion to handle TypeScript constraints
+        (updatedEventData as any).series = null;
+        // Don't set seriesSlug directly, let TypeORM handle it through the relation
+        this.logger.debug(`Explicitly clearing series relationship`);
       }
-    } else if (originalSeriesSlug) {
-      // If seriesSlug is not being updated but the event has one, explicitly preserve it
-      this.logger.debug(
-        `Preserving existing seriesSlug: ${originalSeriesSlug} (not modified in update)`,
-      );
-      updatedEventData.seriesSlug = originalSeriesSlug;
     }
 
     // Update categories if provided
@@ -553,16 +538,6 @@ export class EventManagementService {
       } catch (error) {
         throw new Error(`Error finding categories: ${error.message}`);
       }
-    }
-
-    // Update recurrence flags if needed
-    if (updatedEventData.seriesSlug) {
-      // Set isRecurring flag when we have a seriesSlug
-      updatedEventData.isRecurring = true;
-    } else if (updateEventDto.isRecurring === false) {
-      // Explicitly clear seriesSlug if isRecurring is set to false
-      updatedEventData.seriesSlug = undefined;
-      updatedEventData.series = undefined;
     }
 
     // Log the updated event data
@@ -585,17 +560,6 @@ export class EventManagementService {
       updatedEvent.createdAt === event.createdAt,
       'CreatedAt should be the same',
     );
-
-    // Verify seriesSlug preservation after saving but do not attempt to restore it
-    if (
-      originalSeriesSlug &&
-      updateEventDto.seriesSlug === undefined &&
-      updatedEvent.seriesSlug !== originalSeriesSlug
-    ) {
-      this.logger.warn(
-        `[SERIES_SLUG_LOST] During update. Expected to preserve: ${originalSeriesSlug}, Got: ${updatedEvent.seriesSlug || 'null'}`,
-      );
-    }
 
     // If it's a Bluesky event, update it there too
     if (event.sourceType === EventSourceType.BLUESKY && event.sourceId) {

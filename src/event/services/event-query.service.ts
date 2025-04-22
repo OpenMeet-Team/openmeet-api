@@ -157,7 +157,7 @@ export class EventQueryService {
     await this.initializeRepository();
     const event = await this.eventRepository.findOne({
       where: { slug },
-      relations: ['user', 'group', 'categories'],
+      relations: ['user', 'group', 'categories', 'series'],
       select: {
         id: false,
         user: {

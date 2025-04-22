@@ -386,7 +386,7 @@ export class EventSeriesService {
           transactionalEntityManager.getRepository(EventSeriesEntity);
 
         // Verify the template event exists within the transaction
-        const eventInTransaction = await eventRepo.findOne({
+        let eventInTransaction = await eventRepo.findOne({
           where: { slug: templateEventSlug },
           relations: ['image', 'group'],
         });
@@ -396,6 +396,38 @@ export class EventSeriesService {
             `Template event with slug ${templateEventSlug} not found in transaction`,
           );
         }
+
+        // If for any reason the series slug is already set on the event and it doesn't match the one we
+        // are about to create, log a warning
+        if (
+          eventInTransaction.seriesSlug &&
+          eventInTransaction.seriesSlug !== seriesSlug
+        ) {
+          this.logger.warn(
+            `Event ${eventInTransaction.slug} already has a series slug ${
+              eventInTransaction.seriesSlug
+            } that is different from the one being created ${seriesSlug}.`,
+          );
+        }
+
+        // Promote the entity to a Series Template instance on the transactional manager
+        eventInTransaction = await eventRepo.findOne({
+          where: { slug: templateEventSlug },
+        });
+
+        // Make sure we still have the event after re-fetching
+        if (!eventInTransaction) {
+          throw new NotFoundException(
+            `Template event with slug ${templateEventSlug} not found after re-fetching`,
+          );
+        }
+
+        // Store the original slug for later reference (so we can find it again)
+        // eventInTransaction.templateEventSlug = templateEventSlug;
+
+        // Set seriesSlug directly to establish the relationship
+        // (isRecurring is computed automatically from this)
+        eventInTransaction.seriesSlug = seriesSlug;
 
         // Create a complete entity including the user relation
         const eventSeriesData = {
@@ -421,7 +453,7 @@ export class EventSeriesService {
           sourceData: seriesOptions.sourceData || templateEvent.sourceData,
           matrixRoomId: seriesOptions.matrixRoomId,
           templateEventSlug: templateEventSlug,
-          timeZone: timeZone || (templateEvent as any).timeZone || 'UTC',
+          timeZone: timeZone || 'UTC',
         };
 
         // Create and save the entity
@@ -477,7 +509,6 @@ export class EventSeriesService {
 
         // Set the series association properties
         eventInTransaction.seriesSlug = refreshedSeries.slug;
-        eventInTransaction.isRecurring = true; // Explicitly set isRecurring flag
 
         // Log the update operation for debugging
         this.logger.debug(
@@ -487,7 +518,6 @@ export class EventSeriesService {
               id: eventInTransaction.id,
               slug: eventInTransaction.slug,
               seriesSlug: eventInTransaction.seriesSlug,
-              isRecurring: eventInTransaction.isRecurring,
             },
           },
         );
@@ -513,7 +543,6 @@ export class EventSeriesService {
                 id: updatedEvent.id,
                 slug: updatedEvent.slug,
                 seriesSlug: updatedEvent.seriesSlug,
-                isRecurring: updatedEvent.isRecurring,
               },
             },
           );
@@ -571,6 +600,7 @@ export class EventSeriesService {
       templateEventAfterSeries,
     });
 
+    // Simple verification without retries or fallback mechanisms
     if (!templateEventAfterSeries) {
       this.logger.error(
         `[SERIES_SLUG_LOST] Could not find template event ${templateEventSlug} after series creation`,
@@ -579,84 +609,10 @@ export class EventSeriesService {
       this.logger.error(
         `[SERIES_SLUG_LOST] SeriesSlug mismatch after transaction! Expected: ${series.slug}, Got: ${templateEventAfterSeries.seriesSlug || 'null'}`,
       );
-
-      // Apply a fix after the transaction if needed
-      try {
-        this.logger.debug(
-          `Attempting post-transaction fix for event ${templateEventSlug} with series ${series.slug}`,
-        );
-
-        // Initialize repository if needed
-        await this.initializeRepository(tenantId);
-
-        // Get a direct connection to run the update
-        const dataSource =
-          await this.tenantConnectionService.getTenantConnection(
-            tenantId || this.request?.tenantId,
-          );
-
-        // Update the event directly
-        await dataSource
-          .createQueryBuilder()
-          .update(EventEntity)
-          .set({ seriesSlug: series.slug })
-          .where('id = :id', { id: templateEventAfterSeries.id })
-          .execute();
-
-        this.logger.debug(
-          `Applied post-transaction fix for event ${templateEventSlug} with series ${series.slug}`,
-        );
-
-        // Verify the fix worked
-        const verifiedEvent =
-          await this.eventQueryService.findEventBySlug(templateEventSlug);
-        if (verifiedEvent?.seriesSlug === series.slug) {
-          this.logger.debug(
-            `[POST-TRANSACTION VERIFICATION SUCCESS] Successfully fixed association for event ${templateEventSlug} with series ${series.slug}`,
-          );
-        } else {
-          this.logger.error(
-            `[POST-TRANSACTION VERIFICATION FAILED] Unable to fix association for event ${templateEventSlug} with series ${series.slug}`,
-          );
-        }
-      } catch (fixError) {
-        this.logger.error(
-          `Error applying post-transaction fix: ${fixError.message}`,
-          fixError.stack,
-        );
-      }
+      // This is considered a bug that needs to be fixed in the code, not via a retry mechanism
     } else {
       this.logger.debug(
         `SeriesSlug correctly set on template event after transaction: ${templateEventAfterSeries.seriesSlug}`,
-      );
-    }
-
-    // Additional verification to check if findEventsBySeriesSlug can find the event
-    this.logger.debug(
-      `[POST-TRANSACTION] Performing additional verification to ensure event ${templateEventSlug} is properly associated with series ${series.slug}`,
-    );
-
-    try {
-      const [eventsInSeries] =
-        await this.eventQueryService.findEventsBySeriesSlug(series.slug);
-
-      const eventFound = eventsInSeries.some(
-        (e) => e.slug === templateEventSlug,
-      );
-
-      if (!eventFound) {
-        this.logger.warn(
-          `[POST-TRANSACTION VERIFICATION FAILED] Event ${templateEventSlug} was not found in series query results after transaction.`,
-        );
-      } else {
-        this.logger.debug(
-          `[POST-TRANSACTION VERIFICATION SUCCESS] Event ${templateEventSlug} is properly associated with series ${series.slug}`,
-        );
-      }
-    } catch (verifyError) {
-      this.logger.error(
-        `Error in post-transaction verification: ${verifyError.message}`,
-        verifyError.stack,
       );
     }
 

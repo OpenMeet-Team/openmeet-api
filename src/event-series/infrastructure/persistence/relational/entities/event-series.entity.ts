@@ -81,7 +81,7 @@ export class EventSeriesEntity
   group?: GroupEntity | null;
 
   @OneToMany(() => EventEntity, (event) => event.series, {
-    cascade: ['update'],
+    cascade: true,
   })
   events: EventEntity[];
 

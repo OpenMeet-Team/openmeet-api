@@ -13,7 +13,7 @@ import {
   EventType,
   GroupStatus,
 } from '../../src/core/constants/constant';
-
+import { EventEntity } from '../../src/event/infrastructure/persistence/relational/entities/event.entity';
 async function getAuthToken(
   app: string,
   email: string,
@@ -200,8 +200,8 @@ async function updateEvent(app, token, eventSlug, eventData) {
     expect(eventData.name).toBe(response.body.name);
   }
 
-  console.log('Update event response:', JSON.stringify(response.body, null, 2));
-  return response.body;
+  // console.log('Update event response:', JSON.stringify(response.body, null, 2));
+  return response.body as EventEntity;
 }
 
 async function getAllEvents(app, token) {

@@ -136,11 +136,7 @@ export class EventController {
       throw new NotFoundException(`Event with slug ${slug} not found`);
     }
 
-    // Ensure isRecurring is set if the event is part of a series
-    if (event.seriesSlug && !event.isRecurring) {
-      (event as any).isRecurring = true;
-    }
-
+    // isRecurring is now a computed property based on seriesSlug
     return event;
   }
 
@@ -175,18 +171,9 @@ export class EventController {
         id: updatedEvent.id,
         slug: updatedEvent.slug,
         seriesSlug: updatedEvent.seriesSlug,
-        isRecurring: updatedEvent.isRecurring,
+        series: updatedEvent.series,
       })}`,
     );
-
-    // Check if this is a conversion to recurring event
-    if (updateEventDto.recurrenceRule && !updateEventDto.isRecurring) {
-      // Force setting isRecurring flag on the response if we have a seriesSlug
-      if (updatedEvent.seriesSlug) {
-        (updatedEvent as any).isRecurring = true;
-        this.logger.debug(`Forced isRecurring=true on response`);
-      }
-    }
 
     return updatedEvent;
   }

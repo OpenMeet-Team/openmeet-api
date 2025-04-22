@@ -292,7 +292,12 @@ export class BlueskyService {
     tenantId: string,
   ): Promise<{ rkey: string }> {
     this.logger.debug('Creating Bluesky event record:', {
-      eventName: event.name,
+      event: {
+        name: event.name,
+        startDate: event.startDate,
+        endDate: event.endDate,
+        series: event.series ? event.series.slug : null,
+      },
       did,
       handle,
       tenantId,
@@ -406,10 +411,10 @@ export class BlueskyService {
           };
 
           // Add openmeet-specific metadata in record
-          if (event.seriesSlug) {
+          if (event.series) {
             // Add series information to help with discovery
             recordData.openMeetMeta = {
-              seriesSlug: event.seriesSlug,
+              seriesSlug: event.series.slug,
               isRecurring: true,
             };
           }

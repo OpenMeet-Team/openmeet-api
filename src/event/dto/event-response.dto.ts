@@ -218,7 +218,8 @@ export class EventResponseDto {
       this.recurrenceUntil = partial.recurrenceUntil;
       this.recurrenceCount = partial.recurrenceCount;
 
-      // Explicitly calculate isRecurring based on seriesSlug or provided value
+      // isRecurring is now properly computed in the entity based on seriesSlug
+      // Let's ensure it's consistent here too
       this.isRecurring = partial.seriesSlug ? true : !!partial.isRecurring;
 
       this.parentEventId = partial.parentEventId;

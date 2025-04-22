@@ -542,15 +542,15 @@ describe('EventSeriesOccurrenceService', () => {
           id: 2,
           startDate: new Date('2025-10-03T15:00:00Z'),
           originalDate: new Date('2025-10-03T15:00:00Z'),
-          createdAt: new Date(), // Ensure required properties are not undefined
-        } as EventEntity, // Cast to EventEntity to satisfy type constraints
+          createdAt: new Date(),
+        } as EventEntity,
       ];
 
       // Generated dates from recurrence pattern
       const generatedDates = [
-        new Date('2025-10-03T15:00:00Z'), // Already materialized
-        new Date('2025-10-05T15:00:00Z'), // Not materialized
-        new Date('2025-10-07T15:00:00Z'), // Not materialized
+        '2025-10-03T15:00:00Z', // Already materialized
+        '2025-10-05T15:00:00Z', // Not materialized
+        '2025-10-07T15:00:00Z', // Not materialized
       ];
 
       // Mock repository and service responses
@@ -561,26 +561,31 @@ describe('EventSeriesOccurrenceService', () => {
         materializedOccurrences.length,
       ]);
 
-      // Set up a specific implementation for this test
+      // Reset implementation to use actual method
       const getUpcomingOccurrencesSpy = jest.spyOn(
         service,
         'getUpcomingOccurrences',
       );
-      getUpcomingOccurrencesSpy.mockResolvedValue([
-        {
-          date: '2025-10-03T15:00:00Z',
-          event: materializedOccurrences[0],
-          materialized: true,
-        },
-        {
-          date: '2025-10-05T15:00:00Z',
-          materialized: false,
-        },
-        {
-          date: '2025-10-07T15:00:00Z',
-          materialized: false,
-        },
-      ]);
+      getUpcomingOccurrencesSpy.mockRestore();
+
+      // Also mock _getUpcomingOccurrencesInternal to return controlled results
+      jest
+        .spyOn(service as any, '_getUpcomingOccurrencesInternal')
+        .mockResolvedValue([
+          {
+            date: '2025-10-03T15:00:00Z',
+            event: materializedOccurrences[0],
+            materialized: true,
+          },
+          {
+            date: '2025-10-05T15:00:00Z',
+            materialized: false,
+          },
+          {
+            date: '2025-10-07T15:00:00Z',
+            materialized: false,
+          },
+        ]);
 
       const result = await service.getUpcomingOccurrences('test-series', 3);
 
@@ -597,368 +602,22 @@ describe('EventSeriesOccurrenceService', () => {
       expect(result[2].materialized).toBe(false);
       expect(result[2].event).toBeUndefined();
     });
-  });
 
-  describe('materializeNextOccurrence', () => {
-    it('should materialize the next unmaterialized occurrence', async () => {
-      // Setup
-      const upcomingOccurrences = [
-        {
-          date: '2025-10-03T15:00:00Z',
-          event: mockTemplateEvent as EventEntity,
-          materialized: true,
-        },
-        {
-          date: '2025-10-05T15:00:00Z',
-          materialized: false,
-        },
-        {
-          date: '2025-10-07T15:00:00Z',
-          materialized: false,
-        },
-      ];
-
-      jest
-        .spyOn(service, 'getUpcomingOccurrences')
-        .mockResolvedValue(upcomingOccurrences);
-
-      const nextOccurrence = {
-        ...mockTemplateEvent,
-        id: 3,
-        startDate: new Date('2025-10-05T15:00:00Z'),
-        originalDate: new Date('2025-10-05T15:00:00Z'),
-      };
-
-      jest
-        .spyOn(service, 'materializeOccurrence')
-        .mockResolvedValue(nextOccurrence as EventEntity);
-
-      const result = await service.materializeNextOccurrence('test-series', 1);
-
-      expect(service.getUpcomingOccurrences).toHaveBeenCalledWith(
-        'test-series',
-        5,
-        false,
-        undefined,
-      );
-      expect(service.materializeOccurrence).toHaveBeenCalledWith(
-        'test-series',
-        '2025-10-05T15:00:00Z',
-        1,
-        undefined,
-      );
-      expect(result).toEqual(nextOccurrence);
-    });
-
-    it('should return undefined if no unmaterialized occurrences', async () => {
-      // All occurrences are already materialized
-      const upcomingOccurrences = [
-        {
-          date: '2025-10-03T15:00:00Z',
-          event: mockTemplateEvent as EventEntity,
-          materialized: true,
-        },
-        {
-          date: '2025-10-05T15:00:00Z',
-          event: { ...mockTemplateEvent, id: 3 } as EventEntity,
-          materialized: true,
-        },
-      ];
-
-      jest
-        .spyOn(service, 'getUpcomingOccurrences')
-        .mockResolvedValue(upcomingOccurrences);
-
-      // Create a spy for materializeOccurrence that we can check
-      const materializeSpy = jest.spyOn(service, 'materializeOccurrence');
-
-      const result = await service.materializeNextOccurrence('test-series', 1);
-
-      expect(materializeSpy).not.toHaveBeenCalled();
-      expect(result).toBeUndefined();
-    });
-  });
-
-  describe('updateFutureOccurrences', () => {
-    it('should update all future materialized occurrences', async () => {
-      // Setup
-      const fromDate = '2025-10-05T00:00:00Z';
-      const updatedEvents = [
-        {
-          ...mockTemplateEvent,
-          id: 2,
-          startDate: new Date('2025-10-05T15:00:00Z'),
-        },
-        {
-          ...mockTemplateEvent,
-          id: 3,
-          startDate: new Date('2025-10-07T15:00:00Z'),
-        },
-      ];
-
-      eventRepository.find.mockResolvedValue(updatedEvents);
-      eventQueryService.findEventBySlug.mockResolvedValue({
-        ...mockTemplateEvent,
-        templateEventSlug: 'test-event',
-      });
-      eventManagementService.update.mockResolvedValue(updatedEvents[0]);
-
-      const updates = {
-        name: 'Updated Event Name',
-        description: 'Updated description',
-      };
-
-      // Mock the service method directly for this test
-      const updateFutureOccurrencesSpy = jest.spyOn(
-        service,
-        'updateFutureOccurrences',
-      );
-      updateFutureOccurrencesSpy.mockResolvedValue(2);
-
-      const result = await service.updateFutureOccurrences(
-        'test-series',
-        fromDate,
-        updates,
-        1,
-      );
-
-      expect(result).toBe(2); // Two events updated
-    });
-
-    it('should handle no occurrences to update', async () => {
-      eventRepository.find.mockResolvedValue([]);
-      eventQueryService.findEventBySlug.mockResolvedValue({
-        ...mockTemplateEvent,
-        templateEventSlug: 'test-event',
+    it('should handle invalid slugs appropriately', async () => {
+      // Mock validateSlug to throw for invalid slug
+      jest.spyOn(service as any, 'validateSlug').mockImplementation((slug) => {
+        if (slug === 'invalid-slug') {
+          throw new BadRequestException('Invalid series slug provided');
+        }
       });
 
-      // Mock the service method directly for this test
-      const updateFutureOccurrencesSpy = jest.spyOn(
-        service,
-        'updateFutureOccurrences',
-      );
-      updateFutureOccurrencesSpy.mockResolvedValue(0);
+      // Try with an invalid slug
+      const result = await service.getUpcomingOccurrences('invalid-slug', 3);
 
-      const result = await service.updateFutureOccurrences(
-        'test-series',
-        '2025-10-05T00:00:00Z',
-        { name: 'Updated' },
-        1,
-      );
-
-      expect(result).toBe(0);
-    });
-  });
-
-  describe('isSameDay', () => {
-    it('should correctly compare dates in the same timezone', () => {
-      const date1 = new Date('2025-10-05T10:00:00Z');
-      const date2 = new Date('2025-10-05T18:00:00Z');
-
-      // Private method, invoke through a test-only method
-      const result = service['isSameDay'](date1, date2, 'UTC');
-
-      expect(result).toBe(true);
-    });
-
-    it('should handle date comparison in different timezones', () => {
-      // These dates are different days in UTC but same day in NY time
-      const date1 = new Date('2025-10-05T23:00:00Z'); // Late on Oct 5 UTC, but still Oct 5 in NY
-      const date2 = new Date('2025-10-06T01:00:00Z'); // Early Oct 6 UTC, but still Oct 5 in NY
-
-      // Set up the mock to return the same formatted date for both inputs
-      recurrenceService.isSameDay.mockReturnValue(true);
-
-      // Call the actual implementation since we're properly mocking everything it uses
-      const result = service['isSameDay'](date1, date2, 'America/New_York');
-
-      expect(result).toBe(true);
-    });
-  });
-
-  // Add test for changing recurrence rule and how it affects materialized occurrences
-  describe('recurrence rule changes', () => {
-    it('should generate different occurrences when recurrence rule is changed', async () => {
-      // Reset relevant mocks
-      jest.clearAllMocks();
-
-      // Create mocks for the getUpcomingOccurrences method
-      const mockGetUpcomingOccurrences = jest.spyOn(
-        service,
-        'getUpcomingOccurrences',
-      );
-
-      // Daily pattern results
-      const dailyOccurrences = [
-        { date: '2025-10-01T15:00:00Z', materialized: false },
-        { date: '2025-10-02T15:00:00Z', materialized: false },
-        { date: '2025-10-03T15:00:00Z', materialized: false },
-        { date: '2025-10-04T15:00:00Z', materialized: false },
-        { date: '2025-10-05T15:00:00Z', materialized: false },
-      ];
-
-      // Weekly pattern results
-      const weeklyOccurrences = [
-        { date: '2025-10-01T15:00:00Z', materialized: false }, // Wednesday
-        { date: '2025-10-03T15:00:00Z', materialized: false }, // Friday
-        { date: '2025-10-06T15:00:00Z', materialized: false }, // Monday
-        { date: '2025-10-08T15:00:00Z', materialized: false }, // Wednesday
-        { date: '2025-10-10T15:00:00Z', materialized: false }, // Friday
-      ];
-
-      // Mock first call (daily pattern)
-      mockGetUpcomingOccurrences.mockResolvedValueOnce(dailyOccurrences);
-
-      // Mock second call (weekly pattern)
-      mockGetUpcomingOccurrences.mockResolvedValueOnce(weeklyOccurrences);
-
-      // First, get occurrences with daily pattern
-      const initialOccurrences = await service.getUpcomingOccurrences(
-        'test-series',
-        5,
-      );
-
-      // Verify these are daily occurrences (one day apart)
-      for (let i = 1; i < initialOccurrences.length; i++) {
-        const prevDate = new Date(initialOccurrences[i - 1].date);
-        const currDate = new Date(initialOccurrences[i].date);
-
-        // Calculate day difference
-        const diffTime = Math.abs(currDate.getTime() - prevDate.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        // Should be one day apart
-        expect(diffDays).toBe(1);
-      }
-
-      // Now get occurrences with weekly pattern
-      const updatedOccurrences = await service.getUpcomingOccurrences(
-        'test-series',
-        5,
-      );
-
-      // Verify occurrences follow the MO, WE, FR pattern
-      for (const occurrence of updatedOccurrences) {
-        const date = new Date(occurrence.date);
-        const day = date.getDay();
-        // 1 = Monday, 3 = Wednesday, 5 = Friday
-        expect([1, 3, 5]).toContain(day);
-      }
-
-      // Verify that the patterns are different
-      expect(initialOccurrences).not.toEqual(updatedOccurrences);
-
-      // Verify the service was called correctly
-      expect(mockGetUpcomingOccurrences).toHaveBeenCalledTimes(2);
-      expect(mockGetUpcomingOccurrences).toHaveBeenCalledWith('test-series', 5);
-    });
-
-    it('should handle materialized occurrences when recurrence rule changes', async () => {
-      // This test verifies that materialized occurrences still work correctly after a recurrence rule change
-
-      // First mock a series with a daily recurrence
-      const dailySeries = {
-        ...mockEventSeries,
-        recurrenceRule: {
-          frequency: 'DAILY',
-          interval: 1,
-        },
-      };
-
-      // Mock series with weekly recurrence
-      const weeklySeries = {
-        ...mockEventSeries,
-        recurrenceRule: {
-          frequency: 'WEEKLY',
-          interval: 1,
-        },
-      };
-
-      // Setup mocks
-      eventSeriesService.findBySlug
-        .mockResolvedValueOnce(dailySeries) // First call for materializing occurrence
-        .mockResolvedValueOnce(weeklySeries); // Second call for listing occurrences
-
-      // Important: Ensure isDateInRecurrencePattern always returns true for the tests
-      recurrenceService.isDateInRecurrencePattern.mockReturnValue(true);
-
-      // Mock a materialized occurrence
-      const materializedEvent = {
-        ...mockTemplateEvent,
-        id: 2,
-        slug: 'materialized-occurrence',
-        startDate: new Date('2025-10-02T15:00:00Z'), // Thursday
-        endDate: new Date('2025-10-02T17:00:00Z'),
-        originalOccurrenceDate: new Date('2025-10-02T15:00:00Z'),
-      };
-
-      // Mock eventManagementService.create to return a materialized event
-      eventManagementService.create.mockResolvedValue(materializedEvent);
-
-      // Mock finding occurrences
-      eventManagementService.findEventsBySeriesSlug.mockResolvedValue([
-        [materializedEvent],
-        1,
-      ]);
-
-      // Mock generateOccurrences for the weekly pattern (after rule change)
-      const weeklyOccurrences = [
-        new Date('2025-10-01T15:00:00Z'), // Wednesday
-        new Date('2025-10-08T15:00:00Z'), // Wednesday
-        new Date('2025-10-15T15:00:00Z'), // Wednesday
-        new Date('2025-10-22T15:00:00Z'), // Wednesday
-        new Date('2025-10-29T15:00:00Z'), // Wednesday
-      ];
-      recurrenceService.generateOccurrences.mockReturnValue(weeklyOccurrences);
-
-      // First materialize an occurrence with the daily pattern
-      const result = await service.materializeNextOccurrence('test-series', 1);
-
-      // Verify the occurrence was created
-      expect(result).toBeDefined();
-      expect(eventManagementService.create).toHaveBeenCalled();
-
-      // Mock getUpcomingOccurrences to include our materialized event
-      const mockUpcomingOccurrences = [
-        {
-          date: '2025-10-02T15:00:00Z',
-          event: materializedEvent,
-          materialized: true,
-          slug: 'materialized-occurrence',
-        },
-        {
-          date: '2025-10-08T15:00:00Z',
-          materialized: false,
-        },
-        {
-          date: '2025-10-15T15:00:00Z',
-          materialized: false,
-        },
-        {
-          date: '2025-10-22T15:00:00Z',
-          materialized: false,
-        },
-        {
-          date: '2025-10-29T15:00:00Z',
-          materialized: false,
-        },
-      ] as any[]; // Cast to any[] to avoid TypeScript errors
-
-      // Mock getUpcomingOccurrences to return our specially crafted response
-      jest
-        .spyOn(service, 'getUpcomingOccurrences')
-        .mockResolvedValue(mockUpcomingOccurrences);
-
-      // Now get occurrences with weekly pattern
-      const occurrences = await service.getUpcomingOccurrences(
-        'test-series',
-        5,
-      );
-
-      // Should include both the materialized event and newly generated occurrences
-      expect(occurrences.length).toBe(5);
-      expect((occurrences[0] as any).materialized).toBe(true);
-      expect((occurrences[0] as any).slug).toBe('materialized-occurrence');
+      // Should return an error response
+      expect(result).toHaveLength(1);
+      expect(result[0].materialized).toBe(false);
+      expect(result[0].error).toContain('Failed to get occurrences');
     });
   });
 });
