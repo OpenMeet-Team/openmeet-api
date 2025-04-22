@@ -13,7 +13,7 @@ import {
   EventType,
   GroupStatus,
 } from '../../src/core/constants/constant';
-
+import { EventEntity } from '../../src/event/infrastructure/persistence/relational/entities/event.entity';
 async function getAuthToken(
   app: string,
   email: string,
@@ -180,9 +180,9 @@ async function getRecommendedEvents(
   return response.body;
 }
 
-async function updateEvent(app, token, eventId, eventData) {
+async function updateEvent(app, token, eventSlug, eventData) {
   const response = await request(app)
-    .patch(`/api/events/${eventId}`)
+    .patch(`/api/events/${eventSlug}`)
     .set('Authorization', `Bearer ${token}`)
     .set('x-tenant-id', TESTING_TENANT_ID)
     .send(eventData);
@@ -195,7 +195,13 @@ async function updateEvent(app, token, eventId, eventData) {
   }
 
   expect(response.status).toBe(200);
-  return response.body;
+  expect(eventSlug).toBe(response.body.slug);
+  if (eventData.name) {
+    expect(eventData.name).toBe(response.body.name);
+  }
+
+  // console.log('Update event response:', JSON.stringify(response.body, null, 2));
+  return response.body as EventEntity;
 }
 
 async function getAllEvents(app, token) {

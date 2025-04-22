@@ -8,6 +8,8 @@ import { EventQueryService } from '../event/services/event-query.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { EventType, EventStatus } from '../core/constants/constant';
+import { TenantConnectionService } from '../tenant/tenant.service';
+import { REQUEST } from '@nestjs/core';
 
 // Mock modules first before creating mock implementations
 jest.mock('@atproto/api', () => ({
@@ -50,6 +52,14 @@ const mockEventQueryService = {
 
 const mockConfigService = {
   get: jest.fn(),
+};
+
+const mockTenantConnectionService = {
+  getTenantConnection: jest.fn().mockResolvedValue({}),
+};
+
+const mockRequest = {
+  tenantId: 'test-tenant',
 };
 
 // Mock Agent implementation to return in tests
@@ -106,6 +116,11 @@ describe('BlueskyService', () => {
           useValue: mockEventManagementService,
         },
         { provide: EventQueryService, useValue: mockEventQueryService },
+        {
+          provide: TenantConnectionService,
+          useValue: mockTenantConnectionService,
+        },
+        { provide: REQUEST, useValue: mockRequest },
       ],
     }).compile();
 
@@ -236,23 +251,26 @@ describe('BlueskyService', () => {
     describe('resumeSession', () => {
       it('should return an agent when successful', async () => {
         // Act
-        const result = await service.resumeSession('test-tenant', 'test-did');
+        const result = await service.tryResumeSession(
+          'test-tenant',
+          'test-did',
+        );
 
         // Assert
         expect(result).toBeDefined();
       });
 
       it('should handle session errors gracefully', async () => {
-        // Arrange - mock tryResumeSession to throw an error
+        // Arrange - mock resumeSession to throw an error
         jest
-          .spyOn(service as any, 'tryResumeSession')
+          .spyOn(service as any, 'resumeSession')
           .mockImplementationOnce(() => {
             throw new Error('Some session error');
           });
 
         // Act & Assert
         await expect(
-          service.resumeSession('test-tenant', 'test-did'),
+          service.tryResumeSession('test-tenant', 'test-did'),
         ).rejects.toThrow();
       });
     });

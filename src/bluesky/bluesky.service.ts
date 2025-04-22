@@ -11,6 +11,8 @@ import { delay } from '../utils/delay';
 import { BlueskyLocation, BlueskyEventUri } from './BlueskyTypes';
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventQueryService } from '../event/services/event-query.service';
+import { REQUEST } from '@nestjs/core';
+import { TenantConnectionService } from '../tenant/tenant.service';
 
 @Injectable()
 export class BlueskyService {
@@ -27,6 +29,8 @@ export class BlueskyService {
     private readonly eventManagementService: EventManagementService,
     @Inject(forwardRef(() => EventQueryService))
     private readonly eventQueryService: EventQueryService,
+    private readonly tenantConnectionService: TenantConnectionService,
+    @Inject(REQUEST) private readonly request: any,
   ) {}
 
   private async getOAuthClient(tenantId: string): Promise<NodeOAuthClient> {
@@ -37,34 +41,12 @@ export class BlueskyService {
     );
   }
 
-  private async tryResumeSession(
-    tenantId: string,
-    did: string,
-  ): Promise<Agent> {
+  private async resumeSession(tenantId: string, did: string): Promise<Agent> {
     for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
       try {
         const client = await this.getOAuthClient(tenantId);
-        // Try direct restore first without locking
-        try {
-          const directSession = await client.restore(did);
-          if (directSession) {
-            const agent = new Agent(directSession);
-            // Verify the session is valid
-            await agent.getProfile({ actor: did });
-            this.logger.debug(
-              `Successfully restored session for DID ${did} directly`,
-            );
-            return agent;
-          }
-        } catch (directError) {
-          this.logger.debug(
-            `Direct session restore failed: ${directError.message}`,
-          );
-          // Fall through to try with lock
-        }
-
-        // Use a consistent lock key for session operations
         const lockKey = `@atproto-oauth-client-${did}`;
+
         // Wrap the restore operation in a lock
         const session = await this.elasticacheService.withLock(
           lockKey,
@@ -310,99 +292,37 @@ export class BlueskyService {
     tenantId: string,
   ): Promise<{ rkey: string }> {
     this.logger.debug('Creating Bluesky event record:', {
-      eventName: event.name,
+      event: {
+        name: event.name,
+        startDate: event.startDate,
+        endDate: event.endDate,
+        series: event.series ? event.series.slug : null,
+      },
       did,
       handle,
       tenantId,
     });
 
     try {
-      // Try to create the event record directly without a lock first
-      try {
-        const agent = await this.resumeSession(tenantId, did);
-        // Convert event type to Bluesky mode
-        const modeMap = {
-          'in-person': 'community.lexicon.calendar.event#inperson',
-          online: 'community.lexicon.calendar.event#virtual',
-          hybrid: 'community.lexicon.calendar.event#hybrid',
-        };
-
-        // Convert event status to Bluesky status
-        const statusMap = {
-          draft: 'community.lexicon.calendar.event#planned',
-          published: 'community.lexicon.calendar.event#scheduled',
-          cancelled: 'community.lexicon.calendar.event#cancelled',
-        };
-
-        const locations: BlueskyLocation[] = [];
-
-        // Add physical location if exists
-        if (event.location && event.lat && event.lon) {
-          locations.push({
-            type: 'community.lexicon.location.geo',
-            lat: event.lat,
-            lon: event.lon,
-            description: event.location,
-          });
-        }
-
-        // Add online location if exists
-        if (event.locationOnline) {
-          locations.push({
-            type: 'community.lexicon.calendar.event#uri',
-            uri: event.locationOnline,
-            name: 'Online Meeting Link',
-          });
-        }
-
-        // Generate a unique rkey from the event name
-        const baseName = this.generateBaseName(event.name);
-        const rkey = await this.generateUniqueRkey(agent, did, baseName);
-
-        // Prepare uris array with image if it exists
-        const uris: BlueskyEventUri[] = [];
-        if (event.image?.path) {
-          uris.push({
-            uri: event.image.path,
-            name: 'Event Image',
-          });
-        }
-
-        // Add online location to uris if it exists
-        if (event.locationOnline) {
-          uris.push({
-            uri: event.locationOnline,
-            name: 'Online Meeting Link',
-          });
-        }
-
-        const result = await agent.com.atproto.repo.putRecord({
-          repo: did,
-          collection: 'community.lexicon.calendar.event',
-          rkey,
-          record: {
-            $type: 'community.lexicon.calendar.event',
-            name: event.name,
-            description: event.description,
-            createdAt: event.createdAt,
-            startsAt: event.startDate,
-            endsAt: event.endDate,
-            mode: modeMap[event.type] || modeMap['in-person'],
-            status: statusMap[event.status] || statusMap['published'],
-            locations,
-            uris,
-          },
+      // Transform image if needed
+      if (
+        event.image &&
+        typeof event.image.path === 'object' &&
+        Object.keys(event.image.path).length === 0
+      ) {
+        this.logger.debug('Transforming empty image path object', {
+          eventId: event.id,
+          imageBefore: event.image,
         });
-        this.logger.debug(result);
-        this.logger.log(
-          `Event ${event.name} posted to Bluesky for user ${handle} (direct without lock)`,
-        );
-        return { rkey };
-      } catch (directError) {
-        this.logger.warn(
-          `Direct event creation failed: ${directError.message}, trying with lock`,
-        );
-        // Fall through to try with lock
+
+        // Use instanceToPlain to force the Transform decorator to run
+        const { instanceToPlain } = await import('class-transformer');
+        event.image = instanceToPlain(event.image) as any;
+
+        this.logger.debug('Transformed image', {
+          eventId: event.id,
+          imageAfter: event.image,
+        });
       }
 
       // Use a consistent lock key for session operations
@@ -413,6 +333,7 @@ export class BlueskyService {
         lockKey,
         async () => {
           const agent = await this.resumeSession(tenantId, did);
+
           // Convert event type to Bluesky mode
           const modeMap = {
             'in-person': 'community.lexicon.calendar.event#inperson',
@@ -459,6 +380,12 @@ export class BlueskyService {
               uri: event.image.path,
               name: 'Event Image',
             });
+          } else if (event.image) {
+            // Log a warning if we have an image but no path
+            this.logger.warn('Event has image but no path', {
+              eventId: event.id,
+              image: event.image,
+            });
           }
 
           // Add online location to uris if it exists
@@ -469,26 +396,39 @@ export class BlueskyService {
             });
           }
 
+          // Create record data
+          const recordData: any = {
+            $type: 'community.lexicon.calendar.event',
+            name: event.name,
+            description: event.description,
+            createdAt: event.createdAt,
+            startsAt: event.startDate,
+            endsAt: event.endDate,
+            mode: modeMap[event.type] || modeMap['in-person'],
+            status: statusMap[event.status] || statusMap['published'],
+            locations,
+            uris,
+          };
+
+          // Add openmeet-specific metadata in record
+          if (event.series) {
+            // Add series information to help with discovery
+            recordData.openMeetMeta = {
+              seriesSlug: event.series.slug,
+              isRecurring: true,
+            };
+          }
+
           const result = await agent.com.atproto.repo.putRecord({
             repo: did,
             collection: 'community.lexicon.calendar.event',
             rkey,
-            record: {
-              $type: 'community.lexicon.calendar.event',
-              name: event.name,
-              description: event.description,
-              createdAt: event.createdAt,
-              startsAt: event.startDate,
-              endsAt: event.endDate,
-              mode: modeMap[event.type] || modeMap['in-person'],
-              status: statusMap[event.status] || statusMap['published'],
-              locations,
-              uris,
-            },
+            record: recordData,
           });
+
           this.logger.debug(result);
           this.logger.log(
-            `Event ${event.name} posted to Bluesky for user ${handle} (with lock)`,
+            `Event ${event.name} posted to Bluesky for user ${handle}`,
           );
           return { rkey };
         },
@@ -523,7 +463,7 @@ export class BlueskyService {
 
   async listEvents(did: string, tenantId: string): Promise<any[]> {
     try {
-      const agent = await this.tryResumeSession(tenantId, did);
+      const agent = await this.resumeSession(tenantId, did);
 
       const response = await agent.com.atproto.repo.listRecords({
         repo: did,
@@ -539,9 +479,9 @@ export class BlueskyService {
     }
   }
 
-  async resumeSession(tenantId: string, did: string): Promise<Agent> {
+  async tryResumeSession(tenantId: string, did: string): Promise<Agent> {
     try {
-      return await this.tryResumeSession(tenantId, did);
+      return await this.resumeSession(tenantId, did);
     } catch (error) {
       // Log the error but with a cleaner message
       this.logger.error(`Failed to resume Bluesky session for DID ${did}:`, {
@@ -567,7 +507,7 @@ export class BlueskyService {
       throw new Error('No Bluesky record key found in event sourceData');
     }
 
-    const agent = await this.tryResumeSession(tenantId, did);
+    const agent = await this.resumeSession(tenantId, did);
     const response = await agent.com.atproto.repo.deleteRecord({
       repo: did,
       collection: 'community.lexicon.calendar.event',
@@ -817,8 +757,7 @@ export class BlueskyService {
       };
 
       try {
-        // Always use public profile lookup as the primary approach
-        // This respects ATProtocol's decentralized nature
+        // Use public profile lookup as the primary approach
         const publicProfile = await this.getPublicProfile(identifier);
 
         // Merge the public profile data with our stored information

@@ -10,6 +10,7 @@ import { Repository, MoreThan, Brackets } from 'typeorm';
 import { instanceToPlain } from 'class-transformer';
 import { EventEntity } from '../infrastructure/persistence/relational/entities/event.entity';
 import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
+import { EventSeriesEntity } from '../../event-series/infrastructure/persistence/relational/entities/event-series.entity';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { QueryEventDto } from '../dto/query-events.dto';
 import { PaginationDto } from '../../utils/dto/pagination.dto';
@@ -156,7 +157,7 @@ export class EventQueryService {
     await this.initializeRepository();
     const event = await this.eventRepository.findOne({
       where: { slug },
-      relations: ['user', 'group', 'categories'],
+      relations: ['user', 'group', 'categories', 'series'],
       select: {
         id: false,
         user: {
@@ -1052,5 +1053,96 @@ export class EventQueryService {
     this.logger.debug(`Found ${events.length} events matching source criteria`);
 
     return events;
+  }
+
+  /**
+   * Find all events (occurrences) that belong to a series by the series slug
+   */
+  @Trace('event-query.findEventsBySeriesSlug')
+  async findEventsBySeriesSlug(
+    seriesSlug: string,
+    options?: { page: number; limit: number },
+  ): Promise<[EventEntity[], number]> {
+    try {
+      await this.initializeRepository();
+
+      const page = options?.page || 1;
+      const limit = options?.limit || 10;
+
+      this.logger.debug(`Finding events for series slug ${seriesSlug}`);
+
+      // Direct query by seriesSlug
+      const queryBuilder = this.eventRepository
+        .createQueryBuilder('event')
+        .where('event.seriesSlug = :seriesSlug', { seriesSlug })
+        .leftJoinAndSelect('event.user', 'user')
+        .leftJoinAndSelect('event.group', 'group')
+        .leftJoinAndSelect('event.categories', 'categories')
+        .leftJoinAndSelect('event.image', 'image')
+        .orderBy('event.startDate', 'ASC')
+        .skip((page - 1) * limit)
+        .take(limit);
+
+      try {
+        const [events, total] = await queryBuilder.getManyAndCount();
+        this.logger.debug(
+          `Found ${events.length} events for series slug ${seriesSlug}`,
+        );
+        return [events, total];
+      } catch (queryError) {
+        this.logger.error(`Database query error: ${queryError.message}`);
+        return [[], 0];
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error finding events by series slug: ${error.message}`,
+        error.stack,
+      );
+      return [[], 0]; // Return empty results instead of throwing to prevent hanging
+    }
+  }
+
+  /**
+   * Find all events (occurrences) that belong to a series by ID
+   * @internal This method is primarily for internal use - prefer findEventsBySeriesSlug for user-facing code
+   */
+  @Trace('event-query.findEventsBySeriesId')
+  async findEventsBySeriesId(
+    seriesId: number,
+    options?: { page: number; limit: number },
+  ): Promise<[EventEntity[], number]> {
+    try {
+      await this.initializeRepository();
+
+      const page = options?.page || 1;
+      const limit = options?.limit || 10;
+
+      this.logger.debug(
+        `Finding events for series ID ${seriesId}, page ${page}, limit ${limit}`,
+      );
+
+      // Get the series to find its slug since we need to query by slug, not ID
+      const tenantId = this.request.tenantId;
+      const dataSource =
+        await this.tenantConnectionService.getTenantConnection(tenantId);
+      const seriesRepository = dataSource.getRepository(EventSeriesEntity);
+      const series = await seriesRepository.findOne({
+        where: { id: seriesId },
+      });
+
+      if (!series) {
+        this.logger.warn(`Series with ID ${seriesId} not found`);
+        return [[], 0];
+      }
+
+      // Forward to the slug-based method
+      return await this.findEventsBySeriesSlug(series.slug, options);
+    } catch (error) {
+      this.logger.error(
+        `Error finding events by seriesId: ${error.message}`,
+        error.stack,
+      );
+      return [[], 0];
+    }
   }
 }

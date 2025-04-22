@@ -433,10 +433,10 @@ export class ChatRoomService {
     const chatRoomRepo = dataSource.getRepository(ChatRoomEntity);
     const eventRepo = dataSource.getRepository(EventEntity);
 
-    // Get the event
+    // Get the event with both user and series relations to prevent losing series association
     const event = await eventRepo.findOne({
       where: { id: eventId },
-      relations: ['user'],
+      relations: ['user', 'series'],
     });
 
     if (!event) {
@@ -505,9 +505,8 @@ export class ChatRoomService {
     // Save the chat room
     await chatRoomRepo.save(chatRoom);
 
-    // Update the event with the Matrix room ID
-    event.matrixRoomId = roomInfo.roomId;
-    await eventRepo.save(event);
+    // Update only the matrixRoomId field to preserve all other fields including seriesSlug
+    await eventRepo.update({ id: eventId }, { matrixRoomId: roomInfo.roomId });
 
     this.logger.log(
       `Created chat room for event ${event.slug} in tenant ${tenantId}`,

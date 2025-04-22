@@ -29,7 +29,6 @@ import { CreateSeriesFromEventDto } from '../dto/create-series-from-event.dto';
 import { EventResponseDto } from '../../event/dto/event-response.dto';
 import { JWTAuthGuard } from '../../auth/auth.guard';
 import { TenantGuard } from '../../tenant/tenant.guard';
-import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
 
 @ApiTags('event-series')
 @Controller('event-series')
@@ -96,44 +95,20 @@ export class EventSeriesController {
     @Body() createEventSeriesDto: CreateEventSeriesDto,
     @Request() req,
   ) {
-    this.logger.log('Creating event series');
-    // Extract tenant ID directly from request to avoid decorator issues
+    this.logger.log(`Creating event series by user ${req.user.id}`);
+    // Extract tenant ID directly from request
     const tenantId =
       req.tenantId || (req.headers && req.headers['x-tenant-id']);
+    this.logger.debug(`Using tenant ID: ${tenantId} for event series creation`);
 
-    this.logger.log(
-      `Creating event series in tenant ${tenantId} by user ${req.user.id}`,
+    const eventSeries = await this.eventSeriesService.create(
+      createEventSeriesDto,
+      req.user.id,
+      false, // generateFutureEvents
+      tenantId,
     );
 
-    // Verify the user ID and tenant info
-    this.logger.debug(
-      `User information: ${JSON.stringify({
-        id: req.user.id,
-        tenantId,
-        headers: req.headers && req.headers['x-tenant-id'],
-        hasUser: !!req.user,
-      })}`,
-    );
-
-    // Log the received DTO
-    this.logger.log(
-      `Received event series DTO: ${JSON.stringify(createEventSeriesDto, null, 2)}`,
-    );
-
-    try {
-      const eventSeries = await this.eventSeriesService.create(
-        createEventSeriesDto,
-        req.user.id,
-      );
-
-      return new EventSeriesResponseDto(eventSeries);
-    } catch (error) {
-      this.logger.error(
-        `Error creating event series: ${error.message}`,
-        error.stack,
-      );
-      throw error;
-    }
+    return new EventSeriesResponseDto(eventSeries);
   }
 
   @Get()
@@ -158,10 +133,13 @@ export class EventSeriesController {
       `Getting all event series in tenant ${tenantId} by user ${req.user.id}`,
     );
 
-    const { data, total } = await this.eventSeriesService.findAll({
-      page: +page,
-      limit: +limit,
-    });
+    const { data, total } = await this.eventSeriesService.findAll(
+      {
+        page: +page,
+        limit: +limit,
+      },
+      tenantId,
+    );
 
     return {
       data: data.map((series) => new EventSeriesResponseDto(series)),
@@ -197,10 +175,14 @@ export class EventSeriesController {
       `Getting event series for user ${userId} in tenant ${tenantId}`,
     );
 
-    const { data, total } = await this.eventSeriesService.findByUser(+userId, {
-      page: +page,
-      limit: +limit,
-    });
+    const { data, total } = await this.eventSeriesService.findByUser(
+      +userId,
+      {
+        page: +page,
+        limit: +limit,
+      },
+      tenantId,
+    );
 
     return {
       data: data.map((series) => new EventSeriesResponseDto(series)),
@@ -255,15 +237,23 @@ export class EventSeriesController {
       `Creating series from event ${eventSlug} by user ${req.user.id}`,
     );
 
+    // Extract tenant ID directly from request
+    const tenantId =
+      req.tenantId || (req.headers && req.headers['x-tenant-id']);
+    this.logger.debug(
+      `Using tenant ID: ${tenantId} for event series creation from event ${eventSlug}`,
+    );
+
     try {
-      const eventSeries = await this.eventSeriesService.createFromExistingEvent(
-        eventSlug,
-        createData.recurrenceRule,
-        req.user.id,
-        createData.name,
-        createData.description,
-        createData.timeZone,
-      );
+      // Use the new simplified service method
+      const eventSeries =
+        await this.eventSeriesService.createSeriesFromEventDto(
+          eventSlug,
+          createData,
+          req.user.id,
+          false, // generateFutureEvents - set to false to prevent auto-generating duplicate events
+          tenantId,
+        );
 
       return new EventSeriesResponseDto(eventSeries);
     } catch (error) {
@@ -305,6 +295,7 @@ export class EventSeriesController {
         page: +page,
         limit: +limit,
       },
+      tenantId,
     );
 
     return {
@@ -332,7 +323,10 @@ export class EventSeriesController {
 
     this.logger.log(`Getting event series ${slug} in tenant ${tenantId}`);
 
-    const eventSeries = await this.eventSeriesService.findBySlug(slug);
+    const eventSeries = await this.eventSeriesService.findBySlug(
+      slug,
+      tenantId,
+    );
     return new EventSeriesResponseDto(eventSeries);
   }
 
@@ -393,74 +387,22 @@ export class EventSeriesController {
       `Getting ${includePastBool ? 'all' : 'upcoming'} occurrences for series ${slug} in tenant ${tenantId}`,
     );
 
-    // Set a timeout for the entire endpoint to ensure we don't hang
-    const timeoutMs = 30000; // 30 seconds
-
     try {
-      // Use a promise with timeout to wrap the service call
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => {
-          reject(
-            new Error(
-              'Controller timeout: Overall request took too long to process',
-            ),
-          );
-        }, timeoutMs);
-      });
-
-      const servicePromise =
-        this.eventSeriesOccurrenceService.getUpcomingOccurrences(
+      // Delegate to the service method
+      const result =
+        await this.eventSeriesOccurrenceService.getUpcomingOccurrences(
           slug,
           +count,
           includePastBool,
+          tenantId,
         );
-
-      // Race the promises to ensure we don't hang
-      const result = (await Promise.race([timeoutPromise, servicePromise])) as {
-        date: string;
-        event?: EventEntity;
-        materialized: boolean;
-      }[];
-
-      // Add debugging to ensure we're returning correctly
-      this.logger.log(
-        `Successfully completed occurrences endpoint for series ${slug} with ${result.length} results`,
-      );
-
-      // Explicitly clean up the timeout to prevent lingering handles
-      if (timeoutPromise) {
-        // @ts-expect-error - Access internal timer to clear it
-        clearTimeout(timeoutPromise._timer);
-      }
 
       return result;
     } catch (error) {
       this.logger.error(
         `Error in occurrences endpoint for series ${slug}: ${error.message}`,
       );
-
-      // Return a minimal response instead of throwing
-      return [
-        {
-          date: new Date().toISOString(),
-          materialized: false,
-          error: `Failed to get occurrences: ${error.message}`,
-        },
-      ];
-    } finally {
-      // Add additional cleanup here if needed
-      this.logger.debug(
-        `Request for series ${slug} occurrences completed - releasing resources`,
-      );
-
-      // Force garbage collection if this is Node.js 14+
-      try {
-        if (global.gc) {
-          global.gc();
-        }
-      } catch {
-        // Ignore if not available
-      }
+      throw error;
     }
   }
 
@@ -523,6 +465,7 @@ export class EventSeriesController {
         slug,
         occurrenceDate,
         req.user.id,
+        tenantId,
       );
 
     return occurrence;
@@ -589,6 +532,7 @@ export class EventSeriesController {
       slug,
       updateEventSeriesDto,
       req.user.id,
+      tenantId,
     );
 
     return new EventSeriesResponseDto(eventSeries);
@@ -639,7 +583,12 @@ export class EventSeriesController {
     );
 
     try {
-      await this.eventSeriesService.delete(slug, req.user.id, deleteEvents);
+      await this.eventSeriesService.delete(
+        slug,
+        req.user.id,
+        deleteEvents,
+        tenantId,
+      );
       // Return nothing with 204 No Content status
       return;
     } catch (error) {
@@ -741,6 +690,10 @@ export class EventSeriesController {
     status: HttpStatus.OK,
     description: 'Next occurrence has been materialized',
   })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Invalid series slug provided',
+  })
   async materializeNextOccurrence(@Param('slug') slug: string, @Request() req) {
     // Extract tenant ID directly from request
     const tenantId =
@@ -754,6 +707,7 @@ export class EventSeriesController {
       await this.eventSeriesOccurrenceService.materializeNextOccurrence(
         slug,
         req.user.id,
+        tenantId,
       );
 
     if (!occurrence) {

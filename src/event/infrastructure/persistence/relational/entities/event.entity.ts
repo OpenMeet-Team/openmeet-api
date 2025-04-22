@@ -173,20 +173,27 @@ export class EventEntity
   @Column({ type: 'timestamp', nullable: true })
   lastSyncedAt: Date | null;
 
+  // Explicitly define seriesSlug column - needed for TypeScript
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  seriesSlug: string | null;
+
+  // Make isRecurring a computed property based on whether series is set
+  get isRecurring(): boolean {
+    return !!this.seriesSlug;
+  }
+
   // Series-based recurrence model
   @ManyToOne(
     () => EventSeriesEntity,
     (series: EventSeriesEntity) => series.events,
     {
       nullable: true,
+      onDelete: 'SET NULL',
+      onUpdate: 'CASCADE',
     },
   )
   @JoinColumn({ name: 'seriesSlug', referencedColumnName: 'slug' })
   series: EventSeriesEntity;
-
-  @Column({ type: 'varchar', length: 255, nullable: true })
-  @Index()
-  seriesSlug: string;
 
   /**
    * Original date of the occurrence when it was created or modified.
@@ -219,11 +226,6 @@ export class EventEntity
   @Column({ nullable: true, type: 'jsonb' })
   conferenceData: Record<string, any>;
 
-  // @Expose()
-  // get attendeesCount(): number {
-  //   return this.attendees ? this.attendees.length : 0;
-  // }
-
   @BeforeInsert()
   generateUlid() {
     if (!this.ulid) {
@@ -243,6 +245,4 @@ export class EventEntity
       )}`;
     }
   }
-
-  // Messages are now stored in Matrix, not in the event entity
 }

@@ -81,10 +81,10 @@ describe('Timezone Handling in Recurring Events (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
 
-    console.log(
-      '[TEST DEBUG] occurrencesResponse body:',
-      JSON.stringify(occurrencesResponse.body, null, 2),
-    );
+    // console.log(
+    //   '[TEST DEBUG] occurrencesResponse body:',
+    //   JSON.stringify(occurrencesResponse.body, null, 2),
+    // );
     expect(occurrencesResponse.status).toBe(200);
     expect(Array.isArray(occurrencesResponse.body)).toBe(true);
     expect(occurrencesResponse.body.length).toBeGreaterThanOrEqual(5);

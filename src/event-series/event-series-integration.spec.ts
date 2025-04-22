@@ -8,7 +8,6 @@ import {
   mockEventSeriesRepository,
   mockEventSeriesService,
 } from '../test/mocks';
-import { EVENT_SERIES_REPOSITORY } from './interfaces/event-series-repository.interface';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { EventSeriesEntity } from './infrastructure/persistence/relational/entities/event-series.entity';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
@@ -28,19 +27,8 @@ describe('EventSeries Module Integration', () => {
           useValue: { tenantId: 'test-tenant-id' },
         },
         {
-          provide: EVENT_SERIES_REPOSITORY,
-          useValue: mockEventSeriesRepository,
-        },
-        {
           provide: getRepositoryToken(EventSeriesEntity),
-          useValue: {
-            findOne: jest.fn(),
-            find: jest.fn(),
-            create: jest.fn(),
-            save: jest.fn(),
-            update: jest.fn(),
-            delete: jest.fn(),
-          },
+          useValue: mockEventSeriesRepository,
         },
         {
           provide: getRepositoryToken(EventEntity),

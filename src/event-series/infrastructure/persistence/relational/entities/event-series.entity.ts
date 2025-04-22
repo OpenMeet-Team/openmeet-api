@@ -80,7 +80,9 @@ export class EventSeriesEntity
   @JoinColumn({ name: 'groupId' })
   group?: GroupEntity | null;
 
-  @OneToMany(() => EventEntity, (event) => event.series)
+  @OneToMany(() => EventEntity, (event) => event.series, {
+    cascade: true,
+  })
   events: EventEntity[];
 
   // External source fields

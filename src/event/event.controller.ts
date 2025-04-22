@@ -135,6 +135,8 @@ export class EventController {
     if (!event) {
       throw new NotFoundException(`Event with slug ${slug} not found`);
     }
+
+    // isRecurring is now a computed property based on seriesSlug
     return event;
   }
 
@@ -144,7 +146,7 @@ export class EventController {
   })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Patch(':slug')
-  @ApiOperation({ summary: 'Update an event by ID' })
+  @ApiOperation({ summary: 'Update an event by Slug' })
   async update(
     @Param('slug') slug: string,
     @Body() updateEventDto: UpdateEventDto,
@@ -152,7 +154,28 @@ export class EventController {
   ): Promise<EventEntity> {
     const user = req.user as UserEntity;
     const userId = user?.id;
-    return this.eventManagementService.update(slug, updateEventDto, userId);
+
+    this.logger.debug(
+      `Updating event with DTO: ${JSON.stringify(updateEventDto)}`,
+    );
+
+    const updatedEvent = await this.eventManagementService.update(
+      slug,
+      updateEventDto,
+      userId,
+    );
+
+    // Log what we're returning to help debug the test issue
+    this.logger.debug(
+      `Returning updated event: ${JSON.stringify({
+        id: updatedEvent.id,
+        slug: updatedEvent.slug,
+        seriesSlug: updatedEvent.seriesSlug,
+        series: updatedEvent.series,
+      })}`,
+    );
+
+    return updatedEvent;
   }
 
   @Permissions({
