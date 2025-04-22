@@ -506,10 +506,7 @@ export class ChatRoomService {
     await chatRoomRepo.save(chatRoom);
 
     // Update only the matrixRoomId field to preserve all other fields including seriesSlug
-    await eventRepo.update(
-      { id: eventId },
-      { matrixRoomId: roomInfo.roomId }
-    );
+    await eventRepo.update({ id: eventId }, { matrixRoomId: roomInfo.roomId });
 
     this.logger.log(
       `Created chat room for event ${event.slug} in tenant ${tenantId}`,

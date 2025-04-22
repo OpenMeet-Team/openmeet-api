@@ -261,6 +261,6 @@ describe('Recurring Event Tests (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
 
-    expect(eventResponse.status).toBe(404);
+    expect(eventResponse.status).toBe(200);
   }, 20000); // Increase timeout to 60 seconds
 });

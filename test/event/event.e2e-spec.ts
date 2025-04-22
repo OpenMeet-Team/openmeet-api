@@ -3,7 +3,6 @@ import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import {
   loginAsTester,
   createEvent,
-  createGroup,
   updateEvent,
   getEvent,
   getMyEvents,
@@ -409,7 +408,9 @@ describe('EventController (e2e)', () => {
           eventResponse.status === 200 &&
           eventResponse.body.seriesSlug === expectedSeriesSlug
         ) {
-          console.log(`Link established successfully on attempt ${retries + 1}`);
+          console.log(
+            `Link established successfully on attempt ${retries + 1}`,
+          );
           return; // Success
         }
 
@@ -418,13 +419,16 @@ describe('EventController (e2e)', () => {
         );
 
         // Calculate backoff delay
-        const delay = Math.min(1000, Math.pow(1.5, retries) * 300 + Math.random() * 200);
-        
+        const delay = Math.min(
+          1000,
+          Math.pow(1.5, retries) * 300 + Math.random() * 200,
+        );
+
         // Wait before retrying
         await new Promise((resolve) => setTimeout(resolve, delay));
         retries++;
       }
-      
+
       throw new Error('Failed to establish event-series link');
     };
 
@@ -472,19 +476,17 @@ describe('EventController (e2e)', () => {
       (occ) => occ.materialized,
     ).length;
     console.log(`Materialized occurrences: ${materializedCount}`);
-    
+
     // Verify the occurrences count matches the recurrence rule count
     expect(occurrencesResponse.body.length).toBe(
       updateData.recurrenceRule.count,
     );
-    
+
     // Verify that the original event is in the occurrences
     // (It should have the same seriesSlug as the series)
     const occurrences = occurrencesResponse.body;
     expect(
-      occurrences.some(
-        (occurrence) => occurrence.event?.slug === event.slug
-      ),
+      occurrences.some((occurrence) => occurrence.event?.slug === event.slug),
     ).toBe(true);
 
     // if (occurrencesResponse.body.length >= 2) {

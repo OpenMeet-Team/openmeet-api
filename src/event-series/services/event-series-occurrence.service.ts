@@ -589,10 +589,7 @@ export class EventSeriesOccurrenceService {
 
       // Track events that have been included already
       const includedEventIds = new Set<number>();
-      
-      // Initialize template tracking
-      let templateIncluded = false;
-      
+
       // FIRST: Always add the template event if it exists, regardless of date or pattern
       if (templateEvent) {
         log(
@@ -604,7 +601,6 @@ export class EventSeriesOccurrenceService {
           materialized: true,
         });
         includedEventIds.add(templateEvent.id);
-        templateIncluded = true;
       }
 
       // SECOND: Include ALL existing events from the series upfront, regardless of date
@@ -643,7 +639,7 @@ export class EventSeriesOccurrenceService {
           if (includedEventIds.has(existingEvent.id)) {
             continue;
           }
-          
+
           // Otherwise add it now
           results.push({
             date: date.toISOString(),
