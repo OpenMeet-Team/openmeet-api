@@ -36,7 +36,7 @@ export const mockGroupUserPermission = {
 export const mockGroupMember = {
   id: 1,
   user: mockUser,
-  group: mockGroup,
+  group: { id: 1, slug: 'test-group' },
 } as GroupMemberEntity;
 
 export const mockGroupMembers = [mockGroupMember];
