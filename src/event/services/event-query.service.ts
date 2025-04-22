@@ -580,8 +580,25 @@ export class EventQueryService {
   @Trace('event-query.showDashboardEvents')
   async showDashboardEvents(userId: number): Promise<EventEntity[]> {
     await this.initializeRepository();
-    const createdEvents = await this.getEventsByCreator(userId);
-    const attendingEvents = await this.getEventsByAttendee(userId);
+
+    // Fetch events with all necessary relations
+    const createdEvents = await this.eventRepository.find({
+      where: { user: { id: userId } },
+      relations: ['user', 'group', 'categories', 'image'],
+    });
+
+    // Get events the user is attending
+    const attendingEventsQuery = this.eventAttendeesRepository
+      .createQueryBuilder('eventAttendee')
+      .leftJoinAndSelect('eventAttendee.event', 'event')
+      .leftJoinAndSelect('event.user', 'user')
+      .leftJoinAndSelect('event.group', 'group')
+      .leftJoinAndSelect('event.categories', 'categories')
+      .leftJoinAndSelect('event.image', 'image')
+      .where('eventAttendee.user.id = :userId', { userId });
+
+    const attendees = await attendingEventsQuery.getMany();
+    const attendingEvents = attendees.map((attendee) => attendee.event);
 
     // Combine and deduplicate events
     const allEvents = [...createdEvents, ...attendingEvents];
@@ -589,20 +606,41 @@ export class EventQueryService {
       new Map(allEvents.map((event) => [event.id, event])).values(),
     );
 
-    const eventsWithAttendees = (await Promise.all(
-      uniqueEvents.map(async (event) => ({
-        ...event,
-        attendee: await this.eventAttendeeService.findEventAttendeeByUserId(
-          event.id,
-          userId,
-        ),
-      })),
+    // Add attendee role information and counts for each event
+    const eventsWithDetails = (await Promise.all(
+      uniqueEvents.map(async (event) => {
+        const attendee =
+          await this.eventAttendeeService.findEventAttendeeByUserId(
+            event.id,
+            userId,
+          );
+
+        return {
+          ...event,
+          attendee,
+          attendeesCount:
+            await this.eventAttendeeService.showConfirmedEventAttendeesCount(
+              event.id,
+            ),
+        };
+      }),
     )) as EventEntity[];
 
-    // Add recurrence descriptions
-    return eventsWithAttendees.map((event) =>
-      this.addRecurrenceInformation(event),
-    );
+    // Add recurrence descriptions and sort by start date
+    return eventsWithDetails
+      .map((event) => this.addRecurrenceInformation(event))
+      .sort((a, b) => {
+        // Sort future events first, then by start date
+        const aDate = new Date(a.startDate);
+        const bDate = new Date(b.startDate);
+        const now = new Date();
+
+        if (aDate >= now && bDate < now) return -1;
+        if (aDate < now && bDate >= now) return 1;
+
+        // For two future or two past events, sort by date
+        return aDate.getTime() - bDate.getTime();
+      });
   }
 
   @Trace('event-query.getHomePageFeaturedEvents')
