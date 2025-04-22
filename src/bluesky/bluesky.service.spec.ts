@@ -261,17 +261,19 @@ describe('BlueskyService', () => {
       });
 
       it('should handle session errors gracefully', async () => {
-        // Arrange - mock resumeSession to throw an error
+        // Arrange
+        // Mock the OAuthClient restore method to throw an error
+        const mockClient = {
+          restore: jest.fn().mockRejectedValue(new Error('Some session error')),
+        };
         jest
-          .spyOn(service as any, 'resumeSession')
-          .mockImplementationOnce(() => {
-            throw new Error('Some session error');
-          });
+          .spyOn(service as any, 'getOAuthClient')
+          .mockResolvedValue(mockClient);
 
         // Act & Assert
         await expect(
           service.tryResumeSession('test-tenant', 'test-did'),
-        ).rejects.toThrow();
+        ).rejects.toThrow('Unable to access your Bluesky account');
       });
     });
   });

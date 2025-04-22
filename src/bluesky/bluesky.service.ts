@@ -325,124 +325,106 @@ export class BlueskyService {
         });
       }
 
-      // Use a consistent lock key for session operations
-      const lockKey = `@atproto-oauth-client-${did}`;
+      // Use direct approach without locking
+      const agent = await this.tryResumeSession(tenantId, did);
 
-      // Use the withLock pattern to prevent concurrent session operations
-      const result = await this.elasticacheService.withLock<{ rkey: string }>(
-        lockKey,
-        async () => {
-          const agent = await this.resumeSession(tenantId, did);
+      // Convert event type to Bluesky mode
+      const modeMap = {
+        'in-person': 'community.lexicon.calendar.event#inperson',
+        online: 'community.lexicon.calendar.event#virtual',
+        hybrid: 'community.lexicon.calendar.event#hybrid',
+      };
 
-          // Convert event type to Bluesky mode
-          const modeMap = {
-            'in-person': 'community.lexicon.calendar.event#inperson',
-            online: 'community.lexicon.calendar.event#virtual',
-            hybrid: 'community.lexicon.calendar.event#hybrid',
-          };
+      // Convert event status to Bluesky status
+      const statusMap = {
+        draft: 'community.lexicon.calendar.event#planned',
+        published: 'community.lexicon.calendar.event#scheduled',
+        cancelled: 'community.lexicon.calendar.event#cancelled',
+      };
 
-          // Convert event status to Bluesky status
-          const statusMap = {
-            draft: 'community.lexicon.calendar.event#planned',
-            published: 'community.lexicon.calendar.event#scheduled',
-            cancelled: 'community.lexicon.calendar.event#cancelled',
-          };
+      const locations: BlueskyLocation[] = [];
 
-          const locations: BlueskyLocation[] = [];
-
-          // Add physical location if exists
-          if (event.location && event.lat && event.lon) {
-            locations.push({
-              type: 'community.lexicon.location.geo',
-              lat: event.lat,
-              lon: event.lon,
-              description: event.location,
-            });
-          }
-
-          // Add online location if exists
-          if (event.locationOnline) {
-            locations.push({
-              type: 'community.lexicon.calendar.event#uri',
-              uri: event.locationOnline,
-              name: 'Online Meeting Link',
-            });
-          }
-
-          // Generate a unique rkey from the event name
-          const baseName = this.generateBaseName(event.name);
-          const rkey = await this.generateUniqueRkey(agent, did, baseName);
-
-          // Prepare uris array with image if it exists
-          const uris: BlueskyEventUri[] = [];
-          if (event.image?.path) {
-            uris.push({
-              uri: event.image.path,
-              name: 'Event Image',
-            });
-          } else if (event.image) {
-            // Log a warning if we have an image but no path
-            this.logger.warn('Event has image but no path', {
-              eventId: event.id,
-              image: event.image,
-            });
-          }
-
-          // Add online location to uris if it exists
-          if (event.locationOnline) {
-            uris.push({
-              uri: event.locationOnline,
-              name: 'Online Meeting Link',
-            });
-          }
-
-          // Create record data
-          const recordData: any = {
-            $type: 'community.lexicon.calendar.event',
-            name: event.name,
-            description: event.description,
-            createdAt: event.createdAt,
-            startsAt: event.startDate,
-            endsAt: event.endDate,
-            mode: modeMap[event.type] || modeMap['in-person'],
-            status: statusMap[event.status] || statusMap['published'],
-            locations,
-            uris,
-          };
-
-          // Add openmeet-specific metadata in record
-          if (event.series) {
-            // Add series information to help with discovery
-            recordData.openMeetMeta = {
-              seriesSlug: event.series.slug,
-              isRecurring: true,
-            };
-          }
-
-          const result = await agent.com.atproto.repo.putRecord({
-            repo: did,
-            collection: 'community.lexicon.calendar.event',
-            rkey,
-            record: recordData,
-          });
-
-          this.logger.debug(result);
-          this.logger.log(
-            `Event ${event.name} posted to Bluesky for user ${handle}`,
-          );
-          return { rkey };
-        },
-        60000, // 60 second lock TTL for the Bluesky event creation
-      );
-
-      // Handle the case where we couldn't acquire the lock
-      if (result === null) {
-        throw new Error(
-          'Failed to acquire lock for Bluesky event creation. Please try again later.',
-        );
+      // Add physical location if exists
+      if (event.location && event.lat && event.lon) {
+        locations.push({
+          type: 'community.lexicon.location.geo',
+          lat: event.lat,
+          lon: event.lon,
+          description: event.location,
+        });
       }
 
-      return result;
+      // Add online location if exists
+      if (event.locationOnline) {
+        locations.push({
+          type: 'community.lexicon.calendar.event#uri',
+          uri: event.locationOnline,
+          name: 'Online Meeting Link',
+        });
+      }
+
+      // Generate a unique rkey from the event name
+      const baseName = this.generateBaseName(event.name);
+      const rkey = await this.generateUniqueRkey(agent, did, baseName);
+
+      // Prepare uris array with image if it exists
+      const uris: BlueskyEventUri[] = [];
+      if (event.image?.path) {
+        uris.push({
+          uri: event.image.path,
+          name: 'Event Image',
+        });
+      } else if (event.image) {
+        // Log a warning if we have an image but no path
+        this.logger.warn('Event has image but no path', {
+          eventId: event.id,
+          image: event.image,
+        });
+      }
+
+      // Add online location to uris if it exists
+      if (event.locationOnline) {
+        uris.push({
+          uri: event.locationOnline,
+          name: 'Online Meeting Link',
+        });
+      }
+
+      // Create record data
+      const recordData: any = {
+        $type: 'community.lexicon.calendar.event',
+        name: event.name,
+        description: event.description,
+        createdAt: event.createdAt,
+        startsAt: event.startDate,
+        endsAt: event.endDate,
+        mode: modeMap[event.type] || modeMap['in-person'],
+        status: statusMap[event.status] || statusMap['published'],
+        locations,
+        uris,
+      };
+
+      // Add openmeet-specific metadata in record
+      if (event.series) {
+        // Add series information to help with discovery
+        recordData.openMeetMeta = {
+          seriesSlug: event.series.slug,
+          isRecurring: true,
+        };
+      }
+
+      const result = await agent.com.atproto.repo.putRecord({
+        repo: did,
+        collection: 'community.lexicon.calendar.event',
+        rkey,
+        record: recordData,
+      });
+
+      this.logger.debug(result);
+      this.logger.log(
+        `Event ${event.name} posted to Bluesky for user ${handle}`,
+      );
+      return { rkey };
     } catch (error: any) {
       this.logger.error('Failed to create Bluesky event:', {
         error: error.message,
@@ -481,7 +463,16 @@ export class BlueskyService {
 
   async tryResumeSession(tenantId: string, did: string): Promise<Agent> {
     try {
-      return await this.resumeSession(tenantId, did);
+      // Direct approach without using the lock mechanism
+      const client = await this.getOAuthClient(tenantId);
+      const session = await client.restore(did);
+      if (!session) {
+        throw new Error('No session found');
+      }
+      const agent = new Agent(session);
+      // Verify the session is valid
+      await agent.getProfile({ actor: did });
+      return agent;
     } catch (error) {
       // Log the error but with a cleaner message
       this.logger.error(`Failed to resume Bluesky session for DID ${did}:`, {
