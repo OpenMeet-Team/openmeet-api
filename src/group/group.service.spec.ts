@@ -538,7 +538,11 @@ describe('GroupService', () => {
   describe('showDashboardGroups', () => {
     it('should return dashboard groups', async () => {
       const result = await service.showDashboardGroups(mockUser.id);
-      expect(result).toEqual([mockGroup]);
+      expect(result[0]).toMatchObject({
+        id: mockGroup.id,
+        name: mockGroup.name,
+        slug: mockGroup.slug
+      });
     });
   });
 });

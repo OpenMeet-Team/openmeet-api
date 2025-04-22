@@ -901,24 +901,66 @@ export class GroupService {
   async showDashboardGroups(userId: number): Promise<GroupEntity[]> {
     await this.getTenantSpecificGroupRepository();
 
-    const groupsByMember = await this.getGroupsByMember(userId);
+    // Define a type extension for GroupEntity to include our extra properties
+    type ExtendedGroupEntity = GroupEntity & {
+      isCreator: boolean;
+      upcomingEventsCount: number;
+    };
 
-    const groupsByCreator = await this.getGroupsByCreator(userId);
+    // First get groups where user is a member with all necessary relations loaded
+    const groupsQuery = this.groupRepository
+      .createQueryBuilder('group')
+      .leftJoinAndSelect('group.groupMembers', 'groupMember')
+      .leftJoinAndSelect('groupMember.user', 'memberUser')
+      .leftJoinAndSelect('groupMember.groupRole', 'groupRole')
+      .leftJoinAndSelect('group.createdBy', 'createdBy')
+      .leftJoinAndSelect('group.categories', 'categories')
+      .leftJoinAndSelect('group.image', 'image')
+      .where('groupMember.user.id = :userId', { userId });
 
-    const groups = [...groupsByMember, ...groupsByCreator];
+    const groups = await groupsQuery.getMany();
+
+    // Deduplicate groups by ID to ensure we don't have duplicates
     const uniqueGroups = Array.from(
       new Map(groups.map((group) => [group.id, group])).values(),
     );
 
-    return (await Promise.all(
-      uniqueGroups.map(async (group) => ({
-        ...group,
-        groupMember: await this.groupMemberService.findGroupMemberByUserId(
-          group.id,
-          Number(userId),
-        ),
-      })),
-    )) as GroupEntity[];
+    // For each group, add the user's membership information with proper role data
+    const groupsWithMembership = (await Promise.all(
+      uniqueGroups.map(async (group) => {
+        // Get the user's membership for this group with complete role information
+        const groupMember =
+          await this.groupMemberService.findGroupMemberByUserId(
+            group.id,
+            userId,
+          );
+
+        // Get upcoming events count for this group
+        const upcomingEventsCount = await this.eventQueryService
+          .findUpcomingEventsForGroup(group.id, 1)
+          .then((events) => events.length);
+
+        // Create a new object with our extended properties
+        const extendedGroup = {
+          ...group,
+          groupMember,
+          upcomingEventsCount,
+          isCreator: group.createdBy?.id === userId,
+        };
+
+        return extendedGroup;
+      }),
+    )) as ExtendedGroupEntity[];
+
+    // Sort groups: created groups first, then member groups
+    return groupsWithMembership.sort((a, b) => {
+      // Sort by creator status first
+      if (a.isCreator && !b.isCreator) return -1;
+      if (!a.isCreator && b.isCreator) return 1;
+
+      // Then sort by name
+      return a.name.localeCompare(b.name);
+    });
   }
 
   async getGroupMembers(groupId: number): Promise<GroupMemberEntity[]> {
