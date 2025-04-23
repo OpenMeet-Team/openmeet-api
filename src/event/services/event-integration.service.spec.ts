@@ -14,6 +14,14 @@ import {
 import { Repository } from 'typeorm';
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
 import { AuthProvidersEnum } from '../../auth/auth-providers.enum';
+import { BadRequestException } from '@nestjs/common';
+import { Counter, Histogram } from 'prom-client';
+
+// Add constants for metrics tokens
+const PROM_METRIC_EVENT_INTEGRATION_PROCESSED_TOTAL = 'PROM_METRIC_EVENT_INTEGRATION_PROCESSED_TOTAL';
+const PROM_METRIC_EVENT_INTEGRATION_DEDUPLICATION_MATCHES_TOTAL = 'PROM_METRIC_EVENT_INTEGRATION_DEDUPLICATION_MATCHES_TOTAL';
+const PROM_METRIC_EVENT_INTEGRATION_DEDUPLICATION_FAILURES_TOTAL = 'PROM_METRIC_EVENT_INTEGRATION_DEDUPLICATION_FAILURES_TOTAL';
+const PROM_METRIC_EVENT_INTEGRATION_PROCESSING_DURATION_SECONDS = 'PROM_METRIC_EVENT_INTEGRATION_PROCESSING_DURATION_SECONDS';
 
 describe('EventIntegrationService', () => {
   let service: EventIntegrationService;
@@ -21,6 +29,12 @@ describe('EventIntegrationService', () => {
   let tenantService: jest.Mocked<TenantConnectionService>;
   let shadowAccountService: jest.Mocked<ShadowAccountService>;
   let eventRepository: jest.Mocked<Repository<EventEntity>>;
+  
+  // Mock Prometheus metrics
+  let processedCounter: jest.Mocked<Counter<string>>;
+  let deduplicationMatchesCounter: jest.Mocked<Counter<string>>;
+  let deduplicationFailuresCounter: jest.Mocked<Counter<string>>;
+  let processingDurationHistogram: jest.Mocked<Histogram<string>>;
 
   const mockTenantConnection = {
     getRepository: jest.fn(),
@@ -78,6 +92,7 @@ describe('EventIntegrationService', () => {
     // Create mocks
     eventQueryService = {
       findBySourceAttributes: jest.fn(),
+      findByBlueskySource: jest.fn(),
     } as any;
 
     tenantService = {
@@ -88,6 +103,28 @@ describe('EventIntegrationService', () => {
       findOrCreateShadowAccount: jest.fn().mockResolvedValue(mockUser),
     } as any;
 
+    // Setup Prometheus metrics mocks
+    processedCounter = {
+      inc: jest.fn(),
+      labels: jest.fn().mockReturnThis(),
+    } as any;
+    
+    deduplicationMatchesCounter = {
+      inc: jest.fn(),
+      labels: jest.fn().mockReturnThis(),
+    } as any;
+    
+    deduplicationFailuresCounter = {
+      inc: jest.fn(),
+      labels: jest.fn().mockReturnThis(),
+    } as any;
+    
+    processingDurationHistogram = {
+      observe: jest.fn(),
+      labels: jest.fn().mockReturnThis(),
+      startTimer: jest.fn().mockReturnValue(jest.fn()),
+    } as any;
+
     // Instead of creating a mock object, we'll use Jest's spying capability
     const EventEntityMock = {
       prototype: {
@@ -96,9 +133,17 @@ describe('EventIntegrationService', () => {
       },
     };
 
+    // Create a mock query builder
+    const mockQueryBuilder = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([]),
+    };
+
     // Setup repository mocks with proper type casting
     eventRepository = {
       findOne: jest.fn(),
+      find: jest.fn().mockResolvedValue([]),
       create: jest.fn().mockImplementation(() => {
         // Return an instance of our mocked EventEntity
         return {
@@ -130,6 +175,8 @@ describe('EventIntegrationService', () => {
         } as unknown as EventEntity);
       }),
       merge: jest.fn(),
+      createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+      remove: jest.fn().mockImplementation((entity) => Promise.resolve(entity)),
     } as any;
 
     mockTenantConnection.getRepository.mockReturnValue(eventRepository);
@@ -156,6 +203,22 @@ describe('EventIntegrationService', () => {
         {
           provide: ShadowAccountService,
           useValue: shadowAccountService,
+        },
+        {
+          provide: PROM_METRIC_EVENT_INTEGRATION_PROCESSED_TOTAL,
+          useValue: processedCounter,
+        },
+        {
+          provide: PROM_METRIC_EVENT_INTEGRATION_DEDUPLICATION_MATCHES_TOTAL,
+          useValue: deduplicationMatchesCounter,
+        },
+        {
+          provide: PROM_METRIC_EVENT_INTEGRATION_DEDUPLICATION_FAILURES_TOTAL,
+          useValue: deduplicationFailuresCounter,
+        },
+        {
+          provide: PROM_METRIC_EVENT_INTEGRATION_PROCESSING_DURATION_SECONDS,
+          useValue: processingDurationHistogram,
         },
       ],
     }).compile();
@@ -328,6 +391,323 @@ describe('EventIntegrationService', () => {
       expect(capturedEvent.locationOnline).toBe(
         'https://meet.google.com/abc-defg-hij',
       );
+    });
+  });
+
+  describe('Enhanced Deduplication Logic', () => {
+    // Test primary method: source ID and type
+    it('should find existing event by sourceId and sourceType', async () => {
+      // Arrange
+      eventQueryService.findBySourceAttributes.mockResolvedValue([
+        mockExistingEvent as unknown as EventEntity,
+      ]);
+
+      // Act
+      const result = await service.processExternalEvent(
+        mockEventDto,
+        'tenant1',
+      );
+
+      // Assert
+      expect(eventQueryService.findBySourceAttributes).toHaveBeenCalledWith(
+        mockEventDto.source.id,
+        mockEventDto.source.type,
+        'tenant1',
+      );
+      expect(result.id).toBe(mockExistingEvent.id);
+    });
+
+    // Test secondary method: source URL
+    it('should find existing event by sourceUrl when sourceId check fails', async () => {
+      // Arrange
+      // Primary method returns empty
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+
+      // Different sourceId but same URL
+      const eventWithDifferentSourceId: ExternalEventDto = {
+        ...mockEventDto,
+        source: {
+          ...mockEventDto.source,
+          id: 'different-id', // Changed source ID
+        },
+      };
+
+      // Mock finding by URL
+      eventRepository.find.mockImplementation((criteria: any) => {
+        if (
+          criteria?.where?.sourceUrl === mockEventDto.source.url &&
+          criteria?.where?.sourceType === EventSourceType.BLUESKY
+        ) {
+          return Promise.resolve([mockExistingEvent as unknown as EventEntity]);
+        }
+        return Promise.resolve([]);
+      });
+
+      // Act
+      const result = await service.processExternalEvent(
+        eventWithDifferentSourceId,
+        'tenant1',
+      );
+
+      // Assert
+      expect(eventQueryService.findBySourceAttributes).toHaveBeenCalledWith(
+        'different-id',
+        EventSourceType.BLUESKY,
+        'tenant1',
+      );
+      expect(eventRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            sourceUrl: mockEventDto.source.url,
+            sourceType: EventSourceType.BLUESKY,
+          },
+        }),
+      );
+      expect(result.id).toBe(mockExistingEvent.id);
+    });
+
+    // Test tertiary method: metadata fields (rkey)
+    it('should find existing event by rkey in metadata when primary and secondary methods fail', async () => {
+      // Arrange
+      // Primary method returns empty
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+
+      // Different sourceId and URL but same rkey
+      const eventWithDifferentSourceIdAndUrl: ExternalEventDto = {
+        ...mockEventDto,
+        source: {
+          ...mockEventDto.source,
+          id: 'different-id', // Changed source ID
+          url: 'https://different-url.com', // Changed URL
+          metadata: {
+            rkey: '1234', // Same rkey as existing event
+          },
+        },
+      };
+
+      // For secondary method (find by URL)
+      eventRepository.find.mockResolvedValue([]);
+
+      // For tertiary method (find by rkey)
+      const mockGetMany = jest
+        .fn()
+        .mockResolvedValue([mockExistingEvent as unknown as EventEntity]);
+
+      eventRepository.createQueryBuilder.mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: mockGetMany,
+      } as any);
+
+      // Act
+      const result = await service.processExternalEvent(
+        eventWithDifferentSourceIdAndUrl,
+        'tenant1',
+      );
+
+      // Assert
+      expect(eventQueryService.findBySourceAttributes).toHaveBeenCalledWith(
+        'different-id',
+        EventSourceType.BLUESKY,
+        'tenant1',
+      );
+      expect(eventRepository.find).toHaveBeenCalled();
+      expect(eventRepository.createQueryBuilder).toHaveBeenCalled();
+      expect(result.id).toBe(mockExistingEvent.id);
+    });
+
+    // Test tertiary method: metadata fields (cid)
+    it('should find existing event by cid in metadata when other methods fail', async () => {
+      // Arrange
+      // Primary method returns empty
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+
+      // Different sourceId, URL, and rkey but has cid
+      const eventWithDifferentSourceIdUrlRkey: ExternalEventDto = {
+        ...mockEventDto,
+        source: {
+          ...mockEventDto.source,
+          id: 'different-id', // Changed source ID
+          url: 'https://different-url.com', // Changed URL
+          metadata: {
+            rkey: 'different-rkey', // Different rkey
+            cid: 'some-cid', // But has CID
+          },
+        },
+      };
+
+      // Mock find by URL returning empty for the second check
+      eventRepository.find.mockResolvedValue([]);
+
+      // Setup the mock to return empty for rkey and an event for cid
+      let queryCount = 0;
+      eventRepository.createQueryBuilder.mockImplementation(() => {
+        queryCount++;
+        if (queryCount === 1) {
+          // First call (rkey) - return empty
+          return {
+            where: jest.fn().mockReturnThis(),
+            andWhere: jest.fn().mockReturnThis(),
+            getMany: jest.fn().mockResolvedValue([]),
+          } as any;
+        } else {
+          // Second call (cid) - return the event
+          return {
+            where: jest.fn().mockReturnThis(),
+            andWhere: jest.fn().mockReturnThis(),
+            getMany: jest
+              .fn()
+              .mockResolvedValue([mockExistingEvent as unknown as EventEntity]),
+          } as any;
+        }
+      });
+
+      // Act
+      const result = await service.processExternalEvent(
+        eventWithDifferentSourceIdUrlRkey,
+        'tenant1',
+      );
+
+      // Assert
+      expect(eventQueryService.findBySourceAttributes).toHaveBeenCalledWith(
+        'different-id',
+        EventSourceType.BLUESKY,
+        'tenant1',
+      );
+      expect(eventRepository.find).toHaveBeenCalled();
+      expect(eventRepository.createQueryBuilder).toHaveBeenCalledTimes(2);
+      expect(result.id).toBe(mockExistingEvent.id);
+    });
+
+    // Test fallback to creating new event when no match found
+    it('should create a new event when no existing event is found by any method', async () => {
+      // Arrange
+      // All checks return empty
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+      eventRepository.find.mockResolvedValue([]);
+      eventRepository.createQueryBuilder.mockImplementation(() => {
+        return {
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([]),
+        } as any;
+      });
+
+      const newEventWithUnknownSource: ExternalEventDto = {
+        ...mockEventDto,
+        name: 'New Unique Event',
+        source: {
+          ...mockEventDto.source,
+          id: 'unknown-id',
+          url: 'https://unknown-url.com',
+          metadata: {
+            rkey: 'unknown-rkey',
+            cid: 'unknown-cid',
+          },
+        },
+      };
+
+      // Set up for shadow account creation
+      shadowAccountService.findOrCreateShadowAccount.mockResolvedValue(
+        mockUser,
+      );
+
+      // Act
+      const result = await service.processExternalEvent(
+        newEventWithUnknownSource,
+        'tenant1',
+      );
+
+      // Assert
+      expect(eventQueryService.findBySourceAttributes).toHaveBeenCalled();
+      expect(eventRepository.find).toHaveBeenCalled();
+      expect(eventRepository.createQueryBuilder).toHaveBeenCalled();
+      expect(result.id).toBe(2); // New ID for created event
+      expect(shadowAccountService.findOrCreateShadowAccount).toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteExternalEvent', () => {
+    it('should successfully delete an existing event', async () => {
+      // Arrange
+      eventQueryService.findBySourceAttributes.mockResolvedValue([
+        mockExistingEvent as unknown as EventEntity,
+      ]);
+
+      // Act
+      const result = await service.deleteExternalEvent(
+        'did:plc:1234',
+        EventSourceType.BLUESKY,
+        'tenant1',
+      );
+
+      // Assert
+      expect(eventQueryService.findBySourceAttributes).toHaveBeenCalledWith(
+        'did:plc:1234',
+        EventSourceType.BLUESKY,
+        'tenant1',
+      );
+      expect(eventRepository.remove).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Successfully deleted');
+    });
+
+    it('should return failure when no event is found to delete', async () => {
+      // Arrange
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+
+      // Act
+      const result = await service.deleteExternalEvent(
+        'unknown-id',
+        EventSourceType.BLUESKY,
+        'tenant1',
+      );
+
+      // Assert
+      expect(eventQueryService.findBySourceAttributes).toHaveBeenCalledWith(
+        'unknown-id',
+        EventSourceType.BLUESKY,
+        'tenant1',
+      );
+      expect(eventRepository.remove).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('No events found matching');
+    });
+
+    it('should validate tenant ID requirement', async () => {
+      // Act & Assert
+      await expect(
+        service.deleteExternalEvent(
+          'did:plc:1234',
+          EventSourceType.BLUESKY,
+          '',
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should handle error during deletion gracefully', async () => {
+      // Arrange
+      eventQueryService.findBySourceAttributes.mockResolvedValue([
+        mockExistingEvent as unknown as EventEntity,
+      ]);
+
+      // Mock an error during removal
+      eventRepository.remove.mockRejectedValue(
+        new Error('Database connection error'),
+      );
+
+      // Act
+      const result = await service.deleteExternalEvent(
+        'did:plc:1234',
+        EventSourceType.BLUESKY,
+        'tenant1',
+      );
+
+      // Assert
+      expect(eventQueryService.findBySourceAttributes).toHaveBeenCalled();
+      expect(eventRepository.remove).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Successfully deleted 0 event(s)');
     });
   });
 

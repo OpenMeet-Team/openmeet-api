@@ -68,6 +68,31 @@ const businessMetricsProviders = [
   }),
 ];
 
+// Define event integration metrics for tracking deduplication
+const eventIntegrationMetrics = [
+  makeCounterProvider({
+    name: 'event_integration_processed_total',
+    help: 'Total number of external events processed',
+    labelNames: ['tenant', 'source_type', 'operation'],
+  }),
+  makeCounterProvider({
+    name: 'event_integration_deduplication_matches_total',
+    help: 'Total number of deduplication matches by method',
+    labelNames: ['tenant', 'source_type', 'method'], // method: primary, secondary, tertiary
+  }),
+  makeCounterProvider({
+    name: 'event_integration_deduplication_failures_total',
+    help: 'Total number of deduplication failures',
+    labelNames: ['tenant', 'source_type', 'error'],
+  }),
+  makeHistogramProvider({
+    name: 'event_integration_processing_duration_seconds',
+    help: 'Duration of event integration processing in seconds',
+    labelNames: ['tenant', 'source_type', 'operation', 'is_duplicate'],
+    buckets: [0.01, 0.05, 0.1, 0.5, 1, 2.5, 5],
+  }),
+];
+
 @Module({
   imports: [
     ScheduleModule.forRoot(),
@@ -82,11 +107,14 @@ const businessMetricsProviders = [
     MetricsService,
     ...businessMetricsProviders,
     ...httpMetricsProviders,
+    ...eventIntegrationMetrics,
   ],
   exports: [
     MetricsService,
     // Export HTTP metrics for use in interceptors/filters
     ...httpMetricsProviders,
+    // Export event integration metrics for use in EventIntegrationService
+    ...eventIntegrationMetrics,
   ],
 })
 export class MetricsModule implements OnModuleInit {

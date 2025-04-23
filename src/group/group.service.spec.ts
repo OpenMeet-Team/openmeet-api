@@ -541,7 +541,7 @@ describe('GroupService', () => {
       expect(result[0]).toMatchObject({
         id: mockGroup.id,
         name: mockGroup.name,
-        slug: mockGroup.slug
+        slug: mockGroup.slug,
       });
     });
   });

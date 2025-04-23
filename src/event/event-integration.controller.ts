@@ -9,6 +9,8 @@ import {
   BadRequestException,
   Headers,
   UnauthorizedException,
+  Delete,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -16,6 +18,7 @@ import {
   ApiBody,
   ApiResponse,
   ApiHeader,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { EventIntegrationService } from './services/event-integration.service';
 import { ExternalEventDto } from './dto/external-event.dto';
@@ -92,6 +95,80 @@ export class EventIntegrationController {
       throw new BadRequestException(
         `Failed to process event: ${error.message}`,
       );
+    }
+  }
+
+  /**
+   * Deletes an event from an external source
+   */
+  @Delete()
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({ summary: 'Delete an event from an external source' })
+  @ApiHeader({
+    name: 'x-tenant-id',
+    description: 'Tenant ID',
+    required: true,
+  })
+  @ApiQuery({
+    name: 'sourceId',
+    description: 'Source ID of the event to delete',
+    required: true,
+  })
+  @ApiQuery({
+    name: 'sourceType',
+    description: 'Source type of the event',
+    required: true,
+  })
+  @ApiResponse({
+    status: HttpStatus.ACCEPTED,
+    description: 'Event deletion request accepted',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Invalid request',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Missing tenant ID',
+  })
+  async deleteEvent(
+    @Headers('x-tenant-id') tenantId: string,
+    @Query('sourceId') sourceId: string,
+    @Query('sourceType') sourceType: string,
+  ) {
+    if (!tenantId) {
+      throw new UnauthorizedException(
+        'Missing tenant ID. Please provide the x-tenant-id header.',
+      );
+    }
+
+    if (!sourceId || !sourceType) {
+      throw new BadRequestException(
+        'Both sourceId and sourceType query parameters are required',
+      );
+    }
+
+    try {
+      this.logger.debug(
+        `Deleting external event for tenant ${tenantId} with sourceId: ${sourceId} and sourceType: ${sourceType}`,
+      );
+
+      await this.eventIntegrationService.deleteExternalEvent(
+        sourceId,
+        sourceType,
+        tenantId,
+      );
+
+      return {
+        success: true,
+        message: 'Event deletion request accepted',
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error deleting external event: ${error.message}`,
+        error.stack,
+      );
+      throw new BadRequestException(`Failed to delete event: ${error.message}`);
     }
   }
 }

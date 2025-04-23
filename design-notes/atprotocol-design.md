@@ -27,6 +27,9 @@ This document serves as the authoritative source of truth for the design and imp
   - [Completed](#completed)
   - [In Progress](#in-progress)
   - [Planned](#planned)
+- [Minimum Viable Implementation](#minimum-viable-implementation)
+  - [MVI Components](#mvi-components)
+  - [MVI Benefits](#mvi-benefits)
 - [Event Integration Interface Design](#event-integration-interface-design)
   - [Problem Statement](#problem-statement)
   - [Design Decision](#design-decision)
@@ -168,6 +171,14 @@ When ingesting events from Bluesky:
    - Analyze ingested events for recurring patterns
    - Group potentially related events
    - Suggest series creation when patterns are detected
+
+4. **User-Initiated Sync**
+   - Trigger comprehensive event sync when Bluesky users log in
+   - Perform bidirectional synchronization of user's events
+   - Handle both historical and future events
+   - Apply conflict resolution with ATProtocol as source of truth
+   - Implement loop detection to prevent circular updates
+   - Respect connection status (no updates to ATProtocol if disconnected)
 
 Reference: [ATProtocol Integration Guide](/design-notes/recurring-events/atprotocol-integration-guide.md)
 
@@ -356,6 +367,43 @@ interface BlueskyEnhancedProfile extends BlueskyPublicProfile {
    - Add metrics for sync quality and performance
    - Create dashboards for monitoring sync status
    - Implement alerting for sync failures
+
+4. **User-Initiated Event Sync**
+   - Develop the `UserEventSyncService` for login-triggered syncs
+   - Implement bidirectional sync with proper conflict resolution
+   - Add user preferences for sync behavior
+   - Create admin tools for monitoring and troubleshooting
+
+## Minimum Viable Implementation
+
+To expedite delivery of the core integration features, we will focus initially on a Minimum Viable Implementation (MVI) approach. This allows us to quickly provide value while continuing to build out the complete architecture.
+
+### MVI Components
+
+1. **Basic Event Import from Bluesky**
+   - Focused on reliable ingestion of events via the firehose
+   - Core event data mapping for essential fields only
+   - Simple deduplication based on source IDs
+
+2. **Shadow Account Fundamentals**
+   - Lightweight user records for Bluesky event creators
+   - Essential identification via DIDs and handles
+   - Visual indicators for shadow vs. regular accounts
+
+3. **User Profile Navigation**
+   - Basic API endpoints to fetch events by user
+   - Fundamental user profile information from ATProtocol
+   - Navigation between events and creator profiles
+
+### MVI Benefits
+
+- **Faster Time to Value**: Delivers core functionality quickly
+- **User-Centric Approach**: Prioritizes features that directly enhance user experience
+- **Incremental Complexity**: Builds a solid foundation before adding advanced features
+- **Early Validation**: Allows testing of core architectural decisions
+- **Focused Development**: Clearer short-term goals for the development team
+
+After successfully implementing the MVI, we will incrementally add the more complex features like bidirectional sync, advanced conflict resolution, and series detection.
 
 ## Event Integration Interface Design
 
