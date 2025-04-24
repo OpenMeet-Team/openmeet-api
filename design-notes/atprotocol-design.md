@@ -16,6 +16,7 @@ This document serves as the authoritative source of truth for the design and imp
 - [Event Synchronization](#event-synchronization)
   - [1. OpenMeet → Bluesky](#1-openmeet--bluesky)
   - [2. Bluesky → OpenMeet](#2-bluesky--openmeet)
+  - [3. RSVP Synchronization](#3-rsvp-synchronization)
 - [Shadow Account Management](#shadow-account-management)
   - [1. Account Creation Process](#1-account-creation-process)
   - [2. Architectural Principles](#2-architectural-principles)
@@ -179,6 +180,32 @@ When ingesting events from Bluesky:
    - Apply conflict resolution with ATProtocol as source of truth
    - Implement loop detection to prevent circular updates
    - Respect connection status (no updates to ATProtocol if disconnected)
+
+### 3. RSVP Synchronization
+
+RSVPs (event attendance records) are also synchronized between platforms:
+
+1. **RSVP Ingestion (Bluesky → OpenMeet)**
+   - Firehose consumer filters for RSVP operations
+   - Processor extracts user and event references
+   - Maps Bluesky status values to OpenMeet attendance statuses:
+     - "interested" → Maybe
+     - "going" → Confirmed
+     - "notgoing" → Cancelled
+   - Shadow accounts created for Bluesky users who haven't registered
+   - Events located by their source attributes (sourceId, sourceType)
+   - Attendee records created or updated using natural key (user + event)
+
+2. **User PDS RSVP Synchronization**
+   - During user login, we can check the user's PDS for RSVPs
+   - For each RSVP, find the corresponding event in OpenMeet
+   - Create or update the attendance record accordingly
+   - Handles both local and remote events
+
+3. **RSVP Integration API**
+   - Dedicated endpoint for RSVP ingestion (/integration/rsvps)
+   - Uses same authentication mechanism as event integration
+   - DTO format includes user reference, event reference, and status
 
 Reference: [ATProtocol Integration Guide](/design-notes/recurring-events/atprotocol-integration-guide.md)
 

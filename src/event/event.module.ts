@@ -25,6 +25,9 @@ import { EventSeriesModule } from '../event-series/event-series.module';
 import { ConfigModule } from '@nestjs/config';
 import { EventIntegrationController } from './event-integration.controller';
 import { EventIntegrationService } from './services/event-integration.service';
+import { RsvpIntegrationController } from './rsvp-integration.controller';
+import { RsvpIntegrationService } from './services/rsvp-integration.service';
+import { MetricsModule } from '../metrics/metrics.module';
 
 // Create a provider for the DiscussionService
 const discussionServiceProvider: Provider = {
@@ -49,8 +52,13 @@ const discussionServiceProvider: Provider = {
     ShadowAccountModule,
     forwardRef(() => ChatModule),
     forwardRef(() => EventSeriesModule),
+    MetricsModule,
   ],
-  controllers: [EventController, EventIntegrationController],
+  controllers: [
+    EventController,
+    EventIntegrationController,
+    RsvpIntegrationController,
+  ],
   providers: [
     EventManagementService,
     EventQueryService,
@@ -60,6 +68,7 @@ const discussionServiceProvider: Provider = {
     EventRoleService,
     ICalendarService,
     EventIntegrationService,
+    RsvpIntegrationService,
     discussionServiceProvider,
   ],
   exports: [
@@ -67,6 +76,8 @@ const discussionServiceProvider: Provider = {
     EventQueryService,
     EventRecommendationService,
     EventIntegrationService,
+    RsvpIntegrationService,
+    ICalendarService,
   ],
 })
 export class EventModule {}

@@ -93,6 +93,21 @@ const eventIntegrationMetrics = [
   }),
 ];
 
+// Define RSVP integration metrics
+const rsvpIntegrationMetrics = [
+  makeCounterProvider({
+    name: 'rsvp_integration_processed_total',
+    help: 'Total number of external RSVPs processed',
+    labelNames: ['tenant', 'source_type', 'operation'],
+  }),
+  makeHistogramProvider({
+    name: 'rsvp_integration_processing_duration_seconds',
+    help: 'Time spent processing external RSVPs in seconds',
+    labelNames: ['tenant', 'source_type', 'operation'],
+    buckets: [0.01, 0.1, 0.5, 1, 2, 5, 10],
+  }),
+];
+
 @Module({
   imports: [
     ScheduleModule.forRoot(),
@@ -108,6 +123,7 @@ const eventIntegrationMetrics = [
     ...businessMetricsProviders,
     ...httpMetricsProviders,
     ...eventIntegrationMetrics,
+    ...rsvpIntegrationMetrics,
   ],
   exports: [
     MetricsService,
@@ -115,6 +131,8 @@ const eventIntegrationMetrics = [
     ...httpMetricsProviders,
     // Export event integration metrics for use in EventIntegrationService
     ...eventIntegrationMetrics,
+    // Export RSVP integration metrics for use in RsvpIntegrationService
+    ...rsvpIntegrationMetrics,
   ],
 })
 export class MetricsModule implements OnModuleInit {

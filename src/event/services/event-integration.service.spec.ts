@@ -18,10 +18,14 @@ import { BadRequestException } from '@nestjs/common';
 import { Counter, Histogram } from 'prom-client';
 
 // Add constants for metrics tokens
-const PROM_METRIC_EVENT_INTEGRATION_PROCESSED_TOTAL = 'PROM_METRIC_EVENT_INTEGRATION_PROCESSED_TOTAL';
-const PROM_METRIC_EVENT_INTEGRATION_DEDUPLICATION_MATCHES_TOTAL = 'PROM_METRIC_EVENT_INTEGRATION_DEDUPLICATION_MATCHES_TOTAL';
-const PROM_METRIC_EVENT_INTEGRATION_DEDUPLICATION_FAILURES_TOTAL = 'PROM_METRIC_EVENT_INTEGRATION_DEDUPLICATION_FAILURES_TOTAL';
-const PROM_METRIC_EVENT_INTEGRATION_PROCESSING_DURATION_SECONDS = 'PROM_METRIC_EVENT_INTEGRATION_PROCESSING_DURATION_SECONDS';
+const PROM_METRIC_EVENT_INTEGRATION_PROCESSED_TOTAL =
+  'PROM_METRIC_EVENT_INTEGRATION_PROCESSED_TOTAL';
+const PROM_METRIC_EVENT_INTEGRATION_DEDUPLICATION_MATCHES_TOTAL =
+  'PROM_METRIC_EVENT_INTEGRATION_DEDUPLICATION_MATCHES_TOTAL';
+const PROM_METRIC_EVENT_INTEGRATION_DEDUPLICATION_FAILURES_TOTAL =
+  'PROM_METRIC_EVENT_INTEGRATION_DEDUPLICATION_FAILURES_TOTAL';
+const PROM_METRIC_EVENT_INTEGRATION_PROCESSING_DURATION_SECONDS =
+  'PROM_METRIC_EVENT_INTEGRATION_PROCESSING_DURATION_SECONDS';
 
 describe('EventIntegrationService', () => {
   let service: EventIntegrationService;
@@ -29,7 +33,7 @@ describe('EventIntegrationService', () => {
   let tenantService: jest.Mocked<TenantConnectionService>;
   let shadowAccountService: jest.Mocked<ShadowAccountService>;
   let eventRepository: jest.Mocked<Repository<EventEntity>>;
-  
+
   // Mock Prometheus metrics
   let processedCounter: jest.Mocked<Counter<string>>;
   let deduplicationMatchesCounter: jest.Mocked<Counter<string>>;
@@ -108,17 +112,17 @@ describe('EventIntegrationService', () => {
       inc: jest.fn(),
       labels: jest.fn().mockReturnThis(),
     } as any;
-    
+
     deduplicationMatchesCounter = {
       inc: jest.fn(),
       labels: jest.fn().mockReturnThis(),
     } as any;
-    
+
     deduplicationFailuresCounter = {
       inc: jest.fn(),
       labels: jest.fn().mockReturnThis(),
     } as any;
-    
+
     processingDurationHistogram = {
       observe: jest.fn(),
       labels: jest.fn().mockReturnThis(),
