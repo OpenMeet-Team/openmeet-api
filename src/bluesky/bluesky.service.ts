@@ -499,17 +499,44 @@ export class BlueskyService {
     }
 
     const agent = await this.resumeSession(tenantId, did);
-    const response = await agent.com.atproto.repo.deleteRecord({
-      repo: did,
-      collection: 'community.lexicon.calendar.event',
-      rkey,
-    });
-    this.logger.debug('Bluesky event delete response:', response);
 
-    return {
-      success: true,
-      message: 'Event deleted successfully',
-    };
+    try {
+      // When deleting a record, ensure that the repo information is included
+      // This ensures the deletion goes to the correct queue (dev vs prod)
+      const response = await agent.com.atproto.repo.deleteRecord({
+        repo: did,
+        collection: 'community.lexicon.calendar.event',
+        rkey,
+      });
+
+      this.logger.debug('Bluesky event delete response:', response);
+
+      // Also log the expected format that should be in the queue for debugging
+      this.logger.debug('Expected queue record format:', {
+        kind: 'commit',
+        commit: {
+          repo: did, // This is the critical field that should be in the queue
+          collection: 'community.lexicon.calendar.event',
+          operation: 'delete',
+          rkey,
+        },
+      });
+
+      return {
+        success: true,
+        message: 'Event deleted successfully',
+      };
+    } catch (error) {
+      this.logger.error('Failed to delete Bluesky event record', {
+        error: error.message,
+        stack: error.stack,
+        did,
+        rkey,
+        tenantId,
+      });
+
+      throw new Error(`Failed to delete Bluesky event: ${error.message}`);
+    }
   }
 
   /**
