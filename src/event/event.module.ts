@@ -29,12 +29,6 @@ import { RsvpIntegrationController } from './rsvp-integration.controller';
 import { RsvpIntegrationService } from './services/rsvp-integration.service';
 import { MetricsModule } from '../metrics/metrics.module';
 
-// Create a provider for the DiscussionService
-const discussionServiceProvider: Provider = {
-  provide: 'DiscussionService',
-  useValue: {}, // Providing an empty object since it's optional
-};
-
 @Module({
   imports: [
     ConfigModule,
@@ -69,7 +63,6 @@ const discussionServiceProvider: Provider = {
     ICalendarService,
     EventIntegrationService,
     RsvpIntegrationService,
-    discussionServiceProvider,
   ],
   exports: [
     EventManagementService,
