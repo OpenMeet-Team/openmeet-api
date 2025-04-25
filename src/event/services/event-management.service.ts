@@ -189,6 +189,31 @@ export class EventManagementService {
       conferenceData: createEventDto.conferenceData,
     };
 
+    // Get user to check for Bluesky connectivity
+    const user = await this.userService.getUserById(userId);
+
+    // If sourceType isn't specified but user has a connected Bluesky account,
+    // automatically set the source properties for Bluesky
+    if (
+      !createEventDto.sourceType &&
+      user?.preferences?.bluesky?.connected &&
+      user?.preferences?.bluesky?.did &&
+      user?.socialId &&
+      eventData.status === EventStatus.Published
+    ) {
+      this.logger.debug(
+        `User ${userId} has a connected Bluesky account. Setting source properties.`,
+      );
+      createEventDto.sourceType = EventSourceType.BLUESKY;
+      createEventDto.sourceId = user.preferences.bluesky.did || user.socialId;
+      createEventDto.sourceData = {
+        handle: user.preferences.bluesky.handle,
+      };
+      this.logger.debug(
+        `Set source properties for Bluesky: sourceId=${createEventDto.sourceId}, handle=${createEventDto.sourceData.handle}`,
+      );
+    }
+
     let createdEvent;
 
     // If this is a Bluesky event and it's being published, create it in Bluesky first
@@ -294,8 +319,6 @@ export class EventManagementService {
     const hostRole = await this.eventRoleService.getRoleByName(
       EventAttendeeRole.Host,
     );
-
-    const user = await this.userService.getUserById(userId);
 
     await this.eventAttendeeService.create({
       role: hostRole,
