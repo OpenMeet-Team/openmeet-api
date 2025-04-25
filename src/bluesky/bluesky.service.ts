@@ -420,7 +420,7 @@ export class BlueskyService {
         record: recordData,
       });
 
-      this.logger.debug(result);
+      this.logger.debug('post to bluesky result', JSON.stringify(result));
       this.logger.log(
         `Event ${event.name} posted to Bluesky for user ${handle}`,
       );
