@@ -363,9 +363,21 @@ export class BlueskyService {
         });
       }
 
-      // Generate a unique rkey from the event name
-      const baseName = this.generateBaseName(event.name);
-      const rkey = await this.generateUniqueRkey(agent, did, baseName);
+      // Determine the rkey to use
+      let rkey: string;
+      
+      // If updating an existing event, use the existing rkey
+      if (event.sourceData?.rkey) {
+        rkey = event.sourceData.rkey as string;
+        this.logger.debug(`Using existing rkey for update: ${rkey}`);
+      } 
+      // For new events, generate a unique rkey based on the slug (not name)
+      else {
+        // Use slug instead of name to generate rkey (slugs don't change on rename)
+        const baseValue = event.slug || this.generateBaseName(event.name);
+        rkey = await this.generateUniqueRkey(agent, did, baseValue);
+        this.logger.debug(`Generated new rkey for create: ${rkey}`);
+      }
 
       // Prepare uris array with image if it exists
       const uris: BlueskyEventUri[] = [];
@@ -388,6 +400,26 @@ export class BlueskyService {
           uri: event.locationOnline,
           name: 'Online Meeting Link',
         });
+      }
+      
+      // Add OpenMeet event URL to uris to help with matching
+      const baseUrl = this.configService.get<string>('APP_URL') || 'https://openmeet.net';
+      const openmeetEventUrl = `${baseUrl}/events/${event.slug}`;
+      
+      // Check if we already have an OpenMeet Event URI to avoid duplicates
+      const existingOpenMeetUri = uris.find(uri => 
+        uri.name === 'OpenMeet Event' || 
+        (uri.uri && uri.uri.includes(`/events/${event.slug}`))
+      );
+      
+      if (!existingOpenMeetUri) {
+        this.logger.debug(`Adding OpenMeet event URL: ${openmeetEventUrl}`);
+        uris.push({
+          uri: openmeetEventUrl,
+          name: 'OpenMeet Event',
+        });
+      } else {
+        this.logger.debug(`OpenMeet event URL already exists: ${existingOpenMeetUri.uri}`);
       }
 
       // Create record data
@@ -487,7 +519,6 @@ export class BlueskyService {
     }
   }
 
-  // Add a new method to delete an event from Bluesky
   async deleteEventRecord(
     event: EventEntity,
     did: string,
@@ -509,7 +540,10 @@ export class BlueskyService {
         rkey,
       });
 
-      this.logger.debug('Bluesky event delete response:', response);
+      this.logger.debug(
+        'Bluesky event delete response:',
+        JSON.stringify(response),
+      );
 
       // Also log the expected format that should be in the queue for debugging
       this.logger.debug('Expected queue record format:', {
