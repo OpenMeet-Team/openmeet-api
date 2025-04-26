@@ -16,6 +16,7 @@ import { UserEntity } from '../../user/infrastructure/persistence/relational/ent
 import { AuthProvidersEnum } from '../../auth/auth-providers.enum';
 import { BadRequestException } from '@nestjs/common';
 import { Counter, Histogram } from 'prom-client';
+import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
 
 // Add constants for metrics tokens
 const PROM_METRIC_EVENT_INTEGRATION_PROCESSED_TOTAL =
@@ -207,6 +208,14 @@ describe('EventIntegrationService', () => {
         {
           provide: ShadowAccountService,
           useValue: shadowAccountService,
+        },
+        {
+          provide: BlueskyIdService,
+          useValue: {
+            createUri: jest.fn(),
+            parseUri: jest.fn(),
+            isValidUri: jest.fn(),
+          },
         },
         {
           provide: PROM_METRIC_EVENT_INTEGRATION_PROCESSED_TOTAL,

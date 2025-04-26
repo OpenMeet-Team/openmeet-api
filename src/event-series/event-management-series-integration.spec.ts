@@ -26,6 +26,7 @@ import { EventRoleService } from '../event-role/event-role.service';
 import { UserService } from '../user/user.service';
 import { EventMailService } from '../event-mail/event-mail.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
+import { BlueskyIdService } from '../bluesky/bluesky-id.service';
 import { RecurrenceFrequency } from '../event-series/interfaces/recurrence.interface';
 // import { DiscussionService } from '../chat/services/discussion.service'; // Removed unused import
 
@@ -166,6 +167,14 @@ describe('EventManagementService Integration with EventSeriesService', () => {
           provide: BlueskyService,
           useValue: {
             uploadEvent: jest.fn(),
+          },
+        },
+        {
+          provide: BlueskyIdService,
+          useValue: {
+            createUri: jest.fn(),
+            parseUri: jest.fn(),
+            isValidUri: jest.fn(),
           },
         },
         {

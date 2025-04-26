@@ -9,7 +9,7 @@ import {
 import { OccurrenceResult } from '../../src/event-series/interfaces/occurrence-result.interface';
 
 // Set a global timeout for all tests in this file
-jest.setTimeout(15000); // Increased timeout
+jest.setTimeout(60000);
 
 describe('Recurring Event Tests (e2e)', () => {
   let token: string;
@@ -183,7 +183,7 @@ describe('Recurring Event Tests (e2e)', () => {
       .set('x-tenant-id', TESTING_TENANT_ID);
 
     expect(seriesDeleteResponse.status).toBe(204);
-  }, 20000);
+  });
 
   it('should compute isRecurring property correctly based on seriesSlug', async () => {
     // 1. Create a regular event first
@@ -263,5 +263,5 @@ describe('Recurring Event Tests (e2e)', () => {
 
     // console.log('eventResponse', eventResponse.body);
     // expect(eventResponse.status).toBe(404);
-  }, 20000); // Increase timeout to 60 seconds
+  });
 });

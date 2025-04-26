@@ -11,6 +11,7 @@ import {
   UnauthorizedException,
   Delete,
   Query,
+  Param,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -19,6 +20,7 @@ import {
   ApiResponse,
   ApiHeader,
   ApiQuery,
+  ApiParam,
 } from '@nestjs/swagger';
 import { EventIntegrationService } from './services/event-integration.service';
 import { ExternalEventDto } from './dto/external-event.dto';
@@ -27,6 +29,9 @@ import { ServiceKeyAuthGuard } from '../auth/guards/service-key-auth.guard';
 /**
  * Controller handling requests for integrating external events
  * Used by services like bsky-event-processor
+ *
+ * Note: For Bluesky events, sourceId should be the full URI in format:
+ * at://{did}/{collection}/{rkey}
  */
 @ApiTags('Event Integration')
 @Controller('integration/events')
@@ -99,11 +104,13 @@ export class EventIntegrationController {
   }
 
   /**
-   * Deletes an event from an external source
+   * Deletes an event from an external source using query parameters
    */
   @Delete()
   @HttpCode(HttpStatus.ACCEPTED)
-  @ApiOperation({ summary: 'Delete an event from an external source' })
+  @ApiOperation({
+    summary: 'Delete an event from an external source using query parameters',
+  })
   @ApiHeader({
     name: 'x-tenant-id',
     description: 'Tenant ID',
@@ -111,7 +118,8 @@ export class EventIntegrationController {
   })
   @ApiQuery({
     name: 'sourceId',
-    description: 'Source ID of the event to delete',
+    description:
+      'Source ID of the event to delete - should be the full URI for Bluesky events',
     required: true,
   })
   @ApiQuery({
@@ -131,7 +139,7 @@ export class EventIntegrationController {
     status: HttpStatus.UNAUTHORIZED,
     description: 'Missing tenant ID',
   })
-  async deleteEvent(
+  async deleteEventByQuery(
     @Headers('x-tenant-id') tenantId: string,
     @Query('sourceId') sourceId: string,
     @Query('sourceType') sourceType: string,
@@ -166,6 +174,155 @@ export class EventIntegrationController {
     } catch (error) {
       this.logger.error(
         `Error deleting external event: ${error.message}`,
+        error.stack,
+      );
+      throw new BadRequestException(`Failed to delete event: ${error.message}`);
+    }
+  }
+
+  /**
+   * Deletes an event from an external source using path parameter
+   */
+  @Delete(':sourceId(*)')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({
+    summary: 'Delete an event from an external source using path parameter',
+  })
+  @ApiHeader({
+    name: 'x-tenant-id',
+    description: 'Tenant ID',
+    required: true,
+  })
+  @ApiParam({
+    name: 'sourceId',
+    description:
+      'Source ID of the event to delete - should be the full URI for Bluesky events',
+    required: true,
+  })
+  @ApiQuery({
+    name: 'sourceType',
+    description: 'Source type of the event',
+    required: true,
+  })
+  @ApiResponse({
+    status: HttpStatus.ACCEPTED,
+    description: 'Event deletion request accepted',
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Invalid request',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Missing tenant ID',
+  })
+  async deleteEventByPath(
+    @Headers('x-tenant-id') tenantId: string,
+    @Param('sourceId') sourceId: string,
+    @Query('sourceType') sourceType: string,
+  ) {
+    if (!tenantId) {
+      throw new UnauthorizedException(
+        'Missing tenant ID. Please provide the x-tenant-id header.',
+      );
+    }
+
+    if (!sourceId || !sourceType) {
+      throw new BadRequestException(
+        'Both sourceId and sourceType parameters are required',
+      );
+    }
+
+    try {
+      // Source ID will be URL-encoded in the request, so we need to decode it
+      const decodedSourceId = decodeURIComponent(sourceId);
+
+      this.logger.debug(
+        `Deleting external event via path parameter for tenant ${tenantId} with sourceId: ${decodedSourceId} and sourceType: ${sourceType}`,
+      );
+
+      await this.eventIntegrationService.deleteExternalEvent(
+        decodedSourceId,
+        sourceType,
+        tenantId,
+      );
+
+      return {
+        success: true,
+        message: 'Event deletion request accepted',
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error deleting external event via path parameter: ${error.message}`,
+        error.stack,
+      );
+      throw new BadRequestException(`Failed to delete event: ${error.message}`);
+    }
+  }
+
+  /**
+   * Deletes an event from an external source using path parameter
+   * The wildcard routing pattern accepts URLs with multiple segments
+   */
+  @Delete('atproto/:did/:collection/:rkey')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({
+    summary: 'Delete an AT Protocol event using path parameter components',
+  })
+  @ApiHeader({
+    name: 'x-tenant-id',
+    description: 'Tenant ID',
+    required: true,
+  })
+  @ApiQuery({
+    name: 'sourceType',
+    description: 'Source type of the event (e.g., bluesky)',
+    required: true,
+  })
+  @ApiResponse({
+    status: HttpStatus.ACCEPTED,
+    description: 'Event deletion request accepted',
+  })
+  async deleteAtprotoEvent(
+    @Headers('x-tenant-id') tenantId: string,
+    @Param('did') did: string,
+    @Param('collection') collection: string,
+    @Param('rkey') rkey: string,
+    @Query('sourceType') sourceType: string,
+  ) {
+    if (!tenantId) {
+      throw new UnauthorizedException(
+        'Missing tenant ID. Please provide the x-tenant-id header.',
+      );
+    }
+
+    if (!did || !collection || !rkey || !sourceType) {
+      throw new BadRequestException(
+        'Missing required parameters: did, collection, rkey, sourceType',
+      );
+    }
+
+    try {
+      // Construct the AT Protocol URI
+      const sourceId = `at://${did}/${collection}/${rkey}`;
+
+      this.logger.debug(
+        `Deleting AT Protocol event for tenant ${tenantId} with sourceId: ${sourceId} and sourceType: ${sourceType}`,
+      );
+
+      const result = await this.eventIntegrationService.deleteExternalEvent(
+        sourceId,
+        sourceType,
+        tenantId,
+      );
+
+      return {
+        success: true,
+        message: result.message || 'Event deletion request accepted',
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error deleting AT Protocol event: ${error.message}`,
         error.stack,
       );
       throw new BadRequestException(`Failed to delete event: ${error.message}`);

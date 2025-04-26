@@ -405,7 +405,7 @@ export class BlueskyService {
       // Add OpenMeet event URL to uris to help with matching
       const baseUrl =
         this.configService.get<string>('APP_URL', { infer: true }) ||
-        'https://openmeet.net';
+        'https://platform.openmeet.net';
       const openmeetEventUrl = `${baseUrl}/events/${event.slug}`;
 
       // Check if we already have an OpenMeet Event URI to avoid duplicates

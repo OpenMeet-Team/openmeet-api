@@ -12,6 +12,7 @@ import { Trace } from '../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter, Histogram } from 'prom-client';
+import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
 
 @Injectable()
 export class EventIntegrationService {
@@ -22,6 +23,7 @@ export class EventIntegrationService {
     private readonly tenantService: TenantConnectionService,
     private readonly shadowAccountService: ShadowAccountService,
     private readonly eventQueryService: EventQueryService,
+    private readonly blueskyIdService: BlueskyIdService,
     @InjectMetric('event_integration_processed_total')
     private readonly processedCounter: Counter<string>,
     @InjectMetric('event_integration_deduplication_matches_total')
@@ -129,6 +131,7 @@ export class EventIntegrationService {
         `Checking for existing event by sourceId: ${eventData.source.id} and sourceType: ${eventData.source.type}`,
       );
 
+      // this is all events for a user's did
       const existingEvents =
         await this.eventQueryService.findBySourceAttributes(
           eventData.source.id,
@@ -530,19 +533,49 @@ export class EventIntegrationService {
       eventData.source.id &&
       eventData.source.handle
     ) {
-      // The sourceId for Bluesky contains the DID
+      // The sourceId should be the full AT Protocol URI (at://{did}/{collection}/{rkey})
+      // but we need to extract just the DID for shadow account creation
+      let did = eventData.source.id;
+
+      // Check if sourceId is a full URI
+      if (eventData.source.id.startsWith('at://')) {
+        try {
+          // Use our BlueskyIdService to parse the URI
+          const parsed = this.blueskyIdService.parseUri(eventData.source.id);
+          did = parsed.did;
+
+          this.logger.debug(
+            `Extracted DID ${did} from URI ${eventData.source.id}`,
+          );
+        } catch (e) {
+          this.logger.error(
+            `Error parsing sourceId as AT Protocol URI: ${eventData.source.id}`,
+            e.stack,
+          );
+          this.logger.warn(
+            `Failed to parse sourceId as AT Protocol URI: ${eventData.source.id}, using it as is`,
+          );
+          // If we can't parse it, just use the whole thing
+        }
+      }
+
+      // If metadata also contains the DID directly, use that as a fallback
+      if (!did.startsWith('did:') && eventData.source.metadata?.did) {
+        did = eventData.source.metadata.did as string;
+      }
+
       this.logger.debug(
-        `Creating shadow account for Bluesky user with DID ${eventData.source.id} and handle ${eventData.source.handle} for tenant ${tenantId}`,
+        `Creating shadow account for Bluesky user with DID ${did} and handle ${eventData.source.handle} for tenant ${tenantId}`,
       );
 
       return this.shadowAccountService.findOrCreateShadowAccount(
-        eventData.source.id,
+        did, // Use the extracted DID
         eventData.source.handle,
         AuthProvidersEnum.bluesky,
         tenantId,
         {
           bluesky: {
-            did: eventData.source.id,
+            did: did, // Use the extracted DID
             handle: eventData.source.handle,
             connected: false,
           },

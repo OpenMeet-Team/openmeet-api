@@ -21,6 +21,7 @@ import { UserService } from '../../user/user.service';
 import { EventMailService } from '../../event-mail/event-mail.service';
 import { AuditLoggerService } from '../../logger/audit-logger.provider';
 import { BlueskyService } from '../../bluesky/bluesky.service';
+import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
 import { CreateEventDto } from '../dto/create-event.dto';
 import { UpdateEventDto } from '../dto/update-event.dto';
 import {
@@ -64,6 +65,8 @@ export class EventManagementService {
     private readonly eventMailService: EventMailService,
     @Inject(forwardRef(() => BlueskyService))
     private readonly blueskyService: BlueskyService,
+    @Inject(forwardRef(() => BlueskyIdService))
+    private readonly blueskyIdService: BlueskyIdService,
     @Inject(forwardRef(() => 'DiscussionService'))
     private readonly discussionService: any, // Using any here to avoid circular dependency issues
     @Inject(forwardRef(() => EventSeriesService))
@@ -247,11 +250,21 @@ export class EventManagementService {
 
         // Store Bluesky-specific data in source fields
         event.sourceType = EventSourceType.BLUESKY;
-        event.sourceId = createEventDto.sourceId ?? '';
-        event.sourceUrl = `https://bsky.app/profile/${createEventDto.sourceData?.handle}/post/${rkey}`;
+
+        // Use BlueskyIdService to create a proper AT Protocol URI
+        const did = createEventDto.sourceId ?? '';
+        const collection = 'community.lexicon.calendar.event';
+        event.sourceId = this.blueskyIdService.createUri(did, collection, rkey);
+
+        // Removed sourceUrl as it doesn't point to a real page
+        event.sourceUrl = null;
+
+        // Store components in metadata for reference
         event.sourceData = {
           rkey,
           handle: createEventDto.sourceData?.handle,
+          did,
+          collection,
         };
         event.lastSyncedAt = new Date();
 
@@ -585,16 +598,49 @@ export class EventManagementService {
     );
 
     // If it's a Bluesky event, update it there too
-    if (event.sourceType === EventSourceType.BLUESKY && event.sourceId) {
+    if (
+      event.sourceType === EventSourceType.BLUESKY &&
+      event.sourceData?.rkey
+    ) {
       try {
         // Type cast sourceData.handle to string to avoid TypeScript error
         const handle = (event.sourceData?.handle as string) || '';
+        const did = (event.sourceData?.did as string) || '';
+        const collection = 'community.lexicon.calendar.event';
+        const rkey = event.sourceData?.rkey as string;
+
+        // Update the record in Bluesky
         await this.blueskyService.createEventRecord(
           updatedEvent,
-          event.sourceId,
+          did,
           handle,
           this.request.tenantId,
         );
+
+        // Update the sourceId with proper AT Protocol URI
+        updatedEvent.sourceId = this.blueskyIdService.createUri(
+          did,
+          collection,
+          rkey,
+        );
+
+        // Remove sourceUrl as it doesn't point to a real page
+        updatedEvent.sourceUrl = null;
+
+        // Ensure sourceData has all the components
+        updatedEvent.sourceData = {
+          ...updatedEvent.sourceData,
+          did,
+          rkey,
+          handle,
+          collection,
+        };
+
+        // Update the lastSyncedAt timestamp
+        updatedEvent.lastSyncedAt = new Date();
+
+        // Save the updated event with Bluesky metadata
+        await this.eventRepository.save(updatedEvent);
       } catch (error) {
         this.logger.error('Failed to update event in Bluesky', {
           error: error.message,

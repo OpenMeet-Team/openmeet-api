@@ -34,6 +34,7 @@ import { RoleEnum } from '../../role/role.enum';
 import { EventSeriesEntity } from '../../event-series/infrastructure/persistence/relational/entities/event-series.entity';
 import { UpdateEventDto } from '../dto/update-event.dto';
 import { RecurrenceFrequency } from '../../event-series/interfaces/recurrence-frequency.enum';
+import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
 
 describe('EventManagementService', () => {
   let service: EventManagementService;
@@ -230,6 +231,14 @@ describe('EventManagementService', () => {
         {
           provide: BlueskyService,
           useValue: {},
+        },
+        {
+          provide: BlueskyIdService,
+          useValue: {
+            createUri: jest.fn(),
+            parseUri: jest.fn(),
+            isValidUri: jest.fn(),
+          },
         },
         {
           provide: 'DiscussionService',

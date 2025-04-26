@@ -11,8 +11,9 @@ import { EventSourceType } from '../../core/constants/source-type.constant';
 
 export class ExternalRsvpDto {
   @ApiProperty({
-    description: 'Source ID of the event being responded to',
-    example: 'did:plc:abcdef123456',
+    description:
+      'Source ID of the event being responded to - full AT Protocol URI',
+    example: 'at://did:plc:abcdef123456/app.bsky.feed.post/3jui2dwarf2xa',
   })
   @IsString()
   @IsNotEmpty()
