@@ -182,43 +182,49 @@ export class EventIntegrationService {
 
           return eventsByUrl[0];
         }
-        
+
         // Check uris array for OpenMeet URLs which contain the slug
         if (eventData.source.metadata?.uris) {
-          const uris = eventData.source.metadata.uris as Array<{uri: string, name: string}>;
-          
+          const uris = eventData.source.metadata.uris as Array<{
+            uri: string;
+            name: string;
+          }>;
+
           // Look for OpenMeet Event URIs
-          const openmeetUris = uris.filter(uri => 
-            uri.name === 'OpenMeet Event' && 
-            uri.uri && 
-            (uri.uri.includes('/events/'))
+          const openmeetUris = uris.filter(
+            (uri) =>
+              uri.name === 'OpenMeet Event' &&
+              uri.uri &&
+              uri.uri.includes('/events/'),
           );
-          
+
           if (openmeetUris.length > 0) {
             // Extract slug from URI - typically the last part of the path
             for (const openmeetUri of openmeetUris) {
               const uriParts = openmeetUri.uri.split('/');
               const potentialSlug = uriParts[uriParts.length - 1];
-              
+
               if (potentialSlug) {
-                this.logger.debug(`Looking for event with slug: ${potentialSlug}`);
-                
+                this.logger.debug(
+                  `Looking for event with slug: ${potentialSlug}`,
+                );
+
                 const eventBySlug = await eventRepository.findOne({
-                  where: { slug: potentialSlug }
+                  where: { slug: potentialSlug },
                 });
-                
+
                 if (eventBySlug) {
                   this.logger.debug(
                     `Found existing event by embedded slug in URI: ${eventBySlug.id}`,
                   );
-                  
+
                   // Record the deduplication method used
                   this.deduplicationCounter.inc({
                     tenant: tenantId,
                     source_type: eventData.source.type,
                     method: 'secondary_uri_slug',
                   });
-                  
+
                   return eventBySlug;
                 }
               }

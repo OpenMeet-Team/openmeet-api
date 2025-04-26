@@ -365,12 +365,12 @@ export class BlueskyService {
 
       // Determine the rkey to use
       let rkey: string;
-      
+
       // If updating an existing event, use the existing rkey
       if (event.sourceData?.rkey) {
         rkey = event.sourceData.rkey as string;
         this.logger.debug(`Using existing rkey for update: ${rkey}`);
-      } 
+      }
       // For new events, generate a unique rkey based on the slug (not name)
       else {
         // Use slug instead of name to generate rkey (slugs don't change on rename)
@@ -401,17 +401,20 @@ export class BlueskyService {
           name: 'Online Meeting Link',
         });
       }
-      
+
       // Add OpenMeet event URL to uris to help with matching
-      const baseUrl = this.configService.get<string>('APP_URL') || 'https://openmeet.net';
+      const baseUrl =
+        this.configService.get<string>('APP_URL', { infer: true }) ||
+        'https://openmeet.net';
       const openmeetEventUrl = `${baseUrl}/events/${event.slug}`;
-      
+
       // Check if we already have an OpenMeet Event URI to avoid duplicates
-      const existingOpenMeetUri = uris.find(uri => 
-        uri.name === 'OpenMeet Event' || 
-        (uri.uri && uri.uri.includes(`/events/${event.slug}`))
+      const existingOpenMeetUri = uris.find(
+        (uri) =>
+          uri.name === 'OpenMeet Event' ||
+          (uri.uri && uri.uri.includes(`/events/${event.slug}`)),
       );
-      
+
       if (!existingOpenMeetUri) {
         this.logger.debug(`Adding OpenMeet event URL: ${openmeetEventUrl}`);
         uris.push({
@@ -419,7 +422,9 @@ export class BlueskyService {
           name: 'OpenMeet Event',
         });
       } else {
-        this.logger.debug(`OpenMeet event URL already exists: ${existingOpenMeetUri.uri}`);
+        this.logger.debug(
+          `OpenMeet event URL already exists: ${existingOpenMeetUri.uri}`,
+        );
       }
 
       // Create record data
