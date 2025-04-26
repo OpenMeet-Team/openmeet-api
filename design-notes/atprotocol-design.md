@@ -35,6 +35,7 @@ This document serves as the authoritative source of truth for the design and imp
   - [Problem Statement](#problem-statement)
   - [Design Decision](#design-decision)
   - [Benefits](#benefits)
+  - [Implementation Status](#implementation-status-1)
   - [Implementation Plan](#implementation-plan)
   - [References](#references)
 - [Comprehensive Event Ingestion Flow Architecture](#comprehensive-event-ingestion-flow-architecture)
@@ -202,7 +203,7 @@ RSVPs (event attendance records) are also synchronized between platforms:
      - "going" → Confirmed
      - "notgoing" → Cancelled
    - Shadow accounts created for Bluesky users who haven't registered
-   - Events located by their source attributes (sourceId, sourceType)
+   - Events located by their source attributes (sourceId, sourceType, cid, rkey, uri)
    - Attendee records created or updated using natural key (user + event)
 
 2. **RSVP Processing Flow Implementation**
