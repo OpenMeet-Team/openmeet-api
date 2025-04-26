@@ -99,6 +99,8 @@ The integration consists of several key components:
 - **Event Processor**: Maps Bluesky events to OpenMeet's format
 - **Event Publisher**: Publishes OpenMeet events to Bluesky
 - **Deduplication Service**: Prevents duplicate events
+- **Event Sync Service**: Manages bidirectional event synchronization using a strategy pattern 
+- **Sync Strategy Factory**: Creates appropriate sync strategies for different source types
 
 ### 4. Shadow User Components
 
@@ -173,7 +175,14 @@ When ingesting events from Bluesky:
    - Group potentially related events
    - Suggest series creation when patterns are detected
 
-4. **User-Initiated Sync**
+4. **Event Synchronization Strategy**
+   - Implemented using a strategy pattern for different source types
+   - Fast initial response from database with asynchronous background sync
+   - Timestamp comparison to detect and apply remote changes
+   - Prevention of circular updates using skipBlueskySync flag
+   - Event slug-based synchronization to ensure proper identification
+
+5. **User-Initiated Sync**
    - Trigger comprehensive event sync when Bluesky users log in
    - Perform bidirectional synchronization of user's events
    - Handle both historical and future events
@@ -196,16 +205,34 @@ RSVPs (event attendance records) are also synchronized between platforms:
    - Events located by their source attributes (sourceId, sourceType)
    - Attendee records created or updated using natural key (user + event)
 
-2. **User PDS RSVP Synchronization**
+2. **RSVP Processing Flow Implementation**
+   - bsky-firehose-consumer detects RSVP operations from firehose
+   - Filters for creates, updates, and deletes
+   - Extracts user DID/handle, event reference, and status
+   - Publishes structured message to RabbitMQ
+   - bsky-event-processor consumes and maps to ExternalRsvpDto format
+   - RsvpIntegrationService processes the RSVP:
+     - Finds referenced event by source attributes
+     - Creates or finds shadow account for the user
+     - Maps RSVP status to OpenMeet status
+     - Finds existing attendee record or creates a new one
+     - Updates the status based on the RSVP
+   - Metrics and detailed logging track processing performance
+
+3. **User PDS RSVP Synchronization**
    - During user login, we can check the user's PDS for RSVPs
    - For each RSVP, find the corresponding event in OpenMeet
    - Create or update the attendance record accordingly
    - Handles both local and remote events
 
-3. **RSVP Integration API**
+4. **RSVP Integration API**
    - Dedicated endpoint for RSVP ingestion (/integration/rsvps)
    - Uses same authentication mechanism as event integration
-   - DTO format includes user reference, event reference, and status
+   - ExternalRsvpDto includes:
+     - Event reference (eventSourceId, eventSourceType)
+     - User reference (userDid, userHandle)
+     - RSVP status and timestamp
+     - Optional metadata for Bluesky-specific data
 
 Reference: [ATProtocol Integration Guide](/design-notes/recurring-events/atprotocol-integration-guide.md)
 
@@ -361,22 +388,42 @@ interface BlueskyEnhancedProfile extends BlueskyPublicProfile {
    - Enhanced profiles for authenticated users
    - Profile data syncing from Bluesky
 
+4. **Event Integration Flow**
+   - Firehose consumer implementation for Bluesky event capture
+   - Event processor service transforming and routing events
+   - Enhanced server-side deduplication with multi-criteria matching
+   - Comprehensive metrics and monitoring with Prometheus/Grafana
+   - DELETE endpoint for integration events
+   - Shadow account handling for Bluesky event creators
+
+5. **RSVP Integration**
+   - RSVP capture from Bluesky firehose
+   - Integration/rsvps endpoint implementation
+   - Shadow account creation for RSVP users
+   - Mapping from Bluesky RSVP statuses to OpenMeet attendance statuses
+   - Metrics for RSVP processing effectiveness
+
+6. **Infrastructure Setup**
+   - Kubernetes configurations for both bsky-firehose-consumer and bsky-event-processor
+   - Enhanced monitoring with Grafana dashboards
+   - Improved error handling with proper logging
+   - Exponential backoff implementation for temporary errors
+
 ### In Progress
 
-1. **Shadow Account Service**
-   - Design complete, implementation in progress
-   - Need to add `isShadowAccount` flag to UserEntity
-   - Need to implement account claiming process
+1. **Shadow Account Service Enhancements**
+   - Account claiming process implementation
+   - Profile synchronization improvements
+   - Admin interface for shadow account management
 
-2. **Event Ingestion**
-   - Firehose consumer architecture defined
-   - Need to improve event mapping and deduplication
-   - Series detection algorithm to be implemented
+2. **RSVP Handling Improvements**
+   - RSVP deletion functionality
+   - User PDS RSVP Synchronization development
 
 3. **Recurrence Handling**
    - Strategy defined for publishing recurring events
-   - Implementation of occurrence selection algorithm needed
-   - Next occurrence publishing logic to be added
+   - Implementation of occurrence selection algorithm 
+   - Next occurrence publishing logic
 
 ### Planned
 
@@ -390,16 +437,22 @@ interface BlueskyEnhancedProfile extends BlueskyPublicProfile {
    - Build similarity scoring for potential series members
    - Create UI for confirming series detection results
 
-3. **Comprehensive Monitoring**
-   - Add metrics for sync quality and performance
-   - Create dashboards for monitoring sync status
-   - Implement alerting for sync failures
+3. **Comprehensive Testing**
+   - End-to-end tests for the event and RSVP ingestion pipeline
+   - User profile navigation tests for shadow accounts
+   - Integration tests for bidirectional event sync
 
 4. **User-Initiated Event Sync**
-   - Develop the `UserEventSyncService` for login-triggered syncs
+   - Complete the `UserEventSyncService` for login-triggered syncs
    - Implement bidirectional sync with proper conflict resolution
    - Add user preferences for sync behavior
    - Create admin tools for monitoring and troubleshooting
+
+5. **Event Sync Strategy Improvements**
+   - Add unit tests for EventSyncService and BlueskyEventSyncStrategy
+   - Add metrics for sync operations (success rate, time to sync)
+   - Implement exponential backoff for sync failures
+   - Implement sync status tracking in admin interface
 
 ## Minimum Viable Implementation
 
@@ -464,6 +517,41 @@ We will implement a dedicated Event Integration Interface with the following arc
 - **Efficiency**: Optimized for bulk operations and service-to-service communication
 - **Separation of Concerns**: Clearly separates integration traffic from user-generated content
 - **Extensibility**: Easy to add new source types without changing the core API
+
+### Implementation Status
+
+1. **Server-Side Deduplication (Completed)**
+   - Enhanced `EventIntegrationService` with multi-criteria matching:
+     - Primary method: Source ID and type
+     - Secondary method: Source URL
+     - Tertiary method: Metadata fields (CID and rkey specific to Bluesky)
+   - Added detailed logging for matching logic
+   - Comprehensive test suite for deduplication logic
+   - Preserved legacy method for backward compatibility
+
+2. **Integration API Endpoints (Completed)**
+   - Created `/integration/events` endpoint for event ingestion
+   - Added DELETE endpoint for integration events with sourceId and sourceType parameters
+   - Implemented `/integration/rsvps` endpoint for RSVP processing
+   - Enhanced security with ServiceKeyAuthGuard
+
+3. **Processor Simplification (Completed)**
+   - Removed client-side deduplication logic from processors
+   - Standardized approach for creates, updates, and deletes
+   - Improved error handling with exponential backoff
+
+4. **Monitoring (Completed)**
+   - Added comprehensive metrics for processing:
+     - Counters for processed events by operation (create/update/delete)
+     - Counters for deduplication matches by method
+     - Histogram for processing duration
+   - Created Grafana dashboard for event integration metrics
+
+5. **Remaining Tasks**
+   - Update `event-processor.service.ts` to use `/integration/events` endpoint
+   - Complete RSVP deletion functionality
+   - Implement end-to-end tests for the complete pipeline
+   - Add admin tools for viewing and managing ingested events
 
 ### Implementation Plan
 
