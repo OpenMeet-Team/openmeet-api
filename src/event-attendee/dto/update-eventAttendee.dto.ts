@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   EventAttendeeRole,
   EventAttendeeStatus,
@@ -16,4 +16,10 @@ export class UpdateEventAttendeeDto {
     enum: EventAttendeeStatus,
   })
   status: EventAttendeeStatus;
+  
+  @ApiPropertyOptional({
+    description: 'Optional metadata for the attendance record',
+    type: 'object',
+  })
+  metadata?: Record<string, any>;
 }

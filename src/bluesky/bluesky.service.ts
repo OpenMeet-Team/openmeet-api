@@ -41,7 +41,7 @@ export class BlueskyService {
     );
   }
 
-  private async resumeSession(tenantId: string, did: string): Promise<Agent> {
+  async resumeSession(tenantId: string, did: string): Promise<Agent> {
     for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
       try {
         const client = await this.getOAuthClient(tenantId);

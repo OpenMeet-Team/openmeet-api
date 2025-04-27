@@ -255,11 +255,12 @@ export class EventIntegrationService {
 
           const queryBuilder = eventRepository.createQueryBuilder('event');
 
+          // Use "sourceData" with quotes to ensure proper column case
           const eventsByRkey = await queryBuilder
             .where('event.sourceType = :sourceType', {
               sourceType: EventSourceType.BLUESKY,
             })
-            .andWhere(`event.sourceData->>'rkey' = :rkey`, { rkey })
+            .andWhere(`event."sourceData"->>'rkey' = :rkey`, { rkey })
             .getMany();
 
           if (eventsByRkey.length > 0) {
@@ -287,11 +288,12 @@ export class EventIntegrationService {
 
           const queryBuilder = eventRepository.createQueryBuilder('event');
 
+          // Use "sourceData" with quotes to ensure proper column case
           const eventsByCid = await queryBuilder
             .where('event.sourceType = :sourceType', {
               sourceType: EventSourceType.BLUESKY,
             })
-            .andWhere(`event.sourceData->>'cid' = :cid`, { cid })
+            .andWhere(`event."sourceData"->>'cid' = :cid`, { cid })
             .getMany();
 
           if (eventsByCid.length > 0) {

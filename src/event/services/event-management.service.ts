@@ -57,6 +57,7 @@ export class EventManagementService {
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly categoryService: CategoryService,
+    @Inject(forwardRef(() => EventAttendeeService))
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly eventEmitter: EventEmitter2,
     private readonly fileService: FilesS3PresignedService,
@@ -71,6 +72,7 @@ export class EventManagementService {
     private readonly discussionService: any, // Using any here to avoid circular dependency issues
     @Inject(forwardRef(() => EventSeriesService))
     private readonly eventSeriesService: EventSeriesService,
+    @Inject(forwardRef(() => EventQueryService))
     private readonly eventQueryService: EventQueryService,
   ) {
     void this.initializeRepository();
@@ -524,6 +526,77 @@ export class EventManagementService {
       isAllDay: updateEventDto.isAllDay,
     };
 
+    // Handle sourceType and sourceId
+    if (updateEventDto.sourceType) {
+      // Cast the sourceType to the correct enum type
+      updatedEventData.sourceType =
+        updateEventDto.sourceType as EventSourceType;
+
+      // If sourceId is provided and is a DID (not a full URI)
+      if (updateEventDto.sourceId) {
+        if (
+          updateEventDto.sourceId.startsWith('did:') &&
+          !updateEventDto.sourceId.startsWith('at://')
+        ) {
+          this.logger.debug(
+            'Source ID is a DID, converting to full URI if possible',
+          );
+
+          // Try to create a full URI if we have all the components
+          if (event.sourceData?.rkey) {
+            const did = updateEventDto.sourceId;
+            const collection = 'community.lexicon.calendar.event';
+            // Ensure rkey is properly typed as a string
+            const rkey = String(event.sourceData.rkey);
+
+            try {
+              updatedEventData.sourceId = this.blueskyIdService.createUri(
+                did,
+                collection,
+                rkey,
+              );
+              this.logger.debug(
+                `Converted DID to full URI: ${updatedEventData.sourceId}`,
+              );
+
+              // Update sourceData to include all components
+              updatedEventData.sourceData = {
+                ...event.sourceData,
+                did,
+                collection,
+              };
+            } catch (error) {
+              this.logger.warn(
+                `Could not convert DID to full URI: ${error.message}`,
+                {
+                  did,
+                  rkey,
+                  source: 'update',
+                },
+              );
+              // Keep the original sourceId
+              updatedEventData.sourceId = updateEventDto.sourceId;
+            }
+          } else {
+            // Just use the DID as is
+            updatedEventData.sourceId = updateEventDto.sourceId;
+          }
+        } else {
+          // Keep the sourceId as is (might already be a URI)
+          updatedEventData.sourceId = updateEventDto.sourceId;
+        }
+      }
+
+      // Handle sourceData and sourceUrl
+      if (updateEventDto.sourceData) {
+        updatedEventData.sourceData = updateEventDto.sourceData;
+      }
+
+      if (updateEventDto.sourceUrl) {
+        updatedEventData.sourceUrl = updateEventDto.sourceUrl;
+      }
+    }
+
     // Handle location point update
     if (updateEventDto.lat && updateEventDto.lon) {
       const { lat, lon } = updateEventDto;
@@ -603,11 +676,43 @@ export class EventManagementService {
       event.sourceData?.rkey
     ) {
       try {
-        // Type cast sourceData.handle to string to avoid TypeScript error
-        const handle = (event.sourceData?.handle as string) || '';
-        const did = (event.sourceData?.did as string) || '';
+        // If the sourceId is a DID (not a full URI), parse components from sourceData
+        let did = '';
+        let handle = '';
         const collection = 'community.lexicon.calendar.event';
-        const rkey = event.sourceData?.rkey as string;
+        // Ensure rkey is properly typed as a string
+        const rkey = String(event.sourceData?.rkey || '');
+
+        // Try to extract DID from sourceId if it's a full URI
+        if (event.sourceId && event.sourceId.startsWith('at://')) {
+          try {
+            const parsedUri = this.blueskyIdService.parseUri(event.sourceId);
+            did = parsedUri.did;
+          } catch (parseError) {
+            this.logger.warn(
+              `Failed to parse URI from sourceId: ${event.sourceId}`,
+              {
+                error: parseError.message,
+              },
+            );
+          }
+        }
+
+        // If we couldn't get DID from sourceId, use the one from sourceData
+        if (!did) {
+          did = String(event.sourceData?.did || '');
+        }
+
+        // Use handle from sourceData
+        handle = String(event.sourceData?.handle || '');
+
+        this.logger.debug('Preparing to update Bluesky event record:', {
+          eventId: event.id,
+          did,
+          handle,
+          rkey,
+          collection,
+        });
 
         // Update the record in Bluesky
         await this.blueskyService.createEventRecord(
@@ -641,10 +746,24 @@ export class EventManagementService {
 
         // Save the updated event with Bluesky metadata
         await this.eventRepository.save(updatedEvent);
+
+        this.logger.debug(
+          'Successfully updated Bluesky event record and local metadata',
+          {
+            eventId: event.id,
+            sourceId: updatedEvent.sourceId,
+          },
+        );
       } catch (error) {
         this.logger.error('Failed to update event in Bluesky', {
           error: error.message,
           stack: error.stack,
+          eventData: {
+            id: event.id,
+            sourceId: event.sourceId,
+            sourceType: event.sourceType,
+            sourceData: event.sourceData,
+          },
         });
         // Continue execution - we don't want to fail the update due to Bluesky issues
       }

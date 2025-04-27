@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
   Scope,
+  forwardRef,
 } from '@nestjs/common';
 import { Repository, UpdateResult } from 'typeorm';
 import { REQUEST } from '@nestjs/core';
@@ -23,6 +24,9 @@ import { EventRoleService } from '../event-role/event-role.service';
 import { AuditLoggerService } from '../logger/audit-logger.provider';
 import { In } from 'typeorm';
 import { Trace } from '../utils/trace.decorator';
+import { EventSourceType } from '../core/constants/source-type.constant';
+import { BlueskyRsvpService } from '../bluesky/bluesky-rsvp.service';
+import { UserService } from '../user/user.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventAttendeeService {
@@ -35,6 +39,10 @@ export class EventAttendeeService {
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly eventRoleService: EventRoleService,
+    @Inject(forwardRef(() => BlueskyRsvpService))
+    private readonly blueskyRsvpService: BlueskyRsvpService,
+    @Inject(forwardRef(() => UserService))
+    private readonly userService: UserService,
   ) {
     this.logger.log('EventAttendeeService Constructed');
   }
@@ -63,6 +71,72 @@ export class EventAttendeeService {
       this.auditLogger.log('event attendee created', {
         saved,
       });
+
+      // After creating the attendance record, sync to Bluesky if:
+      // 1. The event has a Bluesky source
+      // 2. The user has a connected Bluesky account
+      // 3. Bluesky syncing is not specifically disabled
+      if (
+        !createEventAttendeeDto.skipBlueskySync && 
+        createEventAttendeeDto.event.sourceType === EventSourceType.BLUESKY &&
+        createEventAttendeeDto.event.sourceData?.rkey
+      ) {
+        try {
+          // Get the user's Bluesky preferences
+          const user = await this.userService.findById(
+            createEventAttendeeDto.user.id,
+            this.request.tenantId,
+          );
+          
+          if (user?.preferences?.bluesky?.connected && user?.preferences?.bluesky?.did) {
+            this.logger.debug('User has connected Bluesky account, syncing RSVP');
+
+            // Map OpenMeet status to Bluesky status
+            const statusMap = {
+              [EventAttendeeStatus.Confirmed]: 'going',
+              [EventAttendeeStatus.Maybe]: 'interested',
+              [EventAttendeeStatus.Cancelled]: 'notgoing',
+              [EventAttendeeStatus.Pending]: 'interested',
+              [EventAttendeeStatus.Waitlist]: 'interested',
+            };
+            
+            const blueskyStatus = statusMap[saved.status] || 'interested';
+            
+            // Create RSVP in Bluesky
+            const result = await this.blueskyRsvpService.createRsvp(
+              createEventAttendeeDto.event,
+              blueskyStatus,
+              user.preferences.bluesky.did,
+              this.request.tenantId
+            );
+            
+            // Store the RSVP URI in the attendance record's metadata
+            if (result.success) {
+              this.logger.debug(`Successfully created Bluesky RSVP: ${result.rsvpUri}`);
+              
+              // Get the entity first
+              const attendee = await this.eventAttendeesRepository.findOne({
+                where: { id: saved.id }
+              });
+              
+              if (attendee) {
+                // Update the metadata
+                attendee.metadata = {
+                  ...(attendee.metadata || {}),
+                  blueskyRsvpUri: result.rsvpUri,
+                };
+                
+                // Save the updated entity
+                await this.eventAttendeesRepository.save(attendee);
+              }
+            }
+          }
+        } catch (error) {
+          // Log but don't fail if Bluesky sync fails
+          this.logger.error(`Failed to sync attendance to Bluesky: ${error.message}`, error.stack);
+        }
+      }
+      
       return saved;
     } catch (error) {
       // Handle database save errors
@@ -234,7 +308,7 @@ export class EventAttendeeService {
           EventAttendeeStatus.Pending,
         ]),
       },
-      relations: ['user', 'role', 'role.permissions'],
+      relations: ['user', 'role', 'role.permissions', 'event'],
       order: { createdAt: 'DESC' },
     });
 
@@ -253,6 +327,55 @@ export class EventAttendeeService {
     this.logger.debug(
       `[cancelEventAttendance] Updated attendee status: ${updatedAttendee.status}`,
     );
+
+    // After cancelling, update Bluesky RSVP if:
+    // 1. The attendee has a Bluesky RSVP URI in metadata or the event is from Bluesky
+    // 2. The user has a connected Bluesky account
+    if (
+      (updatedAttendee.metadata?.blueskyRsvpUri || attendee.event.sourceType === EventSourceType.BLUESKY) &&
+      attendee.event.sourceData?.rkey
+    ) {
+      try {
+        // Get the user's Bluesky preferences
+        const user = await this.userService.findById(
+          userId,
+          this.request.tenantId,
+        );
+        
+        if (user?.preferences?.bluesky?.connected && user?.preferences?.bluesky?.did) {
+          // Create a "notgoing" RSVP
+          const result = await this.blueskyRsvpService.createRsvp(
+            attendee.event,
+            'notgoing',
+            user.preferences.bluesky.did,
+            this.request.tenantId
+          );
+          
+          if (result.success) {
+            // Get the entity first
+            const attendee = await this.eventAttendeesRepository.findOne({
+              where: { id: updatedAttendee.id }
+            });
+            
+            if (attendee) {
+              // Update the metadata
+              attendee.metadata = {
+                ...(attendee.metadata || {}),
+                blueskyRsvpUri: result.rsvpUri,
+              };
+              
+              // Save the updated entity
+              await this.eventAttendeesRepository.save(attendee);
+            }
+            
+            this.logger.debug(`Updated Bluesky RSVP to notgoing: ${result.rsvpUri}`);
+          }
+        }
+      } catch (error) {
+        // Log but don't fail if Bluesky sync fails
+        this.logger.error(`Failed to sync cancellation to Bluesky: ${error.message}`, error.stack);
+      }
+    }
 
     return updatedAttendee;
   }
@@ -320,6 +443,49 @@ export class EventAttendeeService {
       select: ['event'],
     });
     return attendees.map((a) => a.id);
+  }
+  
+  /**
+   * Find event attendees by metadata field value
+   * @param key The metadata key to search for
+   * @param value The value to match
+   * @param userSlug Optional user slug to filter by
+   */
+  @Trace('event-attendee.findByMetadata')
+  async findByMetadata(
+    key: string,
+    value: any,
+    userSlug?: string
+  ): Promise<EventAttendeesEntity[]> {
+    await this.getTenantSpecificEventRepository();
+    
+    // Create base query with jsonb path operator
+    const query = this.eventAttendeesRepository
+      .createQueryBuilder('eventAttendee')
+      .leftJoinAndSelect('eventAttendee.event', 'event')
+      .leftJoinAndSelect('eventAttendee.user', 'user')
+      .where(`eventAttendee.metadata->>'${key}' = :value`, { value });
+    
+    // Add user slug filter if provided
+    if (userSlug) {
+      query.andWhere('user.slug = :userSlug', { userSlug });
+    }
+    
+    return query.getMany();
+  }
+  
+  /**
+   * Find all attendance records for a specific user
+   * @param userSlug The user slug to find attendees for
+   */
+  @Trace('event-attendee.findByUserSlug')
+  async findByUserSlug(userSlug: string): Promise<EventAttendeesEntity[]> {
+    await this.getTenantSpecificEventRepository();
+    
+    return this.eventAttendeesRepository.find({
+      where: { user: { slug: userSlug } },
+      relations: ['event'],
+    });
   }
 
   @Trace('event-attendee.getMailServiceEventAttendeesByPermission')
@@ -411,5 +577,16 @@ export class EventAttendeeService {
   async findOne(options: any): Promise<EventAttendeesEntity | null> {
     await this.getTenantSpecificEventRepository();
     return this.eventAttendeesRepository.findOne(options);
+  }
+
+  /**
+   * Save an event attendee entity
+   * @param attendee The event attendee entity to save
+   * @returns The saved event attendee entity
+   */
+  @Trace('event-attendee.save')
+  async save(attendee: EventAttendeesEntity): Promise<EventAttendeesEntity> {
+    await this.getTenantSpecificEventRepository();
+    return this.eventAttendeesRepository.save(attendee);
   }
 }

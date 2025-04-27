@@ -7,6 +7,8 @@ import { ShadowAccountService } from '../../shadow-account/shadow-account.servic
 import { EventQueryService } from './event-query.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { EventRoleService } from '../../event-role/event-role.service';
+import { UserService } from '../../user/user.service';
+import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
 import { EventSourceType } from '../../core/constants/source-type.constant';
 import {
   EventAttendeeStatus,
@@ -25,6 +27,8 @@ describe('RsvpIntegrationService', () => {
   let eventQueryService: jest.Mocked<EventQueryService>;
   let eventAttendeeService: jest.Mocked<EventAttendeeService>;
   let eventRoleService: jest.Mocked<EventRoleService>;
+  let userService: jest.Mocked<UserService>;
+  let blueskyIdService: jest.Mocked<BlueskyIdService>;
   let processedCounter: jest.Mock;
   let processingDuration: { startTimer: jest.Mock };
 
@@ -100,12 +104,25 @@ describe('RsvpIntegrationService', () => {
             updateEventAttendee: jest.fn(),
             findOne: jest.fn(),
             create: jest.fn(),
+            save: jest.fn(), // Add the save method that was missing
           },
         },
         {
           provide: EventRoleService,
           useValue: {
             getRoleByName: jest.fn(),
+          },
+        },
+        {
+          provide: UserService,
+          useValue: {
+            findByExternalId: jest.fn(),
+          },
+        },
+        {
+          provide: BlueskyIdService,
+          useValue: {
+            parseUri: jest.fn(),
           },
         },
         {
@@ -135,6 +152,12 @@ describe('RsvpIntegrationService', () => {
     eventRoleService = module.get(
       EventRoleService,
     ) as jest.Mocked<EventRoleService>;
+    userService = module.get(
+      UserService,
+    ) as jest.Mocked<UserService>;
+    blueskyIdService = module.get(
+      BlueskyIdService,
+    ) as jest.Mocked<BlueskyIdService>;
   });
 
   it('should be defined', () => {
@@ -171,6 +194,7 @@ describe('RsvpIntegrationService', () => {
       eventRoleService.getRoleByName.mockResolvedValue(mockRole);
       eventAttendeeService.updateEventAttendee.mockResolvedValue({} as any);
       eventAttendeeService.findOne.mockResolvedValue(mockAttendee);
+      eventAttendeeService.save.mockResolvedValue(mockAttendee);
 
       const result = await service.processExternalRsvp(
         mockRsvpDto,
@@ -208,6 +232,7 @@ describe('RsvpIntegrationService', () => {
       expect(eventAttendeeService.findOne).toHaveBeenCalledWith({
         id: mockAttendee.id,
       });
+      expect(eventAttendeeService.save).toHaveBeenCalled();
       expect(processedCounter).toHaveBeenCalledWith({
         tenant: 'test-tenant',
         source_type: mockRsvpDto.eventSourceType,
@@ -240,6 +265,11 @@ describe('RsvpIntegrationService', () => {
         user: mockUser,
         status: EventAttendeeStatus.Confirmed,
         role: mockRole,
+        metadata: {
+          sourceId: mockRsvpDto.sourceId,
+          sourceType: mockRsvpDto.eventSourceType,
+        },
+        skipBlueskySync: true,
       });
       expect(processedCounter).toHaveBeenCalledWith({
         tenant: 'test-tenant',

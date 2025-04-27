@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { EventAttendeePermission } from '../core/constants/constant';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
@@ -8,6 +8,7 @@ import { MailService } from '../mail/mail.service';
 export class EventMailService {
   constructor(
     private readonly mailService: MailService,
+    @Inject(forwardRef(() => EventAttendeeService))
     private readonly eventAttendeeService: EventAttendeeService,
   ) {}
 

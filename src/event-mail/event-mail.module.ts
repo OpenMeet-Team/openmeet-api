@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { EventMailService } from './event-mail.service';
 import { MailModule } from '../mail/mail.module';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
@@ -11,7 +11,7 @@ import { ConfigModule } from '@nestjs/config';
   imports: [
     ConfigModule,
     MailModule,
-    EventAttendeeModule,
+    forwardRef(() => EventAttendeeModule),
     MailerModule,
     TenantModule,
   ],

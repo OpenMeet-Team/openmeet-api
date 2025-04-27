@@ -40,4 +40,7 @@ export class EventAttendeesEntity {
 
   @Column({ type: 'text', nullable: true })
   approvalAnswer?: string;
+  
+  @Column({ type: 'jsonb', nullable: true })
+  metadata?: Record<string, any>;
 }

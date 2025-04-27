@@ -28,6 +28,7 @@ import { EventIntegrationService } from './services/event-integration.service';
 import { RsvpIntegrationController } from './rsvp-integration.controller';
 import { RsvpIntegrationService } from './services/rsvp-integration.service';
 import { MetricsModule } from '../metrics/metrics.module';
+import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { MetricsModule } from '../metrics/metrics.module';
     ICalendarService,
     EventIntegrationService,
     RsvpIntegrationService,
+    EventAttendeeService,
   ],
   exports: [
     EventManagementService,

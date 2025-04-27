@@ -108,6 +108,21 @@ const rsvpIntegrationMetrics = [
   }),
 ];
 
+// Define Bluesky RSVP specific metrics
+const blueskyRsvpMetrics = [
+  makeCounterProvider({
+    name: 'bluesky_rsvp_operations_total',
+    help: 'Total number of Bluesky RSVP operations',
+    labelNames: ['tenant', 'operation', 'status'],
+  }),
+  makeHistogramProvider({
+    name: 'bluesky_rsvp_processing_duration_seconds',
+    help: 'Time spent processing Bluesky RSVPs in seconds',
+    labelNames: ['tenant', 'operation', 'status'],
+    buckets: [0.01, 0.1, 0.5, 1, 2, 5, 10],
+  }),
+];
+
 @Module({
   imports: [
     ScheduleModule.forRoot(),
@@ -124,6 +139,7 @@ const rsvpIntegrationMetrics = [
     ...httpMetricsProviders,
     ...eventIntegrationMetrics,
     ...rsvpIntegrationMetrics,
+    ...blueskyRsvpMetrics,
   ],
   exports: [
     MetricsService,
@@ -133,6 +149,8 @@ const rsvpIntegrationMetrics = [
     ...eventIntegrationMetrics,
     // Export RSVP integration metrics for use in RsvpIntegrationService
     ...rsvpIntegrationMetrics,
+    // Export Bluesky RSVP metrics for use in BlueskyRsvpService
+    ...blueskyRsvpMetrics,
   ],
 })
 export class MetricsModule implements OnModuleInit {

@@ -34,4 +34,19 @@ export class CreateEventAttendeeDto {
   })
   @IsOptional()
   status?: EventAttendeeStatus;
+
+  @ApiPropertyOptional({
+    description: 'Optional metadata for the attendance record',
+    type: 'object',
+  })
+  @IsOptional()
+  metadata?: Record<string, any>;
+
+  @ApiPropertyOptional({
+    description: 'Skip syncing this attendance to Bluesky',
+    type: 'boolean',
+    default: false,
+  })
+  @IsOptional()
+  skipBlueskySync?: boolean;
 }
