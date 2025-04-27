@@ -33,6 +33,12 @@ export const mockEventAttendee = {
   approvalAnswer: 'test',
   event: mockEvent,
   user: mockUser,
+  // SourceFields implementation
+  sourceType: null,
+  sourceId: null,
+  sourceUrl: null,
+  sourceData: null,
+  lastSyncedAt: null,
 } as EventAttendeesEntity;
 
 export const mockEventAttendees = [mockEventAttendee];

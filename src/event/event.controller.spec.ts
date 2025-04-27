@@ -328,9 +328,18 @@ describe('EventController', () => {
       jest
         .spyOn(eventManagementService, 'attendEvent')
         .mockResolvedValue(mockEventAttendee);
+      // Convert entity to DTO
+      const mockAttendeeDto = {
+        ...mockEventAttendee,
+        sourceType: mockEventAttendee.sourceType || undefined,
+        sourceId: mockEventAttendee.sourceId || undefined,
+        sourceUrl: mockEventAttendee.sourceUrl || undefined,
+        sourceData: mockEventAttendee.sourceData || undefined,
+        lastSyncedAt: mockEventAttendee.lastSyncedAt || undefined,
+      };
       const result = await controller.attendEvent(
         mockUser,
-        mockEventAttendee,
+        mockAttendeeDto,
         mockEvent.slug,
       );
       expect(result).toEqual(mockEventAttendee);

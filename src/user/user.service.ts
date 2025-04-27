@@ -680,7 +680,7 @@ export class UserService {
     if (!externalId) return null;
 
     await this.getTenantSpecificRepository(tenantId);
-    
+
     return this.usersRepository.findOne({
       where: { socialId: externalId },
       relations: ['role', 'role.permissions'],

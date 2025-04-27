@@ -77,7 +77,7 @@ export class EventAttendeeService {
       // 2. The user has a connected Bluesky account
       // 3. Bluesky syncing is not specifically disabled
       if (
-        !createEventAttendeeDto.skipBlueskySync && 
+        !createEventAttendeeDto.skipBlueskySync &&
         createEventAttendeeDto.event.sourceType === EventSourceType.BLUESKY &&
         createEventAttendeeDto.event.sourceData?.rkey
       ) {
@@ -87,9 +87,14 @@ export class EventAttendeeService {
             createEventAttendeeDto.user.id,
             this.request.tenantId,
           );
-          
-          if (user?.preferences?.bluesky?.connected && user?.preferences?.bluesky?.did) {
-            this.logger.debug('User has connected Bluesky account, syncing RSVP');
+
+          if (
+            user?.preferences?.bluesky?.connected &&
+            user?.preferences?.bluesky?.did
+          ) {
+            this.logger.debug(
+              'User has connected Bluesky account, syncing RSVP',
+            );
 
             // Map OpenMeet status to Bluesky status
             const statusMap = {
@@ -99,33 +104,34 @@ export class EventAttendeeService {
               [EventAttendeeStatus.Pending]: 'interested',
               [EventAttendeeStatus.Waitlist]: 'interested',
             };
-            
+
             const blueskyStatus = statusMap[saved.status] || 'interested';
-            
+
             // Create RSVP in Bluesky
             const result = await this.blueskyRsvpService.createRsvp(
               createEventAttendeeDto.event,
               blueskyStatus,
               user.preferences.bluesky.did,
-              this.request.tenantId
+              this.request.tenantId,
             );
-            
-            // Store the RSVP URI in the attendance record's metadata
+
+            // Store the RSVP URI in the attendance record
             if (result.success) {
-              this.logger.debug(`Successfully created Bluesky RSVP: ${result.rsvpUri}`);
-              
+              this.logger.debug(
+                `Successfully created Bluesky RSVP: ${result.rsvpUri}`,
+              );
+
               // Get the entity first
               const attendee = await this.eventAttendeesRepository.findOne({
-                where: { id: saved.id }
+                where: { id: saved.id },
               });
-              
+
               if (attendee) {
-                // Update the metadata
-                attendee.metadata = {
-                  ...(attendee.metadata || {}),
-                  blueskyRsvpUri: result.rsvpUri,
-                };
-                
+                // Update the source fields
+                attendee.sourceId = result.rsvpUri;
+                attendee.sourceType = EventSourceType.BLUESKY;
+                attendee.lastSyncedAt = new Date();
+
                 // Save the updated entity
                 await this.eventAttendeesRepository.save(attendee);
               }
@@ -133,10 +139,13 @@ export class EventAttendeeService {
           }
         } catch (error) {
           // Log but don't fail if Bluesky sync fails
-          this.logger.error(`Failed to sync attendance to Bluesky: ${error.message}`, error.stack);
+          this.logger.error(
+            `Failed to sync attendance to Bluesky: ${error.message}`,
+            error.stack,
+          );
         }
       }
-      
+
       return saved;
     } catch (error) {
       // Handle database save errors
@@ -329,10 +338,11 @@ export class EventAttendeeService {
     );
 
     // After cancelling, update Bluesky RSVP if:
-    // 1. The attendee has a Bluesky RSVP URI in metadata or the event is from Bluesky
+    // 1. The attendee has a Bluesky sourceId or the event is from Bluesky
     // 2. The user has a connected Bluesky account
     if (
-      (updatedAttendee.metadata?.blueskyRsvpUri || attendee.event.sourceType === EventSourceType.BLUESKY) &&
+      (updatedAttendee.sourceId ||
+        attendee.event.sourceType === EventSourceType.BLUESKY) &&
       attendee.event.sourceData?.rkey
     ) {
       try {
@@ -341,39 +351,46 @@ export class EventAttendeeService {
           userId,
           this.request.tenantId,
         );
-        
-        if (user?.preferences?.bluesky?.connected && user?.preferences?.bluesky?.did) {
+
+        if (
+          user?.preferences?.bluesky?.connected &&
+          user?.preferences?.bluesky?.did
+        ) {
           // Create a "notgoing" RSVP
           const result = await this.blueskyRsvpService.createRsvp(
             attendee.event,
             'notgoing',
             user.preferences.bluesky.did,
-            this.request.tenantId
+            this.request.tenantId,
           );
-          
+
           if (result.success) {
             // Get the entity first
             const attendee = await this.eventAttendeesRepository.findOne({
-              where: { id: updatedAttendee.id }
+              where: { id: updatedAttendee.id },
             });
-            
+
             if (attendee) {
-              // Update the metadata
-              attendee.metadata = {
-                ...(attendee.metadata || {}),
-                blueskyRsvpUri: result.rsvpUri,
-              };
-              
+              // Update the source fields
+              attendee.sourceId = result.rsvpUri;
+              attendee.sourceType = EventSourceType.BLUESKY;
+              attendee.lastSyncedAt = new Date();
+
               // Save the updated entity
               await this.eventAttendeesRepository.save(attendee);
             }
-            
-            this.logger.debug(`Updated Bluesky RSVP to notgoing: ${result.rsvpUri}`);
+
+            this.logger.debug(
+              `Updated Bluesky RSVP to notgoing: ${result.rsvpUri}`,
+            );
           }
         }
       } catch (error) {
         // Log but don't fail if Bluesky sync fails
-        this.logger.error(`Failed to sync cancellation to Bluesky: ${error.message}`, error.stack);
+        this.logger.error(
+          `Failed to sync cancellation to Bluesky: ${error.message}`,
+          error.stack,
+        );
       }
     }
 
@@ -444,36 +461,74 @@ export class EventAttendeeService {
     });
     return attendees.map((a) => a.id);
   }
-  
+
   /**
-   * Find event attendees by metadata field value
-   * @param key The metadata key to search for
-   * @param value The value to match
+   * Find event attendees by source identifier
+   * @param sourceId The source identifier to search for
    * @param userSlug Optional user slug to filter by
+   */
+  @Trace('event-attendee.findBySourceId')
+  async findBySourceId(
+    sourceId: string,
+    userSlug?: string,
+  ): Promise<EventAttendeesEntity[]> {
+    await this.getTenantSpecificEventRepository();
+
+    // Create base query with source id operator
+    const query = this.eventAttendeesRepository
+      .createQueryBuilder('eventAttendee')
+      .leftJoinAndSelect('eventAttendee.event', 'event')
+      .leftJoinAndSelect('eventAttendee.user', 'user')
+      .where(`eventAttendee.sourceId = :sourceId`, { sourceId });
+
+    // Add user slug filter if provided
+    if (userSlug) {
+      query.andWhere('user.slug = :userSlug', { userSlug });
+    }
+
+    return query.getMany();
+  }
+
+  /**
+   * @deprecated Use findBySourceId instead
    */
   @Trace('event-attendee.findByMetadata')
   async findByMetadata(
     key: string,
     value: any,
-    userSlug?: string
+    userSlug?: string,
   ): Promise<EventAttendeesEntity[]> {
+    if (key === 'blueskyRsvpUri') {
+      return this.findBySourceId(value, userSlug);
+    }
+
+    this.logger.warn(`Using deprecated findByMetadata with key ${key}`);
     await this.getTenantSpecificEventRepository();
-    
-    // Create base query with jsonb path operator
+
+    // Create base query with source fields if we can determine the field
     const query = this.eventAttendeesRepository
       .createQueryBuilder('eventAttendee')
       .leftJoinAndSelect('eventAttendee.event', 'event')
-      .leftJoinAndSelect('eventAttendee.user', 'user')
-      .where(`eventAttendee.metadata->>'${key}' = :value`, { value });
-    
+      .leftJoinAndSelect('eventAttendee.user', 'user');
+
+    // Add source fields to query
+    if (key === 'sourceId') {
+      query.where(`eventAttendee.sourceId = :value`, { value });
+    } else if (key === 'sourceType') {
+      query.where(`eventAttendee.sourceType = :value`, { value });
+    } else {
+      // Fallback to check in sourceData
+      query.where(`eventAttendee.sourceData->>'${key}' = :value`, { value });
+    }
+
     // Add user slug filter if provided
     if (userSlug) {
       query.andWhere('user.slug = :userSlug', { userSlug });
     }
-    
+
     return query.getMany();
   }
-  
+
   /**
    * Find all attendance records for a specific user
    * @param userSlug The user slug to find attendees for
@@ -481,7 +536,7 @@ export class EventAttendeeService {
   @Trace('event-attendee.findByUserSlug')
   async findByUserSlug(userSlug: string): Promise<EventAttendeesEntity[]> {
     await this.getTenantSpecificEventRepository();
-    
+
     return this.eventAttendeesRepository.find({
       where: { user: { slug: userSlug } },
       relations: ['event'],

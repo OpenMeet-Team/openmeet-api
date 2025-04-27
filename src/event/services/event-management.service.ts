@@ -1385,13 +1385,17 @@ export class EventManagementService {
     }
 
     // Create the attendee
-    const attendee = await this.eventAttendeeService.create({
+    // Start with the DTO values to preserve any source fields
+    const attendeeData = {
       ...createEventAttendeeDto,
+      // Override with the values we need to set
       event,
       user,
       status: attendeeStatus,
       role: participantRole,
-    });
+    };
+
+    const attendee = await this.eventAttendeeService.create(attendeeData);
 
     await this.eventMailService.sendMailAttendeeGuestJoined(attendee);
 

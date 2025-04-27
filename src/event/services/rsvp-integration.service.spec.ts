@@ -63,9 +63,6 @@ describe('RsvpIntegrationService', () => {
     status: 'going',
     timestamp: '2023-10-15T18:00:00Z',
     sourceId: 'at://did:plc:abcd/app.bsky.rsvp/1234',
-    metadata: {
-      cid: 'cid123',
-    },
   };
 
   const timerMock = jest.fn();
@@ -152,9 +149,7 @@ describe('RsvpIntegrationService', () => {
     eventRoleService = module.get(
       EventRoleService,
     ) as jest.Mocked<EventRoleService>;
-    userService = module.get(
-      UserService,
-    ) as jest.Mocked<UserService>;
+    userService = module.get(UserService) as jest.Mocked<UserService>;
     blueskyIdService = module.get(
       BlueskyIdService,
     ) as jest.Mocked<BlueskyIdService>;
@@ -260,17 +255,18 @@ describe('RsvpIntegrationService', () => {
       );
 
       // Verify interactions
-      expect(eventAttendeeService.create).toHaveBeenCalledWith({
-        event: mockEvent,
-        user: mockUser,
-        status: EventAttendeeStatus.Confirmed,
-        role: mockRole,
-        metadata: {
+      // Using expect.objectContaining to allow for lastSyncedAt Date to be different
+      expect(eventAttendeeService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: mockEvent,
+          user: mockUser,
+          status: EventAttendeeStatus.Confirmed,
+          role: mockRole,
           sourceId: mockRsvpDto.sourceId,
           sourceType: mockRsvpDto.eventSourceType,
-        },
-        skipBlueskySync: true,
-      });
+          skipBlueskySync: true,
+        }),
+      );
       expect(processedCounter).toHaveBeenCalledWith({
         tenant: 'test-tenant',
         source_type: mockRsvpDto.eventSourceType,

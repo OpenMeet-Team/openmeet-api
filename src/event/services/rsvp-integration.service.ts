@@ -1,4 +1,9 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ExternalRsvpDto } from '../dto/external-rsvp.dto';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { ShadowAccountService } from '../../shadow-account/shadow-account.service';
@@ -123,25 +128,24 @@ export class RsvpIntegrationService {
         // Update existing record with status and role
         await this.eventAttendeeService.updateEventAttendee(
           existingAttendee.id,
-          { 
-            status, 
+          {
+            status,
             role: existingAttendee.role.name,
-          }
+          },
         );
-        
-        // Now update the metadata separately
+
+        // Now update the source fields separately
         const attendeeToUpdate = await this.eventAttendeeService.findOne({
-          where: { id: existingAttendee.id }
+          where: { id: existingAttendee.id },
         });
-        
+
         if (attendeeToUpdate) {
-          // Update the metadata
-          attendeeToUpdate.metadata = {
-            ...(attendeeToUpdate.metadata || {}),
-            sourceId: rsvpData.sourceId,
-            sourceType: rsvpData.eventSourceType,
-          };
-          
+          // Update the source fields
+          // For entity fields, we use null (not undefined) since they're defined as nullable in the entity
+          attendeeToUpdate.sourceId = rsvpData.sourceId || null;
+          attendeeToUpdate.sourceType = rsvpData.eventSourceType || null;
+          attendeeToUpdate.lastSyncedAt = new Date();
+
           // Save the updated entity
           await this.eventAttendeeService.save(attendeeToUpdate);
         }
@@ -159,20 +163,21 @@ export class RsvpIntegrationService {
         );
 
         // Create new attendee record
-        const newAttendee = await this.eventAttendeeService.create({
+        const attendeeData = {
           event,
           user,
           status,
           role: participantRole,
-          // Store the sourceId to track the relationship with the external RSVP
-          // This will help with future updates or deletions
-          metadata: {
-            sourceId: rsvpData.sourceId,
-            sourceType: rsvpData.eventSourceType,
-          },
+          // Store the source fields to track the relationship with the external RSVP
+          sourceId: rsvpData.sourceId,
+          sourceType: rsvpData.eventSourceType,
+          lastSyncedAt: new Date(),
           // Skip syncing back to Bluesky since this RSVP came from Bluesky
           skipBlueskySync: true,
-        });
+        };
+
+        const newAttendee =
+          await this.eventAttendeeService.create(attendeeData);
 
         timer();
         return newAttendee;
@@ -191,7 +196,7 @@ export class RsvpIntegrationService {
   }
 
   /**
-   * Delete an external RSVP 
+   * Delete an external RSVP
    * @param sourceId Source ID of the RSVP to delete
    * @param sourceType Source type of the RSVP
    * @param tenantId Tenant ID where the RSVP is stored
@@ -199,16 +204,16 @@ export class RsvpIntegrationService {
    */
   @Trace('rsvp-integration.deleteExternalRsvp')
   async deleteExternalRsvp(
-    sourceId: string, 
-    sourceType: string, 
-    tenantId: string
+    sourceId: string,
+    sourceType: string,
+    tenantId: string,
   ): Promise<{ success: boolean; message: string }> {
     if (!tenantId) {
       throw new BadRequestException('Tenant ID is required');
     }
 
     this.logger.debug(
-      `Deleting external RSVP for tenant ${tenantId}: sourceId=${sourceId}, sourceType=${sourceType}`
+      `Deleting external RSVP for tenant ${tenantId}: sourceId=${sourceId}, sourceType=${sourceType}`,
     );
 
     // Start measuring duration
@@ -219,18 +224,18 @@ export class RsvpIntegrationService {
     });
 
     try {
-      // First approach: Try to find attendees by metadata
+      // First approach: Try to find attendees by sourceId
       if (sourceId.startsWith('at://')) {
         try {
-          // If we have a full AT Protocol URI, try to find attendees by the blueskyRsvpUri in metadata
-          const attendees = await this.eventAttendeeService.findByMetadata(
-            'blueskyRsvpUri',
-            sourceId
-          );
-          
+          // If we have a full AT Protocol URI, try to find attendees by sourceId
+          const attendees =
+            await this.eventAttendeeService.findBySourceId(sourceId);
+
           if (attendees && attendees.length > 0) {
-            this.logger.debug(`Found ${attendees.length} attendees with blueskyRsvpUri = ${sourceId}`);
-            
+            this.logger.debug(
+              `Found ${attendees.length} attendees with blueskyRsvpUri = ${sourceId}`,
+            );
+
             // Mark each attendee as cancelled
             let cancelledCount = 0;
             for (const attendee of attendees) {
@@ -238,22 +243,19 @@ export class RsvpIntegrationService {
               if (attendee.status === EventAttendeeStatus.Cancelled) {
                 continue;
               }
-              
+
               // Update the attendee status to cancelled
-              await this.eventAttendeeService.updateEventAttendee(
-                attendee.id,
-                { 
-                  status: EventAttendeeStatus.Cancelled,
-                  role: attendee.role.name
-                }
-              );
+              await this.eventAttendeeService.updateEventAttendee(attendee.id, {
+                status: EventAttendeeStatus.Cancelled,
+                role: attendee.role.name,
+              });
               cancelledCount++;
-              
+
               this.logger.debug(
-                `Cancelled attendance record ${attendee.id} for user ${attendee.user.slug} on event ${attendee.event.slug}`
+                `Cancelled attendance record ${attendee.id} for user ${attendee.user.slug} on event ${attendee.event.slug}`,
               );
             }
-            
+
             // If we successfully cancelled at least one attendee, return success
             if (cancelledCount > 0) {
               // Increment the processed counter
@@ -262,7 +264,7 @@ export class RsvpIntegrationService {
                 source_type: sourceType,
                 operation: 'delete',
               });
-              
+
               timer();
               return {
                 success: true,
@@ -270,15 +272,20 @@ export class RsvpIntegrationService {
               };
             }
           }
-          
+
           // If we didn't find any attendees by RSVP URI or couldn't cancel any, try by user DID
           const parsedUri = this.blueskyIdService.parseUri(sourceId);
           const userDid = parsedUri.did;
-          this.logger.debug(`Extracted DID ${userDid} from URI ${sourceId}, trying user lookup`);
-          
+          this.logger.debug(
+            `Extracted DID ${userDid} from URI ${sourceId}, trying user lookup`,
+          );
+
           // Try to find the user by DID
-          const user = await this.userService.findByExternalId(userDid, tenantId);
-          
+          const user = await this.userService.findByExternalId(
+            userDid,
+            tenantId,
+          );
+
           if (!user) {
             this.logger.warn(`No user found with DID ${userDid}`);
             return {
@@ -286,18 +293,22 @@ export class RsvpIntegrationService {
               message: `No user found with DID ${userDid}`,
             };
           }
-          
+
           // Find attendees by user
-          const userAttendees = await this.eventAttendeeService.findByUserSlug(user.slug);
-          
+          const userAttendees = await this.eventAttendeeService.findByUserSlug(
+            user.slug,
+          );
+
           if (!userAttendees || userAttendees.length === 0) {
-            this.logger.warn(`No attendee records found for user ${user.slug} (DID: ${userDid})`);
+            this.logger.warn(
+              `No attendee records found for user ${user.slug} (DID: ${userDid})`,
+            );
             return {
               success: false,
               message: `No attendee records found for the given user`,
             };
           }
-          
+
           // Mark each attendee as cancelled
           let cancelledCount = 0;
           for (const attendee of userAttendees) {
@@ -305,35 +316,32 @@ export class RsvpIntegrationService {
             if (attendee.status === EventAttendeeStatus.Cancelled) {
               continue;
             }
-            
+
             // Verify this is for a Bluesky event
             const event = attendee.event;
             if (event && event.sourceType === sourceType) {
               // Update the attendee status to cancelled
-              await this.eventAttendeeService.updateEventAttendee(
-                attendee.id,
-                { 
-                  status: EventAttendeeStatus.Cancelled,
-                  role: attendee.role.name
-                }
-              );
+              await this.eventAttendeeService.updateEventAttendee(attendee.id, {
+                status: EventAttendeeStatus.Cancelled,
+                role: attendee.role.name,
+              });
               cancelledCount++;
-              
+
               this.logger.debug(
-                `Cancelled attendance record ${attendee.id} for user ${user.slug} on event ${event.slug}`
+                `Cancelled attendance record ${attendee.id} for user ${user.slug} on event ${event.slug}`,
               );
             }
           }
-          
+
           // Increment the processed counter
           this.processedCounter.inc({
             tenant: tenantId,
             source_type: sourceType,
             operation: 'delete',
           });
-          
+
           timer();
-          
+
           if (cancelledCount > 0) {
             return {
               success: true,
@@ -348,16 +356,16 @@ export class RsvpIntegrationService {
         } catch (error) {
           this.logger.warn(
             `Failed while processing URI ${sourceId}: ${error.message}`,
-            error.stack
+            error.stack,
           );
           // If URI processing fails, fall back to the original approach
         }
       }
-      
+
       // Fallback approach: Try to find the user by sourceId as DID
       const userDid = sourceId.startsWith('at://') ? sourceId : sourceId;
       const user = await this.userService.findByExternalId(userDid, tenantId);
-      
+
       if (!user) {
         this.logger.warn(`No user found with identifier ${userDid}`);
         return {
@@ -365,10 +373,12 @@ export class RsvpIntegrationService {
           message: `No user found with identifier ${userDid}`,
         };
       }
-      
+
       // Find attendees by user
-      const attendees = await this.eventAttendeeService.findByUserSlug(user.slug);
-      
+      const attendees = await this.eventAttendeeService.findByUserSlug(
+        user.slug,
+      );
+
       if (!attendees || attendees.length === 0) {
         this.logger.warn(`No attendee records found for user ${user.slug}`);
         return {
@@ -376,7 +386,7 @@ export class RsvpIntegrationService {
           message: `No attendee records found for the given user`,
         };
       }
-      
+
       // Mark each attendee as cancelled
       let cancelledCount = 0;
       for (const attendee of attendees) {
@@ -384,22 +394,19 @@ export class RsvpIntegrationService {
         if (attendee.status === EventAttendeeStatus.Cancelled) {
           continue;
         }
-        
+
         // Verify this is for a Bluesky event
         const event = attendee.event;
         if (event && event.sourceType === sourceType) {
           // Update the attendee status to cancelled
-          await this.eventAttendeeService.updateEventAttendee(
-            attendee.id,
-            { 
-              status: EventAttendeeStatus.Cancelled,
-              role: attendee.role.name
-            }
-          );
+          await this.eventAttendeeService.updateEventAttendee(attendee.id, {
+            status: EventAttendeeStatus.Cancelled,
+            role: attendee.role.name,
+          });
           cancelledCount++;
-          
+
           this.logger.debug(
-            `Cancelled attendance record ${attendee.id} for user ${user.slug} on event ${event.slug}`
+            `Cancelled attendance record ${attendee.id} for user ${user.slug} on event ${event.slug}`,
           );
         }
       }
@@ -412,7 +419,7 @@ export class RsvpIntegrationService {
       });
 
       timer();
-      
+
       if (cancelledCount > 0) {
         return {
           success: true,
@@ -429,7 +436,7 @@ export class RsvpIntegrationService {
       timer();
 
       this.logger.error(`Error deleting RSVP: ${error.message}`, error.stack);
-      
+
       // If not found, don't treat as an error
       if (error instanceof NotFoundException) {
         return {
@@ -437,7 +444,7 @@ export class RsvpIntegrationService {
           message: 'RSVP not found for deletion - ignoring',
         };
       }
-      
+
       throw error;
     }
   }

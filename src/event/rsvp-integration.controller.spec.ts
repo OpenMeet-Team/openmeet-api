@@ -19,9 +19,6 @@ describe('RsvpIntegrationController', () => {
     status: 'going',
     timestamp: '2023-10-15T18:00:00Z',
     sourceId: 'at://did:plc:abcd/app.bsky.rsvp/1234',
-    metadata: {
-      cid: 'cid123',
-    },
   };
 
   // Create a mock for EventAttendeesEntity

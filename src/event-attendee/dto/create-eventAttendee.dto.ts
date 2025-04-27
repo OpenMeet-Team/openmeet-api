@@ -4,6 +4,7 @@ import { EventAttendeeStatus } from '../../core/constants/constant';
 import { EventRoleEntity } from '../../event-role/infrastructure/persistence/relational/entities/event-role.entity';
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
+import { EventSourceType } from '../../core/constants/source-type.constant';
 
 export class CreateEventAttendeeDto {
   @ApiPropertyOptional({
@@ -35,12 +36,42 @@ export class CreateEventAttendeeDto {
   @IsOptional()
   status?: EventAttendeeStatus;
 
+  // Source fields
   @ApiPropertyOptional({
-    description: 'Optional metadata for the attendance record',
+    description: 'The type of the source for this attendee (e.g. BLUESKY)',
+    enum: EventSourceType,
+  })
+  @IsOptional()
+  sourceType?: EventSourceType;
+
+  @ApiPropertyOptional({
+    description:
+      'The unique identifier for the external source of this attendance',
+  })
+  @IsOptional()
+  sourceId?: string;
+
+  @ApiPropertyOptional({
+    description: 'URL to the external source',
+  })
+  @IsOptional()
+  sourceUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Additional data from the source',
     type: 'object',
   })
   @IsOptional()
-  metadata?: Record<string, any>;
+  sourceData?: Record<string, unknown>;
+
+  @ApiPropertyOptional({
+    description:
+      'When this attendance was last synced with the external source',
+  })
+  @IsOptional()
+  lastSyncedAt?: Date;
+
+  // Metadata field removed in favor of standardized SourceFields
 
   @ApiPropertyOptional({
     description: 'Skip syncing this attendance to Bluesky',

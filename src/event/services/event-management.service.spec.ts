@@ -372,10 +372,20 @@ describe('EventManagementService', () => {
         .spyOn(service, 'attendEvent')
         .mockResolvedValue(currentMockEventAttendee);
 
+      // Convert entity to DTO
+      const mockAttendeeDto = {
+        ...currentMockEventAttendee,
+        sourceType: currentMockEventAttendee.sourceType || undefined,
+        sourceId: currentMockEventAttendee.sourceId || undefined,
+        sourceUrl: currentMockEventAttendee.sourceUrl || undefined,
+        sourceData: currentMockEventAttendee.sourceData || undefined,
+        lastSyncedAt: currentMockEventAttendee.lastSyncedAt || undefined,
+      };
+
       const result = await service.attendEvent(
         targetEvent.slug,
         mockUser.id,
-        currentMockEventAttendee,
+        mockAttendeeDto,
       );
       expect(result).toEqual(currentMockEventAttendee);
     });

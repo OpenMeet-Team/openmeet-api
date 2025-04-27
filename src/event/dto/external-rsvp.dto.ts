@@ -5,7 +5,6 @@ import {
   IsOptional,
   IsEnum,
   IsISO8601,
-  IsObject,
 } from 'class-validator';
 import { EventSourceType } from '../../core/constants/source-type.constant';
 
@@ -67,12 +66,4 @@ export class ExternalRsvpDto {
   @IsString()
   @IsOptional()
   sourceId?: string;
-
-  @ApiPropertyOptional({
-    description: 'Additional RSVP metadata',
-    type: 'object',
-  })
-  @IsObject()
-  @IsOptional()
-  metadata?: Record<string, any>;
 }
