@@ -327,6 +327,15 @@ export class UserService {
     return user;
   }
 
+  /**
+   * Finds or creates a user for social authentication providers
+   *
+   * NOTE ABOUT BLUESKY IDs:
+   * - When authProvider='bluesky', the profile.id is the user's DID
+   * - This DID is stored directly in the user.socialId field
+   * - We use this socialId field for Bluesky operations rather than duplicating in preferences
+   * - When working with Bluesky, check for user.provider === 'bluesky' && user.socialId
+   */
   async findOrCreateUser(
     profile: SocialInterface,
     authProvider: string,

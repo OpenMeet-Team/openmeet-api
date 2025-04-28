@@ -93,11 +93,13 @@ export class UserEntity extends EntityRelationalHelper {
   @ApiProperty({
     type: String,
     example: '1234567890',
+    description:
+      'External ID from social provider. For Bluesky users, this is the DID (decentralized identifier)',
   })
   @Index()
   @Column({ type: String, nullable: true })
   @Expose({ groups: ['me', 'admin'] })
-  socialId?: string | null;
+  socialId?: string | null; // For Bluesky users, this contains the DID
 
   @ApiProperty({
     type: String,
@@ -242,7 +244,7 @@ export class UserEntity extends EntityRelationalHelper {
   preferences: {
     bluesky?: {
       avatar?: string;
-      did?: string;
+      did?: string; // DEPRECATED: Use user.socialId instead when user.provider === 'bluesky'
       handle?: string;
       connected?: boolean;
       autoPost?: boolean;

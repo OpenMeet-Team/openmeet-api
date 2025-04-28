@@ -1,4 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { BlueskyConfig } from '../auth-bluesky/config/bluesky-config.type';
+import { BLUESKY_COLLECTIONS } from './BlueskyTypes';
 
 /**
  * Service for handling Bluesky AT Protocol URI operations
@@ -7,6 +10,13 @@ import { Injectable } from '@nestjs/common';
  */
 @Injectable()
 export class BlueskyIdService {
+  private readonly collectionSuffix: string;
+
+  constructor(private readonly configService: ConfigService) {
+    // Read the collection suffix from configuration
+    this.collectionSuffix =
+      this.configService.get<BlueskyConfig>('bluesky')?.collectionSuffix || '';
+  }
   /**
    * Creates a full AT Protocol URI from its components
    * @param did - The decentralized identifier
@@ -20,7 +30,31 @@ export class BlueskyIdService {
     this.validateCollection(collection);
     this.validateRkey(rkey);
 
-    return `at://${did}/${collection}/${rkey}`;
+    // Apply collection suffix if available - handle base collections for events and RSVPs
+    const finalCollection = this.applyCollectionSuffix(collection);
+
+    return `at://${did}/${finalCollection}/${rkey}`;
+  }
+
+  /**
+   * Applies the collection suffix to the standard collection name
+   * @param collection - The base collection name
+   * @returns The collection name with suffix if applicable
+   */
+  applyCollectionSuffix(collection: string): string {
+    if (!this.collectionSuffix) {
+      return collection;
+    }
+
+    // Only apply suffix to our calendar collections
+    if (
+      collection === BLUESKY_COLLECTIONS.EVENT ||
+      collection === BLUESKY_COLLECTIONS.RSVP
+    ) {
+      return `${collection}${this.collectionSuffix}`;
+    }
+
+    return collection;
   }
 
   /**
@@ -43,11 +77,43 @@ export class BlueskyIdService {
 
     const [did, collection, rkey] = parts;
 
+    // Normalize collection name by removing any suffix for internal usage
+    const normalizedCollection = this.normalizeCollection(collection);
+
     return {
       did,
-      collection,
+      collection: normalizedCollection,
       rkey,
     };
+  }
+
+  /**
+   * Normalizes a collection name by removing any environment suffix
+   * Used when parsing URIs to ensure consistent collection names internally
+   * @param collection - The collection name with possible suffix
+   * @returns The normalized collection name without suffix
+   */
+  normalizeCollection(collection: string): string {
+    if (!this.collectionSuffix) {
+      return collection;
+    }
+
+    // Remove suffix from event and RSVP collections if present
+    if (collection.endsWith(this.collectionSuffix)) {
+      // Check if it's one of our known collections with a suffix
+      if (
+        collection === `${BLUESKY_COLLECTIONS.EVENT}${this.collectionSuffix}`
+      ) {
+        return BLUESKY_COLLECTIONS.EVENT;
+      }
+      if (
+        collection === `${BLUESKY_COLLECTIONS.RSVP}${this.collectionSuffix}`
+      ) {
+        return BLUESKY_COLLECTIONS.RSVP;
+      }
+    }
+
+    return collection;
   }
 
   /**
@@ -106,6 +172,8 @@ export class BlueskyIdService {
   private isValidCollection(collection: string): boolean {
     // Collections should be alphanumeric with possible hyphens and dots
     // Must not contain exclamation marks, slashes, or other special characters
+    // Also allow our suffix pattern (e.g., ".dev")
+    const normalizedCollection = this.normalizeCollection(collection);
     return (
       /^[a-zA-Z][a-zA-Z0-9.-]*$/.test(collection) && !collection.includes('/')
     );

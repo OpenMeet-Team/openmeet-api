@@ -6,4 +6,5 @@ export default registerAs<BlueskyConfig>('bluesky', () => ({
   clientId: process.env.BLUESKY_CLIENT_ID || '',
   clientSecret: process.env.BLUESKY_CLIENT_SECRET || '',
   redirectUri: process.env.BLUESKY_REDIRECT_URI || '',
+  collectionSuffix: process.env.BLUESKY_COLLECTION_SUFFIX || '',
 }));

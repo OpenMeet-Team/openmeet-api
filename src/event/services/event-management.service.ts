@@ -45,6 +45,7 @@ import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persis
 import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
 import { assert } from 'console';
 import { EventQueryService } from '../services/event-query.service';
+import { BLUESKY_COLLECTIONS } from '../../bluesky/BlueskyTypes';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventManagementService {
@@ -201,18 +202,18 @@ export class EventManagementService {
     // automatically set the source properties for Bluesky
     if (
       !createEventDto.sourceType &&
-      user?.preferences?.bluesky?.connected &&
-      user?.preferences?.bluesky?.did &&
+      user?.provider === 'bluesky' &&
       user?.socialId &&
+      user?.preferences?.bluesky?.connected &&
       eventData.status === EventStatus.Published
     ) {
       this.logger.debug(
         `User ${userId} has a connected Bluesky account. Setting source properties.`,
       );
       createEventDto.sourceType = EventSourceType.BLUESKY;
-      createEventDto.sourceId = user.preferences.bluesky.did || user.socialId;
+      createEventDto.sourceId = user.socialId;
       createEventDto.sourceData = {
-        handle: user.preferences.bluesky.handle,
+        handle: user.preferences?.bluesky?.handle,
       };
       this.logger.debug(
         `Set source properties for Bluesky: sourceId=${createEventDto.sourceId}, handle=${createEventDto.sourceData.handle}`,
@@ -255,7 +256,7 @@ export class EventManagementService {
 
         // Use BlueskyIdService to create a proper AT Protocol URI
         const did = createEventDto.sourceId ?? '';
-        const collection = 'community.lexicon.calendar.event';
+        const collection = BLUESKY_COLLECTIONS.EVENT;
         event.sourceId = this.blueskyIdService.createUri(did, collection, rkey);
 
         // Removed sourceUrl as it doesn't point to a real page

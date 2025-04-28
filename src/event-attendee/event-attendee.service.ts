@@ -76,15 +76,10 @@ export class EventAttendeeService {
       });
 
       // After creating the attendance record, sync to Bluesky if:
-      // 1. The event has a Bluesky source
+      // 1. Bluesky syncing is not specifically disabled
       // 2. The user has a connected Bluesky account
-      // 3. Bluesky syncing is not specifically disabled
-      if (
-        !createEventAttendeeDto.skipBlueskySync &&
-        // Only sync RSVPs for events that exist in Bluesky
-        createEventAttendeeDto.event.sourceType === EventSourceType.BLUESKY &&
-        createEventAttendeeDto.event.sourceData?.rkey
-      ) {
+      // Either sync when the event is a Bluesky event OR when the user is a Bluesky user
+      if (!createEventAttendeeDto.skipBlueskySync) {
         try {
           // Get the user's Bluesky preferences
           const user = await this.userService.findBySlug(
@@ -92,13 +87,15 @@ export class EventAttendeeService {
             this.request.tenantId,
           );
 
-          if (
-            user?.preferences?.bluesky?.connected &&
-            user?.preferences?.bluesky?.did
-          ) {
-            this.logger.debug(
-              'User has connected Bluesky account, syncing RSVP',
-            );
+          // For Bluesky users, we check if the provider is 'bluesky' and use the socialId as DID
+          if (user && user.provider === 'bluesky' && user.socialId) {
+            // User registered through Bluesky, use the socialId as DID
+            const blueskyDid = user.socialId;
+
+            this.logger.debug('User is a Bluesky user, syncing RSVP', {
+              userSlug: user.slug,
+              did: blueskyDid,
+            });
 
             // Map OpenMeet status to Bluesky status
             const statusMap = {
@@ -115,7 +112,7 @@ export class EventAttendeeService {
             const result = await this.blueskyRsvpService.createRsvp(
               createEventAttendeeDto.event,
               blueskyStatus,
-              user.preferences.bluesky.did,
+              blueskyDid,
               this.request.tenantId,
             );
 
@@ -142,7 +139,12 @@ export class EventAttendeeService {
             }
           } else {
             this.logger.debug(
-              `[create] Skipping Bluesky sync for user ${createEventAttendeeDto.user.slug} - no connected Bluesky account or missing DID`,
+              `[create] Skipping Bluesky sync for user ${createEventAttendeeDto.user.slug} - not a Bluesky user`,
+              {
+                userSlug: user?.slug,
+                provider: user?.provider,
+                hasSocialId: Boolean(user?.socialId),
+              },
             );
           }
         } catch (error) {
@@ -369,15 +371,20 @@ export class EventAttendeeService {
           this.request.tenantId,
         );
 
-        if (
-          user?.preferences?.bluesky?.connected &&
-          user?.preferences?.bluesky?.did
-        ) {
+        // For Bluesky users, we check if the provider is 'bluesky' and use the socialId as DID
+        if (user && user.provider === 'bluesky' && user.socialId) {
+          // User registered through Bluesky, use the socialId as DID
+          const blueskyDid = user.socialId;
+
+          this.logger.debug(
+            'User is a Bluesky user, syncing cancellation RSVP',
+            { userSlug: user.slug, did: blueskyDid },
+          );
           // Create a "notgoing" RSVP
           const result = await this.blueskyRsvpService.createRsvp(
             attendee.event,
             'notgoing',
-            user.preferences.bluesky.did,
+            blueskyDid,
             this.request.tenantId,
           );
 
@@ -401,6 +408,15 @@ export class EventAttendeeService {
               `Updated Bluesky RSVP to notgoing: ${result.rsvpUri}`,
             );
           }
+        } else {
+          this.logger.debug(
+            `Skipping Bluesky RSVP update - not a Bluesky user`,
+            {
+              userSlug: user?.slug,
+              provider: user?.provider,
+              hasSocialId: Boolean(user?.socialId),
+            },
+          );
         }
       } catch (error) {
         // Log but don't fail if Bluesky sync fails

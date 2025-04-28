@@ -8,11 +8,16 @@ import { NodeOAuthClient } from '@atproto/oauth-client-node';
 import { initializeOAuthClient } from '../utils/bluesky';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { delay } from '../utils/delay';
-import { BlueskyLocation, BlueskyEventUri } from './BlueskyTypes';
+import {
+  BlueskyLocation,
+  BlueskyEventUri,
+  BLUESKY_COLLECTIONS,
+} from './BlueskyTypes';
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventQueryService } from '../event/services/event-query.service';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
+import { BlueskyIdService } from './bluesky-id.service';
 
 @Injectable()
 export class BlueskyService {
@@ -31,6 +36,8 @@ export class BlueskyService {
     private readonly eventQueryService: EventQueryService,
     private readonly tenantConnectionService: TenantConnectionService,
     @Inject(REQUEST) private readonly request: any,
+    @Inject(forwardRef(() => BlueskyIdService))
+    private readonly blueskyIdService: BlueskyIdService,
   ) {}
 
   private async getOAuthClient(tenantId: string): Promise<NodeOAuthClient> {
@@ -119,10 +126,15 @@ export class BlueskyService {
           did,
         });
 
+        // Get collection name with appropriate suffix
+        const eventCollection = this.blueskyIdService.applyCollectionSuffix(
+          BLUESKY_COLLECTIONS.EVENT,
+        );
+
         // Check if record exists
         await agent.com.atproto.repo.getRecord({
           repo: did,
-          collection: 'community.lexicon.calendar.event',
+          collection: eventCollection,
           rkey,
         });
 
@@ -450,9 +462,14 @@ export class BlueskyService {
         };
       }
 
+      // Get collection name with appropriate suffix from BlueskyIdService
+      const eventCollection = this.blueskyIdService.applyCollectionSuffix(
+        BLUESKY_COLLECTIONS.EVENT,
+      );
+
       const result = await agent.com.atproto.repo.putRecord({
         repo: did,
-        collection: 'community.lexicon.calendar.event',
+        collection: eventCollection,
         rkey,
         record: recordData,
       });
@@ -484,9 +501,14 @@ export class BlueskyService {
     try {
       const agent = await this.resumeSession(tenantId, did);
 
+      // Get collection name with appropriate suffix
+      const eventCollection = this.blueskyIdService.applyCollectionSuffix(
+        BLUESKY_COLLECTIONS.EVENT,
+      );
+
       const response = await agent.com.atproto.repo.listRecords({
         repo: did,
-        collection: 'community.lexicon.calendar.event',
+        collection: eventCollection,
       });
       return response.data.records;
     } catch (error) {
@@ -539,9 +561,14 @@ export class BlueskyService {
     try {
       // When deleting a record, ensure that the repo information is included
       // This ensures the deletion goes to the correct queue (dev vs prod)
+      // Get collection name with appropriate suffix
+      const eventCollection = this.blueskyIdService.applyCollectionSuffix(
+        BLUESKY_COLLECTIONS.EVENT,
+      );
+
       const response = await agent.com.atproto.repo.deleteRecord({
         repo: did,
-        collection: 'community.lexicon.calendar.event',
+        collection: eventCollection,
         rkey,
       });
 
@@ -555,7 +582,7 @@ export class BlueskyService {
         kind: 'commit',
         commit: {
           repo: did, // This is the critical field that should be in the queue
-          collection: 'community.lexicon.calendar.event',
+          collection: eventCollection,
           operation: 'delete',
           rkey,
         },
