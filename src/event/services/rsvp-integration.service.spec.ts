@@ -27,8 +27,6 @@ describe('RsvpIntegrationService', () => {
   let eventQueryService: jest.Mocked<EventQueryService>;
   let eventAttendeeService: jest.Mocked<EventAttendeeService>;
   let eventRoleService: jest.Mocked<EventRoleService>;
-  let userService: jest.Mocked<UserService>;
-  let blueskyIdService: jest.Mocked<BlueskyIdService>;
 
   let processedCounter: jest.Mock;
   let processingDuration: { startTimer: jest.Mock };
@@ -150,10 +148,6 @@ describe('RsvpIntegrationService', () => {
     eventRoleService = module.get(
       EventRoleService,
     ) as jest.Mocked<EventRoleService>;
-    userService = module.get(UserService) as jest.Mocked<UserService>;
-    blueskyIdService = module.get(
-      BlueskyIdService,
-    ) as jest.Mocked<BlueskyIdService>;
   });
 
   it('should be defined', () => {
