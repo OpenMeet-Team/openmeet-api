@@ -62,6 +62,9 @@ export class EventAttendeeService {
   ): Promise<EventAttendeesEntity> {
     await this.getTenantSpecificEventRepository();
 
+    this.logger.debug(
+      `[create] Creating event attendee for event ${JSON.stringify(createEventAttendeeDto)}`,
+    );
     try {
       const attendee = this.eventAttendeesRepository.create(
         createEventAttendeeDto,
@@ -78,13 +81,14 @@ export class EventAttendeeService {
       // 3. Bluesky syncing is not specifically disabled
       if (
         !createEventAttendeeDto.skipBlueskySync &&
+        // Only sync RSVPs for events that exist in Bluesky
         createEventAttendeeDto.event.sourceType === EventSourceType.BLUESKY &&
         createEventAttendeeDto.event.sourceData?.rkey
       ) {
         try {
           // Get the user's Bluesky preferences
-          const user = await this.userService.findById(
-            createEventAttendeeDto.user.id,
+          const user = await this.userService.findBySlug(
+            createEventAttendeeDto.user.slug,
             this.request.tenantId,
           );
 
@@ -136,6 +140,10 @@ export class EventAttendeeService {
                 await this.eventAttendeesRepository.save(attendee);
               }
             }
+          } else {
+            this.logger.debug(
+              `[create] Skipping Bluesky sync for user ${createEventAttendeeDto.user.slug} - no connected Bluesky account or missing DID`,
+            );
           }
         } catch (error) {
           // Log but don't fail if Bluesky sync fails
@@ -144,6 +152,15 @@ export class EventAttendeeService {
             error.stack,
           );
         }
+      } else {
+        this.logger.debug(
+          `[create] Skipping Bluesky sync for event ${createEventAttendeeDto.event.id} and user ${createEventAttendeeDto.user.id}`,
+          {
+            skipBlueskySync: createEventAttendeeDto.skipBlueskySync,
+            eventSourceType: createEventAttendeeDto.event.sourceType,
+            hasRkey: Boolean(createEventAttendeeDto.event.sourceData?.rkey),
+          },
+        );
       }
 
       return saved;

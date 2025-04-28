@@ -265,23 +265,37 @@ describe('EventController (e2e)', () => {
       group: null,
     });
 
-    console.log('Created test events with IDs:', [event1.id, event2.id, event3.id]);
-    console.log('Created test events with slugs:', [event1.slug, event2.slug, event3.slug]);
+    console.log('Created test events with IDs:', [
+      event1.id,
+      event2.id,
+      event3.id,
+    ]);
+    console.log('Created test events with slugs:', [
+      event1.slug,
+      event2.slug,
+      event3.slug,
+    ]);
 
     // Instead of querying all events, let's fetch our test events directly by their slugs
     const testEvents = [
       await getEvent(TESTING_APP_URL, token, event1.slug),
       await getEvent(TESTING_APP_URL, token, event2.slug),
-      await getEvent(TESTING_APP_URL, token, event3.slug)
+      await getEvent(TESTING_APP_URL, token, event3.slug),
     ];
 
     // Sort them by start date manually to verify order
-    const sortedEvents = [...testEvents].sort((a, b) => 
-      new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+    const sortedEvents = [...testEvents].sort(
+      (a, b) =>
+        new Date(a.startDate).getTime() - new Date(b.startDate).getTime(),
     );
 
-    console.log('Events sorted by start date:', 
-      sortedEvents.map(e => ({ id: e.id, name: e.name, startDate: e.startDate }))
+    console.log(
+      'Events sorted by start date:',
+      sortedEvents.map((e) => ({
+        id: e.id,
+        name: e.name,
+        startDate: e.startDate,
+      })),
     );
 
     // Verify we have enough events to test sorting

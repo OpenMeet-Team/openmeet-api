@@ -5,7 +5,6 @@ import { REQUEST } from '@nestjs/core';
 import { EventRoleService } from '../event-role/event-role.service';
 import { BlueskyRsvpService } from '../bluesky/bluesky-rsvp.service';
 import { UserService } from '../user/user.service';
-import { forwardRef } from '@nestjs/common';
 import { stopCleanupInterval } from '../database/data-source';
 
 describe('EventAttendeeService', () => {

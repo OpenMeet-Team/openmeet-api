@@ -46,17 +46,45 @@ export class BlueskyRsvpService {
     });
 
     try {
+      this.logger.debug(
+        `Starting Bluesky RSVP creation for user ${did} to event ${event.id}`,
+        {
+          eventId: event.id,
+          eventName: event.name,
+          eventSourceType: event.sourceType,
+          eventSourceData: event.sourceData,
+          userDid: did,
+          tenantId,
+          status,
+        },
+      );
+
       // Get the event's Bluesky URI
       if (
         !event.sourceData?.rkey ||
         event.sourceType !== EventSourceType.BLUESKY
       ) {
+        this.logger.warn(
+          `Cannot create RSVP: Event does not have valid Bluesky source information`,
+          {
+            eventId: event.id,
+            eventSourceType: event.sourceType,
+            eventSourceData: event.sourceData,
+          },
+        );
         throw new Error('Event does not have Bluesky source information');
       }
 
       // Extract event creator DID from sourceData
       const eventCreatorDid = event.sourceData.did as string;
       if (!eventCreatorDid) {
+        this.logger.warn(
+          `Cannot create RSVP: Event source data is missing creator DID`,
+          {
+            eventId: event.id,
+            eventSourceData: event.sourceData,
+          },
+        );
         throw new Error('Event source data is missing creator DID');
       }
 
@@ -68,7 +96,18 @@ export class BlueskyRsvpService {
       );
 
       // Get Bluesky agent for the user
+      this.logger.debug(`Creating Bluesky session for user`, {
+        userDid: did,
+        tenantId,
+      });
       const agent = await this.blueskyService.resumeSession(tenantId, did);
+      if (!agent) {
+        this.logger.warn(`Failed to create Bluesky session for user`, {
+          userDid: did,
+          tenantId,
+        });
+        throw new Error(`Failed to create Bluesky session for user ${did}`);
+      }
 
       // Create the RSVP record
       const recordData = {
@@ -83,6 +122,13 @@ export class BlueskyRsvpService {
 
       // Generate an rkey for the RSVP
       const rkey = `${event.sourceData.rkey}-rsvp-${Date.now()}`;
+
+      this.logger.debug(`Sending RSVP record to Bluesky PDS`, {
+        userDid: did,
+        rkey,
+        eventUri,
+        recordData,
+      });
 
       // Create the RSVP record in the user's PDS
       const result = await agent.com.atproto.repo.putRecord({
@@ -107,12 +153,13 @@ export class BlueskyRsvpService {
       });
 
       this.logger.debug(
-        `Created RSVP for event ${event.name} with status ${status}`,
+        `Successfully created RSVP for event ${event.name} with status ${status}`,
         {
           eventUri,
           did,
           rkey,
           cid: result.data.cid,
+          rsvpUri,
         },
       );
 
@@ -127,10 +174,16 @@ export class BlueskyRsvpService {
       // Stop the timer for error case
       timer();
 
-      this.logger.error(
-        `Failed to create Bluesky RSVP: ${error.message}`,
-        error.stack,
-      );
+      this.logger.error(`Failed to create Bluesky RSVP: ${error.message}`, {
+        error: error.stack,
+        eventId: event.id,
+        eventName: event.name,
+        eventSourceType: event.sourceType,
+        eventSourceData: event.sourceData,
+        userDid: did,
+        tenantId,
+        status,
+      });
       throw new Error(`Failed to create Bluesky RSVP: ${error.message}`);
     }
   }

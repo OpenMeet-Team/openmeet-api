@@ -29,6 +29,7 @@ describe('RsvpIntegrationService', () => {
   let eventRoleService: jest.Mocked<EventRoleService>;
   let userService: jest.Mocked<UserService>;
   let blueskyIdService: jest.Mocked<BlueskyIdService>;
+
   let processedCounter: jest.Mock;
   let processingDuration: { startTimer: jest.Mock };
 
