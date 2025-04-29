@@ -10,6 +10,7 @@ import fileConfig from './file/config/file.config';
 import facebookConfig from './auth-facebook/config/facebook.config';
 import googleConfig from './auth-google/config/google.config';
 import githubConfig from './auth-github/config/github.config';
+import blueskyConfig from './auth-bluesky/config/bluesky.config';
 import path from 'path';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -74,6 +75,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
         facebookConfig,
         googleConfig,
         githubConfig,
+        blueskyConfig,
       ],
       envFilePath: ['.env'],
     }),

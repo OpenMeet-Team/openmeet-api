@@ -89,13 +89,11 @@ export class BlueskyRsvpService {
         throw new Error('Event source data is missing creator DID');
       }
 
-      // Create AT Protocol URI for the event - use appropriate collection suffix
-      const eventCollection = this.blueskyIdService.applyCollectionSuffix(
-        BLUESKY_COLLECTIONS.EVENT,
-      );
+      // Create AT Protocol URI for the event - use standard collection name
+      const standardEventCollection = BLUESKY_COLLECTIONS.EVENT;
       const eventUri = this.blueskyIdService.createUri(
         eventCreatorDid,
-        eventCollection,
+        standardEventCollection,
         event.sourceData.rkey as string,
       );
 
@@ -113,11 +111,11 @@ export class BlueskyRsvpService {
         throw new Error(`Failed to create Bluesky session for user ${did}`);
       }
 
-      // Create the RSVP record
+      // Create the RSVP record using standard collection names
       const recordData = {
-        $type: 'community.lexicon.calendar.rsvp',
+        $type: BLUESKY_COLLECTIONS.RSVP,
         subject: {
-          $type: 'community.lexicon.calendar.event',
+          $type: BLUESKY_COLLECTIONS.EVENT,
           uri: eventUri,
         },
         status,
@@ -134,23 +132,21 @@ export class BlueskyRsvpService {
         recordData,
       });
 
-      // Get collection name with appropriate suffix for RSVPs
-      const rsvpCollection = this.blueskyIdService.applyCollectionSuffix(
-        BLUESKY_COLLECTIONS.RSVP,
-      );
+      // Use standard collection name without suffix
+      const standardRsvpCollection = BLUESKY_COLLECTIONS.RSVP;
 
       // Create the RSVP record in the user's PDS
       const result = await agent.com.atproto.repo.putRecord({
         repo: did,
-        collection: rsvpCollection,
+        collection: standardRsvpCollection,
         rkey,
         record: recordData,
       });
 
-      // Generate the full RSVP URI - use the same collection name with suffix
+      // Generate the full RSVP URI - use standard collection name
       const rsvpUri = this.blueskyIdService.createUri(
         did,
-        rsvpCollection,
+        standardRsvpCollection,
         rkey,
       );
 
@@ -229,15 +225,13 @@ export class BlueskyRsvpService {
       // Get Bluesky agent for the user
       const agent = await this.blueskyService.resumeSession(tenantId, did);
 
-      // Get collection name with appropriate suffix for RSVPs
-      const rsvpCollection = this.blueskyIdService.applyCollectionSuffix(
-        BLUESKY_COLLECTIONS.RSVP,
-      );
+      // Use standard collection name for RSVPs
+      const standardRsvpCollection = BLUESKY_COLLECTIONS.RSVP;
 
       // Delete the RSVP record
       await agent.com.atproto.repo.deleteRecord({
         repo: did,
-        collection: rsvpCollection,
+        collection: standardRsvpCollection,
         rkey: parsedUri.rkey,
       });
 
@@ -285,15 +279,13 @@ export class BlueskyRsvpService {
       // Get Bluesky agent for the user
       const agent = await this.blueskyService.resumeSession(tenantId, did);
 
-      // Get collection name with appropriate suffix for RSVPs
-      const rsvpCollection = this.blueskyIdService.applyCollectionSuffix(
-        BLUESKY_COLLECTIONS.RSVP,
-      );
+      // Use standard collection name for RSVPs
+      const standardRsvpCollection = BLUESKY_COLLECTIONS.RSVP;
 
       // List RSVP records
       const response = await agent.com.atproto.repo.listRecords({
         repo: did,
-        collection: rsvpCollection,
+        collection: standardRsvpCollection,
       });
 
       // Map raw records to a more usable format
@@ -308,7 +300,7 @@ export class BlueskyRsvpService {
         return {
           uri: this.blueskyIdService.createUri(
             did,
-            rsvpCollection,
+            standardRsvpCollection,
             record.rkey as string,
           ),
           cid: record.cid,

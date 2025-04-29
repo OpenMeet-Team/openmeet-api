@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { BlueskyConfig } from '../auth-bluesky/config/bluesky-config.type';
 import { BLUESKY_COLLECTIONS } from './BlueskyTypes';
@@ -11,11 +11,13 @@ import { BLUESKY_COLLECTIONS } from './BlueskyTypes';
 @Injectable()
 export class BlueskyIdService {
   private readonly collectionSuffix: string;
-
+  private readonly logger = new Logger(BlueskyIdService.name);
   constructor(private readonly configService: ConfigService) {
     // Read the collection suffix from configuration
     this.collectionSuffix =
-      this.configService.get<BlueskyConfig>('bluesky')?.collectionSuffix || '';
+      this.configService.get<BlueskyConfig>('bluesky', { infer: true })
+        ?.collectionSuffix || '';
+    this.logger.debug('Collection suffix', { collectionSuffix: this.collectionSuffix });
   }
   /**
    * Creates a full AT Protocol URI from its components

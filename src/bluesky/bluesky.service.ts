@@ -126,15 +126,12 @@ export class BlueskyService {
           did,
         });
 
-        // Get collection name with appropriate suffix
-        const eventCollection = this.blueskyIdService.applyCollectionSuffix(
-          BLUESKY_COLLECTIONS.EVENT,
-        );
+        // We no longer need to apply collection suffix
 
-        // Check if record exists
+        // Check if record exists - use standard collection name
         await agent.com.atproto.repo.getRecord({
           repo: did,
-          collection: eventCollection,
+          collection: BLUESKY_COLLECTIONS.EVENT,
           rkey,
         });
 
@@ -462,14 +459,12 @@ export class BlueskyService {
         };
       }
 
-      // Get collection name with appropriate suffix from BlueskyIdService
-      const eventCollection = this.blueskyIdService.applyCollectionSuffix(
-        BLUESKY_COLLECTIONS.EVENT,
-      );
+      // Use standard collection name without suffix
+      const standardEventCollection = BLUESKY_COLLECTIONS.EVENT;
 
       const result = await agent.com.atproto.repo.putRecord({
         repo: did,
-        collection: eventCollection,
+        collection: standardEventCollection,
         rkey,
         record: recordData,
       });
@@ -560,15 +555,12 @@ export class BlueskyService {
 
     try {
       // When deleting a record, ensure that the repo information is included
-      // This ensures the deletion goes to the correct queue (dev vs prod)
-      // Get collection name with appropriate suffix
-      const eventCollection = this.blueskyIdService.applyCollectionSuffix(
-        BLUESKY_COLLECTIONS.EVENT,
-      );
+      // Use standard collection name without suffix
+      const standardEventCollection = BLUESKY_COLLECTIONS.EVENT;
 
       const response = await agent.com.atproto.repo.deleteRecord({
         repo: did,
-        collection: eventCollection,
+        collection: standardEventCollection,
         rkey,
       });
 
@@ -582,7 +574,7 @@ export class BlueskyService {
         kind: 'commit',
         commit: {
           repo: did, // This is the critical field that should be in the queue
-          collection: eventCollection,
+          collection: standardEventCollection,
           operation: 'delete',
           rkey,
         },

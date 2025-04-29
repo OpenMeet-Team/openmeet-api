@@ -62,7 +62,6 @@ export class AuthBlueskyController {
       effectiveTenantId,
     );
 
-    this.logger.debug('Redirecting to:', redirectUrl);
     res.redirect(redirectUrl);
   }
 
