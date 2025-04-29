@@ -1,15 +1,33 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BlueskyIdService } from './bluesky-id.service';
+import { ConfigService } from '@nestjs/config';
 
 describe('BlueskyIdService', () => {
   let service: BlueskyIdService;
+  let configService: ConfigService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [BlueskyIdService],
+      providers: [
+        BlueskyIdService,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: string) => {
+              if (key === 'bluesky') {
+                return {
+                  collectionSuffix: 'test-suffix'
+                };
+              }
+              return null;
+            })
+          }
+        }
+      ],
     }).compile();
 
     service = module.get<BlueskyIdService>(BlueskyIdService);
+    configService = module.get<ConfigService>(ConfigService);
   });
 
   it('should be defined', () => {

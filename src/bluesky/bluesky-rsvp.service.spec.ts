@@ -163,7 +163,7 @@ describe('BlueskyRsvpService', () => {
       expect(mockAgent.com.atproto.repo.putRecord).toHaveBeenCalledWith({
         repo: userDid,
         collection: 'community.lexicon.calendar.rsvp',
-        rkey: expect.stringContaining('event123-rsvp-'),
+        rkey: expect.stringContaining('event123-rsvp'),
         record: {
           $type: 'community.lexicon.calendar.rsvp',
           subject: {

@@ -55,7 +55,7 @@ describe('RsvpIntegrationService', () => {
   } as unknown as EventAttendeesEntity;
 
   const mockRsvpDto: ExternalRsvpDto = {
-    eventSourceId: 'did:plc:1234',
+    eventSourceId: 'at://did:plc:1234/app.bsky.feed.post/1234',
     eventSourceType: EventSourceType.BLUESKY,
     userDid: 'did:plc:abcd',
     userHandle: 'test.bsky.social',
