@@ -63,7 +63,12 @@ export class RsvpIntegrationService {
       // Get the tenant connection - needed for shadow account service
       await this.tenantService.getTenantConnection(tenantId);
 
-      // Find the event by source attributes
+      // Validate the AT Protocol URI format
+      if (!rsvpData.eventSourceId.startsWith('at://')) {
+        throw new BadRequestException('Event source ID must be a valid AT Protocol URI');
+      }
+
+      // Find the event by source attributes using the full AT Protocol URI
       const events = await this.eventQueryService.findBySourceAttributes(
         rsvpData.eventSourceId,
         rsvpData.eventSourceType,
@@ -157,31 +162,31 @@ export class RsvpIntegrationService {
 
         timer();
         return updatedAttendee;
-      } else {
-        this.logger.debug(
-          'No existing attendance record found, creating a new one',
-        );
-
-        // Create new attendee record
-        const attendeeData = {
-          event,
-          user,
-          status,
-          role: participantRole,
-          // Store the source fields to track the relationship with the external RSVP
-          sourceId: rsvpData.sourceId,
-          sourceType: rsvpData.eventSourceType,
-          lastSyncedAt: new Date(),
-          // Skip syncing back to Bluesky since this RSVP came from Bluesky
-          skipBlueskySync: true,
-        };
-
-        const newAttendee =
-          await this.eventAttendeeService.create(attendeeData);
-
-        timer();
-        return newAttendee;
       }
+
+      this.logger.debug(
+        'No existing attendance record found, creating a new one',
+      );
+
+      // Create new attendee record
+      const attendeeData = {
+        event,
+        user,
+        status,
+        role: participantRole,
+        // Store the source fields to track the relationship with the external RSVP
+        sourceId: rsvpData.sourceId,
+        sourceType: rsvpData.eventSourceType,
+        lastSyncedAt: new Date(),
+        // Skip syncing back to Bluesky since this RSVP came from Bluesky
+        skipBlueskySync: true,
+      };
+
+      const newAttendee =
+        await this.eventAttendeeService.create(attendeeData);
+
+      timer();
+      return newAttendee;
     } catch (error) {
       // Stop the timer for error case
       timer();
