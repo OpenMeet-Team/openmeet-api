@@ -3,4 +3,5 @@ export type BlueskyConfig = {
   clientId: string;
   clientSecret: string;
   redirectUri: string;
+  collectionSuffix: string;
 };

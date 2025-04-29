@@ -1,4 +1,4 @@
-import { forwardRef, Module, Provider } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { EventController } from './event.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
@@ -25,12 +25,9 @@ import { EventSeriesModule } from '../event-series/event-series.module';
 import { ConfigModule } from '@nestjs/config';
 import { EventIntegrationController } from './event-integration.controller';
 import { EventIntegrationService } from './services/event-integration.service';
-
-// Create a provider for the DiscussionService
-const discussionServiceProvider: Provider = {
-  provide: 'DiscussionService',
-  useValue: {}, // Providing an empty object since it's optional
-};
+import { RsvpIntegrationController } from './rsvp-integration.controller';
+import { RsvpIntegrationService } from './services/rsvp-integration.service';
+import { MetricsModule } from '../metrics/metrics.module';
 
 @Module({
   imports: [
@@ -49,8 +46,13 @@ const discussionServiceProvider: Provider = {
     ShadowAccountModule,
     forwardRef(() => ChatModule),
     forwardRef(() => EventSeriesModule),
+    MetricsModule,
   ],
-  controllers: [EventController, EventIntegrationController],
+  controllers: [
+    EventController,
+    EventIntegrationController,
+    RsvpIntegrationController,
+  ],
   providers: [
     EventManagementService,
     EventQueryService,
@@ -60,13 +62,16 @@ const discussionServiceProvider: Provider = {
     EventRoleService,
     ICalendarService,
     EventIntegrationService,
-    discussionServiceProvider,
+    RsvpIntegrationService,
+    // Removed EventAttendeeService as it's already imported from EventAttendeeModule
   ],
   exports: [
     EventManagementService,
     EventQueryService,
     EventRecommendationService,
     EventIntegrationService,
+    RsvpIntegrationService,
+    ICalendarService,
   ],
 })
 export class EventModule {}

@@ -3,7 +3,10 @@ import { EventAttendeeService } from './event-attendee.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import { EventRoleService } from '../event-role/event-role.service';
+import { BlueskyRsvpService } from '../bluesky/bluesky-rsvp.service';
+import { UserService } from '../user/user.service';
 import { stopCleanupInterval } from '../database/data-source';
+
 describe('EventAttendeeService', () => {
   let service: EventAttendeeService;
   let module: TestingModule;
@@ -39,6 +42,19 @@ describe('EventAttendeeService', () => {
           useValue: {
             getRoleByName: jest.fn(),
           },
+        },
+        {
+          provide: BlueskyRsvpService,
+          useFactory: () => ({
+            createRsvp: jest.fn(),
+            deleteRsvp: jest.fn(),
+          }),
+        },
+        {
+          provide: UserService,
+          useFactory: () => ({
+            findById: jest.fn(),
+          }),
         },
         {
           provide: REQUEST,

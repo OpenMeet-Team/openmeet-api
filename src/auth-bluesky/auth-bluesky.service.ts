@@ -10,13 +10,14 @@ import { TenantConnectionService } from '../tenant/tenant.service';
 import { TenantConfig } from '../core/constants/constant';
 import { ConfigService } from '@nestjs/config';
 import { Agent } from '@atproto/api';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 import { AuthService } from '../auth/auth.service';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { UserService } from '../user/user.service';
 import { initializeOAuthClient } from '../utils/bluesky';
 import { EventSeriesOccurrenceService } from '../event-series/services/event-series-occurrence.service';
+import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class AuthBlueskyService {
@@ -96,7 +97,7 @@ export class AuthBlueskyService {
 
     const profile = await agent.getProfile({ actor: oauthSession.did });
     const profileData = {
-      did: profile.data.did,
+      did: profile.data.did, // Important: This will be stored as socialId
       handle: profile.data.handle,
       displayName: profile.data.displayName,
       avatar: profile.data.avatar,
@@ -109,13 +110,13 @@ export class AuthBlueskyService {
     });
 
     // Get existing user if any to preserve preferences
-    const existingUser = await this.userService.findBySocialIdAndProvider(
+    const existingUser = (await this.userService.findBySocialIdAndProvider(
       {
         socialId: profileData.did,
         provider: 'bluesky',
       },
       tenantId,
-    );
+    )) as UserEntity;
 
     this.logger.debug('Validating social login:', {
       did: profileData.did,
@@ -131,6 +132,38 @@ export class AuthBlueskyService {
         email: existingUser.email,
         provider: existingUser.provider,
       });
+
+      // Ensure that the DID is stored in preferences.bluesky.did
+      // This fixes cases where users have a socialId but no DID in preferences
+      if (
+        existingUser.id &&
+        (!existingUser.preferences?.bluesky?.did ||
+          existingUser.preferences?.bluesky?.did !== profileData.did)
+      ) {
+        this.logger.debug('Updating user Bluesky preferences with DID', {
+          userId: existingUser.id,
+          did: profileData.did,
+        });
+
+        // Update preferences to include DID
+        await this.userService.update(
+          existingUser.id,
+          {
+            preferences: {
+              ...(existingUser.preferences || {}),
+              bluesky: {
+                ...(existingUser.preferences?.bluesky || {}),
+                did: profileData.did,
+                handle: profileData.handle,
+                avatar: profileData.avatar,
+                connected: true,
+                connectedAt: new Date(),
+              },
+            },
+          },
+          tenantId,
+        );
+      }
     }
 
     this.logger.debug('Validating social login with tenant ID:', { tenantId });

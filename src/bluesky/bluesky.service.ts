@@ -8,11 +8,16 @@ import { NodeOAuthClient } from '@atproto/oauth-client-node';
 import { initializeOAuthClient } from '../utils/bluesky';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { delay } from '../utils/delay';
-import { BlueskyLocation, BlueskyEventUri } from './BlueskyTypes';
+import {
+  BlueskyLocation,
+  BlueskyEventUri,
+  BLUESKY_COLLECTIONS,
+} from './BlueskyTypes';
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventQueryService } from '../event/services/event-query.service';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
+import { BlueskyIdService } from './bluesky-id.service';
 
 @Injectable()
 export class BlueskyService {
@@ -31,6 +36,8 @@ export class BlueskyService {
     private readonly eventQueryService: EventQueryService,
     private readonly tenantConnectionService: TenantConnectionService,
     @Inject(REQUEST) private readonly request: any,
+    @Inject(forwardRef(() => BlueskyIdService))
+    private readonly blueskyIdService: BlueskyIdService,
   ) {}
 
   private async getOAuthClient(tenantId: string): Promise<NodeOAuthClient> {
@@ -41,7 +48,7 @@ export class BlueskyService {
     );
   }
 
-  private async resumeSession(tenantId: string, did: string): Promise<Agent> {
+  async resumeSession(tenantId: string, did: string): Promise<Agent> {
     for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
       try {
         const client = await this.getOAuthClient(tenantId);
@@ -119,10 +126,12 @@ export class BlueskyService {
           did,
         });
 
-        // Check if record exists
+        // We no longer need to apply collection suffix
+
+        // Check if record exists - use standard collection name
         await agent.com.atproto.repo.getRecord({
           repo: did,
-          collection: 'community.lexicon.calendar.event',
+          collection: BLUESKY_COLLECTIONS.EVENT,
           rkey,
         });
 
@@ -363,9 +372,21 @@ export class BlueskyService {
         });
       }
 
-      // Generate a unique rkey from the event name
-      const baseName = this.generateBaseName(event.name);
-      const rkey = await this.generateUniqueRkey(agent, did, baseName);
+      // Determine the rkey to use
+      let rkey: string;
+
+      // If updating an existing event, use the existing rkey
+      if (event.sourceData?.rkey) {
+        rkey = event.sourceData.rkey as string;
+        this.logger.debug(`Using existing rkey for update: ${rkey}`);
+      }
+      // For new events, generate a unique rkey based on the slug (not name)
+      else {
+        // Use slug instead of name to generate rkey (slugs don't change on rename)
+        const baseValue = event.slug || this.generateBaseName(event.name);
+        rkey = await this.generateUniqueRkey(agent, did, baseValue);
+        this.logger.debug(`Generated new rkey for create: ${rkey}`);
+      }
 
       // Prepare uris array with image if it exists
       const uris: BlueskyEventUri[] = [];
@@ -388,6 +409,31 @@ export class BlueskyService {
           uri: event.locationOnline,
           name: 'Online Meeting Link',
         });
+      }
+
+      // Add OpenMeet event URL to uris to help with matching
+      const baseUrl =
+        this.configService.get<string>('APP_URL', { infer: true }) ||
+        'https://platform.openmeet.net';
+      const openmeetEventUrl = `${baseUrl}/events/${event.slug}`;
+
+      // Check if we already have an OpenMeet Event URI to avoid duplicates
+      const existingOpenMeetUri = uris.find(
+        (uri) =>
+          uri.name === 'OpenMeet Event' ||
+          (uri.uri && uri.uri.includes(`/events/${event.slug}`)),
+      );
+
+      if (!existingOpenMeetUri) {
+        this.logger.debug(`Adding OpenMeet event URL: ${openmeetEventUrl}`);
+        uris.push({
+          uri: openmeetEventUrl,
+          name: 'OpenMeet Event',
+        });
+      } else {
+        this.logger.debug(
+          `OpenMeet event URL already exists: ${existingOpenMeetUri.uri}`,
+        );
       }
 
       // Create record data
@@ -413,14 +459,17 @@ export class BlueskyService {
         };
       }
 
+      // Use standard collection name without suffix
+      const standardEventCollection = BLUESKY_COLLECTIONS.EVENT;
+
       const result = await agent.com.atproto.repo.putRecord({
         repo: did,
-        collection: 'community.lexicon.calendar.event',
+        collection: standardEventCollection,
         rkey,
         record: recordData,
       });
 
-      this.logger.debug(result);
+      this.logger.debug('post to bluesky result', JSON.stringify(result));
       this.logger.log(
         `Event ${event.name} posted to Bluesky for user ${handle}`,
       );
@@ -447,9 +496,14 @@ export class BlueskyService {
     try {
       const agent = await this.resumeSession(tenantId, did);
 
+      // Get collection name with appropriate suffix
+      const eventCollection = this.blueskyIdService.applyCollectionSuffix(
+        BLUESKY_COLLECTIONS.EVENT,
+      );
+
       const response = await agent.com.atproto.repo.listRecords({
         repo: did,
-        collection: 'community.lexicon.calendar.event',
+        collection: eventCollection,
       });
       return response.data.records;
     } catch (error) {
@@ -487,7 +541,6 @@ export class BlueskyService {
     }
   }
 
-  // Add a new method to delete an event from Bluesky
   async deleteEventRecord(
     event: EventEntity,
     did: string,
@@ -499,17 +552,49 @@ export class BlueskyService {
     }
 
     const agent = await this.resumeSession(tenantId, did);
-    const response = await agent.com.atproto.repo.deleteRecord({
-      repo: did,
-      collection: 'community.lexicon.calendar.event',
-      rkey,
-    });
-    this.logger.debug('Bluesky event delete response:', response);
 
-    return {
-      success: true,
-      message: 'Event deleted successfully',
-    };
+    try {
+      // When deleting a record, ensure that the repo information is included
+      // Use standard collection name without suffix
+      const standardEventCollection = BLUESKY_COLLECTIONS.EVENT;
+
+      const response = await agent.com.atproto.repo.deleteRecord({
+        repo: did,
+        collection: standardEventCollection,
+        rkey,
+      });
+
+      this.logger.debug(
+        'Bluesky event delete response:',
+        JSON.stringify(response),
+      );
+
+      // Also log the expected format that should be in the queue for debugging
+      this.logger.debug('Expected queue record format:', {
+        kind: 'commit',
+        commit: {
+          repo: did, // This is the critical field that should be in the queue
+          collection: standardEventCollection,
+          operation: 'delete',
+          rkey,
+        },
+      });
+
+      return {
+        success: true,
+        message: 'Event deleted successfully',
+      };
+    } catch (error) {
+      this.logger.error('Failed to delete Bluesky event record', {
+        error: error.message,
+        stack: error.stack,
+        did,
+        rkey,
+        tenantId,
+      });
+
+      throw new Error(`Failed to delete Bluesky event: ${error.message}`);
+    }
   }
 
   /**

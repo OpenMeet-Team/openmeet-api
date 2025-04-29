@@ -16,6 +16,7 @@ This document serves as the authoritative source of truth for the design and imp
 - [Event Synchronization](#event-synchronization)
   - [1. OpenMeet → Bluesky](#1-openmeet--bluesky)
   - [2. Bluesky → OpenMeet](#2-bluesky--openmeet)
+  - [3. RSVP Synchronization](#3-rsvp-synchronization)
 - [Shadow Account Management](#shadow-account-management)
   - [1. Account Creation Process](#1-account-creation-process)
   - [2. Architectural Principles](#2-architectural-principles)
@@ -27,10 +28,14 @@ This document serves as the authoritative source of truth for the design and imp
   - [Completed](#completed)
   - [In Progress](#in-progress)
   - [Planned](#planned)
+- [Minimum Viable Implementation](#minimum-viable-implementation)
+  - [MVI Components](#mvi-components)
+  - [MVI Benefits](#mvi-benefits)
 - [Event Integration Interface Design](#event-integration-interface-design)
   - [Problem Statement](#problem-statement)
   - [Design Decision](#design-decision)
   - [Benefits](#benefits)
+  - [Implementation Status](#implementation-status-1)
   - [Implementation Plan](#implementation-plan)
   - [References](#references)
 - [Comprehensive Event Ingestion Flow Architecture](#comprehensive-event-ingestion-flow-architecture)
@@ -95,6 +100,8 @@ The integration consists of several key components:
 - **Event Processor**: Maps Bluesky events to OpenMeet's format
 - **Event Publisher**: Publishes OpenMeet events to Bluesky
 - **Deduplication Service**: Prevents duplicate events
+- **Event Sync Service**: Manages bidirectional event synchronization using a strategy pattern 
+- **Sync Strategy Factory**: Creates appropriate sync strategies for different source types
 
 ### 4. Shadow User Components
 
@@ -168,6 +175,65 @@ When ingesting events from Bluesky:
    - Analyze ingested events for recurring patterns
    - Group potentially related events
    - Suggest series creation when patterns are detected
+
+4. **Event Synchronization Strategy**
+   - Implemented using a strategy pattern for different source types
+   - Fast initial response from database with asynchronous background sync
+   - Timestamp comparison to detect and apply remote changes
+   - Prevention of circular updates using skipBlueskySync flag
+   - Event slug-based synchronization to ensure proper identification
+
+5. **User-Initiated Sync**
+   - Trigger comprehensive event sync when Bluesky users log in
+   - Perform bidirectional synchronization of user's events
+   - Handle both historical and future events
+   - Apply conflict resolution with ATProtocol as source of truth
+   - Implement loop detection to prevent circular updates
+   - Respect connection status (no updates to ATProtocol if disconnected)
+
+### 3. RSVP Synchronization
+
+RSVPs (event attendance records) are also synchronized between platforms:
+
+1. **RSVP Ingestion (Bluesky → OpenMeet)**
+   - Firehose consumer filters for RSVP operations
+   - Processor extracts user and event references
+   - Maps Bluesky status values to OpenMeet attendance statuses:
+     - "interested" → Maybe
+     - "going" → Confirmed
+     - "notgoing" → Cancelled
+   - Shadow accounts created for Bluesky users who haven't registered
+   - Events located by their source attributes (sourceId, sourceType, cid, rkey, uri)
+   - Attendee records created or updated using natural key (user + event)
+
+2. **RSVP Processing Flow Implementation**
+   - bsky-firehose-consumer detects RSVP operations from firehose
+   - Filters for creates, updates, and deletes
+   - Extracts user DID/handle, event reference, and status
+   - Publishes structured message to RabbitMQ
+   - bsky-event-processor consumes and maps to ExternalRsvpDto format
+   - RsvpIntegrationService processes the RSVP:
+     - Finds referenced event by source attributes
+     - Creates or finds shadow account for the user
+     - Maps RSVP status to OpenMeet status
+     - Finds existing attendee record or creates a new one
+     - Updates the status based on the RSVP
+   - Metrics and detailed logging track processing performance
+
+3. **User PDS RSVP Synchronization**
+   - During user login, we can check the user's PDS for RSVPs
+   - For each RSVP, find the corresponding event in OpenMeet
+   - Create or update the attendance record accordingly
+   - Handles both local and remote events
+
+4. **RSVP Integration API**
+   - Dedicated endpoint for RSVP ingestion (/integration/rsvps)
+   - Uses same authentication mechanism as event integration
+   - ExternalRsvpDto includes:
+     - Event reference (eventSourceId, eventSourceType)
+     - User reference (userDid, userHandle)
+     - RSVP status and timestamp
+     - Optional metadata for Bluesky-specific data
 
 Reference: [ATProtocol Integration Guide](/design-notes/recurring-events/atprotocol-integration-guide.md)
 
@@ -323,22 +389,42 @@ interface BlueskyEnhancedProfile extends BlueskyPublicProfile {
    - Enhanced profiles for authenticated users
    - Profile data syncing from Bluesky
 
+4. **Event Integration Flow**
+   - Firehose consumer implementation for Bluesky event capture
+   - Event processor service transforming and routing events
+   - Enhanced server-side deduplication with multi-criteria matching
+   - Comprehensive metrics and monitoring with Prometheus/Grafana
+   - DELETE endpoint for integration events
+   - Shadow account handling for Bluesky event creators
+
+5. **RSVP Integration**
+   - RSVP capture from Bluesky firehose
+   - Integration/rsvps endpoint implementation
+   - Shadow account creation for RSVP users
+   - Mapping from Bluesky RSVP statuses to OpenMeet attendance statuses
+   - Metrics for RSVP processing effectiveness
+
+6. **Infrastructure Setup**
+   - Kubernetes configurations for both bsky-firehose-consumer and bsky-event-processor
+   - Enhanced monitoring with Grafana dashboards
+   - Improved error handling with proper logging
+   - Exponential backoff implementation for temporary errors
+
 ### In Progress
 
-1. **Shadow Account Service**
-   - Design complete, implementation in progress
-   - Need to add `isShadowAccount` flag to UserEntity
-   - Need to implement account claiming process
+1. **Shadow Account Service Enhancements**
+   - Account claiming process implementation
+   - Profile synchronization improvements
+   - Admin interface for shadow account management
 
-2. **Event Ingestion**
-   - Firehose consumer architecture defined
-   - Need to improve event mapping and deduplication
-   - Series detection algorithm to be implemented
+2. **RSVP Handling Improvements**
+   - RSVP deletion functionality
+   - User PDS RSVP Synchronization development
 
 3. **Recurrence Handling**
    - Strategy defined for publishing recurring events
-   - Implementation of occurrence selection algorithm needed
-   - Next occurrence publishing logic to be added
+   - Implementation of occurrence selection algorithm 
+   - Next occurrence publishing logic
 
 ### Planned
 
@@ -352,10 +438,53 @@ interface BlueskyEnhancedProfile extends BlueskyPublicProfile {
    - Build similarity scoring for potential series members
    - Create UI for confirming series detection results
 
-3. **Comprehensive Monitoring**
-   - Add metrics for sync quality and performance
-   - Create dashboards for monitoring sync status
-   - Implement alerting for sync failures
+3. **Comprehensive Testing**
+   - End-to-end tests for the event and RSVP ingestion pipeline
+   - User profile navigation tests for shadow accounts
+   - Integration tests for bidirectional event sync
+
+4. **User-Initiated Event Sync**
+   - Complete the `UserEventSyncService` for login-triggered syncs
+   - Implement bidirectional sync with proper conflict resolution
+   - Add user preferences for sync behavior
+   - Create admin tools for monitoring and troubleshooting
+
+5. **Event Sync Strategy Improvements**
+   - Add unit tests for EventSyncService and BlueskyEventSyncStrategy
+   - Add metrics for sync operations (success rate, time to sync)
+   - Implement exponential backoff for sync failures
+   - Implement sync status tracking in admin interface
+
+## Minimum Viable Implementation
+
+To expedite delivery of the core integration features, we will focus initially on a Minimum Viable Implementation (MVI) approach. This allows us to quickly provide value while continuing to build out the complete architecture.
+
+### MVI Components
+
+1. **Basic Event Import from Bluesky**
+   - Focused on reliable ingestion of events via the firehose
+   - Core event data mapping for essential fields only
+   - Simple deduplication based on source IDs
+
+2. **Shadow Account Fundamentals**
+   - Lightweight user records for Bluesky event creators
+   - Essential identification via DIDs and handles
+   - Visual indicators for shadow vs. regular accounts
+
+3. **User Profile Navigation**
+   - Basic API endpoints to fetch events by user
+   - Fundamental user profile information from ATProtocol
+   - Navigation between events and creator profiles
+
+### MVI Benefits
+
+- **Faster Time to Value**: Delivers core functionality quickly
+- **User-Centric Approach**: Prioritizes features that directly enhance user experience
+- **Incremental Complexity**: Builds a solid foundation before adding advanced features
+- **Early Validation**: Allows testing of core architectural decisions
+- **Focused Development**: Clearer short-term goals for the development team
+
+After successfully implementing the MVI, we will incrementally add the more complex features like bidirectional sync, advanced conflict resolution, and series detection.
 
 ## Event Integration Interface Design
 
@@ -389,6 +518,41 @@ We will implement a dedicated Event Integration Interface with the following arc
 - **Efficiency**: Optimized for bulk operations and service-to-service communication
 - **Separation of Concerns**: Clearly separates integration traffic from user-generated content
 - **Extensibility**: Easy to add new source types without changing the core API
+
+### Implementation Status
+
+1. **Server-Side Deduplication (Completed)**
+   - Enhanced `EventIntegrationService` with multi-criteria matching:
+     - Primary method: Source ID and type
+     - Secondary method: Source URL
+     - Tertiary method: Metadata fields (CID and rkey specific to Bluesky)
+   - Added detailed logging for matching logic
+   - Comprehensive test suite for deduplication logic
+   - Preserved legacy method for backward compatibility
+
+2. **Integration API Endpoints (Completed)**
+   - Created `/integration/events` endpoint for event ingestion
+   - Added DELETE endpoint for integration events with sourceId and sourceType parameters
+   - Implemented `/integration/rsvps` endpoint for RSVP processing
+   - Enhanced security with ServiceKeyAuthGuard
+
+3. **Processor Simplification (Completed)**
+   - Removed client-side deduplication logic from processors
+   - Standardized approach for creates, updates, and deletes
+   - Improved error handling with exponential backoff
+
+4. **Monitoring (Completed)**
+   - Added comprehensive metrics for processing:
+     - Counters for processed events by operation (create/update/delete)
+     - Counters for deduplication matches by method
+     - Histogram for processing duration
+   - Created Grafana dashboard for event integration metrics
+
+5. **Remaining Tasks**
+   - Update `event-processor.service.ts` to use `/integration/events` endpoint
+   - Complete RSVP deletion functionality
+   - Implement end-to-end tests for the complete pipeline
+   - Add admin tools for viewing and managing ingested events
 
 ### Implementation Plan
 

@@ -162,6 +162,10 @@ export class EventEntity
   sourceType: EventSourceType | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
+  /**
+   * The unique identifier for the event source.
+   * For Bluesky events, this should be the full URI (e.g., at://did:plc:abcdef/app.bsky.feed.post/12345)
+   */
   sourceId: string | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })

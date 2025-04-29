@@ -327,6 +327,15 @@ export class UserService {
     return user;
   }
 
+  /**
+   * Finds or creates a user for social authentication providers
+   *
+   * NOTE ABOUT BLUESKY IDs:
+   * - When authProvider='bluesky', the profile.id is the user's DID
+   * - This DID is stored directly in the user.socialId field
+   * - We use this socialId field for Bluesky operations rather than duplicating in preferences
+   * - When working with Bluesky, check for user.provider === 'bluesky' && user.socialId
+   */
   async findOrCreateUser(
     profile: SocialInterface,
     authProvider: string,
@@ -665,5 +674,25 @@ export class UserService {
       );
       return null;
     }
+  }
+
+  /**
+   * Find user by external ID (such as Bluesky DID)
+   * @param externalId The external ID to search for (e.g., Bluesky DID)
+   * @param tenantId The tenant ID
+   * @returns The user entity or null if not found
+   */
+  async findByExternalId(
+    externalId: string,
+    tenantId?: string,
+  ): Promise<NullableType<UserEntity>> {
+    if (!externalId) return null;
+
+    await this.getTenantSpecificRepository(tenantId);
+
+    return this.usersRepository.findOne({
+      where: { socialId: externalId },
+      relations: ['role', 'role.permissions'],
+    });
   }
 }

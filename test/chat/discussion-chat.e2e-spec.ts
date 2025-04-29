@@ -14,7 +14,7 @@ import { loginAsTester, createEvent, createGroup } from '../utils/functions';
 jest.setTimeout(120000);
 
 // Helper function to retry API calls
-async function retryApiCall(apiCall, maxRetries = 3, retryDelay = 2000) {
+async function retryApiCall(apiCall, maxRetries = 1, retryDelay = 2000) {
   let lastError;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {

@@ -34,6 +34,7 @@ import { RoleEnum } from '../../role/role.enum';
 import { EventSeriesEntity } from '../../event-series/infrastructure/persistence/relational/entities/event-series.entity';
 import { UpdateEventDto } from '../dto/update-event.dto';
 import { RecurrenceFrequency } from '../../event-series/interfaces/recurrence-frequency.enum';
+import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
 
 describe('EventManagementService', () => {
   let service: EventManagementService;
@@ -232,6 +233,14 @@ describe('EventManagementService', () => {
           useValue: {},
         },
         {
+          provide: BlueskyIdService,
+          useValue: {
+            createUri: jest.fn(),
+            parseUri: jest.fn(),
+            isValidUri: jest.fn(),
+          },
+        },
+        {
           provide: 'DiscussionService',
           useValue: {},
         },
@@ -363,10 +372,20 @@ describe('EventManagementService', () => {
         .spyOn(service, 'attendEvent')
         .mockResolvedValue(currentMockEventAttendee);
 
+      // Convert entity to DTO
+      const mockAttendeeDto = {
+        ...currentMockEventAttendee,
+        sourceType: currentMockEventAttendee.sourceType || undefined,
+        sourceId: currentMockEventAttendee.sourceId || undefined,
+        sourceUrl: currentMockEventAttendee.sourceUrl || undefined,
+        sourceData: currentMockEventAttendee.sourceData || undefined,
+        lastSyncedAt: currentMockEventAttendee.lastSyncedAt || undefined,
+      };
+
       const result = await service.attendEvent(
         targetEvent.slug,
         mockUser.id,
-        currentMockEventAttendee,
+        mockAttendeeDto,
       );
       expect(result).toEqual(currentMockEventAttendee);
     });

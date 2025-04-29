@@ -44,3 +44,9 @@ export interface BlueskyEvent {
     }>;
   };
 }
+
+// Constants for Bluesky collection names
+export const BLUESKY_COLLECTIONS = {
+  EVENT: 'community.lexicon.calendar.event',
+  RSVP: 'community.lexicon.calendar.rsvp',
+};

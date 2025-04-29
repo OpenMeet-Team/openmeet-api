@@ -68,6 +68,61 @@ const businessMetricsProviders = [
   }),
 ];
 
+// Define event integration metrics for tracking deduplication
+const eventIntegrationMetrics = [
+  makeCounterProvider({
+    name: 'event_integration_processed_total',
+    help: 'Total number of external events processed',
+    labelNames: ['tenant', 'source_type', 'operation'],
+  }),
+  makeCounterProvider({
+    name: 'event_integration_deduplication_matches_total',
+    help: 'Total number of deduplication matches by method',
+    labelNames: ['tenant', 'source_type', 'method'], // method: primary, secondary, tertiary
+  }),
+  makeCounterProvider({
+    name: 'event_integration_deduplication_failures_total',
+    help: 'Total number of deduplication failures',
+    labelNames: ['tenant', 'source_type', 'error'],
+  }),
+  makeHistogramProvider({
+    name: 'event_integration_processing_duration_seconds',
+    help: 'Duration of event integration processing in seconds',
+    labelNames: ['tenant', 'source_type', 'operation', 'is_duplicate'],
+    buckets: [0.01, 0.05, 0.1, 0.5, 1, 2.5, 5],
+  }),
+];
+
+// Define RSVP integration metrics
+const rsvpIntegrationMetrics = [
+  makeCounterProvider({
+    name: 'rsvp_integration_processed_total',
+    help: 'Total number of external RSVPs processed',
+    labelNames: ['tenant', 'source_type', 'operation'],
+  }),
+  makeHistogramProvider({
+    name: 'rsvp_integration_processing_duration_seconds',
+    help: 'Time spent processing external RSVPs in seconds',
+    labelNames: ['tenant', 'source_type', 'operation'],
+    buckets: [0.01, 0.1, 0.5, 1, 2, 5, 10],
+  }),
+];
+
+// Define Bluesky RSVP specific metrics
+const blueskyRsvpMetrics = [
+  makeCounterProvider({
+    name: 'bluesky_rsvp_operations_total',
+    help: 'Total number of Bluesky RSVP operations',
+    labelNames: ['tenant', 'operation', 'status'],
+  }),
+  makeHistogramProvider({
+    name: 'bluesky_rsvp_processing_duration_seconds',
+    help: 'Time spent processing Bluesky RSVPs in seconds',
+    labelNames: ['tenant', 'operation', 'status'],
+    buckets: [0.01, 0.1, 0.5, 1, 2, 5, 10],
+  }),
+];
+
 @Module({
   imports: [
     ScheduleModule.forRoot(),
@@ -82,11 +137,20 @@ const businessMetricsProviders = [
     MetricsService,
     ...businessMetricsProviders,
     ...httpMetricsProviders,
+    ...eventIntegrationMetrics,
+    ...rsvpIntegrationMetrics,
+    ...blueskyRsvpMetrics,
   ],
   exports: [
     MetricsService,
     // Export HTTP metrics for use in interceptors/filters
     ...httpMetricsProviders,
+    // Export event integration metrics for use in EventIntegrationService
+    ...eventIntegrationMetrics,
+    // Export RSVP integration metrics for use in RsvpIntegrationService
+    ...rsvpIntegrationMetrics,
+    // Export Bluesky RSVP metrics for use in BlueskyRsvpService
+    ...blueskyRsvpMetrics,
   ],
 })
 export class MetricsModule implements OnModuleInit {

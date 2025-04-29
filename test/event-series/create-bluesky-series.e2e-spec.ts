@@ -79,6 +79,20 @@ describe('Create Bluesky Series and Verify Materialized Occurrences (e2e)', () =
       );
     }
 
+    // Verify the sourceId is a full AT Protocol URI (at://{did}/{collection}/{rkey})
+    if (templateEvent.sourceType === 'bluesky' && templateEvent.sourceId) {
+      console.log(`Event sourceId: ${templateEvent.sourceId}`);
+      expect(templateEvent.sourceId).toMatch(
+        /^at:\/\/did:[a-z]+:[a-zA-Z0-9.%-]+\/[^\/]+\/[^\/]+$/,
+      );
+      const uriParts = templateEvent.sourceId.replace('at://', '').split('/');
+      expect(uriParts.length).toBe(3);
+      const [did, collection, rkey] = uriParts;
+      expect(did).toMatch(/^did:(plc|web|key):/);
+      expect(collection).toBeTruthy();
+      expect(rkey).toBeTruthy();
+    }
+
     console.log(`Template event created with slug: ${templateEventSlug}`);
 
     // STEP 2: Create a series from the Bluesky event
@@ -160,6 +174,40 @@ describe('Create Bluesky Series and Verify Materialized Occurrences (e2e)', () =
       if (templateEvent.sourceType === 'bluesky') {
         // If template had Bluesky properties, verify they were passed
         expect(occurrence.event.sourceType).toBe('bluesky');
+
+        // Verify the materialized event also has a properly formatted sourceId
+        if (occurrence.event.sourceId) {
+          console.log(
+            `Materialized event sourceId: ${occurrence.event.sourceId}`,
+          );
+          expect(occurrence.event.sourceId).toMatch(
+            /^at:\/\/did:[a-z]+:[a-zA-Z0-9.%-]+\/[^\/]+\/[^\/]+$/,
+          );
+
+          // Verify the sourceId parts are valid
+          const uriParts = occurrence.event.sourceId
+            .replace('at://', '')
+            .split('/');
+          expect(uriParts.length).toBe(3);
+          const [did, collection, rkey] = uriParts;
+          expect(did).toMatch(/^did:(plc|web|key):/);
+          expect(collection).toBeTruthy();
+          expect(rkey).toBeTruthy();
+
+          // The DID part should be the same as the template event
+          if (templateEvent.sourceId) {
+            const templateDidMatch = templateEvent.sourceId.match(
+              /^at:\/\/(did:[^\/]+)\//,
+            );
+            const occurrenceDidMatch = occurrence.event.sourceId.match(
+              /^at:\/\/(did:[^\/]+)\//,
+            );
+            if (templateDidMatch && occurrenceDidMatch) {
+              expect(occurrenceDidMatch[1]).toBe(templateDidMatch[1]);
+            }
+          }
+        }
+
         console.log(
           `Verified source info for occurrence: ${occurrence.event.slug}`,
         );

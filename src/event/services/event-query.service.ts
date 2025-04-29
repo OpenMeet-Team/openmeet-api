@@ -4,6 +4,7 @@ import {
   Inject,
   Logger,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Repository, MoreThan, Brackets } from 'typeorm';
@@ -38,6 +39,7 @@ export class EventQueryService {
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
+    @Inject(forwardRef(() => EventAttendeeService))
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly groupMemberService: GroupMemberService,
   ) {
