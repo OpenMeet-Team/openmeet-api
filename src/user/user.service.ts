@@ -44,9 +44,7 @@ export class UserService {
     private readonly roleService: RoleService,
     private eventEmitter: EventEmitter2,
     private readonly fileService: FilesS3PresignedService,
-  ) {
-    this.logger.log('UserService constructed');
-  }
+  ) {}
 
   async getTenantSpecificRepository(tenantId?: string) {
     const effectiveTenantId = tenantId || this.request?.tenantId;
