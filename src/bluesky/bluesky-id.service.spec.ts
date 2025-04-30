@@ -16,13 +16,13 @@ describe('BlueskyIdService', () => {
             get: jest.fn((key: string) => {
               if (key === 'bluesky') {
                 return {
-                  collectionSuffix: 'test-suffix'
+                  collectionSuffix: 'test-suffix',
                 };
               }
               return null;
-            })
-          }
-        }
+            }),
+          },
+        },
       ],
     }).compile();
 

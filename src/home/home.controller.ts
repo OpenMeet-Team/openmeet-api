@@ -16,6 +16,7 @@ export class HomeController {
   constructor(private service: HomeService) {}
 
   @Public()
+  @TenantPublic()
   @Get()
   @ApiOperation({ summary: 'Redirect to platform or API docs' })
   @Redirect()

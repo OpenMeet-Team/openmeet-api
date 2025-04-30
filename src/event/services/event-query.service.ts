@@ -583,66 +583,63 @@ export class EventQueryService {
   async showDashboardEvents(userId: number): Promise<EventEntity[]> {
     await this.initializeRepository();
 
-    // Fetch events with all necessary relations
-    const createdEvents = await this.eventRepository.find({
-      where: { user: { id: userId } },
-      relations: ['user', 'group', 'categories', 'image'],
-    });
-
-    // Get events the user is attending
-    const attendingEventsQuery = this.eventAttendeesRepository
-      .createQueryBuilder('eventAttendee')
-      .leftJoinAndSelect('eventAttendee.event', 'event')
+    // Create a single efficient query instead of multiple separate queries
+    const eventsQuery = this.eventRepository
+      .createQueryBuilder('event')
       .leftJoinAndSelect('event.user', 'user')
       .leftJoinAndSelect('event.group', 'group')
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.image', 'image')
-      .where('eventAttendee.user.id = :userId', { userId });
+      .leftJoinAndSelect(
+        'event.attendees',
+        'attendee',
+        'attendee.user.id = :userId',
+        { userId },
+      )
+      .leftJoinAndSelect('attendee.role', 'role')
+      .leftJoinAndSelect('role.permissions', 'permissions')
+      .where('event.user.id = :userId', { userId })
+      .orWhere('attendee.id IS NOT NULL')
+      // Load all attendees count in a single query using COUNT subquery
+      .loadRelationCountAndMap(
+        'event.attendeesCount',
+        'event.attendees',
+        'attendeesCount',
+        (qb) =>
+          qb.where('attendeesCount.status = :status', {
+            status: EventAttendeeStatus.Confirmed,
+          }),
+      );
 
-    const attendees = await attendingEventsQuery.getMany();
-    const attendingEvents = attendees.map((attendee) => attendee.event);
+    const events = await eventsQuery.getMany();
 
-    // Combine and deduplicate events
-    const allEvents = [...createdEvents, ...attendingEvents];
+    // Deduplicate events (in case a user both created and is attending an event)
     const uniqueEvents = Array.from(
-      new Map(allEvents.map((event) => [event.id, event])).values(),
+      new Map(events.map((event) => [event.id, event])).values(),
     );
 
-    // Add attendee role information and counts for each event
-    const eventsWithDetails = (await Promise.all(
-      uniqueEvents.map(async (event) => {
-        const attendee =
-          await this.eventAttendeeService.findEventAttendeeByUserId(
-            event.id,
-            userId,
-          );
+    // Process the events without additional database queries
+    const processedEvents = uniqueEvents.map((event) => {
+      // Add attendee information if it exists
+      if (event.attendees && event.attendees.length > 0) {
+        event.attendee = event.attendees[0];
+      }
 
-        return {
-          ...event,
-          attendee,
-          attendeesCount:
-            await this.eventAttendeeService.showConfirmedEventAttendeesCount(
-              event.id,
-            ),
-        };
-      }),
-    )) as EventEntity[];
+      // Add recurrence information
+      return this.addRecurrenceInformation(event);
+    });
 
-    // Add recurrence descriptions and sort by start date
-    return eventsWithDetails
-      .map((event) => this.addRecurrenceInformation(event))
-      .sort((a, b) => {
-        // Sort future events first, then by start date
-        const aDate = new Date(a.startDate);
-        const bDate = new Date(b.startDate);
-        const now = new Date();
+    // Sort events: future events first, then by start date
+    return processedEvents.sort((a, b) => {
+      const aDate = new Date(a.startDate);
+      const bDate = new Date(b.startDate);
+      const now = new Date();
 
-        if (aDate >= now && bDate < now) return -1;
-        if (aDate < now && bDate >= now) return 1;
+      if (aDate >= now && bDate < now) return -1;
+      if (aDate < now && bDate >= now) return 1;
 
-        // For two future or two past events, sort by date
-        return aDate.getTime() - bDate.getTime();
-      });
+      return aDate.getTime() - bDate.getTime();
+    });
   }
 
   @Trace('event-query.getHomePageFeaturedEvents')

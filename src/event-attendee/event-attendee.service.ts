@@ -35,6 +35,12 @@ export class EventAttendeeService {
 
   private eventAttendeesRepository: Repository<EventAttendeesEntity>;
 
+  // Cache to store attendee lookups for the current request
+  private readonly attendeeCache = new Map<
+    string,
+    EventAttendeesEntity | null
+  >();
+
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
@@ -264,6 +270,14 @@ export class EventAttendeeService {
   ): Promise<EventAttendeesEntity | null> {
     await this.getTenantSpecificEventRepository();
 
+    // Generate cache key
+    const cacheKey = `${eventId}:${userId}`;
+
+    // Check cache first
+    if (this.attendeeCache.has(cacheKey)) {
+      return this.attendeeCache.get(cacheKey) || null;
+    }
+
     this.logger.debug(
       `[findEventAttendeeByUserId] Finding most recent attendance for event ${eventId} and user ${userId}`,
     );
@@ -276,9 +290,58 @@ export class EventAttendeeService {
       .where('attendee.event.id = :eventId', { eventId })
       .andWhere('attendee.user.id = :userId', { userId })
       .orderBy('attendee.updatedAt', 'DESC')
+      .cache(5000) // Cache for 5 seconds
       .getOne();
 
+    // Cache the result
+    this.attendeeCache.set(cacheKey, attendee);
+
     return attendee;
+  }
+
+  @Trace('event-attendee.findEventAttendeesByUserIdBatch')
+  async findEventAttendeesByUserIdBatch(
+    eventIds: number[],
+    userId: number,
+  ): Promise<Map<number, EventAttendeesEntity | null>> {
+    if (!eventIds.length) {
+      return new Map();
+    }
+
+    await this.getTenantSpecificEventRepository();
+
+    this.logger.debug(
+      `[findEventAttendeesByUserIdBatch] Finding attendance for ${eventIds.length} events and user ${userId}`,
+    );
+
+    // Find all attendees for this user and the given events in a single query
+    const attendees = await this.eventAttendeesRepository
+      .createQueryBuilder('attendee')
+      .leftJoinAndSelect('attendee.user', 'user')
+      .leftJoinAndSelect('attendee.role', 'role')
+      .leftJoinAndSelect('role.permissions', 'permissions')
+      .leftJoinAndSelect('attendee.event', 'event')
+      .where('event.id IN (:...eventIds)', { eventIds })
+      .andWhere('attendee.user.id = :userId', { userId })
+      .orderBy('attendee.updatedAt', 'DESC')
+      .getMany();
+
+    // Create a map of eventId to attendee
+    const result = new Map<number, EventAttendeesEntity | null>();
+
+    // Initialize all events with null (no attendance)
+    eventIds.forEach((id) => result.set(id, null));
+
+    // Update with actual attendees where found
+    attendees.forEach((attendee) => {
+      result.set(attendee.event.id, attendee);
+
+      // Also update the cache
+      const cacheKey = `${attendee.event.id}:${userId}`;
+      this.attendeeCache.set(cacheKey, attendee);
+    });
+
+    return result;
   }
 
   @Trace('event-attendee.updateEventAttendee')
@@ -480,9 +543,16 @@ export class EventAttendeeService {
   @Trace('event-attendee.showConfirmedEventAttendeesCount')
   async showConfirmedEventAttendeesCount(eventId: number): Promise<number> {
     await this.getTenantSpecificEventRepository();
-    return await this.eventAttendeesRepository.count({
-      where: { event: { id: eventId }, status: EventAttendeeStatus.Confirmed },
-    });
+
+    // Use query builder with a 5-second cache to reduce database load
+    return this.eventAttendeesRepository
+      .createQueryBuilder('attendee')
+      .where('attendee.event.id = :eventId', { eventId })
+      .andWhere('attendee.status = :status', {
+        status: EventAttendeeStatus.Confirmed,
+      })
+      .cache(5000) // Cache for 5 seconds
+      .getCount();
   }
 
   @Trace('event-attendee.findEventIdsByUserId')
