@@ -17,7 +17,9 @@ export class BlueskyIdService {
     this.collectionSuffix =
       this.configService.get<BlueskyConfig>('bluesky', { infer: true })
         ?.collectionSuffix || '';
-    this.logger.debug('Collection suffix', { collectionSuffix: this.collectionSuffix });
+    this.logger.debug('Collection suffix', {
+      collectionSuffix: this.collectionSuffix,
+    });
   }
   /**
    * Creates a full AT Protocol URI from its components

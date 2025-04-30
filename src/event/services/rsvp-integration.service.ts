@@ -65,7 +65,9 @@ export class RsvpIntegrationService {
 
       // Validate the AT Protocol URI format
       if (!rsvpData.eventSourceId.startsWith('at://')) {
-        throw new BadRequestException('Event source ID must be a valid AT Protocol URI');
+        throw new BadRequestException(
+          'Event source ID must be a valid AT Protocol URI',
+        );
       }
 
       // Find the event by source attributes using the full AT Protocol URI
@@ -182,8 +184,7 @@ export class RsvpIntegrationService {
         skipBlueskySync: true,
       };
 
-      const newAttendee =
-        await this.eventAttendeeService.create(attendeeData);
+      const newAttendee = await this.eventAttendeeService.create(attendeeData);
 
       timer();
       return newAttendee;
