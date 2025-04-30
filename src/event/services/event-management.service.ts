@@ -1383,18 +1383,11 @@ export class EventManagementService {
         user.id,
       );
 
-    if (
-      eventAttendee &&
-      eventAttendee.status !== EventAttendeeStatus.Cancelled
-    ) {
-      return eventAttendee;
-    }
-
     const participantRole = await this.eventRoleService.getRoleByName(
       EventAttendeeRole.Participant,
     );
 
-    // Create the attendee with appropriate status based on event settings
+    // Calculate the appropriate status based on event settings
     let attendeeStatus = EventAttendeeStatus.Confirmed;
     if (event.allowWaitlist) {
       const count = await this.eventAttendeeService.showEventAttendeesCount(
@@ -1408,18 +1401,60 @@ export class EventManagementService {
       attendeeStatus = EventAttendeeStatus.Pending;
     }
 
-    // Create the attendee
-    // Start with the DTO values to preserve any source fields
-    const attendeeData = {
-      ...createEventAttendeeDto,
-      // Override with the values we need to set
-      event,
-      user,
-      status: attendeeStatus,
-      role: participantRole,
-    };
+    // If the attendee already exists and is not cancelled, return it
+    if (
+      eventAttendee &&
+      eventAttendee.status !== EventAttendeeStatus.Cancelled
+    ) {
+      return eventAttendee;
+    }
 
-    const attendee = await this.eventAttendeeService.create(attendeeData);
+    let attendee;
+
+    // If attendee exists but has cancelled status, update the existing record
+    if (
+      eventAttendee &&
+      eventAttendee.status === EventAttendeeStatus.Cancelled
+    ) {
+      this.logger.log(
+        `Reactivating cancelled attendee: ${eventAttendee.id} for event ${event.slug}`,
+      );
+
+      // Update the existing record with new status
+      eventAttendee.status = attendeeStatus;
+      eventAttendee.role = participantRole;
+
+      // Preserve original source fields if they exist
+      // Merge any new source fields from the DTO if provided
+      if (createEventAttendeeDto.sourceId) {
+        eventAttendee.sourceId = createEventAttendeeDto.sourceId;
+      }
+      if (createEventAttendeeDto.sourceType) {
+        eventAttendee.sourceType = createEventAttendeeDto.sourceType;
+      }
+      if (createEventAttendeeDto.sourceUrl) {
+        eventAttendee.sourceUrl = createEventAttendeeDto.sourceUrl;
+      }
+      if (createEventAttendeeDto.sourceData) {
+        eventAttendee.sourceData = createEventAttendeeDto.sourceData;
+      }
+
+      // Save the updated record
+      attendee = await this.eventAttendeeService.save(eventAttendee);
+    } else {
+      // Create new attendee record if none exists
+      // Start with the DTO values to preserve any source fields
+      const attendeeData = {
+        ...createEventAttendeeDto,
+        // Override with the values we need to set
+        event,
+        user,
+        status: attendeeStatus,
+        role: participantRole,
+      };
+
+      attendee = await this.eventAttendeeService.create(attendeeData);
+    }
 
     await this.eventMailService.sendMailAttendeeGuestJoined(attendee);
 
