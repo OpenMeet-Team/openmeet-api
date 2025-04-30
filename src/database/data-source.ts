@@ -139,11 +139,11 @@ export const AppDataSource = (tenantId: string) => {
           ? parseInt(process.env.DATABASE_MAX_CONNECTIONS, 10)
           : 100,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
-        min: 2, // Minimum connections to maintain
-        maxUses: 7500, // Maximum number of times to use a connection before releasing it
-        statement_timeout: 60000, // Timeout SQL statements after 60s
-        query_timeout: 60000, // Timeout entire queries after 60s
+        connectionTimeoutMillis: 5000,
+        min: 5,
+        maxUses: 7500,
+        statement_timeout: 15000,
+        query_timeout: 15000,
         application_name: `openmeet_${process.env.NODE_ENV}_${tenantId}`,
         ssl:
           process.env.DATABASE_SSL_ENABLED === 'true'
@@ -158,10 +158,10 @@ export const AppDataSource = (tenantId: string) => {
         // Connection pool settings
         poolSize: process.env.DATABASE_POOL_SIZE
           ? parseInt(process.env.DATABASE_POOL_SIZE, 10)
-          : 10,
+          : 20,
         maxPoolSize: process.env.DATABASE_MAX_POOL_SIZE
           ? parseInt(process.env.DATABASE_MAX_POOL_SIZE, 10)
-          : 20,
+          : 40,
         // Cleanup idle connections
         allowExitOnIdle: true,
       },
