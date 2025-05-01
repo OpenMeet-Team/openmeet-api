@@ -196,6 +196,7 @@ describe('EventManagementService', () => {
           useValue: {
             create: jest.fn(),
             findEventAttendeeByUserId: jest.fn(),
+            findEventAttendeesByUserIdBatch: jest.fn(),
             createEventMember: jest.fn(),
             deleteEventAttendees: jest.fn(),
             update: jest.fn(),
@@ -204,6 +205,7 @@ describe('EventManagementService', () => {
               .fn()
               .mockImplementation((attendee) => Promise.resolve(attendee)),
             reactivateEventAttendance: jest.fn(),
+            findOne: jest.fn(),
           },
         },
         {
@@ -501,7 +503,7 @@ describe('EventManagementService', () => {
       expect(mockEventAttendeeService.create).not.toHaveBeenCalled();
       expect(
         mockEventAttendeeService.findEventAttendeeByUserId,
-      ).toHaveBeenCalledWith(targetEvent.id, mockUser.id);
+      ).toHaveBeenCalledWith(targetEvent.id, mockUser.id, expect.anything());
     });
 
     it('should handle duplicate key errors when creating attendee record', async () => {
