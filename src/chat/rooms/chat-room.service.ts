@@ -895,22 +895,22 @@ export class ChatRoomService {
         relations: ['members'],
       });
 
-      if (
+      // Check database membership but don't skip Matrix operations
+      const isInDatabase =
         roomWithMembers &&
-        roomWithMembers.members.some((member) => member.id === userId)
-      ) {
+        roomWithMembers.members.some((member) => member.id === userId);
+
+      if (isInDatabase) {
         this.logger.debug(
-          `User ${userId} is already a database member of room ${chatRoom.id}, skipping Matrix join`,
+          `User ${userId} is already a database member of room ${chatRoom.id}, but still ensuring Matrix membership`,
         );
-        // Mark as verified in request cache
-        this.markUserAsComplete(eventId, userId);
-        return;
       }
 
-      // User not yet a member, continue with Matrix operations
+      // Always ensure user has Matrix credentials and joins the room
+      // This fixes the issue when toggling attendance where the user may be removed from Matrix room but still in database
       const user = await this.ensureUserHasMatrixCredentials(userId);
 
-      // Handle Matrix room operations
+      // Always attempt Matrix room operations
       const isJoined = await this.addUserToMatrixRoom(
         chatRoom.matrixRoomId,
         user,
@@ -927,8 +927,10 @@ export class ChatRoomService {
         );
       }
 
-      // Update database relationship
-      await this.addUserToRoomInDatabase(chatRoom.id, userId);
+      // Update database relationship only if not already there
+      if (!isInDatabase) {
+        await this.addUserToRoomInDatabase(chatRoom.id, userId);
+      }
 
       // Mark as completed
       this.markUserAsComplete(eventId, userId);
