@@ -76,7 +76,7 @@ export class EventAttendeeService {
         const saved = await this.eventAttendeesRepository.save(attendee);
 
         this.logger.debug(
-          `[create] Successfully created attendee record ID=${saved.id}`,
+          `[create] Successfully created attendee record ID=${saved.id} for event ${createEventAttendeeDto.event.slug} and user ${createEventAttendeeDto.user.slug}`,
         );
 
         this.auditLogger.log('event attendee created', {
@@ -318,11 +318,11 @@ export class EventAttendeeService {
   }
 
   // Keep this method for backward compatibility, but implement it using slugs
+  // @deprecated Use findEventAttendeeByUserSlug instead
   @Trace('event-attendee.findEventAttendeeByUserId')
   async findEventAttendeeByUserId(
     eventId: number,
     userId: number,
-    options?: any, // Keep options parameter for backward compatibility
   ): Promise<EventAttendeesEntity | null> {
     await this.getTenantSpecificEventRepository();
 
@@ -336,6 +336,7 @@ export class EventAttendeeService {
       .leftJoinAndSelect('attendee.user', 'user')
       .leftJoinAndSelect('attendee.role', 'role')
       .leftJoinAndSelect('role.permissions', 'permissions')
+      .leftJoinAndSelect('attendee.event', 'event') // Add relation to fully populate event object
       .where('attendee.event.id = :eventId', { eventId })
       .andWhere('attendee.user.id = :userId', { userId })
       .orderBy('attendee.updatedAt', 'DESC')

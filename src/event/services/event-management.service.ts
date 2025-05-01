@@ -1377,7 +1377,7 @@ export class EventManagementService {
 
     const event = await this.eventRepository.findOne({ where: { slug } });
     if (!event) {
-      throw new Error(`Event with slug ${slug} not found`);
+      throw new NotFoundException(`Event with slug ${slug} not found`);
     }
 
     const user = await this.userService.getUserById(userId);
@@ -1389,7 +1389,6 @@ export class EventManagementService {
       await this.eventAttendeeService.findEventAttendeeByUserId(
         event.id,
         user.id,
-        { logCacheState: true },
       );
 
     // Log existing attendance status if any
@@ -1446,13 +1445,14 @@ export class EventManagementService {
           `[attendEvent] Reactivating cancelled attendee: ${eventAttendee.id} for event ${event.slug}`,
         );
 
-        // Use our new simple method to reactivate
-        attendee = await this.eventAttendeeService.reactivateEventAttendance(
-          event.id,
-          user.id,
-          attendeeStatus,
-          participantRole.id,
-        );
+        // Use the slug-based method to reactivate
+        attendee =
+          await this.eventAttendeeService.reactivateEventAttendanceBySlug(
+            event.slug,
+            user.slug,
+            attendeeStatus,
+            participantRole.id,
+          );
 
         // Update source fields if needed
         if (
@@ -1518,7 +1518,6 @@ export class EventManagementService {
               await this.eventAttendeeService.findEventAttendeeByUserId(
                 event.id,
                 user.id,
-                { logCacheState: true },
               );
 
             this.logger.debug(
@@ -1541,7 +1540,6 @@ export class EventManagementService {
               await this.eventAttendeeService.findEventAttendeeByUserId(
                 event.id,
                 user.id,
-                { bypassCache: true, logCacheState: true },
               );
 
             if (existingAttendee) {
@@ -1649,18 +1647,28 @@ export class EventManagementService {
 
     const event = await this.eventRepository.findOne({ where: { slug } });
     if (!event) {
-      throw new Error(`Event with slug ${slug} not found`);
+      throw new NotFoundException(`Event with slug ${slug} not found`);
+    }
+
+    // Get the user to obtain their slug
+    const user = await this.userService.getUserById(
+      userId,
+      this.request.tenantId,
+    );
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
     // Log before calling cancel attendance
     this.logger.debug(
-      `[cancelAttendingEvent] Calling cancelEventAttendance for event ${event.id}, userId ${userId}`,
+      `[cancelAttendingEvent] Calling cancelEventAttendanceBySlug for event ${slug}, userSlug ${user.slug}`,
     );
 
-    const attendee = await this.eventAttendeeService.cancelEventAttendance(
-      event.id,
-      userId,
-    );
+    const attendee =
+      await this.eventAttendeeService.cancelEventAttendanceBySlug(
+        slug,
+        user.slug,
+      );
 
     this.logger.debug(
       `[cancelAttendingEvent] Attendance cancelled, new status: ${attendee.status}, id: ${attendee.id}`,
@@ -1679,6 +1687,7 @@ export class EventManagementService {
       userId,
       tenantId: this.request.tenantId,
       eventSlug: event.slug,
+      userSlug: user.slug,
     });
 
     return attendee;

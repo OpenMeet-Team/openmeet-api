@@ -503,7 +503,7 @@ describe('EventManagementService', () => {
       expect(mockEventAttendeeService.create).not.toHaveBeenCalled();
       expect(
         mockEventAttendeeService.findEventAttendeeByUserId,
-      ).toHaveBeenCalledWith(targetEvent.id, mockUser.id, expect.anything());
+      ).toHaveBeenCalledWith(targetEvent.id, mockUser.id);
     });
 
     it('should handle duplicate key errors when creating attendee record', async () => {
