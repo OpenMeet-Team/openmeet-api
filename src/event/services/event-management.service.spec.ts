@@ -199,6 +199,11 @@ describe('EventManagementService', () => {
             createEventMember: jest.fn(),
             deleteEventAttendees: jest.fn(),
             update: jest.fn(),
+            showEventAttendeesCount: jest.fn().mockResolvedValue(0),
+            save: jest
+              .fn()
+              .mockImplementation((attendee) => Promise.resolve(attendee)),
+            reactivateEventAttendance: jest.fn(),
           },
         },
         {
@@ -368,9 +373,55 @@ describe('EventManagementService', () => {
         mockEventAttendee ||
         ({ id: 1, status: EventAttendeeStatus.Confirmed } as any);
 
-      jest
-        .spyOn(service, 'attendEvent')
-        .mockResolvedValue(currentMockEventAttendee);
+      // Restore the original implementation for this test
+      jest.spyOn(service, 'attendEvent').mockRestore();
+
+      // Mock repository findOne to return the event
+      mockRepository.findOne.mockResolvedValueOnce(targetEvent);
+
+      // Mock userService.getUserById
+      const mockUserService = service[
+        'userService'
+      ] as jest.Mocked<UserService>;
+      mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
+
+      // Mock eventAttendeeService.findEventAttendeeByUserId to return null (no existing record)
+      const mockEventAttendeeService = service[
+        'eventAttendeeService'
+      ] as jest.Mocked<EventAttendeeService>;
+      mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+        null,
+      );
+
+      // Mock eventRoleService.getRoleByName
+      const mockEventRoleService = service[
+        'eventRoleService'
+      ] as jest.Mocked<EventRoleService>;
+      mockEventRoleService.getRoleByName.mockResolvedValueOnce({
+        id: 1,
+        name: EventAttendeeRole.Participant,
+        attendees: [],
+        permissions: [],
+      } as any);
+
+      // Mock eventAttendeeService.showEventAttendeesCount
+      mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(0);
+
+      // Mock eventAttendeeService.create to return a new attendee
+      mockEventAttendeeService.create.mockResolvedValueOnce(
+        currentMockEventAttendee,
+      );
+
+      // Mock eventMailService.sendMailAttendeeGuestJoined
+      const mockEventMailService = service[
+        'eventMailService'
+      ] as jest.Mocked<EventMailService>;
+      mockEventMailService.sendMailAttendeeGuestJoined.mockResolvedValueOnce();
+
+      // Mock the extra findEventAttendeeByUserId call that happens after we find a duplicate
+      mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+        currentMockEventAttendee,
+      );
 
       // Convert entity to DTO
       const mockAttendeeDto = {
@@ -387,7 +438,144 @@ describe('EventManagementService', () => {
         mockUser.id,
         mockAttendeeDto,
       );
-      expect(result).toEqual(currentMockEventAttendee);
+
+      expect(result).toBeDefined();
+      expect(mockEventAttendeeService.create).toHaveBeenCalled();
+      expect(
+        mockEventMailService.sendMailAttendeeGuestJoined,
+      ).toHaveBeenCalled();
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'event.attendee.added',
+        expect.any(Object),
+      );
+    });
+
+    it('should return existing attendee when already attending an event', async () => {
+      const targetEvent = findOneMockEventEntity;
+      const existingAttendee = {
+        id: 1,
+        status: EventAttendeeStatus.Confirmed,
+        user: mockUser,
+        event: targetEvent,
+        role: { id: 1, name: EventAttendeeRole.Participant },
+      } as any;
+
+      // Restore the original implementation for this test
+      jest.spyOn(service, 'attendEvent').mockRestore();
+
+      // Mock repository findOne to return the event
+      mockRepository.findOne.mockResolvedValueOnce(targetEvent);
+
+      // Mock userService.getUserById
+      const mockUserService = service[
+        'userService'
+      ] as jest.Mocked<UserService>;
+      mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
+
+      // Mock eventAttendeeService.findEventAttendeeByUserId to return an existing record
+      const mockEventAttendeeService = service[
+        'eventAttendeeService'
+      ] as jest.Mocked<EventAttendeeService>;
+      mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+        existingAttendee,
+      );
+
+      // Convert entity to DTO
+      const mockAttendeeDto = {
+        ...existingAttendee,
+        sourceType: existingAttendee.sourceType || undefined,
+        sourceId: existingAttendee.sourceId || undefined,
+        sourceUrl: existingAttendee.sourceUrl || undefined,
+        sourceData: existingAttendee.sourceData || undefined,
+        lastSyncedAt: existingAttendee.lastSyncedAt || undefined,
+      };
+
+      const result = await service.attendEvent(
+        targetEvent.slug,
+        mockUser.id,
+        mockAttendeeDto,
+      );
+
+      // Should return the existing attendee without creating a new one
+      expect(result).toEqual(existingAttendee);
+      expect(mockEventAttendeeService.create).not.toHaveBeenCalled();
+      expect(
+        mockEventAttendeeService.findEventAttendeeByUserId,
+      ).toHaveBeenCalledWith(targetEvent.id, mockUser.id);
+    });
+
+    it('should handle duplicate key errors when creating attendee record', async () => {
+      const targetEvent = findOneMockEventEntity;
+      const existingAttendee = {
+        id: 1,
+        status: EventAttendeeStatus.Confirmed,
+        user: mockUser,
+        event: targetEvent,
+        role: { id: 1, name: EventAttendeeRole.Participant },
+      } as any;
+
+      // Restore the original implementation for this test
+      jest.spyOn(service, 'attendEvent').mockRestore();
+
+      // Mock repository findOne to return the event
+      mockRepository.findOne.mockResolvedValueOnce(targetEvent);
+
+      // Mock userService.getUserById
+      const mockUserService = service[
+        'userService'
+      ] as jest.Mocked<UserService>;
+      mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
+
+      // Mock eventAttendeeService.findEventAttendeeByUserId to initially return null
+      // and then return an existing record after the duplicate error
+      const mockEventAttendeeService = service[
+        'eventAttendeeService'
+      ] as jest.Mocked<EventAttendeeService>;
+      mockEventAttendeeService.findEventAttendeeByUserId
+        .mockResolvedValueOnce(null) // Initial check - no record found
+        .mockResolvedValueOnce(existingAttendee); // Second check after duplicate error
+
+      // Mock eventRoleService.getRoleByName
+      const mockEventRoleService = service[
+        'eventRoleService'
+      ] as jest.Mocked<EventRoleService>;
+      mockEventRoleService.getRoleByName.mockResolvedValueOnce({
+        id: 1,
+        name: EventAttendeeRole.Participant,
+        attendees: [],
+        permissions: [],
+      } as any);
+
+      // Mock eventAttendeeService.showEventAttendeesCount
+      mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(0);
+
+      // Mock eventAttendeeService.create to throw a duplicate error
+      mockEventAttendeeService.create.mockRejectedValueOnce(
+        new Error('duplicate key value violates unique constraint'),
+      );
+
+      // Convert entity to DTO
+      const mockAttendeeDto = {
+        ...existingAttendee,
+        sourceType: existingAttendee.sourceType || undefined,
+        sourceId: existingAttendee.sourceId || undefined,
+        sourceUrl: existingAttendee.sourceUrl || undefined,
+        sourceData: existingAttendee.sourceData || undefined,
+        lastSyncedAt: existingAttendee.lastSyncedAt || undefined,
+      };
+
+      const result = await service.attendEvent(
+        targetEvent.slug,
+        mockUser.id,
+        mockAttendeeDto,
+      );
+
+      // Should handle the duplicate error and return the existing record
+      expect(result).toEqual(existingAttendee);
+      expect(mockEventAttendeeService.create).toHaveBeenCalled();
+      expect(
+        mockEventAttendeeService.findEventAttendeeByUserId,
+      ).toHaveBeenCalledTimes(2);
     });
   });
 

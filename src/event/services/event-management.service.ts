@@ -1429,106 +1429,148 @@ export class EventManagementService {
 
     let attendee;
 
-    // If attendee exists but has cancelled status, use the reactivation method
-    if (
-      eventAttendee &&
-      eventAttendee.status === EventAttendeeStatus.Cancelled
-    ) {
-      this.logger.debug(
-        `[attendEvent] Reactivating cancelled attendee: ${eventAttendee.id} for event ${event.slug}`,
-      );
-
-      // Use our new simple method to reactivate
-      attendee = await this.eventAttendeeService.reactivateEventAttendance(
-        event.id,
-        user.id,
-        attendeeStatus,
-        participantRole.id,
-      );
-
-      // Update source fields if needed
+    try {
+      // If attendee exists but has cancelled status, use the reactivation method
       if (
-        createEventAttendeeDto.sourceId ||
-        createEventAttendeeDto.sourceType ||
-        createEventAttendeeDto.sourceUrl ||
-        createEventAttendeeDto.sourceData
+        eventAttendee &&
+        eventAttendee.status === EventAttendeeStatus.Cancelled
       ) {
-        if (createEventAttendeeDto.sourceId)
-          attendee.sourceId = createEventAttendeeDto.sourceId;
-        if (createEventAttendeeDto.sourceType)
-          attendee.sourceType = createEventAttendeeDto.sourceType;
-        if (createEventAttendeeDto.sourceUrl)
-          attendee.sourceUrl = createEventAttendeeDto.sourceUrl;
-        if (createEventAttendeeDto.sourceData)
-          attendee.sourceData = createEventAttendeeDto.sourceData;
+        this.logger.debug(
+          `[attendEvent] Reactivating cancelled attendee: ${eventAttendee.id} for event ${event.slug}`,
+        );
 
-        // Save the updated source fields
-        attendee = await this.eventAttendeeService.save(attendee);
+        // Use our new simple method to reactivate
+        attendee = await this.eventAttendeeService.reactivateEventAttendance(
+          event.id,
+          user.id,
+          attendeeStatus,
+          participantRole.id,
+        );
+
+        // Update source fields if needed
+        if (
+          createEventAttendeeDto.sourceId ||
+          createEventAttendeeDto.sourceType ||
+          createEventAttendeeDto.sourceUrl ||
+          createEventAttendeeDto.sourceData
+        ) {
+          if (createEventAttendeeDto.sourceId)
+            attendee.sourceId = createEventAttendeeDto.sourceId;
+          if (createEventAttendeeDto.sourceType)
+            attendee.sourceType = createEventAttendeeDto.sourceType;
+          if (createEventAttendeeDto.sourceUrl)
+            attendee.sourceUrl = createEventAttendeeDto.sourceUrl;
+          if (createEventAttendeeDto.sourceData)
+            attendee.sourceData = createEventAttendeeDto.sourceData;
+
+          // Save the updated source fields
+          attendee = await this.eventAttendeeService.save(attendee);
+        }
+
+        this.logger.debug(
+          `[attendEvent] Reactivated attendee record to status ${attendee.status}`,
+        );
+      } else {
+        // Create new attendee record if none exists
+        this.logger.debug(
+          `[attendEvent] Creating new attendance record with status ${attendeeStatus}`,
+        );
+
+        // Start with the DTO values to preserve any source fields
+        const attendeeData = {
+          ...createEventAttendeeDto,
+          // Override with the values we need to set
+          event,
+          user,
+          status: attendeeStatus,
+          role: participantRole,
+        };
+
+        try {
+          attendee = await this.eventAttendeeService.create(attendeeData);
+          this.logger.debug(
+            `[attendEvent] Created new attendee record with ID ${attendee.id}`,
+          );
+        } catch (error) {
+          // Check if the error is due to a unique constraint violation (record already exists)
+          if (
+            error.message.includes('duplicate key') ||
+            error.message.includes('unique constraint')
+          ) {
+            this.logger.warn(
+              `[attendEvent] Duplicate record detected for event ${event.id}, user ${user.id}: ${error.message}`,
+            );
+
+            // Attempt to fetch the existing record
+            const existingAttendee =
+              await this.eventAttendeeService.findEventAttendeeByUserId(
+                event.id,
+                user.id,
+              );
+
+            if (existingAttendee) {
+              this.logger.debug(
+                `[attendEvent] Found existing record after duplicate error. Using record with status ${existingAttendee.status}`,
+              );
+              return existingAttendee;
+            } else {
+              // This should be rare - we couldn't create due to duplicate but can't find the existing record
+              throw new Error(
+                `Could not create attendance record due to duplicate, but could not find existing record: ${error.message}`,
+              );
+            }
+          } else {
+            // Re-throw other errors
+            throw error;
+          }
+        }
       }
 
+      // Add logging to debug the structure of the attendee object before sending mail
       this.logger.debug(
-        `[attendEvent] Reactivated attendee record to status ${attendee.status}`,
-      );
-    } else {
-      // Create new attendee record if none exists
-      this.logger.debug(
-        `[attendEvent] Creating new attendance record with status ${attendeeStatus}`,
+        `[attendEvent] Sending mail for attendee: ${attendee.id}, with event: ${attendee.event?.id || 'undefined'}`,
       );
 
-      // Start with the DTO values to preserve any source fields
-      const attendeeData = {
-        ...createEventAttendeeDto,
-        // Override with the values we need to set
-        event,
-        user,
+      try {
+        await this.eventMailService.sendMailAttendeeGuestJoined(attendee);
+      } catch (error) {
+        this.logger.error(
+          `[attendEvent] Error sending mail for attendee ${attendee.id}: ${error.message}`,
+          error.stack,
+        );
+        // Continue execution - don't let mail errors affect the overall operation
+      }
+
+      // Emit event for other parts of the system
+      this.eventEmitter.emit('event.attendee.added', {
+        eventId: event.id,
+        userId: user.id,
         status: attendeeStatus,
-        role: participantRole,
-      };
+        tenantId: this.request.tenantId,
+        eventSlug: event.slug,
+        userSlug: user.slug,
+      });
 
-      attendee = await this.eventAttendeeService.create(attendeeData);
-      this.logger.debug(
-        `[attendEvent] Created new attendee record with ID ${attendee.id}`,
-      );
-    }
+      // Ensure we're returning a fully populated attendee object
+      // This ensures the frontend has all the data it needs without requiring additional API calls
+      if (!attendee.role || !attendee.role.permissions) {
+        this.logger.debug(
+          `[attendEvent] Loading complete attendee record with role and permissions`,
+        );
+        attendee = await this.eventAttendeeService.findEventAttendeeByUserId(
+          event.id,
+          user.id,
+        );
+      }
 
-    // Add logging to debug the structure of the attendee object before sending mail
-    this.logger.debug(
-      `[attendEvent] Sending mail for attendee: ${attendee.id}, with event: ${attendee.event?.id || 'undefined'}`,
-    );
-
-    try {
-      await this.eventMailService.sendMailAttendeeGuestJoined(attendee);
+      return attendee;
     } catch (error) {
       this.logger.error(
-        `[attendEvent] Error sending mail for attendee ${attendee.id}: ${error.message}`,
+        `[attendEvent] Error during event attendance processing: ${error.message}`,
         error.stack,
       );
-      // Continue execution - don't let mail errors affect the overall operation
+      throw error;
     }
-
-    // Emit event for other parts of the system
-    this.eventEmitter.emit('event.attendee.added', {
-      eventId: event.id,
-      userId: user.id,
-      status: attendeeStatus,
-      tenantId: this.request.tenantId,
-      eventSlug: event.slug,
-      userSlug: user.slug,
-    });
-
-    // Ensure we're returning a fully populated attendee object
-    // This ensures the frontend has all the data it needs without requiring additional API calls
-    if (!attendee.role || !attendee.role.permissions) {
-      this.logger.debug(
-        `[attendEvent] Loading complete attendee record with role and permissions`,
-      );
-      attendee = await this.eventAttendeeService.findEventAttendeeByUserId(
-        event.id,
-        user.id,
-      );
-    }
-
-    return attendee;
   }
 
   @Trace('event-management.cancelAttendingEvent')
