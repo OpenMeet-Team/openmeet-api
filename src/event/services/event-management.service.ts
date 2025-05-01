@@ -1371,6 +1371,10 @@ export class EventManagementService {
   ) {
     await this.initializeRepository();
 
+    this.logger.debug(
+      `[attendEvent] Processing attendance for event ${slug} and user ${userId}`,
+    );
+
     const event = await this.eventRepository.findOne({ where: { slug } });
     if (!event) {
       throw new Error(`Event with slug ${slug} not found`);
@@ -1382,6 +1386,15 @@ export class EventManagementService {
         event.id,
         user.id,
       );
+
+    // Log existing attendance status if any
+    if (eventAttendee) {
+      this.logger.debug(
+        `[attendEvent] Found existing attendance record with status ${eventAttendee.status}`,
+      );
+    } else {
+      this.logger.debug(`[attendEvent] No existing attendance record found`);
+    }
 
     const participantRole = await this.eventRoleService.getRoleByName(
       EventAttendeeRole.Participant,
@@ -1401,48 +1414,67 @@ export class EventManagementService {
       attendeeStatus = EventAttendeeStatus.Pending;
     }
 
+    this.logger.debug(`[attendEvent] Calculated status: ${attendeeStatus}`);
+
     // If the attendee already exists and is not cancelled, return it
     if (
       eventAttendee &&
       eventAttendee.status !== EventAttendeeStatus.Cancelled
     ) {
+      this.logger.debug(
+        `[attendEvent] Using existing active attendance record`,
+      );
       return eventAttendee;
     }
 
     let attendee;
 
-    // If attendee exists but has cancelled status, update the existing record
+    // If attendee exists but has cancelled status, use the reactivation method
     if (
       eventAttendee &&
       eventAttendee.status === EventAttendeeStatus.Cancelled
     ) {
-      this.logger.log(
-        `Reactivating cancelled attendee: ${eventAttendee.id} for event ${event.slug}`,
+      this.logger.debug(
+        `[attendEvent] Reactivating cancelled attendee: ${eventAttendee.id} for event ${event.slug}`,
       );
 
-      // Update the existing record with new status
-      eventAttendee.status = attendeeStatus;
-      eventAttendee.role = participantRole;
+      // Use our new simple method to reactivate
+      attendee = await this.eventAttendeeService.reactivateEventAttendance(
+        event.id,
+        user.id,
+        attendeeStatus,
+        participantRole.id,
+      );
 
-      // Preserve original source fields if they exist
-      // Merge any new source fields from the DTO if provided
-      if (createEventAttendeeDto.sourceId) {
-        eventAttendee.sourceId = createEventAttendeeDto.sourceId;
-      }
-      if (createEventAttendeeDto.sourceType) {
-        eventAttendee.sourceType = createEventAttendeeDto.sourceType;
-      }
-      if (createEventAttendeeDto.sourceUrl) {
-        eventAttendee.sourceUrl = createEventAttendeeDto.sourceUrl;
-      }
-      if (createEventAttendeeDto.sourceData) {
-        eventAttendee.sourceData = createEventAttendeeDto.sourceData;
+      // Update source fields if needed
+      if (
+        createEventAttendeeDto.sourceId ||
+        createEventAttendeeDto.sourceType ||
+        createEventAttendeeDto.sourceUrl ||
+        createEventAttendeeDto.sourceData
+      ) {
+        if (createEventAttendeeDto.sourceId)
+          attendee.sourceId = createEventAttendeeDto.sourceId;
+        if (createEventAttendeeDto.sourceType)
+          attendee.sourceType = createEventAttendeeDto.sourceType;
+        if (createEventAttendeeDto.sourceUrl)
+          attendee.sourceUrl = createEventAttendeeDto.sourceUrl;
+        if (createEventAttendeeDto.sourceData)
+          attendee.sourceData = createEventAttendeeDto.sourceData;
+
+        // Save the updated source fields
+        attendee = await this.eventAttendeeService.save(attendee);
       }
 
-      // Save the updated record
-      attendee = await this.eventAttendeeService.save(eventAttendee);
+      this.logger.debug(
+        `[attendEvent] Reactivated attendee record to status ${attendee.status}`,
+      );
     } else {
       // Create new attendee record if none exists
+      this.logger.debug(
+        `[attendEvent] Creating new attendance record with status ${attendeeStatus}`,
+      );
+
       // Start with the DTO values to preserve any source fields
       const attendeeData = {
         ...createEventAttendeeDto,
@@ -1454,9 +1486,25 @@ export class EventManagementService {
       };
 
       attendee = await this.eventAttendeeService.create(attendeeData);
+      this.logger.debug(
+        `[attendEvent] Created new attendee record with ID ${attendee.id}`,
+      );
     }
 
-    await this.eventMailService.sendMailAttendeeGuestJoined(attendee);
+    // Add logging to debug the structure of the attendee object before sending mail
+    this.logger.debug(
+      `[attendEvent] Sending mail for attendee: ${attendee.id}, with event: ${attendee.event?.id || 'undefined'}`,
+    );
+
+    try {
+      await this.eventMailService.sendMailAttendeeGuestJoined(attendee);
+    } catch (error) {
+      this.logger.error(
+        `[attendEvent] Error sending mail for attendee ${attendee.id}: ${error.message}`,
+        error.stack,
+      );
+      // Continue execution - don't let mail errors affect the overall operation
+    }
 
     // Emit event for other parts of the system
     this.eventEmitter.emit('event.attendee.added', {
@@ -1468,21 +1516,64 @@ export class EventManagementService {
       userSlug: user.slug,
     });
 
+    // Ensure we're returning a fully populated attendee object
+    // This ensures the frontend has all the data it needs without requiring additional API calls
+    if (!attendee.role || !attendee.role.permissions) {
+      this.logger.debug(
+        `[attendEvent] Loading complete attendee record with role and permissions`,
+      );
+      attendee = await this.eventAttendeeService.findEventAttendeeByUserId(
+        event.id,
+        user.id,
+      );
+    }
+
     return attendee;
   }
 
   @Trace('event-management.cancelAttendingEvent')
   async cancelAttendingEvent(slug: string, userId: number) {
     await this.initializeRepository();
+
+    this.logger.debug(
+      `[cancelAttendingEvent] Processing cancellation for event ${slug} and user ${userId}`,
+    );
+
     const event = await this.eventRepository.findOne({ where: { slug } });
     if (!event) {
       throw new Error(`Event with slug ${slug} not found`);
     }
 
-    return await this.eventAttendeeService.cancelEventAttendance(
+    // Log before calling cancel attendance
+    this.logger.debug(
+      `[cancelAttendingEvent] Calling cancelEventAttendance for event ${event.id}, userId ${userId}`,
+    );
+
+    const attendee = await this.eventAttendeeService.cancelEventAttendance(
       event.id,
       userId,
     );
+
+    this.logger.debug(
+      `[cancelAttendingEvent] Attendance cancelled, new status: ${attendee.status}, id: ${attendee.id}`,
+    );
+
+    // Verify the attendee has correct status
+    if (attendee.status !== EventAttendeeStatus.Cancelled) {
+      this.logger.warn(
+        `[cancelAttendingEvent] Unexpected status after cancellation: ${attendee.status}. Expected: ${EventAttendeeStatus.Cancelled}`,
+      );
+    }
+
+    // Emit event for other parts of the system
+    this.eventEmitter.emit('event.attendee.cancelled', {
+      eventId: event.id,
+      userId,
+      tenantId: this.request.tenantId,
+      eventSlug: event.slug,
+    });
+
+    return attendee;
   }
 
   @Trace('event-management.updateEventAttendee')

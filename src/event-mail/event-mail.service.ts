@@ -13,6 +13,14 @@ export class EventMailService {
   ) {}
 
   async sendMailAttendeeGuestJoined(eventAttendee: EventAttendeesEntity) {
+    // Check if event is defined before accessing its id
+    if (!eventAttendee || !eventAttendee.event) {
+      console.warn(
+        `[sendMailAttendeeGuestJoined] Event is undefined for attendee with ID ${eventAttendee?.id}`,
+      );
+      return; // Skip sending email if event is undefined
+    }
+
     const admins =
       await this.eventAttendeeService.getMailServiceEventAttendeesByPermission(
         eventAttendee.event.id,
@@ -30,16 +38,32 @@ export class EventMailService {
   }
 
   async sendMailAttendeeStatusChanged(eventAttendeeId: number) {
-    const eventAttendee =
-      await this.eventAttendeeService.getMailServiceEventAttendee(
-        eventAttendeeId,
-      );
+    try {
+      const eventAttendee =
+        await this.eventAttendeeService.getMailServiceEventAttendee(
+          eventAttendeeId,
+        );
 
-    if (eventAttendee.user.email) {
-      await this.mailService.sendMailAttendeeStatusChanged({
-        to: eventAttendee.user.email,
-        data: { eventAttendee },
-      });
+      // Check for missing user or email before attempting to send
+      if (!eventAttendee.user) {
+        console.warn(
+          `[sendMailAttendeeStatusChanged] User is undefined for attendee with ID ${eventAttendeeId}`,
+        );
+        return;
+      }
+
+      if (eventAttendee.user.email) {
+        await this.mailService.sendMailAttendeeStatusChanged({
+          to: eventAttendee.user.email,
+          data: { eventAttendee },
+        });
+      }
+    } catch (error) {
+      console.error(
+        `[sendMailAttendeeStatusChanged] Error processing mail for attendee ID ${eventAttendeeId}:`,
+        error,
+      );
+      // Continue execution - don't let mail errors affect the overall operation
     }
   }
 }

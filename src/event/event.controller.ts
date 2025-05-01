@@ -204,17 +204,18 @@ export class EventController {
     @Body() createEventAttendeeDto: CreateEventAttendeeDto,
     @Param('slug') slug: string,
   ) {
-    return this.eventManagementService.attendEvent(
+    const attendee = await this.eventManagementService.attendEvent(
       slug,
       user.id,
       createEventAttendeeDto,
     );
+    return attendee;
   }
 
-  @Permissions({
-    context: 'event',
-    permissions: [EventAttendeePermission.AttendEvent],
-  })
+  // @Permissions({
+  //   context: 'event',
+  //   permissions: [EventAttendeePermission.AttendEvent],
+  // })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/cancel-attending')
   @ApiOperation({ summary: 'Cancel attending an event' })

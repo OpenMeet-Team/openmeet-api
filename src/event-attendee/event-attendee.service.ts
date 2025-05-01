@@ -275,13 +275,18 @@ export class EventAttendeeService {
 
     // Check cache first
     if (this.attendeeCache.has(cacheKey)) {
-      return this.attendeeCache.get(cacheKey) || null;
+      const cachedAttendee = this.attendeeCache.get(cacheKey);
+      this.logger.debug(
+        `[findEventAttendeeByUserId] Using cached attendance record for event ${eventId}, user ${userId}: ${cachedAttendee ? `Found, status=${cachedAttendee.status}` : 'Not found'}`,
+      );
+      return cachedAttendee || null;
     }
 
     this.logger.debug(
       `[findEventAttendeeByUserId] Finding most recent attendance for event ${eventId} and user ${userId}`,
     );
 
+    // Get the most recent attendance record with a single query
     const attendee = await this.eventAttendeesRepository
       .createQueryBuilder('attendee')
       .leftJoinAndSelect('attendee.user', 'user')
@@ -290,8 +295,18 @@ export class EventAttendeeService {
       .where('attendee.event.id = :eventId', { eventId })
       .andWhere('attendee.user.id = :userId', { userId })
       .orderBy('attendee.updatedAt', 'DESC')
-      .cache(5000) // Cache for 5 seconds
       .getOne();
+
+    // Log what we found
+    if (attendee) {
+      this.logger.debug(
+        `[findEventAttendeeByUserId] Found attendance record with status '${attendee.status}' and ID ${attendee.id} for event ${eventId}, user ${userId}`,
+      );
+    } else {
+      this.logger.debug(
+        `[findEventAttendeeByUserId] No attendance record found for event ${eventId}, user ${userId}`,
+      );
+    }
 
     // Cache the result
     this.attendeeCache.set(cacheKey, attendee);
@@ -389,35 +404,77 @@ export class EventAttendeeService {
       `[cancelEventAttendance] Finding active attendance for event ${eventId} and user ${userId}`,
     );
 
-    // Find the most recent active attendance record
-    const attendee = await this.eventAttendeesRepository.findOne({
+    // First try to find an active attendance record (Confirmed or Pending)
+    let attendee = await this.eventAttendeesRepository.findOne({
       where: {
         event: { id: eventId },
         user: { id: userId },
         status: In([
           EventAttendeeStatus.Confirmed,
           EventAttendeeStatus.Pending,
+          EventAttendeeStatus.Waitlist,
         ]),
       },
       relations: ['user', 'role', 'role.permissions', 'event'],
       order: { createdAt: 'DESC' },
     });
 
+    // If no active record, look for any record including cancelled ones
     if (!attendee) {
-      throw new NotFoundException('Active attendance record not found');
+      this.logger.debug(
+        `[cancelEventAttendance] No active attendance found, looking for any record including cancelled ones`,
+      );
+
+      attendee = await this.eventAttendeesRepository.findOne({
+        where: {
+          event: { id: eventId },
+          user: { id: userId },
+        },
+        relations: ['user', 'role', 'role.permissions', 'event'],
+        order: { createdAt: 'DESC' },
+      });
     }
 
+    // If still no record, throw error
+    if (!attendee) {
+      throw new NotFoundException('No attendance record found for this user');
+    }
+
+    // If record is already cancelled, log but continue (idempotent cancel)
+    if (attendee.status === EventAttendeeStatus.Cancelled) {
+      this.logger.debug(
+        `[cancelEventAttendance] Attendance already cancelled, returning existing record with id: ${attendee.id}`,
+      );
+      return attendee;
+    }
+
+    // Log the current status before cancellation for debugging
     this.logger.debug(
-      `[cancelEventAttendance] Found attendee: ${JSON.stringify(attendee)}`,
+      `[cancelEventAttendance] Found attendee with status: ${attendee.status}, id: ${attendee.id}`,
     );
 
     // Update the status to cancelled
     attendee.status = EventAttendeeStatus.Cancelled;
+
+    // Log the change we're about to make
+    this.logger.debug(
+      `[cancelEventAttendance] Changing attendee status to ${attendee.status}`,
+    );
+
+    // Clear the attendee cache before saving to ensure we don't return stale data
+    const cacheKey = `${eventId}:${userId}`;
+    this.attendeeCache.delete(cacheKey);
+
+    // Save the updated record
     const updatedAttendee = await this.eventAttendeesRepository.save(attendee);
 
+    // Log the updated status after saving
     this.logger.debug(
-      `[cancelEventAttendance] Updated attendee status: ${updatedAttendee.status}`,
+      `[cancelEventAttendance] Updated attendee status: ${updatedAttendee.status}, id: ${updatedAttendee.id}`,
     );
+
+    // Update the cache with the new record
+    this.attendeeCache.set(cacheKey, updatedAttendee);
 
     // After cancelling, update Bluesky RSVP if:
     // 1. The attendee has a Bluesky sourceId or the event is from Bluesky
@@ -746,5 +803,52 @@ export class EventAttendeeService {
   async save(attendee: EventAttendeesEntity): Promise<EventAttendeesEntity> {
     await this.getTenantSpecificEventRepository();
     return this.eventAttendeesRepository.save(attendee);
+  }
+
+  @Trace('event-attendee.reactivateEventAttendance')
+  async reactivateEventAttendance(
+    eventId: number,
+    userId: number,
+    newStatus: EventAttendeeStatus = EventAttendeeStatus.Confirmed,
+    roleId?: number,
+  ): Promise<EventAttendeesEntity> {
+    await this.getTenantSpecificEventRepository();
+
+    this.logger.debug(
+      `[reactivateEventAttendance] Finding attendance for event ${eventId} and user ${userId}`,
+    );
+
+    // Find the attendance record (including cancelled ones)
+    const attendee = await this.eventAttendeesRepository.findOne({
+      where: {
+        event: { id: eventId },
+        user: { id: userId },
+      },
+      relations: ['user', 'role', 'role.permissions', 'event'],
+    });
+
+    if (!attendee) {
+      throw new NotFoundException('No attendance record found for this user');
+    }
+
+    // Update the status
+    attendee.status = newStatus;
+
+    // Update role if provided
+    if (roleId) {
+      attendee.role = { id: roleId } as any;
+    }
+
+    // Clear the attendee cache
+    const cacheKey = `${eventId}:${userId}`;
+    this.attendeeCache.delete(cacheKey);
+
+    // Save the updated record
+    const updatedAttendee = await this.eventAttendeesRepository.save(attendee);
+
+    // Update the cache
+    this.attendeeCache.set(cacheKey, updatedAttendee);
+
+    return updatedAttendee;
   }
 }
