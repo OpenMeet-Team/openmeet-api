@@ -1382,12 +1382,14 @@ export class EventManagementService {
 
     const user = await this.userService.getUserById(userId);
     // First check the cache state for debugging
-    this.logger.debug(`[attendEvent] Checking for existing attendance record with detailed cache logging`);
+    this.logger.debug(
+      `[attendEvent] Checking for existing attendance record with detailed cache logging`,
+    );
     const eventAttendee =
       await this.eventAttendeeService.findEventAttendeeByUserId(
         event.id,
         user.id,
-        { logCacheState: true }
+        { logCacheState: true },
       );
 
     // Log existing attendance status if any
@@ -1396,7 +1398,9 @@ export class EventManagementService {
         `[attendEvent] Found existing attendance record with status ${eventAttendee.status}, id=${eventAttendee.id}`,
       );
     } else {
-      this.logger.debug(`[attendEvent] No existing attendance record found in initial check`);
+      this.logger.debug(
+        `[attendEvent] No existing attendance record found in initial check`,
+      );
     }
 
     const participantRole = await this.eventRoleService.getRoleByName(
@@ -1503,41 +1507,41 @@ export class EventManagementService {
             this.logger.warn(
               `[attendEvent] Duplicate record detected for event ${event.id}, user ${user.id}: ${error.message}`,
             );
-            
+
             // Log the cache state
             this.logger.debug(
-              `[attendEvent] CRITICAL ERROR STATE: Race condition detected - logging cache state before retry`
+              `[attendEvent] CRITICAL ERROR STATE: Race condition detected - logging cache state before retry`,
             );
-            
+
             // First try: Attempt to fetch with cache state logging
-            const cachedAttendeeInfo = 
+            const cachedAttendeeInfo =
               await this.eventAttendeeService.findEventAttendeeByUserId(
-                event.id, 
+                event.id,
                 user.id,
-                { logCacheState: true }
+                { logCacheState: true },
               );
-            
+
             this.logger.debug(
-              `[attendEvent] After error - first attempt to fetch record: ${cachedAttendeeInfo ? `Found ID=${cachedAttendeeInfo.id}` : 'Not found'}`
+              `[attendEvent] After error - first attempt to fetch record: ${cachedAttendeeInfo ? `Found ID=${cachedAttendeeInfo.id}` : 'Not found'}`,
             );
-            
+
             if (cachedAttendeeInfo) {
               this.logger.debug(
                 `[attendEvent] Found existing record using regular lookup. Using record with status ${cachedAttendeeInfo.status}, id=${cachedAttendeeInfo.id}`,
               );
               return cachedAttendeeInfo;
             }
-            
+
             // Second try: Attempt to fetch existing record with cache bypass
             this.logger.debug(
-              `[attendEvent] Retrying lookup with cache bypass for event ${event.id}, user ${user.id}`
+              `[attendEvent] Retrying lookup with cache bypass for event ${event.id}, user ${user.id}`,
             );
-            
+
             const existingAttendee =
               await this.eventAttendeeService.findEventAttendeeByUserId(
                 event.id,
                 user.id,
-                { bypassCache: true, logCacheState: true }
+                { bypassCache: true, logCacheState: true },
               );
 
             if (existingAttendee) {
@@ -1550,22 +1554,22 @@ export class EventManagementService {
               this.logger.warn(
                 `[attendEvent] Still could not find record after bypass. Trying direct query with findOne.`,
               );
-              
+
               // Try one more time with fewer relations
               const simpleAttendee = await this.eventAttendeeService.findOne({
-                where: { 
+                where: {
                   event: { id: event.id },
-                  user: { id: user.id } 
-                }
+                  user: { id: user.id },
+                },
               });
-              
+
               if (simpleAttendee) {
                 this.logger.debug(
                   `[attendEvent] Found record without relations. ID: ${simpleAttendee.id}, Status: ${simpleAttendee.status}`,
                 );
                 return simpleAttendee;
               }
-              
+
               // This should be rare - we couldn't create due to duplicate but can't find the existing record
               this.logger.error(
                 `[attendEvent] CRITICAL DATA CONSISTENCY ERROR: Record exists (due to duplicate key error) but cannot be found with any method`,
@@ -1573,10 +1577,10 @@ export class EventManagementService {
                   eventId: event.id,
                   userId: user.id,
                   errorMessage: error.message,
-                  requestId: this.request.id || 'unknown'
-                }
+                  requestId: this.request.id || 'unknown',
+                },
               );
-              
+
               throw new Error(
                 `Could not create attendance record due to duplicate, but could not find existing record after multiple attempts: ${error.message}`,
               );

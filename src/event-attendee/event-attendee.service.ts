@@ -35,12 +35,6 @@ export class EventAttendeeService {
 
   private eventAttendeesRepository: Repository<EventAttendeesEntity>;
 
-  // Cache to store attendee lookups for the current request
-  private readonly attendeeCache = new Map<
-    string,
-    EventAttendeesEntity | null
-  >();
-
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
@@ -68,112 +62,135 @@ export class EventAttendeeService {
   ): Promise<EventAttendeesEntity> {
     await this.getTenantSpecificEventRepository();
 
+    // Log creation attempt with key info for debugging
     this.logger.debug(
-      `[create] Creating event attendee for event ${JSON.stringify(createEventAttendeeDto)}`,
+      `[create] Creating event attendee for event ${createEventAttendeeDto.event.slug || createEventAttendeeDto.event.id}, user ${createEventAttendeeDto.user.slug || createEventAttendeeDto.user.id}`,
     );
+
     try {
       const attendee = this.eventAttendeesRepository.create(
         createEventAttendeeDto,
       );
 
-      const saved = await this.eventAttendeesRepository.save(attendee);
-      this.auditLogger.log('event attendee created', {
-        saved,
-      });
+      try {
+        const saved = await this.eventAttendeesRepository.save(attendee);
 
-      // After creating the attendance record, sync to Bluesky if:
-      // 1. Bluesky syncing is not specifically disabled
-      // 2. The user has a connected Bluesky account
-      // Either sync when the event is a Bluesky event OR when the user is a Bluesky user
-      if (!createEventAttendeeDto.skipBlueskySync) {
-        try {
-          // Get the user's Bluesky preferences
-          const user = await this.userService.findBySlug(
-            createEventAttendeeDto.user.slug,
-            this.request.tenantId,
-          );
+        this.logger.debug(
+          `[create] Successfully created attendee record ID=${saved.id}`,
+        );
 
-          // For Bluesky users, we check if the provider is 'bluesky' and use the socialId as DID
-          if (user && user.provider === 'bluesky' && user.socialId) {
-            // User registered through Bluesky, use the socialId as DID
-            const blueskyDid = user.socialId;
+        this.auditLogger.log('event attendee created', {
+          saved,
+        });
 
-            this.logger.debug('User is a Bluesky user, syncing RSVP', {
-              userSlug: user.slug,
-              did: blueskyDid,
-            });
-
-            // Map OpenMeet status to Bluesky status
-            const statusMap = {
-              [EventAttendeeStatus.Confirmed]: 'going',
-              [EventAttendeeStatus.Maybe]: 'interested',
-              [EventAttendeeStatus.Cancelled]: 'notgoing',
-              [EventAttendeeStatus.Pending]: 'interested',
-              [EventAttendeeStatus.Waitlist]: 'interested',
-            };
-
-            const blueskyStatus = statusMap[saved.status] || 'interested';
-
-            // Create RSVP in Bluesky
-            const result = await this.blueskyRsvpService.createRsvp(
-              createEventAttendeeDto.event,
-              blueskyStatus,
-              blueskyDid,
+        // After creating the attendance record, sync to Bluesky if:
+        // 1. Bluesky syncing is not specifically disabled
+        // 2. The user has a connected Bluesky account
+        // Either sync when the event is a Bluesky event OR when the user is a Bluesky user
+        if (!createEventAttendeeDto.skipBlueskySync) {
+          try {
+            // Get the user's Bluesky preferences
+            const user = await this.userService.findBySlug(
+              createEventAttendeeDto.user.slug,
               this.request.tenantId,
             );
 
-            // Store the RSVP URI in the attendance record
-            if (result.success) {
-              this.logger.debug(
-                `Successfully created Bluesky RSVP: ${result.rsvpUri}`,
-              );
+            // For Bluesky users, we check if the provider is 'bluesky' and use the socialId as DID
+            if (user && user.provider === 'bluesky' && user.socialId) {
+              // User registered through Bluesky, use the socialId as DID
+              const blueskyDid = user.socialId;
 
-              // Get the entity first
-              const attendee = await this.eventAttendeesRepository.findOne({
-                where: { id: saved.id },
+              this.logger.debug('User is a Bluesky user, syncing RSVP', {
+                userSlug: user.slug,
+                did: blueskyDid,
               });
 
-              if (attendee) {
-                // Update the source fields
-                attendee.sourceId = result.rsvpUri;
-                attendee.sourceType = EventSourceType.BLUESKY;
-                attendee.lastSyncedAt = new Date();
+              // Map OpenMeet status to Bluesky status
+              const statusMap = {
+                [EventAttendeeStatus.Confirmed]: 'going',
+                [EventAttendeeStatus.Maybe]: 'interested',
+                [EventAttendeeStatus.Cancelled]: 'notgoing',
+                [EventAttendeeStatus.Pending]: 'interested',
+                [EventAttendeeStatus.Waitlist]: 'interested',
+              };
 
-                // Save the updated entity
-                await this.eventAttendeesRepository.save(attendee);
+              const blueskyStatus = statusMap[saved.status] || 'interested';
+
+              // Create RSVP in Bluesky
+              const result = await this.blueskyRsvpService.createRsvp(
+                createEventAttendeeDto.event,
+                blueskyStatus,
+                blueskyDid,
+                this.request.tenantId,
+              );
+
+              // Store the RSVP URI in the attendance record
+              if (result.success) {
+                this.logger.debug(
+                  `Successfully created Bluesky RSVP: ${result.rsvpUri}`,
+                );
+
+                // Get the entity first
+                const attendee = await this.eventAttendeesRepository.findOne({
+                  where: { id: saved.id },
+                });
+
+                if (attendee) {
+                  // Update the source fields
+                  attendee.sourceId = result.rsvpUri;
+                  attendee.sourceType = EventSourceType.BLUESKY;
+                  attendee.lastSyncedAt = new Date();
+
+                  // Save the updated entity
+                  await this.eventAttendeesRepository.save(attendee);
+                }
               }
+            } else {
+              this.logger.debug(
+                `[create] Skipping Bluesky sync for user ${createEventAttendeeDto.user.slug} - not a Bluesky user`,
+                {
+                  userSlug: user?.slug,
+                  provider: user?.provider,
+                  hasSocialId: Boolean(user?.socialId),
+                },
+              );
             }
-          } else {
-            this.logger.debug(
-              `[create] Skipping Bluesky sync for user ${createEventAttendeeDto.user.slug} - not a Bluesky user`,
-              {
-                userSlug: user?.slug,
-                provider: user?.provider,
-                hasSocialId: Boolean(user?.socialId),
-              },
+          } catch (error) {
+            // Log but don't fail if Bluesky sync fails
+            this.logger.error(
+              `Failed to sync attendance to Bluesky: ${error.message}`,
+              error.stack,
             );
           }
-        } catch (error) {
-          // Log but don't fail if Bluesky sync fails
-          this.logger.error(
-            `Failed to sync attendance to Bluesky: ${error.message}`,
-            error.stack,
+        } else {
+          this.logger.debug(
+            `[create] Skipping Bluesky sync for event ${createEventAttendeeDto.event.slug || createEventAttendeeDto.event.id} and user ${createEventAttendeeDto.user.slug || createEventAttendeeDto.user.id}`,
+            {
+              skipBlueskySync: createEventAttendeeDto.skipBlueskySync,
+              eventSourceType: createEventAttendeeDto.event.sourceType,
+              hasRkey: Boolean(createEventAttendeeDto.event.sourceData?.rkey),
+            },
           );
         }
-      } else {
-        this.logger.debug(
-          `[create] Skipping Bluesky sync for event ${createEventAttendeeDto.event.id} and user ${createEventAttendeeDto.user.id}`,
-          {
-            skipBlueskySync: createEventAttendeeDto.skipBlueskySync,
-            eventSourceType: createEventAttendeeDto.event.sourceType,
-            hasRkey: Boolean(createEventAttendeeDto.event.sourceData?.rkey),
-          },
+
+        return saved;
+      } catch (error) {
+        // Pass through any errors from the inner try block
+        throw error;
+      }
+    } catch (error) {
+      // Handle duplicate key errors explicitly
+      if (
+        error.message.includes('duplicate key') ||
+        error.message.includes('unique constraint')
+      ) {
+        // Log the error with detailed information
+        this.logger.warn(
+          `[create] Duplicate key error for event ${createEventAttendeeDto.event.slug || createEventAttendeeDto.event.id}, user ${createEventAttendeeDto.user.slug || createEventAttendeeDto.user.id}: ${error.message}`,
         );
       }
 
-      return saved;
-    } catch (error) {
-      // Handle database save errors
+      // Rethrow the error with additional context
       throw new Error(
         'EventAttendeeService: Failed to save attendee: ' + error.message,
       );
@@ -263,27 +280,54 @@ export class EventAttendeeService {
     return paginate(eventAttendee, { page, limit });
   }
 
+  @Trace('event-attendee.findEventAttendeeByUserSlug')
+  async findEventAttendeeByUserSlug(
+    eventSlug: string,
+    userSlug: string,
+  ): Promise<EventAttendeesEntity | null> {
+    await this.getTenantSpecificEventRepository();
+
+    this.logger.debug(
+      `[findEventAttendeeByUserSlug] Finding attendance for event ${eventSlug}, user ${userSlug}`,
+    );
+
+    // Get the most recent attendance record with a single query
+    const attendee = await this.eventAttendeesRepository
+      .createQueryBuilder('attendee')
+      .leftJoinAndSelect('attendee.user', 'user')
+      .leftJoinAndSelect('attendee.event', 'event')
+      .leftJoinAndSelect('attendee.role', 'role')
+      .leftJoinAndSelect('role.permissions', 'permissions')
+      .where('event.slug = :eventSlug', { eventSlug })
+      .andWhere('user.slug = :userSlug', { userSlug })
+      .orderBy('attendee.updatedAt', 'DESC')
+      .getOne();
+
+    // Log what we found
+    if (attendee) {
+      this.logger.debug(
+        `[findEventAttendeeByUserSlug] Found attendance record with status '${attendee.status}' and ID ${attendee.id} for event ${eventSlug}, user ${userSlug}`,
+      );
+    } else {
+      this.logger.debug(
+        `[findEventAttendeeByUserSlug] No attendance record found in database for event ${eventSlug}, user ${userSlug}`,
+      );
+    }
+
+    return attendee;
+  }
+
+  // Keep this method for backward compatibility, but implement it using slugs
   @Trace('event-attendee.findEventAttendeeByUserId')
   async findEventAttendeeByUserId(
     eventId: number,
     userId: number,
+    options?: any, // Keep options parameter for backward compatibility
   ): Promise<EventAttendeesEntity | null> {
     await this.getTenantSpecificEventRepository();
 
-    // Generate cache key
-    const cacheKey = `${eventId}:${userId}`;
-
-    // Check cache first
-    if (this.attendeeCache.has(cacheKey)) {
-      const cachedAttendee = this.attendeeCache.get(cacheKey);
-      this.logger.debug(
-        `[findEventAttendeeByUserId] Using cached attendance record for event ${eventId}, user ${userId}: ${cachedAttendee ? `Found, status=${cachedAttendee.status}` : 'Not found'}`,
-      );
-      return cachedAttendee || null;
-    }
-
     this.logger.debug(
-      `[findEventAttendeeByUserId] Finding most recent attendance for event ${eventId} and user ${userId}`,
+      `[findEventAttendeeByUserId] Finding attendance for event ID ${eventId}, user ID ${userId}`,
     );
 
     // Get the most recent attendance record with a single query
@@ -300,20 +344,20 @@ export class EventAttendeeService {
     // Log what we found
     if (attendee) {
       this.logger.debug(
-        `[findEventAttendeeByUserId] Found attendance record with status '${attendee.status}' and ID ${attendee.id} for event ${eventId}, user ${userId}`,
+        `[findEventAttendeeByUserId] Found attendance record with status '${attendee.status}' and ID ${attendee.id}`,
       );
     } else {
       this.logger.debug(
-        `[findEventAttendeeByUserId] No attendance record found for event ${eventId}, user ${userId}`,
+        `[findEventAttendeeByUserId] No attendance record found in database`,
       );
     }
-
-    // Cache the result
-    this.attendeeCache.set(cacheKey, attendee);
 
     return attendee;
   }
 
+  /**
+   * @deprecated Use findEventAttendeesByUserSlugBatch with event slugs and user slug instead of IDs
+   */
   @Trace('event-attendee.findEventAttendeesByUserIdBatch')
   async findEventAttendeesByUserIdBatch(
     eventIds: number[],
@@ -350,10 +394,47 @@ export class EventAttendeeService {
     // Update with actual attendees where found
     attendees.forEach((attendee) => {
       result.set(attendee.event.id, attendee);
+    });
 
-      // Also update the cache
-      const cacheKey = `${attendee.event.id}:${userId}`;
-      this.attendeeCache.set(cacheKey, attendee);
+    return result;
+  }
+
+  @Trace('event-attendee.findEventAttendeesByUserSlugBatch')
+  async findEventAttendeesByUserSlugBatch(
+    eventSlugs: string[],
+    userSlug: string,
+  ): Promise<Map<string, EventAttendeesEntity | null>> {
+    if (!eventSlugs.length) {
+      return new Map();
+    }
+
+    await this.getTenantSpecificEventRepository();
+
+    this.logger.debug(
+      `[findEventAttendeesByUserSlugBatch] Finding attendance for ${eventSlugs.length} events and user ${userSlug}`,
+    );
+
+    // Find all attendees for this user and the given events in a single query
+    const attendees = await this.eventAttendeesRepository
+      .createQueryBuilder('attendee')
+      .leftJoinAndSelect('attendee.user', 'user')
+      .leftJoinAndSelect('attendee.role', 'role')
+      .leftJoinAndSelect('role.permissions', 'permissions')
+      .leftJoinAndSelect('attendee.event', 'event')
+      .where('event.slug IN (:...eventSlugs)', { eventSlugs })
+      .andWhere('user.slug = :userSlug', { userSlug })
+      .orderBy('attendee.updatedAt', 'DESC')
+      .getMany();
+
+    // Create a map of eventSlug to attendee
+    const result = new Map<string, EventAttendeesEntity | null>();
+
+    // Initialize all events with null (no attendance)
+    eventSlugs.forEach((slug) => result.set(slug, null));
+
+    // Update with actual attendees where found
+    attendees.forEach((attendee) => {
+      result.set(attendee.event.slug, attendee);
     });
 
     return result;
@@ -393,6 +474,165 @@ export class EventAttendeeService {
     });
   }
 
+  @Trace('event-attendee.cancelEventAttendanceBySlug')
+  async cancelEventAttendanceBySlug(
+    eventSlug: string,
+    userSlug: string,
+  ): Promise<EventAttendeesEntity> {
+    await this.getTenantSpecificEventRepository();
+
+    this.logger.debug(
+      `[cancelEventAttendanceBySlug] Finding active attendance for event ${eventSlug} and user ${userSlug}`,
+    );
+
+    // First try to find an active attendance record (Confirmed or Pending)
+    let attendee = await this.eventAttendeesRepository
+      .createQueryBuilder('attendee')
+      .leftJoinAndSelect('attendee.user', 'user')
+      .leftJoinAndSelect('attendee.role', 'role')
+      .leftJoinAndSelect('role.permissions', 'permissions')
+      .leftJoinAndSelect('attendee.event', 'event')
+      .where('event.slug = :eventSlug', { eventSlug })
+      .andWhere('user.slug = :userSlug', { userSlug })
+      .andWhere('attendee.status IN (:...statuses)', {
+        statuses: [
+          EventAttendeeStatus.Confirmed,
+          EventAttendeeStatus.Pending,
+          EventAttendeeStatus.Waitlist,
+        ],
+      })
+      .orderBy('attendee.createdAt', 'DESC')
+      .getOne();
+
+    // If no active record, look for any record including cancelled ones
+    if (!attendee) {
+      this.logger.debug(
+        `[cancelEventAttendanceBySlug] No active attendance found, looking for any record including cancelled ones`,
+      );
+
+      attendee = await this.eventAttendeesRepository
+        .createQueryBuilder('attendee')
+        .leftJoinAndSelect('attendee.user', 'user')
+        .leftJoinAndSelect('attendee.role', 'role')
+        .leftJoinAndSelect('role.permissions', 'permissions')
+        .leftJoinAndSelect('attendee.event', 'event')
+        .where('event.slug = :eventSlug', { eventSlug })
+        .andWhere('user.slug = :userSlug', { userSlug })
+        .orderBy('attendee.createdAt', 'DESC')
+        .getOne();
+    }
+
+    // If still no record, throw error
+    if (!attendee) {
+      throw new NotFoundException('No attendance record found for this user');
+    }
+
+    // If record is already cancelled, log but continue (idempotent cancel)
+    if (attendee.status === EventAttendeeStatus.Cancelled) {
+      this.logger.debug(
+        `[cancelEventAttendanceBySlug] Attendance already cancelled, returning existing record with id: ${attendee.id}`,
+      );
+      return attendee;
+    }
+
+    // Log the current status before cancellation for debugging
+    this.logger.debug(
+      `[cancelEventAttendanceBySlug] Found attendee with status: ${attendee.status}, id: ${attendee.id}`,
+    );
+
+    // Update the status to cancelled
+    attendee.status = EventAttendeeStatus.Cancelled;
+
+    // Log the change we're about to make
+    this.logger.debug(
+      `[cancelEventAttendanceBySlug] Changing attendee status to ${attendee.status}`,
+    );
+
+    // Save the updated record
+    const updatedAttendee = await this.eventAttendeesRepository.save(attendee);
+
+    // Log the updated status after saving
+    this.logger.debug(
+      `[cancelEventAttendanceBySlug] Updated attendee status: ${updatedAttendee.status}, id: ${updatedAttendee.id}`,
+    );
+
+    // After cancelling, update Bluesky RSVP if:
+    // 1. The attendee has a Bluesky sourceId or the event is from Bluesky
+    // 2. The user has a connected Bluesky account
+    if (
+      (updatedAttendee.sourceId ||
+        attendee.event.sourceType === EventSourceType.BLUESKY) &&
+      attendee.event.sourceData?.rkey
+    ) {
+      try {
+        // Get the user's Bluesky preferences using the slug
+        const user = await this.userService.findBySlug(
+          userSlug,
+          this.request.tenantId,
+        );
+
+        // For Bluesky users, we check if the provider is 'bluesky' and use the socialId as DID
+        if (user && user.provider === 'bluesky' && user.socialId) {
+          // User registered through Bluesky, use the socialId as DID
+          const blueskyDid = user.socialId;
+
+          this.logger.debug(
+            'User is a Bluesky user, syncing cancellation RSVP',
+            { userSlug: user.slug, did: blueskyDid },
+          );
+          // Create a "notgoing" RSVP
+          const result = await this.blueskyRsvpService.createRsvp(
+            attendee.event,
+            'notgoing',
+            blueskyDid,
+            this.request.tenantId,
+          );
+
+          if (result.success) {
+            // Get the entity first
+            const attendee = await this.eventAttendeesRepository.findOne({
+              where: { id: updatedAttendee.id },
+            });
+
+            if (attendee) {
+              // Update the source fields
+              attendee.sourceId = result.rsvpUri;
+              attendee.sourceType = EventSourceType.BLUESKY;
+              attendee.lastSyncedAt = new Date();
+
+              // Save the updated entity
+              await this.eventAttendeesRepository.save(attendee);
+            }
+
+            this.logger.debug(
+              `Updated Bluesky RSVP to notgoing: ${result.rsvpUri}`,
+            );
+          }
+        } else {
+          this.logger.debug(
+            `Skipping Bluesky RSVP update - not a Bluesky user`,
+            {
+              userSlug: user?.slug,
+              provider: user?.provider,
+              hasSocialId: Boolean(user?.socialId),
+            },
+          );
+        }
+      } catch (error) {
+        // Log but don't fail if Bluesky sync fails
+        this.logger.error(
+          `Failed to sync cancellation to Bluesky: ${error.message}`,
+          error.stack,
+        );
+      }
+    }
+
+    return updatedAttendee;
+  }
+
+  /**
+   * @deprecated Use cancelEventAttendanceBySlug with event and user slugs instead of IDs
+   */
   @Trace('event-attendee.cancelEventAttendance')
   async cancelEventAttendance(
     eventId: number,
@@ -461,10 +701,6 @@ export class EventAttendeeService {
       `[cancelEventAttendance] Changing attendee status to ${attendee.status}`,
     );
 
-    // Clear the attendee cache before saving to ensure we don't return stale data
-    const cacheKey = `${eventId}:${userId}`;
-    this.attendeeCache.delete(cacheKey);
-
     // Save the updated record
     const updatedAttendee = await this.eventAttendeesRepository.save(attendee);
 
@@ -473,12 +709,7 @@ export class EventAttendeeService {
       `[cancelEventAttendance] Updated attendee status: ${updatedAttendee.status}, id: ${updatedAttendee.id}`,
     );
 
-    // Update the cache with the new record
-    this.attendeeCache.set(cacheKey, updatedAttendee);
-
-    // After cancelling, update Bluesky RSVP if:
-    // 1. The attendee has a Bluesky sourceId or the event is from Bluesky
-    // 2. The user has a connected Bluesky account
+    // After cancelling, update Bluesky RSVP if needed, using the original method
     if (
       (updatedAttendee.sourceId ||
         attendee.event.sourceType === EventSourceType.BLUESKY) &&
@@ -805,6 +1036,51 @@ export class EventAttendeeService {
     return this.eventAttendeesRepository.save(attendee);
   }
 
+  @Trace('event-attendee.reactivateEventAttendanceBySlug')
+  async reactivateEventAttendanceBySlug(
+    eventSlug: string,
+    userSlug: string,
+    newStatus: EventAttendeeStatus = EventAttendeeStatus.Confirmed,
+    roleId?: number,
+  ): Promise<EventAttendeesEntity> {
+    await this.getTenantSpecificEventRepository();
+
+    this.logger.debug(
+      `[reactivateEventAttendanceBySlug] Finding attendance for event ${eventSlug} and user ${userSlug}`,
+    );
+
+    // Find the attendance record (including cancelled ones)
+    const attendee = await this.eventAttendeesRepository
+      .createQueryBuilder('attendee')
+      .leftJoinAndSelect('attendee.user', 'user')
+      .leftJoinAndSelect('attendee.role', 'role')
+      .leftJoinAndSelect('role.permissions', 'permissions')
+      .leftJoinAndSelect('attendee.event', 'event')
+      .where('event.slug = :eventSlug', { eventSlug })
+      .andWhere('user.slug = :userSlug', { userSlug })
+      .getOne();
+
+    if (!attendee) {
+      throw new NotFoundException('No attendance record found for this user');
+    }
+
+    // Update the status
+    attendee.status = newStatus;
+
+    // Update role if provided
+    if (roleId) {
+      attendee.role = { id: roleId } as any;
+    }
+
+    // Save the updated record
+    const updatedAttendee = await this.eventAttendeesRepository.save(attendee);
+
+    return updatedAttendee;
+  }
+
+  /**
+   * @deprecated Use reactivateEventAttendanceBySlug with event and user slugs instead of IDs
+   */
   @Trace('event-attendee.reactivateEventAttendance')
   async reactivateEventAttendance(
     eventId: number,
@@ -839,15 +1115,8 @@ export class EventAttendeeService {
       attendee.role = { id: roleId } as any;
     }
 
-    // Clear the attendee cache
-    const cacheKey = `${eventId}:${userId}`;
-    this.attendeeCache.delete(cacheKey);
-
     // Save the updated record
     const updatedAttendee = await this.eventAttendeesRepository.save(attendee);
-
-    // Update the cache
-    this.attendeeCache.set(cacheKey, updatedAttendee);
 
     return updatedAttendee;
   }
