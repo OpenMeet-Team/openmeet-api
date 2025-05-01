@@ -4,7 +4,6 @@ import { ConfigService } from '@nestjs/config';
 
 describe('BlueskyIdService', () => {
   let service: BlueskyIdService;
-  let configService: ConfigService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -27,7 +26,6 @@ describe('BlueskyIdService', () => {
     }).compile();
 
     service = module.get<BlueskyIdService>(BlueskyIdService);
-    configService = module.get<ConfigService>(ConfigService);
   });
 
   it('should be defined', () => {

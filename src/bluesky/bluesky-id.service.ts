@@ -81,12 +81,9 @@ export class BlueskyIdService {
 
     const [did, collection, rkey] = parts;
 
-    // Normalize collection name by removing any suffix for internal usage
-    const normalizedCollection = this.normalizeCollection(collection);
-
     return {
       did,
-      collection: normalizedCollection,
+      collection: this.normalizeCollection(collection),
       rkey,
     };
   }
@@ -177,7 +174,6 @@ export class BlueskyIdService {
     // Collections should be alphanumeric with possible hyphens and dots
     // Must not contain exclamation marks, slashes, or other special characters
     // Also allow our suffix pattern (e.g., ".dev")
-    const normalizedCollection = this.normalizeCollection(collection);
     return (
       /^[a-zA-Z][a-zA-Z0-9.-]*$/.test(collection) && !collection.includes('/')
     );
