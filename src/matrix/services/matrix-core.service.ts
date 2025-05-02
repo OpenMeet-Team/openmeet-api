@@ -137,14 +137,44 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  // Token regeneration tracking to prevent excessive attempts
+  private lastTokenRegenerationAttempt = 0;
+  private tokenRegenerationBackoff = 1000; // Start with 1 second
+
+  /**
+   * Helper function for implementing delay
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   /**
    * Regenerate admin access token using admin password
    * This method is public to allow external components to request token regeneration
+   * Added rate limit handling with exponential backoff
    */
   public async regenerateAdminAccessToken(): Promise<string | null> {
     const matrixConfig = this.configService.get<MatrixConfig>('matrix', {
       infer: true,
     });
+
+    // Check if we're trying to regenerate too frequently
+    const now = Date.now();
+    const timeSinceLastAttempt = now - this.lastTokenRegenerationAttempt;
+
+    // If we've attempted recently, enforce a cooldown period
+    if (timeSinceLastAttempt < this.tokenRegenerationBackoff) {
+      const waitTime = this.tokenRegenerationBackoff - timeSinceLastAttempt;
+      this.logger.warn(
+        `Rate limiting token regeneration, waiting ${waitTime}ms before retrying`,
+      );
+
+      // Wait the required time
+      await this.sleep(waitTime);
+    }
+
+    // Update the last attempt timestamp
+    this.lastTokenRegenerationAttempt = Date.now();
 
     // Password is now required in the config
     const adminPassword = matrixConfig?.adminPassword;
@@ -197,6 +227,9 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
           `Successfully generated admin token for ${usernameOnly}`,
         );
 
+        // Reset backoff on success
+        this.tokenRegenerationBackoff = 1000;
+
         // Recreate admin client with new token
         this.createAdminClient();
 
@@ -205,13 +238,46 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
         this.logger.error(
           'Failed to generate admin token: unexpected response format',
         );
+        // Increase backoff on failure
+        this.tokenRegenerationBackoff = Math.min(
+          this.tokenRegenerationBackoff * 2,
+          60000,
+        );
         return null;
       }
     } catch (error) {
-      this.logger.error(
-        `Failed to generate admin token: ${error.message}`,
-        error.stack,
-      );
+      // Special handling for rate limiting errors
+      if (error.response && error.response.status === 429) {
+        // Get retry time from Matrix response if available
+        const retryAfter = error.response.headers['retry-after']
+          ? parseInt(error.response.headers['retry-after'], 10) * 1000
+          : undefined;
+
+        // Use the Matrix-provided retry time or increase backoff exponentially
+        if (retryAfter) {
+          this.tokenRegenerationBackoff = retryAfter;
+        } else {
+          // Double the backoff time for exponential backoff, max 1 minute
+          this.tokenRegenerationBackoff = Math.min(
+            this.tokenRegenerationBackoff * 2,
+            60000,
+          );
+        }
+
+        this.logger.warn(
+          `Matrix rate limit reached (429). Will back off for ${this.tokenRegenerationBackoff}ms before next token attempt`,
+        );
+      } else {
+        // For non-rate-limit errors, still increase backoff but log as error
+        this.tokenRegenerationBackoff = Math.min(
+          this.tokenRegenerationBackoff * 2,
+          30000,
+        );
+        this.logger.error(
+          `Failed to generate admin token: ${error.message}`,
+          error.stack,
+        );
+      }
       return null;
     }
   }
@@ -509,8 +575,46 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
    * Ensures admin token is valid before returning a client
    */
   async acquireClient(): Promise<MatrixClientWithContext> {
-    // Check if token is valid and regenerate if needed
-    await this.ensureValidAdminToken();
+    // Maximum number of token validation retries
+    const MAX_RETRIES = 3;
+    let retryCount = 0;
+    let tokenValid = false;
+
+    // Try to validate/regenerate token with retries and backoff
+    while (retryCount < MAX_RETRIES && !tokenValid) {
+      if (retryCount > 0) {
+        // If this is a retry attempt, add some backoff delay
+        const backoffTime = Math.pow(2, retryCount) * 500; // Exponential backoff
+        this.logger.debug(
+          `Retry ${retryCount}/${MAX_RETRIES}: backing off for ${backoffTime}ms`,
+        );
+        await this.sleep(backoffTime);
+      }
+
+      // Check if token is valid and regenerate if needed
+      tokenValid = await this.ensureValidAdminToken();
+
+      if (!tokenValid) {
+        this.logger.warn(
+          `Token validation attempt ${retryCount + 1} failed, ${MAX_RETRIES - retryCount - 1} retries left`,
+        );
+      }
+
+      retryCount++;
+    }
+
+    // If we still don't have a valid token after retries, but have admin token string,
+    // continue anyway and hope for the best - the operation might still work
+    if (!tokenValid && this.adminAccessToken) {
+      this.logger.warn(
+        'Proceeding with potentially invalid token after max retries',
+      );
+    } else if (!tokenValid) {
+      this.logger.error('Failed to obtain valid token after max retries');
+      throw new Error(
+        'Unable to acquire Matrix client: token validation failed',
+      );
+    }
 
     // Verify client pool is initialized
     if (!this.clientPool) {
@@ -533,41 +637,75 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // Get a client from the pool
-    const client = await this.clientPool.acquire();
+    try {
+      // Get a client from the pool
+      const client = await this.clientPool.acquire();
 
-    // If the token was regenerated, we need to update the client's token
-    // This ensures the client uses the latest token
-    if (client.client.getAccessToken() !== this.adminAccessToken) {
-      this.logger.debug('Updating client with regenerated admin token');
+      // If the token was regenerated, we need to update the client's token
+      // This ensures the client uses the latest token
+      if (client.client.getAccessToken() !== this.adminAccessToken) {
+        this.logger.debug('Updating client with regenerated admin token');
 
-      // Release the old client
-      await this.clientPool.release(client);
+        try {
+          // Release the old client
+          await this.clientPool.release(client);
+        } catch (releaseError) {
+          this.logger.warn(
+            `Failed to release Matrix client: ${releaseError.message}`,
+          );
+          // Continue anyway - we'll create a new client
+        }
 
-      // Create a new client with the updated token
-      const newClient = this.matrixSdk.createClient({
+        // Create a new client with the updated token
+        const newClient = this.matrixSdk.createClient({
+          baseUrl: this.baseUrl,
+          userId: this.adminUserId,
+          accessToken: this.adminAccessToken,
+          useAuthorizationHeader: true,
+          logger: {
+            // Disable verbose HTTP logging from Matrix SDK
+            log: () => {},
+            info: () => {},
+            warn: () => {},
+            debug: () => {},
+            error: (msg: string) => this.logger.error(msg), // Keep error logs
+          },
+        });
+
+        // Return the new client directly instead of reinitializing the pool
+        return {
+          client: newClient,
+          userId: this.adminUserId,
+        };
+      }
+
+      return client;
+    } catch (error) {
+      this.logger.error(`Failed to acquire Matrix client: ${error.message}`);
+
+      // Last resort - create a new client outside the pool
+      // This helps recover from pool issues
+      const emergencyClient = this.matrixSdk.createClient({
         baseUrl: this.baseUrl,
         userId: this.adminUserId,
         accessToken: this.adminAccessToken,
         useAuthorizationHeader: true,
         logger: {
-          // Disable verbose HTTP logging from Matrix SDK
           log: () => {},
           info: () => {},
           warn: () => {},
           debug: () => {},
-          error: (msg: string) => this.logger.error(msg), // Keep error logs
+          error: (msg: string) => this.logger.error(msg),
         },
       });
 
-      // Return the new client directly instead of reinitializing the pool
+      this.logger.warn('Created emergency Matrix client outside pool');
+
       return {
-        client: newClient,
+        client: emergencyClient,
         userId: this.adminUserId,
       };
     }
-
-    return client;
   }
 
   /**
@@ -590,6 +728,12 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     return this.matrixSdk;
   }
 
+  // Used to prevent too frequent token checks
+  private lastTokenValidityCheck = 0;
+  private tokenValidityCache: { valid: boolean; timestamp: number } | null =
+    null;
+  private readonly TOKEN_VALIDITY_CACHE_TTL = 30000; // 30 seconds
+
   /**
    * Check if admin token is valid and regenerate if needed
    * This is useful for operations that require admin access
@@ -597,6 +741,26 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
    */
   public async ensureValidAdminToken(): Promise<boolean> {
     try {
+      const now = Date.now();
+
+      // Use cached token validity if available and recent
+      if (
+        this.tokenValidityCache &&
+        now - this.tokenValidityCache.timestamp < this.TOKEN_VALIDITY_CACHE_TTL
+      ) {
+        return this.tokenValidityCache.valid;
+      }
+
+      // Throttle validity checks to avoid overwhelming the Matrix server
+      const timeSinceLastCheck = now - this.lastTokenValidityCheck;
+      if (timeSinceLastCheck < 500) {
+        // At most 2 checks per second
+        this.logger.debug('Token check throttled, using last known state');
+        return this.tokenValidityCache?.valid || false;
+      }
+
+      this.lastTokenValidityCheck = now;
+
       // Use whoami endpoint to verify token works
       const whoamiUrl = `${this.baseUrl}/_matrix/client/v3/account/whoami`;
 
@@ -606,26 +770,31 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
             Authorization: `Bearer ${this.adminAccessToken}`,
           },
         });
-        // Token is valid
+
+        // Token is valid, update cache
+        this.tokenValidityCache = { valid: true, timestamp: now };
         return true;
       } catch (whoamiError) {
         this.logger.warn(
           `Admin token appears invalid: ${whoamiError.message}. Attempting to regenerate.`,
         );
 
-        // Try to regenerate the token
+        // Try to regenerate the token with built-in rate limit handling
         const newToken = await this.regenerateAdminAccessToken();
         if (!newToken) {
           this.logger.error('Failed to regenerate admin token.');
+          this.tokenValidityCache = { valid: false, timestamp: now };
           return false;
         }
 
         // Token regenerated successfully
-        this.logger.log('Admin token regenerated successfully');
+        this.logger.debug('Updating client with regenerated admin token');
+        this.tokenValidityCache = { valid: true, timestamp: now };
         return true;
       }
     } catch (error) {
       this.logger.error(`Error checking admin token: ${error.message}`);
+      this.tokenValidityCache = { valid: false, timestamp: Date.now() };
       return false;
     }
   }
