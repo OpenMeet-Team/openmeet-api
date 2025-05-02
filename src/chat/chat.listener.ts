@@ -1,4 +1,4 @@
-import { Injectable, Logger, Scope } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { ModuleRef } from '@nestjs/core';
 import { DiscussionService } from './services/discussion.service';
@@ -34,12 +34,12 @@ export class ChatListener {
 
       // Create a context for the discussion service
       const contextId = ContextIdFactory.create();
-      
+
       // Resolve the discussion service with a new context
       const discussionService = await this.moduleRef.resolve(
         DiscussionService,
         contextId,
-        { strict: false }
+        { strict: false },
       );
 
       // Use the resolved service with tenant ID
@@ -80,12 +80,12 @@ export class ChatListener {
 
       // Create a context for the discussion service
       const contextId = ContextIdFactory.create();
-      
+
       // Resolve the discussion service with a new context
       const discussionService = await this.moduleRef.resolve(
         DiscussionService,
         contextId,
-        { strict: false }
+        { strict: false },
       );
 
       await discussionService.removeMemberFromEventDiscussionBySlug(
@@ -112,14 +112,14 @@ export class ChatListener {
     try {
       // Create a context for the discussion service
       const contextId = ContextIdFactory.create();
-      
+
       // Resolve the discussion service with a new context
       const discussionService = await this.moduleRef.resolve(
         DiscussionService,
         contextId,
-        { strict: false }
+        { strict: false },
       );
-      
+
       await discussionService.addMemberToGroupDiscussion(
         params.groupId,
         params.userId,
@@ -145,14 +145,14 @@ export class ChatListener {
     try {
       // Create a context for the discussion service
       const contextId = ContextIdFactory.create();
-      
+
       // Resolve the discussion service with a new context
       const discussionService = await this.moduleRef.resolve(
         DiscussionService,
         contextId,
-        { strict: false }
+        { strict: false },
       );
-      
+
       await discussionService.removeMemberFromGroupDiscussion(
         params.groupId,
         params.userId,
@@ -214,12 +214,12 @@ export class ChatListener {
 
       // Create a context for the discussion service
       const contextId = ContextIdFactory.create();
-      
+
       // Resolve the discussion service with a new context
       const discussionService = await this.moduleRef.resolve(
         DiscussionService,
         contextId,
-        { strict: false }
+        { strict: false },
       );
 
       // Clean up all chat rooms for this event through the DiscussionService
@@ -260,12 +260,12 @@ export class ChatListener {
 
       // Create a context for the discussion service
       const contextId = ContextIdFactory.create();
-      
+
       // Resolve the discussion service with a new context
       const discussionService = await this.moduleRef.resolve(
         DiscussionService,
         contextId,
-        { strict: false }
+        { strict: false },
       );
 
       // Clean up all chat rooms for this group through the DiscussionService
@@ -355,14 +355,14 @@ export class ChatListener {
         // Use the standard flow with slugs
         // Create a context for the discussion service
         const contextId = ContextIdFactory.create();
-        
+
         // Resolve the discussion service with a new context
         const discussionService = await this.moduleRef.resolve(
           DiscussionService,
           contextId,
-          { strict: false }
+          { strict: false },
         );
-        
+
         const result = await discussionService.getIdsFromSlugsWithTenant(
           params.eventSlug,
           params.userSlug,
@@ -388,16 +388,18 @@ export class ChatListener {
           try {
             // Create a context for the discussion service
             const contextId = ContextIdFactory.create();
-            
+
             // Resolve the discussion service with a new context
             const discussionService = await this.moduleRef.resolve(
               DiscussionService,
               contextId,
-              { strict: false }
+              { strict: false },
             );
-            
-            const eventStillExists =
-              await discussionService.checkEventExists(eventId, tenantId);
+
+            const eventStillExists = await discussionService.checkEventExists(
+              eventId,
+              tenantId,
+            );
 
             if (!eventStillExists) {
               this.logger.warn(
