@@ -153,28 +153,6 @@ describe('Discussion Chat API Tests', () => {
 
   describe('Event Discussion Operations', () => {
     it('should join an event discussion', async () => {
-      // Skip this test if Matrix user wasn't provisioned
-      if (!matrixUserProvisioned) {
-        console.warn('Skipping test: Matrix user not provisioned');
-        return;
-      }
-
-      // Try to provision Matrix user again if needed
-      if (!matrixUserProvisioned) {
-        try {
-          const provisionResponse = await retryApiCall(async () => {
-            return request(TESTING_APP_URL)
-              .post('/api/matrix/provision-user')
-              .set('Authorization', `Bearer ${token}`)
-              .set('x-tenant-id', TESTING_TENANT_ID);
-          });
-
-          matrixUserProvisioned = provisionResponse.status === 200;
-        } catch (error) {
-          console.warn('Failed to provision Matrix user:', error.message);
-        }
-      }
-
       // Verify the event exists
       const eventResponse = await request(TESTING_APP_URL)
         .get(`/api/events/${eventSlug}`)
