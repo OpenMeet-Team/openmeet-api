@@ -817,7 +817,7 @@ export class EventManagementService {
       );
     }
 
-    this.logger.debug('Starting event removal:', {
+    this.logger.debug('[remove] event', {
       eventId: event.id,
       name: event.name,
       sourceType: event.sourceType,
@@ -899,87 +899,54 @@ export class EventManagementService {
       this.request.tenantId,
     );
 
-    // Use a transaction to ensure atomicity
+    // Check if the discussionService exists and has the cleanupEventChatRooms method
+    if (
+      !this.discussionService ||
+      typeof this.discussionService.cleanupEventChatRooms !== 'function'
+    ) {
+      throw new UnprocessableEntityException(
+        'Discussion service required for event deletion is not available. Event deletion cannot proceed safely.',
+      );
+    }
+
+    // Before starting the transaction, clean up chat rooms through the discussion service
+    try {
+      this.logger.log(
+        `Starting chat room cleanup for event ${event.id} via discussionService`,
+      );
+
+      // Call the service layer method to clean up chat rooms
+      await this.discussionService.cleanupEventChatRooms(
+        event.id,
+        this.request.tenantId,
+      );
+
+      this.logger.log(
+        `Successfully cleaned up chat rooms for event ${event.id}`,
+      );
+    } catch (chatCleanupError) {
+      this.logger.error(
+        `Error cleaning up chat rooms for event ${event.id}: ${chatCleanupError.message}`,
+        chatCleanupError.stack,
+      );
+      throw new UnprocessableEntityException(
+        `Failed to clean up chat rooms: ${chatCleanupError.message}`,
+      );
+    }
+
+    // Use a transaction for the rest of the event deletion
     await dataSource
       .transaction(async (transactionalEntityManager) => {
         this.logger.log(`Starting transaction for event deletion: ${event.id}`);
 
-        // Step 1: Cleanup chat rooms first to prevent foreign key constraint errors
-        try {
-          // First attempt to clean up via discussionService if available
-          if (
-            this.discussionService &&
-            typeof this.discussionService.cleanupEventChatRooms === 'function'
-          ) {
-            this.logger.log(
-              `Cleaning up chat rooms for event ${event.id} via discussionService`,
-            );
-            await this.discussionService.cleanupEventChatRooms(
-              event.id,
-              this.request.tenantId,
-            );
-            this.logger.log(
-              `Successfully cleaned up chat rooms for event ${event.id}`,
-            );
-          } else {
-            // Direct cleanup as fallback if discussionService is not available
-            this.logger.warn(
-              `discussionService not available, using direct SQL queries for chatroom cleanup`,
-            );
-
-            // Check if there are any chat rooms to clean up first
-            const chatRooms = await transactionalEntityManager.query(
-              'SELECT COUNT(*) as count FROM "chatRooms" WHERE "eventId" = $1',
-              [event.id],
-            );
-
-            const roomCount = parseInt(chatRooms[0]?.count || '0', 10);
-
-            if (roomCount > 0) {
-              this.logger.log(
-                `Found ${roomCount} chat rooms to clean up for event ${event.id}`,
-              );
-
-              // Delete chat room members first due to foreign key constraints
-              await transactionalEntityManager.query(
-                'DELETE FROM "userChatRooms" WHERE "chatRoomId" IN (SELECT id FROM "chatRooms" WHERE "eventId" = $1)',
-                [event.id],
-              );
-
-              // Then delete the chat rooms themselves
-              await transactionalEntityManager.query(
-                'DELETE FROM "chatRooms" WHERE "eventId" = $1',
-                [event.id],
-              );
-
-              this.logger.log(
-                `Successfully cleaned up chat rooms for event ${event.id} via direct queries`,
-              );
-            } else {
-              this.logger.log(
-                `No chat rooms found for event ${event.id}, skipping cleanup`,
-              );
-            }
-          }
-        } catch (chatCleanupError) {
-          this.logger.error(
-            `Error cleaning up chat rooms for event ${event.id}: ${chatCleanupError.message}`,
-            chatCleanupError.stack,
-          );
-          // Rethrow to trigger transaction rollback
-          throw new Error(
-            `Failed to clean up chat rooms: ${chatCleanupError.message}`,
-          );
-        }
-
-        // Step 2: Clear Matrix room ID reference
+        // Step 1: Clear Matrix room ID reference
         if (event.matrixRoomId) {
           event.matrixRoomId = '';
           await transactionalEntityManager.save(EventEntity, event);
           this.logger.log(`Cleared Matrix room ID for event ${event.id}`);
         }
 
-        // Step 3: Delete related event attendees
+        // Step 2: Delete related event attendees
         try {
           const eventAttendeeRepo =
             transactionalEntityManager.getRepository(EventAttendeesEntity);
@@ -996,7 +963,7 @@ export class EventManagementService {
           );
         }
 
-        // Step 4: Handle series exceptions if needed
+        // Step 3: Handle series exceptions if needed
         if (event.seriesSlug) {
           try {
             this.logger.log(
@@ -1050,7 +1017,7 @@ export class EventManagementService {
           }
         }
 
-        // Step 5: Finally, delete the event itself
+        // Step 4: Finally, delete the event itself
         try {
           await transactionalEntityManager.remove(EventEntity, event);
           this.logger.log(`Successfully deleted event ${event.id}`);
