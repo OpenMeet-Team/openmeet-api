@@ -5,6 +5,7 @@ import {
   HttpHealthIndicator,
   TypeOrmHealthIndicator,
 } from '@nestjs/terminus';
+import { MatrixHealthIndicator } from '../matrix/health/matrix.health';
 
 describe('HealthController', () => {
   let controller: HealthController;
@@ -29,6 +30,21 @@ describe('HealthController', () => {
         {
           provide: TypeOrmHealthIndicator,
           useValue: {},
+        },
+        {
+          provide: MatrixHealthIndicator,
+          useValue: {
+            isHealthy: jest.fn().mockResolvedValue({
+              status: 'up',
+              matrix: {
+                serverAvailable: true,
+                tokenState: 'valid',
+                tokenValid: true,
+                adminPrivilegesValid: true,
+                serverUrl: 'https://matrix.example.org',
+              },
+            }),
+          },
         },
       ],
     }).compile();

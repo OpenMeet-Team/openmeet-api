@@ -51,15 +51,13 @@ export class HealthController {
       };
     }
   }
-  
+
   @HealthCheck()
   @Get('matrix')
   @ApiOperation({ summary: 'Matrix health check' })
   async matrixHealth() {
     try {
-      return await this.health.check([
-        () => this.matrix.isHealthy('matrix'),
-      ]);
+      return await this.health.check([() => this.matrix.isHealthy('matrix')]);
     } catch (error) {
       return {
         status: 'error',

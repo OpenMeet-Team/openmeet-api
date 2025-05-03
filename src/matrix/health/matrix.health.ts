@@ -1,13 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import { HealthIndicator, HealthIndicatorResult, HealthCheckError } from '@nestjs/terminus';
+import {
+  HealthIndicator,
+  HealthIndicatorResult,
+  HealthCheckError,
+} from '@nestjs/terminus';
 import axios from 'axios';
 import { MatrixTokenManagerService } from '../services/matrix-token-manager.service';
 
 @Injectable()
 export class MatrixHealthIndicator extends HealthIndicator {
-  constructor(
-    private readonly tokenManager: MatrixTokenManagerService,
-  ) {
+  constructor(private readonly tokenManager: MatrixTokenManagerService) {
     super();
   }
 
@@ -16,7 +18,7 @@ export class MatrixHealthIndicator extends HealthIndicator {
       const baseUrl = this.tokenManager['baseUrl']; // Access baseUrl from token manager
       const tokenState = this.tokenManager.getTokenState();
       const adminToken = this.tokenManager.getAdminToken();
-      
+
       // Basic checks that don't require auth
       let serverAvailable = false;
       try {
@@ -27,11 +29,11 @@ export class MatrixHealthIndicator extends HealthIndicator {
       } catch (serverCheckError) {
         serverAvailable = false;
       }
-      
+
       // Auth checks - only if server is available
       let tokenValid = false;
       let adminPrivilegesValid = false;
-      
+
       if (serverAvailable && tokenState === 'valid' && adminToken) {
         try {
           // Check if token is valid using whoami endpoint
@@ -39,9 +41,9 @@ export class MatrixHealthIndicator extends HealthIndicator {
           const whoamiResponse = await axios.get(whoamiUrl, {
             headers: { Authorization: `Bearer ${adminToken}` },
           });
-          
+
           tokenValid = whoamiResponse.status === 200;
-          
+
           // Check admin privileges if token is valid
           if (tokenValid) {
             try {
@@ -50,7 +52,7 @@ export class MatrixHealthIndicator extends HealthIndicator {
               const adminResponse = await axios.get(adminUrl, {
                 headers: { Authorization: `Bearer ${adminToken}` },
               });
-              
+
               adminPrivilegesValid = adminResponse.status === 200;
             } catch (adminError) {
               adminPrivilegesValid = false;
@@ -58,14 +60,14 @@ export class MatrixHealthIndicator extends HealthIndicator {
           }
         } catch (tokenError) {
           tokenValid = false;
-          
+
           // Report invalid token if it fails the health check
           if (tokenState === 'valid') {
             this.tokenManager.reportTokenInvalid();
           }
         }
       }
-      
+
       const data = {
         serverAvailable,
         tokenState,
@@ -73,14 +75,15 @@ export class MatrixHealthIndicator extends HealthIndicator {
         adminPrivilegesValid,
         serverUrl: baseUrl,
       };
-      
+
       // Consider healthy if server is available and either token is valid or being regenerated
-      const isHealthy = serverAvailable && (tokenValid || tokenState === 'regenerating');
-      
+      const isHealthy =
+        serverAvailable && (tokenValid || tokenState === 'regenerating');
+
       if (isHealthy) {
         return this.getStatus(key, true, data);
       }
-      
+
       throw new HealthCheckError(
         'Matrix server check failed',
         this.getStatus(key, false, data),

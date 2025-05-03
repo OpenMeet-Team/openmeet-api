@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { MatrixCoreService } from './matrix-core.service';
 import axios from 'axios';
 import { Logger } from '@nestjs/common';
+import { MatrixTokenManagerService } from './matrix-token-manager.service';
 
 // Create the mocks directly in the test file instead of importing
 // This avoids path issues in different environments
@@ -77,6 +78,15 @@ describe('MatrixCoreService', () => {
               }
               return null;
             }),
+          },
+        },
+        {
+          provide: MatrixTokenManagerService,
+          useValue: {
+            getAdminToken: jest.fn().mockReturnValue('admin-token'),
+            getTokenState: jest.fn().mockReturnValue('valid'),
+            reportTokenInvalid: jest.fn(),
+            forceTokenRegeneration: jest.fn().mockResolvedValue(true),
           },
         },
       ],

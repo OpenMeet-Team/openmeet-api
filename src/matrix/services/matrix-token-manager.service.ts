@@ -13,13 +13,15 @@ import { MatrixConfig } from '../config/matrix-config.type';
 export type TokenState = 'valid' | 'regenerating' | 'invalid';
 
 @Injectable()
-export class MatrixTokenManagerService implements OnModuleInit, OnModuleDestroy {
+export class MatrixTokenManagerService
+  implements OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(MatrixTokenManagerService.name);
   private tokenState: TokenState = 'invalid';
   private lastTokenRefresh = 0;
   private tokenRefreshInterval: NodeJS.Timeout;
   private adminAccessToken: string = '';
-  
+
   private readonly baseUrl: string;
   private readonly serverName: string;
   private readonly adminUserId: string;
@@ -30,7 +32,7 @@ export class MatrixTokenManagerService implements OnModuleInit, OnModuleDestroy 
     const matrixConfig = this.configService.get<MatrixConfig>('matrix', {
       infer: true,
     });
-    
+
     // Log actual environment variables for debugging
     this.logger.debug('Matrix environment variables:', {
       MATRIX_HOMESERVER_URL: process.env.MATRIX_HOMESERVER_URL,
@@ -67,7 +69,7 @@ export class MatrixTokenManagerService implements OnModuleInit, OnModuleDestroy 
 
     // Initialize with token from config or empty string
     this.adminAccessToken = matrixConfig?.adminAccessToken || '';
-    
+
     // Log the determined values
     this.logger.log(`Token Manager created with Matrix configuration:`, {
       serverName,
@@ -78,7 +80,7 @@ export class MatrixTokenManagerService implements OnModuleInit, OnModuleDestroy 
 
   async onModuleInit() {
     this.logger.log('Initializing Matrix Token Manager');
-    
+
     // Initial token generation if needed
     if (!this.adminAccessToken) {
       this.logger.log('No admin token provided, generating a new one');
@@ -87,15 +89,18 @@ export class MatrixTokenManagerService implements OnModuleInit, OnModuleDestroy 
       // Verify existing token
       this.verifyExistingToken();
     }
-    
+
     // Set up background refresh (every 12 hours)
-    this.tokenRefreshInterval = setInterval(() => {
-      this.regenerateTokenIfNeeded();
-    }, 12 * 60 * 60 * 1000); // 12 hours
-    
+    this.tokenRefreshInterval = setInterval(
+      () => {
+        this.regenerateTokenIfNeeded();
+      },
+      12 * 60 * 60 * 1000,
+    ); // 12 hours
+
     this.logger.log('Matrix Token Manager initialized');
   }
-  
+
   onModuleDestroy() {
     if (this.tokenRefreshInterval) {
       clearInterval(this.tokenRefreshInterval);
@@ -104,7 +109,7 @@ export class MatrixTokenManagerService implements OnModuleInit, OnModuleDestroy 
   }
 
   // Public methods for external components
-  
+
   /**
    * Get the current admin access token
    */
@@ -146,21 +151,25 @@ export class MatrixTokenManagerService implements OnModuleInit, OnModuleDestroy 
   private async verifyExistingToken(): Promise<void> {
     try {
       const whoamiUrl = `${this.baseUrl}/_matrix/client/v3/account/whoami`;
-      
+
       this.logger.debug(`Verifying existing admin token with: ${whoamiUrl}`);
-      
+
       const response = await axios.get(whoamiUrl, {
         headers: {
           Authorization: `Bearer ${this.adminAccessToken}`,
         },
       });
-      
+
       if (response.data && response.data.user_id) {
-        this.logger.log(`Matrix token verified for user: ${response.data.user_id}`);
+        this.logger.log(
+          `Matrix token verified for user: ${response.data.user_id}`,
+        );
         this.tokenState = 'valid';
         this.lastTokenRefresh = Date.now();
       } else {
-        this.logger.warn('Unexpected whoami response format - token may be invalid');
+        this.logger.warn(
+          'Unexpected whoami response format - token may be invalid',
+        );
         this.triggerTokenRegeneration();
       }
     } catch (error) {
@@ -174,7 +183,9 @@ export class MatrixTokenManagerService implements OnModuleInit, OnModuleDestroy 
    * @param waitForCompletion If true, returns only when regeneration is complete
    * @returns Promise that resolves to true if regeneration was successful
    */
-  private async triggerTokenRegeneration(waitForCompletion = false): Promise<boolean> {
+  private async triggerTokenRegeneration(
+    waitForCompletion = false,
+  ): Promise<boolean> {
     // Don't run multiple regenerations at once
     if (this.tokenState === 'regenerating') {
       this.logger.debug('Token regeneration already in progress');
@@ -182,7 +193,7 @@ export class MatrixTokenManagerService implements OnModuleInit, OnModuleDestroy 
     }
 
     this.tokenState = 'regenerating';
-    
+
     const regenerationTask = async () => {
       try {
         const newToken = await this.regenerateToken();
@@ -206,17 +217,17 @@ export class MatrixTokenManagerService implements OnModuleInit, OnModuleDestroy 
         return false;
       }
     };
-    
+
     // If we need to wait for completion, run synchronously
     if (waitForCompletion) {
       return regenerationTask();
     }
-    
+
     // Otherwise run in the background
     setTimeout(async () => {
       await regenerationTask();
     }, 0);
-    
+
     return true;
   }
 
@@ -226,9 +237,12 @@ export class MatrixTokenManagerService implements OnModuleInit, OnModuleDestroy 
   private async regenerateTokenIfNeeded(): Promise<void> {
     const now = Date.now();
     const timeSinceLastRefresh = now - this.lastTokenRefresh;
-    
+
     // Only refresh if it's been more than 6 hours or token is invalid
-    if (timeSinceLastRefresh > 6 * 60 * 60 * 1000 || this.tokenState === 'invalid') {
+    if (
+      timeSinceLastRefresh > 6 * 60 * 60 * 1000 ||
+      this.tokenState === 'invalid'
+    ) {
       this.logger.log('Scheduled token refresh triggered');
       this.triggerTokenRegeneration();
     }
@@ -307,7 +321,7 @@ export class MatrixTokenManagerService implements OnModuleInit, OnModuleDestroy 
         headers: error.response?.headers,
         stack: error.stack,
       };
-      
+
       this.logger.error(
         `Failed to generate admin token: ${error.message}`,
         errorDetails,
