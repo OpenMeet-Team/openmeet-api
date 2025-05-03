@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { ModuleRef } from '@nestjs/core';
 import { DiscussionService } from './services/discussion.service';
@@ -6,6 +6,7 @@ import { ChatRoomService } from './rooms/chat-room.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { ContextIdFactory } from '@nestjs/core';
+import { ChatRoomManagerInterface } from './interfaces/chat-room-manager.interface';
 
 @Injectable()
 export class ChatListener {
@@ -15,6 +16,8 @@ export class ChatListener {
     private readonly moduleRef: ModuleRef,
     private readonly chatRoomService: ChatRoomService,
     private readonly tenantConnectionService: TenantConnectionService,
+    @Inject('ChatRoomManagerInterface')
+    private readonly chatRoomManager: ChatRoomManagerInterface,
   ) {}
 
   @OnEvent('chat.event.member.add')
@@ -32,7 +35,7 @@ export class ChatListener {
         throw new Error('Tenant ID is required');
       }
 
-      // Create a context for the discussion service
+      // Create a context for the discussion service (for backward compatibility)
       const contextId = ContextIdFactory.create();
 
       // Resolve the discussion service with a new context
@@ -42,10 +45,24 @@ export class ChatListener {
         { strict: false },
       );
 
-      // Use the resolved service with tenant ID
-      await discussionService.addMemberToEventDiscussionBySlug(
+      // Use the IDs from slugs with the tenant ID
+      const { eventId, userId } = await discussionService.getIdsFromSlugsWithTenant(
         params.eventSlug,
         params.userSlug,
+        params.tenantId,
+      );
+
+      if (!eventId || !userId) {
+        this.logger.error(
+          `Could not find event or user with slugs: event=${params.eventSlug}, user=${params.userSlug}`,
+        );
+        return;
+      }
+
+      // Use the tenant-aware ChatRoomManagerInterface implementation
+      await this.chatRoomManager.addUserToEventChatRoom(
+        eventId,
+        userId,
         params.tenantId,
       );
 
@@ -78,7 +95,7 @@ export class ChatListener {
         throw new Error('Tenant ID is required');
       }
 
-      // Create a context for the discussion service
+      // Create a context for the discussion service (for backward compatibility)
       const contextId = ContextIdFactory.create();
 
       // Resolve the discussion service with a new context
@@ -88,9 +105,24 @@ export class ChatListener {
         { strict: false },
       );
 
-      await discussionService.removeMemberFromEventDiscussionBySlug(
+      // Get IDs from slugs
+      const { eventId, userId } = await discussionService.getIdsFromSlugsWithTenant(
         params.eventSlug,
         params.userSlug,
+        params.tenantId,
+      );
+
+      if (!eventId || !userId) {
+        this.logger.error(
+          `Could not find event or user with slugs: event=${params.eventSlug}, user=${params.userSlug}`,
+        );
+        return;
+      }
+
+      // Use the tenant-aware ChatRoomManagerInterface implementation
+      await this.chatRoomManager.removeUserFromEventChatRoom(
+        eventId,
+        userId,
         params.tenantId,
       );
 
@@ -106,11 +138,21 @@ export class ChatListener {
   }
 
   @OnEvent('chat.group.member.add')
-  async handleChatGroupMemberAdd(params: { groupId: number; userId: number }) {
+  async handleChatGroupMemberAdd(params: { 
+    groupId: number; 
+    userId: number;
+    tenantId?: string;
+  }) {
     this.logger.log('chat.group.member.add event received', params);
 
     try {
-      // Create a context for the discussion service
+      // Tenant ID is required in all environments
+      if (!params.tenantId) {
+        this.logger.error('Tenant ID is required in the event payload');
+        throw new Error('Tenant ID is required');
+      }
+
+      // Create a context for the discussion service (for backward compatibility)
       const contextId = ContextIdFactory.create();
 
       // Resolve the discussion service with a new context
@@ -120,10 +162,13 @@ export class ChatListener {
         { strict: false },
       );
 
+      // For now, delegate to the legacy implementation through DiscussionService
+      // In the future, we can extend ChatRoomManagerInterface to handle group operations
       await discussionService.addMemberToGroupDiscussion(
         params.groupId,
         params.userId,
       );
+      
       this.logger.log(
         `Added user ${params.userId} to group ${params.groupId} chat room`,
       );
@@ -139,11 +184,18 @@ export class ChatListener {
   async handleChatGroupMemberRemove(params: {
     groupId: number;
     userId: number;
+    tenantId?: string;
   }) {
     this.logger.log('chat.group.member.remove event received', params);
 
     try {
-      // Create a context for the discussion service
+      // Tenant ID is required in all environments
+      if (!params.tenantId) {
+        this.logger.error('Tenant ID is required in the event payload');
+        throw new Error('Tenant ID is required');
+      }
+
+      // Create a context for the discussion service (for backward compatibility)
       const contextId = ContextIdFactory.create();
 
       // Resolve the discussion service with a new context
@@ -153,10 +205,13 @@ export class ChatListener {
         { strict: false },
       );
 
+      // For now, delegate to the legacy implementation through DiscussionService
+      // In the future, we can extend ChatRoomManagerInterface to handle group operations
       await discussionService.removeMemberFromGroupDiscussion(
         params.groupId,
         params.userId,
       );
+      
       this.logger.log(
         `Removed user ${params.userId} from group ${params.groupId} chat room`,
       );
@@ -194,36 +249,8 @@ export class ChatListener {
         throw new Error('Tenant ID is required');
       }
 
-      // Check if chat rooms still exist for this event before attempting cleanup
-      const dataSource = await this.tenantConnectionService.getTenantConnection(
-        params.tenantId,
-      );
-      const chatRoomRepo = dataSource.getRepository('chat_room');
-
-      // Count chat rooms for this event
-      const count = await chatRoomRepo.count({
-        where: { eventId: params.eventId },
-      });
-
-      if (count === 0) {
-        this.logger.log(
-          `No chat rooms found for event ${params.eventSlug}, skipping cleanup`,
-        );
-        return;
-      }
-
-      // Create a context for the discussion service
-      const contextId = ContextIdFactory.create();
-
-      // Resolve the discussion service with a new context
-      const discussionService = await this.moduleRef.resolve(
-        DiscussionService,
-        contextId,
-        { strict: false },
-      );
-
-      // Clean up all chat rooms for this event through the DiscussionService
-      await discussionService.cleanupEventChatRooms(
+      // Use the tenant-aware ChatRoomManagerInterface implementation
+      await this.chatRoomManager.deleteEventChatRooms(
         params.eventId,
         params.tenantId,
       );
@@ -268,7 +295,8 @@ export class ChatListener {
         { strict: false },
       );
 
-      // Clean up all chat rooms for this group through the DiscussionService
+      // For now, delegate to the legacy implementation through DiscussionService
+      // In the future, we can extend ChatRoomManagerInterface to handle group operations
       await discussionService.cleanupGroupChatRooms(
         params.groupId,
         params.tenantId,
@@ -385,42 +413,25 @@ export class ChatListener {
       if (eventId && userId) {
         try {
           // Verify the event still exists using our service-layer method
-          try {
-            // Create a context for the discussion service
-            const contextId = ContextIdFactory.create();
+          const eventExists = await this.chatRoomManager.checkEventExists(
+            eventId,
+            tenantId,
+          );
 
-            // Resolve the discussion service with a new context
-            const discussionService = await this.moduleRef.resolve(
-              DiscussionService,
-              contextId,
-              { strict: false },
+          if (!eventExists) {
+            this.logger.warn(
+              `Event with id ${eventId} no longer exists based on service check. Skipping chat room creation.`,
             );
-
-            const eventStillExists = await discussionService.checkEventExists(
-              eventId,
-              tenantId,
-            );
-
-            if (!eventStillExists) {
-              this.logger.warn(
-                `Event with id ${eventId} no longer exists based on service check. Skipping chat room creation.`,
-              );
-              return;
-            }
-          } catch (error) {
-            this.logger.error(
-              `Failed to verify event existence for ${eventId}: ${error.message}`,
-              error.stack,
-            );
-            // Don't proceed if we can't verify event existence
             return;
           }
 
-          await this.chatRoomService.createEventChatRoomWithTenant(
+          // Create the chat room using our tenant-aware chat room manager
+          await this.chatRoomManager.ensureEventChatRoom(
             eventId,
             userId,
             tenantId,
           );
+          
           this.logger.log(
             `Created chat room for event ${params.eventSlug} by user ID ${userId} in tenant ${tenantId}`,
           );

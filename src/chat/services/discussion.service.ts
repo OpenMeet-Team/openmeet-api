@@ -734,23 +734,33 @@ export class DiscussionService implements DiscussionServiceInterface {
   async addMemberToEventDiscussion(
     eventId: number,
     userId: number,
+    explicitTenantId?: string,
   ): Promise<void> {
-    // Check if this.request exists - might be undefined when called from event handlers
-    if (!this.request) {
-      this.logger.warn(
-        `Request object not available in addMemberToEventDiscussion, likely called from event handler`,
-      );
+    // Get tenant ID either from explicit parameter or request context
+    let tenantId = explicitTenantId;
 
-      // Directly add the user to the chat room using entity ID since we can't use request context
-      await this.ensureEntityChatRoom('event', eventId, userId);
-      await this.chatRoomService.addUserToEventChatRoom(eventId, userId);
-      return;
+    // If no explicit tenantId, try to get it from request context
+    if (!tenantId) {
+      // Check if this.request exists - might be undefined when called from event handlers
+      if (!this.request) {
+        this.logger.warn(
+          `Request object not available in addMemberToEventDiscussion, likely called from event handler`,
+        );
+        // We can't proceed without a tenant ID
+        throw new Error(
+          'Tenant ID is required - either pass it explicitly or call from request context',
+        );
+      }
+
+      // Try to get tenantId from request
+      tenantId = this.request.tenantId;
     }
 
-    // Get the tenant ID from the request context
-    const tenantId = this.request.tenantId;
+    // Final check that we have a tenantId one way or another
     if (!tenantId) {
-      this.logger.error('Tenant ID is required in request context');
+      this.logger.error(
+        'Tenant ID is required but not available from any source',
+      );
       throw new Error('Tenant ID is required');
     }
 
@@ -958,13 +968,18 @@ export class DiscussionService implements DiscussionServiceInterface {
     }
 
     // Set recursion flag before calling the ID-based method to prevent infinite loops
-    this.request._avoidRecursion = true;
+    if (this.request) {
+      this.request._avoidRecursion = true;
+    }
+
     try {
-      // Add member to event discussion
-      await this.addMemberToEventDiscussion(eventId, userId);
+      // Add member to event discussion - pass the tenant ID explicitly
+      await this.addMemberToEventDiscussion(eventId, userId, tenantId);
     } finally {
       // Always clear the flag when we're done
-      delete this.request._avoidRecursion;
+      if (this.request) {
+        delete this.request._avoidRecursion;
+      }
     }
   }
 
