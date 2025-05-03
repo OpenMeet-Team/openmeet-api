@@ -3,8 +3,6 @@ import {
   Logger,
   OnModuleInit,
   OnModuleDestroy,
-  Inject,
-  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
@@ -87,13 +85,13 @@ export class MatrixTokenManagerService
       await this.triggerTokenRegeneration();
     } else {
       // Verify existing token
-      this.verifyExistingToken();
+      await this.verifyExistingToken();
     }
 
     // Set up background refresh (every 12 hours)
     this.tokenRefreshInterval = setInterval(
       () => {
-        this.regenerateTokenIfNeeded();
+        void this.regenerateTokenIfNeeded();
       },
       12 * 60 * 60 * 1000,
     ); // 12 hours
@@ -131,7 +129,7 @@ export class MatrixTokenManagerService
     this.logger.warn('Token reported as invalid, triggering regeneration');
     if (this.tokenState !== 'regenerating') {
       this.tokenState = 'invalid';
-      this.triggerTokenRegeneration();
+      void this.triggerTokenRegeneration();
     }
   }
 
@@ -170,11 +168,11 @@ export class MatrixTokenManagerService
         this.logger.warn(
           'Unexpected whoami response format - token may be invalid',
         );
-        this.triggerTokenRegeneration();
+        await this.triggerTokenRegeneration();
       }
     } catch (error) {
       this.logger.warn(`Existing token appears invalid: ${error.message}`);
-      this.triggerTokenRegeneration();
+      await this.triggerTokenRegeneration();
     }
   }
 
@@ -220,11 +218,11 @@ export class MatrixTokenManagerService
 
     // If we need to wait for completion, run synchronously
     if (waitForCompletion) {
-      return regenerationTask();
+      return await regenerationTask();
     }
 
     // Otherwise run in the background
-    setTimeout(async () => {
+    void setTimeout(async () => {
       await regenerationTask();
     }, 0);
 
@@ -234,7 +232,7 @@ export class MatrixTokenManagerService
   /**
    * Periodic token refresh logic
    */
-  private async regenerateTokenIfNeeded(): Promise<void> {
+  public async regenerateTokenIfNeeded(): Promise<void> {
     const now = Date.now();
     const timeSinceLastRefresh = now - this.lastTokenRefresh;
 
@@ -244,7 +242,7 @@ export class MatrixTokenManagerService
       this.tokenState === 'invalid'
     ) {
       this.logger.log('Scheduled token refresh triggered');
-      this.triggerTokenRegeneration();
+      await this.triggerTokenRegeneration();
     }
   }
 

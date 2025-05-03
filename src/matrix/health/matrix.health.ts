@@ -26,7 +26,8 @@ export class MatrixHealthIndicator extends HealthIndicator {
         const serverInfoUrl = `${baseUrl}/_matrix/client/versions`;
         const serverInfoResponse = await axios.get(serverInfoUrl);
         serverAvailable = serverInfoResponse.status === 200;
-      } catch (serverCheckError) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      } catch (_serverCheckError) {
         serverAvailable = false;
       }
 
@@ -54,11 +55,13 @@ export class MatrixHealthIndicator extends HealthIndicator {
               });
 
               adminPrivilegesValid = adminResponse.status === 200;
-            } catch (adminError) {
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            } catch (_adminError) {
               adminPrivilegesValid = false;
             }
           }
-        } catch (tokenError) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        } catch (_tokenError) {
           tokenValid = false;
 
           // Report invalid token if it fails the health check

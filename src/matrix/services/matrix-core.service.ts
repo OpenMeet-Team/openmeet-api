@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as pool from 'generic-pool';
-import axios from 'axios';
 import { MatrixConfig } from '../config/matrix-config.type';
 import { IMatrixClient, IMatrixSdk } from '../types/matrix.interfaces';
 import { MatrixClientWithContext } from '../types/matrix.types';
@@ -447,7 +446,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
 
       // If the token is invalid, report it
       if (tokenState === 'invalid') {
-        this.tokenManager.reportTokenInvalid();
+        await this.tokenManager.reportTokenInvalid();
         return false;
       }
 

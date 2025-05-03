@@ -10,14 +10,19 @@ import { GroupMemberService } from '../../group-member/group-member.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupService } from '../../group/group.service';
-import { ChatRoomEntity, ChatRoomType, ChatRoomVisibility } from '../infrastructure/persistence/relational/entities/chat-room.entity';
-import { Repository, DataSource, FindOneOptions } from 'typeorm';
+import {
+  ChatRoomEntity,
+  ChatRoomType,
+  ChatRoomVisibility,
+} from '../infrastructure/persistence/relational/entities/chat-room.entity';
+import { Repository } from 'typeorm';
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
 
 describe('MatrixChatRoomManagerAdapter', () => {
   let service: MatrixChatRoomManagerAdapter;
-  let tenantConnectionService: TenantConnectionService;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  let _tenantConnectionService: TenantConnectionService;
   let matrixRoomService: MatrixRoomService;
   let matrixUserService: MatrixUserService;
   let matrixMessageService: MatrixMessageService;
@@ -40,7 +45,7 @@ describe('MatrixChatRoomManagerAdapter', () => {
       delete: jest.fn(),
       update: jest.fn(),
     } as unknown as Repository<ChatRoomEntity>;
-    
+
     mockEventRepository = {
       findOne: jest.fn(),
       find: jest.fn(),
@@ -48,7 +53,7 @@ describe('MatrixChatRoomManagerAdapter', () => {
       save: jest.fn(),
       update: jest.fn(),
     } as unknown as Repository<EventEntity>;
-    
+
     // Configure the mockDataSource's getRepository to return different repositories
     // based on the entity type
     mockDataSource.getRepository.mockImplementation((entity) => {
@@ -59,6 +64,43 @@ describe('MatrixChatRoomManagerAdapter', () => {
       }
       return {} as Repository<any>;
     });
+
+    // Setup default mocks for slug methods
+    (eventQueryService as any) = {
+      findById: jest.fn(),
+      showEventBySlug: jest.fn().mockResolvedValue({
+        id: 1,
+        slug: 'event-slug',
+        name: 'Test Event',
+        visibility: 'public',
+      }),
+      showEventBySlugWithTenant: jest.fn().mockResolvedValue({
+        id: 1,
+        slug: 'test-event',
+        name: 'Test Event',
+        visibility: 'public',
+      }),
+    };
+
+    (userService as any) = {
+      findById: jest.fn(),
+      update: jest.fn(),
+      findByMatrixUserId: jest.fn(),
+      getUserBySlug: jest.fn().mockResolvedValue({
+        id: 1,
+        matrixUserId: '@user:matrix.org',
+        matrixAccessToken: 'access-token',
+        matrixDeviceId: 'device-id',
+        slug: 'test-user',
+      }),
+      getUserBySlugWithTenant: jest.fn().mockResolvedValue({
+        id: 1,
+        matrixUserId: '@user:matrix.org',
+        matrixAccessToken: 'access-token',
+        matrixDeviceId: 'device-id',
+        slug: 'test-user',
+      }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -108,6 +150,8 @@ describe('MatrixChatRoomManagerAdapter', () => {
             findById: jest.fn(),
             update: jest.fn(),
             findByMatrixUserId: jest.fn(),
+            getUserBySlug: jest.fn(),
+            getUserBySlugWithTenant: jest.fn(),
           },
         },
         {
@@ -126,24 +170,84 @@ describe('MatrixChatRoomManagerAdapter', () => {
           provide: EventQueryService,
           useValue: {
             findById: jest.fn(),
+            showEventBySlug: jest.fn(),
+            showEventBySlugWithTenant: jest.fn(),
           },
         },
         {
           provide: GroupService,
           useValue: {
-            // Add methods as needed
+            getGroupBySlug: jest.fn(),
           },
         },
       ],
     }).compile();
 
-    service = module.get<MatrixChatRoomManagerAdapter>(MatrixChatRoomManagerAdapter);
-    tenantConnectionService = module.get<TenantConnectionService>(TenantConnectionService);
+    service = module.get<MatrixChatRoomManagerAdapter>(
+      MatrixChatRoomManagerAdapter,
+    );
+    _tenantConnectionService = module.get<TenantConnectionService>(
+      TenantConnectionService,
+    );
     matrixRoomService = module.get<MatrixRoomService>(MatrixRoomService);
     matrixUserService = module.get<MatrixUserService>(MatrixUserService);
-    matrixMessageService = module.get<MatrixMessageService>(MatrixMessageService);
+    matrixMessageService =
+      module.get<MatrixMessageService>(MatrixMessageService);
     userService = module.get<UserService>(UserService);
     eventQueryService = module.get<EventQueryService>(EventQueryService);
+
+    // We need to update the service instances with our mock implementations
+    (eventQueryService.showEventBySlug as jest.Mock).mockImplementation(
+      (slug) => {
+        return {
+          id: 1,
+          slug: slug,
+          name: 'Test Event',
+          visibility: 'public',
+        };
+      },
+    );
+
+    (
+      eventQueryService.showEventBySlugWithTenant as jest.Mock
+    ).mockImplementation((slug, _tenantId) => {
+      if (slug === 'test-event' && _tenantId === 'tenant1') {
+        return {
+          id: 1,
+          slug: slug,
+          name: 'Test Event',
+          visibility: 'public',
+        };
+      }
+      return null;
+    });
+
+    // Setup proper mocks for user service methods
+    (userService.getUserBySlug as jest.Mock).mockImplementation((slug) => {
+      return {
+        id: 1,
+        matrixUserId: '@user:matrix.org',
+        matrixAccessToken: 'access-token',
+        matrixDeviceId: 'device-id',
+        firstName: 'Test',
+        lastName: 'User',
+        slug: slug,
+      };
+    });
+
+    (userService.getUserBySlugWithTenant as jest.Mock).mockImplementation(
+      (slug, _tenantId) => {
+        return {
+          id: 1,
+          matrixUserId: '@user:matrix.org',
+          matrixAccessToken: 'access-token',
+          matrixDeviceId: 'device-id',
+          firstName: 'Test',
+          lastName: 'User',
+          slug: slug,
+        };
+      },
+    );
   });
 
   it('should be defined', () => {
@@ -152,6 +256,22 @@ describe('MatrixChatRoomManagerAdapter', () => {
 
   describe('ensureEventChatRoom', () => {
     it('should return existing chat room if it exists', async () => {
+      // Mock the event and user services for consistent results
+      (eventQueryService.showEventBySlug as jest.Mock).mockResolvedValueOnce({
+        id: 1,
+        slug: 'event-slug',
+        name: 'Test Event',
+        visibility: 'public',
+      });
+
+      (userService.getUserBySlug as jest.Mock).mockResolvedValueOnce({
+        id: 1,
+        matrixUserId: '@user:matrix.org',
+        matrixAccessToken: 'access-token',
+        matrixDeviceId: 'device-id',
+        slug: 'user-slug',
+      });
+
       const mockChatRoom = {
         id: 1,
         matrixRoomId: 'abc123',
@@ -167,11 +287,17 @@ describe('MatrixChatRoomManagerAdapter', () => {
         user2Id: null,
         settings: {},
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
       } as unknown as ChatRoomEntity;
-      (mockChatRoomRepository.findOne as jest.Mock).mockResolvedValueOnce(mockChatRoom);
+      (mockChatRoomRepository.findOne as jest.Mock).mockResolvedValueOnce(
+        mockChatRoom,
+      );
 
-      const result = await service.ensureEventChatRoom(1, 1, 'tenant1');
+      const result = await service.ensureEventChatRoom(
+        'event-slug',
+        'user-slug',
+        'tenant1',
+      );
 
       expect(result).toEqual(mockChatRoom);
       expect(mockChatRoomRepository.findOne).toHaveBeenCalledWith({
@@ -190,7 +316,9 @@ describe('MatrixChatRoomManagerAdapter', () => {
         name: 'Test Event',
         visibility: 'public',
       };
-      (eventQueryService.findById as jest.Mock).mockResolvedValueOnce(mockEvent);
+      (eventQueryService.showEventBySlug as jest.Mock).mockResolvedValueOnce(
+        mockEvent,
+      );
 
       // Mock user service to return a user
       const mockUser = {
@@ -198,11 +326,13 @@ describe('MatrixChatRoomManagerAdapter', () => {
         matrixUserId: '@user:matrix.org',
         slug: 'test-user',
       } as UserEntity;
-      (userService.findById as jest.Mock).mockResolvedValueOnce(mockUser);
+      (userService.getUserBySlug as jest.Mock).mockResolvedValueOnce(mockUser);
 
       // Mock matrix room service to create a room
       const mockRoomInfo = { roomId: 'new-room-id' };
-      (matrixRoomService.createRoom as jest.Mock).mockResolvedValueOnce(mockRoomInfo);
+      (matrixRoomService.createRoom as jest.Mock).mockResolvedValueOnce(
+        mockRoomInfo,
+      );
 
       // Mock chat room repository create and save
       const mockChatRoom = {
@@ -220,26 +350,36 @@ describe('MatrixChatRoomManagerAdapter', () => {
         user2Id: null,
         settings: {},
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
       } as unknown as ChatRoomEntity;
-      (mockChatRoomRepository.create as jest.Mock).mockReturnValueOnce(mockChatRoom);
-      (mockChatRoomRepository.save as jest.Mock).mockResolvedValueOnce(mockChatRoom);
+      (mockChatRoomRepository.create as jest.Mock).mockReturnValueOnce(
+        mockChatRoom,
+      );
+      (mockChatRoomRepository.save as jest.Mock).mockResolvedValueOnce(
+        mockChatRoom,
+      );
 
       // Call the method
-      const result = await service.ensureEventChatRoom(1, 1, 'tenant1');
+      const result = await service.ensureEventChatRoom(
+        'test-event',
+        'test-user',
+        'tenant1',
+      );
 
       // Assertions
       expect(mockChatRoomRepository.findOne).toHaveBeenCalledWith({
         where: { event: { id: 1 } },
       });
-      expect(eventQueryService.findById).toHaveBeenCalledWith(1, 'tenant1');
-      expect(userService.findById).toHaveBeenCalledWith(1, 'tenant1');
+      expect(eventQueryService.showEventBySlug).toHaveBeenCalledWith(
+        'test-event',
+      );
+      expect(userService.getUserBySlug).toHaveBeenCalledWith('test-user');
       expect(matrixRoomService.createRoom).toHaveBeenCalled();
       expect(mockChatRoomRepository.create).toHaveBeenCalled();
       expect(mockChatRoomRepository.save).toHaveBeenCalledWith(mockChatRoom);
       expect(mockEventRepository.update).toHaveBeenCalledWith(
         { id: 1 },
-        { matrixRoomId: 'new-room-id' }
+        { matrixRoomId: 'new-room-id' },
       );
       expect(result).toEqual(mockChatRoom);
     });
@@ -249,12 +389,14 @@ describe('MatrixChatRoomManagerAdapter', () => {
       (mockChatRoomRepository.findOne as jest.Mock).mockResolvedValueOnce(null);
 
       // Mock event query service to return null (event not found)
-      (eventQueryService.findById as jest.Mock).mockResolvedValueOnce(null);
+      (eventQueryService.showEventBySlug as jest.Mock).mockResolvedValueOnce(
+        null,
+      );
 
       // Call the method and expect it to throw
-      await expect(service.ensureEventChatRoom(1, 1, 'tenant1')).rejects.toThrow(
-        'Event with id 1 not found'
-      );
+      await expect(
+        service.ensureEventChatRoom('test-event', 'test-user', 'tenant1'),
+      ).rejects.toThrow('Event with slug test-event not found');
     });
   });
 
@@ -267,7 +409,9 @@ describe('MatrixChatRoomManagerAdapter', () => {
         name: 'Test Event',
         visibility: 'public',
       };
-      (eventQueryService.findById as jest.Mock).mockResolvedValueOnce(mockEvent);
+      (eventQueryService.showEventBySlug as jest.Mock).mockResolvedValueOnce(
+        mockEvent,
+      );
 
       // Mock chat room repository findOne to return a chat room
       const mockChatRoom = {
@@ -285,9 +429,9 @@ describe('MatrixChatRoomManagerAdapter', () => {
         user2Id: null,
         settings: {},
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
       } as unknown as ChatRoomEntity;
-      
+
       (mockChatRoomRepository.findOne as jest.Mock)
         .mockResolvedValueOnce(mockChatRoom) // First for getChatRoomForEvent
         .mockResolvedValueOnce({
@@ -306,22 +450,35 @@ describe('MatrixChatRoomManagerAdapter', () => {
       (userService.findById as jest.Mock).mockResolvedValueOnce(mockUser);
 
       // Mock matrix room service inviteUser and joinRoom
-      (matrixRoomService.inviteUser as jest.Mock).mockResolvedValueOnce(undefined);
-      (matrixRoomService.joinRoom as jest.Mock).mockResolvedValueOnce(undefined);
+      (matrixRoomService.inviteUser as jest.Mock).mockResolvedValueOnce(
+        undefined,
+      );
+      (matrixRoomService.joinRoom as jest.Mock).mockResolvedValueOnce(
+        undefined,
+      );
 
       // Call the method
-      await service.addUserToEventChatRoom(1, 1, 'tenant1');
+      await service.addUserToEventChatRoom(
+        'test-event',
+        'test-user',
+        'tenant1',
+      );
 
       // Assertions
-      expect(eventQueryService.findById).toHaveBeenCalledWith(1, 'tenant1');
+      expect(eventQueryService.showEventBySlug).toHaveBeenCalledWith(
+        'test-event',
+      );
       expect(mockChatRoomRepository.findOne).toHaveBeenCalled(); // Don't check call count as it may vary
-      expect(userService.findById).toHaveBeenCalledWith(1, 'tenant1');
-      expect(matrixRoomService.inviteUser).toHaveBeenCalledWith('abc123', '@user:matrix.org');
+      expect(userService.getUserBySlug).toHaveBeenCalledWith('test-user');
+      expect(matrixRoomService.inviteUser).toHaveBeenCalledWith(
+        'abc123',
+        '@user:matrix.org',
+      );
       expect(matrixRoomService.joinRoom).toHaveBeenCalledWith(
         'abc123',
         '@user:matrix.org',
         'access-token',
-        'device-id'
+        'device-id',
       );
       // Don't verify save was called as it depends on internal implementation
     });
@@ -334,7 +491,9 @@ describe('MatrixChatRoomManagerAdapter', () => {
         name: 'Test Event',
         visibility: 'public',
       };
-      (eventQueryService.findById as jest.Mock).mockResolvedValueOnce(mockEvent);
+      (eventQueryService.showEventBySlug as jest.Mock).mockResolvedValueOnce(
+        mockEvent,
+      );
 
       // Mock chat room repository findOne to return a chat room
       const mockChatRoom = {
@@ -352,9 +511,9 @@ describe('MatrixChatRoomManagerAdapter', () => {
         user2Id: null,
         settings: {},
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
       } as unknown as ChatRoomEntity;
-      
+
       const mockUser = {
         id: 1,
         matrixUserId: '@user:matrix.org',
@@ -362,10 +521,10 @@ describe('MatrixChatRoomManagerAdapter', () => {
         matrixDeviceId: 'device-id',
         slug: 'test-user',
       } as UserEntity;
-      
+
       (mockChatRoomRepository.findOne as jest.Mock)
         .mockResolvedValueOnce(mockChatRoom) // First for getChatRoomForEvent
-        .mockResolvedValueOnce({ 
+        .mockResolvedValueOnce({
           ...mockChatRoom,
           members: [mockUser], // User is already a member
         });
@@ -379,13 +538,22 @@ describe('MatrixChatRoomManagerAdapter', () => {
       });
 
       // Call the method
-      await service.addUserToEventChatRoom(1, 1, 'tenant1');
+      await service.addUserToEventChatRoom(
+        'test-event',
+        'test-user',
+        'tenant1',
+      );
 
       // Assertions
-      expect(eventQueryService.findById).toHaveBeenCalledWith(1, 'tenant1');
+      expect(eventQueryService.showEventBySlug).toHaveBeenCalledWith(
+        'test-event',
+      );
       expect(mockChatRoomRepository.findOne).toHaveBeenCalledTimes(2);
-      expect(userService.findById).toHaveBeenCalledWith(1, 'tenant1');
-      expect(matrixRoomService.inviteUser).toHaveBeenCalledWith('abc123', '@user:matrix.org');
+      expect(userService.getUserBySlug).toHaveBeenCalledWith('test-user');
+      expect(matrixRoomService.inviteUser).toHaveBeenCalledWith(
+        'abc123',
+        '@user:matrix.org',
+      );
       // Should not save the chat room since user is already a member
       expect(mockChatRoomRepository.save).not.toHaveBeenCalled();
     });
@@ -409,9 +577,11 @@ describe('MatrixChatRoomManagerAdapter', () => {
         user2Id: null,
         settings: {},
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
       } as unknown as ChatRoomEntity;
-      (mockChatRoomRepository.findOne as jest.Mock).mockResolvedValueOnce(mockChatRoom);
+      (mockChatRoomRepository.findOne as jest.Mock).mockResolvedValueOnce(
+        mockChatRoom,
+      );
 
       // Mock user service to return a user with Matrix credentials
       const mockUser = {
@@ -436,10 +606,12 @@ describe('MatrixChatRoomManagerAdapter', () => {
           content: 'Hello user',
         },
       ];
-      (matrixMessageService.getRoomMessages as jest.Mock).mockResolvedValueOnce({
-        messages: mockMessages,
-        end: 'end-token',
-      });
+      (matrixMessageService.getRoomMessages as jest.Mock).mockResolvedValueOnce(
+        {
+          messages: mockMessages,
+          end: 'end-token',
+        },
+      );
 
       // Mock userService.findByMatrixUserId
       (userService.findByMatrixUserId as jest.Mock).mockResolvedValueOnce({
@@ -459,11 +631,14 @@ describe('MatrixChatRoomManagerAdapter', () => {
         'abc123',
         50,
         undefined,
-        '@user:matrix.org'
+        '@user:matrix.org',
       );
       expect(result.messages.length).toBe(2);
       expect(result.end).toBe('end-token');
-      expect(userService.findByMatrixUserId).toHaveBeenCalledWith('@user:matrix.org', 'tenant1');
+      expect(userService.findByMatrixUserId).toHaveBeenCalledWith(
+        '@user:matrix.org',
+        'tenant1',
+      );
       // First message should have sender_name
       expect(result.messages[0]).toHaveProperty('sender_name', 'Test User');
     });
@@ -487,9 +662,9 @@ describe('MatrixChatRoomManagerAdapter', () => {
         user2Id: null,
         settings: {},
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
       } as unknown as ChatRoomEntity;
-      
+
       (mockChatRoomRepository.findOne as jest.Mock)
         .mockResolvedValueOnce(mockChatRoom) // First call
         .mockResolvedValueOnce({ ...mockChatRoom, members: [] }); // Second call with members
@@ -507,14 +682,22 @@ describe('MatrixChatRoomManagerAdapter', () => {
       (userService.findById as jest.Mock).mockResolvedValueOnce(mockUser);
 
       // Mock matrix room service inviteUser and joinRoom
-      (matrixRoomService.inviteUser as jest.Mock).mockResolvedValueOnce(undefined);
-      (matrixRoomService.joinRoom as jest.Mock).mockResolvedValueOnce(undefined);
+      (matrixRoomService.inviteUser as jest.Mock).mockResolvedValueOnce(
+        undefined,
+      );
+      (matrixRoomService.joinRoom as jest.Mock).mockResolvedValueOnce(
+        undefined,
+      );
 
       // Mock matrix user service setUserDisplayName
-      (matrixUserService.setUserDisplayName as jest.Mock).mockResolvedValueOnce(undefined);
+      (matrixUserService.setUserDisplayName as jest.Mock).mockResolvedValueOnce(
+        undefined,
+      );
 
       // Mock matrix message service sendMessage
-      (matrixMessageService.sendMessage as jest.Mock).mockResolvedValueOnce('msg1');
+      (matrixMessageService.sendMessage as jest.Mock).mockResolvedValueOnce(
+        'msg1',
+      );
 
       // Call the method
       const result = await service.sendMessage(1, 1, 'Hello world', 'tenant1');
@@ -522,26 +705,31 @@ describe('MatrixChatRoomManagerAdapter', () => {
       // Assertions
       expect(mockChatRoomRepository.findOne).toHaveBeenCalledTimes(2);
       expect(userService.findById).toHaveBeenCalledWith(1, 'tenant1');
-      expect(matrixRoomService.inviteUser).toHaveBeenCalledWith('abc123', '@user:matrix.org');
+      expect(matrixRoomService.inviteUser).toHaveBeenCalledWith(
+        'abc123',
+        '@user:matrix.org',
+      );
       expect(matrixRoomService.joinRoom).toHaveBeenCalledWith(
         'abc123',
         '@user:matrix.org',
         'access-token',
-        'device-id'
+        'device-id',
       );
       expect(matrixUserService.setUserDisplayName).toHaveBeenCalledWith(
         '@user:matrix.org',
         'access-token',
         'Test User',
-        'device-id'
+        'device-id',
       );
-      expect(matrixMessageService.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
-        roomId: 'abc123',
-        content: 'Hello world',
-        userId: '@user:matrix.org',
-        accessToken: 'access-token',
-        deviceId: 'device-id',
-      }));
+      expect(matrixMessageService.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          roomId: 'abc123',
+          content: 'Hello world',
+          userId: '@user:matrix.org',
+          accessToken: 'access-token',
+          deviceId: 'device-id',
+        }),
+      );
       expect(result).toBe('msg1');
     });
   });
@@ -555,34 +743,56 @@ describe('MatrixChatRoomManagerAdapter', () => {
       });
 
       // Call the method
-      const result = await service.checkEventExists(1, 'tenant1');
+      // Mock the service to return an event
+      (
+        eventQueryService.showEventBySlugWithTenant as jest.Mock
+      ).mockResolvedValueOnce({
+        id: 1,
+        slug: 'test-event',
+        name: 'Test Event',
+      });
+
+      const result = await service.checkEventExists('test-event', 'tenant1');
 
       // Assertions
-      expect(eventQueryService.findById).toHaveBeenCalledWith(1, 'tenant1');
+      expect(eventQueryService.showEventBySlugWithTenant).toHaveBeenCalledWith(
+        'test-event',
+        'tenant1',
+      );
       expect(result).toBe(true);
     });
 
     it('should return false if event does not exist', async () => {
       // Mock event query service to return null
-      (eventQueryService.findById as jest.Mock).mockResolvedValueOnce(null);
+      (
+        eventQueryService.showEventBySlugWithTenant as jest.Mock
+      ).mockResolvedValueOnce(null);
 
       // Call the method
-      const result = await service.checkEventExists(1, 'tenant1');
+      const result = await service.checkEventExists('test-event', 'tenant1');
 
       // Assertions
-      expect(eventQueryService.findById).toHaveBeenCalledWith(1, 'tenant1');
+      expect(eventQueryService.showEventBySlugWithTenant).toHaveBeenCalledWith(
+        'test-event',
+        'tenant1',
+      );
       expect(result).toBe(false);
     });
 
     it('should return false if event query throws an error', async () => {
       // Mock event query service to throw an error
-      (eventQueryService.findById as jest.Mock).mockRejectedValueOnce(new Error('Database error'));
+      (
+        eventQueryService.showEventBySlugWithTenant as jest.Mock
+      ).mockRejectedValueOnce(new Error('Database error'));
 
       // Call the method
-      const result = await service.checkEventExists(1, 'tenant1');
+      const result = await service.checkEventExists('test-event', 'tenant1');
 
       // Assertions
-      expect(eventQueryService.findById).toHaveBeenCalledWith(1, 'tenant1');
+      expect(eventQueryService.showEventBySlugWithTenant).toHaveBeenCalledWith(
+        'test-event',
+        'tenant1',
+      );
       expect(result).toBe(false);
     });
   });
