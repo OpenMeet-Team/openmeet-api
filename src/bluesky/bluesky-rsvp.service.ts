@@ -124,7 +124,7 @@ export class BlueskyRsvpService {
 
       // Generate a consistent rkey for the RSVP based on event and user
       // Format: event-rkey-rsvp-user-did
-      const rkey = `${event.sourceData.rkey}-rsvp}`;
+      const rkey = `${event.sourceData.rkey}-rsvp`;
 
       this.logger.debug(`Sending RSVP record to Bluesky PDS`, {
         userDid: did,

@@ -246,6 +246,17 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
         return null;
       }
     } catch (error) {
+      // Log the full error details
+      const errorDetails = {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        errorMessage: error.message,
+        errorType: error.constructor?.name,
+        headers: error.response?.headers,
+        stack: error.stack,
+      };
+
       // Special handling for rate limiting errors
       if (error.response && error.response.status === 429) {
         // Get retry time from Matrix response if available
@@ -266,6 +277,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
 
         this.logger.warn(
           `Matrix rate limit reached (429). Will back off for ${this.tokenRegenerationBackoff}ms before next token attempt`,
+          errorDetails,
         );
       } else {
         // For non-rate-limit errors, still increase backoff but log as error
@@ -275,7 +287,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
         );
         this.logger.error(
           `Failed to generate admin token: ${error.message}`,
-          error.stack,
+          errorDetails,
         );
       }
       return null;
@@ -775,14 +787,23 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
         this.tokenValidityCache = { valid: true, timestamp: now };
         return true;
       } catch (whoamiError) {
+        // Log detailed error info
         this.logger.warn(
           `Admin token appears invalid: ${whoamiError.message}. Attempting to regenerate.`,
+          {
+            status: whoamiError.response?.status,
+            data: whoamiError.response?.data,
+            error: whoamiError.toString(),
+            stack: whoamiError.stack,
+          },
         );
 
         // Try to regenerate the token with built-in rate limit handling
         const newToken = await this.regenerateAdminAccessToken();
         if (!newToken) {
-          this.logger.error('Failed to regenerate admin token.');
+          this.logger.error(
+            'Failed to regenerate admin token - continuing without valid token',
+          );
           this.tokenValidityCache = { valid: false, timestamp: now };
           return false;
         }

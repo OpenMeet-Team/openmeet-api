@@ -349,6 +349,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
 
   /**
    * Ensure the admin user is a member of the room
+   * Using Matrix SDK consistently with focused error handling
    * @private
    */
   private async ensureAdminInRoom(roomId: string, client: any): Promise<void> {
@@ -358,39 +359,170 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         `Ensuring admin user ${adminUserId} is in room ${roomId}`,
       );
 
-      // Try to join the room as admin
+      // Extract the server name from the room ID
+      // Room IDs are in the format !roomid:server.name
+      const serverName = roomId.split(':')[1];
+
+      this.logger.debug(
+        `Admin user ${adminUserId} joining room ${roomId} via server: ${serverName || 'none'}`,
+      );
+
       try {
-        await client.client.joinRoom(roomId);
-        this.logger.debug(
-          `Admin user ${adminUserId} successfully joined room ${roomId}`,
-        );
-      } catch (joinError) {
-        // If error indicates already in room, that's fine
+        // Try to join the room using Matrix SDK - using client passed in from caller
+        // Some SDK versions support passing server_name directly for better joining
         if (
-          joinError.message &&
-          (joinError.message.includes('already in the room') ||
-            joinError.message.includes('already a member') ||
-            joinError.message.includes('already joined'))
+          serverName &&
+          typeof client.client.joinRoom === 'function' &&
+          client.client.joinRoom.length >= 2
         ) {
-          this.logger.debug(
-            `Admin user ${adminUserId} is already in room ${roomId}`,
-          );
+          try {
+            await client.client.joinRoom(roomId, { server_name: [serverName] });
+            this.logger.debug(
+              `Admin user joined room ${roomId} using SDK with server_name`,
+            );
+          } catch (joinError) {
+            // Check error details
+            this.handleJoinError(joinError, roomId, adminUserId, 'admin');
+          }
         } else {
-          // For other errors, try to get an invite from someone in the room
-          // This is a fallback and might not always work depending on permissions
-          this.logger.warn(
-            `Admin user failed to join room ${roomId}: ${joinError.message}. Will try alternative methods.`,
-          );
-          throw joinError;
+          // Standard join without server_name parameter
+          try {
+            await client.client.joinRoom(roomId);
+            this.logger.debug(
+              `Admin user joined room ${roomId} using standard join`,
+            );
+          } catch (joinError) {
+            // Check error details
+            this.handleJoinError(joinError, roomId, adminUserId, 'admin');
+          }
         }
+      } catch (error) {
+        // Make sure we preserve specific error messages
+        let errorMessage = `Admin user could not join room: ${error.message}`;
+
+        // Check if it's one of our specific error cases
+        if (error.message && error.message.includes('Room not found (404)')) {
+          errorMessage = error.message;
+        } else if (
+          error.message &&
+          error.message.includes('Rate limit exceeded (429)')
+        ) {
+          errorMessage = error.message;
+        }
+
+        // Log with detailed error information
+        this.logger.error(
+          `Failed to ensure admin is in room ${roomId}: ${error.message}`,
+          {
+            status: error.response?.status || error.httpStatus,
+            data: error.data || error.response?.data || null,
+            body: error.body || error.response?.body || null,
+            stack: error.stack,
+          },
+        );
+
+        throw new Error(errorMessage);
       }
     } catch (error) {
-      this.logger.error(
-        `Failed to ensure admin is in room ${roomId}: ${error.message}`,
-        error.stack,
-      );
-      throw new Error(`Admin user could not join room: ${error.message}`);
+      // Make sure we preserve specific error messages for better error reporting
+      let errorMessage = `Admin user could not join room: ${error.message}`;
+
+      // Check if it's one of our specific error cases
+      if (error.message && error.message.includes('Room not found (404)')) {
+        errorMessage = error.message;
+      } else if (
+        error.message &&
+        error.message.includes('Rate limit exceeded (429)')
+      ) {
+        errorMessage = error.message;
+      }
+
+      throw new Error(errorMessage);
     }
+  }
+
+  /**
+   * Helper method to handle common join error scenarios across methods
+   * @private
+   */
+  private handleJoinError(
+    error: any,
+    roomId: string,
+    userId: string,
+    userType: 'admin' | 'user',
+  ): void {
+    // Check if already in room - this is success
+    if (
+      error.message &&
+      (error.message.includes('already in the room') ||
+        error.message.includes('already a member') ||
+        error.message.includes('already joined'))
+    ) {
+      this.logger.debug(
+        `${userType} user ${userId} is already in room ${roomId}`,
+      );
+      return;
+    }
+
+    // For 404 errors, the room doesn't exist
+    if (
+      error.httpStatus === 404 ||
+      (error.data && error.data.errcode === 'M_NOT_FOUND') ||
+      (error.response && error.response.status === 404) ||
+      (error.message && error.message.includes('404')) ||
+      (error.message && error.message.includes('not found'))
+    ) {
+      const errorDetails = {
+        message: error.message,
+        status: error.httpStatus || error.response?.status,
+        data: error.data || error.response?.data || null,
+        errorCode: error.errcode || error.data?.errcode || null,
+      };
+      this.logger.error(
+        `Room ${roomId} not found (404) - it may have been deleted`,
+        errorDetails,
+      );
+      throw new Error(`Room not found (404): ${roomId}`);
+    }
+
+    // For 429 errors (rate limiting), give a clear error
+    if (
+      error.httpStatus === 429 ||
+      (error.data && error.data.errcode === 'M_LIMIT_EXCEEDED') ||
+      (error.response && error.response.status === 429) ||
+      (error.message && error.message.includes('429')) ||
+      (error.message && error.message.includes('limit exceeded'))
+    ) {
+      const errorDetails = {
+        message: error.message,
+        status: error.httpStatus || error.response?.status,
+        data: error.data || error.response?.data || null,
+        errorCode: error.errcode || error.data?.errcode || null,
+        retryAfter:
+          error.data?.retry_after_ms ||
+          error.response?.headers?.['retry-after'],
+      };
+      this.logger.error(
+        `Rate limit (429) hit when ${userType} trying to join room ${roomId}`,
+        errorDetails,
+      );
+      throw new Error(`Rate limit exceeded (429) when joining room: ${roomId}`);
+    }
+
+    // Log the detailed error for debugging
+    this.logger.error(
+      `Error ${userType} joining room ${roomId}: ${error.message}`,
+      {
+        message: error.message,
+        status: error.httpStatus || error.response?.status,
+        data: error.data || error.response?.data || null,
+        errorCode: error.errcode || error.data?.errcode || null,
+        stack: error.stack,
+      },
+    );
+
+    // Re-throw the error to be handled by the caller
+    throw error;
   }
 
   /**
@@ -557,6 +689,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
 
   /**
    * Join a room as a specific user
+   * With improved error handling for 404 and 429 errors, using SDK methods
    */
   async joinRoom(
     roomId: string,
@@ -569,6 +702,10 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       const config = this.matrixCoreService.getConfig();
       const sdk = this.matrixCoreService.getSdk();
 
+      // Extract the server name from the room ID
+      // Room IDs are in the format !roomid:server.name
+      const serverName = roomId.split(':')[1];
+
       // Create a temporary client for the user
       const tempClient = sdk.createClient({
         baseUrl: config.baseUrl,
@@ -578,36 +715,234 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         useAuthorizationHeader: true,
       });
 
-      // Join the room
       try {
-        await tempClient.joinRoom(roomId);
-        this.logger.debug(`User ${userId} successfully joined room ${roomId}`);
-      } catch (joinError) {
-        // Check if the error is just that the user is already in the room
+        this.logger.debug(
+          `User ${userId} joining room ${roomId} via server: ${serverName || 'none'}`,
+        );
+
+        // When using joinRoom, we can pass server names directly if available
+        if (serverName) {
+          // Try with server_name parameter directly in the SDK call
+          try {
+            await tempClient.joinRoom(roomId);
+            this.logger.debug(
+              `User ${userId} joined room ${roomId} using standard SDK join`,
+            );
+            return;
+          } catch (joinError) {
+            // Check if already in room - this is success
+            if (
+              joinError.message &&
+              (joinError.message.includes('already in the room') ||
+                joinError.message.includes('already a member') ||
+                joinError.message.includes('already joined'))
+            ) {
+              this.logger.debug(
+                `User ${userId} is already a member of room ${roomId}`,
+              );
+              return;
+            }
+
+            // For 404 errors, provide clearer information
+            if (
+              joinError.httpStatus === 404 ||
+              (joinError.data && joinError.data.errcode === 'M_NOT_FOUND') ||
+              (joinError.message && joinError.message.includes('404')) ||
+              (joinError.message && joinError.message.includes('not found'))
+            ) {
+              this.logger.error(
+                `Room ${roomId} not found (404) - it may have been deleted`,
+                {
+                  error: joinError.message,
+                  data: joinError.data || null,
+                  errorCode:
+                    joinError.errcode || joinError.data?.errcode || null,
+                },
+              );
+              throw new Error(`Room not found (404): ${roomId}`);
+            }
+
+            // For 429 errors (rate limiting), give a clear error
+            if (
+              joinError.httpStatus === 429 ||
+              (joinError.data &&
+                joinError.data.errcode === 'M_LIMIT_EXCEEDED') ||
+              (joinError.message && joinError.message.includes('429')) ||
+              (joinError.message &&
+                joinError.message.includes('limit exceeded'))
+            ) {
+              this.logger.error(
+                `Rate limit (429) hit when trying to join room ${roomId}`,
+                {
+                  error: joinError.message,
+                  data: joinError.data || null,
+                  errorCode:
+                    joinError.errcode || joinError.data?.errcode || null,
+                  retryAfter: joinError.data?.retry_after_ms,
+                },
+              );
+              throw new Error(
+                `Rate limit exceeded (429) when joining room: ${roomId}`,
+              );
+            }
+
+            // Log the detailed error for debugging
+            this.logger.error(
+              `Error joining room ${roomId} as user ${userId}`,
+              {
+                error: joinError.message,
+                data: joinError.data || null,
+                stack: joinError.stack,
+                errorCode: joinError.errcode || joinError.data?.errcode || null,
+              },
+            );
+
+            throw joinError;
+          }
+        } else {
+          // No server name available, try standard join
+          try {
+            await tempClient.joinRoom(roomId);
+            this.logger.debug(
+              `User ${userId} joined room ${roomId} using standard SDK join`,
+            );
+            return;
+          } catch (standardJoinError) {
+            // Check if already in room - this is success
+            if (
+              standardJoinError.message &&
+              (standardJoinError.message.includes('already in the room') ||
+                standardJoinError.message.includes('already a member') ||
+                standardJoinError.message.includes('already joined'))
+            ) {
+              this.logger.debug(
+                `User ${userId} is already a member of room ${roomId}`,
+              );
+              return;
+            }
+
+            // For 404 errors, provide clearer information
+            if (
+              standardJoinError.httpStatus === 404 ||
+              (standardJoinError.data &&
+                standardJoinError.data.errcode === 'M_NOT_FOUND') ||
+              (standardJoinError.message &&
+                standardJoinError.message.includes('404')) ||
+              (standardJoinError.message &&
+                standardJoinError.message.includes('not found'))
+            ) {
+              this.logger.error(
+                `Room ${roomId} not found (404) - it may have been deleted`,
+                {
+                  error: standardJoinError.message,
+                  data: standardJoinError.data || null,
+                  errorCode:
+                    standardJoinError.errcode ||
+                    standardJoinError.data?.errcode ||
+                    null,
+                },
+              );
+              throw new Error(`Room not found (404): ${roomId}`);
+            }
+
+            // For 429 errors (rate limiting), give a clear error
+            if (
+              standardJoinError.httpStatus === 429 ||
+              (standardJoinError.data &&
+                standardJoinError.data.errcode === 'M_LIMIT_EXCEEDED') ||
+              (standardJoinError.message &&
+                standardJoinError.message.includes('429')) ||
+              (standardJoinError.message &&
+                standardJoinError.message.includes('limit exceeded'))
+            ) {
+              this.logger.error(
+                `Rate limit (429) hit when trying to join room ${roomId}`,
+                {
+                  error: standardJoinError.message,
+                  data: standardJoinError.data || null,
+                  errorCode:
+                    standardJoinError.errcode ||
+                    standardJoinError.data?.errcode ||
+                    null,
+                  retryAfter: standardJoinError.data?.retry_after_ms,
+                },
+              );
+              throw new Error(
+                `Rate limit exceeded (429) when joining room: ${roomId}`,
+              );
+            }
+
+            // Log the detailed error for debugging
+            this.logger.error(
+              `Error joining room ${roomId} as user ${userId}`,
+              {
+                error: standardJoinError.message,
+                data: standardJoinError.data || null,
+                stack: standardJoinError.stack,
+                errorCode:
+                  standardJoinError.errcode ||
+                  standardJoinError.data?.errcode ||
+                  null,
+              },
+            );
+
+            throw standardJoinError;
+          }
+        }
+      } catch (error) {
+        // Check if this is an "already in room" type of error which is actually success
         if (
-          joinError.message &&
-          (joinError.message.includes('already in the room') ||
-            joinError.message.includes('already a member') ||
-            joinError.message.includes('already joined'))
+          error.message &&
+          (error.message.includes('already in the room') ||
+            error.message.includes('already a member') ||
+            error.message.includes('already joined'))
         ) {
           this.logger.debug(
             `User ${userId} is already a member of room ${roomId}`,
           );
-          // This is actually not an error for our purposes
-        } else {
-          this.logger.error(
-            `Error joining room ${roomId} as user ${userId}: ${joinError.message}`,
-            joinError.stack,
-          );
-          throw joinError; // Re-throw the error
+          return; // This is actually not an error for our purposes
         }
+
+        // Preserve specific error types
+        if (error.message && error.message.includes('Room not found (404)')) {
+          throw error; // Already formatted nicely
+        }
+
+        if (
+          error.message &&
+          error.message.includes('Rate limit exceeded (429)')
+        ) {
+          throw error; // Already formatted nicely
+        }
+
+        // Re-throw with better logging
+        this.logger.error(
+          `Failed to join room ${roomId} as user ${userId}: ${error.message}`,
+          {
+            error: error.message,
+            data: error.data || null,
+            stack: error.stack,
+            errorCode: error.errcode || error.data?.errcode || null,
+          },
+        );
+
+        throw error;
       }
     } catch (error) {
-      this.logger.error(
-        `Error joining room ${roomId} as user ${userId}: ${error.message}`,
-        error.stack,
-      );
-      throw new Error(`Failed to join Matrix room: ${error.message}`);
+      // Make sure we preserve specific error messages
+      let errorMessage = `Failed to join Matrix room: ${error.message}`;
+
+      // Check if it's one of our specific error cases to preserve the message
+      if (error.message && error.message.includes('Room not found (404)')) {
+        errorMessage = error.message;
+      } else if (
+        error.message &&
+        error.message.includes('Rate limit exceeded (429)')
+      ) {
+        errorMessage = error.message;
+      }
+
+      throw new Error(errorMessage);
     }
   }
 
