@@ -317,8 +317,9 @@ export class EventAttendeeService {
     return attendee;
   }
 
-  // Keep this method for backward compatibility, but implement it using slugs
-  // @deprecated Use findEventAttendeeByUserSlug instead
+  /**
+   * @deprecated Use findEventAttendeeByUserSlug instead
+   */
   @Trace('event-attendee.findEventAttendeeByUserId')
   async findEventAttendeeByUserId(
     eventId: number,

@@ -898,6 +898,58 @@ export class MatrixGateway
       throw new Error('Matrix credentials missing');
     }
 
+    // Verify if the token is valid
+    let isTokenValid = false;
+    try {
+      isTokenValid = await this.matrixUserService.verifyAccessToken(
+        user.matrixUserId,
+        user.matrixAccessToken,
+      );
+    } catch (error) {
+      this.logger.warn(`Error verifying token: ${error.message}`);
+      isTokenValid = false;
+    }
+
+    // If token is invalid, try to refresh it
+    if (!isTokenValid) {
+      this.logger.warn(
+        `Matrix token for user ${user.id} is invalid, attempting to regenerate...`,
+      );
+
+      try {
+        const newToken = await this.matrixUserService.generateNewAccessToken(
+          user.matrixUserId,
+        );
+        if (newToken) {
+          this.logger.log(`Successfully regenerated token for user ${user.id}`);
+
+          // Update user record with new token
+          await userService.update(
+            user.id,
+            { matrixAccessToken: newToken },
+            tenantId,
+          );
+
+          // Update the token for this connection
+          user.matrixAccessToken = newToken;
+
+          // Update socket data for future requests in this session
+          client.data.matrixAccessToken = newToken;
+        } else {
+          this.logger.error(`Failed to regenerate token for user ${user.id}`);
+          throw new Error('Failed to refresh Matrix credentials');
+        }
+      } catch (error) {
+        this.logger.error(
+          `Error refreshing token: ${error.message}`,
+          error.stack,
+        );
+        throw new Error(
+          `Failed to refresh Matrix credentials: ${error.message}`,
+        );
+      }
+    }
+
     // Use the MatrixMessageService to send the message
     const eventId = await this.matrixMessageService.sendMessage({
       roomId: data.roomId,

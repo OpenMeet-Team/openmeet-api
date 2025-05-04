@@ -456,7 +456,7 @@ export class ChatRoomService {
     }
 
     // Get the creator user
-    const creator = await this.userService.getUserById(creatorId, tenantId);
+    const creator = await this.userService.getUserById(creatorId);
 
     // Create a chat room in Matrix
     // Using the event slug with tenant ID for a unique, stable identifier
@@ -1978,52 +1978,76 @@ export class ChatRoomService {
     // Get the chat room
     const chatRoom = await this.chatRoomRepository.findOne({
       where: { id: roomId },
+      select: ['id', 'matrixRoomId'],
+      relations: ['event', 'group'],
     });
 
     if (!chatRoom) {
-      throw new Error(`Chat room with id ${roomId} not found`);
+      throw new Error(`Chat room with ID ${roomId} not found`);
+    }
+
+    if (!chatRoom.matrixRoomId) {
+      throw new Error(`Chat room ${roomId} does not have a Matrix room ID`);
     }
 
     // Ensure user has Matrix credentials (will provision them if needed)
     const user = await this.ensureUserHasMatrixCredentials(userId);
 
-    // Make sure user is in the room
-    try {
-      // Check if user is already a member of the room in the database
-      const roomWithMembers = await this.chatRoomRepository.findOne({
-        where: { id: chatRoom.id },
-        relations: ['members'],
-      });
-
-      const isMember = roomWithMembers?.members?.some(
-        (member) => member.id === userId,
+    // Verify if the user's Matrix token is valid and refresh if needed
+    if (user.matrixUserId && user.matrixAccessToken) {
+      const isTokenValid = await this.matrixUserService.verifyAccessToken(
+        user.matrixUserId,
+        user.matrixAccessToken,
       );
 
-      // If not a member, invite and join the room
-      if (!isMember) {
-        this.logger.log(
-          `User ${userId} not yet a member of room ${chatRoom.id}, adding them now`,
+      if (!isTokenValid) {
+        this.logger.warn(
+          `Matrix token for user ${userId} is invalid, regenerating...`,
         );
 
-        // First, invite the user via admin
-        await this.matrixRoomService.inviteUser(
-          chatRoom.matrixRoomId,
-          user.matrixUserId!, // Non-null assertion
-        );
+        try {
+          // Generate a new token using admin API
+          const newToken = await this.matrixUserService.generateNewAccessToken(
+            user.matrixUserId,
+          );
 
-        // Then have the user join the room
-        await this.matrixRoomService.joinRoom(
-          chatRoom.matrixRoomId,
-          user.matrixUserId!, // Non-null assertion
-          user.matrixAccessToken!, // Non-null assertion
-          user.matrixDeviceId,
-        );
+          if (newToken) {
+            // Update user with the new token
+            await this.userService.update(userId, {
+              matrixAccessToken: newToken,
+            });
 
-        // Add user to the room's members in the database
-        if (roomWithMembers) {
-          roomWithMembers.members.push(user);
-          await this.chatRoomRepository.save(roomWithMembers);
+            // Update our local user object
+            user.matrixAccessToken = newToken;
+
+            this.logger.log(
+              `Successfully refreshed Matrix token for user ${userId}`,
+            );
+          } else {
+            this.logger.error(
+              `Failed to generate new token for user ${userId}`,
+            );
+            throw new Error('Failed to refresh Matrix credentials');
+          }
+        } catch (error) {
+          this.logger.error(
+            `Error refreshing Matrix token: ${error.message}`,
+            error.stack,
+          );
+          throw new Error(
+            `Failed to refresh Matrix credentials: ${error.message}`,
+          );
         }
+      }
+    }
+
+    // Ensure the user is in the room
+    try {
+      // This method handles adding the user to the room if needed
+      if (chatRoom.event && chatRoom.event.id) {
+        await this.addUserToEventChatRoom(chatRoom.event.id, userId);
+      } else if (chatRoom.group && chatRoom.group.id) {
+        await this.addUserToGroupChatRoom(chatRoom.group.id, userId);
       }
     } catch (error) {
       this.logger.warn(

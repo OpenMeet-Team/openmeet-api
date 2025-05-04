@@ -1,14 +1,19 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import axios from 'axios';
 import { MatrixCoreService } from './matrix-core.service';
 import { IMatrixMessageProvider } from '../types/matrix.interfaces';
 import { Message, SendMessageOptions } from '../types/matrix.types';
+import { MatrixUserService } from './matrix-user.service';
 
 @Injectable()
 export class MatrixMessageService implements IMatrixMessageProvider {
   private readonly logger = new Logger(MatrixMessageService.name);
 
-  constructor(private readonly matrixCoreService: MatrixCoreService) {}
+  constructor(
+    private readonly matrixCoreService: MatrixCoreService,
+    @Inject(forwardRef(() => MatrixUserService))
+    private readonly matrixUserService: MatrixUserService,
+  ) {}
 
   /**
    * Send a message to a room
@@ -71,13 +76,64 @@ export class MatrixMessageService implements IMatrixMessageProvider {
         const senderDevice =
           senderDeviceId || deviceId || config.defaultDeviceId;
 
+        // Verify the token is valid before sending
+        let finalToken = senderToken;
+        let isTokenValid = false;
+
+        try {
+          isTokenValid = await this.matrixUserService.verifyAccessToken(
+            senderId,
+            finalToken,
+          );
+        } catch (error) {
+          this.logger.warn(
+            `Error verifying token for ${senderId}: ${error.message}`,
+          );
+          isTokenValid = false;
+        }
+
+        // If token is invalid, try to refresh it
+        if (!isTokenValid) {
+          this.logger.warn(
+            `Matrix token for ${senderId} is invalid, attempting to regenerate...`,
+          );
+
+          try {
+            const newToken =
+              await this.matrixUserService.generateNewAccessToken(senderId);
+            if (newToken) {
+              this.logger.log(`Successfully regenerated token for ${senderId}`);
+              finalToken = newToken;
+
+              // Note: Ideally we would update the user record here, but we don't have
+              // the user ID (number) or tenant ID in this context, only the Matrix user ID.
+              // The next authentication attempt should update the tokens in the database.
+            } else {
+              this.logger.error(`Failed to regenerate token for ${senderId}`);
+              throw new Error('Failed to refresh Matrix credentials');
+            }
+          } catch (refreshError) {
+            this.logger.error(
+              `Error regenerating token: ${refreshError.message}`,
+              refreshError.stack,
+            );
+            throw new Error(
+              `Failed to refresh Matrix credentials: ${refreshError.message}`,
+            );
+          }
+        } else {
+          this.logger.debug(
+            `Token for ${senderId} is valid, proceeding with message send`,
+          );
+        }
+
         this.logger.debug(`Sending message as user ${senderId}`);
 
-        // Create a temporary client for the user
+        // Create a temporary client for the user with potentially refreshed token
         const tempClient = sdk.createClient({
           baseUrl: config.baseUrl,
           userId: senderId,
-          accessToken: senderToken,
+          accessToken: finalToken,
           deviceId: senderDevice,
           useAuthorizationHeader: true,
           logger: {
@@ -91,14 +147,27 @@ export class MatrixMessageService implements IMatrixMessageProvider {
         });
 
         // Send the message
-        const response = await tempClient.sendEvent(
-          roomId,
-          msgtype,
-          messageContent,
-          '',
-        );
+        try {
+          const response = await tempClient.sendEvent(
+            roomId,
+            msgtype,
+            messageContent,
+            '',
+          );
 
-        return response.event_id;
+          return response.event_id;
+        } catch (sendError) {
+          // If we still get an error after token refresh, it might be a room access issue
+          if (sendError.message?.includes('M_FORBIDDEN')) {
+            this.logger.error(
+              `User ${senderId} does not have permission to send messages to room ${roomId}`,
+            );
+            throw new Error(
+              'You do not have permission to send messages to this room',
+            );
+          }
+          throw sendError;
+        }
       }
 
       // Fall back to using the admin client
