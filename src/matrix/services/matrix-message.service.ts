@@ -99,15 +99,26 @@ export class MatrixMessageService implements IMatrixMessageProvider {
           );
 
           try {
+            // Get a new token through admin API
             const newToken =
               await this.matrixUserService.generateNewAccessToken(senderId);
             if (newToken) {
               this.logger.log(`Successfully regenerated token for ${senderId}`);
               finalToken = newToken;
-
-              // Note: Ideally we would update the user record here, but we don't have
-              // the user ID (number) or tenant ID in this context, only the Matrix user ID.
-              // The next authentication attempt should update the tokens in the database.
+              
+              // Extract username for client cache clearing
+              const username = senderId.startsWith('@')
+                ? senderId.split(':')[0].substring(1)
+                : senderId;
+              
+              // Clear the client from the cache immediately to force recreation
+              try {
+                await this.matrixUserService.clearUserClients(username, options.tenantId);
+                this.logger.debug(`Cleared cached Matrix clients for user ${username} after token refresh`);
+              } catch (clearError) {
+                this.logger.warn(`Error clearing cached Matrix clients: ${clearError.message}`);
+                // Continue anyway
+              }
             } else {
               this.logger.error(`Failed to regenerate token for ${senderId}`);
               throw new Error('Failed to refresh Matrix credentials');

@@ -243,9 +243,13 @@ export class MatrixGateway
   /**
    * Initialize Matrix client for a user connection
    * @param client Connected socket client
+   * @param user User object
+   * @param tenantId Optional tenant ID
    */
   private async initializeMatrixClientForConnection(
     client: Socket,
+    user?: any,
+    tenantId?: string,
   ): Promise<void> {
     if (!client.data.hasMatrixCredentials) {
       return;
@@ -262,26 +266,29 @@ export class MatrixGateway
         this.logger,
       );
 
-      // Get tenant ID from client data
-      const tenantId = client.data.tenantId;
+      // Get tenant ID from client data or from the parameter
+      const finalTenantId = tenantId || client.data.tenantId;
       this.logger.debug(
-        `Using tenant ID for Matrix client initialization: ${tenantId || 'undefined'}`,
+        `Using tenant ID for Matrix client initialization: ${finalTenantId || 'undefined'}`,
       );
 
-      // Fetch user to get the slug
-      const user = await MatrixGatewayHelper.resolveUserById(
-        userId,
-        userService,
-        tenantId,
-        this.logger,
-      );
+      // Fetch user from parameter or resolve from userId
+      let finalUser = user;
+      if (!finalUser) {
+        finalUser = await MatrixGatewayHelper.resolveUserById(
+          userId,
+          userService,
+          finalTenantId,
+          this.logger,
+        );
+      }
 
       // Initialize Matrix client using DB credentials (will be cached in MatrixUserService)
       // Pass userService and tenantId
       await this.matrixUserService.getClientForUser(
-        user.slug,
+        finalUser.slug,
         userService,
-        tenantId,
+        finalTenantId,
       );
 
       // Store the user ID in socket data for connection management
@@ -935,6 +942,25 @@ export class MatrixGateway
 
           // Update socket data for future requests in this session
           client.data.matrixAccessToken = newToken;
+          
+          // Clear any cached Matrix clients for this user to ensure they're recreated with the new token
+          try {
+            await this.matrixUserService.clearUserClients(user.slug, tenantId);
+            this.logger.debug(`Cleared cached Matrix clients for user ${user.slug} after token refresh`);
+          } catch (clearError) {
+            this.logger.warn(`Error clearing cached Matrix clients: ${clearError.message}`);
+            // Continue anyway
+          }
+          
+          // Re-initialize Matrix client for this connection with the new token
+          try {
+            this.logger.debug(`Re-initializing Matrix client for user ${user.id} after token refresh`);
+            await this.initializeMatrixClientForConnection(client, user, tenantId);
+            this.logger.debug(`Successfully re-initialized Matrix client for user ${user.id}`);
+          } catch (initError) {
+            this.logger.warn(`Failed to re-initialize Matrix client after token refresh: ${initError.message}. Continuing with updated token.`);
+            // Continue even if re-initialization fails - the next operation will try again
+          }
         } else {
           this.logger.error(`Failed to regenerate token for user ${user.id}`);
           throw new Error('Failed to refresh Matrix credentials');

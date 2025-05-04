@@ -525,7 +525,74 @@ export class MatrixUserService
       this.logger.warn(
         `Matrix token invalid for user ${userId}: ${error.message}`,
       );
+      
+      // Extract username for cache clearing
+      const username = userId.startsWith('@')
+        ? userId.split(':')[0].substring(1)
+        : userId;
+      
+      // Since we don't have tenantId in this context, clear all clients for this username
+      // across all tenants to ensure we don't keep using any invalid tokens
+      this.clearCachedClients(username);
+      
       return false;
+    }
+  }
+  
+  /**
+   * Public method to clear cached clients for a specific user
+   * @param username The username to clear clients for
+   * @param tenantId Optional tenant ID to restrict clearing to a specific tenant
+   */
+  async clearUserClients(username: string, tenantId?: string): Promise<void> {
+    this.clearCachedClients(username, tenantId);
+  }
+  
+  /**
+   * Clear all cached clients for a given username or pattern
+   * @param usernamePattern The username pattern to match
+   * @param tenantId Optional specific tenant ID to match
+   */
+  private clearCachedClients(usernamePattern: string, tenantId?: string): void {
+    try {
+      // Find all keys that match the username pattern and tenant ID (if provided)
+      const keysToRemove: string[] = [];
+      
+      this.userMatrixClients.forEach((client, key) => {
+        // If tenant ID is provided, make sure we only clear clients for that tenant
+        const isTenantMatch = !tenantId || 
+          (client.matrixUserId && client.matrixUserId.includes(`_${tenantId}`));
+          
+        // Match by username pattern
+        const isUsernameMatch = key.includes(usernamePattern);
+        
+        if (isUsernameMatch && isTenantMatch) {
+          keysToRemove.push(key);
+        }
+      });
+      
+      if (keysToRemove.length > 0) {
+        this.logger.debug(`Clearing ${keysToRemove.length} cached Matrix clients matching ${usernamePattern}${tenantId ? ` for tenant ${tenantId}` : ''}`);
+        
+        // Stop and remove all matching clients
+        for (const key of keysToRemove) {
+          try {
+            const client = this.userMatrixClients.get(key);
+            if (client) {
+              client.client.stopClient();
+              this.logger.debug(`Stopped Matrix client for ${key}`);
+            }
+          } catch (stopError) {
+            this.logger.warn(`Error stopping client for ${key}: ${stopError.message}`);
+          }
+          
+          this.userMatrixClients.delete(key);
+          this.logger.debug(`Removed Matrix client for ${key} from cache`);
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Error clearing cached clients: ${error.message}`);
+      // Continue anyway
     }
   }
 
@@ -675,6 +742,25 @@ export class MatrixUserService
           this.logger.log(
             `Successfully updated Matrix token for user ${userSlug}`,
           );
+          
+          // Clear any existing client from cache to force recreation with new token
+          if (this.userMatrixClients.has(userSlug)) {
+            try {
+              const existingClient = this.userMatrixClients.get(userSlug);
+              if (existingClient) {
+                this.logger.debug(`Stopping existing Matrix client for user ${userSlug} after token refresh`);
+                existingClient.client.stopClient();
+                this.userMatrixClients.delete(userSlug);
+                this.logger.debug(`Removed old Matrix client from cache for user ${userSlug}`);
+              }
+            } catch (stopError) {
+              this.logger.warn(
+                `Error stopping existing client after token refresh: ${stopError.message}`
+              );
+              // Continue even if stopping fails, but still remove from cache
+              this.userMatrixClients.delete(userSlug);
+            }
+          }
         } catch (updateError) {
           this.logger.error(
             `Failed to update Matrix token in database: ${updateError.message}`,

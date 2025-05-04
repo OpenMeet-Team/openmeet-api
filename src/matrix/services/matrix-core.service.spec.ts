@@ -4,6 +4,7 @@ import { MatrixCoreService } from './matrix-core.service';
 import axios from 'axios';
 import { Logger } from '@nestjs/common';
 import { MatrixTokenManagerService } from './matrix-token-manager.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 // Create the mocks directly in the test file instead of importing
 // This avoids path issues in different environments
@@ -87,6 +88,14 @@ describe('MatrixCoreService', () => {
             getTokenState: jest.fn().mockReturnValue('valid'),
             reportTokenInvalid: jest.fn(),
             forceTokenRegeneration: jest.fn().mockResolvedValue(true),
+          },
+        },
+        {
+          provide: EventEmitter2,
+          useValue: {
+            emit: jest.fn(),
+            on: jest.fn(),
+            removeListener: jest.fn(),
           },
         },
       ],
@@ -263,6 +272,21 @@ describe('MatrixCoreService', () => {
       const config = service.getConfig();
 
       expect(config).toEqual(expectedConfig);
+    });
+    
+    it('should return event emitter', () => {
+      const mockEventEmitter = {
+        emit: jest.fn(),
+        on: jest.fn(),
+        removeListener: jest.fn(),
+      };
+      
+      // Set the expected properties for the test
+      (service as any).eventEmitter = mockEventEmitter;
+      
+      const eventEmitter = service.getEventEmitter();
+      
+      expect(eventEmitter).toBe(mockEventEmitter);
     });
   });
 });

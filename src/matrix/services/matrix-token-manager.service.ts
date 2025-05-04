@@ -236,13 +236,31 @@ export class MatrixTokenManagerService
     const now = Date.now();
     const timeSinceLastRefresh = now - this.lastTokenRefresh;
 
-    // Only refresh if it's been more than 6 hours or token is invalid
+    // Only refresh if it's been more than 2 hours or token is invalid
+    // Reduced from 6 hours to 2 hours to ensure tokens are refreshed more frequently
     if (
-      timeSinceLastRefresh > 6 * 60 * 60 * 1000 ||
+      timeSinceLastRefresh > 2 * 60 * 60 * 1000 ||
       this.tokenState === 'invalid'
     ) {
       this.logger.log('Scheduled token refresh triggered');
-      await this.triggerTokenRegeneration();
+      
+      // Verify the existing token before triggering regeneration
+      try {
+        await this.verifyExistingToken();
+        
+        // If token verification sets state to invalid, regenerate
+        if (this.tokenState === 'invalid') {
+          this.logger.warn('Token verification failed, regenerating token');
+          await this.triggerTokenRegeneration();
+        } else {
+          this.logger.log('Token verification successful, no need to regenerate');
+          // Update lastTokenRefresh time to prevent immediate re-verification
+          this.lastTokenRefresh = now;
+        }
+      } catch (error) {
+        this.logger.warn(`Token verification failed with error: ${error.message}`);
+        await this.triggerTokenRegeneration();
+      }
     }
   }
 

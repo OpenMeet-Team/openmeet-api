@@ -5,6 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as pool from 'generic-pool';
 import { MatrixConfig } from '../config/matrix-config.type';
 import { IMatrixClient, IMatrixSdk } from '../types/matrix.interfaces';
@@ -50,6 +51,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly configService: ConfigService,
     private readonly tokenManager: MatrixTokenManagerService,
+    private readonly eventEmitter: EventEmitter2,
   ) {
     const matrixConfig = this.configService.get<MatrixConfig>('matrix', {
       infer: true,
@@ -297,6 +299,14 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
    */
   getAdminClient(): IMatrixClient {
     return this.adminClient;
+  }
+  
+  /**
+   * Get the event emitter for Matrix-related events
+   * Used for system-wide notifications about token refreshes, etc.
+   */
+  getEventEmitter(): EventEmitter2 {
+    return this.eventEmitter;
   }
 
   /**
