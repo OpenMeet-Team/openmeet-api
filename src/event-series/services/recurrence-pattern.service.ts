@@ -88,6 +88,18 @@ export class RecurrencePatternService {
       timeZone,
     });
 
+    // Check specifically for monthly patterns with bysetpos (nth weekday of month)
+    if (rule.frequency === 'MONTHLY' && rule.byweekday && rule.bysetpos) {
+      this.logger.log(
+        '[generateOccurrences] Monthly bysetpos pattern detected:',
+        {
+          byweekday: rule.byweekday,
+          bysetpos: rule.bysetpos,
+          pattern: `${rule.bysetpos[0]}${rule.byweekday[0]} of each month`,
+        },
+      );
+    }
+
     const rruleOptions: Partial<Options> = {
       freq: this.mapFrequency(rule.frequency),
       interval: rule.interval || 1,
@@ -100,9 +112,22 @@ export class RecurrencePatternService {
       byweekday: rule.byweekday ? this.mapByWeekDay(rule.byweekday) : null,
       bymonthday: rule.bymonthday || null,
       bymonth: rule.bymonth || null,
+      bysetpos: rule.bysetpos || null, // Add bysetpos for monthly nth weekday patterns
       wkst: 0,
       tzid: timeZone, // RRule's timezone handling for DST
     };
+    
+    // Log if we're using bysetpos for debugging
+    if (rule.bysetpos && rule.bysetpos.length > 0) {
+      this.logger.debug(
+        '[generateOccurrences] Using bysetpos for monthly day-of-week pattern',
+        {
+          bysetpos: rule.bysetpos,
+          byweekday: rule.byweekday,
+          frequency: rule.frequency,
+        },
+      );
+    }
 
     const rrule = new RRule(rruleOptions);
 
@@ -315,6 +340,7 @@ export class RecurrencePatternService {
       interval: frontendRule.interval,
       byweekday: frontendRule.byDay, // Use byDay instead of byweekday
       bymonthday: frontendRule.byMonthDay, // Use byMonthDay instead of bymonthday
+      bysetpos: frontendRule.bySetPos, // Add bySetPos support for nth weekday patterns
     };
   }
 

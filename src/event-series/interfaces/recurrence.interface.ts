@@ -27,6 +27,8 @@ export interface RecurrenceRule {
   bymonthday?: number[];
   /** Months of the year (1-12) */
   bymonth?: number[];
+  /** Positions within a month/year (e.g., 1 for first, 2 for second, -1 for last) */
+  bysetpos?: number[];
 }
 
 /**

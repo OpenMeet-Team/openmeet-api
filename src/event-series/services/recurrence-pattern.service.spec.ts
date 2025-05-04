@@ -239,6 +239,49 @@ describe('RecurrencePatternService', () => {
       expect(occurrences[0]).toBe('2023-01-01T10:00:00.000Z');
       expect(occurrences[1]).toBe('2023-01-04T10:00:00.000Z');
     });
+    
+    it('should correctly generate monthly occurrences for nth weekday patterns using bysetpos', () => {
+      // Start with a date that is a Wednesday in March 2023
+      const startDate = new Date('2023-03-08T10:00:00Z'); // This is a Wednesday
+      
+      // Monthly rule for 2nd Wednesday of the month
+      const rule: RecurrenceRule = {
+        frequency: RecurrenceFrequency.MONTHLY,
+        byweekday: ['WE'],
+        bysetpos: [2], // 2nd occurrence (2nd Wednesday)
+      };
+      
+      const occurrences = service.generateOccurrences(startDate, rule, { count: 5 });
+      
+      // Convert to Date objects for easier testing
+      const dates = occurrences.map(iso => new Date(iso));
+      
+      // Expected dates should be the 2nd Wednesday of each month
+      expect(dates[0].getMonth()).toBe(2); // March (0-indexed)
+      expect(dates[0].getDay()).toBe(3); // Wednesday (0=Sunday, 3=Wednesday)
+      
+      expect(dates[1].getMonth()).toBe(3); // April
+      expect(dates[1].getDay()).toBe(3); // Wednesday
+      
+      expect(dates[2].getMonth()).toBe(4); // May
+      expect(dates[2].getDay()).toBe(3); // Wednesday
+      
+      // Check if we're getting monthly rather than weekly occurrences
+      // The difference between consecutive occurrences should be roughly a month, not a week
+      const diffDays1 = Math.round((dates[1].getTime() - dates[0].getTime()) / (1000 * 60 * 60 * 24));
+      const diffDays2 = Math.round((dates[2].getTime() - dates[1].getTime()) / (1000 * 60 * 60 * 24));
+      
+      expect(diffDays1).toBeGreaterThan(25); // Should be around 28-31 days apart, definitely not 7
+      expect(diffDays2).toBeGreaterThan(25);
+      
+      console.log('Monthly nth weekday pattern (2nd Wednesday) occurrences:', 
+        dates.map(d => ({
+          date: d.toISOString(), 
+          dayOfMonth: d.getDate(), 
+          dayOfWeek: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]
+        }))
+      );
+    });
   });
 
   describe('isDateInRecurrencePattern', () => {
