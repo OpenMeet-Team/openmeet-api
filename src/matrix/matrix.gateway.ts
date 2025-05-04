@@ -649,7 +649,7 @@ export class MatrixGateway
   private async sendTypingNotification(
     client: Socket,
     data: { roomId: string; isTyping: boolean; tenantId?: string },
-  ): Promise<{ success: boolean }> {
+  ): Promise<{ success: boolean; warning?: string }> {
     // Get tenant ID from client data or from the request
     const tenantId = MatrixGatewayHelper.getTenantId(client, data);
 
@@ -673,11 +673,27 @@ export class MatrixGateway
       tenantId,
     );
 
-    // Send typing notification using the client
-    await matrixClient.sendTyping(data.roomId, data.isTyping, 30000);
+    // Send typing notification using the client with error handling
+    try {
+      await matrixClient.sendTyping(data.roomId, data.isTyping, 30000);
+      return { success: true };
+    } catch (error) {
+      // Just log the error but don't fail the request for typing indicators
+      this.logger.warn(
+        `Non-critical: Typing notification failed for user ${user.matrixUserId} in room ${data.roomId}`,
+        {
+          error: error.message,
+          roomId: data.roomId,
+          isTyping: data.isTyping,
+        },
+      );
 
-    // Return success with minimal logging
-    return { success: true };
+      // Return success anyway since typing is not a critical function
+      return {
+        success: true,
+        warning: 'Typing notification failed but continuing',
+      };
+    }
   }
 
   @UseGuards(WsJwtAuthGuard)

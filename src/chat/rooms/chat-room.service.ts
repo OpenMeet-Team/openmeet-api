@@ -158,6 +158,7 @@ export class ChatRoomService {
     private readonly eventQueryService: EventQueryService,
     @Inject(forwardRef(() => GroupService))
     private readonly groupService: GroupService,
+    // We already have EventQueryService injected above, so we'll use that instead of EventService
     private readonly elastiCacheService: ElastiCacheService,
   ) {
     void this.initializeRepositories();
@@ -909,6 +910,71 @@ export class ChatRoomService {
       // Always ensure user has Matrix credentials and joins the room
       // This fixes the issue when toggling attendance where the user may be removed from Matrix room but still in database
       const user = await this.ensureUserHasMatrixCredentials(userId);
+
+      // Skip room verification in the WebSocket context to avoid infinite loops
+      // Only verify room existence if we're in a regular HTTP request context (not in a WebSocket context)
+      // Check either the request context flag or UserService flag set in MatrixGatewayHelper
+      if (
+        chatRoom.matrixRoomId &&
+        !this.request?._wsContext &&
+        !(this.userService as any)?._wsContext
+      ) {
+        const roomExists = await this.matrixRoomService.verifyRoomExists(
+          chatRoom.matrixRoomId,
+        );
+
+        if (!roomExists) {
+          this.logger.warn(
+            `Matrix room ${chatRoom.matrixRoomId} doesn't exist, recreating it for event ${eventId}`,
+          );
+
+          // Track the original room ID to prevent updates if it changes during our operation
+          const originalRoomId = chatRoom.matrixRoomId;
+
+          try {
+            // Get the event details to use for the new room name
+            const event = await this.eventQueryService.findEventById(eventId);
+            const roomName = event
+              ? `${event.name} - Discussion`
+              : `Event ${eventId} - Discussion`;
+
+            // Create a new Matrix room with options object
+            const newRoomInfo = await this.matrixRoomService.createRoom({
+              name: roomName,
+              isPublic: false,
+              encrypted: true,
+            });
+
+            this.logger.log(
+              `Created new Matrix room ${newRoomInfo.roomId} to replace missing room ${originalRoomId}`,
+            );
+
+            // Fetch fresh chat room entity to avoid race conditions
+            const freshChatRoom = await this.chatRoomRepository.findOne({
+              where: { id: chatRoom.id },
+            });
+
+            if (freshChatRoom) {
+              // Only update if the room ID hasn't changed (no race condition)
+              if (freshChatRoom.matrixRoomId === originalRoomId) {
+                freshChatRoom.matrixRoomId = newRoomInfo.roomId;
+                await this.chatRoomRepository.save(freshChatRoom);
+
+                // Update our reference too
+                chatRoom.matrixRoomId = newRoomInfo.roomId;
+              } else {
+                this.logger.warn(
+                  `Room ID changed during recreation from ${originalRoomId} to ${freshChatRoom.matrixRoomId}, keeping new value`,
+                );
+                chatRoom.matrixRoomId = freshChatRoom.matrixRoomId;
+              }
+            }
+          } catch (error) {
+            this.logger.error(`Error recreating Matrix room: ${error.message}`);
+            // Continue with the process even if room recreation fails
+          }
+        }
+      }
 
       // Always attempt Matrix room operations
       const isJoined = await this.addUserToMatrixRoom(

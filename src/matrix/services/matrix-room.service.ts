@@ -12,6 +12,55 @@ export class MatrixRoomService implements IMatrixRoomProvider {
   constructor(private readonly matrixCoreService: MatrixCoreService) {}
 
   /**
+   * Verify if a Matrix room exists by checking room state
+   * @param roomId Matrix room ID to verify
+   * @returns true if room exists, false if not
+   */
+  async verifyRoomExists(roomId: string): Promise<boolean> {
+    let client;
+    try {
+      client = await this.matrixCoreService.acquireClient();
+      try {
+        // Check if room exists using the correct method based on the Matrix SDK interface
+        // Use roomState instead of getRoomState as defined in IMatrixClient
+        await client.client.roomState(roomId);
+        this.logger.debug(`Room ${roomId} exists in Matrix`);
+        return true;
+      } catch (error) {
+        if (
+          error.statusCode === 404 ||
+          (error.data && error.data.errcode === 'M_NOT_FOUND') ||
+          (error.message && error.message.includes('404')) ||
+          (error.message && error.message.includes('not found'))
+        ) {
+          this.logger.warn(`Room ${roomId} doesn't exist in Matrix`);
+          return false;
+        }
+        // Other errors might be permission-related, not existence-related
+        this.logger.error(
+          `Error checking if room ${roomId} exists: ${error.message}`,
+        );
+        throw error;
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error acquiring client to check room ${roomId}: ${error.message}`,
+      );
+      return false; // Assume room doesn't exist if we can't check
+    } finally {
+      if (client) {
+        try {
+          await this.matrixCoreService.releaseClient(client);
+        } catch (releaseError) {
+          this.logger.warn(
+            `Failed to release Matrix client: ${releaseError.message}`,
+          );
+        }
+      }
+    }
+  }
+
+  /**
    * Get the admin client for Matrix operations that require admin privileges
    * @returns The Matrix admin client
    */
@@ -376,9 +425,9 @@ export class MatrixRoomService implements IMatrixRoomProvider {
           client.client.joinRoom.length >= 2
         ) {
           try {
-            await client.client.joinRoom(roomId, { server_name: [serverName] });
+            await client.client.joinRoom(roomId);
             this.logger.debug(
-              `Admin user joined room ${roomId} using SDK with server_name`,
+              `Admin user joined room ${roomId} using standard SDK join`,
             );
           } catch (joinError) {
             // Check error details
@@ -722,7 +771,8 @@ export class MatrixRoomService implements IMatrixRoomProvider {
 
         // When using joinRoom, we can pass server names directly if available
         if (serverName) {
-          // Try with server_name parameter directly in the SDK call
+          // For now, just try the basic join without options
+          // Your SDK version might not support the options parameter
           try {
             await tempClient.joinRoom(roomId);
             this.logger.debug(
