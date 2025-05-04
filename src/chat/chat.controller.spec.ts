@@ -13,6 +13,9 @@ const mockDiscussionService = {
     end: 'token-123',
   }),
   addMemberToEventDiscussionBySlug: jest.fn().mockResolvedValue(undefined),
+  addMemberToEventDiscussionBySlugAndGetRoomId: jest
+    .fn()
+    .mockResolvedValue({ roomId: 'room-123' }),
   removeMemberFromEventDiscussionBySlug: jest.fn().mockResolvedValue(undefined),
   sendGroupDiscussionMessage: jest
     .fn()
@@ -103,7 +106,7 @@ describe('ChatController', () => {
       );
 
       expect(
-        discussionService.addMemberToEventDiscussionBySlug,
+        discussionService.addMemberToEventDiscussionBySlugAndGetRoomId,
       ).toHaveBeenCalledWith(eventSlug, userSlug);
     });
 
