@@ -241,37 +241,62 @@ export class EventManagementService {
         event.generateUlid();
         event.generateSlug();
 
-        // Create in Bluesky first to get the rkey
-        const { rkey } = await this.blueskyService.createEventRecord(
-          event,
-          createEventDto.sourceId ?? '',
-          createEventDto.sourceData?.handle ?? '',
-          this.request.tenantId,
-        );
+        try {
+          // Create in Bluesky first to get the rkey
+          const { rkey } = await this.blueskyService.createEventRecord(
+            event,
+            createEventDto.sourceId ?? '',
+            createEventDto.sourceData?.handle ?? '',
+            this.request.tenantId,
+          );
 
-        this.logger.debug('Successfully created Bluesky event');
+          this.logger.debug('Successfully created Bluesky event');
 
-        // Store Bluesky-specific data in source fields
-        event.sourceType = EventSourceType.BLUESKY;
+          // Store Bluesky-specific data in source fields
+          event.sourceType = EventSourceType.BLUESKY;
 
-        // Use BlueskyIdService to create a proper AT Protocol URI
-        const did = createEventDto.sourceId ?? '';
-        const collection = BLUESKY_COLLECTIONS.EVENT;
-        event.sourceId = this.blueskyIdService.createUri(did, collection, rkey);
+          // Use BlueskyIdService to create a proper AT Protocol URI
+          const did = createEventDto.sourceId ?? '';
+          const collection = BLUESKY_COLLECTIONS.EVENT;
+          event.sourceId = this.blueskyIdService.createUri(did, collection, rkey);
 
-        // Removed sourceUrl as it doesn't point to a real page
-        event.sourceUrl = null;
+          // Removed sourceUrl as it doesn't point to a real page
+          event.sourceUrl = null;
 
-        // Store components in metadata for reference
-        event.sourceData = {
-          rkey,
-          handle: createEventDto.sourceData?.handle,
-          did,
-          collection,
-        };
-        event.lastSyncedAt = new Date();
+          // Store components in metadata for reference
+          event.sourceData = {
+            rkey,
+            handle: createEventDto.sourceData?.handle,
+            did,
+            collection,
+          };
+          event.lastSyncedAt = new Date();
+        } catch (blueskyError) {
+          // If the user specifically requested a Bluesky event, fail with detailed error
+          if (createEventDto.sourceType === EventSourceType.BLUESKY || createEventDto.sourceId) {
+            this.logger.error('Failed to create event in Bluesky:', {
+              error: blueskyError.message,
+              stack: blueskyError.stack,
+            });
+            throw new UnprocessableEntityException(
+              'Failed to create event in Bluesky. Please try again or check your Bluesky connection.',
+            );
+          }
+          
+          // Otherwise, just log the error and continue creating the event without Bluesky integration
+          this.logger.warn('Failed to create event in Bluesky, continuing without Bluesky integration:', {
+            error: blueskyError.message,
+            stack: blueskyError.stack,
+          });
+          
+          // Clear Bluesky-specific fields so we don't have dangling references
+          event.sourceType = null;
+          event.sourceId = null;
+          event.sourceUrl = null;
+          event.sourceData = null;
+        }
 
-        // Save the event with Bluesky metadata
+        // Save the event with or without Bluesky metadata
         createdEvent = await this.eventRepository.save(event);
 
         // Verify seriesSlug was preserved but do not attempt to restore it
@@ -284,13 +309,11 @@ export class EventManagementService {
           );
         }
       } catch (error) {
-        this.logger.error('Failed to create event in Bluesky:', {
+        this.logger.error('Failed during event creation process:', {
           error: error.message,
           stack: error.stack,
         });
-        throw new UnprocessableEntityException(
-          'Failed to create event in Bluesky. Please try again.',
-        );
+        throw error; // Re-throw to propagate the exception
       }
     } else {
       // For non-Bluesky events, just save directly to database
@@ -671,7 +694,7 @@ export class EventManagementService {
       'CreatedAt should be the same',
     );
 
-    // If it's a Bluesky event, update it there too
+    // If it's a Bluesky event, try to update it there too, but don't fail if Bluesky is unavailable
     if (
       event.sourceType === EventSourceType.BLUESKY &&
       event.sourceData?.rkey
