@@ -474,7 +474,7 @@ describe('Matrix Token Refresh Integration', () => {
             user.matrixUserId,
             user.matrixAccessToken,
           );
-        } catch () {
+        } catch {
           isTokenValid = false;
         }
 
