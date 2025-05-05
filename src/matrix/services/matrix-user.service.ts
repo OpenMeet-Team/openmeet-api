@@ -493,7 +493,9 @@ export class MatrixUserService
     accessToken: string,
   ): Promise<boolean> {
     if (!userId || !accessToken) {
-      this.logger.warn(`Token verification failed: userId or accessToken is empty`);
+      this.logger.warn(
+        `Token verification failed: userId or accessToken is empty`,
+      );
       return false;
     }
 
@@ -504,7 +506,7 @@ export class MatrixUserService
       const url = `${config.baseUrl}/_matrix/client/v3/account/whoami`;
 
       this.logger.debug(`Verifying token for ${userId} using URL: ${url}`);
-      
+
       const response = await axios.get(url, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -522,50 +524,58 @@ export class MatrixUserService
       this.logger.warn(
         `Token verification failed: user ID mismatch. Expected ${userId}, got ${response.data?.user_id}`,
       );
-      
+
       // Extract username for cache clearing on mismatch
       const username = userId.startsWith('@')
         ? userId.split(':')[0].substring(1)
         : userId;
-      
+
       // Clear all clients for this user since the token is invalid
-      this.logger.debug(`Clearing all cached clients for ${username} due to user ID mismatch`);
+      this.logger.debug(
+        `Clearing all cached clients for ${username} due to user ID mismatch`,
+      );
       this.clearCachedClients(username);
-      
+
       return false;
     } catch (error) {
       // If we get an error, the token is likely invalid
       this.logger.warn(
         `Matrix token invalid for user ${userId}: ${error.message}`,
       );
-      
+
       if (error.response) {
-        this.logger.debug(`Response status: ${error.response.status}, data: ${JSON.stringify(error.response.data)}`);
+        this.logger.debug(
+          `Response status: ${error.response.status}, data: ${JSON.stringify(error.response.data)}`,
+        );
       }
-      
+
       // Extract username for cache clearing
       const username = userId.startsWith('@')
         ? userId.split(':')[0].substring(1)
         : userId;
-      
+
       // Since we don't have tenantId in this context, clear all clients for this username
       // across all tenants to ensure we don't keep using any invalid tokens
-      this.logger.debug(`Clearing all cached clients for ${username} due to token validation error`);
+      this.logger.debug(
+        `Clearing all cached clients for ${username} due to token validation error`,
+      );
       this.clearCachedClients(username);
-      
+
       return false;
     }
   }
-  
+
   /**
    * Public method to clear cached clients for a specific user
    * @param username The username to clear clients for
    * @param tenantId Optional tenant ID to restrict clearing to a specific tenant
    */
   async clearUserClients(username: string, tenantId?: string): Promise<void> {
+    // Just delegate to the synchronous implementation
     this.clearCachedClients(username, tenantId);
+    return Promise.resolve();
   }
-  
+
   /**
    * Clear all cached clients for a given username or pattern
    * @param usernamePattern The username pattern to match
@@ -574,40 +584,47 @@ export class MatrixUserService
   private clearCachedClients(usernamePattern: string, tenantId?: string): void {
     try {
       // Log the full cache for debugging
-      this.logger.debug(`Current Matrix client cache keys: ${Array.from(this.userMatrixClients.keys()).join(', ')}`);
-    
+      this.logger.debug(
+        `Current Matrix client cache keys: ${Array.from(this.userMatrixClients.keys()).join(', ')}`,
+      );
+
       // Find all keys that match the username pattern and tenant ID (if provided)
       const keysToRemove: string[] = [];
-      
+
       this.userMatrixClients.forEach((client, key) => {
         // If tenant ID is provided, make sure we only clear clients for that tenant
-        const isTenantMatch = !tenantId || 
+        const isTenantMatch =
+          !tenantId ||
           (client.matrixUserId && client.matrixUserId.includes(`_${tenantId}`));
-          
+
         // Using exact match to avoid false positives
         // Or clear all clients if we're getting desperate
         const isUsernameMatch = key === usernamePattern;
-        
+
         if (isUsernameMatch && isTenantMatch) {
           keysToRemove.push(key);
         }
       });
-      
+
       // If we didn't find any exact matches and there is no tenant ID, try a more aggressive approach
       if (keysToRemove.length === 0) {
         // Fallback: Clear all clients for this user across all tenants if we can't find an exact match
-        this.logger.debug(`No exact matches found for ${usernamePattern}, trying partial matches`);
-        
+        this.logger.debug(
+          `No exact matches found for ${usernamePattern}, trying partial matches`,
+        );
+
         this.userMatrixClients.forEach((client, key) => {
           if (key.includes(usernamePattern)) {
             keysToRemove.push(key);
           }
         });
       }
-      
+
       if (keysToRemove.length > 0) {
-        this.logger.debug(`Clearing ${keysToRemove.length} cached Matrix clients matching ${usernamePattern}${tenantId ? ` for tenant ${tenantId}` : ''}`);
-        
+        this.logger.debug(
+          `Clearing ${keysToRemove.length} cached Matrix clients matching ${usernamePattern}${tenantId ? ` for tenant ${tenantId}` : ''}`,
+        );
+
         // Stop and remove all matching clients
         for (const key of keysToRemove) {
           try {
@@ -617,14 +634,18 @@ export class MatrixUserService
               this.logger.debug(`Stopped Matrix client for ${key}`);
             }
           } catch (stopError) {
-            this.logger.warn(`Error stopping client for ${key}: ${stopError.message}`);
+            this.logger.warn(
+              `Error stopping client for ${key}: ${stopError.message}`,
+            );
           }
-          
+
           this.userMatrixClients.delete(key);
           this.logger.debug(`Removed Matrix client for ${key} from cache`);
         }
       } else {
-        this.logger.debug(`No cached Matrix clients found matching ${usernamePattern}${tenantId ? ` for tenant ${tenantId}` : ''}`);
+        this.logger.debug(
+          `No cached Matrix clients found matching ${usernamePattern}${tenantId ? ` for tenant ${tenantId}` : ''}`,
+        );
       }
     } catch (error) {
       this.logger.error(`Error clearing cached clients: ${error.message}`);
@@ -647,7 +668,9 @@ export class MatrixUserService
       // Use admin API to create a new access token
       const url = `${config.baseUrl}/_synapse/admin/v1/users/${encodeURIComponent(matrixUserId)}/login`;
 
-      this.logger.debug(`Generating new access token for ${matrixUserId} using URL: ${url}`);
+      this.logger.debug(
+        `Generating new access token for ${matrixUserId} using URL: ${url}`,
+      );
 
       const response = await axios.post(
         url,
@@ -657,6 +680,8 @@ export class MatrixUserService
         {
           headers: {
             Authorization: `Bearer ${adminToken}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
           },
         },
       );
@@ -665,35 +690,18 @@ export class MatrixUserService
         this.logger.log(
           `Successfully generated new admin token for ${matrixUserId}`,
         );
-        
+
         // Log token length for debugging (don't log actual token)
         const tokenLength = response.data.access_token.length;
         this.logger.debug(`Generated token length: ${tokenLength} characters`);
-        
-        // Verify the new token works immediately
-        try {
-          const isValid = await this.verifyAccessToken(
-            matrixUserId,
-            response.data.access_token
-          );
-          
-          if (!isValid) {
-            this.logger.warn(`Generated new token for ${matrixUserId} but it failed verification!`);
-            return null;
-          }
-          
-          this.logger.debug(`Verified new token for ${matrixUserId} is valid`);
-        } catch (verifyError) {
-          this.logger.warn(
-            `Error verifying new token for ${matrixUserId}: ${verifyError.message}`
-          );
-          // Continue anyway since we got what looks like a valid token
-        }
-        
+
+        // Skip token verification since Matrix server has issues with macaroon tokens
         return response.data.access_token;
       }
 
-      this.logger.warn(`Generated token response missing access_token field: ${JSON.stringify(response.data)}`);
+      this.logger.warn(
+        `Generated token response missing access_token field: ${JSON.stringify(response.data)}`,
+      );
       return null;
     } catch (error) {
       this.logger.error(
@@ -701,7 +709,9 @@ export class MatrixUserService
         error.stack,
       );
       if (error.response) {
-        this.logger.error(`Response data: ${JSON.stringify(error.response.data)}`);
+        this.logger.error(
+          `Response data: ${JSON.stringify(error.response.data)}`,
+        );
         this.logger.error(`Response status: ${error.response.status}`);
       }
       return null;
@@ -810,20 +820,24 @@ export class MatrixUserService
           this.logger.log(
             `Successfully updated Matrix token for user ${userSlug}`,
           );
-          
+
           // Clear any existing client from cache to force recreation with new token
           if (this.userMatrixClients.has(userSlug)) {
             try {
               const existingClient = this.userMatrixClients.get(userSlug);
               if (existingClient) {
-                this.logger.debug(`Stopping existing Matrix client for user ${userSlug} after token refresh`);
+                this.logger.debug(
+                  `Stopping existing Matrix client for user ${userSlug} after token refresh`,
+                );
                 existingClient.client.stopClient();
                 this.userMatrixClients.delete(userSlug);
-                this.logger.debug(`Removed old Matrix client from cache for user ${userSlug}`);
+                this.logger.debug(
+                  `Removed old Matrix client from cache for user ${userSlug}`,
+                );
               }
             } catch (stopError) {
               this.logger.warn(
-                `Error stopping existing client after token refresh: ${stopError.message}`
+                `Error stopping existing client after token refresh: ${stopError.message}`,
               );
               // Continue even if stopping fails, but still remove from cache
               this.userMatrixClients.delete(userSlug);

@@ -273,19 +273,19 @@ describe('MatrixCoreService', () => {
 
       expect(config).toEqual(expectedConfig);
     });
-    
+
     it('should return event emitter', () => {
       const mockEventEmitter = {
         emit: jest.fn(),
         on: jest.fn(),
         removeListener: jest.fn(),
       };
-      
+
       // Set the expected properties for the test
       (service as any).eventEmitter = mockEventEmitter;
-      
+
       const eventEmitter = service.getEventEmitter();
-      
+
       expect(eventEmitter).toBe(mockEventEmitter);
     });
   });

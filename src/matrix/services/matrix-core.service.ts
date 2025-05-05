@@ -300,7 +300,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
   getAdminClient(): IMatrixClient {
     return this.adminClient;
   }
-  
+
   /**
    * Get the event emitter for Matrix-related events
    * Used for system-wide notifications about token refreshes, etc.

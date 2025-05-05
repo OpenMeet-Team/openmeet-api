@@ -16,8 +16,7 @@ const mockedAxios = axios as jest.Mocked<typeof axios>;
 describe('Matrix Token Refresh Integration', () => {
   let userService: MatrixUserService;
   let messageService: MatrixMessageService;
-  let coreService: MatrixCoreService;
-  let gateway: MatrixGateway;
+  // These services are used indirectly
 
   // Mock Matrix client
   const mockMatrixClient = {
@@ -116,9 +115,7 @@ describe('Matrix Token Refresh Integration', () => {
       emit: jest.fn(),
       use: jest.fn(),
       adapter: {
-        rooms: new Map([
-          ['room-123', new Set(['socket-id-1', 'socket-id-2'])],
-        ]),
+        rooms: new Map([['room-123', new Set(['socket-id-1', 'socket-id-2'])]]),
       },
     };
 
@@ -209,8 +206,7 @@ describe('Matrix Token Refresh Integration', () => {
 
     userService = module.get<MatrixUserService>(MatrixUserService);
     messageService = module.get<MatrixMessageService>(MatrixMessageService);
-    coreService = module.get<MatrixCoreService>(MatrixCoreService);
-    gateway = module.get<MatrixGateway>(MatrixGateway);
+    // Services are used by reference in the tests
 
     // We don't need to add methods to gateway - we'll use our own mock functions instead
   });
@@ -230,26 +226,32 @@ describe('Matrix Token Refresh Integration', () => {
   describe('Token Refresh Integration', () => {
     it('should clear clients when Matrix tokens are invalid', async () => {
       // Spy on clearCachedClients method
-      const clearClientsSpy = jest.spyOn(userService as any, 'clearCachedClients');
+      const clearClientsSpy = jest.spyOn(
+        userService as any,
+        'clearCachedClients',
+      );
 
       // First setup a client in the cache
       await userService.getClientForUser('admin');
-      
+
       // Verify client was cached
       expect((userService as any).userMatrixClients.has('admin')).toBe(true);
-      
+
       // Now simulate token validation failure
       mockMatrixClient.getAccessToken.mockReturnValue('invalid-token');
-      
+
       // Attempt to verify the token
-      const isValid = await userService.verifyAccessToken('@admin:matrix.org', 'invalid-token');
-      
+      const isValid = await userService.verifyAccessToken(
+        '@admin:matrix.org',
+        'invalid-token',
+      );
+
       // Token should be invalid
       expect(isValid).toBe(false);
-      
+
       // The client should be cleared from cache
       expect(clearClientsSpy).toHaveBeenCalled();
-      
+
       // Re-initialize Axios mock for the next test
       mockMatrixClient.getAccessToken.mockReturnValue('admin-access-token');
     });
@@ -257,12 +259,15 @@ describe('Matrix Token Refresh Integration', () => {
     it('should clear clients and get new token when sending message with invalid token', async () => {
       // Spy on methods
       const clearUserClientsSpy = jest.spyOn(userService, 'clearUserClients');
-      const generateNewTokenSpy = jest.spyOn(userService, 'generateNewAccessToken');
+      const generateNewTokenSpy = jest.spyOn(
+        userService,
+        'generateNewAccessToken',
+      );
       const createClientSpy = jest.spyOn(mockMatrixSdk, 'createClient');
-      
+
       // Create a client in the cache
       await userService.getClientForUser('admin');
-      
+
       // First attempt should succeed with valid token
       const eventId1 = await messageService.sendMessage({
         roomId: 'room-123',
@@ -270,12 +275,12 @@ describe('Matrix Token Refresh Integration', () => {
         accessToken: 'admin-access-token',
         content: 'Test message',
       });
-      
+
       expect(eventId1).toBe('event-123');
-      
+
       // Now simulate token expiration
       mockMatrixClient.getAccessToken.mockReturnValue('invalid-token');
-      
+
       // Mock axios to simulate token error first, then success with new token
       mockedAxios.get.mockImplementationOnce(() => {
         return Promise.reject({
@@ -285,6 +290,9 @@ describe('Matrix Token Refresh Integration', () => {
           },
         });
       });
+
+      // Mock successful token generation before sending
+      jest.spyOn(userService, 'generateNewAccessToken').mockResolvedValueOnce('new-token');
       
       // The next message should trigger token refresh and clear cached clients
       const eventId2 = await messageService.sendMessage({
@@ -294,23 +302,23 @@ describe('Matrix Token Refresh Integration', () => {
         content: 'Test message with refresh',
         tenantId: 'test-tenant',
       });
-      
+
       // Should still get a successful message ID
       expect(eventId2).toBe('event-123');
-      
+
       // Verify our methods were called
       expect(generateNewTokenSpy).toHaveBeenCalledWith('@admin:matrix.org');
       expect(clearUserClientsSpy).toHaveBeenCalledWith('admin', 'test-tenant');
-      
+
       // Verify a new client was created with new token
       const createClientCalls = createClientSpy.mock.calls;
       const lastCall = createClientCalls[createClientCalls.length - 1];
       expect(lastCall[0]).toHaveProperty('accessToken');
-      
+
       // Reset for next test
       mockMatrixClient.getAccessToken.mockReturnValue('admin-access-token');
     });
-    
+
     it('should simulate the real-world token refresh scenario', async () => {
       // This test will simulate the real-world scenario:
       // 1. Create and cache a Matrix client
@@ -318,31 +326,37 @@ describe('Matrix Token Refresh Integration', () => {
       // 3. Try to use the client, which will fail
       // 4. Regenerate the token, but WITHOUT our fix the old client would still be used
       // 5. With our fix, the client is cleared from cache and recreated
-      
+
+      // Mock successful token generation
+      jest.spyOn(userService, 'generateNewAccessToken')
+          .mockImplementation(() => Promise.resolve('new-access-token'));
+
       // Prepare spies
       const clearUserClientsSpy = jest.spyOn(userService, 'clearUserClients');
       const createClientSpy = jest.spyOn(mockMatrixSdk, 'createClient');
-      
+
       // Track spy calls before we start
       const initialCreateClientCalls = createClientSpy.mock.calls.length;
-      
+
       // Step 1: Create and cache a Matrix client
-      const client1 = await userService.getClientForUser('admin');
-      expect(createClientSpy).toHaveBeenCalledTimes(initialCreateClientCalls + 1);
-      
+      await userService.getClientForUser('admin');
+      expect(createClientSpy).toHaveBeenCalledTimes(
+        initialCreateClientCalls + 1,
+      );
+
       // Step 2: Simulate token expiration
       mockMatrixClient.getAccessToken.mockReturnValue('invalid-token');
-      
+
       // Mock the sendEvent function to simulate token error
       const originalSendEvent = mockMatrixClient.sendEvent;
       mockMatrixClient.sendEvent = jest.fn().mockImplementation(() => {
         // Return a Matrix-like token error
-        return Promise.reject({ 
+        return Promise.reject({
           errcode: 'M_UNKNOWN_TOKEN',
-          error: 'Invalid access token'
+          error: 'Invalid access token',
         });
       });
-      
+
       // Also mock axios to simulate token verification failure
       mockedAxios.get.mockImplementationOnce(() => {
         return Promise.reject({
@@ -352,7 +366,7 @@ describe('Matrix Token Refresh Integration', () => {
           },
         });
       });
-      
+
       // Preparation for message service to simulate token refresh
       let messageErrorThrown = false;
       try {
@@ -362,25 +376,25 @@ describe('Matrix Token Refresh Integration', () => {
           userId: '@admin:matrix.org',
           accessToken: 'invalid-token',
           content: 'This message will fail',
-          tenantId: 'test-tenant'
+          tenantId: 'test-tenant',
         });
       } catch (error) {
         messageErrorThrown = true;
-        
+
         // We expect an error here because the first attempt should fail with invalid token
         expect(error.message).toContain('Failed to send message');
       }
-      
+
       // Verify the error was thrown
       expect(messageErrorThrown).toBe(true);
-      
+
       // Now let's verify our client was cleared
       expect(clearUserClientsSpy).toHaveBeenCalledWith('admin', 'test-tenant');
-      
+
       // Reset mocks to simulate successful token refresh
       mockMatrixClient.sendEvent = originalSendEvent;
       mockMatrixClient.getAccessToken.mockReturnValue('new-access-token');
-      
+
       // Step 4 & 5: Try sending a message again, with the new token
       // The client should have been recreated with new token
       const eventId3 = await messageService.sendMessage({
@@ -388,19 +402,21 @@ describe('Matrix Token Refresh Integration', () => {
         userId: '@admin:matrix.org',
         accessToken: 'new-access-token',
         content: 'This message should succeed with new token',
-        tenantId: 'test-tenant'
+        tenantId: 'test-tenant',
       });
-      
+
       // Verify we got a message ID
       expect(eventId3).toBe('event-123');
-      
+
       // Verify a new client was created (original + 2 more = 3 calls)
-      expect(createClientSpy).toHaveBeenCalledTimes(initialCreateClientCalls + 3);
-      
+      expect(createClientSpy).toHaveBeenCalledTimes(
+        initialCreateClientCalls + 3,
+      );
+
       // WITHOUT our fix:
       // 1. Cached client would still be used with invalid token
       // 2. Multiple failures would occur until abandoned
-      
+
       // WITH our fix:
       // 1. Client cache is cleared when token becomes invalid
       // 2. New client is created with new token
@@ -408,6 +424,10 @@ describe('Matrix Token Refresh Integration', () => {
     });
 
     it('should clear Matrix clients when refreshing tokens in MatrixGateway', async () => {
+      // Mock successful token generation
+      jest.spyOn(userService, 'generateNewAccessToken')
+          .mockImplementation(() => Promise.resolve('new-access-token'));
+      
       // Mock a socket client object
       const mockSocket = {
         id: 'socket-id-1',
@@ -421,14 +441,17 @@ describe('Matrix Token Refresh Integration', () => {
         },
         emit: jest.fn(),
       };
-      
+
       // Spy on methods
       const clearUserClientsSpy = jest.spyOn(userService, 'clearUserClients');
-      const generateNewTokenSpy = jest.spyOn(userService, 'generateNewAccessToken');
-      
+      const generateNewTokenSpy = jest.spyOn(
+        userService,
+        'generateNewAccessToken',
+      );
+
       // Create a mock reinitialization function
       const mockReinitializeClient = jest.fn().mockResolvedValue(undefined);
-      
+
       // Mock the MatrixGateway's sendMatrixMessage method
       // This is simplified from the gateway implementation
       const sendMatrixMessage = async (client, data) => {
@@ -439,7 +462,7 @@ describe('Matrix Token Refresh Integration', () => {
           matrixAccessToken: client.data.matrixAccessToken,
           matrixDeviceId: client.data.matrixDeviceId,
         };
-        
+
         // Verify token
         let isTokenValid = false;
         try {
@@ -450,22 +473,24 @@ describe('Matrix Token Refresh Integration', () => {
         } catch (error) {
           isTokenValid = false;
         }
-        
+
         // Token refresh
         if (!isTokenValid) {
-          const newToken = await userService.generateNewAccessToken(user.matrixUserId);
+          const newToken = await userService.generateNewAccessToken(
+            user.matrixUserId,
+          );
           if (newToken) {
             user.matrixAccessToken = newToken;
             client.data.matrixAccessToken = newToken;
-            
+
             // Clear cached clients
             await userService.clearUserClients(user.slug, data.tenantId);
-            
+
             // Simulate re-initialization (we can't call private method)
             await mockReinitializeClient(client, user, data.tenantId);
           }
         }
-        
+
         // Send message
         return await messageService.sendMessage({
           roomId: data.roomId,
@@ -476,24 +501,24 @@ describe('Matrix Token Refresh Integration', () => {
           tenantId: data.tenantId,
         });
       };
-      
+
       // Simulate token verification failure
       mockMatrixClient.getAccessToken.mockReturnValue('invalid-token');
-      
+
       // Create a client in the cache
       await userService.getClientForUser('admin');
-      
+
       // Call the method
       await sendMatrixMessage(mockSocket, {
         roomId: 'room-123',
         message: 'Test message',
         tenantId: 'test-tenant',
       });
-      
+
       // Verify our methods were called
       expect(generateNewTokenSpy).toHaveBeenCalledWith('@admin:matrix.org');
       expect(clearUserClientsSpy).toHaveBeenCalledWith('admin', 'test-tenant');
-      
+
       // Verify the re-initialization was called
       expect(mockReinitializeClient).toHaveBeenCalled();
     });

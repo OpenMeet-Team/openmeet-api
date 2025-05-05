@@ -116,7 +116,7 @@ export class RecurrencePatternService {
       wkst: 0,
       tzid: timeZone, // RRule's timezone handling for DST
     };
-    
+
     // Log if we're using bysetpos for debugging
     if (rule.bysetpos && rule.bysetpos.length > 0) {
       this.logger.debug(

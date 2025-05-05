@@ -229,6 +229,9 @@ describe('MatrixUserService', () => {
       // Ensure no client exists yet
       (service as any).userMatrixClients = new Map();
 
+      // Mock successful token generation and verification
+      jest.spyOn(service, 'verifyAccessToken').mockResolvedValue(true);
+      
       // Get client
       const client = await service.getClientForUser(
         userSlug,

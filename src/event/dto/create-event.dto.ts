@@ -89,9 +89,10 @@ export class RecurrenceRuleDto {
   @IsArray()
   @IsNumber({}, { each: true })
   bymonthday?: number[];
-  
+
   @ApiPropertyOptional({
-    description: 'Positions within a month/year (e.g., 1 for first, 2 for second, -1 for last)',
+    description:
+      'Positions within a month/year (e.g., 1 for first, 2 for second, -1 for last)',
     example: [1],
     type: [Number],
   })

@@ -942,23 +942,37 @@ export class MatrixGateway
 
           // Update socket data for future requests in this session
           client.data.matrixAccessToken = newToken;
-          
+
           // Clear any cached Matrix clients for this user to ensure they're recreated with the new token
           try {
             await this.matrixUserService.clearUserClients(user.slug, tenantId);
-            this.logger.debug(`Cleared cached Matrix clients for user ${user.slug} after token refresh`);
+            this.logger.debug(
+              `Cleared cached Matrix clients for user ${user.slug} after token refresh`,
+            );
           } catch (clearError) {
-            this.logger.warn(`Error clearing cached Matrix clients: ${clearError.message}`);
+            this.logger.warn(
+              `Error clearing cached Matrix clients: ${clearError.message}`,
+            );
             // Continue anyway
           }
-          
+
           // Re-initialize Matrix client for this connection with the new token
           try {
-            this.logger.debug(`Re-initializing Matrix client for user ${user.id} after token refresh`);
-            await this.initializeMatrixClientForConnection(client, user, tenantId);
-            this.logger.debug(`Successfully re-initialized Matrix client for user ${user.id}`);
+            this.logger.debug(
+              `Re-initializing Matrix client for user ${user.id} after token refresh`,
+            );
+            await this.initializeMatrixClientForConnection(
+              client,
+              user,
+              tenantId,
+            );
+            this.logger.debug(
+              `Successfully re-initialized Matrix client for user ${user.id}`,
+            );
           } catch (initError) {
-            this.logger.warn(`Failed to re-initialize Matrix client after token refresh: ${initError.message}. Continuing with updated token.`);
+            this.logger.warn(
+              `Failed to re-initialize Matrix client after token refresh: ${initError.message}. Continuing with updated token.`,
+            );
             // Continue even if re-initialization fails - the next operation will try again
           }
         } else {

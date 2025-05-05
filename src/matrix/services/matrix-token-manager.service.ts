@@ -243,22 +243,26 @@ export class MatrixTokenManagerService
       this.tokenState === 'invalid'
     ) {
       this.logger.log('Scheduled token refresh triggered');
-      
+
       // Verify the existing token before triggering regeneration
       try {
         await this.verifyExistingToken();
-        
+
         // If token verification sets state to invalid, regenerate
         if (this.tokenState === 'invalid') {
           this.logger.warn('Token verification failed, regenerating token');
           await this.triggerTokenRegeneration();
         } else {
-          this.logger.log('Token verification successful, no need to regenerate');
+          this.logger.log(
+            'Token verification successful, no need to regenerate',
+          );
           // Update lastTokenRefresh time to prevent immediate re-verification
           this.lastTokenRefresh = now;
         }
       } catch (error) {
-        this.logger.warn(`Token verification failed with error: ${error.message}`);
+        this.logger.warn(
+          `Token verification failed with error: ${error.message}`,
+        );
         await this.triggerTokenRegeneration();
       }
     }

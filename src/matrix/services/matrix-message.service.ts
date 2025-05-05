@@ -105,18 +105,25 @@ export class MatrixMessageService implements IMatrixMessageProvider {
             if (newToken) {
               this.logger.log(`Successfully regenerated token for ${senderId}`);
               finalToken = newToken;
-              
+
               // Extract username for client cache clearing
               const username = senderId.startsWith('@')
                 ? senderId.split(':')[0].substring(1)
                 : senderId;
-              
+
               // Clear the client from the cache immediately to force recreation
               try {
-                await this.matrixUserService.clearUserClients(username, options.tenantId);
-                this.logger.debug(`Cleared cached Matrix clients for user ${username} after token refresh`);
+                await this.matrixUserService.clearUserClients(
+                  username,
+                  options.tenantId,
+                );
+                this.logger.debug(
+                  `Cleared cached Matrix clients for user ${username} after token refresh`,
+                );
               } catch (clearError) {
-                this.logger.warn(`Error clearing cached Matrix clients: ${clearError.message}`);
+                this.logger.warn(
+                  `Error clearing cached Matrix clients: ${clearError.message}`,
+                );
                 // Continue anyway
               }
             } else {
@@ -128,9 +135,7 @@ export class MatrixMessageService implements IMatrixMessageProvider {
               `Error regenerating token: ${refreshError.message}`,
               refreshError.stack,
             );
-            throw new Error(
-              `Failed to refresh Matrix credentials: ${refreshError.message}`,
-            );
+            throw new Error('Failed to refresh Matrix credentials');
           }
         } else {
           this.logger.debug(
