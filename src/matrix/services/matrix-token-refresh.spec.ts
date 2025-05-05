@@ -292,8 +292,10 @@ describe('Matrix Token Refresh Integration', () => {
       });
 
       // Mock successful token generation before sending
-      jest.spyOn(userService, 'generateNewAccessToken').mockResolvedValueOnce('new-token');
-      
+      jest
+        .spyOn(userService, 'generateNewAccessToken')
+        .mockResolvedValueOnce('new-token');
+
       // The next message should trigger token refresh and clear cached clients
       const eventId2 = await messageService.sendMessage({
         roomId: 'room-123',
@@ -328,8 +330,9 @@ describe('Matrix Token Refresh Integration', () => {
       // 5. With our fix, the client is cleared from cache and recreated
 
       // Mock successful token generation
-      jest.spyOn(userService, 'generateNewAccessToken')
-          .mockImplementation(() => Promise.resolve('new-access-token'));
+      jest
+        .spyOn(userService, 'generateNewAccessToken')
+        .mockImplementation(() => Promise.resolve('new-access-token'));
 
       // Prepare spies
       const clearUserClientsSpy = jest.spyOn(userService, 'clearUserClients');
@@ -425,9 +428,10 @@ describe('Matrix Token Refresh Integration', () => {
 
     it('should clear Matrix clients when refreshing tokens in MatrixGateway', async () => {
       // Mock successful token generation
-      jest.spyOn(userService, 'generateNewAccessToken')
-          .mockImplementation(() => Promise.resolve('new-access-token'));
-      
+      jest
+        .spyOn(userService, 'generateNewAccessToken')
+        .mockImplementation(() => Promise.resolve('new-access-token'));
+
       // Mock a socket client object
       const mockSocket = {
         id: 'socket-id-1',
@@ -470,7 +474,7 @@ describe('Matrix Token Refresh Integration', () => {
             user.matrixUserId,
             user.matrixAccessToken,
           );
-        } catch (error) {
+        } catch () {
           isTokenValid = false;
         }
 

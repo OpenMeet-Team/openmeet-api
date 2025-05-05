@@ -44,7 +44,9 @@ export async function initializeOAuthClient(
 
   const keyset = await loadKeys(configService);
   if (keyset.length === 0) {
-    console.warn('No valid Bluesky keys found in environment variables. Bluesky integration will not be available.');
+    console.warn(
+      'No valid Bluesky keys found in environment variables. Bluesky integration will not be available.',
+    );
     throw new Error('No valid keys found in environment variables');
   }
 

@@ -162,6 +162,23 @@ export class MatrixMessageService implements IMatrixMessageProvider {
           },
         });
 
+        // Initialize the client before use - this is crucial for token acceptance
+        try {
+          this.logger.debug(
+            `Starting Matrix client for user ${senderId} before sending message`,
+          );
+          await tempClient.startClient({
+            initialSyncLimit: 0, // Minimal sync for message sending
+            disablePresence: true, // Don't need presence for message sending
+            lazyLoadMembers: true, // Performance optimization
+          });
+        } catch (startError) {
+          this.logger.warn(
+            `Non-fatal error starting temporary Matrix client: ${startError.message}`,
+          );
+          // Continue anyway - some Matrix SDKs allow operations without starting
+        }
+
         // Send the message
         try {
           const response = await tempClient.sendEvent(
@@ -170,6 +187,16 @@ export class MatrixMessageService implements IMatrixMessageProvider {
             messageContent,
             '',
           );
+
+          // Stop the client after use to prevent resource leaks
+          try {
+            tempClient.stopClient();
+          } catch (stopError) {
+            this.logger.warn(
+              `Non-fatal error stopping Matrix client: ${stopError.message}`,
+            );
+            // Non-fatal error, continue
+          }
 
           return response.event_id;
         } catch (sendError) {
@@ -182,6 +209,20 @@ export class MatrixMessageService implements IMatrixMessageProvider {
               'You do not have permission to send messages to this room',
             );
           }
+
+          // Handle token issues specially to provide better error messages
+          if (
+            sendError.message?.includes('M_UNKNOWN_TOKEN') ||
+            sendError.message?.includes('Invalid access token')
+          ) {
+            this.logger.error(
+              `Token error for user ${senderId} despite refresh: ${sendError.message}`,
+            );
+            throw new Error(
+              'Matrix authentication failed. Please try again or contact support.',
+            );
+          }
+
           throw sendError;
         }
       }
@@ -248,12 +289,38 @@ export class MatrixMessageService implements IMatrixMessageProvider {
         },
       });
 
+      // Initialize the client before using it (similar to messaging)
+      try {
+        this.logger.debug(
+          `Starting Matrix client for typing notification as ${userId}`,
+        );
+        await client.startClient({
+          initialSyncLimit: 0,
+          disablePresence: true,
+          lazyLoadMembers: true,
+        });
+      } catch (startError) {
+        this.logger.warn(
+          `Non-fatal error starting Matrix client for typing: ${startError.message}`,
+        );
+        // Continue anyway
+      }
+
       // Send typing notification
       // The timeout is how long the typing indicator should be shown (in milliseconds)
       // Use 20 seconds for active typing, or 0 for stopped typing
       const timeout = isTyping ? 20000 : 0;
 
       await client.sendTyping(roomId, isTyping, timeout);
+
+      // Clean up client
+      try {
+        client.stopClient();
+      } catch (stopError) {
+        this.logger.warn(
+          `Non-fatal error stopping Matrix client: ${stopError.message}`,
+        );
+      }
 
       this.logger.debug(`Typing notification sent successfully`);
       return {};

@@ -258,7 +258,11 @@ export class EventManagementService {
           // Use BlueskyIdService to create a proper AT Protocol URI
           const did = createEventDto.sourceId ?? '';
           const collection = BLUESKY_COLLECTIONS.EVENT;
-          event.sourceId = this.blueskyIdService.createUri(did, collection, rkey);
+          event.sourceId = this.blueskyIdService.createUri(
+            did,
+            collection,
+            rkey,
+          );
 
           // Removed sourceUrl as it doesn't point to a real page
           event.sourceUrl = null;
@@ -273,7 +277,10 @@ export class EventManagementService {
           event.lastSyncedAt = new Date();
         } catch (blueskyError) {
           // If the user specifically requested a Bluesky event, fail with detailed error
-          if (createEventDto.sourceType === EventSourceType.BLUESKY || createEventDto.sourceId) {
+          if (
+            createEventDto.sourceType === EventSourceType.BLUESKY ||
+            createEventDto.sourceId
+          ) {
             this.logger.error('Failed to create event in Bluesky:', {
               error: blueskyError.message,
               stack: blueskyError.stack,
@@ -282,13 +289,16 @@ export class EventManagementService {
               'Failed to create event in Bluesky. Please try again or check your Bluesky connection.',
             );
           }
-          
+
           // Otherwise, just log the error and continue creating the event without Bluesky integration
-          this.logger.warn('Failed to create event in Bluesky, continuing without Bluesky integration:', {
-            error: blueskyError.message,
-            stack: blueskyError.stack,
-          });
-          
+          this.logger.warn(
+            'Failed to create event in Bluesky, continuing without Bluesky integration:',
+            {
+              error: blueskyError.message,
+              stack: blueskyError.stack,
+            },
+          );
+
           // Clear Bluesky-specific fields so we don't have dangling references
           event.sourceType = null;
           event.sourceId = null;
