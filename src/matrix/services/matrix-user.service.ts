@@ -493,6 +493,7 @@ export class MatrixUserService
     accessToken: string,
   ): Promise<boolean> {
     if (!userId || !accessToken) {
+      this.logger.warn(`Token verification failed: userId or accessToken is empty`);
       return false;
     }
 
@@ -502,6 +503,8 @@ export class MatrixUserService
       // The whoami endpoint is the standard way to verify tokens
       const url = `${config.baseUrl}/_matrix/client/v3/account/whoami`;
 
+      this.logger.debug(`Verifying token for ${userId} using URL: ${url}`);
+      
       const response = await axios.get(url, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -519,12 +522,26 @@ export class MatrixUserService
       this.logger.warn(
         `Token verification failed: user ID mismatch. Expected ${userId}, got ${response.data?.user_id}`,
       );
+      
+      // Extract username for cache clearing on mismatch
+      const username = userId.startsWith('@')
+        ? userId.split(':')[0].substring(1)
+        : userId;
+      
+      // Clear all clients for this user since the token is invalid
+      this.logger.debug(`Clearing all cached clients for ${username} due to user ID mismatch`);
+      this.clearCachedClients(username);
+      
       return false;
     } catch (error) {
       // If we get an error, the token is likely invalid
       this.logger.warn(
         `Matrix token invalid for user ${userId}: ${error.message}`,
       );
+      
+      if (error.response) {
+        this.logger.debug(`Response status: ${error.response.status}, data: ${JSON.stringify(error.response.data)}`);
+      }
       
       // Extract username for cache clearing
       const username = userId.startsWith('@')
@@ -533,6 +550,7 @@ export class MatrixUserService
       
       // Since we don't have tenantId in this context, clear all clients for this username
       // across all tenants to ensure we don't keep using any invalid tokens
+      this.logger.debug(`Clearing all cached clients for ${username} due to token validation error`);
       this.clearCachedClients(username);
       
       return false;
@@ -555,6 +573,9 @@ export class MatrixUserService
    */
   private clearCachedClients(usernamePattern: string, tenantId?: string): void {
     try {
+      // Log the full cache for debugging
+      this.logger.debug(`Current Matrix client cache keys: ${Array.from(this.userMatrixClients.keys()).join(', ')}`);
+    
       // Find all keys that match the username pattern and tenant ID (if provided)
       const keysToRemove: string[] = [];
       
@@ -563,13 +584,26 @@ export class MatrixUserService
         const isTenantMatch = !tenantId || 
           (client.matrixUserId && client.matrixUserId.includes(`_${tenantId}`));
           
-        // Match by username pattern
-        const isUsernameMatch = key.includes(usernamePattern);
+        // Using exact match to avoid false positives
+        // Or clear all clients if we're getting desperate
+        const isUsernameMatch = key === usernamePattern;
         
         if (isUsernameMatch && isTenantMatch) {
           keysToRemove.push(key);
         }
       });
+      
+      // If we didn't find any exact matches and there is no tenant ID, try a more aggressive approach
+      if (keysToRemove.length === 0) {
+        // Fallback: Clear all clients for this user across all tenants if we can't find an exact match
+        this.logger.debug(`No exact matches found for ${usernamePattern}, trying partial matches`);
+        
+        this.userMatrixClients.forEach((client, key) => {
+          if (key.includes(usernamePattern)) {
+            keysToRemove.push(key);
+          }
+        });
+      }
       
       if (keysToRemove.length > 0) {
         this.logger.debug(`Clearing ${keysToRemove.length} cached Matrix clients matching ${usernamePattern}${tenantId ? ` for tenant ${tenantId}` : ''}`);
@@ -589,6 +623,8 @@ export class MatrixUserService
           this.userMatrixClients.delete(key);
           this.logger.debug(`Removed Matrix client for ${key} from cache`);
         }
+      } else {
+        this.logger.debug(`No cached Matrix clients found matching ${usernamePattern}${tenantId ? ` for tenant ${tenantId}` : ''}`);
       }
     } catch (error) {
       this.logger.error(`Error clearing cached clients: ${error.message}`);
@@ -611,6 +647,8 @@ export class MatrixUserService
       // Use admin API to create a new access token
       const url = `${config.baseUrl}/_synapse/admin/v1/users/${encodeURIComponent(matrixUserId)}/login`;
 
+      this.logger.debug(`Generating new access token for ${matrixUserId} using URL: ${url}`);
+
       const response = await axios.post(
         url,
         {
@@ -627,15 +665,45 @@ export class MatrixUserService
         this.logger.log(
           `Successfully generated new admin token for ${matrixUserId}`,
         );
+        
+        // Log token length for debugging (don't log actual token)
+        const tokenLength = response.data.access_token.length;
+        this.logger.debug(`Generated token length: ${tokenLength} characters`);
+        
+        // Verify the new token works immediately
+        try {
+          const isValid = await this.verifyAccessToken(
+            matrixUserId,
+            response.data.access_token
+          );
+          
+          if (!isValid) {
+            this.logger.warn(`Generated new token for ${matrixUserId} but it failed verification!`);
+            return null;
+          }
+          
+          this.logger.debug(`Verified new token for ${matrixUserId} is valid`);
+        } catch (verifyError) {
+          this.logger.warn(
+            `Error verifying new token for ${matrixUserId}: ${verifyError.message}`
+          );
+          // Continue anyway since we got what looks like a valid token
+        }
+        
         return response.data.access_token;
       }
 
+      this.logger.warn(`Generated token response missing access_token field: ${JSON.stringify(response.data)}`);
       return null;
     } catch (error) {
       this.logger.error(
         `Error generating new access token: ${error.message}`,
         error.stack,
       );
+      if (error.response) {
+        this.logger.error(`Response data: ${JSON.stringify(error.response.data)}`);
+        this.logger.error(`Response status: ${error.response.status}`);
+      }
       return null;
     }
   }
