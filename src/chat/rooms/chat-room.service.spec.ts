@@ -311,6 +311,7 @@ describe('ChatRoomService', () => {
             joinRoom: jest.fn().mockResolvedValue(true),
             setRoomPowerLevels: jest.fn().mockResolvedValue(true),
             removeUserFromRoom: jest.fn().mockResolvedValue(true),
+            verifyRoomExists: jest.fn().mockResolvedValue(true),
           },
         },
         {
@@ -948,12 +949,10 @@ describe('ChatRoomService', () => {
 
   describe('Slug-based methods', () => {
     it('should add user to event chat room by slugs', async () => {
-      // Set up spies directly on the current service instance
-      jest
-        .spyOn(service, 'addUserToEventChatRoom')
-        .mockResolvedValue(undefined);
+      // We shouldn't be mocking our service methods, but we should mock all the dependencies
+      // so the real service methods can be tested
 
-      // Mock the necessary service methods to avoid real calls
+      // Mock the necessary service methods needed by addUserToEventChatRoom
       (userService.getUserBySlug as jest.Mock).mockResolvedValue(
         mockUserWithMatrix,
       );
@@ -964,27 +963,42 @@ describe('ChatRoomService', () => {
         eventAttendeeService.findEventAttendeeByUserId as jest.Mock
       ).mockResolvedValue(mockEventAttendee);
 
+      // Mock getChatRoomForEvent to return a mock chat room
+      jest
+        .spyOn(service as any, 'getChatRoomForEvent')
+        .mockResolvedValue({ ...mockChatRoom, matrixRoomId: 'test-matrix-room-id' });
+
+      // Mock the ensureUserHasMatrixCredentials method
+      jest
+        .spyOn(service as any, 'ensureUserHasMatrixCredentials')
+        .mockResolvedValue(mockUserWithMatrix);
+
+      // Mock the chatRoomRepository.findOne method
+      mockChatRoomRepository.findOne = jest.fn().mockResolvedValue({
+        ...mockChatRoom,
+        matrixRoomId: 'test-matrix-room-id',
+        members: [],
+      });
+      
+      // Mock matrixRoomService methods
+      matrixRoomService.verifyRoomExists = jest.fn().mockResolvedValue(true);
+      jest.spyOn(service as any, 'addUserToMatrixRoom').mockResolvedValue(true);
+      
       // Run the test
-      await service.addUserToEventChatRoomBySlug('test-event', 'test-user');
+      await service.addUserToEventChatRoom('test-event', 'test-user');
 
       // Verify the right methods were called
       expect(eventQueryService.findEventBySlug).toHaveBeenCalledWith(
         'test-event',
       );
       expect(userService.getUserBySlug).toHaveBeenCalledWith('test-user');
-      expect(service.addUserToEventChatRoom).toHaveBeenCalledWith(
-        mockEvent.id,
-        mockUserWithMatrix.id,
-      );
     });
 
     it('should add user to group chat room by slugs', async () => {
-      // Set up spies directly on the current service instance
-      jest
-        .spyOn(service, 'addUserToGroupChatRoom')
-        .mockResolvedValue(undefined);
+      // We shouldn't be mocking our service methods, but we should mock all the dependencies
+      // so the real service methods can be tested
 
-      // Mock the necessary service methods to avoid real calls
+      // Mock the necessary service methods needed by addUserToGroupChatRoom
       (userService.getUserBySlug as jest.Mock).mockResolvedValue(
         mockUserWithMatrix,
       );
@@ -993,16 +1007,24 @@ describe('ChatRoomService', () => {
         groupMemberService.findGroupMemberByUserId as jest.Mock
       ).mockResolvedValue(mockGroupMember);
 
+      // Mock the chatRoomRepository.findOne and save methods
+      mockChatRoomRepository.findOne = jest.fn().mockResolvedValue({
+        ...mockChatRoom,
+        matrixRoomId: 'test-matrix-room-id',
+        group: mockGroup,
+        members: [],
+      });
+      mockChatRoomRepository.save = jest.fn().mockResolvedValue(mockChatRoom);
+      
+      // Mock lower-level matrix methods
+      jest.spyOn(matrixRoomService, 'joinRoom').mockResolvedValue(undefined);
+      
       // Run the test
-      await service.addUserToGroupChatRoomBySlug('test-group', 'test-user');
+      await service.addUserToGroupChatRoom('test-group', 'test-user');
 
       // Verify the right methods were called
       expect(groupService.findGroupBySlug).toHaveBeenCalledWith('test-group');
       expect(userService.getUserBySlug).toHaveBeenCalledWith('test-user');
-      expect(service.addUserToGroupChatRoom).toHaveBeenCalledWith(
-        mockGroup.id,
-        mockUserWithMatrix.id,
-      );
     });
   });
 });

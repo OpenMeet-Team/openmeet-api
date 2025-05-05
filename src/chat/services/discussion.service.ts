@@ -238,9 +238,15 @@ export class DiscussionService implements DiscussionServiceInterface {
           this.logger.log(
             `Ensuring user ${userId} is a member of event chat room ${chatRooms[0].matrixRoomId}`,
           );
-          await this.chatRoomService.addUserToEventChatRoom(entityId, userId);
+          await this.chatRoomService.addUserToEventChatRoomById(
+            entityId,
+            userId,
+          );
         } else {
-          await this.chatRoomService.addUserToGroupChatRoom(entityId, userId);
+          await this.chatRoomService.addUserToGroupChatRoomById(
+            entityId,
+            userId,
+          );
         }
 
         // Mark membership as verified for this request cycle
@@ -310,12 +316,12 @@ export class DiscussionService implements DiscussionServiceInterface {
 
             // Make sure the user is added to the new room
             if (entityType === 'event') {
-              await this.chatRoomService.addUserToEventChatRoom(
+              await this.chatRoomService.addUserToEventChatRoomById(
                 entityId,
                 userId,
               );
             } else {
-              await this.chatRoomService.addUserToGroupChatRoom(
+              await this.chatRoomService.addUserToGroupChatRoomById(
                 entityId,
                 userId,
               );
@@ -433,9 +439,15 @@ export class DiscussionService implements DiscussionServiceInterface {
 
           // Try to add the user to the new room
           if (entityType === 'event') {
-            await this.chatRoomService.addUserToEventChatRoom(entityId, userId);
+            await this.chatRoomService.addUserToEventChatRoomById(
+              entityId,
+              userId,
+            );
           } else {
-            await this.chatRoomService.addUserToGroupChatRoom(entityId, userId);
+            await this.chatRoomService.addUserToGroupChatRoomById(
+              entityId,
+              userId,
+            );
           }
 
           // Return empty messages for now - user will need to refresh
@@ -777,7 +789,7 @@ export class DiscussionService implements DiscussionServiceInterface {
       await this.ensureEntityChatRoom('event', eventId, userId);
 
       // Then add the user to the chat room
-      await this.chatRoomService.addUserToEventChatRoom(eventId, userId);
+      await this.chatRoomService.addUserToEventChatRoomById(eventId, userId);
 
       // Cache the membership verification in the request cache
       const cache = this.getRequestCache();
@@ -903,11 +915,11 @@ export class DiscussionService implements DiscussionServiceInterface {
       cache.chatRooms.set(cacheKey, chatRoom);
     }
 
-    // Add the user to the appropriate chat room
+    // Add the user to the appropriate chat room, using slugs directly
     if (entityType === 'event') {
-      await this.chatRoomService.addUserToEventChatRoom(entityId, user.id);
+      await this.chatRoomService.addUserToEventChatRoom(entitySlug, userSlug);
     } else {
-      await this.chatRoomService.addUserToGroupChatRoom(entityId, user.id);
+      await this.chatRoomService.addUserToGroupChatRoom(entitySlug, userSlug);
     }
 
     // Cache the membership verification
@@ -1126,9 +1138,15 @@ export class DiscussionService implements DiscussionServiceInterface {
 
     // Remove the user from the appropriate chat room
     if (entityType === 'event') {
-      await this.chatRoomService.removeUserFromEventChatRoom(entityId, userId);
+      await this.chatRoomService.removeUserFromEventChatRoomById(
+        entityId,
+        userId,
+      );
     } else {
-      await this.chatRoomService.removeUserFromGroupChatRoom(entityId, userId);
+      await this.chatRoomService.removeUserFromGroupChatRoomById(
+        entityId,
+        userId,
+      );
     }
 
     // Clear any cached membership verification for this user/entity
@@ -1272,9 +1290,15 @@ export class DiscussionService implements DiscussionServiceInterface {
       try {
         // Add user to the room based on entity type
         if (entityType === 'event') {
-          await this.chatRoomService.addUserToEventChatRoom(entityId, userId);
+          await this.chatRoomService.addUserToEventChatRoomById(
+            entityId,
+            userId,
+          );
         } else {
-          await this.chatRoomService.addUserToGroupChatRoom(entityId, userId);
+          await this.chatRoomService.addUserToGroupChatRoomById(
+            entityId,
+            userId,
+          );
         }
 
         // Mark membership as verified for this request cycle
@@ -1786,7 +1810,7 @@ export class DiscussionService implements DiscussionServiceInterface {
             // Remove each member from the room first to ensure clean disconnection
             for (const member of members) {
               try {
-                await this.chatRoomService.removeUserFromEventChatRoom(
+                await this.chatRoomService.removeUserFromEventChatRoomById(
                   eventId,
                   member.id,
                 );
