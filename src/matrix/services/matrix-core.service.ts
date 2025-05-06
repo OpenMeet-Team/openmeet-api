@@ -447,7 +447,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
   public async ensureValidAdminToken(): Promise<boolean> {
     try {
       // Use the token manager's state
-      const tokenState = this.tokenManager.getTokenState();
+      const tokenState = this.tokenManager.getAdminTokenState();
 
       // If the token is regenerating, we'll assume it's valid
       if (tokenState === 'regenerating') {

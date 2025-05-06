@@ -13,6 +13,7 @@ import { MatrixUserService } from './services/matrix-user.service';
 import { MatrixRoomService } from './services/matrix-room.service';
 import { MatrixMessageService } from './services/matrix-message.service';
 import { MatrixTokenManagerService } from './services/matrix-token-manager.service';
+import { MatrixClientOperationsService } from './services/matrix-client-operations.service';
 import { MatrixHealthIndicator } from './health/matrix.health';
 import { configureMatrixLogging } from './config/matrix-logger';
 
@@ -46,6 +47,7 @@ configureMatrixLogging();
     MatrixUserService,
     MatrixRoomService,
     MatrixMessageService,
+    MatrixClientOperationsService,
     MatrixHealthIndicator,
 
     // Gateway for real-time events
@@ -64,6 +66,7 @@ configureMatrixLogging();
     MatrixRoomService,
     MatrixMessageService,
     MatrixTokenManagerService,
+    MatrixClientOperationsService,
     MatrixHealthIndicator,
   ],
 })

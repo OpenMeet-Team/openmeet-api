@@ -851,12 +851,10 @@ export class ChatRoomService {
   // Removed redundant ensureUserWithMatrixCredentials method - using ensureUserHasMatrixCredentials directly
 
   /**
-   * Helper method to add a user to a Matrix room and return whether they joined
-   * Handles both invite and join operations with appropriate error handling
-   *
+   * Add a user to a Matrix room with explicit membership verification
    * @param matrixRoomId The Matrix room ID
-   * @param user The user entity with Matrix credentials
-   * @param options Optional parameters for customizing the join behavior
+   * @param user The user entity
+   * @param options Optional parameters for controlling the join process
    * @returns True if the user joined or is already a member, false otherwise
    */
   @Trace('chat-room.addUserToMatrixRoom')
@@ -878,10 +876,60 @@ export class ChatRoomService {
       return false;
     }
 
+    if (!user.matrixAccessToken) {
+      this.logger.warn(
+        `User ${user.id} does not have a Matrix access token, cannot join room`,
+      );
+      return false;
+    }
+
     let isAlreadyJoined = false;
 
-    // Step 1: Invite user to the room if needed
-    if (!skipInvite && user.matrixUserId) {
+    // Step 1: Verify if user is already in the room
+    try {
+      // Create a Matrix client to check membership
+      const sdk = this.matrixCoreService.getSdk();
+      const config = this.matrixCoreService.getConfig();
+      const client = sdk.createClient({
+        baseUrl: config.baseUrl,
+        userId: user.matrixUserId,
+        accessToken: user.matrixAccessToken,
+        deviceId: user.matrixDeviceId || undefined,
+        useAuthorizationHeader: true,
+      });
+
+      // Try to get room state to verify membership
+      try {
+        // Use direct room state check to verify membership
+        await client.roomState(matrixRoomId);
+        this.logger.log(
+          `User ${user.id} is already verified as a member of room ${matrixRoomId}`,
+        );
+        isAlreadyJoined = true;
+        return true;
+      } catch (stateError) {
+        // If error is 403 forbidden, user is not in room
+        if (stateError.httpStatus === 403) {
+          this.logger.debug(
+            `User ${user.id} is not in room ${matrixRoomId}, proceeding with join flow`,
+          );
+          isAlreadyJoined = false;
+        } else {
+          // For other errors, log but continue with join attempt
+          this.logger.warn(
+            `Error checking if user ${user.id} is in room ${matrixRoomId}: ${stateError.message}`,
+          );
+        }
+      }
+    } catch (clientError) {
+      this.logger.warn(
+        `Error creating client to check membership for user ${user.id}: ${clientError.message}`,
+      );
+      // Continue with join flow
+    }
+
+    // Step 2: Invite user to the room if needed
+    if (!skipInvite && !isAlreadyJoined && user.matrixUserId) {
       try {
         await this.matrixRoomService.inviteUser(
           matrixRoomId,
@@ -909,8 +957,8 @@ export class ChatRoomService {
       }
     }
 
-    // Step 2: Have the user join the room if they have credentials and either need to join or we're forcing a join
-    let isJoined = isAlreadyJoined;
+    // Step 3: Have the user join the room if they have credentials and either need to join or we're forcing a join
+    let joinAttempted = false;
     if (
       (user.matrixAccessToken && user.matrixUserId && !isAlreadyJoined) ||
       forceInvite
@@ -919,11 +967,11 @@ export class ChatRoomService {
         await this.matrixRoomService.joinRoom(
           matrixRoomId,
           user.matrixUserId,
-          user.matrixAccessToken!, // Add non-null assertion since we've already checked that it exists
+          user.matrixAccessToken!,
           user.matrixDeviceId,
         );
-        isJoined = true;
-        this.logger.log(`User ${user.id} joined room ${matrixRoomId}`);
+        joinAttempted = true;
+        this.logger.log(`User ${user.id} attempted to join room ${matrixRoomId}`);
       } catch (joinError) {
         // If join fails with "already in room", that's actually success
         if (
@@ -932,7 +980,7 @@ export class ChatRoomService {
             joinError.message.includes('already a member') ||
             joinError.message.includes('already joined'))
         ) {
-          isJoined = true;
+          isAlreadyJoined = true;
           this.logger.debug(
             `User ${user.id} is already a member of room ${matrixRoomId}`,
           );
@@ -940,12 +988,102 @@ export class ChatRoomService {
           this.logger.warn(
             `User ${user.id} failed to join room: ${joinError.message}`,
           );
-          // Continue anyway - they can join later
+          // We'll verify membership below instead of assuming failure
         }
       }
     }
 
-    return isJoined;
+    // Step 4: Explicitly verify room membership AFTER join attempt
+    // This is the critical improvement - verify membership regardless of reported join success
+    if (joinAttempted || !isAlreadyJoined) {
+      try {
+        const sdk = this.matrixCoreService.getSdk();
+        const config = this.matrixCoreService.getConfig();
+        const client = sdk.createClient({
+          baseUrl: config.baseUrl,
+          userId: user.matrixUserId,
+          accessToken: user.matrixAccessToken,
+          deviceId: user.matrixDeviceId || undefined,
+          useAuthorizationHeader: true,
+        });
+
+        // Allow time for join to propagate
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Try to get room state again to verify membership
+        try {
+          await client.roomState(matrixRoomId);
+          this.logger.log(
+            `VERIFIED: User ${user.id} is now a member of room ${matrixRoomId}`,
+          );
+          return true;
+        } catch (verifyError) {
+          if (verifyError.httpStatus === 403) {
+            this.logger.error(
+              `VERIFICATION FAILED: User ${user.id} is still not a member of room ${matrixRoomId} after join attempt`,
+            );
+            
+            // Try a fallback direct join using the admin client
+            try {
+              this.logger.log(`Attempting admin fallback to add user ${user.matrixUserId} to room ${matrixRoomId}`);
+              const adminClient = this.matrixRoomService.getAdminClient();
+              
+              // First ensure admin is in the room
+              try {
+                await adminClient.joinRoom(matrixRoomId);
+              } catch (adminJoinError) {
+                // Ignore "already in room" errors
+                if (!adminJoinError.message?.includes('already')) {
+                  this.logger.warn(`Admin failed to join room: ${adminJoinError.message}`);
+                }
+              }
+              
+              // Then try to invite the user again
+              await adminClient.invite(matrixRoomId, user.matrixUserId);
+              this.logger.log(`Admin successfully invited ${user.matrixUserId} to room ${matrixRoomId}`);
+              
+              // Try joining one more time with user's client
+              await this.matrixRoomService.joinRoom(
+                matrixRoomId,
+                user.matrixUserId,
+                user.matrixAccessToken!,
+                user.matrixDeviceId,
+              );
+              
+              // Final verification
+              try {
+                await client.roomState(matrixRoomId);
+                this.logger.log(
+                  `ADMIN FALLBACK SUCCEEDED: User ${user.id} is now a member of room ${matrixRoomId}`,
+                );
+                return true;
+              } catch (finalVerifyError) {
+                this.logger.error(
+                  `ADMIN FALLBACK FAILED: User ${user.id} still cannot access room ${matrixRoomId}: ${finalVerifyError.message}`,
+                );
+                return false;
+              }
+            } catch (adminError) {
+              this.logger.error(`Admin fallback failed: ${adminError.message}`);
+              return false;
+            }
+          } else {
+            this.logger.warn(
+              `Error verifying if user ${user.id} joined room ${matrixRoomId}: ${verifyError.message}`,
+            );
+            // Since we can't verify, assume join failed
+            return false;
+          }
+        }
+      } catch (clientError) {
+        this.logger.warn(
+          `Error creating client to verify membership for user ${user.id}: ${clientError.message}`,
+        );
+        return false;
+      }
+    }
+
+    return isAlreadyJoined;
   }
 
   /**
