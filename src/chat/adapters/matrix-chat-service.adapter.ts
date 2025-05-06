@@ -350,10 +350,8 @@ export class MatrixChatServiceAdapter implements ChatServiceInterface {
     const userWithSlug = await this.userService.findBySlug(user.slug);
     if (userWithSlug) {
       // Get client for the user using the slug (which is required by the new MatrixUserService)
-      // Get tenant ID from request or use the same tenant ID used to find the user
-      const tenantId =
-        this.request?.tenantId ||
-        (await this.userService.getTenantIdForUser(user.slug));
+      // Get tenant ID from request - this should always be available in a tenant-aware system
+      const tenantId = this.request?.tenantId || 'default';
       await this.matrixUserService.getClientForUser(
         user.slug,
         this.userService,
