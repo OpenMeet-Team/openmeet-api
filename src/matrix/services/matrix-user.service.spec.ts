@@ -120,7 +120,15 @@ describe('MatrixUserService', () => {
           provide: ModuleRef,
           useValue: {
             get: jest.fn(),
-            resolve: jest.fn(),
+            resolve: jest.fn().mockImplementation(() => {
+              return {
+                findBySlug: jest.fn().mockResolvedValue({
+                  matrixUserId: '@test_user:example.org',
+                  matrixAccessToken: 'test-access-token',
+                  matrixDeviceId: 'test-device-id',
+                }),
+              };
+            }),
           },
         },
         {
@@ -218,24 +226,16 @@ describe('MatrixUserService', () => {
   describe('getClientForUser', () => {
     it('should create a new client if none exists for user', async () => {
       const userSlug = 'test-user';
-      const mockUserService = {
-        findBySlug: jest.fn().mockResolvedValue({
-          matrixUserId: '@test_user:example.org',
-          matrixAccessToken: 'test-access-token',
-          matrixDeviceId: 'test-device-id',
-        }),
-      };
-
       // Ensure no client exists yet
       (service as any).userMatrixClients = new Map();
 
       // Mock successful token generation and verification
       jest.spyOn(service, 'verifyAccessToken').mockResolvedValue(true);
 
-      // Get client
+      // Get client - don't pass userService, let it use module resolution
       const client = await service.getClientForUser(
         userSlug,
-        mockUserService as any,
+        undefined, // Use module resolution instead
         'test-tenant',
       );
 

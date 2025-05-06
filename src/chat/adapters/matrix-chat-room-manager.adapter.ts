@@ -127,6 +127,7 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
       await this.matrixUserService.getClientForUser(
         user.slug,
         this.userService,
+        tenantId, // Pass the tenant ID
       );
     } catch (startError) {
       this.logger.error(

@@ -724,7 +724,7 @@ export class MatrixUserService
    */
   async getClientForUser(
     userSlug: string,
-    userService?: any,
+    userService?: any /* DEPRECATED: parameter will be removed in future version */,
     tenantId?: string,
   ): Promise<IMatrixClient> {
     // Check if we already have an active client for this user
@@ -744,26 +744,23 @@ export class MatrixUserService
     let user;
     let userServiceInstance;
     try {
-      if (userService) {
-        // If userService was passed, use it (more efficient)
-        userServiceInstance = userService;
-        user = await userService.findBySlug(userSlug, tenantId);
-      } else {
-        // Otherwise, get a UserService instance through the module system
-        const contextId = ContextIdFactory.create();
+      // NOTE: userService parameter is deprecated and will be removed.
+      // The preferred approach is to pass tenantId instead.
 
-        // Import UserService
-        const UserServiceClass = (await import('../../user/user.service'))
-          .UserService;
-        userServiceInstance = await this.moduleRef.resolve(
-          UserServiceClass,
-          contextId,
-          { strict: false },
-        );
+      // Get a UserService instance through the module system
+      const contextId = ContextIdFactory.create();
 
-        // Pass tenant ID to findBySlug
-        user = await userServiceInstance.findBySlug(userSlug, tenantId);
-      }
+      // Import UserService
+      const UserServiceClass = (await import('../../user/user.service'))
+        .UserService;
+      userServiceInstance = await this.moduleRef.resolve(
+        UserServiceClass,
+        contextId,
+        { strict: false },
+      );
+
+      // Pass tenant ID to findBySlug
+      user = await userServiceInstance.findBySlug(userSlug, tenantId);
     } catch (error) {
       this.logger.error(
         `Error fetching user ${userSlug}: ${error.message}`,

@@ -125,10 +125,11 @@ export class ChatRoomService {
     // Get a client for this user
     try {
       // Add non-null assertions since we've checked these values above
-      // Use getClientForUser from MatrixUserService
+      // Use getClientForUser from MatrixUserService and pass the tenant ID
       await this.matrixUserService.getClientForUser(
         user.slug,
         this.userService,
+        this.request.tenantId, // Pass tenant ID from request context
       );
     } catch (startError) {
       this.logger.error(

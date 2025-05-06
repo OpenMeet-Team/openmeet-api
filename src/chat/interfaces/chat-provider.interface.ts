@@ -149,12 +149,13 @@ export interface ChatProviderInterface {
 
   /**
    * Start a client for a user
-   * @param options Options containing userId, accessToken, and deviceId
+   * @param options Options containing userId, accessToken, deviceId, and tenantId
    */
   startClient(options: {
     userId: string;
     accessToken: string;
     deviceId?: string;
+    tenantId?: string;
   }): Promise<void>;
 
   /**

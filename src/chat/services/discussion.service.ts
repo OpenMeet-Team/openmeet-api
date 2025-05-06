@@ -548,6 +548,7 @@ export class DiscussionService implements DiscussionServiceInterface {
         userId: user.matrixUserId,
         accessToken: user.matrixAccessToken,
         deviceId: user.matrixDeviceId,
+        tenantId, // Explicitly pass tenant ID to the Matrix client
       });
     } catch (error) {
       this.logger.warn(
