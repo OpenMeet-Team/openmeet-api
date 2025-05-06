@@ -964,9 +964,10 @@ describe('ChatRoomService', () => {
       ).mockResolvedValue(mockEventAttendee);
 
       // Mock getChatRoomForEvent to return a mock chat room
-      jest
-        .spyOn(service as any, 'getChatRoomForEvent')
-        .mockResolvedValue({ ...mockChatRoom, matrixRoomId: 'test-matrix-room-id' });
+      jest.spyOn(service as any, 'getChatRoomForEvent').mockResolvedValue({
+        ...mockChatRoom,
+        matrixRoomId: 'test-matrix-room-id',
+      });
 
       // Mock the ensureUserHasMatrixCredentials method
       jest
@@ -979,11 +980,11 @@ describe('ChatRoomService', () => {
         matrixRoomId: 'test-matrix-room-id',
         members: [],
       });
-      
+
       // Mock matrixRoomService methods
       matrixRoomService.verifyRoomExists = jest.fn().mockResolvedValue(true);
       jest.spyOn(service as any, 'addUserToMatrixRoom').mockResolvedValue(true);
-      
+
       // Run the test
       await service.addUserToEventChatRoom('test-event', 'test-user');
 
@@ -1015,10 +1016,10 @@ describe('ChatRoomService', () => {
         members: [],
       });
       mockChatRoomRepository.save = jest.fn().mockResolvedValue(mockChatRoom);
-      
+
       // Mock lower-level matrix methods
       jest.spyOn(matrixRoomService, 'joinRoom').mockResolvedValue(undefined);
-      
+
       // Run the test
       await service.addUserToGroupChatRoom('test-group', 'test-user');
 

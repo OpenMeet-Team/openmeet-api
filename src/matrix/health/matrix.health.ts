@@ -16,7 +16,7 @@ export class MatrixHealthIndicator extends HealthIndicator {
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
     try {
       const baseUrl = this.tokenManager['baseUrl']; // Access baseUrl from token manager
-      const tokenState = this.tokenManager.getTokenState();
+      const tokenState = this.tokenManager.getAdminTokenState();
       const adminToken = this.tokenManager.getAdminToken();
 
       // Basic checks that don't require auth
@@ -26,8 +26,8 @@ export class MatrixHealthIndicator extends HealthIndicator {
         const serverInfoUrl = `${baseUrl}/_matrix/client/versions`;
         const serverInfoResponse = await axios.get(serverInfoUrl);
         serverAvailable = serverInfoResponse.status === 200;
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (_serverCheckError) {
+        console.error('Matrix server check failed', _serverCheckError);
         serverAvailable = false;
       }
 

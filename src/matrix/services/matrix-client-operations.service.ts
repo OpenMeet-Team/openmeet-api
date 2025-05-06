@@ -21,7 +21,10 @@ export class MatrixClientOperationsService {
    * @returns The full Matrix user ID
    */
   private getMatrixUserId(userSlug: string, tenantId?: string): string {
-    const username = MatrixUserService.generateMatrixUsername({ slug: userSlug }, tenantId);
+    const username = MatrixUserService.generateMatrixUsername(
+      { slug: userSlug },
+      tenantId,
+    );
     return `@${username}:${this.matrixCoreService.getConfig().serverName}`;
   }
 
@@ -34,7 +37,9 @@ export class MatrixClientOperationsService {
     // In a real implementation, this would query a database to find the room ID
     // For now, we just use the slug as part of a predictable room ID pattern
     // This would be replaced with actual lookup logic
-    return `!event_${eventSlug}:${this.matrixCoreService.getConfig().serverName}`;
+    return await Promise.resolve(
+      `!event_${eventSlug}:${this.matrixCoreService.getConfig().serverName}`,
+    );
   }
 
   /**
@@ -50,28 +55,35 @@ export class MatrixClientOperationsService {
     tenantId?: string,
   ): Promise<T> {
     const matrixUserId = this.getMatrixUserId(userSlug, tenantId);
-    this.logger.debug(`Creating temporary Matrix client for user ${matrixUserId} (slug: ${userSlug})`);
-    
+    this.logger.debug(
+      `Creating temporary Matrix client for user ${matrixUserId} (slug: ${userSlug})`,
+    );
+
     let client: IMatrixClient | null = null;
-    
+
     try {
       // Get a valid token for this user
-      const token = await this.tokenManager.getValidUserToken(matrixUserId, tenantId);
-      
+      const token = await this.tokenManager.getValidUserToken(
+        matrixUserId,
+        tenantId,
+      );
+
       if (!token) {
-        throw new Error(`Could not obtain valid token for user ${matrixUserId}`);
+        throw new Error(
+          `Could not obtain valid token for user ${matrixUserId}`,
+        );
       }
-      
+
       // Create a new Matrix client with the token
       client = this.matrixCoreService.getSdk().createClient({
         baseUrl: this.matrixCoreService.getConfig().baseUrl,
         accessToken: token,
         userId: matrixUserId,
       });
-      
+
       // Perform the operation
       const result = await operation(client);
-      
+
       return result;
     } catch (error) {
       this.logger.error(
@@ -86,7 +98,9 @@ export class MatrixClientOperationsService {
           client.stopClient();
           this.logger.debug(`Stopped Matrix client for user ${matrixUserId}`);
         } catch (stopError) {
-          this.logger.warn(`Error stopping Matrix client: ${stopError.message}`);
+          this.logger.warn(
+            `Error stopping Matrix client: ${stopError.message}`,
+          );
         }
       }
     }
@@ -101,41 +115,43 @@ export class MatrixClientOperationsService {
     operation: (client: IMatrixClient) => Promise<T>,
   ): Promise<T> {
     this.logger.debug(`Creating temporary Matrix admin client`);
-    
+
     let client: IMatrixClient | null = null;
-    
+
     try {
       // Ensure we have a valid admin token
       const adminConfig = this.matrixCoreService.getConfig();
       const adminToken = this.tokenManager.getAdminToken();
-      
+
       if (!adminToken) {
         throw new Error('No valid admin token available');
       }
-      
+
       // Create a fresh admin client
       client = this.matrixCoreService.getSdk().createClient({
         baseUrl: adminConfig.baseUrl,
         accessToken: adminToken,
         userId: adminConfig.adminUserId,
       });
-      
+
       // Perform the operation
       const result = await operation(client);
-      
+
       return result;
     } catch (error) {
       this.logger.error(
         `Error during Matrix admin operation: ${error.message}`,
         error.stack,
       );
-      
+
       // If we get an unauthorized error, try to refresh the admin token
       if (error.response?.status === 401) {
-        this.logger.warn('Admin token appears invalid, triggering regeneration');
+        this.logger.warn(
+          'Admin token appears invalid, triggering regeneration',
+        );
         this.tokenManager.reportTokenInvalid();
       }
-      
+
       throw error;
     } finally {
       // Always stop the client when done
@@ -144,7 +160,9 @@ export class MatrixClientOperationsService {
           client.stopClient();
           this.logger.debug(`Stopped Matrix admin client`);
         } catch (stopError) {
-          this.logger.warn(`Error stopping Matrix admin client: ${stopError.message}`);
+          this.logger.warn(
+            `Error stopping Matrix admin client: ${stopError.message}`,
+          );
         }
       }
     }
@@ -164,8 +182,7 @@ export class MatrixClientOperationsService {
     tenantId?: string,
   ): Promise<T> {
     const roomId = await this.getMatrixRoomId(eventSlug);
-    const matrixUserId = this.getMatrixUserId(userSlug, tenantId);
-    
+
     return this.withMatrixClient(
       userSlug,
       async (client) => {
@@ -174,7 +191,7 @@ export class MatrixClientOperationsService {
       tenantId,
     );
   }
-  
+
   /**
    * Utility method for admin room operations using event slug
    * @param eventSlug Event slug
@@ -185,7 +202,7 @@ export class MatrixClientOperationsService {
     operation: (client: IMatrixClient, roomId: string) => Promise<T>,
   ): Promise<T> {
     const roomId = await this.getMatrixRoomId(eventSlug);
-    
+
     return this.withAdminClient(async (client) => {
       return operation(client, roomId);
     });
@@ -205,7 +222,7 @@ export class MatrixClientOperationsService {
     tenantId?: string,
   ): Promise<T> {
     const roomId = await this.getMatrixRoomId(eventSlug);
-    
+
     return this.withMatrixClient(
       userSlug,
       async (client) => {
@@ -215,10 +232,10 @@ export class MatrixClientOperationsService {
     );
   }
 
-  /** 
+  /**
    * Legacy methods that accept room IDs directly - kept for backward compatibility
    */
-  
+
   async withRoomOperation<T>(
     roomId: string,
     userSlug: string,
@@ -233,7 +250,7 @@ export class MatrixClientOperationsService {
       tenantId,
     );
   }
-  
+
   async withAdminRoomOperation<T>(
     roomId: string,
     operation: (client: IMatrixClient, roomId: string) => Promise<T>,
@@ -242,4 +259,4 @@ export class MatrixClientOperationsService {
       return operation(client, roomId);
     });
   }
-} 
+}

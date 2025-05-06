@@ -971,7 +971,9 @@ export class ChatRoomService {
           user.matrixDeviceId,
         );
         joinAttempted = true;
-        this.logger.log(`User ${user.id} attempted to join room ${matrixRoomId}`);
+        this.logger.log(
+          `User ${user.id} attempted to join room ${matrixRoomId}`,
+        );
       } catch (joinError) {
         // If join fails with "already in room", that's actually success
         if (
@@ -1008,7 +1010,7 @@ export class ChatRoomService {
         });
 
         // Allow time for join to propagate
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
         // Try to get room state again to verify membership
         try {
@@ -1022,26 +1024,32 @@ export class ChatRoomService {
             this.logger.error(
               `VERIFICATION FAILED: User ${user.id} is still not a member of room ${matrixRoomId} after join attempt`,
             );
-            
+
             // Try a fallback direct join using the admin client
             try {
-              this.logger.log(`Attempting admin fallback to add user ${user.matrixUserId} to room ${matrixRoomId}`);
+              this.logger.log(
+                `Attempting admin fallback to add user ${user.matrixUserId} to room ${matrixRoomId}`,
+              );
               const adminClient = this.matrixRoomService.getAdminClient();
-              
+
               // First ensure admin is in the room
               try {
                 await adminClient.joinRoom(matrixRoomId);
               } catch (adminJoinError) {
                 // Ignore "already in room" errors
                 if (!adminJoinError.message?.includes('already')) {
-                  this.logger.warn(`Admin failed to join room: ${adminJoinError.message}`);
+                  this.logger.warn(
+                    `Admin failed to join room: ${adminJoinError.message}`,
+                  );
                 }
               }
-              
+
               // Then try to invite the user again
               await adminClient.invite(matrixRoomId, user.matrixUserId);
-              this.logger.log(`Admin successfully invited ${user.matrixUserId} to room ${matrixRoomId}`);
-              
+              this.logger.log(
+                `Admin successfully invited ${user.matrixUserId} to room ${matrixRoomId}`,
+              );
+
               // Try joining one more time with user's client
               await this.matrixRoomService.joinRoom(
                 matrixRoomId,
@@ -1049,7 +1057,7 @@ export class ChatRoomService {
                 user.matrixAccessToken!,
                 user.matrixDeviceId,
               );
-              
+
               // Final verification
               try {
                 await client.roomState(matrixRoomId);

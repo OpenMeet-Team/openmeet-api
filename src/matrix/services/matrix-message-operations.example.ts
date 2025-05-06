@@ -4,7 +4,7 @@ import { MatrixClientOperationsService } from './matrix-client-operations.servic
 /**
  * Example service showing how to use the MatrixClientOperationsService
  * for handling Matrix operations with short-lived clients.
- * 
+ *
  * This is an example only and not for production use.
  */
 @Injectable()
@@ -17,7 +17,7 @@ export class MatrixMessageOperationsExample {
 
   /**
    * Send a message to an event chat using a short-lived client
-   * 
+   *
    * @param eventSlug Event slug
    * @param userSlug User slug
    * @param content Message content
@@ -30,26 +30,28 @@ export class MatrixMessageOperationsExample {
     content: { body: string; msgtype: string },
     tenantId?: string,
   ): Promise<string> {
-    this.logger.debug(`Sending message to event ${eventSlug} as user ${userSlug}`);
-    
+    this.logger.debug(
+      `Sending message to event ${eventSlug} as user ${userSlug}`,
+    );
+
     try {
       // Use the withMessageOperation helper for message-specific operations
       const eventId = await this.matrixOperations.withMessageOperation(
         eventSlug,
         userSlug,
         async (client, roomId) => {
-          // Send the message 
+          // Send the message
           const result = await client.sendEvent(
             roomId,
             'm.room.message',
             content,
           );
-          
+
           return result.event_id;
         },
         tenantId,
       );
-      
+
       this.logger.debug(`Message sent successfully with event ID: ${eventId}`);
       return eventId;
     } catch (error) {
@@ -63,7 +65,7 @@ export class MatrixMessageOperationsExample {
 
   /**
    * Get the most recent messages from an event chat
-   * 
+   *
    * @param eventSlug Event slug
    * @param userSlug User slug
    * @param limit Maximum number of messages to fetch
@@ -79,7 +81,7 @@ export class MatrixMessageOperationsExample {
     this.logger.debug(
       `Fetching ${limit} messages from event ${eventSlug} for user ${userSlug}`,
     );
-    
+
     try {
       return await this.matrixOperations.withEventOperation(
         eventSlug,
@@ -94,10 +96,10 @@ export class MatrixMessageOperationsExample {
               throw error;
             }
           }
-          
+
           // Then fetch messages (implementation depends on Matrix SDK version)
           const response = await client.roomState(roomId);
-          
+
           // Here we would normally use a message fetching method
           // but this is simplified for the example
           return response.filter((event) => event.type === 'm.room.message');
@@ -115,7 +117,7 @@ export class MatrixMessageOperationsExample {
 
   /**
    * Send a typing notification
-   * 
+   *
    * @param eventSlug Event slug
    * @param userSlug User slug
    * @param isTyping Whether the user is typing
@@ -130,7 +132,7 @@ export class MatrixMessageOperationsExample {
     this.logger.debug(
       `Sending typing notification to event ${eventSlug} for user ${userSlug}: ${isTyping ? 'typing' : 'not typing'}`,
     );
-    
+
     try {
       await this.matrixOperations.withEventOperation(
         eventSlug,
@@ -151,13 +153,13 @@ export class MatrixMessageOperationsExample {
 
   /**
    * Example of admin operations on an event room
-   * 
+   *
    * @param eventSlug Event slug
    * @returns Room state events
    */
   async getAdminEventState(eventSlug: string): Promise<any[]> {
     this.logger.debug(`Getting room state for event ${eventSlug} as admin`);
-    
+
     try {
       return await this.matrixOperations.withAdminEventOperation(
         eventSlug,
@@ -173,4 +175,4 @@ export class MatrixMessageOperationsExample {
       throw error;
     }
   }
-} 
+}

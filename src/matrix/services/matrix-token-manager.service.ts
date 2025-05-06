@@ -23,22 +23,22 @@ export class MatrixTokenManagerService
   implements OnModuleInit, OnModuleDestroy
 {
   private readonly logger = new Logger(MatrixTokenManagerService.name);
-  
-  // Admin token 
+
+  // Admin token
   private adminTokenState: TokenState = 'invalid';
   private adminAccessToken: string = '';
   private lastAdminTokenRefresh = 0;
-  
+
   // User tokens (new implementation)
   private userTokens = new Map<string, TokenData>();
-  
+
   // Configuration properties
   private readonly baseUrl: string;
   private readonly serverName: string;
   private readonly adminUserId: string;
   private readonly defaultDeviceId: string;
   private readonly defaultInitialDeviceDisplayName: string;
-  
+
   // Refresh interval
   private tokenRefreshInterval: NodeJS.Timeout;
 
@@ -190,7 +190,9 @@ export class MatrixTokenManagerService
         return false;
       }
     } catch (error) {
-      this.logger.warn(`Existing admin token appears invalid: ${error.message}`);
+      this.logger.warn(
+        `Existing admin token appears invalid: ${error.message}`,
+      );
       await this.triggerAdminTokenRegeneration();
       return false;
     }
@@ -219,13 +221,13 @@ export class MatrixTokenManagerService
           this.adminAccessToken = newToken;
           this.adminTokenState = 'valid';
           this.lastAdminTokenRefresh = Date.now();
-          
+
           // Emit an event that the admin token was updated
           this.eventEmitter.emit('matrix.admin.token.updated', {
             userId: this.adminUserId,
             token: this.adminAccessToken,
           });
-          
+
           this.logger.log('Matrix admin token regenerated successfully');
           return true;
         } else {
@@ -265,7 +267,8 @@ export class MatrixTokenManagerService
     });
 
     // Password is now required in the config
-    const adminPassword = process.env.MATRIX_ADMIN_PASSWORD || matrixConfig?.adminPassword;
+    const adminPassword =
+      process.env.MATRIX_ADMIN_PASSWORD || matrixConfig?.adminPassword;
     if (!adminPassword) {
       this.logger.error(
         'Cannot regenerate admin token: admin password not configured',
@@ -348,8 +351,8 @@ export class MatrixTokenManagerService
    * @returns A valid Matrix access token
    */
   async getValidUserToken(
-    matrixUserId: string, 
-    tenantId?: string
+    matrixUserId: string,
+    tenantId?: string,
   ): Promise<string | null> {
     const key = this.getUserTokenKey(matrixUserId, tenantId);
     const tokenData = this.userTokens.get(key);
@@ -364,7 +367,10 @@ export class MatrixTokenManagerService
 
       // Verify the token
       try {
-        const isValid = await this.verifyUserToken(matrixUserId, tokenData.token);
+        const isValid = await this.verifyUserToken(
+          matrixUserId,
+          tokenData.token,
+        );
         if (isValid) {
           // Update the lastVerified timestamp
           tokenData.lastVerified = now;
@@ -387,14 +393,14 @@ export class MatrixTokenManagerService
           lastVerified: Date.now(),
           deviceId: newToken.deviceId,
         });
-        
+
         // Emit an event that the user token was updated
         this.eventEmitter.emit('matrix.user.token.updated', {
           userId: matrixUserId,
           token: newToken.token,
           tenantId,
         });
-        
+
         return newToken.token;
       }
     } catch (error) {
@@ -413,12 +419,12 @@ export class MatrixTokenManagerService
    * @returns True if the token is valid
    */
   async verifyUserToken(
-    matrixUserId: string, 
-    accessToken: string
+    matrixUserId: string,
+    accessToken: string,
   ): Promise<boolean> {
     try {
       const whoamiUrl = `${this.baseUrl}/_matrix/client/v3/account/whoami`;
-      
+
       const response = await axios.get(whoamiUrl, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -435,7 +441,9 @@ export class MatrixTokenManagerService
         return false;
       }
     } catch (error) {
-      this.logger.warn(`Token verification failed for ${matrixUserId}: ${error.message}`);
+      this.logger.warn(
+        `Token verification failed for ${matrixUserId}: ${error.message}`,
+      );
       return false;
     }
   }
@@ -446,42 +454,44 @@ export class MatrixTokenManagerService
    * @returns New token and device ID
    */
   private async generateUserToken(
-    matrixUserId: string
+    matrixUserId: string,
   ): Promise<{ token: string; deviceId: string } | null> {
     try {
-      // We'll need the password for this user
-      // In a real implementation, this might come from a database
-      // For this example, we'll assume we can reset the password and log in
-      
-      // Generate a secure random password
-      const newPassword = Math.random().toString(36).slice(2) + 
-                          Math.random().toString(36).slice(2);
-      
-      // Reset the user's password using admin API
-      await this.resetUserPassword(matrixUserId, newPassword);
-      
-      // Log in as the user to get a new token
-      const loginUrl = `${this.baseUrl}/_matrix/client/v3/login`;
+      // Ensure we have a valid admin token
+      if (this.adminTokenState !== 'valid') {
+        await this.verifyAdminToken();
+      }
+
+      // Generate a device ID for this token
       const deviceId = `OPENMEET_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      
-      const response = await axios.post(loginUrl, {
-        type: 'm.login.password',
-        identifier: {
-          type: 'm.id.user',
-          user: matrixUserId.substring(1).split(':')[0], // Remove @ and server part
+
+      // Use the admin API to generate a token for the user
+      // POST /_synapse/admin/v1/users/{userId}/login
+      const loginUrl = `${this.baseUrl}/_synapse/admin/v1/users/${encodeURIComponent(matrixUserId)}/login`;
+      this.logger.debug(
+        `Generating admin token for user: ${matrixUserId} using admin API`,
+      );
+      const response = await axios.post(
+        loginUrl,
+        {
+          valid_until_ms: Date.now() + 90 * 24 * 60 * 60 * 1000, // 90 days expiry
         },
-        password: newPassword,
-        device_id: deviceId,
-        initial_device_display_name: 'OpenMeet App',
-      });
+        {
+          headers: {
+            Authorization: `Bearer ${this.adminAccessToken}`,
+          },
+        },
+      );
 
       if (response.data && response.data.access_token) {
         return {
           token: response.data.access_token,
-          deviceId: response.data.device_id || deviceId,
+          deviceId: deviceId, // We still generate our own device ID for tracking
         };
       } else {
-        this.logger.error('Failed to generate user token: Unexpected response format');
+        this.logger.error(
+          'Failed to generate user token: Unexpected response format',
+        );
         return null;
       }
     } catch (error) {
@@ -493,49 +503,6 @@ export class MatrixTokenManagerService
   }
 
   /**
-   * Reset a user's password using the admin API
-   * @param matrixUserId Matrix user ID
-   * @param newPassword New password
-   */
-  private async resetUserPassword(
-    matrixUserId: string, 
-    newPassword: string
-  ): Promise<void> {
-    try {
-      // Ensure we have a valid admin token
-      if (this.adminTokenState !== 'valid') {
-        await this.verifyAdminToken();
-      }
-      
-      // Extract username from the Matrix user ID
-      const username = matrixUserId.substring(1).split(':')[0];
-      
-      // Use the admin API to reset the password
-      const resetUrl = `${this.baseUrl}/_synapse/admin/v2/users/${encodeURIComponent(matrixUserId)}`;
-      
-      await axios.put(
-        resetUrl,
-        {
-          password: newPassword,
-          deactivated: false,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.adminAccessToken}`,
-          },
-        },
-      );
-      
-      this.logger.debug(`Reset password for user: ${matrixUserId}`);
-    } catch (error) {
-      this.logger.error(
-        `Failed to reset password for ${matrixUserId}: ${error.message}`,
-      );
-      throw error;
-    }
-  }
-
-  /**
    * Invalidate a user's token
    * @param matrixUserId Matrix user ID
    * @param tenantId Optional tenant ID
@@ -543,17 +510,17 @@ export class MatrixTokenManagerService
   invalidateUserToken(matrixUserId: string, tenantId?: string): void {
     const key = this.getUserTokenKey(matrixUserId, tenantId);
     const tokenData = this.userTokens.get(key);
-    
+
     if (tokenData) {
       tokenData.state = 'invalid';
       this.userTokens.set(key, tokenData);
-      
+
       // Emit an event that the token was invalidated
       this.eventEmitter.emit('matrix.user.token.invalidated', {
         userId: matrixUserId,
         tenantId,
       });
-      
+
       this.logger.debug(`Invalidated token for user: ${matrixUserId}`);
     }
   }
@@ -566,45 +533,50 @@ export class MatrixTokenManagerService
   clearUserTokens(matrixUserId: string, tenantId?: string): void {
     const key = this.getUserTokenKey(matrixUserId, tenantId);
     this.userTokens.delete(key);
-    
+
     // Emit an event that all tokens were cleared
     this.eventEmitter.emit('matrix.user.tokens.cleared', {
       userId: matrixUserId,
       tenantId,
     });
-    
+
     this.logger.debug(`Cleared all tokens for user: ${matrixUserId}`);
   }
 
   // SHARED METHODS
-  
+
   /**
    * Periodic token refresh logic for all tokens
    */
   private async periodicTokenRefresh(): Promise<void> {
     this.logger.debug('Running periodic token refresh');
-    
+
     // Refresh admin token if needed
     const now = Date.now();
     const timeSinceLastAdminRefresh = now - this.lastAdminTokenRefresh;
-    
-    if (timeSinceLastAdminRefresh > 6 * 60 * 60 * 1000 || this.adminTokenState === 'invalid') {
+
+    if (
+      timeSinceLastAdminRefresh > 6 * 60 * 60 * 1000 ||
+      this.adminTokenState === 'invalid'
+    ) {
       this.logger.log('Refreshing admin token');
       await this.verifyAdminToken();
     }
-    
+
     // Refresh user tokens that are older than 6 hours
     for (const [key, tokenData] of this.userTokens.entries()) {
       if (now - tokenData.lastVerified > 6 * 60 * 60 * 1000) {
-        const [matrixUserId, tenantId] = this.parseUserTokenKey(key);
+        const [matrixUserId] = this.parseUserTokenKey(key);
         this.logger.debug(`Refreshing token for user: ${matrixUserId}`);
-        
+
         try {
           // Mark as invalid so it will be regenerated next time it's needed
           tokenData.state = 'invalid';
           this.userTokens.set(key, tokenData);
         } catch (error) {
-          this.logger.warn(`Error refreshing token for ${matrixUserId}: ${error.message}`);
+          this.logger.warn(
+            `Error refreshing token for ${matrixUserId}: ${error.message}`,
+          );
         }
       }
     }
