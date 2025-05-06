@@ -66,7 +66,8 @@ export class MatrixHealthIndicator extends HealthIndicator {
 
           // Report invalid token if it fails the health check
           if (tokenState === 'valid') {
-            this.tokenManager.reportTokenInvalid();
+            // Use the async method, but don't block health check on completion
+            void this.tokenManager.reportTokenInvalid();
           }
         }
       }

@@ -130,6 +130,12 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       // Initialize client pool
       this.initializeClientPool();
 
+      // Set up event listener for token updates
+      this.eventEmitter.on(
+        'matrix.admin.token.updated',
+        this.handleTokenUpdate.bind(this),
+      );
+      
       this.logger.log(
         `Matrix core service initialized with admin user ${this.adminUserId}`,
       );
@@ -157,6 +163,9 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy() {
     try {
+      // Remove event listeners
+      this.eventEmitter.removeAllListeners('matrix.admin.token.updated');
+      
       // Stop the admin client
       if (this.adminClient?.stopClient) {
         this.adminClient.stopClient();
@@ -220,11 +229,26 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
    * Create the admin client for privileged operations
    */
   private createAdminClient(): void {
+    // Check if there's an existing client that needs to be stopped
+    if (this.adminClient?.stopClient) {
+      try {
+        this.adminClient.stopClient();
+        this.logger.debug('Stopped existing admin client before creating a new one');
+      } catch (err) {
+        this.logger.warn(`Error stopping existing admin client: ${err.message}`);
+      }
+    }
+    
+    // Create a new client with the current token
     this.adminClient = this.matrixSdk.createClient({
       baseUrl: this.baseUrl,
       userId: this.adminUserId,
       accessToken: this.adminAccessToken,
       useAuthorizationHeader: true,
+      // Disable automatic capabilities refresh which causes error logs when token is invalid
+      // This prevents the "Failed to refresh capabilities" errors from appearing
+      timeoutCap: 60000, // Set higher timeout to prevent premature failures
+      localTimeoutMs: 120000, // Also increase local timeout
       logger: {
         // Disable verbose HTTP logging from Matrix SDK
         log: () => {},
@@ -260,6 +284,10 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
             userId: this.adminUserId,
             accessToken: this.adminAccessToken,
             useAuthorizationHeader: true,
+            // Disable automatic capabilities refresh which causes error logs when token is invalid
+            // This prevents the "Failed to refresh capabilities" errors from appearing
+            timeoutCap: 60000, // Set higher timeout to prevent premature failures
+            localTimeoutMs: 120000, // Also increase local timeout
             logger: {
               // Disable verbose HTTP logging from Matrix SDK
               log: () => {},
@@ -502,5 +530,45 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       defaultDeviceId: this.defaultDeviceId,
       defaultInitialDeviceDisplayName: this.defaultInitialDeviceDisplayName,
     };
+  }
+
+  /**
+   * Handle token update events from the token manager
+   * This ensures all clients are recreated with the new token
+   */
+  private async handleTokenUpdate(data: { userId: string; token: string }): Promise<void> {
+    if (!data.token) {
+      this.logger.warn('Received token update event with empty token');
+      return;
+    }
+
+    this.logger.log(`Received token update for user ${data.userId}`);
+    
+    // Update the local token reference
+    if (data.userId === this.adminUserId) {
+      const oldToken = this.adminAccessToken;
+      const newToken = data.token;
+      
+      // Only take action if the token actually changed
+      if (oldToken !== newToken) {
+        this.logger.log('Updating admin client with new token');
+        this.adminAccessToken = newToken;
+        
+        // Recreate the admin client with the new token
+        this.createAdminClient();
+        
+        // Drain and reinitialize the client pool to ensure all new clients use the updated token
+        try {
+          if (this.clientPool) {
+            this.logger.log('Draining and reinitializing client pool with new token');
+            await this.clientPool.drain();
+            await this.clientPool.clear();
+            this.initializeClientPool();
+          }
+        } catch (error) {
+          this.logger.error(`Error reinitializing client pool: ${error.message}`);
+        }
+      }
+    }
   }
 }
