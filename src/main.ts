@@ -37,13 +37,13 @@ async function bootstrap() {
     // Choose logger based on environment
     const logger =
       process.env.NODE_ENV === 'production'
-        ? new SimpleLogger() // Use our simple logger in production
+        ? new ConsoleLogger() // Use our simple logger in production
         : new ConsoleLogger(); // Use built-in logger in development
 
     // Set log levels
     logger.setLogLevels(
       process.env.NODE_ENV === 'production'
-        ? ['error', 'warn', 'log']
+        ? ['error', 'warn', 'log', 'debug']
         : ['error', 'warn', 'log', 'debug', 'verbose'],
     );
 
