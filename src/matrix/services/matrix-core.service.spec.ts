@@ -96,6 +96,7 @@ describe('MatrixCoreService', () => {
             emit: jest.fn(),
             on: jest.fn(),
             removeListener: jest.fn(),
+            removeAllListeners: jest.fn(),
           },
         },
       ],
@@ -221,6 +222,9 @@ describe('MatrixCoreService', () => {
 
       // Call cleanup
       await service.onModuleDestroy();
+
+      // Verify removeAllListeners was called with the correct event
+      expect(service['eventEmitter'].removeAllListeners).toHaveBeenCalledWith('matrix.admin.token.updated');
 
       // Verify stopClient was called on the admin client
       expect(mockMatrixClient.stopClient).toHaveBeenCalled();
