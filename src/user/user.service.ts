@@ -44,9 +44,7 @@ export class UserService {
     private readonly roleService: RoleService,
     private eventEmitter: EventEmitter2,
     private readonly fileService: FilesS3PresignedService,
-  ) {
-    this.logger.log('UserService constructed');
-  }
+  ) {}
 
   async getTenantSpecificRepository(tenantId?: string) {
     const effectiveTenantId = tenantId || this.request?.tenantId;
@@ -570,16 +568,10 @@ export class UserService {
 
   async getUserBySlug(slug: User['slug']): Promise<NullableType<UserEntity>> {
     await this.getTenantSpecificRepository();
-    this.logger.debug('getUserBySlug', {
-      slug,
-    });
     const user = await this.usersRepository.findOne({ where: { slug } });
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    this.logger.debug('getUserBySlug result', {
-      user,
-    });
     return user;
   }
 
@@ -642,6 +634,10 @@ export class UserService {
     return user;
   }
 
+  /**
+   * @deprecated
+   * Prefer getUserBySlug
+   */
   async getUserById(id: number, tenantId?: string): Promise<UserEntity> {
     await this.getTenantSpecificRepository(tenantId);
     const user = await this.usersRepository.findOne({ where: { id } });

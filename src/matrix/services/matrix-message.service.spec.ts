@@ -3,6 +3,7 @@ import { MatrixMessageService } from './matrix-message.service';
 import { MatrixCoreService } from './matrix-core.service';
 import axios from 'axios';
 import { SendMessageOptions } from '../types/matrix.types';
+import { MatrixUserService } from './matrix-user.service';
 
 // Mock axios
 jest.mock('axios');
@@ -73,6 +74,18 @@ describe('MatrixMessageService', () => {
             getAdminClient: jest.fn().mockReturnValue(mockMatrixClient),
             acquireClient: jest.fn().mockResolvedValue(mockClientWithContext),
             releaseClient: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: MatrixUserService,
+          useValue: {
+            getClientForUser: jest
+              .fn()
+              .mockResolvedValue(mockClientWithContext),
+            verifyAccessToken: jest.fn().mockResolvedValue(true),
+            generateNewAccessToken: jest
+              .fn()
+              .mockResolvedValue('new-access-token'),
           },
         },
       ],

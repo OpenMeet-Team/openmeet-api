@@ -12,6 +12,9 @@ import { MatrixCoreService } from './services/matrix-core.service';
 import { MatrixUserService } from './services/matrix-user.service';
 import { MatrixRoomService } from './services/matrix-room.service';
 import { MatrixMessageService } from './services/matrix-message.service';
+import { MatrixTokenManagerService } from './services/matrix-token-manager.service';
+import { MatrixClientOperationsService } from './services/matrix-client-operations.service';
+import { MatrixHealthIndicator } from './health/matrix.health';
 import { configureMatrixLogging } from './config/matrix-logger';
 
 // Configure Matrix logging at module load time
@@ -39,10 +42,13 @@ configureMatrixLogging();
   controllers: [MatrixController],
   providers: [
     // Matrix services
+    MatrixTokenManagerService, // Token manager must be initialized before core service
     MatrixCoreService,
     MatrixUserService,
     MatrixRoomService,
     MatrixMessageService,
+    MatrixClientOperationsService,
+    MatrixHealthIndicator,
 
     // Gateway for real-time events
     MatrixGateway,
@@ -59,6 +65,9 @@ configureMatrixLogging();
     MatrixUserService,
     MatrixRoomService,
     MatrixMessageService,
+    MatrixTokenManagerService,
+    MatrixClientOperationsService,
+    MatrixHealthIndicator,
   ],
 })
 export class MatrixModule {}

@@ -23,7 +23,19 @@ export class MatrixGatewayHelper {
       const contextId = ContextIdFactory.create();
 
       // Get the UserService instance for this context
-      return await moduleRef.resolve(UserService, contextId, { strict: false });
+      const userService = await moduleRef.resolve(UserService, contextId, {
+        strict: false,
+      });
+
+      // Set WebSocket context flag to prevent infinite room verification loops
+      // This flag will be checked in ChatRoomService.addUserToEventChatRoom
+      // We need to use a hacky approach since request is private in UserService
+      if (userService) {
+        // Set a property on the userService that will indicate this is a WebSocket context
+        (userService as any)._wsContext = true;
+      }
+
+      return userService;
     } catch (error) {
       logger.error(`Error creating UserService: ${error.message}`, error.stack);
       throw new Error('Failed to create UserService instance');

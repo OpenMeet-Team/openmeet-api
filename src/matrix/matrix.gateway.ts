@@ -243,9 +243,13 @@ export class MatrixGateway
   /**
    * Initialize Matrix client for a user connection
    * @param client Connected socket client
+   * @param user User object
+   * @param tenantId Optional tenant ID
    */
   private async initializeMatrixClientForConnection(
     client: Socket,
+    user?: any,
+    tenantId?: string,
   ): Promise<void> {
     if (!client.data.hasMatrixCredentials) {
       return;
@@ -262,26 +266,29 @@ export class MatrixGateway
         this.logger,
       );
 
-      // Get tenant ID from client data
-      const tenantId = client.data.tenantId;
+      // Get tenant ID from client data or from the parameter
+      const finalTenantId = tenantId || client.data.tenantId;
       this.logger.debug(
-        `Using tenant ID for Matrix client initialization: ${tenantId || 'undefined'}`,
+        `Using tenant ID for Matrix client initialization: ${finalTenantId || 'undefined'}`,
       );
 
-      // Fetch user to get the slug
-      const user = await MatrixGatewayHelper.resolveUserById(
-        userId,
-        userService,
-        tenantId,
-        this.logger,
-      );
+      // Fetch user from parameter or resolve from userId
+      let finalUser = user;
+      if (!finalUser) {
+        finalUser = await MatrixGatewayHelper.resolveUserById(
+          userId,
+          userService,
+          finalTenantId,
+          this.logger,
+        );
+      }
 
       // Initialize Matrix client using DB credentials (will be cached in MatrixUserService)
       // Pass userService and tenantId
       await this.matrixUserService.getClientForUser(
-        user.slug,
+        finalUser.slug,
         userService,
-        tenantId,
+        finalTenantId,
       );
 
       // Store the user ID in socket data for connection management
@@ -649,7 +656,7 @@ export class MatrixGateway
   private async sendTypingNotification(
     client: Socket,
     data: { roomId: string; isTyping: boolean; tenantId?: string },
-  ): Promise<{ success: boolean }> {
+  ): Promise<{ success: boolean; warning?: string }> {
     // Get tenant ID from client data or from the request
     const tenantId = MatrixGatewayHelper.getTenantId(client, data);
 
@@ -673,11 +680,27 @@ export class MatrixGateway
       tenantId,
     );
 
-    // Send typing notification using the client
-    await matrixClient.sendTyping(data.roomId, data.isTyping, 30000);
+    // Send typing notification using the client with error handling
+    try {
+      await matrixClient.sendTyping(data.roomId, data.isTyping, 30000);
+      return { success: true };
+    } catch (error) {
+      // Just log the error but don't fail the request for typing indicators
+      this.logger.warn(
+        `Non-critical: Typing notification failed for user ${user.matrixUserId} in room ${data.roomId}`,
+        {
+          error: error.message,
+          roomId: data.roomId,
+          isTyping: data.isTyping,
+        },
+      );
 
-    // Return success with minimal logging
-    return { success: true };
+      // Return success anyway since typing is not a critical function
+      return {
+        success: true,
+        warning: 'Typing notification failed but continuing',
+      };
+    }
   }
 
   @UseGuards(WsJwtAuthGuard)
@@ -880,6 +903,91 @@ export class MatrixGateway
         `User ${user.id} missing Matrix credentials required to send messages`,
       );
       throw new Error('Matrix credentials missing');
+    }
+
+    // Verify if the token is valid
+    let isTokenValid = false;
+    try {
+      isTokenValid = await this.matrixUserService.verifyAccessToken(
+        user.matrixUserId,
+        user.matrixAccessToken,
+      );
+    } catch (error) {
+      this.logger.warn(`Error verifying token: ${error.message}`);
+      isTokenValid = false;
+    }
+
+    // If token is invalid, try to refresh it
+    if (!isTokenValid) {
+      this.logger.warn(
+        `Matrix token for user ${user.id} is invalid, attempting to regenerate...`,
+      );
+
+      try {
+        const newToken = await this.matrixUserService.generateNewAccessToken(
+          user.matrixUserId,
+        );
+        if (newToken) {
+          this.logger.log(`Successfully regenerated token for user ${user.id}`);
+
+          // Update user record with new token
+          await userService.update(
+            user.id,
+            { matrixAccessToken: newToken },
+            tenantId,
+          );
+
+          // Update the token for this connection
+          user.matrixAccessToken = newToken;
+
+          // Update socket data for future requests in this session
+          client.data.matrixAccessToken = newToken;
+
+          // Clear any cached Matrix clients for this user to ensure they're recreated with the new token
+          try {
+            await this.matrixUserService.clearUserClients(user.slug, tenantId);
+            this.logger.debug(
+              `Cleared cached Matrix clients for user ${user.slug} after token refresh`,
+            );
+          } catch (clearError) {
+            this.logger.warn(
+              `Error clearing cached Matrix clients: ${clearError.message}`,
+            );
+            // Continue anyway
+          }
+
+          // Re-initialize Matrix client for this connection with the new token
+          try {
+            this.logger.debug(
+              `Re-initializing Matrix client for user ${user.id} after token refresh`,
+            );
+            await this.initializeMatrixClientForConnection(
+              client,
+              user,
+              tenantId,
+            );
+            this.logger.debug(
+              `Successfully re-initialized Matrix client for user ${user.id}`,
+            );
+          } catch (initError) {
+            this.logger.warn(
+              `Failed to re-initialize Matrix client after token refresh: ${initError.message}. Continuing with updated token.`,
+            );
+            // Continue even if re-initialization fails - the next operation will try again
+          }
+        } else {
+          this.logger.error(`Failed to regenerate token for user ${user.id}`);
+          throw new Error('Failed to refresh Matrix credentials');
+        }
+      } catch (error) {
+        this.logger.error(
+          `Error refreshing token: ${error.message}`,
+          error.stack,
+        );
+        throw new Error(
+          `Failed to refresh Matrix credentials: ${error.message}`,
+        );
+      }
     }
 
     // Use the MatrixMessageService to send the message

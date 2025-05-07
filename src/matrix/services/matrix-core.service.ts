@@ -5,11 +5,12 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as pool from 'generic-pool';
-import axios from 'axios';
 import { MatrixConfig } from '../config/matrix-config.type';
 import { IMatrixClient, IMatrixSdk } from '../types/matrix.interfaces';
 import { MatrixClientWithContext } from '../types/matrix.types';
+import { MatrixTokenManagerService } from './matrix-token-manager.service';
 
 @Injectable()
 export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
@@ -47,7 +48,11 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     },
   };
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly tokenManager: MatrixTokenManagerService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {
     const matrixConfig = this.configService.get<MatrixConfig>('matrix', {
       infer: true,
     });
@@ -93,8 +98,8 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     this.defaultInitialDeviceDisplayName =
       matrixConfig?.defaultInitialDeviceDisplayName || 'OpenMeet Server';
 
-    // Initialize with token from config or empty string, will be generated if empty
-    this.adminAccessToken = matrixConfig?.adminAccessToken || '';
+    // We'll get the adminAccessToken from the token manager during initialization
+    this.adminAccessToken = '';
   }
 
   async onModuleInit() {
@@ -102,25 +107,35 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       // Dynamically import the matrix-js-sdk
       await this.loadMatrixSdk();
 
-      // Generate admin token if not provided
+      // Get the admin token from the token manager
+      this.adminAccessToken = this.tokenManager.getAdminToken();
+
       if (!this.adminAccessToken) {
-        this.logger.log('No admin token provided, generating a new one');
-        const newToken = await this.regenerateAdminAccessToken();
-        if (!newToken) {
-          throw new Error('Failed to generate initial admin token');
+        this.logger.warn(
+          'No admin token available from token manager, waiting for regeneration',
+        );
+        // Force token regeneration and wait for it to complete
+        const success = await this.tokenManager.forceTokenRegeneration();
+        if (!success) {
+          this.logger.error('Failed to generate initial admin token');
+        } else {
+          // Get the newly generated token
+          this.adminAccessToken = this.tokenManager.getAdminToken();
         }
-        // Token is now set in this.adminAccessToken by regenerateAdminAccessToken
       }
 
       // Create admin client
       this.createAdminClient();
 
-      // Verify admin access
-      await this.verifyAdminAccess();
-
       // Initialize client pool
       this.initializeClientPool();
 
+      // Set up event listener for token updates
+      this.eventEmitter.on(
+        'matrix.admin.token.updated',
+        this.handleTokenUpdate.bind(this),
+      );
+      
       this.logger.log(
         `Matrix core service initialized with admin user ${this.adminUserId}`,
       );
@@ -138,228 +153,19 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Regenerate admin access token using admin password
-   * This method is public to allow external components to request token regeneration
+   * Helper function for implementing delay
    */
-  public async regenerateAdminAccessToken(): Promise<string | null> {
-    const matrixConfig = this.configService.get<MatrixConfig>('matrix', {
-      infer: true,
-    });
-
-    // Password is now required in the config
-    const adminPassword = matrixConfig?.adminPassword;
-    if (!adminPassword) {
-      this.logger.error(
-        'Cannot regenerate admin token: admin password not configured',
-      );
-      throw new Error('MATRIX_ADMIN_PASSWORD is required for token generation');
-    }
-
-    try {
-      // Extract username without domain part for login
-      const usernameOnly = this.adminUserId.startsWith('@')
-        ? this.adminUserId.split(':')[0].substring(1)
-        : this.adminUserId;
-
-      this.logger.log(`Generating admin token for user: ${usernameOnly}`);
-
-      // Use Matrix login API to get a new token
-      const loginUrl = `${this.baseUrl}/_matrix/client/v3/login`;
-
-      // Debug the request data
-      const requestData = {
-        type: 'm.login.password',
-        identifier: {
-          type: 'm.id.user',
-          user: usernameOnly,
-        },
-        password: adminPassword,
-        device_id: this.defaultDeviceId,
-        initial_device_display_name: this.defaultInitialDeviceDisplayName,
-      };
-
-      this.logger.debug(`Matrix login request URL: ${loginUrl}`);
-      this.logger.debug(
-        `Matrix login request data: ${JSON.stringify({
-          ...requestData,
-          password: '******', // Don't log the actual password
-        })}`,
-      );
-
-      const response = await axios.post(loginUrl, requestData);
-
-      if (response.data && response.data.access_token) {
-        const newToken = response.data.access_token;
-        // Update the admin token in memory
-        this.adminAccessToken = newToken;
-
-        this.logger.log(
-          `Successfully generated admin token for ${usernameOnly}`,
-        );
-
-        // Recreate admin client with new token
-        this.createAdminClient();
-
-        return newToken;
-      } else {
-        this.logger.error(
-          'Failed to generate admin token: unexpected response format',
-        );
-        return null;
-      }
-    } catch (error) {
-      this.logger.error(
-        `Failed to generate admin token: ${error.message}`,
-        error.stack,
-      );
-      return null;
-    }
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  /**
-   * Verify the admin token has admin privileges
-   */
-  private async verifyAdminAccess(): Promise<void> {
-    try {
-      // Use whoami endpoint to verify token works at all
-      const whoamiUrl = `${this.baseUrl}/_matrix/client/v3/account/whoami`;
-
-      this.logger.debug(`Verifying admin token with: ${whoamiUrl}`);
-      this.logger.debug(`Using admin user ID: ${this.adminUserId}`);
-      this.logger.debug(
-        `Using admin token: ${this.adminAccessToken ? this.adminAccessToken.substring(0, 6) + '...' : 'null'}`,
-      );
-
-      let response;
-      try {
-        response = await axios.get(whoamiUrl, {
-          headers: {
-            Authorization: `Bearer ${this.adminAccessToken}`,
-          },
-        });
-      } catch (whoamiError) {
-        // If the token is invalid, try to regenerate it
-        this.logger.warn(
-          `Admin token verification failed: ${whoamiError.message}. Attempting to regenerate.`,
-        );
-
-        const newToken = await this.regenerateAdminAccessToken();
-        if (!newToken) {
-          this.logger.error(
-            'Failed to regenerate admin token. User provisioning may fail.',
-          );
-          throw whoamiError;
-        }
-
-        // Try again with the new token
-        response = await axios.get(whoamiUrl, {
-          headers: {
-            Authorization: `Bearer ${newToken}`,
-          },
-        });
-
-        this.logger.log(
-          'Successfully verified admin access with regenerated token',
-        );
-      }
-
-      if (response.data && response.data.user_id) {
-        this.logger.log(
-          `Matrix token verified for user: ${response.data.user_id}`,
-        );
-
-        // Check if this is actually the expected admin user
-        if (response.data.user_id !== this.adminUserId) {
-          this.logger.warn(
-            `Token belongs to ${response.data.user_id}, not configured admin ${this.adminUserId}`,
-          );
-          // Update the admin user ID to match actual token
-          this.adminUserId = response.data.user_id;
-        }
-
-        // Try multiple admin endpoints to verify privileges
-
-        // Try v2 admin API first
-        try {
-          const adminUrlV2 = `${this.baseUrl}/_synapse/admin/v2/users?from=0&limit=1`;
-          await axios.get(adminUrlV2, {
-            headers: {
-              Authorization: `Bearer ${this.adminAccessToken}`,
-            },
-          });
-
-          this.logger.log(
-            'Successfully verified Matrix admin privileges using v2 API',
-          );
-        } catch (adminV2Error) {
-          this.logger.debug(
-            `Admin v2 API check failed: ${adminV2Error.message}`,
-          );
-
-          // Try v1 admin endpoint
-          try {
-            const adminUrlV1 = `${this.baseUrl}/_synapse/admin/v1/users/${encodeURIComponent(this.adminUserId)}/admin`;
-            await axios.get(adminUrlV1, {
-              headers: {
-                Authorization: `Bearer ${this.adminAccessToken}`,
-              },
-            });
-
-            this.logger.log(
-              'Successfully verified Matrix admin privileges using v1 API',
-            );
-          } catch (adminV1Error) {
-            this.logger.warn(
-              'Admin privilege checks failed, trying server info endpoint',
-            );
-
-            // Try server info endpoint as last resort
-            try {
-              const serverInfoUrl = `${this.baseUrl}/_synapse/admin/v1/server_version`;
-              const serverInfoResponse = await axios.get(serverInfoUrl, {
-                headers: {
-                  Authorization: `Bearer ${this.adminAccessToken}`,
-                },
-              });
-
-              if (serverInfoResponse.status === 200) {
-                this.logger.log(
-                  'Successfully verified Matrix admin access using server info API',
-                );
-              }
-            } catch (serverInfoError) {
-              this.logger.warn(
-                'All admin endpoint checks failed, user provisioning might be limited',
-                {
-                  v2Error: adminV2Error.message,
-                  v1Error: adminV1Error.message,
-                  serverInfoError: serverInfoError.message,
-                },
-              );
-            }
-          }
-        }
-      } else {
-        this.logger.warn(
-          'Unexpected whoami response format - admin access uncertain',
-        );
-      }
-    } catch (error) {
-      this.logger.error(
-        `Matrix admin token verification failed: ${error.message}`,
-        {
-          status: error.response?.status,
-          data: error.response?.data,
-        },
-      );
-      this.logger.warn(
-        'Matrix admin token may not be valid - user provisioning might fail',
-      );
-    }
-  }
+  // Removed verifyAdminAccess method as it's now handled by the token manager
 
   async onModuleDestroy() {
     try {
+      // Remove event listeners
+      this.eventEmitter.removeAllListeners('matrix.admin.token.updated');
+      
       // Stop the admin client
       if (this.adminClient?.stopClient) {
         this.adminClient.stopClient();
@@ -423,11 +229,26 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
    * Create the admin client for privileged operations
    */
   private createAdminClient(): void {
+    // Check if there's an existing client that needs to be stopped
+    if (this.adminClient?.stopClient) {
+      try {
+        this.adminClient.stopClient();
+        this.logger.debug('Stopped existing admin client before creating a new one');
+      } catch (err) {
+        this.logger.warn(`Error stopping existing admin client: ${err.message}`);
+      }
+    }
+    
+    // Create a new client with the current token
     this.adminClient = this.matrixSdk.createClient({
       baseUrl: this.baseUrl,
       userId: this.adminUserId,
       accessToken: this.adminAccessToken,
       useAuthorizationHeader: true,
+      // Disable automatic capabilities refresh which causes error logs when token is invalid
+      // This prevents the "Failed to refresh capabilities" errors from appearing
+      timeoutCap: 60000, // Set higher timeout to prevent premature failures
+      localTimeoutMs: 120000, // Also increase local timeout
       logger: {
         // Disable verbose HTTP logging from Matrix SDK
         log: () => {},
@@ -463,6 +284,10 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
             userId: this.adminUserId,
             accessToken: this.adminAccessToken,
             useAuthorizationHeader: true,
+            // Disable automatic capabilities refresh which causes error logs when token is invalid
+            // This prevents the "Failed to refresh capabilities" errors from appearing
+            timeoutCap: 60000, // Set higher timeout to prevent premature failures
+            localTimeoutMs: 120000, // Also increase local timeout
             logger: {
               // Disable verbose HTTP logging from Matrix SDK
               log: () => {},
@@ -505,12 +330,30 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Get the event emitter for Matrix-related events
+   * Used for system-wide notifications about token refreshes, etc.
+   */
+  getEventEmitter(): EventEmitter2 {
+    return this.eventEmitter;
+  }
+
+  /**
    * Acquire a client from the connection pool
    * Ensures admin token is valid before returning a client
    */
   async acquireClient(): Promise<MatrixClientWithContext> {
-    // Check if token is valid and regenerate if needed
-    await this.ensureValidAdminToken();
+    // Check if we have a valid token
+    const tokenValid = await this.ensureValidAdminToken();
+
+    // If token is not valid, get the current token from the token manager
+    // This could happen if the token was recently regenerated by the token manager
+    if (!tokenValid) {
+      this.logger.debug('Token not valid, getting latest from token manager');
+      this.adminAccessToken = this.tokenManager.getAdminToken();
+
+      // Report the invalid token to trigger background regeneration
+      this.tokenManager.reportTokenInvalid();
+    }
 
     // Verify client pool is initialized
     if (!this.clientPool) {
@@ -533,41 +376,54 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // Get a client from the pool
-    const client = await this.clientPool.acquire();
+    try {
+      // If the token has been regenerated, we need to recreate the pool
+      // to ensure all new clients use the correct token
+      const poolClient = await this.clientPool.acquire();
+      if (poolClient.client.getAccessToken() !== this.adminAccessToken) {
+        this.logger.warn('Token has changed, reinitializing the client pool');
 
-    // If the token was regenerated, we need to update the client's token
-    // This ensures the client uses the latest token
-    if (client.client.getAccessToken() !== this.adminAccessToken) {
-      this.logger.debug('Updating client with regenerated admin token');
+        try {
+          // Release this client
+          await this.clientPool.release(poolClient);
 
-      // Release the old client
-      await this.clientPool.release(client);
+          // Drain and clear the pool
+          await this.clientPool.drain();
+          await this.clientPool.clear();
 
-      // Create a new client with the updated token
-      const newClient = this.matrixSdk.createClient({
-        baseUrl: this.baseUrl,
-        userId: this.adminUserId,
-        accessToken: this.adminAccessToken,
-        useAuthorizationHeader: true,
-        logger: {
-          // Disable verbose HTTP logging from Matrix SDK
-          log: () => {},
-          info: () => {},
-          warn: () => {},
-          debug: () => {},
-          error: (msg: string) => this.logger.error(msg), // Keep error logs
-        },
-      });
+          // Reinitialize with new token
+          this.initializeClientPool();
 
-      // Return the new client directly instead of reinitializing the pool
-      return {
-        client: newClient,
-        userId: this.adminUserId,
-      };
+          // Get a fresh client from the reinitialized pool
+          return await this.clientPool.acquire();
+        } catch (error) {
+          this.logger.error(
+            `Error reinitializing client pool: ${error.message}`,
+          );
+          throw new Error(
+            `Failed to reinitialize client pool: ${error.message}`,
+          );
+        }
+      }
+
+      return poolClient;
+    } catch (error) {
+      // Check if this is a token error
+      if (
+        error.message?.includes('M_UNKNOWN_TOKEN') ||
+        error.data?.errcode === 'M_UNKNOWN_TOKEN' ||
+        error.response?.data?.errcode === 'M_UNKNOWN_TOKEN'
+      ) {
+        // Report the invalid token to trigger regeneration
+        this.tokenManager.reportTokenInvalid();
+        this.logger.warn(
+          `Token error detected: ${error.message}, reported to token manager`,
+        );
+      }
+
+      this.logger.error(`Failed to acquire Matrix client: ${error.message}`);
+      throw new Error(`Cannot acquire Matrix client: ${error.message}`);
     }
-
-    return client;
   }
 
   /**
@@ -580,7 +436,26 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       );
       return;
     }
-    await this.clientPool.release(client);
+
+    try {
+      await this.clientPool.release(client);
+    } catch (error) {
+      this.logger.warn(`Failed to release Matrix client: ${error.message}`);
+
+      // Attempt to stop the client gracefully even if we can't release it
+      if (client?.client?.stopClient) {
+        try {
+          client.client.stopClient();
+          this.logger.debug(
+            'Manually stopped Matrix client after failed release',
+          );
+        } catch (stopError) {
+          this.logger.warn(
+            `Failed to stop Matrix client: ${stopError.message}`,
+          );
+        }
+      }
+    }
   }
 
   /**
@@ -590,6 +465,8 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     return this.matrixSdk;
   }
 
+  // Token management is now handled by MatrixTokenManagerService
+
   /**
    * Check if admin token is valid and regenerate if needed
    * This is useful for operations that require admin access
@@ -597,33 +474,39 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
    */
   public async ensureValidAdminToken(): Promise<boolean> {
     try {
-      // Use whoami endpoint to verify token works
-      const whoamiUrl = `${this.baseUrl}/_matrix/client/v3/account/whoami`;
+      // Use the token manager's state
+      const tokenState = this.tokenManager.getAdminTokenState();
 
-      try {
-        await axios.get(whoamiUrl, {
-          headers: {
-            Authorization: `Bearer ${this.adminAccessToken}`,
-          },
-        });
-        // Token is valid
-        return true;
-      } catch (whoamiError) {
-        this.logger.warn(
-          `Admin token appears invalid: ${whoamiError.message}. Attempting to regenerate.`,
-        );
-
-        // Try to regenerate the token
-        const newToken = await this.regenerateAdminAccessToken();
-        if (!newToken) {
-          this.logger.error('Failed to regenerate admin token.');
-          return false;
-        }
-
-        // Token regenerated successfully
-        this.logger.log('Admin token regenerated successfully');
+      // If the token is regenerating, we'll assume it's valid
+      if (tokenState === 'regenerating') {
         return true;
       }
+
+      // If the token is invalid, report it
+      if (tokenState === 'invalid') {
+        await this.tokenManager.reportTokenInvalid();
+        return false;
+      }
+
+      // If the token is valid, get the latest token and update our reference
+      if (tokenState === 'valid') {
+        const latestToken = this.tokenManager.getAdminToken();
+
+        // Update our token if it differs from the token manager's
+        if (latestToken && latestToken !== this.adminAccessToken) {
+          this.logger.debug(
+            'Updating admin token reference from token manager',
+          );
+          this.adminAccessToken = latestToken;
+
+          // Recreate admin client with new token
+          this.createAdminClient();
+        }
+
+        return true;
+      }
+
+      return false;
     } catch (error) {
       this.logger.error(`Error checking admin token: ${error.message}`);
       return false;
@@ -647,5 +530,45 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       defaultDeviceId: this.defaultDeviceId,
       defaultInitialDeviceDisplayName: this.defaultInitialDeviceDisplayName,
     };
+  }
+
+  /**
+   * Handle token update events from the token manager
+   * This ensures all clients are recreated with the new token
+   */
+  private async handleTokenUpdate(data: { userId: string; token: string }): Promise<void> {
+    if (!data.token) {
+      this.logger.warn('Received token update event with empty token');
+      return;
+    }
+
+    this.logger.log(`Received token update for user ${data.userId}`);
+    
+    // Update the local token reference
+    if (data.userId === this.adminUserId) {
+      const oldToken = this.adminAccessToken;
+      const newToken = data.token;
+      
+      // Only take action if the token actually changed
+      if (oldToken !== newToken) {
+        this.logger.log('Updating admin client with new token');
+        this.adminAccessToken = newToken;
+        
+        // Recreate the admin client with the new token
+        this.createAdminClient();
+        
+        // Drain and reinitialize the client pool to ensure all new clients use the updated token
+        try {
+          if (this.clientPool) {
+            this.logger.log('Draining and reinitializing client pool with new token');
+            await this.clientPool.drain();
+            await this.clientPool.clear();
+            this.initializeClientPool();
+          }
+        } catch (error) {
+          this.logger.error(`Error reinitializing client pool: ${error.message}`);
+        }
+      }
+    }
   }
 }

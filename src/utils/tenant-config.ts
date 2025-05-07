@@ -9,17 +9,17 @@ export function fetchTenants(): TenantConfig[] {
       const decodedJson = Buffer.from(base64EncodedJson, 'base64').toString(
         'utf8',
       );
-      console.log('Loaded tenants from env variable');
+      // console.log('Loaded tenants from env variable');
       return JSON.parse(decodedJson);
     }
     // 1. Try command line --config argument
     const configArg = process.argv.find((arg) =>
       arg.startsWith('--tenant-config='),
     );
-    console.log('args', process.argv);
+    // console.log('args', process.argv);
     if (configArg) {
       const configPath = configArg.split('=')[1];
-      console.log('configPath', configPath);
+      // console.log('configPath', configPath);
       if (fs.existsSync(configPath)) {
         const fileContents = fs.readFileSync(configPath, 'utf8');
         try {

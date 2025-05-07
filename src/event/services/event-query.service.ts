@@ -197,11 +197,25 @@ export class EventQueryService {
       );
 
     if (userId) {
+      this.logger.debug(
+        `Finding attendance status for user ${userId} in event ${event.id}`,
+      );
       event.attendee =
         await this.eventAttendeeService.findEventAttendeeByUserId(
           event.id,
           userId,
         );
+
+      // Log whether we found attendance data
+      if (event.attendee) {
+        this.logger.debug(
+          `Found attendee record with status: ${event.attendee.status}`,
+        );
+      } else {
+        this.logger.debug(
+          `No attendee record found for user ${userId} in event ${event.id}`,
+        );
+      }
     }
 
     // Matrix-based discussions will be loaded from the frontend directly

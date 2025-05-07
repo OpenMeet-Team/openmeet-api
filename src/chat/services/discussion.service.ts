@@ -12,10 +12,14 @@ import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupService } from '../../group/group.service';
 import { ChatRoomService } from '../rooms/chat-room.service';
 import { ChatProviderInterface } from '../interfaces/chat-provider.interface';
+import { ChatRoomManagerInterface } from '../interfaces/chat-room-manager.interface';
 import { DiscussionServiceInterface } from '../interfaces/discussion-service.interface';
 import { Message } from '../../matrix/types/matrix.types';
+import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
+import { TenantConnectionService } from '../../tenant/tenant.service';
 import { Trace } from '../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
+import { DiscussionMessagesResponseDto } from '../dto/discussion-message.dto';
 
 /**
  * Service for handling discussions across different entities (events, groups, direct messages)
@@ -32,8 +36,11 @@ export class DiscussionService implements DiscussionServiceInterface {
     @Inject(forwardRef(() => GroupService))
     private readonly groupService: GroupService,
     private readonly chatRoomService: ChatRoomService,
+    private readonly tenantConnectionService: TenantConnectionService,
     @Inject('CHAT_PROVIDER')
     private readonly chatProvider: ChatProviderInterface,
+    @Inject('ChatRoomManagerInterface')
+    private readonly chatRoomManager: ChatRoomManagerInterface,
   ) {}
 
   /**
@@ -47,13 +54,13 @@ export class DiscussionService implements DiscussionServiceInterface {
     userId: number,
     limit = 50,
     from?: string,
-  ): Promise<{
-    messages: Message[];
-    end: string;
-    roomId?: string;
-  }> {
-    const tenantId = this.request.tenantId;
+    explicitTenantId?: string,
+  ): Promise<DiscussionMessagesResponseDto> {
+    // Get tenant ID from explicit parameter or request context
+    const tenantId = explicitTenantId || this.request?.tenantId;
+
     if (!tenantId) {
+      this.logger.error('Tenant ID is required');
       throw new Error('Tenant ID is required');
     }
 
@@ -132,7 +139,7 @@ export class DiscussionService implements DiscussionServiceInterface {
               this.logger.warn(
                 `Too many locks in request (${this.request.locks.size}), skipping chat room creation`,
               );
-              return { messages: [], end: '' };
+              return { messages: [], end: '', roomId: undefined };
             }
           }
         }
@@ -156,7 +163,7 @@ export class DiscussionService implements DiscussionServiceInterface {
                 : await this.chatRoomService.getGroupChatRooms(entityId);
 
             if (!chatRooms || chatRooms.length === 0) {
-              return { messages: [], end: '' };
+              return { messages: [], end: '', roomId: undefined };
             }
 
             roomCreated = true;
@@ -231,9 +238,15 @@ export class DiscussionService implements DiscussionServiceInterface {
           this.logger.log(
             `Ensuring user ${userId} is a member of event chat room ${chatRooms[0].matrixRoomId}`,
           );
-          await this.chatRoomService.addUserToEventChatRoom(entityId, userId);
+          await this.chatRoomService.addUserToEventChatRoomById(
+            entityId,
+            userId,
+          );
         } else {
-          await this.chatRoomService.addUserToGroupChatRoom(entityId, userId);
+          await this.chatRoomService.addUserToGroupChatRoomById(
+            entityId,
+            userId,
+          );
         }
 
         // Mark membership as verified for this request cycle
@@ -252,10 +265,83 @@ export class DiscussionService implements DiscussionServiceInterface {
           );
         }
 
-        this.logger.error(
-          `Error adding user ${userId} to ${entityType} chat room: ${error.message}`,
-          error.stack,
-        );
+        // Check if the room not found error occurred
+        if (error.message && error.message.includes('Room not found (404)')) {
+          this.logger.warn(
+            `Matrix room for ${entityType} ${slug} not found (404). Attempting to recreate it.`,
+          );
+
+          // Delete the existing chat room record to force recreation
+          try {
+            if (chatRooms.length > 0) {
+              // First clear the Matrix room ID in the database
+              if (entityType === 'event') {
+                // Get the event entity and clear its Matrix room ID
+                const dataSource =
+                  await this.tenantConnectionService.getTenantConnection(
+                    this.request.tenantId,
+                  );
+                const eventRepo = dataSource.getRepository(EventEntity);
+                await eventRepo.update({ id: entityId }, { matrixRoomId: '' });
+                this.logger.log(
+                  `Cleared Matrix room ID for event ${slug} (${entityId})`,
+                );
+              } else if (entityType === 'group') {
+                // Update the group's Matrix room ID
+                await this.groupService.update(slug, { matrixRoomId: '' });
+                this.logger.log(
+                  `Cleared Matrix room ID for group ${slug} (${entityId})`,
+                );
+              }
+
+              // Delete the chat room record
+              await this.chatRoomService.deleteChatRoom(chatRooms[0].id);
+              this.logger.log(
+                `Deleted chat room record for ${entityType} ${slug}`,
+              );
+            }
+
+            // Recreate the chat room
+            const newChatRoom = await this.ensureEntityChatRoom(
+              entityType,
+              entityId,
+              userId,
+            );
+            this.logger.log(
+              `Recreated chat room for ${entityType} ${slug} with new Matrix room ID: ${newChatRoom.matrixRoomId}`,
+            );
+
+            // Update our local reference to use the new room
+            chatRooms = [newChatRoom];
+
+            // Make sure the user is added to the new room
+            if (entityType === 'event') {
+              await this.chatRoomService.addUserToEventChatRoomById(
+                entityId,
+                userId,
+              );
+            } else {
+              await this.chatRoomService.addUserToGroupChatRoomById(
+                entityId,
+                userId,
+              );
+            }
+
+            // Mark membership as verified
+            cache.membershipVerified.set(membershipCacheKey, true);
+          } catch (recreateError) {
+            this.logger.error(
+              `Failed to recreate Matrix room for ${entityType} ${slug}: ${recreateError.message}`,
+              recreateError.stack,
+            );
+            // Continue anyway - we will return an empty message list below
+          }
+        } else {
+          this.logger.error(
+            `Error adding user ${userId} to ${entityType} chat room: ${error.message}`,
+            error.stack,
+          );
+        }
         // Continue anyway for events - we'll still try to get messages
       }
     } else if (membershipVerified) {
@@ -269,36 +355,120 @@ export class DiscussionService implements DiscussionServiceInterface {
     }
 
     // Get messages from the first (main) chat room
-    const messageData = await this.chatRoomService.getMessages(
-      chatRooms[0].id,
-      userId,
-      limit,
-      from,
-    );
+    try {
+      if (!chatRooms || chatRooms.length === 0) {
+        this.logger.warn(`No chat rooms found for ${entityType} ${slug}`);
+        return { messages: [], end: '', roomId: undefined };
+      }
 
-    // Enhance messages with user display names
-    const enhancedMessages = await this.enhanceMessagesWithUserInfo(
-      messageData.messages,
-    );
-
-    // Return the Matrix room ID along with messages
-    const roomId = chatRooms[0].matrixRoomId;
-
-    if (!roomId) {
-      this.logger.warn(
-        `No Matrix room ID found for chat room of ${entityType} ${slug}`,
+      const messageData = await this.chatRoomService.getMessages(
+        chatRooms[0].id,
+        userId,
+        limit,
+        from,
       );
-    } else {
-      this.logger.debug(
-        `Using Matrix room ID for ${entityType} ${slug}: ${roomId}`,
+
+      // Enhance messages with user display names
+      const enhancedMessages = await this.enhanceMessagesWithUserInfo(
+        messageData.messages,
       );
+
+      // Return the Matrix room ID along with messages
+      const roomId = chatRooms[0].matrixRoomId;
+
+      if (!roomId) {
+        this.logger.warn(
+          `No Matrix room ID found for chat room of ${entityType} ${slug}`,
+        );
+      } else {
+        this.logger.debug(
+          `Using Matrix room ID for ${entityType} ${slug}: ${roomId}`,
+        );
+      }
+
+      return {
+        messages: enhancedMessages,
+        end: messageData.end,
+        roomId: chatRooms[0].matrixRoomId, // Always include roomId in the response
+      };
+    } catch (error) {
+      // Check for room not found errors and trigger recreation
+      if (error.message && error.message.includes('Room not found (404)')) {
+        this.logger.warn(
+          `Matrix room for ${entityType} ${slug} not found (404) when getting messages. Attempting to recreate it.`,
+        );
+
+        try {
+          // First clear the Matrix room ID in the database
+          if (entityType === 'event') {
+            // Get the event entity and clear its Matrix room ID
+            const dataSource =
+              await this.tenantConnectionService.getTenantConnection(
+                this.request.tenantId,
+              );
+            const eventRepo = dataSource.getRepository(EventEntity);
+            await eventRepo.update({ id: entityId }, { matrixRoomId: '' });
+            this.logger.log(
+              `Cleared Matrix room ID for event ${slug} (${entityId})`,
+            );
+          } else if (entityType === 'group') {
+            // Update the group's Matrix room ID
+            await this.groupService.update(slug, { matrixRoomId: '' });
+            this.logger.log(
+              `Cleared Matrix room ID for group ${slug} (${entityId})`,
+            );
+          }
+
+          // Delete the chat room record
+          if (chatRooms && chatRooms.length > 0) {
+            await this.chatRoomService.deleteChatRoom(chatRooms[0].id);
+            this.logger.log(
+              `Deleted chat room record for ${entityType} ${slug}`,
+            );
+          }
+
+          // Recreate the chat room
+          const newChatRoom = await this.ensureEntityChatRoom(
+            entityType,
+            entityId,
+            userId,
+          );
+          this.logger.log(
+            `Recreated chat room for ${entityType} ${slug} with new Matrix room ID: ${newChatRoom.matrixRoomId}`,
+          );
+
+          // Try to add the user to the new room
+          if (entityType === 'event') {
+            await this.chatRoomService.addUserToEventChatRoomById(
+              entityId,
+              userId,
+            );
+          } else {
+            await this.chatRoomService.addUserToGroupChatRoomById(
+              entityId,
+              userId,
+            );
+          }
+
+          // Return empty messages for now - user will need to refresh
+          return { messages: [], end: '', roomId: newChatRoom.matrixRoomId };
+        } catch (recreateError) {
+          this.logger.error(
+            `Failed to recreate Matrix room for ${entityType} ${slug}: ${recreateError.message}`,
+            recreateError.stack,
+          );
+          // Return empty messages
+          return { messages: [], end: '', roomId: undefined };
+        }
+      }
+
+      // For other errors, just log and return empty messages
+      this.logger.error(
+        `Error fetching messages for ${entityType} ${slug}: ${error.message}`,
+        error.stack,
+      );
+      return { messages: [], end: '', roomId: undefined };
     }
-
-    return {
-      messages: enhancedMessages,
-      end: messageData.end,
-      roomId: roomId,
-    };
   }
 
   private async ensureUserHasMatrixCredentials(userId: number) {
@@ -378,6 +548,7 @@ export class DiscussionService implements DiscussionServiceInterface {
         userId: user.matrixUserId,
         accessToken: user.matrixAccessToken,
         deviceId: user.matrixDeviceId,
+        tenantId, // Explicitly pass tenant ID to the Matrix client
       });
     } catch (error) {
       this.logger.warn(
@@ -434,10 +605,12 @@ export class DiscussionService implements DiscussionServiceInterface {
 
   /**
    * Ensure a chat room exists for an entity (event or group)
+   * Will verify the Matrix room still exists and recreate it if needed
    *
    * @param entityType 'event' or 'group'
    * @param entityId ID of the event or group
    * @param creatorId ID of the user creating the room
+   * @param forceRecreate Whether to force recreation of the room
    * @returns The chat room entity
    */
   @Trace('discussion.ensureEntityChatRoom')
@@ -445,6 +618,7 @@ export class DiscussionService implements DiscussionServiceInterface {
     entityType: 'event' | 'group',
     entityId: number,
     creatorId: number,
+    forceRecreate = false,
   ) {
     try {
       // Try to get existing chat rooms based on entity type
@@ -453,16 +627,91 @@ export class DiscussionService implements DiscussionServiceInterface {
           ? await this.chatRoomService.getEventChatRooms(entityId)
           : await this.chatRoomService.getGroupChatRooms(entityId);
 
+      // If a room exists but we're forcing recreation, handle clearing the old room first
+      if (chatRooms && chatRooms.length > 0 && forceRecreate) {
+        this.logger.log(
+          `Force recreating ${entityType} chat room for ID ${entityId}`,
+        );
+
+        // Clear the room ID in the entity
+        try {
+          if (entityType === 'event') {
+            // Get the event entity and clear its Matrix room ID
+            const dataSource =
+              await this.tenantConnectionService.getTenantConnection(
+                this.request.tenantId,
+              );
+            const eventRepo = dataSource.getRepository(EventEntity);
+            await eventRepo.update({ id: entityId }, { matrixRoomId: '' });
+          } else if (entityType === 'group') {
+            // Get the group by ID through the service
+            const group = await this.groupService.findOne(entityId);
+            if (group) {
+              // Update the group's Matrix room ID
+              await this.groupService.update(group.slug, { matrixRoomId: '' });
+            }
+          }
+
+          // Delete the chat room record
+          await this.chatRoomService.deleteChatRoom(chatRooms[0].id);
+        } catch (error) {
+          this.logger.error(
+            `Error clearing entity data for forced recreation: ${error.message}`,
+            error.stack,
+          );
+          // Continue with recreation anyway - this is a best effort
+        }
+      }
+
+      // Check if rooms exist after potential deletion
+      const updatedChatRooms = forceRecreate
+        ? []
+        : entityType === 'event'
+          ? await this.chatRoomService.getEventChatRooms(entityId)
+          : await this.chatRoomService.getGroupChatRooms(entityId);
+
       // If no chat rooms exist, create one
-      if (!chatRooms || chatRooms.length === 0) {
+      if (!updatedChatRooms || updatedChatRooms.length === 0) {
+        this.logger.log(
+          `Creating new ${entityType} chat room for ID ${entityId}`,
+        );
+        return entityType === 'event'
+          ? await this.chatRoomService.createEventChatRoom(entityId, creatorId)
+          : await this.chatRoomService.createGroupChatRoom(entityId, creatorId);
+      }
+
+      // At this point we have a chat room, but let's verify the Matrix room still exists
+      // For now, we'll just check that there's a Matrix room ID - we'll improve this later
+      if (!updatedChatRooms[0].matrixRoomId) {
+        this.logger.warn(
+          `Chat room for ${entityType} ${entityId} exists but has no Matrix room ID. Recreating...`,
+        );
+
+        // Delete the existing chat room and recreate it
+        await this.chatRoomService.deleteChatRoom(updatedChatRooms[0].id);
+
         return entityType === 'event'
           ? await this.chatRoomService.createEventChatRoom(entityId, creatorId)
           : await this.chatRoomService.createGroupChatRoom(entityId, creatorId);
       }
 
       // Return the first chat room (main entity chat room)
-      return chatRooms[0];
+      return updatedChatRooms[0];
     } catch (error) {
+      // If we get a room not found error, try to recreate the room
+      if (
+        error.message &&
+        error.message.includes('Room not found (404)') &&
+        !forceRecreate
+      ) {
+        this.logger.warn(
+          `Matrix room for ${entityType} ${entityId} not found (404). Attempting to recreate with forced flag.`,
+        );
+
+        // Call this same method with the force flag
+        return this.ensureEntityChatRoom(entityType, entityId, creatorId, true);
+      }
+
       this.logger.error(
         `Error ensuring chat room for ${entityType} ${entityId}: ${error.message}`,
         error.stack,
@@ -471,24 +720,6 @@ export class DiscussionService implements DiscussionServiceInterface {
         `Failed to ensure chat room for ${entityType}: ${error.message}`,
       );
     }
-  }
-
-  /**
-   * Ensure a chat room exists for an event
-   * @deprecated Use ensureEntityChatRoom with entityType='event' instead
-   */
-  @Trace('discussion.ensureEventChatRoom')
-  private async ensureEventChatRoom(eventId: number, creatorId: number) {
-    return this.ensureEntityChatRoom('event', eventId, creatorId);
-  }
-
-  /**
-   * Ensure a chat room exists for a group
-   * @deprecated Use ensureEntityChatRoom with entityType='group' instead
-   */
-  @Trace('discussion.ensureGroupChatRoom')
-  private async ensureGroupChatRoom(groupId: number, creatorId: number) {
-    return this.ensureEntityChatRoom('group', groupId, creatorId);
   }
 
   @Trace('discussion.sendEventDiscussionMessage')
@@ -506,24 +737,47 @@ export class DiscussionService implements DiscussionServiceInterface {
     userId: number,
     limit = 50,
     from?: string,
-  ): Promise<{
-    messages: Message[];
-    end: string;
-    roomId?: string;
-  }> {
+  ): Promise<DiscussionMessagesResponseDto> {
     return this.getEntityDiscussionMessages('event', slug, userId, limit, from);
   }
 
   /**
-   * Legacy method - prefer using slug-based methods instead
+   * @deprecated Use slug-based methods instead
+   * Legacy method maintained for backward compatibility
    */
   @Trace('discussion.addMemberToEventDiscussion')
   async addMemberToEventDiscussion(
     eventId: number,
     userId: number,
+    explicitTenantId?: string,
   ): Promise<void> {
-    // Get the tenant ID from the request context
-    const tenantId = this.request.tenantId;
+    // Get tenant ID either from explicit parameter or request context
+    let tenantId = explicitTenantId;
+
+    // If no explicit tenantId, try to get it from request context
+    if (!tenantId) {
+      // Check if this.request exists - might be undefined when called from event handlers
+      if (!this.request) {
+        this.logger.warn(
+          `Request object not available in addMemberToEventDiscussion, likely called from event handler`,
+        );
+        // We can't proceed without a tenant ID
+        throw new Error(
+          'Tenant ID is required - either pass it explicitly or call from request context',
+        );
+      }
+
+      // Try to get tenantId from request
+      tenantId = this.request.tenantId;
+    }
+
+    // Final check that we have a tenantId one way or another
+    if (!tenantId) {
+      this.logger.error(
+        'Tenant ID is required but not available from any source',
+      );
+      throw new Error('Tenant ID is required');
+    }
 
     // Check if there's a cycle detection flag in the request to prevent recursive loops
     if (this.request._avoidRecursion) {
@@ -536,7 +790,7 @@ export class DiscussionService implements DiscussionServiceInterface {
       await this.ensureEntityChatRoom('event', eventId, userId);
 
       // Then add the user to the chat room
-      await this.chatRoomService.addUserToEventChatRoom(eventId, userId);
+      await this.chatRoomService.addUserToEventChatRoomById(eventId, userId);
 
       // Cache the membership verification in the request cache
       const cache = this.getRequestCache();
@@ -562,7 +816,11 @@ export class DiscussionService implements DiscussionServiceInterface {
     this.request._avoidRecursion = true;
     try {
       // Use the slug-based method which is preferred
-      await this.addMemberToEventDiscussionBySlug(event.slug, user.slug);
+      await this.addMemberToEventDiscussionBySlug(
+        event.slug,
+        user.slug,
+        tenantId,
+      );
     } finally {
       // Always clear the flag when we're done
       delete this.request._avoidRecursion;
@@ -580,9 +838,11 @@ export class DiscussionService implements DiscussionServiceInterface {
     userSlug: string,
     explicitTenantId?: string,
   ): Promise<void> {
-    const tenantId = explicitTenantId || this.request.tenantId;
+    // When called from event handlers, this.request might be undefined
+    // Always rely on explicit tenantId being passed
+    const tenantId = explicitTenantId;
     if (!tenantId) {
-      throw new Error('Tenant ID is required');
+      throw new Error('Explicit Tenant ID is required for event handlers');
     }
 
     const cache = this.getRequestCache();
@@ -656,11 +916,11 @@ export class DiscussionService implements DiscussionServiceInterface {
       cache.chatRooms.set(cacheKey, chatRoom);
     }
 
-    // Add the user to the appropriate chat room
+    // Add the user to the appropriate chat room, using slugs directly
     if (entityType === 'event') {
-      await this.chatRoomService.addUserToEventChatRoom(entityId, user.id);
+      await this.chatRoomService.addUserToEventChatRoom(entitySlug, userSlug);
     } else {
-      await this.chatRoomService.addUserToGroupChatRoom(entityId, user.id);
+      await this.chatRoomService.addUserToGroupChatRoom(entitySlug, userSlug);
     }
 
     // Cache the membership verification
@@ -673,6 +933,23 @@ export class DiscussionService implements DiscussionServiceInterface {
     userSlug: string,
     explicitTenantId?: string,
   ): Promise<void> {
+    // Call the new method that returns roomId info but discard the return value
+    await this.addMemberToEventDiscussionBySlugAndGetRoomId(
+      eventSlug,
+      userSlug,
+      explicitTenantId,
+    );
+  }
+
+  /**
+   * Similar to addMemberToEventDiscussionBySlug but returns room information including the roomId
+   */
+  @Trace('discussion.addMemberToEventDiscussionBySlugAndGetRoomId')
+  async addMemberToEventDiscussionBySlugAndGetRoomId(
+    eventSlug: string,
+    userSlug: string,
+    explicitTenantId?: string,
+  ): Promise<{ roomId?: string }> {
     // Get tenant ID from explicit parameter or request context
     const tenantId = explicitTenantId || this.request?.tenantId;
     if (!tenantId) {
@@ -685,17 +962,29 @@ export class DiscussionService implements DiscussionServiceInterface {
     );
 
     // Check if there's a cycle detection flag in the request to prevent recursive loops
-    if (this.request._avoidRecursion) {
+    // First check if this.request exists to avoid "Cannot read properties of undefined"
+    if (this.request && this.request._avoidRecursion) {
       this.logger.debug(
-        `Avoiding recursive call in addMemberToEventDiscussionBySlug`,
+        `Avoiding recursive call in addMemberToEventDiscussionBySlugAndGetRoomId`,
       );
       // Directly use the entity discussion method to break the cycle
-      return this.addMemberToEntityDiscussionBySlug(
+      await this.addMemberToEntityDiscussionBySlug(
         'event',
         eventSlug,
         userSlug,
         tenantId,
       );
+
+      // After adding the member, try to get the room ID from the event
+      try {
+        const event = await this.eventQueryService.showEventBySlug(eventSlug);
+        return { roomId: event?.matrixRoomId };
+      } catch (error) {
+        this.logger.error(
+          `Error getting event after adding member: ${error.message}`,
+        );
+        return { roomId: undefined };
+      }
     }
 
     // Get event and user IDs from slugs
@@ -709,7 +998,7 @@ export class DiscussionService implements DiscussionServiceInterface {
       this.logger.error(
         `Could not find event or user with slugs: event=${eventSlug}, user=${userSlug}`,
       );
-      return;
+      return { roomId: undefined };
     }
 
     // Verify event exists before proceeding
@@ -718,45 +1007,63 @@ export class DiscussionService implements DiscussionServiceInterface {
       this.logger.warn(
         `Event ${eventSlug} does not exist in tenant ${tenantId}, skipping chat room creation`,
       );
-      return;
+      return { roomId: undefined };
     }
 
     // Set recursion flag before calling the ID-based method to prevent infinite loops
-    this.request._avoidRecursion = true;
+    if (this.request) {
+      this.request._avoidRecursion = true;
+    }
+
     try {
-      // Add member to event discussion
-      await this.addMemberToEventDiscussion(eventId, userId);
+      // Add member to event discussion - pass the tenant ID explicitly
+      await this.addMemberToEventDiscussion(eventId, userId, tenantId);
+
+      // After successfully adding the member, fetch the event to get its room ID
+      const dataSource =
+        await this.tenantConnectionService.getTenantConnection(tenantId);
+      const eventRepository = dataSource.getRepository(EventEntity);
+
+      // Get the event with up-to-date matrixRoomId
+      const event = await eventRepository.findOne({
+        where: { id: eventId },
+      });
+
+      // Find the chat room for this event
+      try {
+        const chatRooms = await this.chatRoomService.getEventChatRooms(eventId);
+        if (chatRooms && chatRooms.length > 0) {
+          return { roomId: chatRooms[0].matrixRoomId };
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Error getting chat rooms for event ${eventId}: ${error.message}`,
+        );
+      }
+
+      // Fall back to the event's matrixRoomId if available
+      return {
+        roomId: event?.matrixRoomId,
+      };
     } finally {
       // Always clear the flag when we're done
-      delete this.request._avoidRecursion;
+      if (this.request) {
+        delete this.request._avoidRecursion;
+      }
     }
   }
 
   /**
-   * Legacy method - prefer using slug-based methods instead
+   * @deprecated Use slug-based methods instead
+   * Legacy method maintained for backward compatibility
    */
   @Trace('discussion.removeMemberFromEventDiscussion')
   async removeMemberFromEventDiscussion(
     eventId: number,
     userId: number,
   ): Promise<void> {
-    // Get the event's slug first
-    const tenantId = this.request.tenantId;
-
-    // Find the event to get its slug
-    const event = await this.eventQueryService.findById(eventId, tenantId);
-    if (!event) {
-      throw new NotFoundException(`Event with id ${eventId} not found`);
-    }
-
-    // Get the user to get their slug
-    const user = await this.userService.findById(userId, tenantId);
-    if (!user) {
-      throw new NotFoundException(`User with id ${userId} not found`);
-    }
-
-    // Use the slug-based method which is preferred
-    await this.removeMemberFromEventDiscussionBySlug(event.slug, user.slug);
+    // Delegate to the unified entity-based implementation
+    await this.removeMemberFromEntityDiscussion('event', eventId, userId);
   }
 
   /**
@@ -770,9 +1077,11 @@ export class DiscussionService implements DiscussionServiceInterface {
     userSlug: string,
     explicitTenantId?: string,
   ): Promise<void> {
-    const tenantId = explicitTenantId || this.request.tenantId;
+    // When called from event handlers, this.request might be undefined
+    // Always rely on explicit tenantId being passed
+    const tenantId = explicitTenantId;
     if (!tenantId) {
-      throw new Error('Tenant ID is required');
+      throw new Error('Explicit Tenant ID is required for event handlers');
     }
 
     // Find the entity by slug
@@ -800,16 +1109,50 @@ export class DiscussionService implements DiscussionServiceInterface {
       throw new NotFoundException(`User with slug ${userSlug} not found`);
     }
 
+    // Use the ID-based method to avoid duplication
+    await this.removeMemberFromEntityDiscussion(
+      entityType,
+      entityId,
+      user.id,
+      tenantId,
+    );
+  }
+
+  /**
+   * Remove a member from either an event or group discussion by ID
+   * Generic method that centralizes the logic for both entity types
+   */
+  @Trace('discussion.removeMemberFromEntityDiscussion')
+  private async removeMemberFromEntityDiscussion(
+    entityType: 'event' | 'group',
+    entityId: number,
+    userId: number,
+    explicitTenantId?: string,
+  ): Promise<void> {
+    // Get tenant ID from explicit parameter or request context
+    const tenantId = explicitTenantId || this.request?.tenantId;
+
+    if (!tenantId) {
+      this.logger.error('Tenant ID is required');
+      throw new Error('Tenant ID is required');
+    }
+
     // Remove the user from the appropriate chat room
     if (entityType === 'event') {
-      await this.chatRoomService.removeUserFromEventChatRoom(entityId, user.id);
+      await this.chatRoomService.removeUserFromEventChatRoomById(
+        entityId,
+        userId,
+      );
     } else {
-      await this.chatRoomService.removeUserFromGroupChatRoom(entityId, user.id);
+      await this.chatRoomService.removeUserFromGroupChatRoomById(
+        entityId,
+        userId,
+      );
     }
 
     // Clear any cached membership verification for this user/entity
     const cache = this.getRequestCache();
-    const membershipCacheKey = `${entityType}:${entityId}:user:${user.id}`;
+    const membershipCacheKey = `${entityType}:${entityId}:user:${userId}`;
     cache.membershipVerified.delete(membershipCacheKey);
   }
 
@@ -884,10 +1227,16 @@ export class DiscussionService implements DiscussionServiceInterface {
     slug: string,
     userId: number,
     body: { message: string },
+    explicitTenantId?: string,
   ): Promise<{ id: string }> {
-    // We need the tenant ID for future multi-tenant functionality
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _tenantId = this.request.tenantId;
+    // Get tenant ID from explicit parameter or request context
+    const tenantId = explicitTenantId || this.request?.tenantId;
+
+    if (!tenantId) {
+      this.logger.error('Tenant ID is required');
+      throw new Error('Tenant ID is required');
+    }
+
     const cache = this.getRequestCache();
 
     let entityId: number;
@@ -942,9 +1291,15 @@ export class DiscussionService implements DiscussionServiceInterface {
       try {
         // Add user to the room based on entity type
         if (entityType === 'event') {
-          await this.chatRoomService.addUserToEventChatRoom(entityId, userId);
+          await this.chatRoomService.addUserToEventChatRoomById(
+            entityId,
+            userId,
+          );
         } else {
-          await this.chatRoomService.addUserToGroupChatRoom(entityId, userId);
+          await this.chatRoomService.addUserToGroupChatRoomById(
+            entityId,
+            userId,
+          );
         }
 
         // Mark membership as verified for this request cycle
@@ -991,8 +1346,24 @@ export class DiscussionService implements DiscussionServiceInterface {
     slug: string,
     userId: number,
     body: { message: string },
+    explicitTenantId?: string,
   ): Promise<{ id: string }> {
-    return this.sendEntityDiscussionMessage('group', slug, userId, body);
+    // Get tenant ID from explicit parameter or request context
+    const tenantId = explicitTenantId || this.request?.tenantId;
+
+    if (!tenantId) {
+      this.logger.error('Tenant ID is required');
+      throw new Error('Tenant ID is required');
+    }
+
+    // Pass the tenant context to the entity discussion method
+    return this.sendEntityDiscussionMessage(
+      'group',
+      slug,
+      userId,
+      body,
+      tenantId,
+    );
   }
 
   @Trace('discussion.getGroupDiscussionMessages')
@@ -1001,36 +1372,62 @@ export class DiscussionService implements DiscussionServiceInterface {
     userId: number,
     limit = 50,
     from?: string,
-  ): Promise<{
-    messages: Message[];
-    end: string;
-    roomId?: string;
-  }> {
-    return this.getEntityDiscussionMessages('group', slug, userId, limit, from);
+    explicitTenantId?: string,
+  ): Promise<DiscussionMessagesResponseDto> {
+    // Get tenant ID from explicit parameter or request context
+    const tenantId = explicitTenantId || this.request?.tenantId;
+
+    if (!tenantId) {
+      this.logger.error('Tenant ID is required');
+      throw new Error('Tenant ID is required');
+    }
+
+    // Pass the tenant context to the entity discussion method
+    return this.getEntityDiscussionMessages(
+      'group',
+      slug,
+      userId,
+      limit,
+      from,
+      tenantId,
+    );
   }
 
   @Trace('discussion.addMemberToGroupDiscussion')
   async addMemberToGroupDiscussion(
     groupId: number,
     userId: number,
+    explicitTenantId?: string,
   ): Promise<void> {
-    // Get the group's slug first
-    const tenantId = this.request.tenantId;
+    // Get tenant ID from explicit parameter or request context
+    const tenantId = explicitTenantId || this.request?.tenantId;
 
-    // Find the group to get its slug
+    if (!tenantId) {
+      this.logger.error('Tenant ID is required');
+      throw new Error('Tenant ID is required');
+    }
+
+    // Check if the group and user exist
     const group = await this.groupService.findOne(groupId);
     if (!group) {
       throw new NotFoundException(`Group with id ${groupId} not found`);
     }
 
-    // Get the user to get their slug
     const user = await this.userService.findById(userId, tenantId);
     if (!user) {
       throw new NotFoundException(`User with id ${userId} not found`);
     }
 
-    // Use the slug-based method which is preferred
-    await this.addMemberToGroupDiscussionBySlug(group.slug, user.slug);
+    // Use the tenant-aware ChatRoomManagerInterface implementation with slugs
+    await this.chatRoomManager.addUserToGroupChatRoom(
+      group.slug,
+      user.slug,
+      tenantId,
+    );
+
+    this.logger.log(
+      `Added user ${user.slug} to group ${group.slug} chat room in tenant ${tenantId}`,
+    );
   }
 
   @Trace('discussion.addMemberToGroupDiscussionBySlug')
@@ -1039,36 +1436,58 @@ export class DiscussionService implements DiscussionServiceInterface {
     userSlug: string,
     explicitTenantId?: string,
   ): Promise<void> {
-    return this.addMemberToEntityDiscussionBySlug(
-      'group',
-      groupSlug,
-      userSlug,
-      explicitTenantId,
+    // If tenantId is provided, use it directly. Otherwise try to use the one from the request
+    // In event listener context, explicitTenantId MUST be provided
+    const tenantId = explicitTenantId || this.request?.tenantId;
+
+    if (!tenantId) {
+      this.logger.error(
+        'Explicit tenantId is required when called from event listeners',
+      );
+      throw new Error('Tenant ID is required');
+    }
+
+    // Find the group by slug
+    const group = await this.groupService.getGroupBySlug(groupSlug);
+    if (!group) {
+      throw new NotFoundException(`Group with slug ${groupSlug} not found`);
+    }
+
+    // Find the user by slug
+    const user = await this.userService.getUserBySlug(userSlug);
+    if (!user) {
+      throw new NotFoundException(`User with slug ${userSlug} not found`);
+    }
+
+    // Use the tenant-aware ChatRoomManagerInterface implementation
+    await this.chatRoomManager.addUserToGroupChatRoom(
+      group.slug,
+      user.slug,
+      tenantId,
+    );
+
+    this.logger.log(
+      `Added user ${userSlug} to group ${groupSlug} chat room in tenant ${tenantId}`,
     );
   }
 
+  /**
+   * @deprecated Use slug-based methods instead
+   * Legacy method maintained for backward compatibility
+   */
   @Trace('discussion.removeMemberFromGroupDiscussion')
   async removeMemberFromGroupDiscussion(
     groupId: number,
     userId: number,
+    explicitTenantId?: string,
   ): Promise<void> {
-    // Get the group's slug first
-    const tenantId = this.request.tenantId;
-
-    // Find the group to get its slug
-    const group = await this.groupService.findOne(groupId);
-    if (!group) {
-      throw new NotFoundException(`Group with id ${groupId} not found`);
-    }
-
-    // Get the user to get their slug
-    const user = await this.userService.findById(userId, tenantId);
-    if (!user) {
-      throw new NotFoundException(`User with id ${userId} not found`);
-    }
-
-    // Use the slug-based method which is preferred
-    await this.removeMemberFromGroupDiscussionBySlug(group.slug, user.slug);
+    // Delegate to the unified entity-based implementation
+    await this.removeMemberFromEntityDiscussion(
+      'group',
+      groupId,
+      userId,
+      explicitTenantId,
+    );
   }
 
   @Trace('discussion.removeMemberFromGroupDiscussionBySlug')
@@ -1077,11 +1496,38 @@ export class DiscussionService implements DiscussionServiceInterface {
     userSlug: string,
     explicitTenantId?: string,
   ): Promise<void> {
-    return this.removeMemberFromEntityDiscussionBySlug(
-      'group',
-      groupSlug,
-      userSlug,
-      explicitTenantId,
+    // If tenantId is provided, use it directly. Otherwise try to use the one from the request
+    // In event listener context, explicitTenantId MUST be provided
+    const tenantId = explicitTenantId || this.request?.tenantId;
+
+    if (!tenantId) {
+      this.logger.error(
+        'Explicit tenantId is required when called from event listeners',
+      );
+      throw new Error('Tenant ID is required');
+    }
+
+    // Find the group by slug
+    const group = await this.groupService.getGroupBySlug(groupSlug);
+    if (!group) {
+      throw new NotFoundException(`Group with slug ${groupSlug} not found`);
+    }
+
+    // Find the user by slug
+    const user = await this.userService.getUserBySlug(userSlug);
+    if (!user) {
+      throw new NotFoundException(`User with slug ${userSlug} not found`);
+    }
+
+    // Use the tenant-aware ChatRoomManagerInterface implementation
+    await this.chatRoomManager.removeUserFromGroupChatRoom(
+      group.slug,
+      user.slug,
+      tenantId,
+    );
+
+    this.logger.log(
+      `Removed user ${userSlug} from group ${groupSlug} chat room in tenant ${tenantId}`,
     );
   }
 
@@ -1112,12 +1558,13 @@ export class DiscussionService implements DiscussionServiceInterface {
     userSlug: string,
     tenantId: string | undefined,
   ): Promise<{ eventId: number | null; userId: number | null }> {
-    // If tenantId is not provided, try to use the one from the request
-    const effectiveTenantId = tenantId || this.request?.tenantId;
+    // If tenantId is provided, use it directly. Otherwise try to use the one from the request
+    // In event listener context, explicitTenantId MUST be provided
+    const effectiveTenantId = tenantId;
 
     if (!effectiveTenantId) {
       this.logger.error(
-        'Neither explicit tenantId nor request.tenantId is available',
+        'Explicit tenantId is required when called from event listeners',
       );
       throw new Error('Tenant ID is required');
     }
@@ -1161,6 +1608,90 @@ export class DiscussionService implements DiscussionServiceInterface {
   }
 
   /**
+   * Get group and user IDs from their slugs with tenant context
+   * This is used by event handlers where tenant context is required
+   */
+  @Trace('discussion.getGroupAndUserIdsFromSlugsWithTenant')
+  async getGroupAndUserIdsFromSlugsWithTenant(
+    groupSlug: string,
+    userSlug: string,
+    tenantId: string,
+  ): Promise<{ groupId: number; userId: number }> {
+    if (!tenantId) {
+      this.logger.error('Tenant ID is required');
+      throw new Error('Tenant ID is required');
+    }
+
+    // Get the group ID
+    const groupId = await this.getGroupIdFromSlugWithTenant(
+      groupSlug,
+      tenantId,
+    );
+
+    // Get the user ID
+    const userId = await this.getUserIdFromSlugWithTenant(userSlug, tenantId);
+
+    return { groupId, userId };
+  }
+
+  /**
+   * Get a group ID from its slug with tenant context
+   */
+  @Trace('discussion.getGroupIdFromSlugWithTenant')
+  async getGroupIdFromSlugWithTenant(
+    groupSlug: string,
+    tenantId: string,
+  ): Promise<number> {
+    if (!tenantId) {
+      this.logger.error('Tenant ID is required');
+      throw new Error('Tenant ID is required');
+    }
+
+    try {
+      const group = await this.groupService.getGroupBySlug(groupSlug);
+      if (!group) {
+        throw new Error(`Group with slug ${groupSlug} not found`);
+      }
+      return group.id;
+    } catch (error) {
+      this.logger.warn(
+        `Could not find group with slug ${groupSlug} in tenant ${tenantId}: ${error.message}`,
+      );
+      throw new Error(`Group with slug ${groupSlug} not found`);
+    }
+  }
+
+  /**
+   * Get a user ID from its slug with tenant context
+   */
+  @Trace('discussion.getUserIdFromSlugWithTenant')
+  async getUserIdFromSlugWithTenant(
+    userSlug: string,
+    tenantId: string,
+  ): Promise<number> {
+    if (!tenantId) {
+      this.logger.error('Tenant ID is required');
+      throw new Error('Tenant ID is required');
+    }
+
+    try {
+      const user = await this.userService.getUserBySlugWithTenant(
+        userSlug,
+        tenantId,
+      );
+      if (!user) {
+        throw new Error(`User with slug ${userSlug} not found`);
+      }
+      return user.id;
+    } catch (error) {
+      this.logger.warn(
+        `Could not find user with slug ${userSlug} in tenant ${tenantId}: ${error.message}`,
+      );
+      throw new Error(`User with slug ${userSlug} not found`);
+    }
+  }
+
+  /**
    * Check if an event exists by ID
    * @param eventId The event ID to check
    * @param tenantId Optional tenant ID
@@ -1191,30 +1722,29 @@ export class DiscussionService implements DiscussionServiceInterface {
     }
   }
 
+  /**
+   * @todo Not implemented yet - placeholder for interface compatibility
+   */
   @Trace('discussion.sendDirectMessage')
   async sendDirectMessage(
     _recipientId: number,
     _senderId: number,
     _body: { message: string },
   ): Promise<{ id: string }> {
-    // This would be implemented for direct messaging
-    // For now, throwing an error as this is not implemented yet
     await Promise.resolve(); // Add await to fix require-await error
     throw new Error('Direct messaging functionality not implemented yet');
   }
 
+  /**
+   * @todo Not implemented yet - placeholder for interface compatibility
+   */
   @Trace('discussion.getDirectMessages')
   async getDirectMessages(
     _userId1: number,
     _userId2: number,
     _limit?: number,
     _from?: string,
-  ): Promise<{
-    messages: Message[];
-    end: string;
-  }> {
-    // This would be implemented for direct messaging
-    // For now, throwing an error as this is not implemented yet
+  ): Promise<DiscussionMessagesResponseDto> {
     await Promise.resolve(); // Add await to fix require-await error
     throw new Error('Direct messaging functionality not implemented yet');
   }
@@ -1281,7 +1811,7 @@ export class DiscussionService implements DiscussionServiceInterface {
             // Remove each member from the room first to ensure clean disconnection
             for (const member of members) {
               try {
-                await this.chatRoomService.removeUserFromEventChatRoom(
+                await this.chatRoomService.removeUserFromEventChatRoomById(
                   eventId,
                   member.id,
                 );
@@ -1338,18 +1868,6 @@ export class DiscussionService implements DiscussionServiceInterface {
     // Use either the instance logger or the static logger as fallback
     const logger = this.logger || DiscussionService.staticLogger;
 
-    // Check if chatRoomService is available
-    if (!this.chatRoomService) {
-      logger.error(
-        'chatRoomService is not available. This could be due to a circular dependency or initialization issue.',
-      );
-      // Return early instead of throwing to avoid blocking group deletion
-      logger.warn(
-        `Skipping chat room cleanup for group ${groupId} due to missing chatRoomService`,
-      );
-      return;
-    }
-
     const effectiveTenantId = tenantId || this.request?.tenantId;
 
     if (!effectiveTenantId) {
@@ -1364,65 +1882,44 @@ export class DiscussionService implements DiscussionServiceInterface {
     );
 
     try {
-      // Get chat rooms for this group
-      const chatRooms = await this.chatRoomService.getGroupChatRooms(groupId);
-
-      if (chatRooms && chatRooms.length > 0) {
-        logger.log(
-          `Found ${chatRooms.length} chat rooms to clean up for group ${groupId}`,
+      // Get the group to find its slug
+      const group = await this.groupService.findOne(groupId);
+      if (!group) {
+        logger.warn(
+          `Group with ID ${groupId} not found, skipping chat room cleanup`,
         );
-
-        // Process each chat room
-        for (const room of chatRooms) {
-          try {
-            // Find all members of the room
-            const members = await this.chatRoomService.getChatRoomMembers(
-              room.id,
-            );
-
-            // Remove each member from the room first to ensure clean disconnection
-            for (const member of members) {
-              try {
-                await this.chatRoomService.removeUserFromGroupChatRoom(
-                  groupId,
-                  member.id,
-                );
-                logger.log(`Removed user ${member.id} from group chat room`);
-              } catch (removeError) {
-                logger.warn(
-                  `Error removing user ${member.id} from room: ${removeError.message}`,
-                );
-                // Continue with other members
-              }
-            }
-          } catch (roomError) {
-            logger.error(
-              `Error processing members for chat room ${room.id}: ${roomError.message}`,
-            );
-            // Continue with other rooms
-          }
-        }
-
-        // After removing all members, delete the chat rooms
-        try {
-          await this.chatRoomService.deleteGroupChatRooms(groupId);
-          logger.log(
-            `Successfully deleted all chat rooms for group ${groupId}`,
-          );
-        } catch (deleteError) {
-          logger.error(
-            `Error deleting chat rooms for group ${groupId}: ${deleteError.message}`,
-          );
-          throw deleteError;
-        }
-      } else {
-        logger.log(`No chat rooms found for group ${groupId}`);
+        return;
       }
+
+      // Check if group exists using the ChatRoomManagerInterface with slug
+      const groupExists = await this.chatRoomManager.checkGroupExists(
+        group.slug,
+        effectiveTenantId,
+      );
+
+      if (!groupExists) {
+        logger.warn(
+          `Group ${group.slug} does not exist in tenant ${effectiveTenantId}, skipping chat room cleanup`,
+        );
+        return;
+      }
+
+      // Use the tenant-aware ChatRoomManagerInterface implementation to delete chat rooms with slug
+      await this.chatRoomManager.deleteGroupChatRooms(
+        group.slug,
+        effectiveTenantId,
+      );
+
+      logger.log(
+        `Successfully deleted all chat rooms for group ${group.slug} in tenant ${effectiveTenantId}`,
+      );
     } catch (error) {
       logger.error(
         `Error cleaning up chat rooms for group ${groupId}: ${error.message}`,
+        error.stack,
       );
-      throw error;
+      // Don't rethrow the error to avoid blocking the group deletion operation
+      // The group deletion should proceed even if chat room cleanup fails
     }
   }
 }

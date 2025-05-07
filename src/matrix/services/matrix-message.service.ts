@@ -1,14 +1,19 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import axios from 'axios';
 import { MatrixCoreService } from './matrix-core.service';
 import { IMatrixMessageProvider } from '../types/matrix.interfaces';
 import { Message, SendMessageOptions } from '../types/matrix.types';
+import { MatrixUserService } from './matrix-user.service';
 
 @Injectable()
 export class MatrixMessageService implements IMatrixMessageProvider {
   private readonly logger = new Logger(MatrixMessageService.name);
 
-  constructor(private readonly matrixCoreService: MatrixCoreService) {}
+  constructor(
+    private readonly matrixCoreService: MatrixCoreService,
+    @Inject(forwardRef(() => MatrixUserService))
+    private readonly matrixUserService: MatrixUserService,
+  ) {}
 
   /**
    * Send a message to a room
@@ -71,13 +76,80 @@ export class MatrixMessageService implements IMatrixMessageProvider {
         const senderDevice =
           senderDeviceId || deviceId || config.defaultDeviceId;
 
+        // Verify the token is valid before sending
+        let finalToken = senderToken;
+        let isTokenValid = false;
+
+        try {
+          isTokenValid = await this.matrixUserService.verifyAccessToken(
+            senderId,
+            finalToken,
+          );
+        } catch (error) {
+          this.logger.warn(
+            `Error verifying token for ${senderId}: ${error.message}`,
+          );
+          isTokenValid = false;
+        }
+
+        // If token is invalid, try to refresh it
+        if (!isTokenValid) {
+          this.logger.warn(
+            `Matrix token for ${senderId} is invalid, attempting to regenerate...`,
+          );
+
+          try {
+            // Get a new token through admin API
+            const newToken =
+              await this.matrixUserService.generateNewAccessToken(senderId);
+            if (newToken) {
+              this.logger.log(`Successfully regenerated token for ${senderId}`);
+              finalToken = newToken;
+
+              // Extract username for client cache clearing
+              const username = senderId.startsWith('@')
+                ? senderId.split(':')[0].substring(1)
+                : senderId;
+
+              // Clear the client from the cache immediately to force recreation
+              try {
+                await this.matrixUserService.clearUserClients(
+                  username,
+                  options.tenantId,
+                );
+                this.logger.debug(
+                  `Cleared cached Matrix clients for user ${username} after token refresh`,
+                );
+              } catch (clearError) {
+                this.logger.warn(
+                  `Error clearing cached Matrix clients: ${clearError.message}`,
+                );
+                // Continue anyway
+              }
+            } else {
+              this.logger.error(`Failed to regenerate token for ${senderId}`);
+              throw new Error('Failed to refresh Matrix credentials');
+            }
+          } catch (refreshError) {
+            this.logger.error(
+              `Error regenerating token: ${refreshError.message}`,
+              refreshError.stack,
+            );
+            throw new Error('Failed to refresh Matrix credentials');
+          }
+        } else {
+          this.logger.debug(
+            `Token for ${senderId} is valid, proceeding with message send`,
+          );
+        }
+
         this.logger.debug(`Sending message as user ${senderId}`);
 
-        // Create a temporary client for the user
+        // Create a temporary client for the user with potentially refreshed token
         const tempClient = sdk.createClient({
           baseUrl: config.baseUrl,
           userId: senderId,
-          accessToken: senderToken,
+          accessToken: finalToken,
           deviceId: senderDevice,
           useAuthorizationHeader: true,
           logger: {
@@ -90,15 +162,69 @@ export class MatrixMessageService implements IMatrixMessageProvider {
           },
         });
 
-        // Send the message
-        const response = await tempClient.sendEvent(
-          roomId,
-          msgtype,
-          messageContent,
-          '',
-        );
+        // Initialize the client before use - this is crucial for token acceptance
+        try {
+          this.logger.debug(
+            `Starting Matrix client for user ${senderId} before sending message`,
+          );
+          await tempClient.startClient({
+            initialSyncLimit: 0, // Minimal sync for message sending
+            disablePresence: true, // Don't need presence for message sending
+            lazyLoadMembers: true, // Performance optimization
+          });
+        } catch (startError) {
+          this.logger.warn(
+            `Non-fatal error starting temporary Matrix client: ${startError.message}`,
+          );
+          // Continue anyway - some Matrix SDKs allow operations without starting
+        }
 
-        return response.event_id;
+        // Send the message
+        try {
+          const response = await tempClient.sendEvent(
+            roomId,
+            msgtype,
+            messageContent,
+            '',
+          );
+
+          // Stop the client after use to prevent resource leaks
+          try {
+            tempClient.stopClient();
+          } catch (stopError) {
+            this.logger.warn(
+              `Non-fatal error stopping Matrix client: ${stopError.message}`,
+            );
+            // Non-fatal error, continue
+          }
+
+          return response.event_id;
+        } catch (sendError) {
+          // If we still get an error after token refresh, it might be a room access issue
+          if (sendError.message?.includes('M_FORBIDDEN')) {
+            this.logger.error(
+              `User ${senderId} does not have permission to send messages to room ${roomId}`,
+            );
+            throw new Error(
+              'You do not have permission to send messages to this room',
+            );
+          }
+
+          // Handle token issues specially to provide better error messages
+          if (
+            sendError.message?.includes('M_UNKNOWN_TOKEN') ||
+            sendError.message?.includes('Invalid access token')
+          ) {
+            this.logger.error(
+              `Token error for user ${senderId} despite refresh: ${sendError.message}`,
+            );
+            throw new Error(
+              'Matrix authentication failed. Please try again or contact support.',
+            );
+          }
+
+          throw sendError;
+        }
       }
 
       // Fall back to using the admin client
@@ -163,12 +289,38 @@ export class MatrixMessageService implements IMatrixMessageProvider {
         },
       });
 
+      // Initialize the client before using it (similar to messaging)
+      try {
+        this.logger.debug(
+          `Starting Matrix client for typing notification as ${userId}`,
+        );
+        await client.startClient({
+          initialSyncLimit: 0,
+          disablePresence: true,
+          lazyLoadMembers: true,
+        });
+      } catch (startError) {
+        this.logger.warn(
+          `Non-fatal error starting Matrix client for typing: ${startError.message}`,
+        );
+        // Continue anyway
+      }
+
       // Send typing notification
       // The timeout is how long the typing indicator should be shown (in milliseconds)
       // Use 20 seconds for active typing, or 0 for stopped typing
       const timeout = isTyping ? 20000 : 0;
 
       await client.sendTyping(roomId, isTyping, timeout);
+
+      // Clean up client
+      try {
+        client.stopClient();
+      } catch (stopError) {
+        this.logger.warn(
+          `Non-fatal error stopping Matrix client: ${stopError.message}`,
+        );
+      }
 
       this.logger.debug(`Typing notification sent successfully`);
       return {};

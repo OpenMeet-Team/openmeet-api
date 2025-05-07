@@ -91,6 +91,17 @@ export class RecurrenceRuleDto {
   bymonthday?: number[];
 
   @ApiPropertyOptional({
+    description:
+      'Positions within a month/year (e.g., 1 for first, 2 for second, -1 for last)',
+    example: [1],
+    type: [Number],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsNumber({}, { each: true })
+  bysetpos?: number[];
+
+  @ApiPropertyOptional({
     description: 'Week start day (SU, MO, TU, WE, TH, FR, SA)',
     example: 'MO',
     default: 'MO',

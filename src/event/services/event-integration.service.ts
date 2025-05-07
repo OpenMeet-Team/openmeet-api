@@ -583,6 +583,50 @@ export class EventIntegrationService {
           },
         },
       );
+    } else if (eventData.source.type === EventSourceType.WEB) {
+      // Implementation for web source type
+      this.logger.debug(
+        `Creating shadow account for Web source ${eventData.source.id} for tenant ${tenantId}`,
+      );
+
+      // Extract domain from source metadata or URL
+      let domain = 'unknown.source';
+      if (eventData.source.metadata?.domain) {
+        domain = eventData.source.metadata.domain as string;
+      } else if (eventData.source.url) {
+        try {
+          const url = new URL(eventData.source.url);
+          domain = url.hostname;
+        } catch (e) {
+          this.logger.error(
+            `Error parsing URL: ${eventData.source.url}`,
+            e.stack,
+          );
+        }
+      }
+
+      // Create a unique identifier for the web source
+      const sourceIdentifier = `web:${domain}:${eventData.source.id}`;
+
+      // Create a display name for the source
+      const displayName = eventData.source.metadata?.siteName
+        ? eventData.source.metadata.siteName
+        : domain.charAt(0).toUpperCase() +
+          domain.slice(1).replace(/\.(com|org|net|io)$/, '');
+
+      return this.shadowAccountService.findOrCreateShadowAccount(
+        sourceIdentifier,
+        displayName,
+        AuthProvidersEnum.email,
+        tenantId,
+        {
+          web: {
+            domain: domain,
+            sourceId: eventData.source.id,
+            url: eventData.source.url,
+          },
+        },
+      );
     }
 
     // For other types, we can extend this method with additional providers

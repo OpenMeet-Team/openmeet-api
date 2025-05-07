@@ -7,6 +7,7 @@ import {
   HttpHealthIndicator,
   HealthCheck,
 } from '@nestjs/terminus';
+import { MatrixHealthIndicator } from '../matrix/health/matrix.health';
 
 @ApiTags('Health')
 @Controller('health')
@@ -16,6 +17,7 @@ export class HealthController {
     private health: HealthCheckService,
     private http: HttpHealthIndicator,
     private db: TypeOrmHealthIndicator,
+    private matrix: MatrixHealthIndicator,
   ) {}
 
   @HealthCheck()
@@ -37,11 +39,29 @@ export class HealthController {
   @ApiOperation({ summary: 'Readiness probe' })
   async readiness() {
     try {
-      return await this.health.check([() => this.db.pingCheck('database')]);
+      return await this.health.check([
+        () => this.db.pingCheck('database'),
+        () => this.matrix.isHealthy('matrix'),
+      ]);
     } catch (error) {
       return {
         status: 'error',
         database: 'disconnected',
+        error: error.message,
+      };
+    }
+  }
+
+  @HealthCheck()
+  @Get('matrix')
+  @ApiOperation({ summary: 'Matrix health check' })
+  async matrixHealth() {
+    try {
+      return await this.health.check([() => this.matrix.isHealthy('matrix')]);
+    } catch (error) {
+      return {
+        status: 'error',
+        matrix: 'disconnected',
         error: error.message,
       };
     }

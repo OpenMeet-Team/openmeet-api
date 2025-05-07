@@ -183,6 +183,7 @@ export class MatrixChatProviderAdapter implements ChatProviderInterface {
     userId: string;
     accessToken: string;
     deviceId?: string;
+    tenantId?: string;
   }): Promise<void> {
     try {
       // Get the user's slug from the Matrix user ID
@@ -196,8 +197,16 @@ export class MatrixChatProviderAdapter implements ChatProviderInterface {
       // Extract slug from the username part (@om_SLUG)
       const userSlug = userIdParts.replace('@om_', '');
 
-      // Create a temporary client using the extracted userSlug
-      const client = await this.matrixUserService.getClientForUser(userSlug);
+      // Use tenantId from options parameter
+      const tenantId = options.tenantId;
+
+      // Create a temporary client using the extracted userSlug and tenant ID
+      const client = await this.matrixUserService.getClientForUser(
+        userSlug,
+        undefined, // Deprecated parameter, will be removed in future
+        tenantId,
+      );
+
       if (client) {
         await client.startClient();
       }

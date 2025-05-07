@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { MatrixCoreService } from './matrix-core.service';
 import axios from 'axios';
 import { Logger } from '@nestjs/common';
+import { MatrixTokenManagerService } from './matrix-token-manager.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 // Create the mocks directly in the test file instead of importing
 // This avoids path issues in different environments
@@ -77,6 +79,24 @@ describe('MatrixCoreService', () => {
               }
               return null;
             }),
+          },
+        },
+        {
+          provide: MatrixTokenManagerService,
+          useValue: {
+            getAdminToken: jest.fn().mockReturnValue('admin-token'),
+            getTokenState: jest.fn().mockReturnValue('valid'),
+            reportTokenInvalid: jest.fn(),
+            forceTokenRegeneration: jest.fn().mockResolvedValue(true),
+          },
+        },
+        {
+          provide: EventEmitter2,
+          useValue: {
+            emit: jest.fn(),
+            on: jest.fn(),
+            removeListener: jest.fn(),
+            removeAllListeners: jest.fn(),
           },
         },
       ],
@@ -203,6 +223,9 @@ describe('MatrixCoreService', () => {
       // Call cleanup
       await service.onModuleDestroy();
 
+      // Verify removeAllListeners was called with the correct event
+      expect(service['eventEmitter'].removeAllListeners).toHaveBeenCalledWith('matrix.admin.token.updated');
+
       // Verify stopClient was called on the admin client
       expect(mockMatrixClient.stopClient).toHaveBeenCalled();
 
@@ -253,6 +276,21 @@ describe('MatrixCoreService', () => {
       const config = service.getConfig();
 
       expect(config).toEqual(expectedConfig);
+    });
+
+    it('should return event emitter', () => {
+      const mockEventEmitter = {
+        emit: jest.fn(),
+        on: jest.fn(),
+        removeListener: jest.fn(),
+      };
+
+      // Set the expected properties for the test
+      (service as any).eventEmitter = mockEventEmitter;
+
+      const eventEmitter = service.getEventEmitter();
+
+      expect(eventEmitter).toBe(mockEventEmitter);
     });
   });
 });

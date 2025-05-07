@@ -115,6 +115,8 @@ describe('MatrixGateway', () => {
               sendEvent: jest.fn().mockResolvedValue({ event_id: 'event-123' }),
             }),
             releaseClientForUser: jest.fn().mockResolvedValue(true),
+            verifyAccessToken: jest.fn().mockResolvedValue(true),
+            generateNewAccessToken: jest.fn().mockResolvedValue('new_token'),
           },
         },
         {
@@ -154,6 +156,7 @@ describe('MatrixGateway', () => {
           provide: UserService,
           useValue: {
             findById: jest.fn().mockResolvedValue(mockUser),
+            update: jest.fn().mockResolvedValue(mockUser),
           },
         },
         {
@@ -235,6 +238,7 @@ describe('MatrixGateway', () => {
     // Add spy for helper method
     const mockUserService = {
       findById: jest.fn().mockResolvedValue(mockUser),
+      update: jest.fn().mockResolvedValue(mockUser),
     } as unknown as UserService;
     jest
       .spyOn(MatrixGatewayHelper, 'createUserServiceForRequest')
@@ -401,15 +405,14 @@ describe('MatrixGateway', () => {
       );
 
       // Check that message was sent with correct parameters
-      expect(matrixMessageService.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          roomId: '!room1:server',
-          userId: mockUser.matrixUserId,
-          accessToken: mockUser.matrixAccessToken,
-          deviceId: mockUser.matrixDeviceId,
-          content: 'Hello world!',
-        }),
-      );
+      expect(matrixMessageService.sendMessage).toHaveBeenCalledWith({
+        roomId: '!room1:server',
+        userId: mockUser.matrixUserId,
+        accessToken: mockUser.matrixAccessToken,
+        deviceId: mockUser.matrixDeviceId,
+        content: 'Hello world!',
+        messageType: 'm.text',
+      });
 
       expect(result).toEqual({ success: true, id: 'event-123' });
     });

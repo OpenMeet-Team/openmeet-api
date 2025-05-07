@@ -258,7 +258,11 @@ export class EventManagementService {
           // Use BlueskyIdService to create a proper AT Protocol URI
           const did = createEventDto.sourceId ?? '';
           const collection = BLUESKY_COLLECTIONS.EVENT;
-          event.sourceId = this.blueskyIdService.createUri(did, collection, rkey);
+          event.sourceId = this.blueskyIdService.createUri(
+            did,
+            collection,
+            rkey,
+          );
 
           // Removed sourceUrl as it doesn't point to a real page
           event.sourceUrl = null;
@@ -273,7 +277,10 @@ export class EventManagementService {
           event.lastSyncedAt = new Date();
         } catch (blueskyError) {
           // If the user specifically requested a Bluesky event, fail with detailed error
-          if (createEventDto.sourceType === EventSourceType.BLUESKY || createEventDto.sourceId) {
+          if (
+            createEventDto.sourceType === EventSourceType.BLUESKY ||
+            createEventDto.sourceId
+          ) {
             this.logger.error('Failed to create event in Bluesky:', {
               error: blueskyError.message,
               stack: blueskyError.stack,
@@ -282,13 +289,16 @@ export class EventManagementService {
               'Failed to create event in Bluesky. Please try again or check your Bluesky connection.',
             );
           }
-          
+
           // Otherwise, just log the error and continue creating the event without Bluesky integration
-          this.logger.warn('Failed to create event in Bluesky, continuing without Bluesky integration:', {
-            error: blueskyError.message,
-            stack: blueskyError.stack,
-          });
-          
+          this.logger.warn(
+            'Failed to create event in Bluesky, continuing without Bluesky integration:',
+            {
+              error: blueskyError.message,
+              stack: blueskyError.stack,
+            },
+          );
+
           // Clear Bluesky-specific fields so we don't have dangling references
           event.sourceType = null;
           event.sourceId = null;
@@ -817,7 +827,7 @@ export class EventManagementService {
       );
     }
 
-    this.logger.debug('Starting event removal:', {
+    this.logger.debug('[remove] event', {
       eventId: event.id,
       name: event.name,
       sourceType: event.sourceType,
@@ -899,87 +909,54 @@ export class EventManagementService {
       this.request.tenantId,
     );
 
-    // Use a transaction to ensure atomicity
+    // Check if the discussionService exists and has the cleanupEventChatRooms method
+    if (
+      !this.discussionService ||
+      typeof this.discussionService.cleanupEventChatRooms !== 'function'
+    ) {
+      throw new UnprocessableEntityException(
+        'Discussion service required for event deletion is not available. Event deletion cannot proceed safely.',
+      );
+    }
+
+    // Before starting the transaction, clean up chat rooms through the discussion service
+    try {
+      this.logger.log(
+        `Starting chat room cleanup for event ${event.id} via discussionService`,
+      );
+
+      // Call the service layer method to clean up chat rooms
+      await this.discussionService.cleanupEventChatRooms(
+        event.id,
+        this.request.tenantId,
+      );
+
+      this.logger.log(
+        `Successfully cleaned up chat rooms for event ${event.id}`,
+      );
+    } catch (chatCleanupError) {
+      this.logger.error(
+        `Error cleaning up chat rooms for event ${event.id}: ${chatCleanupError.message}`,
+        chatCleanupError.stack,
+      );
+      throw new UnprocessableEntityException(
+        `Failed to clean up chat rooms: ${chatCleanupError.message}`,
+      );
+    }
+
+    // Use a transaction for the rest of the event deletion
     await dataSource
       .transaction(async (transactionalEntityManager) => {
         this.logger.log(`Starting transaction for event deletion: ${event.id}`);
 
-        // Step 1: Cleanup chat rooms first to prevent foreign key constraint errors
-        try {
-          // First attempt to clean up via discussionService if available
-          if (
-            this.discussionService &&
-            typeof this.discussionService.cleanupEventChatRooms === 'function'
-          ) {
-            this.logger.log(
-              `Cleaning up chat rooms for event ${event.id} via discussionService`,
-            );
-            await this.discussionService.cleanupEventChatRooms(
-              event.id,
-              this.request.tenantId,
-            );
-            this.logger.log(
-              `Successfully cleaned up chat rooms for event ${event.id}`,
-            );
-          } else {
-            // Direct cleanup as fallback if discussionService is not available
-            this.logger.warn(
-              `discussionService not available, using direct SQL queries for chatroom cleanup`,
-            );
-
-            // Check if there are any chat rooms to clean up first
-            const chatRooms = await transactionalEntityManager.query(
-              'SELECT COUNT(*) as count FROM "chatRooms" WHERE "eventId" = $1',
-              [event.id],
-            );
-
-            const roomCount = parseInt(chatRooms[0]?.count || '0', 10);
-
-            if (roomCount > 0) {
-              this.logger.log(
-                `Found ${roomCount} chat rooms to clean up for event ${event.id}`,
-              );
-
-              // Delete chat room members first due to foreign key constraints
-              await transactionalEntityManager.query(
-                'DELETE FROM "userChatRooms" WHERE "chatRoomId" IN (SELECT id FROM "chatRooms" WHERE "eventId" = $1)',
-                [event.id],
-              );
-
-              // Then delete the chat rooms themselves
-              await transactionalEntityManager.query(
-                'DELETE FROM "chatRooms" WHERE "eventId" = $1',
-                [event.id],
-              );
-
-              this.logger.log(
-                `Successfully cleaned up chat rooms for event ${event.id} via direct queries`,
-              );
-            } else {
-              this.logger.log(
-                `No chat rooms found for event ${event.id}, skipping cleanup`,
-              );
-            }
-          }
-        } catch (chatCleanupError) {
-          this.logger.error(
-            `Error cleaning up chat rooms for event ${event.id}: ${chatCleanupError.message}`,
-            chatCleanupError.stack,
-          );
-          // Rethrow to trigger transaction rollback
-          throw new Error(
-            `Failed to clean up chat rooms: ${chatCleanupError.message}`,
-          );
-        }
-
-        // Step 2: Clear Matrix room ID reference
+        // Step 1: Clear Matrix room ID reference
         if (event.matrixRoomId) {
           event.matrixRoomId = '';
           await transactionalEntityManager.save(EventEntity, event);
           this.logger.log(`Cleared Matrix room ID for event ${event.id}`);
         }
 
-        // Step 3: Delete related event attendees
+        // Step 2: Delete related event attendees
         try {
           const eventAttendeeRepo =
             transactionalEntityManager.getRepository(EventAttendeesEntity);
@@ -996,7 +973,7 @@ export class EventManagementService {
           );
         }
 
-        // Step 4: Handle series exceptions if needed
+        // Step 3: Handle series exceptions if needed
         if (event.seriesSlug) {
           try {
             this.logger.log(
@@ -1050,7 +1027,7 @@ export class EventManagementService {
           }
         }
 
-        // Step 5: Finally, delete the event itself
+        // Step 4: Finally, delete the event itself
         try {
           await transactionalEntityManager.remove(EventEntity, event);
           this.logger.log(`Successfully deleted event ${event.id}`);
@@ -1371,30 +1348,42 @@ export class EventManagementService {
   ) {
     await this.initializeRepository();
 
+    this.logger.debug(
+      `[attendEvent] Processing attendance for event ${slug} and user ${userId}`,
+    );
+
     const event = await this.eventRepository.findOne({ where: { slug } });
     if (!event) {
-      throw new Error(`Event with slug ${slug} not found`);
+      throw new NotFoundException(`Event with slug ${slug} not found`);
     }
 
     const user = await this.userService.getUserById(userId);
+    // First check the cache state for debugging
+    this.logger.debug(
+      `[attendEvent] Checking for existing attendance record with detailed cache logging`,
+    );
     const eventAttendee =
       await this.eventAttendeeService.findEventAttendeeByUserId(
         event.id,
         user.id,
       );
 
-    if (
-      eventAttendee &&
-      eventAttendee.status !== EventAttendeeStatus.Cancelled
-    ) {
-      return eventAttendee;
+    // Log existing attendance status if any
+    if (eventAttendee) {
+      this.logger.debug(
+        `[attendEvent] Found existing attendance record with status ${eventAttendee.status}, id=${eventAttendee.id}`,
+      );
+    } else {
+      this.logger.debug(
+        `[attendEvent] No existing attendance record found in initial check`,
+      );
     }
 
     const participantRole = await this.eventRoleService.getRoleByName(
       EventAttendeeRole.Participant,
     );
 
-    // Create the attendee with appropriate status based on event settings
+    // Calculate the appropriate status based on event settings
     let attendeeStatus = EventAttendeeStatus.Confirmed;
     if (event.allowWaitlist) {
       const count = await this.eventAttendeeService.showEventAttendeesCount(
@@ -1408,46 +1397,277 @@ export class EventManagementService {
       attendeeStatus = EventAttendeeStatus.Pending;
     }
 
-    // Create the attendee
-    // Start with the DTO values to preserve any source fields
-    const attendeeData = {
-      ...createEventAttendeeDto,
-      // Override with the values we need to set
-      event,
-      user,
-      status: attendeeStatus,
-      role: participantRole,
-    };
+    this.logger.debug(`[attendEvent] Calculated status: ${attendeeStatus}`);
 
-    const attendee = await this.eventAttendeeService.create(attendeeData);
+    // If the attendee already exists and is not cancelled, return it
+    if (
+      eventAttendee &&
+      eventAttendee.status !== EventAttendeeStatus.Cancelled
+    ) {
+      this.logger.debug(
+        `[attendEvent] Using existing active attendance record`,
+      );
+      return eventAttendee;
+    }
 
-    await this.eventMailService.sendMailAttendeeGuestJoined(attendee);
+    let attendee;
+
+    try {
+      // If attendee exists but has cancelled status, use the reactivation method
+      if (
+        eventAttendee &&
+        eventAttendee.status === EventAttendeeStatus.Cancelled
+      ) {
+        this.logger.debug(
+          `[attendEvent] Reactivating cancelled attendee: ${eventAttendee.id} for event ${event.slug}`,
+        );
+
+        // Use the slug-based method to reactivate
+        attendee =
+          await this.eventAttendeeService.reactivateEventAttendanceBySlug(
+            event.slug,
+            user.slug,
+            attendeeStatus,
+            participantRole.id,
+          );
+
+        // Update source fields if needed
+        if (
+          createEventAttendeeDto.sourceId ||
+          createEventAttendeeDto.sourceType ||
+          createEventAttendeeDto.sourceUrl ||
+          createEventAttendeeDto.sourceData
+        ) {
+          if (createEventAttendeeDto.sourceId)
+            attendee.sourceId = createEventAttendeeDto.sourceId;
+          if (createEventAttendeeDto.sourceType)
+            attendee.sourceType = createEventAttendeeDto.sourceType;
+          if (createEventAttendeeDto.sourceUrl)
+            attendee.sourceUrl = createEventAttendeeDto.sourceUrl;
+          if (createEventAttendeeDto.sourceData)
+            attendee.sourceData = createEventAttendeeDto.sourceData;
+
+          // Save the updated source fields
+          attendee = await this.eventAttendeeService.save(attendee);
+        }
+
+        this.logger.debug(
+          `[attendEvent] Reactivated attendee record to status ${attendee.status}`,
+        );
+      } else {
+        // Create new attendee record if none exists
+        this.logger.debug(
+          `[attendEvent] Creating new attendance record with status ${attendeeStatus}`,
+        );
+
+        // Start with the DTO values to preserve any source fields
+        const attendeeData = {
+          ...createEventAttendeeDto,
+          // Override with the values we need to set
+          event,
+          user,
+          status: attendeeStatus,
+          role: participantRole,
+        };
+
+        try {
+          attendee = await this.eventAttendeeService.create(attendeeData);
+          this.logger.debug(
+            `[attendEvent] Created new attendee record with ID ${attendee.id}`,
+          );
+        } catch (error) {
+          // Check if the error is due to a unique constraint violation (record already exists)
+          if (
+            error.message.includes('duplicate key') ||
+            error.message.includes('unique constraint')
+          ) {
+            this.logger.warn(
+              `[attendEvent] Duplicate record detected for event ${event.id}, user ${user.id}: ${error.message}`,
+            );
+
+            // Log the cache state
+            this.logger.debug(
+              `[attendEvent] CRITICAL ERROR STATE: Race condition detected - logging cache state before retry`,
+            );
+
+            // First try: Attempt to fetch with cache state logging
+            const cachedAttendeeInfo =
+              await this.eventAttendeeService.findEventAttendeeByUserId(
+                event.id,
+                user.id,
+              );
+
+            this.logger.debug(
+              `[attendEvent] After error - first attempt to fetch record: ${cachedAttendeeInfo ? `Found ID=${cachedAttendeeInfo.id}` : 'Not found'}`,
+            );
+
+            if (cachedAttendeeInfo) {
+              this.logger.debug(
+                `[attendEvent] Found existing record using regular lookup. Using record with status ${cachedAttendeeInfo.status}, id=${cachedAttendeeInfo.id}`,
+              );
+              return cachedAttendeeInfo;
+            }
+
+            // Second try: Attempt to fetch existing record with cache bypass
+            this.logger.debug(
+              `[attendEvent] Retrying lookup with cache bypass for event ${event.id}, user ${user.id}`,
+            );
+
+            const existingAttendee =
+              await this.eventAttendeeService.findEventAttendeeByUserId(
+                event.id,
+                user.id,
+              );
+
+            if (existingAttendee) {
+              this.logger.debug(
+                `[attendEvent] Found existing record after bypass. Using record with status ${existingAttendee.status}, id=${existingAttendee.id}`,
+              );
+              return existingAttendee;
+            } else {
+              // Last ditch effort - try direct query with findOne
+              this.logger.warn(
+                `[attendEvent] Still could not find record after bypass. Trying direct query with findOne.`,
+              );
+
+              // Try one more time with fewer relations
+              const simpleAttendee = await this.eventAttendeeService.findOne({
+                where: {
+                  event: { id: event.id },
+                  user: { id: user.id },
+                },
+              });
+
+              if (simpleAttendee) {
+                this.logger.debug(
+                  `[attendEvent] Found record without relations. ID: ${simpleAttendee.id}, Status: ${simpleAttendee.status}`,
+                );
+                return simpleAttendee;
+              }
+
+              // This should be rare - we couldn't create due to duplicate but can't find the existing record
+              this.logger.error(
+                `[attendEvent] CRITICAL DATA CONSISTENCY ERROR: Record exists (due to duplicate key error) but cannot be found with any method`,
+                {
+                  eventId: event.id,
+                  userId: user.id,
+                  errorMessage: error.message,
+                  requestId: this.request.id || 'unknown',
+                },
+              );
+
+              throw new Error(
+                `Could not create attendance record due to duplicate, but could not find existing record after multiple attempts: ${error.message}`,
+              );
+            }
+          } else {
+            // Re-throw other errors
+            throw error;
+          }
+        }
+      }
+
+      // Add logging to debug the structure of the attendee object before sending mail
+      this.logger.debug(
+        `[attendEvent] Sending mail for attendee: ${attendee.id}, with event: ${attendee.event?.id || 'undefined'}`,
+      );
+
+      try {
+        await this.eventMailService.sendMailAttendeeGuestJoined(attendee);
+      } catch (error) {
+        this.logger.error(
+          `[attendEvent] Error sending mail for attendee ${attendee.id}: ${error.message}`,
+          error.stack,
+        );
+        // Continue execution - don't let mail errors affect the overall operation
+      }
+
+      // Emit event for other parts of the system
+      this.eventEmitter.emit('event.attendee.added', {
+        eventId: event.id,
+        userId: user.id,
+        status: attendeeStatus,
+        tenantId: this.request.tenantId,
+        eventSlug: event.slug,
+        userSlug: user.slug,
+      });
+
+      // Ensure we're returning a fully populated attendee object
+      // This ensures the frontend has all the data it needs without requiring additional API calls
+      if (!attendee.role || !attendee.role.permissions) {
+        this.logger.debug(
+          `[attendEvent] Loading complete attendee record with role and permissions`,
+        );
+        attendee = await this.eventAttendeeService.findEventAttendeeByUserId(
+          event.id,
+          user.id,
+        );
+      }
+
+      return attendee;
+    } catch (error) {
+      this.logger.error(
+        `[attendEvent] Error during event attendance processing: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  @Trace('event-management.cancelAttendingEvent')
+  async cancelAttendingEvent(slug: string, userId: number) {
+    await this.initializeRepository();
+
+    this.logger.debug(
+      `[cancelAttendingEvent] Processing cancellation for event ${slug} and user ${userId}`,
+    );
+
+    const event = await this.eventRepository.findOne({ where: { slug } });
+    if (!event) {
+      throw new NotFoundException(`Event with slug ${slug} not found`);
+    }
+
+    // Get the user to obtain their slug
+    const user = await this.userService.getUserById(
+      userId,
+      this.request.tenantId,
+    );
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    // Log before calling cancel attendance
+    this.logger.debug(
+      `[cancelAttendingEvent] Calling cancelEventAttendanceBySlug for event ${slug}, userSlug ${user.slug}`,
+    );
+
+    const attendee =
+      await this.eventAttendeeService.cancelEventAttendanceBySlug(
+        slug,
+        user.slug,
+      );
+
+    this.logger.debug(
+      `[cancelAttendingEvent] Attendance cancelled, new status: ${attendee.status}, id: ${attendee.id}`,
+    );
+
+    // Verify the attendee has correct status
+    if (attendee.status !== EventAttendeeStatus.Cancelled) {
+      this.logger.warn(
+        `[cancelAttendingEvent] Unexpected status after cancellation: ${attendee.status}. Expected: ${EventAttendeeStatus.Cancelled}`,
+      );
+    }
 
     // Emit event for other parts of the system
-    this.eventEmitter.emit('event.attendee.added', {
+    this.eventEmitter.emit('event.attendee.cancelled', {
       eventId: event.id,
-      userId: user.id,
-      status: attendeeStatus,
+      userId,
       tenantId: this.request.tenantId,
       eventSlug: event.slug,
       userSlug: user.slug,
     });
 
     return attendee;
-  }
-
-  @Trace('event-management.cancelAttendingEvent')
-  async cancelAttendingEvent(slug: string, userId: number) {
-    await this.initializeRepository();
-    const event = await this.eventRepository.findOne({ where: { slug } });
-    if (!event) {
-      throw new Error(`Event with slug ${slug} not found`);
-    }
-
-    return await this.eventAttendeeService.cancelEventAttendance(
-      event.id,
-      userId,
-    );
   }
 
   @Trace('event-management.updateEventAttendee')

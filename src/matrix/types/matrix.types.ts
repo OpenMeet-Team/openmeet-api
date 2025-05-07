@@ -54,6 +54,7 @@ export interface SendMessageOptions {
   content: string;
   messageType?: string;
   deviceId?: string;
+  tenantId?: string;
   // Legacy properties
   body?: string;
   msgtype?: string;
