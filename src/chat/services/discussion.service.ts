@@ -1723,6 +1723,66 @@ export class DiscussionService implements DiscussionServiceInterface {
   }
 
   /**
+   * Check if a group exists by slug
+   * @param groupSlug The group slug to check
+   * @param tenantId Optional tenant ID
+   * @returns The group if it exists, null otherwise
+   */
+  @Trace('discussion.groupExists')
+  async groupExists(groupSlug: string, tenantId?: string): Promise<any> {
+    const effectiveTenantId = tenantId || this.request?.tenantId;
+
+    if (!effectiveTenantId) {
+      this.logger.error(
+        'Neither explicit tenantId nor request.tenantId is available',
+      );
+      throw new Error('Tenant ID is required');
+    }
+
+    try {
+      return await this.groupService.getGroupBySlug(groupSlug);
+    } catch (error) {
+      this.logger.error(
+        `Error checking if group ${groupSlug} exists: ${error.message}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Get chat rooms for a group by slug
+   * @param groupSlug The group slug
+   * @param tenantId Optional tenant ID
+   * @returns Array of chat room entities
+   */
+  @Trace('discussion.getGroupChatRooms')
+  async getGroupChatRooms(
+    groupSlug: string,
+    tenantId?: string,
+  ): Promise<any[]> {
+    const effectiveTenantId = tenantId || this.request?.tenantId;
+
+    if (!effectiveTenantId) {
+      this.logger.error(
+        'Neither explicit tenantId nor request.tenantId is available',
+      );
+      throw new Error('Tenant ID is required');
+    }
+
+    try {
+      return await this.chatRoomManager.getGroupChatRooms(
+        groupSlug,
+        effectiveTenantId,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error getting chat rooms for group ${groupSlug}: ${error.message}`,
+      );
+      return [];
+    }
+  }
+
+  /**
    * @todo Not implemented yet - placeholder for interface compatibility
    */
   @Trace('discussion.sendDirectMessage')

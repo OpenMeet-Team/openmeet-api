@@ -16,7 +16,6 @@ import { ResolvePromisesInterceptor } from './utils/serializer.interceptor';
 import { AggregateByTenantContextIdStrategy } from './strategy/tenant.strategy';
 import { TenantGuard } from './tenant/tenant.guard';
 import { getBuildInfo } from './utils/version';
-import { SimpleLogger } from './logger/simple.logger';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 
 // Add direct console.log for startup debugging - these will show even before logger is configured

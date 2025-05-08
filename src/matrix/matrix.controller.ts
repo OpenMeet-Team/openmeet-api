@@ -227,67 +227,30 @@ export class MatrixController {
     @Body() body: { isTyping: boolean },
   ): Promise<{ success: boolean }> {
     try {
+      // Get the tenant ID from the request
+      const tenantId = this.request.tenantId;
+
+      // Get user slug for the authenticated user
+      const fullUser = await this.userService.findById(user.id, tenantId);
+      if (!fullUser) {
+        throw new Error(`User with ID ${user.id} not found`);
+      }
+
       this.logger.log(
-        `Sending typing notification for user ${user.id} in room ${roomId}, typing: ${body.isTyping}`,
+        `Sending typing notification for user ${fullUser.slug} in room ${roomId}, typing: ${body.isTyping}`,
       );
 
-      try {
-        // Get the tenant ID from the request
-        const tenantId = this.request.tenantId;
-        this.logger.debug(`Using tenant ID for Matrix client: ${tenantId}`);
+      // Use the new slug-based method that correctly handles tenant context
+      await this.matrixMessageService.sendTypingNotificationBySlug(
+        roomId,
+        fullUser.slug,
+        body.isTyping,
+        tenantId,
+      );
 
-        // Get full user info to get the slug
-        const fullUser = await this.userService.findById(user.id, tenantId);
-
-        if (!fullUser) {
-          throw new Error(`User with ID ${user.id} not found`);
-        }
-
-        // Get Matrix client for this user using credentials from database and slug
-        const matrixClient = await this.matrixUserService.getClientForUser(
-          fullUser.slug,
-          this.userService,
-          tenantId,
-        );
-
-        // Send typing notification using the Matrix client
-        await matrixClient.sendTyping(roomId, body.isTyping, 30000);
-
-        this.logger.debug(
-          `Typing notification sent for user ${user.id} in room ${roomId}`,
-        );
-
-        return { success: true };
-      } catch (error) {
-        this.logger.error(`Error using Matrix client: ${error.message}`);
-
-        // Fall back to traditional credential usage method (will be deprecated)
-        this.logger.debug('Falling back to traditional credential method');
-
-        // Get the tenant ID from the request
-        const tenantId = this.request.tenantId;
-        this.logger.debug(`Using tenant ID for fallback method: ${tenantId}`);
-
-        // Get full user information
-        const fullUser = await this.userService.findById(user.id, tenantId);
-
-        if (
-          !fullUser ||
-          !fullUser.matrixUserId ||
-          !fullUser.matrixAccessToken
-        ) {
-          throw new Error('User does not have Matrix credentials');
-        }
-
-        // Send typing notification
-        await this.matrixMessageService.sendTypingNotification(
-          roomId,
-          fullUser.matrixUserId,
-          fullUser.matrixAccessToken,
-          body.isTyping,
-          fullUser.matrixDeviceId,
-        );
-      }
+      this.logger.debug(
+        `Typing notification sent for user ${fullUser.slug} in room ${roomId}`,
+      );
 
       return { success: true };
     } catch (error) {

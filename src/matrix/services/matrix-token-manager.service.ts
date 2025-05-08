@@ -147,21 +147,26 @@ export class MatrixTokenManagerService
    */
   async reportTokenInvalid(): Promise<boolean> {
     this.logger.warn('Token reported as invalid, triggering regeneration');
-    
+
     // If token is already regenerating, log and return to avoid multiple regenerations
     if (this.adminTokenState === 'regenerating') {
-      this.logger.debug('Token regeneration already in progress, skipping duplicate request');
+      this.logger.debug(
+        'Token regeneration already in progress, skipping duplicate request',
+      );
       return false;
     }
-    
+
     // If token was regenerated within the last 30 seconds, skip to avoid thrashing
     const now = Date.now();
     const timeSinceLastRefresh = now - this.lastAdminTokenRefresh;
-    if (timeSinceLastRefresh < 30000) { // 30 seconds
-      this.logger.warn(`Token was regenerated ${Math.round(timeSinceLastRefresh/1000)}s ago, skipping to prevent thrashing`);
+    if (timeSinceLastRefresh < 30000) {
+      // 30 seconds
+      this.logger.warn(
+        `Token was regenerated ${Math.round(timeSinceLastRefresh / 1000)}s ago, skipping to prevent thrashing`,
+      );
       return false;
     }
-    
+
     // Mark as invalid and trigger regeneration
     this.adminTokenState = 'invalid';
     return await this.triggerAdminTokenRegeneration(true); // Wait for completion for more reliable behavior

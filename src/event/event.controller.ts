@@ -412,11 +412,13 @@ export class EventController {
         `Starting database query for series ${seriesSlug} events at ${new Date().toISOString()}`,
       );
 
-      const findEventsPromise =
-        this.eventManagementService.findEventsBySeriesSlug(seriesSlug, {
+      const findEventsPromise = this.eventQueryService.findEventsBySeriesSlug(
+        seriesSlug,
+        {
           page: +pagination.page || 1,
           limit: +pagination.limit || 10,
-        });
+        },
+      );
 
       // Add a timeout to prevent hanging
       const timeoutPromise = new Promise<[EventEntity[], number]>(

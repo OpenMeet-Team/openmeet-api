@@ -255,6 +255,65 @@ export class MatrixMessageService implements IMatrixMessageProvider {
   }
 
   /**
+   * Send typing notification using slug-based approach with proper tenant context
+   * This method handles getting the Matrix credentials and sending typing notifications consistently
+   */
+  async sendTypingNotificationBySlug(
+    roomId: string,
+    userSlug: string,
+    isTyping: boolean,
+    tenantId: string,
+  ): Promise<Record<string, never>> {
+    this.logger.debug(
+      `Sending typing notification for user ${userSlug} in room ${roomId}, typing: ${isTyping}, tenant: ${tenantId}`,
+    );
+
+    // Get Matrix client for this user, which ensures credentials are available
+    try {
+      // Use the MatrixUserService to get a Matrix client - it handles provisioning if needed
+      const matrixClient = await this.matrixUserService.getClientForUser(
+        userSlug,
+        null, // userService is deprecated param, we'll pass null and rely on tenantId
+        tenantId,
+      );
+
+      // Try to send typing notification using the Matrix client directly
+      try {
+        await matrixClient.sendTyping(roomId, isTyping, 30000);
+        this.logger.debug(
+          `Typing notification sent successfully for ${userSlug}`,
+        );
+        return {};
+      } catch (error) {
+        // If the error indicates the user is not in the room, log it but don't throw
+        // This catches errors like "User X not in room Y" which is a Matrix error
+        if (
+          error.message?.includes('not in room') ||
+          error.message?.includes('not a member of') ||
+          error.message?.includes('M_FORBIDDEN')
+        ) {
+          this.logger.warn(
+            `User ${userSlug} not in room ${roomId} when sending typing notification: ${error.message}. Triggering event.attendee.updated to add them.`,
+          );
+
+          throw new Error(
+            `User ${userSlug} not in Matrix room ${roomId}. Please try again in a moment.`,
+          );
+        }
+
+        // For other errors, propagate them
+        throw error;
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error in sendTypingNotificationBySlug: ${error.message}`,
+        error.stack,
+      );
+      throw new Error(`Failed to send typing notification: ${error.message}`);
+    }
+  }
+
+  /**
    * Send typing notification
    */
   async sendTypingNotification(
