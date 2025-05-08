@@ -27,13 +27,16 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
       migrations: [__dirname + '/migrations/**/*{.ts,.js}'],
       cli: {
         entitiesDir: 'src',
-
         subscribersDir: 'subscriber',
       },
+      // Force UTC timezone for all dates, may mean migration needed
+      // timezone: 'Z', // 'Z' means UTC in TypeORM
       extra: {
         // based on https://node-postgres.com/apis/pool
         // max connection pool size
         max: this.configService.get('database.maxConnections', { infer: true }),
+        // Set timezone to UTC in the PostgreSQL connection, may mean migration needed
+        // timezone: 'UTC',
         ssl: this.configService.get('database.sslEnabled', { infer: true })
           ? {
               rejectUnauthorized: this.configService.get(
