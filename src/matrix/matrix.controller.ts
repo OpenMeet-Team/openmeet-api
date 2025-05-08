@@ -229,29 +229,29 @@ export class MatrixController {
     try {
       // Get the tenant ID from the request
       const tenantId = this.request.tenantId;
-      
+
       // Get user slug for the authenticated user
       const fullUser = await this.userService.findById(user.id, tenantId);
       if (!fullUser) {
         throw new Error(`User with ID ${user.id} not found`);
       }
-      
+
       this.logger.log(
         `Sending typing notification for user ${fullUser.slug} in room ${roomId}, typing: ${body.isTyping}`,
       );
-      
+
       // Use the new slug-based method that correctly handles tenant context
       await this.matrixMessageService.sendTypingNotificationBySlug(
         roomId,
         fullUser.slug,
         body.isTyping,
-        tenantId
+        tenantId,
       );
-      
+
       this.logger.debug(
         `Typing notification sent for user ${fullUser.slug} in room ${roomId}`,
       );
-      
+
       return { success: true };
     } catch (error) {
       this.logger.error(

@@ -77,37 +77,38 @@ export class ChatController {
     @Param('slug') eventSlug: string,
     @AuthUser() user: User,
     @Req() request: any,
-  ): Promise<{ success: boolean; roomId?: string }> {
+  ): Promise<{ success: boolean; roomId?: string; message?: string }> {
     const tenantId = request.tenantId;
     this.logger.log(
       `User ${user.id} attempting to join event chat room for ${eventSlug} in tenant ${tenantId}`,
     );
-    
+
     try {
       // Use the enhanced version that returns the room ID
-      const result = await this.discussionService.addMemberToEventDiscussionBySlugAndGetRoomId(
-        eventSlug,
-        user.slug,
-        tenantId
-      );
-      
+      const result =
+        await this.discussionService.addMemberToEventDiscussionBySlugAndGetRoomId(
+          eventSlug,
+          user.slug,
+          tenantId,
+        );
+
       this.logger.log(
         `Successfully joined event chat room for ${eventSlug}, with Matrix room ID: ${result.roomId || 'unknown'}`,
       );
-      
-      return { 
-        success: true, 
-        roomId: result.roomId 
+
+      return {
+        success: true,
+        roomId: result.roomId,
       };
     } catch (error) {
       this.logger.error(
         `Error joining event chat room for ${eventSlug}: ${error.message}`,
         error.stack,
       );
-      
+
       return {
         success: false,
-        message: `Could not join chat room: ${error.message}`
+        message: `Could not join chat room: ${error.message}`,
       };
     }
   }
@@ -241,41 +242,42 @@ export class ChatController {
       if (!group) {
         return {
           success: false,
-          message: `Group with slug ${groupSlug} not found`
+          message: `Group with slug ${groupSlug} not found`,
         };
       }
-      
+
       // Add the user to the group chat room
       await this.discussionService.addMemberToGroupDiscussionBySlug(
         groupSlug,
         user.slug,
-        tenantId
+        tenantId,
       );
-      
+
       // Get the matrix room ID for the chat room
       try {
         const chatRooms = await this.discussionService.getGroupChatRooms(
           groupSlug,
-          tenantId
+          tenantId,
         );
-        
-        const roomId = chatRooms.length > 0 ? chatRooms[0].matrixRoomId : undefined;
-        
+
+        const roomId =
+          chatRooms.length > 0 ? chatRooms[0].matrixRoomId : undefined;
+
         return {
           success: true,
           roomId: roomId,
-          message: 'Successfully joined group chat room'
+          message: 'Successfully joined group chat room',
         };
       } catch (roomError) {
         this.logger.error(
           `Error getting chat rooms for group ${groupSlug}: ${roomError.message}`,
           roomError.stack,
         );
-        
+
         // Return success but without a room ID
         return {
           success: true,
-          message: 'Joined group chat room, but could not get room ID'
+          message: 'Joined group chat room, but could not get room ID',
         };
       }
     } catch (error) {
@@ -283,10 +285,10 @@ export class ChatController {
         `Error joining group chat room for ${groupSlug}: ${error.message}`,
         error.stack,
       );
-      
+
       return {
         success: false,
-        message: `Could not join chat room: ${error.message}`
+        message: `Could not join chat room: ${error.message}`,
       };
     }
   }

@@ -149,7 +149,7 @@ export class MatrixClientOperationsService {
         this.logger.warn(
           'Admin token appears invalid, triggering regeneration',
         );
-        this.tokenManager.reportTokenInvalid();
+        void this.tokenManager.reportTokenInvalid();
       }
 
       throw error;

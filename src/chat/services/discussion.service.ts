@@ -1748,7 +1748,7 @@ export class DiscussionService implements DiscussionServiceInterface {
       return null;
     }
   }
-  
+
   /**
    * Get chat rooms for a group by slug
    * @param groupSlug The group slug
@@ -1756,7 +1756,10 @@ export class DiscussionService implements DiscussionServiceInterface {
    * @returns Array of chat room entities
    */
   @Trace('discussion.getGroupChatRooms')
-  async getGroupChatRooms(groupSlug: string, tenantId?: string): Promise<any[]> {
+  async getGroupChatRooms(
+    groupSlug: string,
+    tenantId?: string,
+  ): Promise<any[]> {
     const effectiveTenantId = tenantId || this.request?.tenantId;
 
     if (!effectiveTenantId) {

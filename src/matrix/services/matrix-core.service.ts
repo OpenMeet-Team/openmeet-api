@@ -135,7 +135,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
         'matrix.admin.token.updated',
         this.handleTokenUpdate.bind(this),
       );
-      
+
       this.logger.log(
         `Matrix core service initialized with admin user ${this.adminUserId}`,
       );
@@ -165,7 +165,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     try {
       // Remove event listeners
       this.eventEmitter.removeAllListeners('matrix.admin.token.updated');
-      
+
       // Stop the admin client
       if (this.adminClient?.stopClient) {
         this.adminClient.stopClient();
@@ -233,12 +233,16 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     if (this.adminClient?.stopClient) {
       try {
         this.adminClient.stopClient();
-        this.logger.debug('Stopped existing admin client before creating a new one');
+        this.logger.debug(
+          'Stopped existing admin client before creating a new one',
+        );
       } catch (err) {
-        this.logger.warn(`Error stopping existing admin client: ${err.message}`);
+        this.logger.warn(
+          `Error stopping existing admin client: ${err.message}`,
+        );
       }
     }
-    
+
     // Create a new client with the current token
     this.adminClient = this.matrixSdk.createClient({
       baseUrl: this.baseUrl,
@@ -352,7 +356,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       this.adminAccessToken = this.tokenManager.getAdminToken();
 
       // Report the invalid token to trigger background regeneration
-      this.tokenManager.reportTokenInvalid();
+      void this.tokenManager.reportTokenInvalid();
     }
 
     // Verify client pool is initialized
@@ -415,7 +419,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
         error.response?.data?.errcode === 'M_UNKNOWN_TOKEN'
       ) {
         // Report the invalid token to trigger regeneration
-        this.tokenManager.reportTokenInvalid();
+        void this.tokenManager.reportTokenInvalid();
         this.logger.warn(
           `Token error detected: ${error.message}, reported to token manager`,
         );
@@ -536,37 +540,44 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
    * Handle token update events from the token manager
    * This ensures all clients are recreated with the new token
    */
-  private async handleTokenUpdate(data: { userId: string; token: string }): Promise<void> {
+  private async handleTokenUpdate(data: {
+    userId: string;
+    token: string;
+  }): Promise<void> {
     if (!data.token) {
       this.logger.warn('Received token update event with empty token');
       return;
     }
 
     this.logger.log(`Received token update for user ${data.userId}`);
-    
+
     // Update the local token reference
     if (data.userId === this.adminUserId) {
       const oldToken = this.adminAccessToken;
       const newToken = data.token;
-      
+
       // Only take action if the token actually changed
       if (oldToken !== newToken) {
         this.logger.log('Updating admin client with new token');
         this.adminAccessToken = newToken;
-        
+
         // Recreate the admin client with the new token
         this.createAdminClient();
-        
+
         // Drain and reinitialize the client pool to ensure all new clients use the updated token
         try {
           if (this.clientPool) {
-            this.logger.log('Draining and reinitializing client pool with new token');
+            this.logger.log(
+              'Draining and reinitializing client pool with new token',
+            );
             await this.clientPool.drain();
             await this.clientPool.clear();
             this.initializeClientPool();
           }
         } catch (error) {
-          this.logger.error(`Error reinitializing client pool: ${error.message}`);
+          this.logger.error(
+            `Error reinitializing client pool: ${error.message}`,
+          );
         }
       }
     }
