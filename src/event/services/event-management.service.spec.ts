@@ -366,6 +366,147 @@ describe('EventManagementService', () => {
       expect(event).toBeDefined();
       expect(mockRepository.save).toHaveBeenCalled();
     });
+
+    // Tests for handling NaN and other problematic group values
+    describe('handling problematic group values', () => {
+      beforeEach(() => {
+        // Mock common service dependencies
+        jest.spyOn(service['categoryService'], 'findByIds').mockResolvedValue([]);
+        jest.spyOn(eventAttendeeService, 'create').mockResolvedValue({} as any);
+        jest.spyOn(mockRepository, 'save').mockResolvedValue(findOneMockEventEntity);
+        
+        // Create is the key method we'll spy on in the individual tests
+        mockRepository.create.mockClear();
+      });
+
+      it('should handle string "NaN" as group value', async () => {
+        // Create event with string "NaN" as group value (matches the bug we fixed)
+        const createEventDto: CreateEventDto = {
+          name: 'Test NaN Group Event',
+          description: 'Test Event with NaN group value',
+          startDate: new Date(),
+          type: EventType.InPerson,
+          maxAttendees: 10,
+          categories: [],
+          locationOnline: '', // Required field
+          group: 'NaN' as any, // Force string "NaN" as group value
+        };
+
+        // Create a spy to check what's passed to repository.create
+        const createSpy = jest.spyOn(mockRepository, 'create');
+
+        const event = await service.create(createEventDto, mockUser.id);
+        
+        // Check the resulting event
+        expect(event).toBeDefined();
+        expect(mockRepository.save).toHaveBeenCalled();
+        
+        // Verify how the data was passed to the create method
+        expect(createSpy).toHaveBeenCalled();
+        
+        // Get the args that were passed to create
+        const createArgs = createSpy.mock.calls[0][0];
+        
+        // Check that our NaN string was handled properly (converted to null)
+        expect(createArgs.group).toBeNull();
+      });
+      
+      it('should handle string "2" as group value (convert to proper number)', async () => {
+        // Create event with string "2" as group value
+        const createEventDto: CreateEventDto = {
+          name: 'Test String Number Group Event',
+          description: 'Test Event with string number group value',
+          startDate: new Date(),
+          type: EventType.InPerson,
+          maxAttendees: 10,
+          categories: [],
+          locationOnline: '', // Required field
+          group: '2' as any, // Force string "2" as group value
+        };
+
+        // Create a spy to check what's passed to repository.create
+        const createSpy = jest.spyOn(mockRepository, 'create');
+
+        const event = await service.create(createEventDto, mockUser.id);
+        
+        // Check the resulting event
+        expect(event).toBeDefined();
+        expect(mockRepository.save).toHaveBeenCalled();
+        
+        // Verify how the data was passed to the create method
+        expect(createSpy).toHaveBeenCalled();
+        
+        // Get the args that were passed to create
+        const createArgs = createSpy.mock.calls[0][0];
+        
+        // Check that our string number was properly converted to a numeric id
+        expect(createArgs.group).toEqual({ id: 2 });
+      });
+      
+      it('should handle JavaScript NaN in group.id', async () => {
+        // Create event with NaN in group.id
+        const createEventDto: CreateEventDto = {
+          name: 'Test NaN in Group ID Event',
+          description: 'Test Event with NaN in group.id',
+          startDate: new Date(),
+          type: EventType.InPerson,
+          maxAttendees: 10,
+          categories: [],
+          locationOnline: '', // Required field
+          group: { id: NaN }, // JavaScript NaN in group.id
+        };
+
+        // Create a spy to check what's passed to repository.create
+        const createSpy = jest.spyOn(mockRepository, 'create');
+
+        const event = await service.create(createEventDto, mockUser.id);
+        
+        // Check the resulting event
+        expect(event).toBeDefined();
+        expect(mockRepository.save).toHaveBeenCalled();
+        
+        // Verify how the data was passed to the create method
+        expect(createSpy).toHaveBeenCalled();
+        
+        // Get the args that were passed to create
+        const createArgs = createSpy.mock.calls[0][0];
+        
+        // Check that our JavaScript NaN was properly handled (converted to null)
+        expect(createArgs.group).toBeNull();
+      });
+
+      it('should handle string "null" as group value', async () => {
+        // Create event with string "null" as group value
+        const createEventDto: CreateEventDto = {
+          name: 'Test String Null Group Event',
+          description: 'Test Event with string null group value',
+          startDate: new Date(),
+          type: EventType.InPerson,
+          maxAttendees: 10,
+          categories: [],
+          locationOnline: '', // Required field
+          group: 'null' as any, // Force string "null" as group value
+        };
+
+        // Create a spy to check what's passed to repository.create
+        const createSpy = jest.spyOn(mockRepository, 'create');
+
+        const event = await service.create(createEventDto, mockUser.id);
+        
+        // Check the resulting event
+        expect(event).toBeDefined();
+        expect(mockRepository.save).toHaveBeenCalled();
+        
+        // Verify how the data was passed to the create method
+        expect(createSpy).toHaveBeenCalled();
+        
+        // Get the args that were passed to create
+        const createArgs = createSpy.mock.calls[0][0];
+        
+        // Check that our string "null" was properly handled (converted to null)
+        expect(createArgs.group).toBeNull();
+      });
+    });
   });
 
   describe('attendEvent', () => {

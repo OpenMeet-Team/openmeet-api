@@ -146,6 +146,49 @@ export class EventManagementService {
       };
     }
 
+    // Process group data to handle all possible input formats safely
+    let groupData: { id: number } | null = null;
+    
+    if (createEventDto.group) {
+      // Handle different types of input for group
+      if (typeof createEventDto.group === 'object' && createEventDto.group !== null) {
+        // Case 1: group is an object with an id property (normal case)
+        if (createEventDto.group.id !== undefined && createEventDto.group.id !== null) {
+          const groupId = Number(createEventDto.group.id);
+          // Only use the ID if it's a valid number
+          if (!isNaN(groupId)) {
+            groupData = { id: groupId };
+            this.logger.debug(`Processed group.id from object: ${groupId}`);
+          } else {
+            this.logger.warn(`Invalid group.id value: ${String(createEventDto.group.id)}, using null instead`);
+          }
+        }
+      } else if (typeof createEventDto.group === 'number') {
+        // Case 2: group is a direct number (e.g., group: 2)
+        const groupId = createEventDto.group;
+        if (!isNaN(groupId)) {
+          groupData = { id: groupId };
+          this.logger.debug(`Processed direct number group: ${groupId}`);
+        }
+      } else if (typeof createEventDto.group === 'string') {
+        // Case 3: group is a string (this is where the error was happening)
+        // Skip processing for "NaN" and "null" strings
+        if (createEventDto.group !== "NaN" && createEventDto.group !== "null") {
+          const groupId = Number(createEventDto.group);
+          if (!isNaN(groupId)) {
+            groupData = { id: groupId };
+            this.logger.debug(`Processed string group to number: ${groupId}`);
+          } else {
+            this.logger.warn(`String group value "${createEventDto.group}" couldn't be converted to number, using null`);
+          }
+        } else {
+          this.logger.warn(`Received invalid string value for group: "${createEventDto.group}", using null instead`);
+        }
+      } else {
+        this.logger.warn(`Unknown group type: ${typeof createEventDto.group}, using null`);
+      }
+    }
+
     // Set default values and prepare base event data
     const eventData = {
       name: createEventDto.name,
@@ -166,9 +209,7 @@ export class EventManagementService {
       lon: createEventDto.lon,
       locationPoint,
       user: { id: userId } as UserEntity,
-      group: createEventDto.group
-        ? { id: Number(createEventDto.group.id) }
-        : null,
+      group: groupData, // Use our safely processed group data
       image: createEventDto.image,
       categories,
       series: originalSeriesSlug
