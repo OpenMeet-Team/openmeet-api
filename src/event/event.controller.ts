@@ -102,7 +102,20 @@ export class EventController {
   async create(
     @Body() createEventDto: CreateEventDto,
     @AuthUser() user: User,
+    @Req() req: Request,
   ): Promise<EventEntity> {
+    // Log the raw request for debugging
+    this.logger.debug(
+      `EVENT CREATE REQUEST [${createEventDto.name}]:
+      -----------------------------------------------
+      ${JSON.stringify(createEventDto, null, 2)}
+
+      ${JSON.stringify(req.headers, null, 2)}
+      ${JSON.stringify(req.body, null, 2)}
+      -----------------------------------------------
+      `,
+    );
+
     return this.eventManagementService.create(createEventDto, user.id);
   }
 
