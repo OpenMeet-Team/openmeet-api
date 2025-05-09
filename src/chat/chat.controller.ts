@@ -21,6 +21,9 @@ import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
 import { DiscussionService } from './services/discussion.service';
 import { DiscussionMessagesResponseDto } from './dto/discussion-message.dto';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RoleEnum } from '../role/role.enum';
+import { RolesGuard } from '../role/role.guard';
 
 @ApiTags('Chat')
 @Controller('chat')
@@ -371,5 +374,176 @@ export class ChatController {
       limit,
       from,
     );
+  }
+
+  /**
+   * Admin endpoints for chat room management
+   */
+  @Delete('admin/event/:slug/chatroom')
+  @UseGuards(JWTAuthGuard, RolesGuard)
+  @Roles(RoleEnum.Admin)
+  @ApiOperation({ summary: 'Delete an event chat room (admin only)' })
+  async deleteEventChatRoom(
+    @Param('slug') eventSlug: string,
+    @AuthUser() user: User,
+    @Req() request: any,
+  ): Promise<{ success: boolean; message?: string }> {
+    const tenantId = request.tenantId;
+    this.logger.log(
+      `Admin user ${user.id} attempting to delete event chat room for ${eventSlug} in tenant ${tenantId}`,
+    );
+
+    try {
+      await this.discussionService.deleteEventChatRoom(
+        eventSlug,
+        tenantId,
+      );
+
+      this.logger.log(
+        `Successfully deleted event chat room for ${eventSlug}`,
+      );
+
+      return {
+        success: true,
+        message: 'Chat room deleted successfully',
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error deleting event chat room for ${eventSlug}: ${error.message}`,
+        error.stack,
+      );
+
+      return {
+        success: false,
+        message: `Could not delete chat room: ${error.message}`,
+      };
+    }
+  }
+
+  @Post('admin/event/:slug/chatroom')
+  @UseGuards(JWTAuthGuard, RolesGuard)
+  @Roles(RoleEnum.Admin)
+  @ApiOperation({ summary: 'Create a new event chat room (admin only)' })
+  async createEventChatRoom(
+    @Param('slug') eventSlug: string,
+    @AuthUser() user: User,
+    @Req() request: any,
+  ): Promise<{ success: boolean; roomId?: string; message?: string }> {
+    const tenantId = request.tenantId;
+    this.logger.log(
+      `Admin user ${user.id} attempting to create event chat room for ${eventSlug} in tenant ${tenantId}`,
+    );
+
+    try {
+      const result = await this.discussionService.createEventChatRoom(
+        eventSlug,
+        user.slug,
+        tenantId,
+      );
+
+      this.logger.log(
+        `Successfully created event chat room for ${eventSlug}, with Matrix room ID: ${result.roomId || 'unknown'}`,
+      );
+
+      return {
+        success: true,
+        roomId: result.roomId,
+        message: 'Chat room created successfully',
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error creating event chat room for ${eventSlug}: ${error.message}`,
+        error.stack,
+      );
+
+      return {
+        success: false,
+        message: `Could not create chat room: ${error.message}`,
+      };
+    }
+  }
+
+  @Delete('admin/group/:slug/chatroom')
+  @UseGuards(JWTAuthGuard, RolesGuard)
+  @Roles(RoleEnum.Admin)
+  @ApiOperation({ summary: 'Delete a group chat room (admin only)' })
+  async deleteGroupChatRoom(
+    @Param('slug') groupSlug: string,
+    @AuthUser() user: User,
+    @Req() request: any,
+  ): Promise<{ success: boolean; message?: string }> {
+    const tenantId = request.tenantId;
+    this.logger.log(
+      `Admin user ${user.id} attempting to delete group chat room for ${groupSlug} in tenant ${tenantId}`,
+    );
+
+    try {
+      await this.discussionService.deleteGroupChatRoom(
+        groupSlug,
+        tenantId,
+      );
+
+      this.logger.log(
+        `Successfully deleted group chat room for ${groupSlug}`,
+      );
+
+      return {
+        success: true,
+        message: 'Chat room deleted successfully',
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error deleting group chat room for ${groupSlug}: ${error.message}`,
+        error.stack,
+      );
+
+      return {
+        success: false,
+        message: `Could not delete chat room: ${error.message}`,
+      };
+    }
+  }
+
+  @Post('admin/group/:slug/chatroom')
+  @UseGuards(JWTAuthGuard, RolesGuard)
+  @Roles(RoleEnum.Admin)
+  @ApiOperation({ summary: 'Create a new group chat room (admin only)' })
+  async createGroupChatRoom(
+    @Param('slug') groupSlug: string,
+    @AuthUser() user: User,
+    @Req() request: any,
+  ): Promise<{ success: boolean; roomId?: string; message?: string }> {
+    const tenantId = request.tenantId;
+    this.logger.log(
+      `Admin user ${user.id} attempting to create group chat room for ${groupSlug} in tenant ${tenantId}`,
+    );
+
+    try {
+      const result = await this.discussionService.createGroupChatRoom(
+        groupSlug,
+        user.slug,
+        tenantId,
+      );
+
+      this.logger.log(
+        `Successfully created group chat room for ${groupSlug}, with Matrix room ID: ${result.roomId || 'unknown'}`,
+      );
+
+      return {
+        success: true,
+        roomId: result.roomId,
+        message: 'Chat room created successfully',
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error creating group chat room for ${groupSlug}: ${error.message}`,
+        error.stack,
+      );
+
+      return {
+        success: false,
+        message: `Could not create chat room: ${error.message}`,
+      };
+    }
   }
 }
