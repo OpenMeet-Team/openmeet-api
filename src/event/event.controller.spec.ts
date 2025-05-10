@@ -219,13 +219,13 @@ describe('EventController', () => {
       jest
         .spyOn(eventManagementService, 'create')
         .mockRejectedValue(new Error('Database error'));
-      await expect(controller.create(createEventDto, mockUser, {
-        user: mockUser,
-        headers: {},
-        body: createEventDto,
-      } as unknown as Request)).rejects.toThrow(
-        'Database error',
-      );
+      await expect(
+        controller.create(createEventDto, mockUser, {
+          user: mockUser,
+          headers: {},
+          body: createEventDto,
+        } as unknown as Request),
+      ).rejects.toThrow('Database error');
     });
   });
 
