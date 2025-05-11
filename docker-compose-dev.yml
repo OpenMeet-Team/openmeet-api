@@ -52,7 +52,7 @@ services:
     image: redis:7-alpine
     container_name: openmeet_redis
     ports:
-      - "39889:6379"
+      - "6379:6379"
     restart: always
     networks:
       - api-network
