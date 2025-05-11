@@ -913,81 +913,82 @@ export class EventSeriesOccurrenceService {
    * @param tenantId - The tenant ID to materialize events for
    * @returns Number of events materialized
    */
-  @Trace('event-series-occurrence.bufferBlueskyMaterialization')
-  async bufferBlueskyMaterialization(
-    userId: number,
-    tenantId?: string,
-  ): Promise<number> {
-    try {
-      this.logger.debug(
-        'Starting buffered materialization for Bluesky events',
-        { userId },
-      );
+  // @Trace('event-series-occurrence.bufferBlueskyMaterialization')
+  // async bufferBlueskyMaterialization(
+  //   userId: number,
+  //   tenantId?: string,
+  // ): Promise<number> {
+  //   try {
+  //     this.logger.debug(
+  //       'Starting buffered materialization for Bluesky events',
+  //       { userId },
+  //     );
 
-      // Get Bluesky event series for the user
-      const { data: userSeries } = await this.eventSeriesService.findByUser(
-        userId,
-        {
-          page: 1,
-          limit: 100,
-          sourceType: 'bluesky', // Only get Bluesky series
-        },
-        tenantId, // Pass tenant ID explicitly
-      );
+  //     // Get Bluesky event series for the user
+  //     const { data: userSeries } = await this.eventSeriesService.findByUser(
+  //       userId,
+  //       {
+  //         page: 1,
+  //         limit: 100,
+  //         sourceType: 'bluesky', // Only get Bluesky series
+  //       },
+  //       tenantId, // Pass tenant ID explicitly
+  //     );
 
-      if (!userSeries || !userSeries.length) {
-        this.logger.debug('No Bluesky series found for user', { userId });
-        return 0;
-      }
+  //     if (!userSeries || !userSeries.length) {
+  //       this.logger.debug('No Bluesky series found for user', { userId });
+  //       return 0;
+  //     }
 
-      this.logger.debug('Found Bluesky event series for user', {
-        userId,
-        count: userSeries.length,
-      });
+  //     this.logger.debug('Found Bluesky event series for user', {
+  //       userId,
+  //       count: userSeries.length,
+  //     });
 
-      let totalMaterialized = 0;
+  //     let totalMaterialized = 0;
 
-      // Process only the 2 most recent series to ensure we don't overload memory
-      // This is a compromise between functionality and memory usage
-      const recentSeries = userSeries.slice(0, 2);
+  //     // Process only the 2 most recent series to ensure we don't overload memory
+  //     // This is a compromise between functionality and memory usage
+  //     const recentSeries = userSeries.slice(0, 2);
 
-      // Process each series to ensure it has the required number of materialized occurrences
-      for (const series of recentSeries) {
-        try {
-          const materializedEvents = await this.materializeNextNOccurrences(
-            series.slug,
-            userId,
-            true, // This is a Bluesky event
-          );
+  //     // Process each series to ensure it has the required number of materialized occurrences
+  //     for (const series of recentSeries) {
+  //       try {
+  //         const materializedEvents = await this.materializeNextNOccurrences(
+  //           series.slug,
+  //           userId,
+  //           true, // This is a Bluesky event
+  //           tenantId,
+  //         );
 
-          totalMaterialized += materializedEvents.length;
+  //         totalMaterialized += materializedEvents.length;
 
-          // Brief pause between series to allow garbage collection
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        } catch (seriesError) {
-          // Log but continue with other series
-          this.logger.error(
-            `Error materializing series ${series.slug}: ${seriesError.message}`,
-            seriesError.stack,
-          );
-        }
-      }
+  //         // Brief pause between series to allow garbage collection
+  //         await new Promise((resolve) => setTimeout(resolve, 100));
+  //       } catch (seriesError) {
+  //         // Log but continue with other series
+  //         this.logger.error(
+  //           `Error materializing series ${series.slug}: ${seriesError.message}`,
+  //           seriesError.stack,
+  //         );
+  //       }
+  //     }
 
-      this.logger.debug('Completed buffered materialization', {
-        userId,
-        totalMaterialized,
-      });
+  //     this.logger.debug('Completed buffered materialization', {
+  //       userId,
+  //       totalMaterialized,
+  //     });
 
-      return totalMaterialized;
-    } catch (error) {
-      this.logger.error(
-        `Error in bufferBlueskyMaterialization: ${error.message}`,
-        error.stack,
-      );
-      // Return 0 instead of throwing to avoid propagating errors
-      return 0;
-    }
-  }
+  //     return totalMaterialized;
+  //   } catch (error) {
+  //     this.logger.error(
+  //       `Error in bufferBlueskyMaterialization: ${error.message}`,
+  //       error.stack,
+  //     );
+  //     // Return 0 instead of throwing to avoid propagating errors
+  //     return 0;
+  //   }
+  // }
 
   /**
    * Update future occurrences from a specific date

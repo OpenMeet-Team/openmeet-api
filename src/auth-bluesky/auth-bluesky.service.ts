@@ -179,33 +179,34 @@ export class AuthBlueskyService {
     );
     this.logger.debug('Social login validated:', { loginResponse, tenantId });
 
-    // Materialize the user's Bluesky events after successful login
-    // Using a timeout to avoid blocking the login response
-    setTimeout(async () => {
-      try {
-        this.logger.debug(
-          'Starting materialization of Bluesky events for user',
-          {
-            userId: loginResponse.user.id,
-          },
-        );
+    // // Materialize the user's Bluesky events after successful login
+    // // Using a timeout to avoid blocking the login response
+    // setTimeout(async () => {
+    //   try {
+    //     this.logger.debug(
+    //       'Starting materialization of Bluesky events for user',
+    //       {
+    //         userId: loginResponse.user.id,
+    //       },
+    //     );
 
-        const materialized =
-          await this.eventSeriesOccurrenceService.bufferBlueskyMaterialization(
-            loginResponse.user.id,
-          );
+    //     const materialized =
+    //       await this.eventSeriesOccurrenceService.bufferBlueskyMaterialization(
+    //         loginResponse.user.id,
+    //         tenantId,
+    //       );
 
-        this.logger.debug('Completed materialization of Bluesky events', {
-          userId: loginResponse.user.id,
-          materialized,
-        });
-      } catch (error) {
-        this.logger.error(
-          `Error in materialization: ${error.message}`,
-          error.stack,
-        );
-      }
-    }, 100); // Small delay to ensure login response is sent first
+    //     this.logger.debug('Completed materialization of Bluesky events', {
+    //       userId: loginResponse.user.id,
+    //       materialized,
+    //     });
+    //   } catch (error) {
+    //     this.logger.error(
+    //       `Error in materialization: ${error.message}`,
+    //       error.stack,
+    //     );
+    //   }
+    // }, 100); // Small delay to ensure login response is sent first
 
     const newParams = new URLSearchParams({
       token: loginResponse.token,
