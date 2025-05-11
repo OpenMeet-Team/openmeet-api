@@ -29,7 +29,7 @@ async function bootstrap() {
   try {
     const app = await NestFactory.create(AppModule, {
       cors: true,
-      bufferLogs: true,
+      bufferLogs: false, // Changed from true to false to output logs immediately
     });
     startupLog('NestJS application created successfully');
 
