@@ -202,7 +202,12 @@ describe('EventController', () => {
         .spyOn(eventManagementService, 'create')
         .mockResolvedValue(mockEvent as EventEntity);
 
-      const result = await controller.create(createEventDto, mockUser, {} as Request);
+
+      const result = await controller.create(createEventDto, mockUser, {
+        user: mockUser,
+        headers: {},
+        body: createEventDto,
+      } as unknown as Request);
 
       expect(result).toEqual(mockEvent);
       expect(eventManagementService.create).toHaveBeenCalledWith(
@@ -215,7 +220,11 @@ describe('EventController', () => {
       jest
         .spyOn(eventManagementService, 'create')
         .mockRejectedValue(new Error('Database error'));
-      await expect(controller.create(createEventDto, mockUser, {} as Request)).rejects.toThrow(
+      await expect(controller.create(createEventDto, mockUser, {
+        user: mockUser,
+        headers: {},
+        body: createEventDto,
+      } as unknown as Request)).rejects.toThrow(
         'Database error',
       );
     });
@@ -568,7 +577,11 @@ describe('EventController', () => {
 
         await expect(guard.canActivate(context)).resolves.toBe(true);
 
-        const result = await controller.create(createEventDto, mockUser, {} as Request);
+        const result = await controller.create(createEventDto, mockUser, {
+          user: mockUser,
+          headers: {},
+          body: createEventDto,
+        } as unknown as Request);
         expect(result).toEqual(createdEvent);
       });
 

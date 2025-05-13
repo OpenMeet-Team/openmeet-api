@@ -1982,4 +1982,218 @@ export class DiscussionService implements DiscussionServiceInterface {
       // The group deletion should proceed even if chat room cleanup fails
     }
   }
+
+  /**
+   * Delete an event chat room
+   *
+   * @param eventSlug The slug of the event
+   * @param tenantId The tenant ID
+   */
+  @Trace('discussion.deleteEventChatRoom')
+  async deleteEventChatRoom(
+    eventSlug: string,
+    tenantId: string,
+  ): Promise<void> {
+    if (!tenantId) {
+      this.logger.error('Tenant ID is required');
+      throw new Error('Tenant ID is required');
+    }
+
+    // Find the event by slug
+    const event = await this.eventQueryService.showEventBySlug(eventSlug);
+    if (!event) {
+      throw new Error(`Event with slug ${eventSlug} not found`);
+    }
+
+    try {
+      // First clear the Matrix room ID in the database
+      const dataSource = await this.tenantConnectionService.getTenantConnection(tenantId);
+      const eventRepo = dataSource.getRepository(EventEntity);
+      await eventRepo.update({ id: event.id }, { matrixRoomId: '' });
+      this.logger.log(`Cleared Matrix room ID for event ${eventSlug}`);
+
+      // Get all chat rooms for this event
+      const chatRooms = await this.chatRoomService.getEventChatRooms(event.id);
+      if (!chatRooms || chatRooms.length === 0) {
+        this.logger.log(`No chat rooms found for event ${eventSlug}`);
+        return;
+      }
+
+      // Process each chat room
+      for (const room of chatRooms) {
+        try {
+          // Delete the chat room record and Matrix room
+          await this.chatRoomService.deleteChatRoom(room.id);
+          this.logger.log(`Deleted chat room ${room.id} for event ${eventSlug}`);
+        } catch (roomError) {
+          this.logger.error(
+            `Error deleting chat room ${room.id}: ${roomError.message}`,
+            roomError.stack,
+          );
+          // Continue with other rooms
+        }
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error deleting chat rooms for event ${eventSlug}: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Create a new event chat room
+   *
+   * @param eventSlug The slug of the event
+   * @param creatorSlug The slug of the creator
+   * @param tenantId The tenant ID
+   * @returns Information about the new room including roomId
+   */
+  @Trace('discussion.createEventChatRoom')
+  async createEventChatRoom(
+    eventSlug: string,
+    creatorSlug: string,
+    tenantId: string,
+  ): Promise<{ roomId?: string }> {
+    if (!tenantId) {
+      this.logger.error('Tenant ID is required');
+      throw new Error('Tenant ID is required');
+    }
+
+    // Find the event by slug
+    const event = await this.eventQueryService.showEventBySlug(eventSlug);
+    if (!event) {
+      throw new Error(`Event with slug ${eventSlug} not found`);
+    }
+
+    // Check if there's already a chat room for this event
+    const existingRooms = await this.chatRoomService.getEventChatRooms(event.id);
+    if (existingRooms && existingRooms.length > 0) {
+      this.logger.warn(`Chat room already exists for event ${eventSlug}, returning existing room ID`);
+      return { roomId: existingRooms[0].matrixRoomId };
+    }
+
+    // Find the creator user by slug
+    const creator = await this.userService.getUserBySlug(creatorSlug);
+    if (!creator) {
+      throw new Error(`Creator user with slug ${creatorSlug} not found`);
+    }
+
+    // Create a new chat room
+    try {
+      const newRoom = await this.ensureEntityChatRoom('event', event.id, creator.id);
+      this.logger.log(`Created new chat room for event ${eventSlug} with Matrix room ID: ${newRoom.matrixRoomId}`);
+      return { roomId: newRoom.matrixRoomId };
+    } catch (error) {
+      this.logger.error(`Error creating chat room: ${error.message}`, error.stack);
+      throw new Error(`Failed to create chat room: ${error.message}`);
+    }
+  }
+
+  /**
+   * Delete a group chat room
+   *
+   * @param groupSlug The slug of the group
+   * @param tenantId The tenant ID
+   */
+  @Trace('discussion.deleteGroupChatRoom')
+  async deleteGroupChatRoom(
+    groupSlug: string,
+    tenantId: string,
+  ): Promise<void> {
+    if (!tenantId) {
+      this.logger.error('Tenant ID is required');
+      throw new Error('Tenant ID is required');
+    }
+
+    // Find the group by slug
+    const group = await this.groupService.getGroupBySlug(groupSlug);
+    if (!group) {
+      throw new Error(`Group with slug ${groupSlug} not found`);
+    }
+
+    try {
+      // First update the group to clear the Matrix room ID
+      await this.groupService.update(group.slug, { matrixRoomId: '' });
+      this.logger.log(`Cleared Matrix room ID for group ${groupSlug}`);
+
+      // Get all chat rooms for this group
+      const chatRooms = await this.chatRoomService.getGroupChatRooms(group.id);
+      if (!chatRooms || chatRooms.length === 0) {
+        this.logger.log(`No chat rooms found for group ${groupSlug}`);
+        return;
+      }
+
+      // Process each chat room
+      for (const room of chatRooms) {
+        try {
+          // Delete the chat room record and Matrix room
+          await this.chatRoomService.deleteChatRoom(room.id);
+          this.logger.log(`Deleted chat room ${room.id} for group ${groupSlug}`);
+        } catch (roomError) {
+          this.logger.error(
+            `Error deleting chat room ${room.id}: ${roomError.message}`,
+            roomError.stack,
+          );
+          // Continue with other rooms
+        }
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error deleting chat rooms for group ${groupSlug}: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Create a new group chat room
+   *
+   * @param groupSlug The slug of the group
+   * @param creatorSlug The slug of the creator
+   * @param tenantId The tenant ID
+   * @returns Information about the new room including roomId
+   */
+  @Trace('discussion.createGroupChatRoom')
+  async createGroupChatRoom(
+    groupSlug: string,
+    creatorSlug: string,
+    tenantId: string,
+  ): Promise<{ roomId?: string }> {
+    if (!tenantId) {
+      this.logger.error('Tenant ID is required');
+      throw new Error('Tenant ID is required');
+    }
+
+    // Find the group by slug
+    const group = await this.groupService.getGroupBySlug(groupSlug);
+    if (!group) {
+      throw new Error(`Group with slug ${groupSlug} not found`);
+    }
+
+    // Check if there's already a chat room for this group
+    const existingRooms = await this.chatRoomService.getGroupChatRooms(group.id);
+    if (existingRooms && existingRooms.length > 0) {
+      this.logger.warn(`Chat room already exists for group ${groupSlug}, returning existing room ID`);
+      return { roomId: existingRooms[0].matrixRoomId };
+    }
+
+    // Find the creator user by slug
+    const creator = await this.userService.getUserBySlug(creatorSlug);
+    if (!creator) {
+      throw new Error(`Creator user with slug ${creatorSlug} not found`);
+    }
+
+    // Create a new chat room
+    try {
+      const newRoom = await this.ensureEntityChatRoom('group', group.id, creator.id);
+      this.logger.log(`Created new chat room for group ${groupSlug} with Matrix room ID: ${newRoom.matrixRoomId}`);
+      return { roomId: newRoom.matrixRoomId };
+    } catch (error) {
+      this.logger.error(`Error creating chat room: ${error.message}`, error.stack);
+      throw new Error(`Failed to create chat room: ${error.message}`);
+    }
+  }
 }
