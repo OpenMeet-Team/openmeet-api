@@ -394,14 +394,9 @@ export class ChatController {
     );
 
     try {
-      await this.discussionService.deleteEventChatRoom(
-        eventSlug,
-        tenantId,
-      );
+      await this.discussionService.deleteEventChatRoom(eventSlug, tenantId);
 
-      this.logger.log(
-        `Successfully deleted event chat room for ${eventSlug}`,
-      );
+      this.logger.log(`Successfully deleted event chat room for ${eventSlug}`);
 
       return {
         success: true,
@@ -478,14 +473,9 @@ export class ChatController {
     );
 
     try {
-      await this.discussionService.deleteGroupChatRoom(
-        groupSlug,
-        tenantId,
-      );
+      await this.discussionService.deleteGroupChatRoom(groupSlug, tenantId);
 
-      this.logger.log(
-        `Successfully deleted group chat room for ${groupSlug}`,
-      );
+      this.logger.log(`Successfully deleted group chat room for ${groupSlug}`);
 
       return {
         success: true,

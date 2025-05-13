@@ -13,6 +13,8 @@ import { trace } from '@opentelemetry/api';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter, Histogram } from 'prom-client';
 import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
+import { FileEntity } from '../../file/infrastructure/persistence/relational/entities/file.entity';
+import { FileService } from '../../file/file.service';
 
 @Injectable()
 export class EventIntegrationService {
@@ -24,6 +26,7 @@ export class EventIntegrationService {
     private readonly shadowAccountService: ShadowAccountService,
     private readonly eventQueryService: EventQueryService,
     private readonly blueskyIdService: BlueskyIdService,
+    private readonly fileService: FileService,
     @InjectMetric('event_integration_processed_total')
     private readonly processedCounter: Counter<string>,
     @InjectMetric('event_integration_deduplication_matches_total')
@@ -405,6 +408,19 @@ export class EventIntegrationService {
     newEvent.sourceUrl = eventData.source.url || null;
     newEvent.sourceData = eventData.source.metadata || {};
 
+    // Handle image if provided
+    if (eventData.image?.id) {
+      this.logger.debug(`Looking up image with ID ${eventData.image.id}`);
+      this.logger.debug(
+        `Image data structure: ${JSON.stringify(eventData.image)}`,
+      );
+      // Create a reference object with just the ID
+      newEvent.image = { id: eventData.image.id } as FileEntity;
+      this.logger.debug(
+        `Set image reference to: ${JSON.stringify(newEvent.image)}`,
+      );
+    }
+
     // If it's a Bluesky event, store the handle
     if (
       eventData.source.type === EventSourceType.BLUESKY &&
@@ -431,9 +447,17 @@ export class EventIntegrationService {
     }
 
     // Save the event
+    this.logger.debug(
+      `Saving new event with data: ${JSON.stringify({
+        id: newEvent.id,
+        name: newEvent.name,
+        hasImage: !!newEvent.image,
+        imageId: newEvent.image?.id,
+      })}`,
+    );
     const savedEvent = await eventRepository.save(newEvent);
     this.logger.debug(
-      `Created new event with ID ${savedEvent.id} for tenant ${tenantId}`,
+      `Created new event with ID ${savedEvent.id} for tenant ${tenantId}, image: ${savedEvent.image ? savedEvent.image.id : 'none'}`,
     );
 
     return savedEvent;
@@ -493,6 +517,21 @@ export class EventIntegrationService {
       };
     }
 
+    // Handle image if provided
+    if (eventData.image?.id) {
+      this.logger.debug(
+        `Setting image with ID ${eventData.image.id} directly for event update`,
+      );
+      this.logger.debug(
+        `Image data structure: ${JSON.stringify(eventData.image)}`,
+      );
+      // Create a reference object with just the ID
+      existingEvent.image = { id: eventData.image.id } as FileEntity;
+      this.logger.debug(
+        `Set image reference to: ${JSON.stringify(existingEvent.image)}`,
+      );
+    }
+
     // Update the URL if provided
     if (eventData.source.url) {
       existingEvent.sourceUrl = eventData.source.url;
@@ -507,9 +546,17 @@ export class EventIntegrationService {
     }
 
     // Save the updated event
+    this.logger.debug(
+      `Saving updated event with data: ${JSON.stringify({
+        id: existingEvent.id,
+        name: existingEvent.name,
+        hasImage: !!existingEvent.image,
+        imageId: existingEvent.image?.id,
+      })}`,
+    );
     const updatedEvent = await eventRepository.save(existingEvent);
     this.logger.debug(
-      `Updated event with ID ${updatedEvent.id} for tenant ${tenantId}`,
+      `Updated event with ID ${updatedEvent.id} for tenant ${tenantId}, image: ${updatedEvent.image ? updatedEvent.image.id : 'none'}`,
     );
 
     return updatedEvent;
@@ -584,11 +631,6 @@ export class EventIntegrationService {
         },
       );
     } else if (eventData.source.type === EventSourceType.WEB) {
-      // Implementation for web source type
-      this.logger.debug(
-        `Creating shadow account for Web source ${eventData.source.id} for tenant ${tenantId}`,
-      );
-
       // Extract domain from source metadata or URL
       let domain = 'unknown.source';
       if (eventData.source.metadata?.domain) {
@@ -605,14 +647,18 @@ export class EventIntegrationService {
         }
       }
 
-      // Create a unique identifier for the web source
-      const sourceIdentifier = `web:${domain}:${eventData.source.id}`;
+      // Create a unique identifier for the web source - use only domain for shadow user
+      const sourceIdentifier = `web:${domain}`;
 
       // Create a display name for the source
       const displayName = eventData.source.metadata?.siteName
         ? eventData.source.metadata.siteName
         : domain.charAt(0).toUpperCase() +
           domain.slice(1).replace(/\.(com|org|net|io)$/, '');
+
+      this.logger.debug(
+        `Creating shadow account for Web source domain ${domain} for tenant ${tenantId}`,
+      );
 
       return this.shadowAccountService.findOrCreateShadowAccount(
         sourceIdentifier,

@@ -2007,7 +2007,8 @@ export class DiscussionService implements DiscussionServiceInterface {
 
     try {
       // First clear the Matrix room ID in the database
-      const dataSource = await this.tenantConnectionService.getTenantConnection(tenantId);
+      const dataSource =
+        await this.tenantConnectionService.getTenantConnection(tenantId);
       const eventRepo = dataSource.getRepository(EventEntity);
       await eventRepo.update({ id: event.id }, { matrixRoomId: '' });
       this.logger.log(`Cleared Matrix room ID for event ${eventSlug}`);
@@ -2024,7 +2025,9 @@ export class DiscussionService implements DiscussionServiceInterface {
         try {
           // Delete the chat room record and Matrix room
           await this.chatRoomService.deleteChatRoom(room.id);
-          this.logger.log(`Deleted chat room ${room.id} for event ${eventSlug}`);
+          this.logger.log(
+            `Deleted chat room ${room.id} for event ${eventSlug}`,
+          );
         } catch (roomError) {
           this.logger.error(
             `Error deleting chat room ${room.id}: ${roomError.message}`,
@@ -2068,9 +2071,13 @@ export class DiscussionService implements DiscussionServiceInterface {
     }
 
     // Check if there's already a chat room for this event
-    const existingRooms = await this.chatRoomService.getEventChatRooms(event.id);
+    const existingRooms = await this.chatRoomService.getEventChatRooms(
+      event.id,
+    );
     if (existingRooms && existingRooms.length > 0) {
-      this.logger.warn(`Chat room already exists for event ${eventSlug}, returning existing room ID`);
+      this.logger.warn(
+        `Chat room already exists for event ${eventSlug}, returning existing room ID`,
+      );
       return { roomId: existingRooms[0].matrixRoomId };
     }
 
@@ -2082,11 +2089,20 @@ export class DiscussionService implements DiscussionServiceInterface {
 
     // Create a new chat room
     try {
-      const newRoom = await this.ensureEntityChatRoom('event', event.id, creator.id);
-      this.logger.log(`Created new chat room for event ${eventSlug} with Matrix room ID: ${newRoom.matrixRoomId}`);
+      const newRoom = await this.ensureEntityChatRoom(
+        'event',
+        event.id,
+        creator.id,
+      );
+      this.logger.log(
+        `Created new chat room for event ${eventSlug} with Matrix room ID: ${newRoom.matrixRoomId}`,
+      );
       return { roomId: newRoom.matrixRoomId };
     } catch (error) {
-      this.logger.error(`Error creating chat room: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error creating chat room: ${error.message}`,
+        error.stack,
+      );
       throw new Error(`Failed to create chat room: ${error.message}`);
     }
   }
@@ -2130,7 +2146,9 @@ export class DiscussionService implements DiscussionServiceInterface {
         try {
           // Delete the chat room record and Matrix room
           await this.chatRoomService.deleteChatRoom(room.id);
-          this.logger.log(`Deleted chat room ${room.id} for group ${groupSlug}`);
+          this.logger.log(
+            `Deleted chat room ${room.id} for group ${groupSlug}`,
+          );
         } catch (roomError) {
           this.logger.error(
             `Error deleting chat room ${room.id}: ${roomError.message}`,
@@ -2174,9 +2192,13 @@ export class DiscussionService implements DiscussionServiceInterface {
     }
 
     // Check if there's already a chat room for this group
-    const existingRooms = await this.chatRoomService.getGroupChatRooms(group.id);
+    const existingRooms = await this.chatRoomService.getGroupChatRooms(
+      group.id,
+    );
     if (existingRooms && existingRooms.length > 0) {
-      this.logger.warn(`Chat room already exists for group ${groupSlug}, returning existing room ID`);
+      this.logger.warn(
+        `Chat room already exists for group ${groupSlug}, returning existing room ID`,
+      );
       return { roomId: existingRooms[0].matrixRoomId };
     }
 
@@ -2188,11 +2210,20 @@ export class DiscussionService implements DiscussionServiceInterface {
 
     // Create a new chat room
     try {
-      const newRoom = await this.ensureEntityChatRoom('group', group.id, creator.id);
-      this.logger.log(`Created new chat room for group ${groupSlug} with Matrix room ID: ${newRoom.matrixRoomId}`);
+      const newRoom = await this.ensureEntityChatRoom(
+        'group',
+        group.id,
+        creator.id,
+      );
+      this.logger.log(
+        `Created new chat room for group ${groupSlug} with Matrix room ID: ${newRoom.matrixRoomId}`,
+      );
       return { roomId: newRoom.matrixRoomId };
     } catch (error) {
-      this.logger.error(`Error creating chat room: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error creating chat room: ${error.message}`,
+        error.stack,
+      );
       throw new Error(`Failed to create chat room: ${error.message}`);
     }
   }

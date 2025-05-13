@@ -17,6 +17,7 @@ import { AuthProvidersEnum } from '../../auth/auth-providers.enum';
 import { BadRequestException } from '@nestjs/common';
 import { Counter, Histogram } from 'prom-client';
 import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
+import { FileService } from '../../file/file.service';
 
 // Add constants for metrics tokens
 const PROM_METRIC_EVENT_INTEGRATION_PROCESSED_TOTAL =
@@ -34,6 +35,7 @@ describe('EventIntegrationService', () => {
   let tenantService: jest.Mocked<TenantConnectionService>;
   let shadowAccountService: jest.Mocked<ShadowAccountService>;
   let eventRepository: jest.Mocked<Repository<EventEntity>>;
+  let fileService: jest.Mocked<FileService>;
 
   // Mock Prometheus metrics
   let processedCounter: jest.Mocked<Counter<string>>;
@@ -106,6 +108,10 @@ describe('EventIntegrationService', () => {
 
     shadowAccountService = {
       findOrCreateShadowAccount: jest.fn().mockResolvedValue(mockUser),
+    } as any;
+
+    fileService = {
+      findById: jest.fn(),
     } as any;
 
     // Setup Prometheus metrics mocks
@@ -208,6 +214,10 @@ describe('EventIntegrationService', () => {
         {
           provide: ShadowAccountService,
           useValue: shadowAccountService,
+        },
+        {
+          provide: FileService,
+          useValue: fileService,
         },
         {
           provide: BlueskyIdService,
