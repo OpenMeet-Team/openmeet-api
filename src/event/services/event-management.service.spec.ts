@@ -371,10 +371,14 @@ describe('EventManagementService', () => {
     describe('handling problematic group values', () => {
       beforeEach(() => {
         // Mock common service dependencies
-        jest.spyOn(service['categoryService'], 'findByIds').mockResolvedValue([]);
+        jest
+          .spyOn(service['categoryService'], 'findByIds')
+          .mockResolvedValue([]);
         jest.spyOn(eventAttendeeService, 'create').mockResolvedValue({} as any);
-        jest.spyOn(mockRepository, 'save').mockResolvedValue(findOneMockEventEntity);
-        
+        jest
+          .spyOn(mockRepository, 'save')
+          .mockResolvedValue(findOneMockEventEntity);
+
         // Create is the key method we'll spy on in the individual tests
         mockRepository.create.mockClear();
       });
@@ -396,21 +400,21 @@ describe('EventManagementService', () => {
         const createSpy = jest.spyOn(mockRepository, 'create');
 
         const event = await service.create(createEventDto, mockUser.id);
-        
+
         // Check the resulting event
         expect(event).toBeDefined();
         expect(mockRepository.save).toHaveBeenCalled();
-        
+
         // Verify how the data was passed to the create method
         expect(createSpy).toHaveBeenCalled();
-        
+
         // Get the args that were passed to create
         const createArgs = createSpy.mock.calls[0][0];
-        
+
         // Check that our NaN string was handled properly (converted to null)
         expect(createArgs.group).toBeNull();
       });
-      
+
       it('should handle string "2" as group value (convert to proper number)', async () => {
         // Create event with string "2" as group value
         const createEventDto: CreateEventDto = {
@@ -428,21 +432,21 @@ describe('EventManagementService', () => {
         const createSpy = jest.spyOn(mockRepository, 'create');
 
         const event = await service.create(createEventDto, mockUser.id);
-        
+
         // Check the resulting event
         expect(event).toBeDefined();
         expect(mockRepository.save).toHaveBeenCalled();
-        
+
         // Verify how the data was passed to the create method
         expect(createSpy).toHaveBeenCalled();
-        
+
         // Get the args that were passed to create
         const createArgs = createSpy.mock.calls[0][0];
-        
+
         // Check that our string number was properly converted to a numeric id
         expect(createArgs.group).toEqual({ id: 2 });
       });
-      
+
       it('should handle JavaScript NaN in group.id', async () => {
         // Create event with NaN in group.id
         const createEventDto: CreateEventDto = {
@@ -460,17 +464,17 @@ describe('EventManagementService', () => {
         const createSpy = jest.spyOn(mockRepository, 'create');
 
         const event = await service.create(createEventDto, mockUser.id);
-        
+
         // Check the resulting event
         expect(event).toBeDefined();
         expect(mockRepository.save).toHaveBeenCalled();
-        
+
         // Verify how the data was passed to the create method
         expect(createSpy).toHaveBeenCalled();
-        
+
         // Get the args that were passed to create
         const createArgs = createSpy.mock.calls[0][0];
-        
+
         // Check that our JavaScript NaN was properly handled (converted to null)
         expect(createArgs.group).toBeNull();
       });
@@ -492,17 +496,17 @@ describe('EventManagementService', () => {
         const createSpy = jest.spyOn(mockRepository, 'create');
 
         const event = await service.create(createEventDto, mockUser.id);
-        
+
         // Check the resulting event
         expect(event).toBeDefined();
         expect(mockRepository.save).toHaveBeenCalled();
-        
+
         // Verify how the data was passed to the create method
         expect(createSpy).toHaveBeenCalled();
-        
+
         // Get the args that were passed to create
         const createArgs = createSpy.mock.calls[0][0];
-        
+
         // Check that our string "null" was properly handled (converted to null)
         expect(createArgs.group).toBeNull();
       });
