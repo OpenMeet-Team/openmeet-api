@@ -13,6 +13,8 @@ import { trace } from '@opentelemetry/api';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter, Histogram } from 'prom-client';
 import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
+import { FileEntity } from '../../file/infrastructure/persistence/relational/entities/file.entity';
+import { FileService } from '../../file/file.service';
 
 @Injectable()
 export class EventIntegrationService {
@@ -24,6 +26,7 @@ export class EventIntegrationService {
     private readonly shadowAccountService: ShadowAccountService,
     private readonly eventQueryService: EventQueryService,
     private readonly blueskyIdService: BlueskyIdService,
+    private readonly fileService: FileService,
     @InjectMetric('event_integration_processed_total')
     private readonly processedCounter: Counter<string>,
     @InjectMetric('event_integration_deduplication_matches_total')
@@ -405,6 +408,28 @@ export class EventIntegrationService {
     newEvent.sourceUrl = eventData.source.url || null;
     newEvent.sourceData = eventData.source.metadata || {};
 
+    // Handle image if provided
+    if (eventData.image?.id) {
+      this.logger.debug(`Looking up image with ID ${eventData.image.id}`);
+
+      try {
+        const image = await this.fileService.findById(eventData.image.id);
+
+        if (image) {
+          this.logger.debug(
+            `Found image with ID ${eventData.image.id}, associating with event`,
+          );
+          newEvent.image = image as FileEntity;
+        } else {
+          this.logger.warn(`Image with ID ${eventData.image.id} not found`);
+        }
+      } catch (error) {
+        this.logger.error(
+          `Error finding image with ID ${eventData.image.id}: ${error.message}`,
+        );
+      }
+    }
+
     // If it's a Bluesky event, store the handle
     if (
       eventData.source.type === EventSourceType.BLUESKY &&
@@ -491,6 +516,32 @@ export class EventIntegrationService {
         ...existingEvent.sourceData,
         ...eventData.source.metadata,
       };
+    }
+
+    // Handle image if provided
+    if (eventData.image?.id) {
+      this.logger.debug(
+        `Looking up image with ID ${eventData.image.id} for event update`,
+      );
+
+      try {
+        const image = await this.fileService.findById(eventData.image.id);
+
+        if (image) {
+          this.logger.debug(
+            `Found image with ID ${eventData.image.id}, updating event image`,
+          );
+          existingEvent.image = image as FileEntity;
+        } else {
+          this.logger.warn(
+            `Image with ID ${eventData.image.id} not found for update`,
+          );
+        }
+      } catch (error) {
+        this.logger.error(
+          `Error finding image with ID ${eventData.image.id} for update: ${error.message}`,
+        );
+      }
     }
 
     // Update the URL if provided

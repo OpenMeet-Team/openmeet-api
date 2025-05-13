@@ -155,6 +155,15 @@ export class ExternalEventDto {
   @IsOptional()
   location?: ExternalEventLocationDto;
 
+  @ApiPropertyOptional({
+    description: 'Event image information. Images are uploaded seperately',
+    type: 'object',
+    example: { id: 450 },
+  })
+  @IsObject()
+  @IsOptional()
+  image?: { id: number };
+
   @ApiProperty({
     description: 'Event source information',
     type: ExternalEventSourceDto,
