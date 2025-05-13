@@ -1097,6 +1097,7 @@ export class MatrixUserService
 
   /**
    * Set Matrix password for a user - handles user verification and matrix password setting
+   * We don't keep track of the password in the database, we just set it and forget it
    */
   async setUserMatrixPassword(
     userId: number,
