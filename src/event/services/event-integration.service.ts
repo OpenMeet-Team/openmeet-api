@@ -411,9 +411,10 @@ export class EventIntegrationService {
     // Handle image if provided
     if (eventData.image?.id) {
       this.logger.debug(`Looking up image with ID ${eventData.image.id}`);
-      this.logger.debug(`Setting image with ID ${eventData.image.id} directly`);
+      this.logger.debug(`Image data structure: ${JSON.stringify(eventData.image)}`);
       // Create a reference object with just the ID
       newEvent.image = { id: eventData.image.id } as FileEntity;
+      this.logger.debug(`Set image reference to: ${JSON.stringify(newEvent.image)}`);
     }
 
     // If it's a Bluesky event, store the handle
@@ -442,9 +443,15 @@ export class EventIntegrationService {
     }
 
     // Save the event
+    this.logger.debug(`Saving new event with data: ${JSON.stringify({
+      id: newEvent.id,
+      name: newEvent.name,
+      hasImage: !!newEvent.image,
+      imageId: newEvent.image?.id
+    })}`);
     const savedEvent = await eventRepository.save(newEvent);
     this.logger.debug(
-      `Created new event with ID ${savedEvent.id} for tenant ${tenantId}`,
+      `Created new event with ID ${savedEvent.id} for tenant ${tenantId}, image: ${savedEvent.image ? savedEvent.image.id : 'none'}`
     );
 
     return savedEvent;
@@ -465,7 +472,7 @@ export class EventIntegrationService {
     tenantId: string,
   ): Promise<EventEntity> {
     this.logger.debug(
-      `Updating event ${existingEvent.id} for tenant ${tenantId}`,
+      `Updating event ${existingEvent.id} for tenant ${tenantId}`
     );
 
     // Update basic fields
@@ -507,13 +514,12 @@ export class EventIntegrationService {
     // Handle image if provided
     if (eventData.image?.id) {
       this.logger.debug(
-        `Looking up image with ID ${eventData.image.id} for event update`,
+        `Setting image with ID ${eventData.image.id} directly for event update`
       );
-      this.logger.debug(
-        `Setting image with ID ${eventData.image.id} directly for event update`,
-      );
+      this.logger.debug(`Image data structure: ${JSON.stringify(eventData.image)}`);
       // Create a reference object with just the ID
       existingEvent.image = { id: eventData.image.id } as FileEntity;
+      this.logger.debug(`Set image reference to: ${JSON.stringify(existingEvent.image)}`);
     }
 
     // Update the URL if provided
@@ -530,9 +536,15 @@ export class EventIntegrationService {
     }
 
     // Save the updated event
+    this.logger.debug(`Saving updated event with data: ${JSON.stringify({
+      id: existingEvent.id,
+      name: existingEvent.name,
+      hasImage: !!existingEvent.image,
+      imageId: existingEvent.image?.id
+    })}`);
     const updatedEvent = await eventRepository.save(existingEvent);
     this.logger.debug(
-      `Updated event with ID ${updatedEvent.id} for tenant ${tenantId}`,
+      `Updated event with ID ${updatedEvent.id} for tenant ${tenantId}, image: ${updatedEvent.image ? updatedEvent.image.id : 'none'}`
     );
 
     return updatedEvent;
