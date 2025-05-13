@@ -63,6 +63,9 @@ export class JWTAuthGuard extends PassportAuthGuard('jwt') {
     if (err && isPublic) {
       request.headers.authorization = undefined;
       request.user = null;
+      console.error(
+        `Error in auth.guard handleRequest while on public route, clearing auth header for user ${user?.slug || user?.id}.  Error: ${err}`,
+      );
       return null as TUser;
     }
 
