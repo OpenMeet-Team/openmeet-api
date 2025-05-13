@@ -411,23 +411,9 @@ export class EventIntegrationService {
     // Handle image if provided
     if (eventData.image?.id) {
       this.logger.debug(`Looking up image with ID ${eventData.image.id}`);
-
-      try {
-        const image = await this.fileService.findById(eventData.image.id);
-
-        if (image) {
-          this.logger.debug(
-            `Found image with ID ${eventData.image.id}, associating with event`,
-          );
-          newEvent.image = image as FileEntity;
-        } else {
-          this.logger.warn(`Image with ID ${eventData.image.id} not found`);
-        }
-      } catch (error) {
-        this.logger.error(
-          `Error finding image with ID ${eventData.image.id}: ${error.message}`,
-        );
-      }
+      this.logger.debug(`Setting image with ID ${eventData.image.id} directly`);
+      // Create a reference object with just the ID
+      newEvent.image = { id: eventData.image.id } as FileEntity;
     }
 
     // If it's a Bluesky event, store the handle
@@ -523,25 +509,11 @@ export class EventIntegrationService {
       this.logger.debug(
         `Looking up image with ID ${eventData.image.id} for event update`,
       );
-
-      try {
-        const image = await this.fileService.findById(eventData.image.id);
-
-        if (image) {
-          this.logger.debug(
-            `Found image with ID ${eventData.image.id}, updating event image`,
-          );
-          existingEvent.image = image as FileEntity;
-        } else {
-          this.logger.warn(
-            `Image with ID ${eventData.image.id} not found for update`,
-          );
-        }
-      } catch (error) {
-        this.logger.error(
-          `Error finding image with ID ${eventData.image.id} for update: ${error.message}`,
-        );
-      }
+      this.logger.debug(
+        `Setting image with ID ${eventData.image.id} directly for event update`,
+      );
+      // Create a reference object with just the ID
+      existingEvent.image = { id: eventData.image.id } as FileEntity;
     }
 
     // Update the URL if provided
