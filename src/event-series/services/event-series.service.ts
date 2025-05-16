@@ -713,6 +713,7 @@ export class EventSeriesService {
                   allowWaitlist: templateEvent.allowWaitlist,
                   categories: templateEvent.categories.map((cat) => cat.id),
                   seriesSlug: series.slug,
+                  timeZone: templateEvent.timeZone || series.timeZone || 'UTC',
                 },
                 userId,
                 series.slug,

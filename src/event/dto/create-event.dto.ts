@@ -260,13 +260,12 @@ export class CreateEventDto implements SourceFields {
   group?: { id: number } | GroupEntity;
 
   // Recurrence fields
-  @ApiPropertyOptional({
+  @ApiProperty({
     description: 'Timezone identifier (e.g., "America/New_York")',
     example: 'America/New_York',
   })
-  @IsOptional()
   @IsString()
-  timeZone?: string;
+  timeZone: string;
 
   @ApiPropertyOptional({
     description: 'Recurrence rule following RFC 5545 standards',
