@@ -56,4 +56,4 @@ export class AddTimeZoneToEvent1747413187416 implements MigrationInterface {
       console.log('Column timeZone does not exist on events table, skipping');
     }
   }
-} 
+}

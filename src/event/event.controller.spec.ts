@@ -14,7 +14,6 @@ import {
   mockEvent,
   mockEventAttendee,
   mockEventAttendeeService,
-  mockGroup,
   mockGroupMemberService,
   mockGroupService,
   mockUser,
@@ -37,16 +36,17 @@ import { EventSeriesOccurrenceService } from '../event-series/services/event-ser
 const createEventDto: CreateEventDto = {
   name: 'Test Event',
   description: 'Test Description',
-  startDate: new Date(),
-  endDate: new Date(),
-  group: { id: mockGroup.id },
-  type: 'in_person',
+  startDate: new Date('2024-01-01T10:00:00Z'),
+  endDate: new Date('2024-01-01T12:00:00Z'),
+  group: { id: 1 },
+  type: 'Test Type',
   location: 'Test Location',
-  locationOnline: 'Test Location Online',
+  locationOnline: 'http://test.com',
   maxAttendees: 100,
-  categories: [mockCategory.id],
+  categories: [1, 2],
   lat: 0,
   lon: 0,
+  timeZone: 'UTC',
 };
 
 const mockAuthService = {
@@ -205,7 +205,7 @@ describe('EventController', () => {
       const result = await controller.create(createEventDto, mockUser, {
         user: mockUser,
         headers: {},
-        body: createEventDto,
+        body: { ...createEventDto, timeZone: 'UTC' },
       } as unknown as Request);
 
       expect(result).toEqual(mockEvent);
@@ -223,7 +223,7 @@ describe('EventController', () => {
         controller.create(createEventDto, mockUser, {
           user: mockUser,
           headers: {},
-          body: createEventDto,
+          body: { ...createEventDto, timeZone: 'UTC' },
         } as unknown as Request),
       ).rejects.toThrow('Database error');
     });
@@ -544,6 +544,7 @@ describe('EventController', () => {
         categories: [mockCategory.id],
         lat: 0,
         lon: 0,
+        timeZone: 'UTC',
       };
 
       beforeEach(() => {
@@ -579,7 +580,7 @@ describe('EventController', () => {
         const result = await controller.create(createEventDto, mockUser, {
           user: mockUser,
           headers: {},
-          body: createEventDto,
+          body: { ...createEventDto, timeZone: 'UTC' },
         } as unknown as Request);
         expect(result).toEqual(createdEvent);
       });
