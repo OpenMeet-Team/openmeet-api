@@ -70,6 +70,7 @@ export async function createGroupsAndEvents(
     lon: 0,
     status: EventStatus.Published,
     group: group.id,
+    timeZone: 'UTC',
   };
 
   const event = await createEvent(app, authToken, eventData);
@@ -129,11 +130,16 @@ async function createCategory(app, token, categoryData) {
 async function createEvent(app: string, authToken: string, eventData: any) {
   // console.log('Creating event with data:', JSON.stringify(eventData, null, 2));
 
+  const payload = {
+    timeZone: 'UTC', // Default timezone
+    ...eventData, // Spread incoming eventData, potentially overriding the default timeZone if provided
+  };
+
   const response = await request(app)
     .post('/api/events')
     .set('Authorization', `Bearer ${authToken}`)
     .set('x-tenant-id', TESTING_TENANT_ID)
-    .send(eventData);
+    .send(payload);
 
   // console.log('Create event response:', {
   //  status: response.status,

@@ -60,6 +60,7 @@ describe('EventSeriesController (e2e)', () => {
       categories: [],
       requireApproval: false,
       allowWaitlist: true,
+      timeZone: 'UTC',
     };
 
     // Create the event
@@ -181,6 +182,7 @@ describe('EventSeriesController (e2e)', () => {
       categories: [],
       requireApproval: false,
       allowWaitlist: true,
+      timeZone: 'UTC',
     };
 
     // Create the template event
@@ -304,6 +306,7 @@ describe('EventSeriesController (e2e)', () => {
       categories: [],
       requireApproval: false,
       allowWaitlist: false,
+      timeZone: 'UTC',
     };
 
     const createTemplateResponse = await request(TESTING_APP_URL)
@@ -455,6 +458,7 @@ describe('EventSeriesController (e2e)', () => {
       startDate: new Date(Date.now() + oneDay).toISOString(),
       endDate: new Date(Date.now() + oneDay + 3600000).toISOString(),
       categories: [],
+      timeZone: 'UTC',
     };
 
     const templateEventResponse = await request(TESTING_APP_URL)
@@ -532,6 +536,7 @@ describe('EventSeriesController (e2e)', () => {
       categories: [],
       requireApproval: false,
       allowWaitlist: false,
+      timeZone: 'UTC',
     };
 
     const templateEventResponse = await request(TESTING_APP_URL)
@@ -642,6 +647,7 @@ describe('EventSeriesController (e2e)', () => {
       categories: [],
       requireApproval: false,
       allowWaitlist: true,
+      timeZone: 'UTC',
     };
 
     // Create the event
