@@ -202,6 +202,7 @@ describe('EventController', () => {
         .spyOn(eventManagementService, 'create')
         .mockResolvedValue(mockEvent as EventEntity);
 
+
       const result = await controller.create(createEventDto, mockUser, {
         user: mockUser,
         headers: {},

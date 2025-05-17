@@ -583,6 +583,7 @@ export class UserService {
     slug: User['slug'],
     tenantId?: string,
   ): Promise<NullableType<UserEntity>> {
+    // TODO: this looks like a bug. we shuld just call getUserBySlug()
     if (tenantId) {
       return this.getUserBySlugWithTenant(slug, tenantId);
     }
@@ -626,10 +627,6 @@ export class UserService {
       );
       return null;
     }
-
-    this.logger.debug('getUserBySlugWithTenant result', {
-      user,
-    });
 
     return user;
   }
