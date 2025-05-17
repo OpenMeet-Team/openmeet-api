@@ -512,6 +512,7 @@ describe('EventController (e2e)', () => {
       lon: 0.0,
       status: 'published',
       group: null,
+      timeZone: 'UTC',
     };
 
     // Create the template event
@@ -564,7 +565,7 @@ describe('EventController (e2e)', () => {
       status: 'published',
       group: null,
       isRecurring: false,
-      recurrenceRule: undefined,
+      timeZone: 'UTC',
     };
 
     const eventResponse = await request(TESTING_APP_URL)
@@ -675,6 +676,7 @@ describe('EventController (e2e)', () => {
       lon: 0.0,
       status: 'published',
       group: null,
+      timeZone: 'UTC',
     };
 
     // Create the template event
@@ -726,7 +728,7 @@ describe('EventController (e2e)', () => {
       status: 'published',
       group: null,
       isRecurring: false,
-      recurrenceRule: undefined,
+      timeZone: 'UTC',
     };
 
     const independentEventResponse = await request(TESTING_APP_URL)

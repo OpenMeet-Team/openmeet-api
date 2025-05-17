@@ -52,6 +52,7 @@ describe('EventAttendeeController (e2e)', () => {
         lat: 40.7128,
         lon: -74.006,
         status: 'published', // Make sure it's published
+        timeZone: 'UTC',
         ...eventData,
       });
 

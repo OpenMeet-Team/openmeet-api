@@ -316,6 +316,7 @@ describe('EventManagementService', () => {
         categories: [1, 2],
         lat: 1,
         lon: 1,
+        timeZone: 'UTC',
       };
 
       const mockAttendees = [
@@ -394,6 +395,7 @@ describe('EventManagementService', () => {
           categories: [],
           locationOnline: '', // Required field
           group: 'NaN' as any, // Force string "NaN" as group value
+          timeZone: 'UTC',
         };
 
         // Create a spy to check what's passed to repository.create
@@ -426,6 +428,7 @@ describe('EventManagementService', () => {
           categories: [],
           locationOnline: '', // Required field
           group: '2' as any, // Force string "2" as group value
+          timeZone: 'UTC',
         };
 
         // Create a spy to check what's passed to repository.create
@@ -458,6 +461,7 @@ describe('EventManagementService', () => {
           categories: [],
           locationOnline: '', // Required field
           group: { id: NaN }, // JavaScript NaN in group.id
+          timeZone: 'UTC',
         };
 
         // Create a spy to check what's passed to repository.create
@@ -490,6 +494,7 @@ describe('EventManagementService', () => {
           categories: [],
           locationOnline: '', // Required field
           group: 'null' as any, // Force string "null" as group value
+          timeZone: 'UTC',
         };
 
         // Create a spy to check what's passed to repository.create
@@ -799,6 +804,7 @@ describe('EventManagementService', () => {
         maxAttendees: 100,
         lat: 0,
         lon: 0,
+        timeZone: 'UTC',
       };
 
       const result = await service.createSeriesOccurrence(
@@ -873,7 +879,7 @@ describe('EventManagementService', () => {
           count: 5,
           byweekday: ['MO', 'WE', 'FR'],
         },
-        timeZone: 'America/New_York',
+        timeZone: 'UTC',
       };
 
       // Call the createRecurringEvent method

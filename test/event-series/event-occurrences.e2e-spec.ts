@@ -37,6 +37,7 @@ describe('EventOccurrencesService (e2e)', () => {
       lon: 0.0,
       status: 'published',
       group: null,
+      timeZone: 'UTC',
     };
 
     const templateResponse = await request(TESTING_APP_URL)

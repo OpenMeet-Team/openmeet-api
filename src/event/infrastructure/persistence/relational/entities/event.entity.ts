@@ -230,6 +230,12 @@ export class EventEntity
   @Column({ nullable: true, type: 'jsonb' })
   conferenceData: Record<string, any>;
 
+  /**
+   * IANA time zone identifier for the event (e.g., "America/New_York").
+   */
+  @Column({ type: 'varchar', length: 100, nullable: false, default: 'UTC' })
+  timeZone: string;
+
   @BeforeInsert()
   generateUlid() {
     if (!this.ulid) {

@@ -96,8 +96,11 @@ export class EventResponseDto {
   lastSyncedAt?: Date | null;
 
   // Recurring event fields
-  @ApiPropertyOptional()
-  timeZone?: string;
+  @ApiProperty({
+    description: 'Timezone identifier (e.g., "America/New_York")',
+    example: 'America/New_York',
+  })
+  timeZone: string;
 
   @ApiPropertyOptional()
   recurrenceRule?: RecurrenceRuleDto;

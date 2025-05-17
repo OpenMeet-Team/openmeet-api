@@ -110,17 +110,18 @@ describe('EventSeries Module Integration', () => {
   describe('createEvent', () => {
     it('should create an event with series', async () => {
       const data: CreateEventDto = {
-        name: 'Test Event',
-        description: 'Test event description',
-        startDate: new Date('2023-01-01T00:00:00Z'),
-        endDate: new Date('2023-01-01T01:00:00Z'),
+        name: 'Test Event Series',
+        description: 'Test Description',
+        startDate: new Date('2024-01-01T10:00:00Z'),
+        endDate: new Date('2024-01-01T12:00:00Z'),
         type: EventType.InPerson,
-        locationOnline: 'false',
+        locationOnline: 'http://test.com',
         categories: [],
-        maxAttendees: 20,
-        lat: 40.7128,
-        lon: -74.006,
-        seriesSlug: 'test-series',
+        maxAttendees: 100,
+        lat: 0,
+        lon: 0,
+        seriesSlug: 'test-event-series',
+        timeZone: 'UTC',
       };
 
       await eventManagementService.create(data, 1);

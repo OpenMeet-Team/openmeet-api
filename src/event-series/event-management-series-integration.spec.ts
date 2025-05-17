@@ -323,15 +323,16 @@ describe('EventManagementService Integration with EventSeriesService', () => {
 
     // Create event with series
     const eventData: CreateEventDto = {
-      name: 'Test Event',
-      description: 'Test event description',
-      startDate: new Date(),
-      endDate: new Date(),
+      name: 'Series Event 1',
+      description: 'Description for series event 1',
+      startDate: new Date('2024-01-15T10:00:00Z'),
+      endDate: new Date('2024-01-15T12:00:00Z'),
       type: EventType.InPerson,
-      locationOnline: 'false',
+      locationOnline: 'http://test.com',
       categories: [],
-      maxAttendees: 20,
+      maxAttendees: 50,
       seriesSlug: 'test-series',
+      timeZone: 'UTC',
     };
 
     const result = await managementService.create(eventData, 1);

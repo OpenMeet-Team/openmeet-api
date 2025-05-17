@@ -613,6 +613,7 @@ export class EventManagementService {
       resources: updateEventDto.resources,
       blocksTime: updateEventDto.blocksTime,
       isAllDay: updateEventDto.isAllDay,
+      timeZone: updateEventDto.timeZone || 'UTC',
     };
 
     // Handle sourceType and sourceId
