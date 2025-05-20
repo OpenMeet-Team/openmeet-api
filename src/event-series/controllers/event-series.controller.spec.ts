@@ -257,9 +257,12 @@ describe('EventSeriesController', () => {
       );
 
       // Act & Assert
-      await expect(
-        controller.previewOccurrences(previewDto, mockReq),
-      ).rejects.toThrow(errorMessage);
+      try {
+        await controller.previewOccurrences(previewDto, mockReq);
+        fail('Should have thrown an error');
+      } catch (error) {
+        expect(error.message).toBe(errorMessage);
+      }
     });
   });
 });
