@@ -1,7 +1,19 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional, IsNumber, ValidateNested, IsEnum, IsArray, IsInt } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsNumber,
+  ValidateNested,
+  IsEnum,
+  IsArray,
+  IsInt,
+} from 'class-validator';
 import { Type } from 'class-transformer';
-import { RecurrenceFrequency, RecurrenceRule } from '../interfaces/recurrence.interface';
+import {
+  RecurrenceFrequency,
+  RecurrenceRule,
+} from '../interfaces/recurrence.interface';
 
 /**
  * DTO for RecurrenceRule to ensure proper deserialization
@@ -55,7 +67,8 @@ export class RecurrenceRuleDto implements RecurrenceRule {
   byweekday?: string[];
 
   @ApiProperty({
-    description: 'Days of the month (1-31 or -31 to -1 for counting from the end)',
+    description:
+      'Days of the month (1-31 or -31 to -1 for counting from the end)',
     example: [1, 15],
     type: [Number],
     required: false,
@@ -77,7 +90,8 @@ export class RecurrenceRuleDto implements RecurrenceRule {
   bymonth?: number[];
 
   @ApiProperty({
-    description: 'Positions within a month/year (e.g., 1 for first, 2 for second, -1 for last)',
+    description:
+      'Positions within a month/year (e.g., 1 for first, 2 for second, -1 for last)',
     example: [1],
     type: [Number],
     required: false,

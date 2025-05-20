@@ -36,7 +36,7 @@ export class RecurrencePatternService {
     options: RecurrenceOptions = {},
   ): string[] {
     const {
-      count = 100,
+      count = 10, // Changed from 100 to 10 to prevent excessive occurrence generation
       until,
       startAfterDate,
       excludeDates = [],
@@ -99,23 +99,20 @@ export class RecurrencePatternService {
         },
       );
     }
-    
+
     // Add special logging for weekly patterns to debug issues
     if (rule.frequency === 'WEEKLY') {
-      this.logger.log(
-        '[WEEKLY_PATTERN_DEBUG] Weekly pattern details:',
-        {
-          byweekday: rule.byweekday,
-          interval: rule.interval || 1,
-          startDate: dtstartDateObject.toISOString(), // Using the already calculated date
-          timeZone,
-          until: rule.until,
-          count: rule.count,
-          // In JavaScript and RRule: 0 = Sunday, 1 = Monday, etc.
-          weekStart: 0, // Using Sunday as the first day of the week (default in US calendars)
-          fullRule: JSON.stringify(rule)
-        },
-      );
+      this.logger.log('[WEEKLY_PATTERN_DEBUG] Weekly pattern details:', {
+        byweekday: rule.byweekday,
+        interval: rule.interval || 1,
+        startDate: dtstartDateObject.toISOString(), // Using the already calculated date
+        timeZone,
+        until: rule.until,
+        count: rule.count,
+        // In JavaScript and RRule: 0 = Sunday, 1 = Monday, etc.
+        weekStart: 0, // Using Sunday as the first day of the week (default in US calendars)
+        fullRule: JSON.stringify(rule),
+      });
     }
 
     // Map byweekday with logging
@@ -123,16 +120,16 @@ export class RecurrencePatternService {
     if (rule.byweekday && rule.byweekday.length > 0) {
       // Store the result of mapByWeekDay which returns number[]
       const mappedResult = this.mapByWeekDay(rule.byweekday);
-      
+
       // Only assign if we got a non-empty array
       if (mappedResult && mappedResult.length > 0) {
         mappedByWeekday = mappedResult;
       }
-      
+
       this.logger.log('[generateOccurrences] Mapped byweekday:', {
-        original: rule.byweekday, 
+        original: rule.byweekday,
         mapped: mappedByWeekday,
-        frequency: rule.frequency
+        frequency: rule.frequency,
       });
     }
 
@@ -181,11 +178,11 @@ export class RecurrencePatternService {
 
     // Create the RRule instance
     const rrule = new RRule(rruleOptions);
-    
+
     // Log the string representation to confirm it's created correctly
     this.logger.log('[RRULE_CREATED] RRule created:', {
       ruleString: rrule.toString(),
-      options: rruleOptions
+      options: rruleOptions,
     });
 
     // Determine the date range for generation
@@ -194,7 +191,7 @@ export class RecurrencePatternService {
     const effectiveEndDate =
       rruleOptions.until instanceof Date
         ? rruleOptions.until
-        : addYears(effectiveStartDate, 10);
+        : addYears(effectiveStartDate, 1); // Changed from 10 years to 1 year to limit maximum occurrences
 
     this.logger.debug('[generateOccurrences] Generating between', {
       start: effectiveStartDate.toISOString(),
@@ -202,36 +199,42 @@ export class RecurrencePatternService {
       rule: rrule.toString(),
     });
 
+    // Generate occurrences with better control over the number
     let occurrences = rrule.between(
       effectiveStartDate,
       effectiveEndDate,
       true, // Inclusive
     );
 
+    // Immediately limit to count to avoid excessive memory usage
+    if (count > 0) {
+      occurrences = occurrences.slice(0, count);
+    }
+
     this.logger.debug('[generateOccurrences] Occurrences after between', {
       count: occurrences.length,
     });
-    
+
     // Add detailed logging for weekly pattern results
     if (rule.frequency === 'WEEKLY') {
       try {
         const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        
+
         this.logger.log('[WEEKLY_RESULT_DEBUG] Generated weekly occurrences:', {
           count: occurrences.length,
           // Include first 5 dates for debugging
-          firstFiveDates: occurrences.slice(0, 5).map(date => ({
+          firstFiveDates: occurrences.slice(0, 5).map((date) => ({
             iso: date.toISOString(),
             local: date.toLocaleString(),
             day: date.getDay(), // 0 = Sunday, 1 = Monday, etc.
             dayName: dayNames[date.getDay()],
           })),
           // Show the pattern of days of week in the results
-          dayOfWeekPattern: occurrences.slice(0, 10).map(date => {
+          dayOfWeekPattern: occurrences.slice(0, 10).map((date) => {
             const day = date.getDay();
-            return { 
-              numeric: day, 
-              name: dayNames[day]
+            return {
+              numeric: day,
+              name: dayNames[day],
             };
           }),
           // How many of each day of week are in the result
@@ -245,16 +248,20 @@ export class RecurrencePatternService {
           inputRule: {
             frequency: rule.frequency,
             interval: rule.interval || 1,
-            byweekday: rule.byweekday
-          }
+            byweekday: rule.byweekday,
+          },
         });
       } catch (error) {
         // Catch any errors in our logging code so it doesn't break the functionality
-        this.logger.error('[WEEKLY_RESULT_ERROR] Error in weekly debug logging:', error);
+        this.logger.error(
+          '[WEEKLY_RESULT_ERROR] Error in weekly debug logging:',
+          error,
+        );
       }
     }
 
-    occurrences = occurrences.slice(0, count);
+    // We've already sliced to count above, so nothing to do here
+    // This used to be where we limited to count, but moved it up for optimization
 
     this.logger.debug('[generateOccurrences] Occurrences after count slice', {
       count: occurrences.length,
@@ -398,10 +405,10 @@ export class RecurrencePatternService {
     }
 
     // Then check if it's in the pattern
-    // Generate at most 365 days of occurrences to limit processing time
+    // Generate at most 20 occurrences to limit processing time
     const occurrences = this.generateOccurrences(startDateTime, rule, {
       timeZone: effectiveTimeZone,
-      count: 365,
+      count: 20, // Reduced from 365 to 20 to improve performance
     });
 
     // Check if target date is in the occurrences
@@ -496,60 +503,80 @@ export class RecurrencePatternService {
    */
   private mapByWeekDay(byweekday: string[]): number[] {
     if (!byweekday || !Array.isArray(byweekday)) {
-      this.logger.error(`[WEEKDAY_MAPPING_ERROR] Invalid byweekday parameter: ${JSON.stringify(byweekday)}`);
+      this.logger.error(
+        `[WEEKDAY_MAPPING_ERROR] Invalid byweekday parameter: ${JSON.stringify(byweekday)}`,
+      );
       return []; // Return empty array instead of null to maintain type compatibility
     }
-    
-    this.logger.log(`[WEEKDAY_MAPPING] Starting to map byweekday: ${JSON.stringify(byweekday)}`);
-    
+
+    this.logger.log(
+      `[WEEKDAY_MAPPING] Starting to map byweekday: ${JSON.stringify(byweekday)}`,
+    );
+
     // Get the actual RRule weekday constants
     const getRRuleWeekday = (day: string): number => {
       if (!day) {
-        this.logger.error(`[WEEKDAY_MAPPING_ERROR] Null or undefined day passed to getRRuleWeekday`);
+        this.logger.error(
+          `[WEEKDAY_MAPPING_ERROR] Null or undefined day passed to getRRuleWeekday`,
+        );
         return RRule.MO.weekday; // Default to Monday
       }
-      
+
       // Handle cases where the day might have a position prefix like '-1MO'
       const match = day.match(/^(?:[+-]?\d+)?([A-Z]{2})$/);
       const dayCode = match ? match[1] : day;
-      
+
       // Map to RRule's constants directly
-      switch(dayCode) {
-        case 'MO': return RRule.MO.weekday;
-        case 'TU': return RRule.TU.weekday;
-        case 'WE': return RRule.WE.weekday;
-        case 'TH': return RRule.TH.weekday;
-        case 'FR': return RRule.FR.weekday;
-        case 'SA': return RRule.SA.weekday;
-        case 'SU': return RRule.SU.weekday;
-        default: 
-          this.logger.warn(`[WEEKDAY_MAPPING_ERROR] Unknown weekday code: ${day}, defaulting to Monday`);
+      switch (dayCode) {
+        case 'MO':
+          return RRule.MO.weekday;
+        case 'TU':
+          return RRule.TU.weekday;
+        case 'WE':
+          return RRule.WE.weekday;
+        case 'TH':
+          return RRule.TH.weekday;
+        case 'FR':
+          return RRule.FR.weekday;
+        case 'SA':
+          return RRule.SA.weekday;
+        case 'SU':
+          return RRule.SU.weekday;
+        default:
+          this.logger.warn(
+            `[WEEKDAY_MAPPING_ERROR] Unknown weekday code: ${day}, defaulting to Monday`,
+          );
           return RRule.MO.weekday;
       }
     };
 
     try {
       const mappedResults = byweekday.map(getRRuleWeekday);
-      
+
       // Log all the mappings together
       this.logger.log(`[WEEKDAY_MAPPING] Complete mapping results:`, {
         input: byweekday,
         output: mappedResults,
         rruleMOReference: RRule.MO.weekday, // Log the reference value for Monday
       });
-      
+
       // Validate that we have at least one valid weekday for WEEKLY patterns
       if (mappedResults.length === 0) {
-        this.logger.warn(`[WEEKDAY_MAPPING_WARNING] Empty result after mapping byweekday: ${JSON.stringify(byweekday)}`);
+        this.logger.warn(
+          `[WEEKDAY_MAPPING_WARNING] Empty result after mapping byweekday: ${JSON.stringify(byweekday)}`,
+        );
       }
-      
+
       return mappedResults;
     } catch (error) {
-      this.logger.error(`[WEEKDAY_MAPPING_EXCEPTION] Error mapping byweekday: ${error.message}`, {
-        input: JSON.stringify(byweekday),
-        stack: error.stack,
-      });
-      
+      this.logger.error(
+        `[WEEKDAY_MAPPING_EXCEPTION] Error mapping byweekday: ${error.message}`,
+        {
+          input: JSON.stringify(byweekday),
+          stack: error.stack,
+        },
+      );
+
       // Return Monday as fallback in case of error
       return [RRule.MO.weekday];
     }

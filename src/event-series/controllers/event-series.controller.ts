@@ -30,8 +30,7 @@ import { CreateSeriesFromEventDto } from '../dto/create-series-from-event.dto';
 import { EventResponseDto } from '../../event/dto/event-response.dto';
 import { JWTAuthGuard } from '../../auth/auth.guard';
 import { TenantGuard } from '../../tenant/tenant.guard';
-import { OccurrencePreviewDto, RecurrenceRuleDto } from '../dto/occurrence-preview.dto';
-import { RecurrenceRule } from '../interfaces/recurrence.interface';
+import { OccurrencePreviewDto } from '../dto/occurrence-preview.dto';
 
 @ApiTags('event-series')
 @Controller('event-series')
@@ -792,7 +791,7 @@ export class EventSeriesController {
       throw error;
     }
   }
-  
+
   @Post('preview-occurrences')
   @ApiOperation({
     summary: 'Preview occurrences for a recurrence pattern',
@@ -811,18 +810,18 @@ export class EventSeriesController {
     status: HttpStatus.BAD_REQUEST,
     description: 'Invalid recurrence rule or other parameters',
   })
-  async previewOccurrences(
+  previewOccurrences(
     @Body() previewDto: OccurrencePreviewDto,
     @Request() req,
-  ) {
+  ): Array<{ date: string; materialized: boolean }> {
     // Extract values with fallbacks
     const startDate = previewDto.startDate;
     const timeZone = previewDto.timeZone;
     const count = previewDto.count || 5;
-    
+
     // Get recurrenceRule from DTO - the class-transformer should have properly deserialized it
-    let recurrenceRule = previewDto.recurrenceRule;
-    
+    const recurrenceRule = previewDto.recurrenceRule;
+
     // Log detailed info about the input parameters for debugging
     this.logger.log('Preview occurrences request details:', {
       startDate,
@@ -832,7 +831,7 @@ export class EventSeriesController {
       userId: req.user?.id,
       userAgent: req.headers?.['user-agent'],
     });
-    
+
     try {
       // Enhanced debug logging for all recurrence patterns
       if (recurrenceRule.frequency === 'WEEKLY') {
@@ -843,19 +842,32 @@ export class EventSeriesController {
           timezone: timeZone,
           originalStartDate: startDate,
         });
-      } else if (recurrenceRule.frequency === 'MONTHLY' && recurrenceRule.byweekday && recurrenceRule.bysetpos) {
-        this.logger.log('[MONTHLY_PATTERN] Processing monthly by day of week pattern:', {
-          byweekday: recurrenceRule.byweekday,
-          bysetpos: recurrenceRule.bysetpos,
-          pattern: `${recurrenceRule.bysetpos[0]}${recurrenceRule.byweekday[0]} of each month`,
-          timezone: timeZone,
-        });
-      } else if (recurrenceRule.frequency === 'MONTHLY' && recurrenceRule.bymonthday) {
-        this.logger.log('[MONTHLY_PATTERN] Processing monthly by monthday pattern:', {
-          bymonthday: recurrenceRule.bymonthday,
-          pattern: `Day ${recurrenceRule.bymonthday} of each month`,
-          timezone: timeZone,
-        });
+      } else if (
+        recurrenceRule.frequency === 'MONTHLY' &&
+        recurrenceRule.byweekday &&
+        recurrenceRule.bysetpos
+      ) {
+        this.logger.log(
+          '[MONTHLY_PATTERN] Processing monthly by day of week pattern:',
+          {
+            byweekday: recurrenceRule.byweekday,
+            bysetpos: recurrenceRule.bysetpos,
+            pattern: `${recurrenceRule.bysetpos[0]}${recurrenceRule.byweekday[0]} of each month`,
+            timezone: timeZone,
+          },
+        );
+      } else if (
+        recurrenceRule.frequency === 'MONTHLY' &&
+        recurrenceRule.bymonthday
+      ) {
+        this.logger.log(
+          '[MONTHLY_PATTERN] Processing monthly by monthday pattern:',
+          {
+            bymonthday: recurrenceRule.bymonthday,
+            pattern: `Day ${recurrenceRule.bymonthday} of each month`,
+            timezone: timeZone,
+          },
+        );
       } else if (recurrenceRule.frequency === 'DAILY') {
         this.logger.log('[DAILY_PATTERN] Processing daily pattern:', {
           interval: recurrenceRule.interval,
@@ -863,7 +875,7 @@ export class EventSeriesController {
           timezone: timeZone,
         });
       }
-      
+
       // Parse the start date correctly and log its value
       const startDateObj = new Date(startDate);
       this.logger.log('[DATE_PARSING] Start date parsing:', {
@@ -871,42 +883,47 @@ export class EventSeriesController {
         parsedDate: startDateObj.toISOString(),
         targetTimeZone: timeZone,
       });
-      
+
       // Use RecurrencePatternService to generate occurrences with our properly deserialized recurrenceRule
-      this.logger.log('[GENERATING] Calling recurrencePatternService.generateOccurrences');
+      this.logger.log(
+        '[GENERATING] Calling recurrencePatternService.generateOccurrences',
+      );
       const occurrences = this.recurrencePatternService.generateOccurrences(
         startDateObj,
         recurrenceRule,
         {
           timeZone: timeZone,
           count: count,
-        }
+        },
       );
-      
+
       // Log the results for debugging
       this.logger.log('[RESULTS] Generated occurrences:', {
         count: occurrences.length,
         firstFew: occurrences.slice(0, 3),
       });
-      
+
       // Map to expected format for the frontend
-      const result = occurrences.map(dateStr => {
+      const result = occurrences.map((dateStr) => {
         return {
           date: dateStr,
-          materialized: false
+          materialized: false,
         };
       });
-      
+
       return result;
     } catch (error) {
-      this.logger.error(`[ERROR] Error previewing occurrences: ${error.message}`, {
-        stack: error.stack,
-        input: JSON.stringify(previewDto),
-      });
+      this.logger.error(
+        `[ERROR] Error previewing occurrences: ${error.message}`,
+        {
+          stack: error.stack,
+          input: JSON.stringify(previewDto),
+        },
+      );
       throw error;
     }
   }
-  
+
   // The calculate-occurrences endpoint has been removed.
   // All clients should use preview-occurrences instead.
 }

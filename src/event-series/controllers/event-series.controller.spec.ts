@@ -34,7 +34,7 @@ describe('EventSeriesController', () => {
     '2025-07-15T09:00:00.000Z',
     '2025-08-15T09:00:00.000Z',
     '2025-09-15T09:00:00.000Z',
-    '2025-10-15T09:00:00.000Z'
+    '2025-10-15T09:00:00.000Z',
   ];
 
   // Mock services
@@ -199,14 +199,14 @@ describe('EventSeriesController', () => {
           frequency: RecurrenceFrequency.MONTHLY,
           byweekday: ['MO'],
           bysetpos: [3], // 3rd Monday
-          interval: 1
+          interval: 1,
         },
-        count: 5
+        count: 5,
       };
 
       const mockReq = {
         user: { id: 1 },
-        tenantId: 'test-tenant'
+        tenantId: 'test-tenant',
       };
 
       // Act
@@ -218,14 +218,16 @@ describe('EventSeriesController', () => {
         previewDto.recurrenceRule,
         {
           timeZone: previewDto.timeZone,
-          count: previewDto.count
-        }
+          count: previewDto.count,
+        },
       );
 
-      expect(result).toEqual(mockOccurrenceDates.map(date => ({
-        date,
-        materialized: false
-      })));
+      expect(result).toEqual(
+        mockOccurrenceDates.map((date) => ({
+          date,
+          materialized: false,
+        })),
+      );
     });
 
     it('should handle errors when generating occurrences', async () => {
@@ -237,23 +239,27 @@ describe('EventSeriesController', () => {
           frequency: RecurrenceFrequency.MONTHLY,
           byweekday: ['MO'],
           bysetpos: [3], // 3rd Monday
-          interval: 1
+          interval: 1,
         },
-        count: 5
+        count: 5,
       };
 
       const mockReq = {
         user: { id: 1 },
-        tenantId: 'test-tenant'
+        tenantId: 'test-tenant',
       };
 
       const errorMessage = 'Failed to generate occurrences';
-      mockRecurrencePatternService.generateOccurrences.mockImplementationOnce(() => {
-        throw new Error(errorMessage);
-      });
+      mockRecurrencePatternService.generateOccurrences.mockImplementationOnce(
+        () => {
+          throw new Error(errorMessage);
+        },
+      );
 
       // Act & Assert
-      await expect(controller.previewOccurrences(previewDto, mockReq)).rejects.toThrow(errorMessage);
+      await expect(
+        controller.previewOccurrences(previewDto, mockReq),
+      ).rejects.toThrow(errorMessage);
     });
   });
 });
