@@ -11,6 +11,8 @@ import { RoleService } from '../role/role.service';
 import { EventQueryService } from '../event/services/event-query.service';
 import { mockEventAttendeeService, mockEventQueryService } from '../test/mocks';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
+import { TenantConnectionService } from '../tenant/tenant.service';
+import { REQUEST } from '@nestjs/core';
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -18,6 +20,7 @@ describe('AuthService', () => {
   const mockSessionService = {
     findById: jest.fn(),
     update: jest.fn(),
+    getTenantSpecificRepository: jest.fn().mockResolvedValue(undefined),
   };
 
   const mockUserService = {
@@ -47,6 +50,14 @@ describe('AuthService', () => {
     findById: jest.fn(),
   };
 
+  const mockTenantConnectionService = {
+    getTenantConnection: jest.fn(),
+  };
+
+  const mockRequest = {
+    tenantId: 'test-tenant',
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -60,6 +71,11 @@ describe('AuthService', () => {
         { provide: RoleService, useValue: mockRoleService },
         { provide: EventQueryService, useValue: mockEventQueryService },
         { provide: EventAttendeeService, useValue: mockEventAttendeeService },
+        {
+          provide: TenantConnectionService,
+          useValue: mockTenantConnectionService,
+        },
+        { provide: REQUEST, useValue: mockRequest },
       ],
     }).compile();
 
