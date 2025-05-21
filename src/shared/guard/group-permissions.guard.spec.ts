@@ -84,7 +84,6 @@ describe('PermissionsGuard - Group Event Permissions', () => {
 
     guard = module.get<PermissionsGuard>(PermissionsGuard);
     reflector = module.get<Reflector>(Reflector);
-    authService = module.get<AuthService>(AuthService);
 
     // Reset mocks before each test
     jest.clearAllMocks();
