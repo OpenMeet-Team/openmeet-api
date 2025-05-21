@@ -240,6 +240,88 @@ async function getMyEvents(app, token) {
   return response.body;
 }
 
+async function createTestUser(app, tenantId, email, firstName, lastName, password = 'Test@1234') {
+  const response = await request(app)
+    .post('/api/v1/auth/email/register')
+    .set('x-tenant-id', tenantId)
+    .send({
+      email: email,
+      password: password,
+      firstName: firstName,
+      lastName: lastName,
+    });
+    
+  if (response.status !== 201) {
+    console.error('Failed to create test user:', response.body);
+    throw new Error(`Failed to create test user: ${response.status}`);
+  }
+  
+  return {
+    id: response.body.id,
+    token: response.body.token,
+    slug: response.body.slug,
+  };
+}
+
+async function joinGroup(app, tenantId, groupSlug, userToken) {
+  const joinResponse = await request(app)
+    .post(`/api/groups/${groupSlug}/join`)
+    .set('Authorization', `Bearer ${userToken}`)
+    .set('x-tenant-id', tenantId);
+    
+  if (joinResponse.status !== 201) {
+    console.error('Failed to join group:', joinResponse.body);
+    throw new Error(`Failed to join group: ${joinResponse.status}`);
+  }
+  
+  return joinResponse.body;
+}
+
+async function updateGroupMemberRole(app, tenantId, groupSlug, memberId, role, adminToken) {
+  const updateRoleResponse = await request(app)
+    .patch(`/api/groups/${groupSlug}/members/${memberId}`)
+    .set('Authorization', `Bearer ${adminToken}`)
+    .set('x-tenant-id', tenantId)
+    .send({
+      name: role
+    });
+    
+  if (updateRoleResponse.status !== 200) {
+    console.error('Failed to update group member role:', updateRoleResponse.body);
+    throw new Error(`Failed to update group member role: ${updateRoleResponse.status}`);
+  }
+  
+  return updateRoleResponse.body;
+}
+
+async function getGroupMembers(app, tenantId, groupSlug, adminToken) {
+  const membersResponse = await request(app)
+    .get(`/api/groups/${groupSlug}/members`)
+    .set('Authorization', `Bearer ${adminToken}`)
+    .set('x-tenant-id', tenantId);
+    
+  if (membersResponse.status !== 200) {
+    console.error('Failed to get group members:', membersResponse.body);
+    throw new Error(`Failed to get group members: ${membersResponse.status}`);
+  }
+  
+  return membersResponse.body;
+}
+
+async function getCurrentUser(app, tenantId, userToken) {
+  const userResponse = await request(app)
+    .get('/api/v1/auth/me')
+    .set('Authorization', `Bearer ${userToken}`)
+    .set('x-tenant-id', tenantId);
+    
+  if (userResponse.status !== 200) {
+    console.error('Failed to get current user:', userResponse.body);
+    throw new Error(`Failed to get current user: ${userResponse.status}`);
+  }
+  
+  return userResponse.body;
+}
+
 export {
   getAuthToken,
   createGroup,
@@ -254,4 +336,9 @@ export {
   getMyEvents,
   createCategory,
   getAllEvents,
+  createTestUser,
+  joinGroup,
+  updateGroupMemberRole,
+  getGroupMembers,
+  getCurrentUser,
 };

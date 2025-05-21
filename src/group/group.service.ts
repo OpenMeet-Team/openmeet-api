@@ -969,7 +969,7 @@ export class GroupService {
       where: {
         group: { id: groupId },
       },
-      relations: ['groupRole', 'groupRole.groupPermissions'],
+      relations: ['user', 'groupRole', 'groupRole.groupPermissions'],
     });
   }
 

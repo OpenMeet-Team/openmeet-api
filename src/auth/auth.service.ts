@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
   UnprocessableEntityException,
   Logger,
+  Inject,
 } from '@nestjs/common';
 import ms from 'ms';
 import crypto from 'crypto';
@@ -35,6 +36,7 @@ import { RoleEnum } from '../role/role.enum';
 import { StatusEntity } from 'src/status/infrastructure/persistence/relational/entities/status.entity';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventQueryService } from '../event/services/event-query.service';
+import { REQUEST } from '@nestjs/core';
 
 @Injectable()
 export class AuthService {
@@ -49,6 +51,7 @@ export class AuthService {
     private mailService: MailService,
     private readonly roleService: RoleService,
     private configService: ConfigService<AllConfigType>,
+    @Inject(REQUEST) private readonly request?: any,
   ) {}
 
   async validateLogin(loginDto: AuthEmailLoginDto): Promise<LoginResponseDto> {
@@ -641,7 +644,25 @@ export class AuthService {
   }
 
   async getEvent(slug: string) {
-    return this.eventQueryService.findEventBySlug(slug);
+    // Make sure we load the group and user relations for permission checks
+    const event = await this.eventQueryService.findEventBySlug(slug);
+
+    // Ensure we have loaded the group and user relations for permission checks
+    // These are used by the permissions guard
+    if (event && !event.group) {
+      try {
+        // Load group relation separately if needed
+        const eventWithRelations = await this.eventQueryService.showEvent(slug);
+        if (eventWithRelations) {
+          event.group = eventWithRelations.group;
+          event.user = eventWithRelations.user;
+        }
+      } catch (error) {
+        this.logger.error(`Error loading event relations for ${slug}:`, error);
+      }
+    }
+
+    return event;
   }
 
   async getGroup(slug: string) {
@@ -653,6 +674,61 @@ export class AuthService {
     groupId: number,
   ): Promise<GroupMemberEntity[]> {
     return this.groupService.getGroupMembers(groupId);
+  }
+
+  /**
+   * This method finds a specific group member by user ID for a group
+   */
+  async getGroupMemberByUserId(
+    userId: number,
+    groupId: number,
+  ): Promise<GroupMemberEntity | null> {
+    try {
+      // Use the GroupService to find the group member
+      // This will use the correct tenant context
+      const groupMembers = await this.groupService.getGroupMembers(groupId);
+      
+      // Debug all group members to ensure we have data
+      this.logger.debug(
+        `[getGroupMemberByUserId] Found ${groupMembers.length} members in group ${groupId}`,
+        {
+          memberUserIds: groupMembers.map(m => m.user?.id || 'no-user'),
+          memberRoles: groupMembers.map(m => m.groupRole?.name || 'no-role'),
+        }
+      );
+      
+      // Find the specific member for this user
+      const groupMember = groupMembers.find(member => 
+        member.user && member.user.id === userId
+      );
+
+      if (groupMember) {
+        this.logger.debug(
+          `[getGroupMemberByUserId] Found membership for user ${userId} in group ${groupId}`,
+          {
+            roleName: groupMember.groupRole?.name,
+            hasPermissions: !!groupMember.groupRole?.groupPermissions,
+            permissionsCount:
+              groupMember.groupRole?.groupPermissions?.length || 0,
+            permissions: groupMember.groupRole?.groupPermissions?.map(
+              (p) => p.name,
+            ),
+          },
+        );
+      } else {
+        this.logger.debug(
+          `[getGroupMemberByUserId] No membership found for user ${userId} in group ${groupId}`,
+        );
+      }
+
+      return groupMember || null;
+    } catch (error) {
+      this.logger.error(
+        `Error getting group member for user ${userId} in group ${groupId}:`,
+        error,
+      );
+      return null;
+    }
   }
 
   async getGroupMemberPermissions(

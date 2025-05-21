@@ -68,25 +68,77 @@ export class PermissionsGuard implements CanActivate {
       case 'event': {
         const eventSlug = (request.headers['x-event-slug'] ||
           request.params.slug) as string;
+
+        // Get the event first to check if it's associated with a group
+        const event = await this.authService.getEvent(eventSlug);
+        if (!event) {
+          throw new ForbiddenException('Event not found');
+        }
+
+        // Check if the user is an attendee with necessary permissions
         const eventAttendee = await this.authService.getEventAttendeeBySlug(
           user.id,
           eventSlug,
         );
-        if (!eventAttendee) {
-          throw new ForbiddenException(
-            'PermissionsGuard: Insufficient permissions',
+
+        // Check attendee permissions if the user is an attendee
+        if (eventAttendee) {
+          const hasAttendeePermissions = this.hasRequiredPermissions(
+            eventAttendee.role?.permissions || [],
+            permissions,
           );
+
+          if (hasAttendeePermissions) {
+            // User has required permissions as an attendee
+            return;
+          }
         }
 
-        const hasPermissions = this.hasRequiredPermissions(
-          eventAttendee.role?.permissions || [],
-          permissions,
-        );
-        if (!hasPermissions) {
-          throw new ForbiddenException(
-            'PermissionsGuard: Insufficient permissions',
-          );
+        // If the event is associated with a group, check group permissions
+        if (event.group && event.group.id) {
+          // Log event group information for debugging
+          console.log(`Event ${event.slug} has group: ${event.group.slug || event.group.id}`);
+          
+          // If the user has group permission, they can manage the event
+          try {
+            // Find this specific user's membership in the event's group
+            const groupMember = await this.authService.getGroupMemberByUserId(
+              user.id,
+              event.group.id,
+            );
+
+            if (
+              groupMember &&
+              groupMember.groupRole &&
+              groupMember.groupRole.groupPermissions
+            ) {
+              // Check if user has the group-level permission for managing events
+              const hasManageEventsPermission = this.hasRequiredPermissions(
+                groupMember.groupRole.groupPermissions,
+                ['MANAGE_EVENTS'], // Group permission to manage events
+              );
+
+              if (hasManageEventsPermission) {
+                // User has group-level permission to manage the event
+                return;
+              }
+            }
+          } catch (error) {
+            // Log the error but continue with other permission checks
+            console.error('Error checking group permissions:', error);
+          }
         }
+
+        // If we reach here, the user doesn't have permissions through attendance or group roles
+        // Check if user is the event owner as a last resort
+        if (event.user && event.user.id === user.id) {
+          return; // Event owner has all permissions
+        }
+
+        // No permissions through any avenue
+        throw new ForbiddenException(
+          'PermissionsGuard: Insufficient permissions',
+        );
         break;
       }
 
@@ -132,11 +184,20 @@ export class PermissionsGuard implements CanActivate {
     requiredPermissions: string[],
   ): boolean {
     if (!userPermissions || !Array.isArray(userPermissions)) {
+      console.log('No user permissions provided or not an array');
       return false;
     }
 
-    return requiredPermissions.every((required) =>
+    // Log what permissions we're checking
+    console.log(
+      `Checking permissions: Required=${JSON.stringify(requiredPermissions)}, User has=${JSON.stringify(userPermissions.map((p) => p.name))}`,
+    );
+
+    const result = requiredPermissions.every((required) =>
       userPermissions.some((p) => p.name === required),
     );
+
+    console.log(`Permission check result: ${result ? 'GRANTED' : 'DENIED'}`);
+    return result;
   }
 }
