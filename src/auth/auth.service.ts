@@ -687,19 +687,19 @@ export class AuthService {
       // Use the GroupService to find the group member
       // This will use the correct tenant context
       const groupMembers = await this.groupService.getGroupMembers(groupId);
-      
+
       // Debug all group members to ensure we have data
       this.logger.debug(
         `[getGroupMemberByUserId] Found ${groupMembers.length} members in group ${groupId}`,
         {
-          memberUserIds: groupMembers.map(m => m.user?.id || 'no-user'),
-          memberRoles: groupMembers.map(m => m.groupRole?.name || 'no-role'),
-        }
+          memberUserIds: groupMembers.map((m) => m.user?.id || 'no-user'),
+          memberRoles: groupMembers.map((m) => m.groupRole?.name || 'no-role'),
+        },
       );
-      
+
       // Find the specific member for this user
-      const groupMember = groupMembers.find(member => 
-        member.user && member.user.id === userId
+      const groupMember = groupMembers.find(
+        (member) => member.user && member.user.id === userId,
       );
 
       if (groupMember) {

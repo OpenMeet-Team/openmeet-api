@@ -2,14 +2,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PermissionsGuard } from './permissions.guard';
 import { Reflector } from '@nestjs/core';
 import { AuthService } from '../../auth/auth.service';
-import { ExecutionContext } from '@nestjs/common';
-import { UserPermission, GroupPermission } from '../../core/constants/constant';
-import { ForbiddenException } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 
 describe('PermissionsGuard - Group Event Permissions', () => {
   let guard: PermissionsGuard;
   let reflector: Reflector;
-  let authService: AuthService;
 
   // Mock data for tests
   const userId = 1;
@@ -47,25 +44,26 @@ describe('PermissionsGuard - Group Event Permissions', () => {
   const createMockContext = (
     user = { id: userId },
     params = { slug: eventSlug },
-  ): ExecutionContext => ({
-    getHandler: jest.fn(),
-    switchToHttp: () => ({
-      getRequest: () => ({
-        user,
-        params,
-        headers: {
-          'x-event-slug': params['slug'],
-          'x-group-slug': params['groupSlug'],
-        },
+  ): ExecutionContext =>
+    ({
+      getHandler: jest.fn(),
+      switchToHttp: () => ({
+        getRequest: () => ({
+          user,
+          params,
+          headers: {
+            'x-event-slug': params['slug'],
+            'x-group-slug': params['groupSlug'],
+          },
+        }),
       }),
-    }),
-    getClass: jest.fn(),
-    getArgs: jest.fn(),
-    getArgByIndex: jest.fn(),
-    switchToRpc: jest.fn(),
-    switchToWs: jest.fn(),
-    getType: jest.fn(),
-  }) as unknown as ExecutionContext;
+      getClass: jest.fn(),
+      getArgs: jest.fn(),
+      getArgByIndex: jest.fn(),
+      switchToRpc: jest.fn(),
+      switchToWs: jest.fn(),
+      getType: jest.fn(),
+    }) as unknown as ExecutionContext;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -95,9 +93,9 @@ describe('PermissionsGuard - Group Event Permissions', () => {
   describe('Event permission checks for group-associated events', () => {
     beforeEach(() => {
       // Default behavior - require VIEW_EVENTS permission for event context
-      jest.spyOn(reflector, 'get').mockReturnValue([
-        { context: 'event', permissions: ['VIEW_EVENTS'] },
-      ]);
+      jest
+        .spyOn(reflector, 'get')
+        .mockReturnValue([{ context: 'event', permissions: ['VIEW_EVENTS'] }]);
 
       // Default - event has a group
       mockAuthService.getEvent.mockResolvedValue(mockEvent);

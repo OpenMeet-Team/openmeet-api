@@ -16,7 +16,6 @@ import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 import { CategoryModule } from '../category/category.module';
 import { AuthBlueskyModule } from '../auth-bluesky/auth-bluesky.module';
 import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
-import { REQUEST } from '@nestjs/core';
 
 @Module({
   imports: [
@@ -34,12 +33,7 @@ import { REQUEST } from '@nestjs/core';
     forwardRef(() => ShadowAccountModule),
   ],
   controllers: [AuthController],
-  providers: [
-    AuthService, 
-    JwtStrategy, 
-    JwtRefreshStrategy, 
-    AnonymousStrategy
-  ],
+  providers: [AuthService, JwtStrategy, JwtRefreshStrategy, AnonymousStrategy],
   exports: [AuthService],
 })
 export class AuthModule {}

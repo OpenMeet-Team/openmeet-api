@@ -1,13 +1,8 @@
 import request from 'supertest';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import {
-  TESTING_APP_URL,
-  TESTING_TENANT_ID,
-} from '../utils/constants';
-import {
-  getAuthToken,
   createGroup,
   createEvent,
-  loginAsTester,
   loginAsAdmin,
   updateEvent,
   createTestUser,
@@ -34,7 +29,7 @@ describe('Group Event Permissions (e2e)', () => {
   let groupMemberToken: string;
   let group: any;
   let groupEvent: any;
-  
+
   // Store user info for cleanup
   let groupAdminUser: any;
   let groupMemberUser: any;
@@ -45,40 +40,40 @@ describe('Group Event Permissions (e2e)', () => {
     try {
       // Get admin token first as we'll need it for operations
       adminToken = await loginAsAdmin();
-      
+
       // Create three test users with unique timestamps to avoid collisions
       const timestamp = Date.now();
-      
+
       // 1. Group admin user
       groupAdminUser = await createTestUser(
-        app, 
+        app,
         TESTING_TENANT_ID,
         `group.admin.${timestamp}@example.com`,
         'Group',
-        'Admin'
+        'Admin',
       );
       groupAdminToken = groupAdminUser.token;
-      
+
       // 2. Group member user
       groupMemberUser = await createTestUser(
-        app, 
+        app,
         TESTING_TENANT_ID,
         `group.member.${timestamp}@example.com`,
         'Group',
-        'Member'
+        'Member',
       );
       groupMemberToken = groupMemberUser.token;
-      
+
       // 3. Regular user (not in group)
       regularUser = await createTestUser(
-        app, 
+        app,
         TESTING_TENANT_ID,
         `regular.user.${timestamp}@example.com`,
         'Regular',
-        'User'
+        'User',
       );
       regularUserToken = regularUser.token;
-      
+
       // Create a test group as admin
       group = await createGroup(app, adminToken, {
         name: 'Test Group For Event Permissions',
@@ -86,34 +81,45 @@ describe('Group Event Permissions (e2e)', () => {
         status: GroupStatus.Published,
         visibility: GroupVisibility.Public,
       });
-      
+
       // Have users join the group
       await joinGroup(app, TESTING_TENANT_ID, group.slug, groupAdminToken);
       await joinGroup(app, TESTING_TENANT_ID, group.slug, groupMemberToken);
-      
+
       // Get all group members
-      const members = await getGroupMembers(app, TESTING_TENANT_ID, group.slug, adminToken);
-      
-      // Get admin user details 
-      const adminDetails = await getCurrentUser(app, TESTING_TENANT_ID, groupAdminToken);
-      
+      const members = await getGroupMembers(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        adminToken,
+      );
+
+      // Get admin user details
+      const adminDetails = await getCurrentUser(
+        app,
+        TESTING_TENANT_ID,
+        groupAdminToken,
+      );
+
       // Find the admin user's member ID using their slug
-      const adminMember = members.find(m => m.user && m.user.slug === adminDetails.slug);
-      
+      const adminMember = members.find(
+        (m) => m.user && m.user.slug === adminDetails.slug,
+      );
+
       if (adminMember) {
         // Update the admin user's role to Admin
         await updateGroupMemberRole(
-          app, 
-          TESTING_TENANT_ID, 
-          group.slug, 
-          adminMember.id, 
-          'admin', 
-          adminToken
+          app,
+          TESTING_TENANT_ID,
+          group.slug,
+          adminMember.id,
+          'admin',
+          adminToken,
         );
       } else {
         console.error('Could not find admin user in group members');
       }
-        
+
       // Create an event in the group as the admin
       groupEvent = await createEvent(app, adminToken, {
         name: 'Group Event For Permission Testing',
@@ -134,7 +140,7 @@ describe('Group Event Permissions (e2e)', () => {
       throw error;
     }
   });
-  
+
   // Clean up created resources
   afterAll(async () => {
     try {
@@ -143,13 +149,13 @@ describe('Group Event Permissions (e2e)', () => {
         .delete(`/api/events/${groupEvent.slug}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
-        
+
       // Delete the group
       await request(app)
         .delete(`/api/groups/${group.slug}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
-        
+
       // Delete test users (if there's an endpoint for this)
       // This step might require admin privileges or might not be possible
       // through the API depending on the implementation
@@ -170,17 +176,20 @@ describe('Group Event Permissions (e2e)', () => {
 
       // Attempt to update the event as the group admin
       const updatedEvent = await updateEvent(
-        app, 
-        groupAdminToken, 
-        groupEvent.slug, 
+        app,
+        groupAdminToken,
+        groupEvent.slug,
         {
           name: 'Updated Group Event Name',
-          description: 'This event was updated by a group admin who did not create it',
-        }
+          description:
+            'This event was updated by a group admin who did not create it',
+        },
       );
 
       expect(updatedEvent.name).toBe('Updated Group Event Name');
-      expect(updatedEvent.description).toBe('This event was updated by a group admin who did not create it');
+      expect(updatedEvent.description).toBe(
+        'This event was updated by a group admin who did not create it',
+      );
     });
 
     it('should not allow a regular group member to edit an event they did not create', async () => {
@@ -237,18 +246,15 @@ describe('Group Event Permissions (e2e)', () => {
       expect(editResponse.status).toBe(200);
 
       // Update the event as the original creator
-      const updatedEvent = await updateEvent(
-        app, 
-        adminToken, 
-        groupEvent.slug, 
-        {
-          name: 'Original Creator Update',
-          description: 'This event was updated by the original creator',
-        }
-      );
+      const updatedEvent = await updateEvent(app, adminToken, groupEvent.slug, {
+        name: 'Original Creator Update',
+        description: 'This event was updated by the original creator',
+      });
 
       expect(updatedEvent.name).toBe('Original Creator Update');
-      expect(updatedEvent.description).toBe('This event was updated by the original creator');
+      expect(updatedEvent.description).toBe(
+        'This event was updated by the original creator',
+      );
     });
   });
 
@@ -271,7 +277,7 @@ describe('Group Event Permissions (e2e)', () => {
         categories: [], // Empty array to satisfy validation
       });
     });
-    
+
     afterAll(async () => {
       // Clean up the non-group event
       await request(app)

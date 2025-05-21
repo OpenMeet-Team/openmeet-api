@@ -97,8 +97,10 @@ export class PermissionsGuard implements CanActivate {
         // If the event is associated with a group, check group permissions
         if (event.group && event.group.id) {
           // Log event group information for debugging
-          console.log(`Event ${event.slug} has group: ${event.group.slug || event.group.id}`);
-          
+          console.log(
+            `Event ${event.slug} has group: ${event.group.slug || event.group.id}`,
+          );
+
           // If the user has group permission, they can manage the event
           try {
             // Find this specific user's membership in the event's group
