@@ -22,6 +22,7 @@ import {
 } from '@nestjs/swagger';
 import { EventSeriesService } from '../services/event-series.service';
 import { EventSeriesOccurrenceService } from '../services/event-series-occurrence.service';
+import { RecurrencePatternService } from '../services/recurrence-pattern.service';
 import { CreateEventSeriesDto } from '../dto/create-event-series.dto';
 import { UpdateEventSeriesDto } from '../dto/update-event-series.dto';
 import { EventSeriesResponseDto } from '../dto/event-series-response.dto';
@@ -29,6 +30,7 @@ import { CreateSeriesFromEventDto } from '../dto/create-series-from-event.dto';
 import { EventResponseDto } from '../../event/dto/event-response.dto';
 import { JWTAuthGuard } from '../../auth/auth.guard';
 import { TenantGuard } from '../../tenant/tenant.guard';
+import { OccurrencePreviewDto } from '../dto/occurrence-preview.dto';
 
 @ApiTags('event-series')
 @Controller('event-series')
@@ -52,6 +54,7 @@ export class EventSeriesController {
   constructor(
     private readonly eventSeriesService: EventSeriesService,
     private readonly eventSeriesOccurrenceService: EventSeriesOccurrenceService,
+    private readonly recurrencePatternService: RecurrencePatternService,
   ) {
     // Ensure services are properly injected
     if (!eventSeriesService) {
@@ -59,6 +62,9 @@ export class EventSeriesController {
     }
     if (!eventSeriesOccurrenceService) {
       this.logger.error('EventSeriesOccurrenceService not injected properly');
+    }
+    if (!recurrencePatternService) {
+      this.logger.error('RecurrencePatternService not injected properly');
     }
   }
 
@@ -785,4 +791,139 @@ export class EventSeriesController {
       throw error;
     }
   }
+
+  @Post('preview-occurrences')
+  @ApiOperation({
+    summary: 'Preview occurrences for a recurrence pattern',
+    description: `
+      Generates occurrence dates based on a provided recurrence pattern, start date, and timezone.
+      This endpoint directly uses RecurrencePatternService to calculate occurrences and handles
+      all recurrence patterns including complex ones like "3rd Monday of each month".
+    `,
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Returns calculated occurrence dates',
+    type: [Object],
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: 'Invalid recurrence rule or other parameters',
+  })
+  previewOccurrences(
+    @Body() previewDto: OccurrencePreviewDto,
+    @Request() req,
+  ): Array<{ date: string; materialized: boolean }> {
+    // Extract values with fallbacks
+    const startDate = previewDto.startDate;
+    const timeZone = previewDto.timeZone;
+    const count = previewDto.count || 5;
+
+    // Get recurrenceRule from DTO - the class-transformer should have properly deserialized it
+    const recurrenceRule = previewDto.recurrenceRule;
+
+    // Log detailed info about the input parameters for debugging
+    this.logger.log('Preview occurrences request details:', {
+      startDate,
+      timeZone,
+      recurrenceRule: JSON.stringify(recurrenceRule),
+      count,
+      userId: req.user?.id,
+      userAgent: req.headers?.['user-agent'],
+    });
+
+    try {
+      // Enhanced debug logging for all recurrence patterns
+      if (recurrenceRule.frequency === 'WEEKLY') {
+        this.logger.log('[WEEKLY_PATTERN] Processing weekly pattern:', {
+          byweekday: recurrenceRule.byweekday,
+          interval: recurrenceRule.interval,
+          pattern: `Every ${recurrenceRule.interval || 1} week(s) on ${recurrenceRule.byweekday?.join(', ') || 'undefined'}`,
+          timezone: timeZone,
+          originalStartDate: startDate,
+        });
+      } else if (
+        recurrenceRule.frequency === 'MONTHLY' &&
+        recurrenceRule.byweekday &&
+        recurrenceRule.bysetpos
+      ) {
+        this.logger.log(
+          '[MONTHLY_PATTERN] Processing monthly by day of week pattern:',
+          {
+            byweekday: recurrenceRule.byweekday,
+            bysetpos: recurrenceRule.bysetpos,
+            pattern: `${recurrenceRule.bysetpos[0]}${recurrenceRule.byweekday[0]} of each month`,
+            timezone: timeZone,
+          },
+        );
+      } else if (
+        recurrenceRule.frequency === 'MONTHLY' &&
+        recurrenceRule.bymonthday
+      ) {
+        this.logger.log(
+          '[MONTHLY_PATTERN] Processing monthly by monthday pattern:',
+          {
+            bymonthday: recurrenceRule.bymonthday,
+            pattern: `Day ${recurrenceRule.bymonthday} of each month`,
+            timezone: timeZone,
+          },
+        );
+      } else if (recurrenceRule.frequency === 'DAILY') {
+        this.logger.log('[DAILY_PATTERN] Processing daily pattern:', {
+          interval: recurrenceRule.interval,
+          pattern: `Every ${recurrenceRule.interval || 1} day(s)`,
+          timezone: timeZone,
+        });
+      }
+
+      // Parse the start date correctly and log its value
+      const startDateObj = new Date(startDate);
+      this.logger.log('[DATE_PARSING] Start date parsing:', {
+        inputString: startDate,
+        parsedDate: startDateObj.toISOString(),
+        targetTimeZone: timeZone,
+      });
+
+      // Use RecurrencePatternService to generate occurrences with our properly deserialized recurrenceRule
+      this.logger.log(
+        '[GENERATING] Calling recurrencePatternService.generateOccurrences',
+      );
+      const occurrences = this.recurrencePatternService.generateOccurrences(
+        startDateObj,
+        recurrenceRule,
+        {
+          timeZone: timeZone,
+          count: count,
+        },
+      );
+
+      // Log the results for debugging
+      this.logger.log('[RESULTS] Generated occurrences:', {
+        count: occurrences.length,
+        firstFew: occurrences.slice(0, 3),
+      });
+
+      // Map to expected format for the frontend
+      const result = occurrences.map((dateStr) => {
+        return {
+          date: dateStr,
+          materialized: false,
+        };
+      });
+
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `[ERROR] Error previewing occurrences: ${error.message}`,
+        {
+          stack: error.stack,
+          input: JSON.stringify(previewDto),
+        },
+      );
+      throw error;
+    }
+  }
+
+  // The calculate-occurrences endpoint has been removed.
+  // All clients should use preview-occurrences instead.
 }

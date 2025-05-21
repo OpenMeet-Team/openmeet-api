@@ -4,6 +4,7 @@ import { EventSeriesService } from './services/event-series.service';
 import { EventSeriesOccurrenceService } from './services/event-series-occurrence.service';
 import { Logger } from '@nestjs/common';
 import { OccurrenceResult } from './interfaces/occurrence-result.interface';
+import { RecurrencePatternService } from './services/recurrence-pattern.service';
 
 describe('EventSeriesController with EventSeriesOccurrenceService', () => {
   let controller: EventSeriesController;
@@ -39,6 +40,8 @@ describe('EventSeriesController with EventSeriesOccurrenceService', () => {
       getOrCreateOccurrence: jest.fn(),
     };
 
+    const recurrencePatternServiceMock = {};
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [EventSeriesController],
       providers: [
@@ -49,6 +52,10 @@ describe('EventSeriesController with EventSeriesOccurrenceService', () => {
         {
           provide: EventSeriesOccurrenceService,
           useValue: eventSeriesOccurrenceServiceMock,
+        },
+        {
+          provide: RecurrencePatternService,
+          useValue: recurrencePatternServiceMock,
         },
         {
           provide: Logger,

@@ -2,12 +2,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { EventSeriesController } from './event-series.controller';
 import { EventSeriesService } from '../services/event-series.service';
 import { EventSeriesOccurrenceService } from '../services/event-series-occurrence.service';
+import { RecurrencePatternService } from '../services/recurrence-pattern.service';
 import { Logger } from '@nestjs/common';
 import { OccurrenceResult } from '../interfaces/occurrence-result.interface';
+import { RecurrenceFrequency } from '../interfaces/recurrence.interface';
 
 describe('EventSeriesController', () => {
   let controller: EventSeriesController;
   let eventSeriesOccurrenceService: EventSeriesOccurrenceService;
+  let recurrencePatternService: RecurrencePatternService;
 
   // Mock data
   const mockOccurrenceResult: OccurrenceResult[] = [
@@ -26,6 +29,14 @@ describe('EventSeriesController', () => {
     },
   ];
 
+  const mockOccurrenceDates = [
+    '2025-06-15T09:00:00.000Z',
+    '2025-07-15T09:00:00.000Z',
+    '2025-08-15T09:00:00.000Z',
+    '2025-09-15T09:00:00.000Z',
+    '2025-10-15T09:00:00.000Z',
+  ];
+
   // Mock services
   const mockEventSeriesService = {
     findBySlug: jest.fn(),
@@ -37,6 +48,10 @@ describe('EventSeriesController', () => {
     materializeNextOccurrence: jest.fn(),
     updateFutureOccurrences: jest.fn(),
     getOrCreateOccurrence: jest.fn(),
+  };
+
+  const mockRecurrencePatternService = {
+    generateOccurrences: jest.fn().mockReturnValue(mockOccurrenceDates),
   };
 
   beforeEach(async () => {
@@ -54,6 +69,10 @@ describe('EventSeriesController', () => {
           useValue: mockEventSeriesOccurrenceService,
         },
         {
+          provide: RecurrencePatternService,
+          useValue: mockRecurrencePatternService,
+        },
+        {
           provide: Logger,
           useValue: {
             log: jest.fn(),
@@ -68,6 +87,9 @@ describe('EventSeriesController', () => {
     controller = module.get<EventSeriesController>(EventSeriesController);
     eventSeriesOccurrenceService = module.get<EventSeriesOccurrenceService>(
       EventSeriesOccurrenceService,
+    );
+    recurrencePatternService = module.get<RecurrencePatternService>(
+      RecurrencePatternService,
     );
   });
 
@@ -164,6 +186,83 @@ describe('EventSeriesController', () => {
       await expect(
         controller.getUpcomingOccurrences(slug, count, includePast, mockReq),
       ).rejects.toThrow(errorMessage);
+    });
+  });
+
+  describe('previewOccurrences', () => {
+    it('should generate occurrences using RecurrencePatternService for monthly by day of week pattern', async () => {
+      // Arrange
+      const previewDto = {
+        startDate: '2025-06-15T09:00:00.000Z',
+        timeZone: 'America/New_York',
+        recurrenceRule: {
+          frequency: RecurrenceFrequency.MONTHLY,
+          byweekday: ['MO'],
+          bysetpos: [3], // 3rd Monday
+          interval: 1,
+        },
+        count: 5,
+      };
+
+      const mockReq = {
+        user: { id: 1 },
+        tenantId: 'test-tenant',
+      };
+
+      // Act
+      const result = await controller.previewOccurrences(previewDto, mockReq);
+
+      // Assert
+      expect(recurrencePatternService.generateOccurrences).toHaveBeenCalledWith(
+        expect.any(Date), // startDate converted to Date object
+        previewDto.recurrenceRule,
+        {
+          timeZone: previewDto.timeZone,
+          count: previewDto.count,
+        },
+      );
+
+      expect(result).toEqual(
+        mockOccurrenceDates.map((date) => ({
+          date,
+          materialized: false,
+        })),
+      );
+    });
+
+    it('should handle errors when generating occurrences', async () => {
+      // Arrange
+      const previewDto = {
+        startDate: '2025-06-15T09:00:00.000Z',
+        timeZone: 'America/New_York',
+        recurrenceRule: {
+          frequency: RecurrenceFrequency.MONTHLY,
+          byweekday: ['MO'],
+          bysetpos: [3], // 3rd Monday
+          interval: 1,
+        },
+        count: 5,
+      };
+
+      const mockReq = {
+        user: { id: 1 },
+        tenantId: 'test-tenant',
+      };
+
+      const errorMessage = 'Failed to generate occurrences';
+      mockRecurrencePatternService.generateOccurrences.mockImplementationOnce(
+        () => {
+          throw new Error(errorMessage);
+        },
+      );
+
+      // Act & Assert
+      try {
+        await controller.previewOccurrences(previewDto, mockReq);
+        fail('Should have thrown an error');
+      } catch (error) {
+        expect(error.message).toBe(errorMessage);
+      }
     });
   });
 });

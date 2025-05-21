@@ -29,7 +29,7 @@ describe('RecurrencePatternService', () => {
         interval: 1,
       };
       const occurrences = service.generateOccurrences(startDate, rule);
-      expect(occurrences).toHaveLength(100);
+      expect(occurrences).toHaveLength(10); // Default limit is now 10 instead of 100
       expect(occurrences[0]).toBe('2023-01-01T10:00:00.000Z');
       expect(occurrences[1]).toBe('2023-01-02T10:00:00.000Z');
     });
@@ -42,7 +42,7 @@ describe('RecurrencePatternService', () => {
         byweekday: ['MO', 'WE', 'FR'],
       };
       const occurrences = service.generateOccurrences(startDate, rule);
-      expect(occurrences).toHaveLength(100);
+      expect(occurrences).toHaveLength(10); // Default limit is now 10 instead of 100
       expect(occurrences[0]).toBe('2023-01-02T10:00:00.000Z');
       expect(occurrences[1]).toBe('2023-01-04T10:00:00.000Z');
       expect(occurrences[2]).toBe('2023-01-06T10:00:00.000Z');
@@ -56,7 +56,7 @@ describe('RecurrencePatternService', () => {
         bymonthday: [1, 15],
       };
       const occurrences = service.generateOccurrences(startDate, rule);
-      expect(occurrences).toHaveLength(100);
+      expect(occurrences).toHaveLength(10); // Default limit is now 10 instead of 100
       expect(occurrences[0]).toBe('2023-01-01T10:00:00.000Z');
       expect(occurrences[1]).toBe('2023-01-15T10:00:00.000Z');
       expect(occurrences[2]).toBe('2023-02-01T10:00:00.000Z');
@@ -71,7 +71,7 @@ describe('RecurrencePatternService', () => {
       const occurrences = service.generateOccurrences(startDate, rule, {
         timeZone: 'America/New_York',
       });
-      expect(occurrences).toHaveLength(100);
+      expect(occurrences).toHaveLength(10); // Default limit is now 10 instead of 100
 
       // Check that all occurrences are 24 hours apart
       for (let i = 1; i < 5; i++) {
@@ -235,7 +235,7 @@ describe('RecurrencePatternService', () => {
       const occurrences = service.generateOccurrences(startDate, rule, {
         excludeDates,
       });
-      expect(occurrences).toHaveLength(98);
+      expect(occurrences).toHaveLength(8); // Default limit is 10, but 2 are excluded
       expect(occurrences[0]).toBe('2023-01-01T10:00:00.000Z');
       expect(occurrences[1]).toBe('2023-01-04T10:00:00.000Z');
     });
