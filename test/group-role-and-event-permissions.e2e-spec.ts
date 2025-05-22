@@ -781,19 +781,49 @@ describe('Group Role Management and Event Permissions (e2e)', () => {
     });
 
     it('should allow owner to change admin roles', async () => {
+      const testTimestamp = Date.now() + Math.floor(Math.random() * 10000);
+
+      // Create a new admin user specifically for this test
+      const testAdminUser = await createTestUser(
+        app,
+        TESTING_TENANT_ID,
+        `openmeet-test-admin-change-${testTimestamp}@openmeet.net`,
+        'TestAdmin',
+        'ForChange',
+      );
+
+      // Add them to the group
+      await addUserToGroup(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        testAdminUser.token,
+      );
+
+      // Get their member record
       const members = await getGroupMembers(
         app,
         TESTING_TENANT_ID,
         group.slug,
         ownerToken,
       );
-      const adminMember = members.find((m) => m.groupRole?.name === 'admin');
+      const newMember = members.find(
+        (m) => m.user?.slug === testAdminUser.slug,
+      );
 
-      expect(adminMember).toBeDefined();
+      expect(newMember).toBeDefined();
+
+      // Owner makes them an admin first
+      await request(app)
+        .patch(`/api/groups/${group.slug}/members/${newMember.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID)
+        .send({ name: 'admin' })
+        .expect(200);
 
       // Owner changes admin to moderator
       const response = await request(app)
-        .patch(`/api/groups/${group.slug}/members/${adminMember.id}`)
+        .patch(`/api/groups/${group.slug}/members/${newMember.id}`)
         .set('Authorization', `Bearer ${ownerToken}`)
         .set('x-tenant-id', TESTING_TENANT_ID)
         .send({ name: 'moderator' });
@@ -820,6 +850,71 @@ describe('Group Role Management and Event Permissions (e2e)', () => {
       const response = await request(app)
         .patch(`/api/groups/${group.slug}/members/${memberToPromote.id}`)
         .set('Authorization', `Bearer ${ownerToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID)
+        .send({ name: 'admin' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.groupRole?.name).toBe('admin');
+    });
+
+    it('should allow admin to promote moderator to admin (same level promotion)', async () => {
+      const testTimestamp = Date.now() + Math.floor(Math.random() * 10000);
+
+      // Create a new user specifically for this test
+      const testModeratorUser = await createTestUser(
+        app,
+        TESTING_TENANT_ID,
+        `openmeet-test-mod-promote-${testTimestamp}@openmeet.net`,
+        'TestMod',
+        'ForPromotion',
+      );
+
+      // Add them to the group
+      await addUserToGroup(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        testModeratorUser.token,
+      );
+
+      // Get their member record
+      const members = await getGroupMembers(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        ownerToken,
+      );
+      const newMember = members.find(
+        (m) => m.user?.slug === testModeratorUser.slug,
+      );
+
+      expect(newMember).toBeDefined();
+
+      // Owner makes them a moderator first
+      await request(app)
+        .patch(`/api/groups/${group.slug}/members/${newMember.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID)
+        .send({ name: 'moderator' })
+        .expect(200);
+
+      // Verify the admin user still has admin role (not changed by previous tests)
+      const currentMembers = await getGroupMembers(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        ownerToken,
+      );
+      const adminUserMember = currentMembers.find(
+        (m) => m.user?.slug === groupAdminUser.slug,
+      );
+      expect(adminUserMember).toBeDefined();
+      expect(adminUserMember.groupRole?.name).toBe('admin');
+
+      // Now admin promotes moderator to admin - this should succeed
+      const response = await request(app)
+        .patch(`/api/groups/${group.slug}/members/${newMember.id}`)
+        .set('Authorization', `Bearer ${groupAdminToken}`)
         .set('x-tenant-id', TESTING_TENANT_ID)
         .send({ name: 'admin' });
 

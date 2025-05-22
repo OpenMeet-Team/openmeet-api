@@ -72,13 +72,10 @@ export class GroupMemberService {
       );
     }
 
-    // Rule 3: Users cannot promote others above their own level (except owners promoting to owner)
-    if (
-      targetNewLevel >= actingUserLevel &&
-      !(actingUserRole === GroupRole.Owner && targetNewRole === GroupRole.Owner)
-    ) {
+    // Rule 3: Users cannot promote others above their own level (but can promote to their own level)
+    if (targetNewLevel > actingUserLevel) {
       throw new ForbiddenException(
-        'Cannot promote users to equal or higher privilege levels',
+        'Cannot promote users above your own privilege level',
       );
     }
 
