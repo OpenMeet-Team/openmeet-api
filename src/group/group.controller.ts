@@ -255,11 +255,13 @@ export class GroupController {
     @Param('slug') slug: string,
     @Param('groupMemberId') groupMemberId: number,
     @Body() updateDto: UpdateGroupMemberRoleDto,
+    @AuthUser() user: User,
   ): Promise<GroupMemberEntity> {
     return this.groupService.updateGroupMemberRole(
       slug,
       groupMemberId,
       updateDto,
+      user.id,
     );
   }
 

@@ -17,11 +17,30 @@ import {
   GroupVisibility,
 } from '../src/core/constants/constant';
 
+// Helper functions for the tests
+async function createAndLoginUser(
+  app: string,
+  tenantId: string,
+  email: string,
+  firstName: string,
+  lastName: string,
+): Promise<any> {
+  return await createTestUser(app, tenantId, email, firstName, lastName);
+}
+
+async function addUserToGroup(
+  app: string,
+  tenantId: string,
+  groupSlug: string,
+  userToken: string,
+): Promise<any> {
+  return await joinGroup(app, tenantId, groupSlug, userToken);
+}
+
 jest.setTimeout(60000);
 
 describe('Group Role Management and Event Permissions (e2e)', () => {
   const app = TESTING_APP_URL;
-  let adminToken: string;
 
   // Test users - each test gets independent users to avoid interference
   let groupOwnerUser: any;
@@ -29,6 +48,11 @@ describe('Group Role Management and Event Permissions (e2e)', () => {
   let groupMemberUser: any;
   let groupGuestUser: any;
   let nonGroupUser: any;
+
+  // Tokens for different roles
+  let ownerToken: string;
+  let adminToken: string;
+  let groupAdminToken: string;
 
   let group: any;
   let groupEventWithMembershipRequired: any;
@@ -48,6 +72,7 @@ describe('Group Role Management and Event Permissions (e2e)', () => {
       'Group',
       'Owner',
     );
+    ownerToken = groupOwnerUser.token;
 
     groupAdminUser = await createTestUser(
       app,
@@ -56,6 +81,7 @@ describe('Group Role Management and Event Permissions (e2e)', () => {
       'Group',
       'Admin',
     );
+    groupAdminToken = groupAdminUser.token;
 
     groupMemberUser = await createTestUser(
       app,
@@ -569,6 +595,333 @@ describe('Group Role Management and Event Permissions (e2e)', () => {
 
       // This should fail but currently the endpoint is @Public() - this is the bug!
       expect(response.status).toBe(403);
+    });
+  });
+
+  describe('Role Hierarchy and Edge Cases', () => {
+    let secondAdminUser: any;
+    let moderatorUser: any;
+    let secondAdminEmail: string;
+    let moderatorEmail: string;
+
+    beforeAll(async () => {
+      // Create unique timestamp for this test suite
+      const hierarchyTimestamp = Date.now() + Math.floor(Math.random() * 1000);
+
+      // Create a second admin user to test admin-to-admin interactions
+      secondAdminEmail = `openmeet-test-second-admin-${hierarchyTimestamp}@openmeet.net`;
+      secondAdminUser = await createAndLoginUser(
+        app,
+        TESTING_TENANT_ID,
+        secondAdminEmail,
+        'SecondAdmin',
+        'User',
+      );
+      // Create a moderator user
+      moderatorEmail = `openmeet-test-moderator-${hierarchyTimestamp}@openmeet.net`;
+      moderatorUser = await createAndLoginUser(
+        app,
+        TESTING_TENANT_ID,
+        moderatorEmail,
+        'Moderator',
+        'User',
+      );
+
+      // Add them to the group and set their roles
+      await addUserToGroup(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        secondAdminUser.token,
+      );
+      await addUserToGroup(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        moderatorUser.token,
+      );
+
+      // Get their group member IDs and set roles
+      const members = await getGroupMembers(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        ownerToken,
+      );
+
+      // Since the group members API doesn't return email, let's use slug to match
+      const secondAdminMember = members.find(
+        (m) => m.user?.slug === secondAdminUser.slug,
+      );
+      const moderatorMember = members.find(
+        (m) => m.user?.slug === moderatorUser.slug,
+      );
+
+      if (!secondAdminMember) {
+        console.error(
+          'Could not find second admin member with slug:',
+          secondAdminUser.slug,
+        );
+        console.error(
+          'Available members:',
+          members.map((m) => ({
+            id: m.id,
+            slug: m.user?.slug,
+            role: m.groupRole?.name,
+          })),
+        );
+        throw new Error('Second admin member not found');
+      }
+
+      if (!moderatorMember) {
+        console.error(
+          'Could not find moderator member with slug:',
+          moderatorUser.slug,
+        );
+        console.error(
+          'Available members:',
+          members.map((m) => ({
+            id: m.id,
+            slug: m.user?.slug,
+            role: m.groupRole?.name,
+          })),
+        );
+        throw new Error('Moderator member not found');
+      }
+
+      // Owner sets second admin role
+      await request(app)
+        .patch(`/api/groups/${group.slug}/members/${secondAdminMember.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID)
+        .send({ name: 'admin' })
+        .expect(200);
+
+      // Owner sets moderator role
+      await request(app)
+        .patch(`/api/groups/${group.slug}/members/${moderatorMember.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID)
+        .send({ name: 'moderator' })
+        .expect(200);
+    });
+
+    it('should allow admin to change another admin to member (regression test)', async () => {
+      const members = await getGroupMembers(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        groupAdminToken,
+      );
+      const secondAdminMember = members.find(
+        (m) => m.user?.slug === secondAdminUser.slug,
+      );
+
+      expect(secondAdminMember).toBeDefined();
+      expect(secondAdminMember.groupRole?.name).toBe('admin');
+
+      // First admin changes second admin to member
+      const response = await request(app)
+        .patch(`/api/groups/${group.slug}/members/${secondAdminMember.id}`)
+        .set('Authorization', `Bearer ${groupAdminToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID)
+        .send({ name: 'member' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.groupRole?.name).toBe('member');
+    });
+
+    it('should NOT allow admin to change owner role (hierarchy protection)', async () => {
+      const members = await getGroupMembers(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        groupAdminToken,
+      );
+      const ownerMember = members.find((m) => m.groupRole?.name === 'owner');
+
+      expect(ownerMember).toBeDefined();
+
+      // Admin tries to change owner to member - this should fail
+      const response = await request(app)
+        .patch(`/api/groups/${group.slug}/members/${ownerMember.id}`)
+        .set('Authorization', `Bearer ${groupAdminToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID)
+        .send({ name: 'member' });
+
+      // This should fail with 403 Forbidden (hierarchy protection)
+      // TODO: Currently this probably succeeds - we need to implement hierarchy validation
+      expect(response.status).toBe(403);
+    });
+
+    it('should NOT allow admin to promote someone to owner (hierarchy protection)', async () => {
+      const members = await getGroupMembers(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        groupAdminToken,
+      );
+      const memberToPromote = members.find(
+        (m) =>
+          m.groupRole?.name === 'member' &&
+          m.user?.slug !== secondAdminUser.slug,
+      );
+
+      expect(memberToPromote).toBeDefined();
+
+      // Admin tries to promote member to owner - this should fail
+      const response = await request(app)
+        .patch(`/api/groups/${group.slug}/members/${memberToPromote.id}`)
+        .set('Authorization', `Bearer ${groupAdminToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID)
+        .send({ name: 'owner' });
+
+      // This should fail with 403 Forbidden (only owner can create other owners)
+      expect(response.status).toBe(403);
+    });
+
+    it('should allow owner to change admin roles', async () => {
+      const members = await getGroupMembers(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        ownerToken,
+      );
+      const adminMember = members.find((m) => m.groupRole?.name === 'admin');
+
+      expect(adminMember).toBeDefined();
+
+      // Owner changes admin to moderator
+      const response = await request(app)
+        .patch(`/api/groups/${group.slug}/members/${adminMember.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID)
+        .send({ name: 'moderator' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.groupRole?.name).toBe('moderator');
+    });
+
+    it('should allow owner to promote member to admin', async () => {
+      // First restore a member to test promotion
+      const members = await getGroupMembers(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        ownerToken,
+      );
+      const memberToPromote = members.find(
+        (m) => m.user?.slug === secondAdminUser.slug,
+      );
+
+      expect(memberToPromote).toBeDefined();
+
+      // Owner promotes member to admin
+      const response = await request(app)
+        .patch(`/api/groups/${group.slug}/members/${memberToPromote.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID)
+        .send({ name: 'admin' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.groupRole?.name).toBe('admin');
+    });
+
+    it('should NOT allow moderator to change admin roles', async () => {
+      const members = await getGroupMembers(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        ownerToken,
+      );
+      const adminMember = members.find((m) => m.groupRole?.name === 'admin');
+
+      expect(adminMember).toBeDefined();
+
+      // Moderator tries to change admin role - this should fail
+      const response = await request(app)
+        .patch(`/api/groups/${group.slug}/members/${adminMember.id}`)
+        .set('Authorization', `Bearer ${moderatorUser.token}`)
+        .set('x-tenant-id', TESTING_TENANT_ID)
+        .send({ name: 'member' });
+
+      // Should fail - moderators can't manage admin roles
+      expect(response.status).toBe(403);
+    });
+
+    it('should allow moderator to manage member and guest roles only', async () => {
+      const members = await getGroupMembers(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        ownerToken,
+      );
+      const guestMember = members.find((m) => m.groupRole?.name === 'guest');
+
+      expect(guestMember).toBeDefined();
+
+      // Moderator changes guest to member - this should succeed
+      const response = await request(app)
+        .patch(`/api/groups/${group.slug}/members/${guestMember.id}`)
+        .set('Authorization', `Bearer ${moderatorUser.token}`)
+        .set('x-tenant-id', TESTING_TENANT_ID)
+        .send({ name: 'member' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.groupRole?.name).toBe('member');
+    });
+
+    it('should NOT allow member to change to admin role (no self-promotion)', async () => {
+      const members = await getGroupMembers(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        ownerToken,
+      );
+      const memberDetails = await getCurrentUser(
+        app,
+        TESTING_TENANT_ID,
+        groupMemberUser.token,
+      );
+      const memberRecord = members.find(
+        (m) => m.user?.slug === memberDetails.slug,
+      );
+
+      expect(memberRecord).toBeDefined();
+
+      // Member tries to promote themselves to admin
+      const response = await request(app)
+        .patch(`/api/groups/${group.slug}/members/${memberRecord.id}`)
+        .set('Authorization', `Bearer ${groupMemberUser.token}`)
+        .set('x-tenant-id', TESTING_TENANT_ID)
+        .send({ name: 'admin' });
+
+      // Should fail - members can't change roles
+      expect(response.status).toBe(403);
+    });
+
+    it('should validate role names and reject invalid roles', async () => {
+      const members = await getGroupMembers(
+        app,
+        TESTING_TENANT_ID,
+        group.slug,
+        ownerToken,
+      );
+      const memberToUpdate = members.find(
+        (m) => m.groupRole?.name === 'member',
+      );
+
+      expect(memberToUpdate).toBeDefined();
+
+      // Owner tries to set invalid role
+      const response = await request(app)
+        .patch(`/api/groups/${group.slug}/members/${memberToUpdate.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID)
+        .send({ name: 'super-admin' });
+
+      // Should fail with 422 (validation error - invalid enum value)
+      expect(response.status).toBe(422);
     });
   });
 });

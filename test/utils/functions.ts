@@ -268,6 +268,7 @@ async function createTestUser(
     token: response.body.token,
     slug: response.body.user.slug,
     user: response.body.user,
+    email: response.body.user.email || email, // fallback to the email we used to register
   };
 }
 

@@ -791,12 +791,14 @@ export class GroupService {
     slug: string,
     groupMemberId: number,
     updateDto: UpdateGroupMemberRoleDto,
+    actingUserId: number,
   ) {
     await this.getTenantSpecificGroupRepository();
 
     await this.groupMemberService.updateGroupMemberRole(
       groupMemberId,
       updateDto,
+      actingUserId,
     );
 
     const showGroupMember =

@@ -42,9 +42,13 @@ describe('GroupMemberService', () => {
   });
 
   it('should update group member role', async () => {
-    const result = await service.updateGroupMemberRole(mockGroupMember.id, {
-      name: GroupRole.Owner,
-    });
+    const result = await service.updateGroupMemberRole(
+      mockGroupMember.id,
+      {
+        name: GroupRole.Owner,
+      },
+      mockUser.id, // actingUserId
+    );
 
     expect(result).toEqual(mockGroupMember);
   });

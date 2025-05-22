@@ -1,4 +1,10 @@
-import { Inject, Injectable, NotFoundException, Scope } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  NotFoundException,
+  Scope,
+  ForbiddenException,
+} from '@nestjs/common';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { GroupMemberEntity } from './infrastructure/persistence/relational/entities/group-member.entity';
 import { Not, Repository } from 'typeorm';
@@ -14,6 +20,16 @@ import { UserEntity } from 'src/user/infrastructure/persistence/relational/entit
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupMemberService {
   private groupMemberRepository: Repository<GroupMemberEntity>;
+
+  // Role hierarchy: higher numbers = higher privilege
+  private readonly roleHierarchy = {
+    [GroupRole.Guest]: 1,
+    [GroupRole.Member]: 2,
+    [GroupRole.Moderator]: 3,
+    [GroupRole.Admin]: 4,
+    [GroupRole.Owner]: 5,
+  };
+
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
@@ -25,6 +41,66 @@ export class GroupMemberService {
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
     this.groupMemberRepository = dataSource.getRepository(GroupMemberEntity);
+  }
+
+  /**
+   * Validates if a role change is allowed based on role hierarchy rules
+   */
+  private validateRoleChange(
+    actingUserRole: GroupRole,
+    targetCurrentRole: GroupRole,
+    targetNewRole: GroupRole,
+  ): void {
+    const actingUserLevel = this.roleHierarchy[actingUserRole];
+    const targetCurrentLevel = this.roleHierarchy[targetCurrentRole];
+    const targetNewLevel = this.roleHierarchy[targetNewRole];
+
+    // Rule 1: Only Owner can promote to Owner role
+    if (
+      targetNewRole === GroupRole.Owner &&
+      actingUserRole !== GroupRole.Owner
+    ) {
+      throw new ForbiddenException(
+        'Only group owners can promote users to owner role',
+      );
+    }
+
+    // Rule 2: Users cannot modify roles of higher privilege (but can modify equal roles)
+    if (targetCurrentLevel > actingUserLevel) {
+      throw new ForbiddenException(
+        'Cannot modify roles of users with higher privileges',
+      );
+    }
+
+    // Rule 3: Users cannot promote others above their own level (except owners promoting to owner)
+    if (
+      targetNewLevel >= actingUserLevel &&
+      !(actingUserRole === GroupRole.Owner && targetNewRole === GroupRole.Owner)
+    ) {
+      throw new ForbiddenException(
+        'Cannot promote users to equal or higher privilege levels',
+      );
+    }
+
+    // Rule 4: Moderators can only manage Member and Guest roles
+    if (actingUserRole === GroupRole.Moderator) {
+      if (
+        targetCurrentRole === GroupRole.Admin ||
+        targetCurrentRole === GroupRole.Owner
+      ) {
+        throw new ForbiddenException(
+          'Moderators cannot modify admin or owner roles',
+        );
+      }
+      if (
+        targetNewRole === GroupRole.Admin ||
+        targetNewRole === GroupRole.Owner
+      ) {
+        throw new ForbiddenException(
+          'Moderators cannot promote users to admin or owner roles',
+        );
+      }
+    }
   }
 
   async createGroupOwner(createDto: CreateGroupMemberDto) {
@@ -100,20 +176,48 @@ export class GroupMemberService {
   async updateGroupMemberRole(
     groupMemberId: number,
     updateDto: UpdateGroupMemberRoleDto,
+    actingUserId: number,
   ): Promise<any> {
     await this.getTenantSpecificEventRepository();
     const { name } = updateDto;
-    const groupMember = await this.groupMemberRepository.findOneOrFail({
+
+    // Get the target group member with their current role and group info
+    const targetGroupMember = await this.groupMemberRepository.findOneOrFail({
       where: { id: groupMemberId },
+      relations: ['groupRole', 'group', 'user'],
     });
 
-    const groupRole = await this.groupRoleService.findOne(name);
-    if (!groupRole) {
+    // Get the new role
+    const newGroupRole = await this.groupRoleService.findOne(name);
+    if (!newGroupRole) {
       throw new NotFoundException(`Group role with name ${name} not found`);
     }
-    groupMember.groupRole = groupRole;
 
-    await this.groupMemberRepository.save(groupMember);
+    // Find the current user's role in this group
+    const actingUserGroupMember = await this.groupMemberRepository.findOne({
+      where: {
+        user: { id: actingUserId },
+        group: { id: targetGroupMember.group.id },
+      },
+      relations: ['groupRole'],
+    });
+
+    if (!actingUserGroupMember || !actingUserGroupMember.groupRole) {
+      throw new ForbiddenException(
+        'You are not a member of this group or your role could not be determined',
+      );
+    }
+
+    // Validate the role change based on hierarchy rules
+    this.validateRoleChange(
+      actingUserGroupMember.groupRole.name as GroupRole,
+      targetGroupMember.groupRole.name as GroupRole,
+      name as GroupRole,
+    );
+
+    // If validation passes, proceed with the role change
+    targetGroupMember.groupRole = newGroupRole;
+    await this.groupMemberRepository.save(targetGroupMember);
 
     return await this.groupMemberRepository.findOne({
       where: { id: groupMemberId },
