@@ -230,8 +230,11 @@ export class GroupController {
     return this.groupService.leaveGroup(slug, user.id);
   }
 
-  @Public()
-  @UseGuards(JWTAuthGuard, VisibilityGuard)
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.ManageMembers],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Delete(':slug/members/:groupMemberId')
   @ApiOperation({ summary: 'Remove a group member' })
   async removeGroupMember(
@@ -243,7 +246,7 @@ export class GroupController {
 
   @Permissions({
     context: 'group',
-    permissions: [GroupPermission.ManageGroup, GroupPermission.ManageMembers],
+    permissions: [GroupPermission.ManageMembers],
   })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Patch(':slug/members/:groupMemberId')

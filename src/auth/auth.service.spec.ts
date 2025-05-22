@@ -13,6 +13,7 @@ import { mockEventAttendeeService, mockEventQueryService } from '../test/mocks';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
+import { GroupMemberService } from '../group-member/group-member.service';
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -58,6 +59,11 @@ describe('AuthService', () => {
     tenantId: 'test-tenant',
   };
 
+  const mockGroupMemberService = {
+    findGroupMemberByUserSlugAndGroupSlug: jest.fn(),
+    getTenantSpecificRepository: jest.fn().mockResolvedValue(undefined),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -67,6 +73,7 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: GroupService, useValue: mockGroupService },
+        { provide: GroupMemberService, useValue: mockGroupMemberService },
         { provide: MailService, useValue: mockMailService },
         { provide: RoleService, useValue: mockRoleService },
         { provide: EventQueryService, useValue: mockEventQueryService },

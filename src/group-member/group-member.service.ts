@@ -70,6 +70,33 @@ export class GroupMemberService {
     });
   }
 
+  async findGroupMemberByUserSlugAndGroupSlug(
+    groupSlug: string,
+    userSlug: string,
+  ): Promise<GroupMemberEntity | null> {
+    await this.getTenantSpecificEventRepository();
+    return await this.groupMemberRepository.findOne({
+      where: { group: { slug: groupSlug }, user: { slug: userSlug } },
+      relations: ['groupRole', 'groupRole.groupPermissions', 'user'],
+      select: {
+        id: true,
+        user: {
+          slug: true,
+          firstName: true,
+          lastName: true,
+          name: true,
+          photo: {
+            path: true,
+          },
+        },
+        groupRole: {
+          name: true,
+          groupPermissions: true,
+        },
+      },
+    });
+  }
+
   async updateGroupMemberRole(
     groupMemberId: number,
     updateDto: UpdateGroupMemberRoleDto,

@@ -14,9 +14,13 @@ describe('PermissionsGuard', () => {
     getUserPermissions: jest.fn(),
     getEventAttendeeBySlug: jest.fn(),
     getGroupMembersBySlug: jest.fn(),
+    getGroupMemberByUserSlugAndGroupSlug: jest.fn(),
   };
 
-  const createMockContext = (user = { id: 1 }, params = {}): ExecutionContext =>
+  const createMockContext = (
+    user: any = { id: 1 },
+    params = {},
+  ): ExecutionContext =>
     ({
       getHandler: jest.fn(),
       switchToHttp: () => ({
@@ -190,7 +194,7 @@ describe('PermissionsGuard', () => {
       ];
       (reflector.get as jest.Mock).mockReturnValue(requirements);
       const mockContext = createMockContext(
-        { id: 1 },
+        { id: 1, slug: 'user-slug' },
         {
           groupSlug: 'group-slug',
         },
@@ -200,13 +204,11 @@ describe('PermissionsGuard', () => {
         { name: UserPermission.CreateEvents },
       ]);
 
-      mockAuthService.getGroupMembersBySlug.mockResolvedValue([
-        {
-          groupRole: {
-            groupPermissions: [{ name: GroupPermission.ManageEvents }],
-          },
+      mockAuthService.getGroupMemberByUserSlugAndGroupSlug.mockResolvedValue({
+        groupRole: {
+          groupPermissions: [{ name: GroupPermission.ManageEvents }],
         },
-      ]);
+      });
 
       await expect(guard.canActivate(mockContext)).resolves.toBe(true);
     });

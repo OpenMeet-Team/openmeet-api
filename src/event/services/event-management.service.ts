@@ -43,6 +43,8 @@ import { UserEntity } from '../../user/infrastructure/persistence/relational/ent
 import { RecurrenceFrequency } from '../../event-series/interfaces/recurrence.interface';
 import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
+import { GroupMemberService } from '../../group-member/group-member.service';
+import { GroupRole } from '../../core/constants/constant';
 import { assert } from 'console';
 import { EventQueryService } from '../services/event-query.service';
 import { BLUESKY_COLLECTIONS } from '../../bluesky/BlueskyTypes';
@@ -77,6 +79,7 @@ export class EventManagementService {
     private readonly eventSeriesService: EventSeriesService,
     @Inject(forwardRef(() => EventQueryService))
     private readonly eventQueryService: EventQueryService,
+    @Inject(forwardRef(() => GroupMemberService))
     private readonly groupMemberService: GroupMemberService,
   ) {
     void this.initializeRepository();
@@ -1417,6 +1420,24 @@ export class EventManagementService {
     });
     if (!event) {
       throw new NotFoundException(`Event with slug ${slug} not found`);
+    }
+
+    // Check if event requires group membership and validate user membership
+    if (event.requireGroupMembership && event.group) {
+      const groupMember = await this.groupMemberService.findGroupMemberByUserId(
+        event.group.id,
+        userId,
+      );
+      if (!groupMember) {
+        throw new BadRequestException(
+          'You must be a member of this group to attend this event',
+        );
+      }
+      if (groupMember.groupRole?.name === GroupRole.Guest) {
+        throw new BadRequestException(
+          'Guests are not allowed to attend this event. Please contact a group admin to change your role.',
+        );
+      }
     }
 
     const user = await this.userService.getUserById(userId);

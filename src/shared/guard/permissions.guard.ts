@@ -146,17 +146,19 @@ export class PermissionsGuard implements CanActivate {
 
       case 'group': {
         const groupSlug = (request.headers['x-group-slug'] ||
-          request.params.groupSlug) as string;
-        const groupMembers = await this.authService.getGroupMembersBySlug(
-          user.id,
-          groupSlug,
-        );
-        if (!groupMembers?.[0]) {
+          request.params.groupSlug ||
+          request.params.slug) as string;
+        const groupMember =
+          await this.authService.getGroupMemberByUserSlugAndGroupSlug(
+            user.slug,
+            groupSlug,
+          );
+        if (!groupMember) {
           throw new ForbiddenException('Insufficient permissions');
         }
 
         const hasPermissions = this.hasRequiredPermissions(
-          groupMembers[0].groupRole.groupPermissions,
+          groupMember.groupRole.groupPermissions,
           permissions,
         );
         if (!hasPermissions) {
