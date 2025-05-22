@@ -81,7 +81,7 @@ describe('Group Role Management and Event Permissions (e2e)', () => {
   describe('Role Management Issues', () => {
     it('should allow changing guest to member role', async () => {
       const timestamp = Date.now();
-      
+
       // Create a test user for this test
       const testUser = await createTestUser(
         app,
@@ -119,7 +119,7 @@ describe('Group Role Management and Event Permissions (e2e)', () => {
 
     it('should allow changing admin to member role', async () => {
       const timestamp = Date.now();
-      
+
       // Create a test user for this test
       const testUser = await createTestUser(
         app,
@@ -165,7 +165,7 @@ describe('Group Role Management and Event Permissions (e2e)', () => {
   describe('Event Group Membership Requirements', () => {
     it('should allow group members to attend events requiring group membership', async () => {
       const timestamp = Date.now();
-      
+
       // Create a test user and make them a member
       const memberUser = await createTestUser(
         app,
@@ -177,7 +177,7 @@ describe('Group Role Management and Event Permissions (e2e)', () => {
 
       // Join the group and change to member role
       await joinGroup(app, TESTING_TENANT_ID, group.slug, memberUser.token);
-      
+
       const members = await getGroupMembers(
         app,
         TESTING_TENANT_ID,
@@ -185,7 +185,9 @@ describe('Group Role Management and Event Permissions (e2e)', () => {
         adminToken,
       );
 
-      const memberRecord = members.find((m) => m.user?.slug === memberUser.slug);
+      const memberRecord = members.find(
+        (m) => m.user?.slug === memberUser.slug,
+      );
       await updateGroupMemberRole(
         app,
         TESTING_TENANT_ID,
@@ -207,7 +209,7 @@ describe('Group Role Management and Event Permissions (e2e)', () => {
 
     it('should NOT allow guests to attend events requiring group membership', async () => {
       const timestamp = Date.now();
-      
+
       // Create a test user and keep them as guest
       const guestUser = await createTestUser(
         app,
@@ -234,7 +236,7 @@ describe('Group Role Management and Event Permissions (e2e)', () => {
 
     it('should NOT allow non-members to attend events requiring group membership', async () => {
       const timestamp = Date.now();
-      
+
       // Create a test user but don't add them to the group
       const nonMemberUser = await createTestUser(
         app,
