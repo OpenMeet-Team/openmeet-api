@@ -22,7 +22,7 @@ import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
   imports: [
     UserModule,
     forwardRef(() => GroupModule),
-    GroupMemberModule,
+    forwardRef(() => GroupMemberModule),
     forwardRef(() => EventModule),
     forwardRef(() => CategoryModule),
     EventAttendeeModule,
