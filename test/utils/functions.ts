@@ -264,9 +264,10 @@ async function createTestUser(
   }
 
   return {
-    id: response.body.id,
+    id: response.body.user.id,
     token: response.body.token,
-    slug: response.body.slug,
+    slug: response.body.user.slug,
+    user: response.body.user,
   };
 }
 

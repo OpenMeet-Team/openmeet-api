@@ -46,6 +46,8 @@ import { GroupEntity } from '../../group/infrastructure/persistence/relational/e
 import { assert } from 'console';
 import { EventQueryService } from '../services/event-query.service';
 import { BLUESKY_COLLECTIONS } from '../../bluesky/BlueskyTypes';
+import { GroupMemberService } from '../../group-member/group-member.service';
+import { GroupRole } from '../../core/constants/constant';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventManagementService {
@@ -75,6 +77,7 @@ export class EventManagementService {
     private readonly eventSeriesService: EventSeriesService,
     @Inject(forwardRef(() => EventQueryService))
     private readonly eventQueryService: EventQueryService,
+    private readonly groupMemberService: GroupMemberService,
   ) {
     void this.initializeRepository();
   }
@@ -1408,12 +1411,51 @@ export class EventManagementService {
       `[attendEvent] Processing attendance for event ${slug} and user ${userId}`,
     );
 
-    const event = await this.eventRepository.findOne({ where: { slug } });
+    const event = await this.eventRepository.findOne({
+      where: { slug },
+      relations: ['group'],
+    });
     if (!event) {
       throw new NotFoundException(`Event with slug ${slug} not found`);
     }
 
     const user = await this.userService.getUserById(userId);
+
+    // Check if event requires group membership and validate user membership
+    if (event.requireGroupMembership && event.group) {
+      this.logger.debug(
+        `[attendEvent] Event requires group membership, checking user ${userId} membership in group ${event.group.id}`,
+      );
+
+      const groupMember = await this.groupMemberService.findGroupMemberByUserId(
+        event.group.id,
+        userId,
+      );
+
+      if (!groupMember) {
+        this.logger.debug(
+          `[attendEvent] User ${userId} is not a member of group ${event.group.id}, denying event attendance`,
+        );
+        throw new BadRequestException(
+          'You must be a member of this group to attend this event',
+        );
+      }
+
+      // Check if user is a guest (which should not be allowed for group-restricted events)
+      if (groupMember.groupRole?.name === GroupRole.Guest) {
+        this.logger.debug(
+          `[attendEvent] User ${userId} is a guest in group ${event.group.id}, denying event attendance`,
+        );
+        throw new BadRequestException(
+          'Guests are not allowed to attend this event. Please contact a group admin to change your role.',
+        );
+      }
+
+      this.logger.debug(
+        `[attendEvent] User ${userId} is a valid member (${groupMember.groupRole?.name}) of group ${event.group.id}`,
+      );
+    }
+
     // First check the cache state for debugging
     this.logger.debug(
       `[attendEvent] Checking for existing attendance record with detailed cache logging`,

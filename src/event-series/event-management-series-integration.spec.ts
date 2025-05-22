@@ -28,6 +28,7 @@ import { EventMailService } from '../event-mail/event-mail.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { BlueskyIdService } from '../bluesky/bluesky-id.service';
 import { RecurrenceFrequency } from '../event-series/interfaces/recurrence.interface';
+import { GroupMemberService } from '../group-member/group-member.service';
 // import { DiscussionService } from '../chat/services/discussion.service'; // Removed unused import
 
 describe('EventManagementService Integration with EventSeriesService', () => {
@@ -271,6 +272,14 @@ describe('EventManagementService Integration with EventSeriesService', () => {
               .fn()
               .mockResolvedValue({ id: 'discussion-123' }),
             // Add other methods used by EventManagementService if needed
+          },
+        },
+        {
+          provide: GroupMemberService,
+          useValue: {
+            findGroupMemberByUserId: jest.fn().mockResolvedValue(null),
+            updateGroupMemberRole: jest.fn().mockResolvedValue({}),
+            createGroupMember: jest.fn().mockResolvedValue({}),
           },
         },
       ],
