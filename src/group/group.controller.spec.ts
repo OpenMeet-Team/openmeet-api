@@ -3,6 +3,7 @@ import { GroupController } from './group.controller';
 import { GroupService } from './group.service';
 import { Reflector } from '@nestjs/core';
 import { AuthService } from '../auth/auth.service';
+import { User } from '../user/domain/user';
 import {
   mockGroup,
   mockGroupMembers,
@@ -184,6 +185,7 @@ describe('GroupController', () => {
         {
           name: 'admin',
         } as UpdateGroupMemberRoleDto,
+        mockUser as User,
       );
       expect(result).toEqual(mockGroupMember);
     });

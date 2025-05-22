@@ -429,6 +429,7 @@ describe('GroupService', () => {
         mockGroup.slug,
         mockGroupMember.id,
         { name: 'admin' } as UpdateGroupMemberRoleDto,
+        1, // actingUserId
       );
       expect(result).toEqual(mockGroupMember);
     });
@@ -530,6 +531,7 @@ describe('GroupService', () => {
         mockGroup.slug,
         mockGroupMember.id,
         { name: 'admin' } as UpdateGroupMemberRoleDto,
+        1, // actingUserId
       );
       expect(result).toEqual(mockGroupMember);
     });

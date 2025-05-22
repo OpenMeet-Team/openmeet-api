@@ -30,6 +30,7 @@ import { SessionService } from '../session/session.service';
 import { StatusEnum } from '../status/status.enum';
 import { User } from '../user/domain/user';
 import { GroupService } from '../group/group.service';
+import { GroupMemberService } from '../group-member/group-member.service';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { RoleService } from '../role/role.service';
 import { RoleEnum } from '../role/role.enum';
@@ -45,6 +46,7 @@ export class AuthService {
     private jwtService: JwtService,
     private userService: UserService,
     private groupService: GroupService,
+    private groupMemberService: GroupMemberService,
     private sessionService: SessionService,
     private eventQueryService: EventQueryService,
     private eventAttendeeService: EventAttendeeService,
@@ -114,6 +116,7 @@ export class AuthService {
     const { token, refreshToken, tokenExpires } = await this.getTokensData({
       id: user.id,
       role: user.role,
+      slug: user.slug,
       sessionId: session.id,
       hash,
     });
@@ -173,6 +176,7 @@ export class AuthService {
     const { token, refreshToken, tokenExpires } = await this.getTokensData({
       id: user.id,
       role: user.role,
+      slug: user.slug,
       sessionId: session.id,
       hash,
     });
@@ -226,6 +230,7 @@ export class AuthService {
     const { token, refreshToken, tokenExpires } = await this.getTokensData({
       id: user.id,
       role: user.role,
+      slug: user.slug,
       sessionId: session.id,
       hash,
     });
@@ -548,6 +553,7 @@ export class AuthService {
       role: {
         id: user.role.id,
       },
+      slug: user.slug,
       sessionId: session.id,
       hash,
     });
@@ -570,6 +576,7 @@ export class AuthService {
   private async getTokensData(data: {
     id: User['id'];
     role: User['role'];
+    slug: User['slug'];
     sessionId: Session['id'];
     hash: Session['hash'];
   }) {
@@ -589,6 +596,7 @@ export class AuthService {
         {
           id: data.id,
           role: data.role,
+          slug: data.slug,
           sessionId: data.sessionId,
         },
         {
@@ -763,6 +771,16 @@ export class AuthService {
     if (!group) return null;
 
     return this.groupService.getGroupMembers(group.id);
+  }
+
+  async getGroupMemberByUserSlugAndGroupSlug(
+    userSlug: string,
+    groupSlug: string,
+  ) {
+    return this.groupMemberService.findGroupMemberByUserSlugAndGroupSlug(
+      groupSlug,
+      userSlug,
+    );
   }
 
   async loginWithBluesky(handle: string) {

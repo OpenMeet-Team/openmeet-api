@@ -280,6 +280,7 @@ describe('EventManagementService Integration with EventSeriesService', () => {
             findGroupMemberByUserId: jest.fn().mockResolvedValue(null),
             updateGroupMemberRole: jest.fn().mockResolvedValue({}),
             createGroupMember: jest.fn().mockResolvedValue({}),
+            getTenantSpecificRepository: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],

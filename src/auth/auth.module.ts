@@ -10,6 +10,7 @@ import { MailModule } from '../mail/mail.module';
 import { SessionModule } from '../session/session.module';
 import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
+import { GroupMemberModule } from '../group-member/group-member.module';
 import { RoleModule } from '../role/role.module';
 import { EventModule } from '../event/event.module';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
@@ -21,6 +22,7 @@ import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
   imports: [
     UserModule,
     forwardRef(() => GroupModule),
+    forwardRef(() => GroupMemberModule),
     forwardRef(() => EventModule),
     forwardRef(() => CategoryModule),
     EventAttendeeModule,
