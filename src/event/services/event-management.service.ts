@@ -48,8 +48,6 @@ import { GroupRole } from '../../core/constants/constant';
 import { assert } from 'console';
 import { EventQueryService } from '../services/event-query.service';
 import { BLUESKY_COLLECTIONS } from '../../bluesky/BlueskyTypes';
-import { GroupMemberService } from '../../group-member/group-member.service';
-import { GroupRole } from '../../core/constants/constant';
 
 @Injectable({ scope: Scope.REQUEST })
 export class EventManagementService {
