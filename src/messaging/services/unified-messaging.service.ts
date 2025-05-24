@@ -1,6 +1,7 @@
 import {
   Injectable,
   Inject,
+  Optional,
   ForbiddenException,
   BadRequestException,
   forwardRef,
@@ -38,8 +39,8 @@ import {
 @Injectable()
 export class UnifiedMessagingService {
   constructor(
-    @Inject(REQUEST) private readonly request: any,
-    private readonly tenantService: TenantConnectionService,
+    @Optional() @Inject(REQUEST) private readonly request: any,
+    @Optional() private readonly tenantService: TenantConnectionService,
     private readonly draftService: MessageDraftService,
     @Inject(EMAIL_SENDER_TOKEN) private readonly emailSender: IEmailSender,
     private readonly auditService: MessageAuditService,
@@ -57,12 +58,18 @@ export class UnifiedMessagingService {
     private readonly userService: UserService,
   ) {}
 
-  private async getLogRepository(tenantId?: string): Promise<Repository<MessageLogEntity>> {
+  private async getLogRepository(
+    tenantId?: string,
+  ): Promise<Repository<MessageLogEntity>> {
     const effectiveTenantId = tenantId || this.request?.tenantId;
     if (!effectiveTenantId) {
       throw new Error('tenantId is required for getLogRepository');
     }
-    const dataSource = await this.tenantService.getTenantConnection(effectiveTenantId);
+    if (!this.tenantService) {
+      throw new Error('TenantConnectionService not available in this context');
+    }
+    const dataSource =
+      await this.tenantService.getTenantConnection(effectiveTenantId);
     return dataSource.getRepository(MessageLogEntity);
   }
 
@@ -75,7 +82,10 @@ export class UnifiedMessagingService {
     recipientCount: number;
     requiresReview: boolean;
   }> {
-    const tenantId = this.request.tenantId;
+    const tenantId = this.request?.tenantId;
+    if (!tenantId) {
+      throw new Error('tenantId is required for sendGroupMessage');
+    }
 
     // Get group and validate permissions
     const group = await this.groupService.findGroupBySlug(groupSlug);
@@ -104,7 +114,7 @@ export class UnifiedMessagingService {
     );
     if (!rateLimit.allowed) {
       await this.auditService.logAction(
-        this.request.tenantId,
+        this.request?.tenantId,
         senderMember.user.id,
         'rate_limit_exceeded',
         {
@@ -160,7 +170,10 @@ export class UnifiedMessagingService {
     recipientCount: number;
     requiresReview: boolean;
   }> {
-    const tenantId = this.request.tenantId;
+    const tenantId = this.request?.tenantId;
+    if (!tenantId) {
+      throw new Error('tenantId is required for sendEventMessage');
+    }
 
     // Get event and validate permissions
     const event = await this.eventService.findEventBySlug(eventSlug);
@@ -197,7 +210,7 @@ export class UnifiedMessagingService {
     );
     if (!rateLimit.allowed) {
       await this.auditService.logAction(
-        this.request.tenantId,
+        this.request?.tenantId,
         senderUser.id,
         'rate_limit_exceeded',
         {
@@ -253,7 +266,7 @@ export class UnifiedMessagingService {
       // This keeps the message in its current status (DRAFT or APPROVED)
       // so it can be retried later
       await this.auditService.logAction(
-        this.request.tenantId,
+        this.request?.tenantId,
         0,
         'message_send_skipped',
         {
@@ -267,7 +280,10 @@ export class UnifiedMessagingService {
       return;
     }
 
-    const tenantId = this.request.tenantId;
+    const tenantId = this.request?.tenantId;
+    if (!tenantId) {
+      throw new Error('tenantId is required for sendMessage');
+    }
     const repository = await this.getLogRepository(tenantId);
 
     // Get draft (using 0 for userId since this is admin/system access)
@@ -311,7 +327,7 @@ export class UnifiedMessagingService {
             switch (channel) {
               case MessageChannel.EMAIL:
                 if (recipient.email) {
-                  externalId = await this.sendEmailMessage(draft, recipient);
+                  externalId = await this.sendEmailMessage(draft, recipient, tenantId);
                 }
                 break;
               // Future channels: SMS, Bluesky, WhatsApp
@@ -349,7 +365,7 @@ export class UnifiedMessagingService {
 
     // Log audit entry
     await this.auditService.logAction(
-      this.request.tenantId,
+      this.request?.tenantId,
       draft.authorId,
       'message_sent',
       {
@@ -367,6 +383,7 @@ export class UnifiedMessagingService {
   private async sendEmailMessage(
     draft: MessageDraftEntity,
     recipient: MessageRecipient,
+    tenantId: string,
   ): Promise<string> {
     try {
       const context = {
@@ -384,6 +401,7 @@ export class UnifiedMessagingService {
         html: draft.htmlContent,
         templatePath: draft.templateId,
         context,
+        tenantId,
       });
 
       return (
@@ -685,14 +703,17 @@ export class UnifiedMessagingService {
     };
   }): Promise<MessageLogEntity | MessageLogEntity[]> {
     const tenantId = options.tenantId || this.request?.tenantId;
-    
+
     if (!tenantId) {
       throw new Error('tenantId is required for sendSystemMessage');
     }
-    
+
     const repository = await this.getLogRepository(tenantId);
 
     // Get system user ID from config or use default admin (1)
+    if (!this.tenantService) {
+      throw new Error('TenantConnectionService not available in this context');
+    }
     const systemUserId =
       this.tenantService.getTenantConfig(tenantId).systemUserId || 1;
 
@@ -739,7 +760,7 @@ export class UnifiedMessagingService {
     ) {
       // Allow critical auth messages through even when paused
       await this.auditService.logAction(
-        this.request.tenantId,
+        this.request?.tenantId,
         systemUserId,
         'system_message_skipped',
         {
@@ -778,6 +799,7 @@ export class UnifiedMessagingService {
                       recipient,
                       metadata: options.metadata,
                     },
+                    tenantId,
                   });
                   externalId = result as string;
                 }
@@ -831,7 +853,7 @@ export class UnifiedMessagingService {
 
     // Log audit entry
     await this.auditService.logAction(
-      this.request.tenantId,
+      this.request?.tenantId,
       systemUserId,
       'system_message_sent',
       {

@@ -11,6 +11,7 @@ export interface IEmailSender {
     templatePath?: string;
     context?: any;
     from?: { name: string; email: string };
+    tenantId?: string;
   }): Promise<string | void>;
 }
 

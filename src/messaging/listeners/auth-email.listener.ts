@@ -47,17 +47,25 @@ export class AuthEmailListener {
       hash: event.hash,
     };
 
-    await this.messagingService.sendSystemMessage({
-      recipientEmail: event.email,
-      subject: context.title,
-      content: `${context.text1}\n\n${context.url}\n\n${context.text2}\n\n${context.text3}`,
-      htmlContent: undefined,
-      templateId: 'auth/activation.hbs',
-      context,
-      type: MessageType.ADMIN_CONTACT,
-      systemReason: 'user_signup',
-      tenantId: event.tenantId,
-    });
+    try {
+      await this.messagingService.sendSystemMessage({
+        recipientEmail: event.email,
+        subject: context.title,
+        content: `${context.text1}\n\n${context.url}\n\n${context.text2}\n\n${context.text3}`,
+        htmlContent: undefined,
+        templateId: 'auth/activation.hbs',
+        context,
+        type: MessageType.ADMIN_CONTACT,
+        systemReason: 'user_signup',
+        tenantId: event.tenantId,
+      });
+    } catch (error) {
+      console.error(
+        'Failed to send signup email via messaging service:',
+        error,
+      );
+      // Don't throw - let the user signup succeed even if email fails
+    }
   }
 
   @OnEvent('auth.password.reset')
