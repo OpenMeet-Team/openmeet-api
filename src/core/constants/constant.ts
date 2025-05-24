@@ -31,6 +31,9 @@ export enum GroupPermission {
   CreateEvent = 'CREATE_EVENT',
   MessageDiscussion = 'MESSAGE_DISCUSSION',
   MessageMember = 'MESSAGE_MEMBER',
+  SendGroupMessage = 'SEND_GROUP_MESSAGE',
+  SendBulkGroupMessage = 'SEND_BULK_GROUP_MESSAGE',
+  ContactGroupAdmins = 'CONTACT_GROUP_ADMINS',
   SeeMembers = 'SEE_MEMBERS',
   SeeEvents = 'SEE_EVENTS',
   SeeDiscussions = 'SEE_DISCUSSIONS',
@@ -83,6 +86,9 @@ export enum EventAttendeePermission {
   ViewEvent = 'VIEW_EVENT',
   AttendEvent = 'ATTEND_EVENT',
   MessageAttendees = 'MESSAGE_ATTENDEES',
+  SendEventMessage = 'SEND_EVENT_MESSAGE',
+  SendBulkEventMessage = 'SEND_BULK_EVENT_MESSAGE',
+  ContactEventOrganizers = 'CONTACT_EVENT_ORGANIZERS',
   CreateDiscussion = 'CREATE_DISCUSSION',
   ViewDiscussion = 'VIEW_DISCUSSION',
 }
@@ -159,6 +165,7 @@ export interface TenantConfig {
   githubClientId: string; // github client id, ex: 1234567890
   githubClientSecret: string; // github client secret, ex: 0987654321
   blueskyConfig?: BlueskyConfig;
+  messagingRateLimit?: number; // messages per hour per user, default: 1
 }
 
 export enum ExternalEventSourceType {

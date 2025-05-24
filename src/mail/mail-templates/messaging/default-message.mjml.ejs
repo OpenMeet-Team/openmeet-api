@@ -1,0 +1,53 @@
+<mjml>
+  <mj-head>
+    <%- include('../layouts/header') %>
+  </mj-head>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <!-- Logo -->
+        <mj-image 
+          width="150px" 
+          src="<%= tenantConfig.logoUrl || 'https://openmeet.net/logo.png' %>" 
+          alt="<%= tenantConfig.name %>"
+        />
+        
+        <!-- Main Content -->
+        <mj-text font-size="20px" font-weight="bold" color="#333333">
+          Message from <%= authorName %>
+        </mj-text>
+        
+        <% if (groupName) { %>
+        <mj-text font-size="14px" color="#666666">
+          Group: <%= groupName %>
+        </mj-text>
+        <% } %>
+        
+        <% if (eventTitle) { %>
+        <mj-text font-size="14px" color="#666666">
+          Event: <%= eventTitle %>
+        </mj-text>
+        <% } %>
+        
+        <mj-divider border-width="1px" border-color="#e0e0e0" />
+        
+        <!-- Message Content -->
+        <mj-text font-size="16px" line-height="1.6" color="#333333">
+          <%- htmlContent %>
+        </mj-text>
+        
+        <mj-divider border-width="1px" border-color="#e0e0e0" />
+        
+        <!-- Footer -->
+        <mj-text font-size="12px" color="#999999" align="center">
+          This message was sent via <%= tenantConfig.name %> messaging system.
+          <br/>
+          To manage your notification preferences, visit your account settings.
+        </mj-text>
+        
+        <!-- Company Footer -->
+        <%- include('../layouts/footer') %>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

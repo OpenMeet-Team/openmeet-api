@@ -5,6 +5,7 @@ import {
   Injectable,
   ForbiddenException,
   UnauthorizedException,
+  NotFoundException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthService } from '../../auth/auth.service';
@@ -67,12 +68,13 @@ export class PermissionsGuard implements CanActivate {
     switch (context) {
       case 'event': {
         const eventSlug = (request.headers['x-event-slug'] ||
+          request.params.eventSlug ||
           request.params.slug) as string;
 
         // Get the event first to check if it's associated with a group
         const event = await this.authService.getEvent(eventSlug);
         if (!event) {
-          throw new ForbiddenException('Event not found');
+          throw new NotFoundException('Event not found');
         }
 
         // Check if the user is an attendee with necessary permissions
