@@ -73,7 +73,7 @@ describe('MessageAuditService', () => {
       mockRepository.create = jest.fn().mockReturnValue(mockAuditEntry);
       mockRepository.save = jest.fn().mockResolvedValue(mockAuditEntry);
 
-      await service.logAction(1, 'message_sent', {
+      await service.logAction('tenant-1', 1, 'message_sent', {
         groupId: 1,
         messageId: 123,
         additionalData: { recipientCount: 5 },
@@ -92,7 +92,7 @@ describe('MessageAuditService', () => {
     });
 
     it('should handle actions without additional details', async () => {
-      await service.logAction(1, 'draft_created');
+      await service.logAction('tenant-1', 1, 'draft_created');
 
       expect(mockRepository.create).toHaveBeenCalledWith({
         tenantId: 'tenant-1',
@@ -111,7 +111,7 @@ describe('MessageAuditService', () => {
       const queryBuilder = (mockRepository.createQueryBuilder as jest.Mock)();
       (queryBuilder.getCount as jest.Mock).mockResolvedValue(0);
 
-      const result = await service.checkRateLimit(1);
+      const result = await service.checkRateLimit('tenant-1', 1);
 
       expect(result).toEqual({
         allowed: true,
@@ -124,7 +124,7 @@ describe('MessageAuditService', () => {
       const queryBuilder = (mockRepository.createQueryBuilder as jest.Mock)();
       (queryBuilder.getCount as jest.Mock).mockResolvedValue(1);
 
-      const result = await service.checkRateLimit(1);
+      const result = await service.checkRateLimit('tenant-1', 1);
 
       expect(result).toEqual({
         allowed: false,
@@ -135,7 +135,7 @@ describe('MessageAuditService', () => {
 
     it('should filter by groupId when provided', async () => {
       const queryBuilder = (mockRepository.createQueryBuilder as jest.Mock)();
-      await service.checkRateLimit(1, 10);
+      await service.checkRateLimit('tenant-1', 1, 10);
 
       expect(queryBuilder.andWhere).toHaveBeenCalledWith(
         'audit.groupId = :groupId',
@@ -145,7 +145,7 @@ describe('MessageAuditService', () => {
 
     it('should filter by eventId when provided', async () => {
       const queryBuilder = (mockRepository.createQueryBuilder as jest.Mock)();
-      await service.checkRateLimit(1, undefined, 20);
+      await service.checkRateLimit('tenant-1', 1, undefined, 20);
 
       expect(queryBuilder.andWhere).toHaveBeenCalledWith(
         'audit.eventId = :eventId',
@@ -161,7 +161,7 @@ describe('MessageAuditService', () => {
       const queryBuilder = (mockRepository.createQueryBuilder as jest.Mock)();
       (queryBuilder.getCount as jest.Mock).mockResolvedValue(4);
 
-      const result = await service.checkRateLimit(1);
+      const result = await service.checkRateLimit('tenant-1', 1);
 
       expect(result).toEqual({
         allowed: true,
@@ -196,7 +196,7 @@ describe('MessageAuditService', () => {
         2,
       ]);
 
-      const result = await service.getAuditLog({}, 1, 50);
+      const result = await service.getAuditLog('tenant-1', {}, 1, 50);
 
       expect(result).toEqual({
         data: mockAuditEntries,
@@ -209,7 +209,7 @@ describe('MessageAuditService', () => {
 
     it('should filter by userId', async () => {
       const queryBuilder = (mockRepository.createQueryBuilder as jest.Mock)();
-      await service.getAuditLog({ userId: 1 });
+      await service.getAuditLog('tenant-1', { userId: 1 });
 
       expect(queryBuilder.andWhere).toHaveBeenCalledWith(
         'audit.userId = :userId',
@@ -219,7 +219,7 @@ describe('MessageAuditService', () => {
 
     it('should filter by action', async () => {
       const queryBuilder = (mockRepository.createQueryBuilder as jest.Mock)();
-      await service.getAuditLog({ action: 'message_sent' });
+      await service.getAuditLog('tenant-1', { action: 'message_sent' });
 
       expect(queryBuilder.andWhere).toHaveBeenCalledWith(
         'audit.action = :action',
@@ -232,7 +232,7 @@ describe('MessageAuditService', () => {
       const endDate = new Date('2024-01-31');
 
       const queryBuilder = (mockRepository.createQueryBuilder as jest.Mock)();
-      await service.getAuditLog({ startDate, endDate });
+      await service.getAuditLog('tenant-1', { startDate, endDate });
 
       expect(queryBuilder.andWhere).toHaveBeenCalledWith(
         'audit.createdAt >= :startDate',
@@ -246,7 +246,7 @@ describe('MessageAuditService', () => {
 
     it('should handle pagination correctly', async () => {
       const queryBuilder = (mockRepository.createQueryBuilder as jest.Mock)();
-      await service.getAuditLog({}, 3, 20);
+      await service.getAuditLog('tenant-1', {}, 3, 20);
 
       expect(queryBuilder.skip).toHaveBeenCalledWith(40); // (page - 1) * limit
       expect(queryBuilder.take).toHaveBeenCalledWith(20);

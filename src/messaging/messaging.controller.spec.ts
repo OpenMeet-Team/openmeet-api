@@ -33,6 +33,10 @@ describe('MessagingController', () => {
     lastName: 'User',
   } as any;
 
+  const mockRequest = {
+    tenantId: 'test-tenant',
+  } as any;
+
   beforeEach(async () => {
     mockMessagingService = {
       sendGroupMessage: jest.fn(),
@@ -398,9 +402,9 @@ describe('MessagingController', () => {
 
       mockAuditService.getAuditLog.mockResolvedValue(expectedAuditLog);
 
-      const result = await controller.getAuditLog();
+      const result = await controller.getAuditLog(mockRequest);
 
-      expect(mockAuditService.getAuditLog).toHaveBeenCalledWith({}, 1, 50);
+      expect(mockAuditService.getAuditLog).toHaveBeenCalledWith('test-tenant', {}, 1, 50);
       expect(result).toEqual(expectedAuditLog);
     });
 
@@ -421,6 +425,7 @@ describe('MessagingController', () => {
       mockAuditService.getAuditLog.mockResolvedValue(expectedAuditLog);
 
       const result = await controller.getAuditLog(
+        mockRequest,
         'other-user',
         'test-group',
         'test-event',
@@ -440,6 +445,7 @@ describe('MessagingController', () => {
       );
 
       expect(mockAuditService.getAuditLog).toHaveBeenCalledWith(
+        'test-tenant',
         {
           userId: 2,
           groupId: 3,
@@ -467,12 +473,13 @@ describe('MessagingController', () => {
       mockAuditService.getAuditLog.mockResolvedValue(expectedAuditLog);
 
       const result = await controller.getAuditLog(
+        mockRequest,
         'non-existent-user',
         'non-existent-group',
         'non-existent-event',
       );
 
-      expect(mockAuditService.getAuditLog).toHaveBeenCalledWith({}, 1, 50);
+      expect(mockAuditService.getAuditLog).toHaveBeenCalledWith('test-tenant', {}, 1, 50);
       expect(result).toEqual(expectedAuditLog);
     });
   });
@@ -487,9 +494,10 @@ describe('MessagingController', () => {
 
       mockAuditService.checkRateLimit.mockResolvedValue(expectedRateLimit);
 
-      const result = await controller.checkRateLimit(mockUser);
+      const result = await controller.checkRateLimit(mockRequest, mockUser);
 
       expect(mockAuditService.checkRateLimit).toHaveBeenCalledWith(
+        'test-tenant',
         mockUser.id,
         undefined,
         undefined,
@@ -513,6 +521,7 @@ describe('MessagingController', () => {
       mockAuditService.checkRateLimit.mockResolvedValue(expectedRateLimit);
 
       const result = await controller.checkRateLimit(
+        mockRequest,
         mockUser,
         'test-group',
         'test-event',
@@ -525,6 +534,7 @@ describe('MessagingController', () => {
         'test-event',
       );
       expect(mockAuditService.checkRateLimit).toHaveBeenCalledWith(
+        'test-tenant',
         mockUser.id,
         3,
         4,
