@@ -199,7 +199,7 @@ describe('MessageAuditService', () => {
       const result = await service.getAuditLog({}, 1, 50);
 
       expect(result).toEqual({
-        entries: mockAuditEntries,
+        data: mockAuditEntries,
         total: 2,
       });
 

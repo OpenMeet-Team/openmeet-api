@@ -385,12 +385,12 @@ describe('MessagingController', () => {
   describe('getAuditLog', () => {
     it('should get audit log without filters', async () => {
       const expectedAuditLog = {
-        entries: [
+        data: [
           {
             id: 1,
             action: 'message_sent',
             userId: 1,
-            createdAt: new Date(),
+            createdAt: expect.any(Date),
           } as any,
         ],
         total: 1,
@@ -414,7 +414,7 @@ describe('MessagingController', () => {
       mockEventService.findEventBySlug.mockResolvedValue(mockEvent as any);
 
       const expectedAuditLog = {
-        entries: [],
+        data: [],
         total: 0,
       };
 
@@ -460,7 +460,7 @@ describe('MessagingController', () => {
       mockEventService.findEventBySlug.mockResolvedValue(null);
 
       const expectedAuditLog = {
-        entries: [],
+        data: [],
         total: 0,
       };
 

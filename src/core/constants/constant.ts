@@ -166,6 +166,7 @@ export interface TenantConfig {
   githubClientSecret: string; // github client secret, ex: 0987654321
   blueskyConfig?: BlueskyConfig;
   messagingRateLimit?: number; // messages per hour per user, default: 1
+  systemUserId?: number; // user ID for system-generated messages, default: 1
 }
 
 export enum ExternalEventSourceType {

@@ -355,7 +355,8 @@ export class UnifiedMessagingService {
       },
     });
 
-    // Return a mock external ID (in real implementation, this would come from SES)
+    // TODO: Update mail service to return message ID from SES
+    // For now, generate a placeholder ID for tracking
     return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
@@ -502,5 +503,126 @@ export class UnifiedMessagingService {
     // Implementation would fetch users by IDs
     // For now, returning empty array as placeholder
     return [];
+  }
+
+  /**
+   * Send a system message immediately without creating a draft
+   * Used for authentication emails, notifications, etc.
+   *
+   * @param options Message options
+   * @returns Message log entry
+   */
+  async sendSystemMessage(options: {
+    recipientEmail?: string;
+    recipientUserId?: number;
+    subject: string;
+    content: string;
+    htmlContent?: string;
+    templateId?: string;
+    context?: any;
+    type: MessageType;
+    systemReason?: string; // e.g., 'user_signup', 'password_reset', 'role_changed'
+  }): Promise<MessageLogEntity> {
+    const tenantId = this.request.tenantId;
+    const repository = await this.getLogRepository();
+
+    // Get system user ID from config or use default admin (1)
+    const systemUserId =
+      this.tenantService.getTenantConfig(tenantId).systemUserId || 1;
+
+    // Get recipient
+    let recipientUser: any;
+    if (options.recipientUserId) {
+      recipientUser = await this.userService.findOne(options.recipientUserId);
+    } else if (options.recipientEmail) {
+      recipientUser = await this.userService.findByEmail(
+        options.recipientEmail,
+      );
+    }
+
+    if (!recipientUser) {
+      throw new NotFoundException('Recipient user not found');
+    }
+
+    // Check if messaging is paused (but allow system messages through)
+    const pauseStatus = await this.pauseService.isMessagingPaused();
+    if (
+      pauseStatus.paused &&
+      options.systemReason !== 'user_signup' &&
+      options.systemReason !== 'password_reset'
+    ) {
+      // Allow critical auth messages through even when paused
+      await this.auditService.logAction(
+        systemUserId,
+        'system_message_skipped',
+        {
+          additionalData: {
+            recipientUserId: recipientUser.id,
+            type: options.type,
+            systemReason: options.systemReason,
+            reason: 'messaging_paused',
+          },
+        },
+      );
+      throw new BadRequestException('Messaging is currently paused');
+    }
+
+    // Send email immediately (no draft, no rate limiting for system messages)
+    try {
+      await this.mailService.sendCustomMessage({
+        to: recipientUser.email,
+        subject: options.subject,
+        content: options.content,
+        htmlContent: options.htmlContent,
+        templateId: options.templateId,
+        context: options.context,
+      });
+
+      // Log success
+      const log = repository.create({
+        tenantId,
+        messageId: undefined, // No draft for system messages
+        recipientUserId: recipientUser.id,
+        channel: MessageChannel.EMAIL,
+        status: 'sent',
+        externalId: `sys_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        metadata: {
+          type: options.type,
+          systemReason: options.systemReason,
+          isSystemMessage: true,
+        },
+      });
+      await repository.save(log);
+
+      // Log audit entry
+      await this.auditService.logAction(systemUserId, 'system_message_sent', {
+        additionalData: {
+          recipientUserId: recipientUser.id,
+          type: options.type,
+          systemReason: options.systemReason,
+          logId: log.id,
+        },
+      });
+
+      return log;
+    } catch (error) {
+      // Log failure
+      const failedLog = repository.create({
+        tenantId,
+        messageId: undefined,
+        recipientUserId: recipientUser.id,
+        channel: MessageChannel.EMAIL,
+        status: 'failed',
+        error: error.message,
+        metadata: {
+          type: options.type,
+          systemReason: options.systemReason,
+          isSystemMessage: true,
+        },
+      });
+      await repository.save(failedLog);
+
+      throw error;
+    }
   }
 }

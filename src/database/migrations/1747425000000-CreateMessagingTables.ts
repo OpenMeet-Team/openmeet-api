@@ -24,7 +24,7 @@ export class CreateMessagingTables1747425000000 implements MigrationInterface {
     `);
 
     await queryRunner.query(`
-      CREATE TYPE "${schema}"."message_audit_action" AS ENUM ('draft_created', 'message_sent', 'review_requested', 'message_approved', 'message_rejected', 'rate_limit_exceeded', 'message_send_skipped')
+      CREATE TYPE "${schema}"."message_audit_action" AS ENUM ('draft_created', 'message_sent', 'review_requested', 'message_approved', 'message_rejected', 'rate_limit_exceeded', 'message_send_skipped', 'system_message_sent', 'system_message_skipped')
     `);
 
     await queryRunner.query(`
@@ -63,14 +63,15 @@ export class CreateMessagingTables1747425000000 implements MigrationInterface {
       CREATE TABLE IF NOT EXISTS "${schema}"."message_logs" (
         "id" SERIAL PRIMARY KEY,
         "tenantId" VARCHAR(50) NOT NULL,
-        "messageId" INTEGER NOT NULL REFERENCES "${schema}"."message_drafts"(id) ON DELETE CASCADE,
+        "messageId" INTEGER REFERENCES "${schema}"."message_drafts"(id) ON DELETE CASCADE,
         "recipientUserId" INTEGER NOT NULL REFERENCES "${schema}"."users"(id) ON DELETE CASCADE,
         "channel" "${schema}"."message_channel" NOT NULL,
         "status" "${schema}"."message_log_status" NOT NULL,
         "sentAt" TIMESTAMP NOT NULL DEFAULT now(),
         "deliveredAt" TIMESTAMP,
         "error" TEXT,
-        "externalId" VARCHAR(255)
+        "externalId" VARCHAR(255),
+        "metadata" JSONB
       )
     `);
 

@@ -38,6 +38,8 @@ export class MessageAuditEntity {
       'message_rejected',
       'rate_limit_exceeded',
       'message_send_skipped',
+      'system_message_sent',
+      'system_message_skipped',
     ],
   })
   action:
@@ -47,7 +49,9 @@ export class MessageAuditEntity {
     | 'message_approved'
     | 'message_rejected'
     | 'rate_limit_exceeded'
-    | 'message_send_skipped';
+    | 'message_send_skipped'
+    | 'system_message_sent'
+    | 'system_message_skipped';
 
   @Column({ nullable: true })
   groupId?: number;

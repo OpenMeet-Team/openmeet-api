@@ -12,6 +12,7 @@ import { UnifiedMessagingService } from './services/unified-messaging.service';
 import { MessageDraftService } from './services/message-draft.service';
 import { MessageAuditService } from './services/message-audit.service';
 import { MessagePauseService } from './services/message-pause.service';
+import { MailAdapterService } from './services/mail-adapter.service';
 
 // Controllers
 import { MessagingController } from './messaging.controller';
@@ -50,6 +51,7 @@ import { AuthModule } from '../auth/auth.module';
     MessageDraftService,
     MessageAuditService,
     MessagePauseService,
+    MailAdapterService,
   ],
   controllers: [MessagingController],
   exports: [
@@ -57,6 +59,7 @@ import { AuthModule } from '../auth/auth.module';
     MessageDraftService,
     MessageAuditService,
     MessagePauseService,
+    MailAdapterService,
   ],
 })
 export class MessagingModule {}

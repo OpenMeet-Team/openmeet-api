@@ -23,8 +23,8 @@ export class MessageLogEntity {
   @Column({ type: 'varchar', length: 50 })
   tenantId: string;
 
-  @Column()
-  messageId: number;
+  @Column({ nullable: true })
+  messageId?: number;
 
   @Column()
   recipientUserId: number;
@@ -52,6 +52,9 @@ export class MessageLogEntity {
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   externalId?: string; // For tracking with external services (SES message ID, etc.)
+
+  @Column({ type: 'jsonb', nullable: true })
+  metadata?: Record<string, any>; // For storing additional data like system message info
 
   // Relations
   @ManyToOne(() => MessageDraftEntity)
