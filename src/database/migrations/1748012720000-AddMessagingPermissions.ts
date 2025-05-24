@@ -134,7 +134,21 @@ export class AddMessagingPermissions1748012720000
       )
     `);
 
-    // Moderator role gets both permissions
+    // Ensure host role has critical management permissions (in case seeds ran out of order)
+    await queryRunner.query(`
+      INSERT INTO "${schema}"."eventRolePermissions" ("eventRoleId", "eventPermissionId")
+      SELECT er.id, ep.id
+      FROM "${schema}"."eventRoles" er
+      CROSS JOIN "${schema}"."eventPermissions" ep
+      WHERE er.name = 'host' 
+      AND ep.name IN ('MANAGE_EVENT', 'DELETE_EVENT', 'CANCEL_EVENT', 'APPROVE_ATTENDEES', 'MANAGE_ATTENDEES')
+      AND NOT EXISTS (
+        SELECT 1 FROM "${schema}"."eventRolePermissions" erp
+        WHERE erp."eventRoleId" = er.id AND erp."eventPermissionId" = ep.id
+      )
+    `);
+
+    // Moderator role gets both messaging permissions
     await queryRunner.query(`
       INSERT INTO "${schema}"."eventRolePermissions" ("eventRoleId", "eventPermissionId")
       SELECT er.id, ep.id
@@ -142,6 +156,20 @@ export class AddMessagingPermissions1748012720000
       CROSS JOIN "${schema}"."eventPermissions" ep
       WHERE er.name = 'moderator' 
       AND ep.name IN ('SEND_EVENT_MESSAGE', 'SEND_BULK_EVENT_MESSAGE')
+      AND NOT EXISTS (
+        SELECT 1 FROM "${schema}"."eventRolePermissions" erp
+        WHERE erp."eventRoleId" = er.id AND erp."eventPermissionId" = ep.id
+      )
+    `);
+
+    // Ensure moderator role has key attendee management permissions (in case seeds ran out of order)
+    await queryRunner.query(`
+      INSERT INTO "${schema}"."eventRolePermissions" ("eventRoleId", "eventPermissionId")
+      SELECT er.id, ep.id
+      FROM "${schema}"."eventRoles" er
+      CROSS JOIN "${schema}"."eventPermissions" ep
+      WHERE er.name = 'moderator' 
+      AND ep.name IN ('APPROVE_ATTENDEES', 'MANAGE_ATTENDEES', 'MANAGE_DISCUSSIONS')
       AND NOT EXISTS (
         SELECT 1 FROM "${schema}"."eventRolePermissions" erp
         WHERE erp."eventRoleId" = er.id AND erp."eventPermissionId" = ep.id
