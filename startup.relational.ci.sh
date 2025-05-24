@@ -12,6 +12,10 @@ npm run migration:run:tenants
 echo "Running database seeds..."
 npm run seed:run:prod
 
+# apk add postgresql-client
+# PGPASSWORD=secret psql -h postgres -U root  api -c "SELECT * FROM migrations order by timestamp desc;"
+# PGPASSWORD=secret psql -h postgres -U root  api -c "SELECT * FROM users;"
+
 # Wait for Matrix and set up admin user
 echo "Waiting for Matrix server to be ready..."
 /opt/wait-for-it.sh matrix:8448
