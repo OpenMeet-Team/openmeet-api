@@ -17,7 +17,10 @@ import { EventQueryService } from '../../event/services/event-query.service';
 import { UserService } from '../../user/user.service';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../../tenant/tenant.service';
-import { IEmailSender, EMAIL_SENDER_TOKEN } from '../interfaces/email-sender.interface';
+import {
+  IEmailSender,
+  EMAIL_SENDER_TOKEN,
+} from '../interfaces/email-sender.interface';
 import {
   MessageType,
   MessageChannel,
@@ -380,7 +383,10 @@ export class UnifiedMessagingService {
         context,
       });
 
-      return externalId as string || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      return (
+        (externalId as string) ||
+        `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      );
     } catch (error) {
       // Log error but return placeholder ID to continue processing
       console.error('Email sending failed:', error);
@@ -534,40 +540,56 @@ export class UnifiedMessagingService {
   }
 
   private async getTargetRecipients(targetUser: {
-    type: 'group_member' | 'group_admins' | 'event_attendee' | 'event_organizers';
+    type:
+      | 'group_member'
+      | 'group_admins'
+      | 'event_attendee'
+      | 'event_organizers';
     groupMemberId?: number;
     attendeeId?: number;
   }): Promise<MessageRecipient[]> {
     switch (targetUser.type) {
       case 'group_member':
         if (!targetUser.groupMemberId) {
-          throw new BadRequestException('groupMemberId required for group_member target');
+          throw new BadRequestException(
+            'groupMemberId required for group_member target',
+          );
         }
         // Get the specific group member
-        const groupMember = await this.groupMemberService.showGroupDetailsMember(targetUser.groupMemberId);
+        const groupMember =
+          await this.groupMemberService.showGroupDetailsMember(
+            targetUser.groupMemberId,
+          );
         if (!groupMember || !groupMember.user) {
           return [];
         }
-        return [{
-          userId: groupMember.user.id,
-          email: groupMember.user.email || undefined,
-          phoneNumber: undefined,
-          preferredChannels: [MessageChannel.EMAIL],
-        }];
+        return [
+          {
+            userId: groupMember.user.id,
+            email: groupMember.user.email || undefined,
+            phoneNumber: undefined,
+            preferredChannels: [MessageChannel.EMAIL],
+          },
+        ];
 
       case 'group_admins':
         if (!targetUser.groupMemberId) {
-          throw new BadRequestException('groupMemberId required for group_admins target');
+          throw new BadRequestException(
+            'groupMemberId required for group_admins target',
+          );
         }
         // Get group from the member and find all admins
-        const member = await this.groupMemberService.showGroupDetailsMember(targetUser.groupMemberId);
+        const member = await this.groupMemberService.showGroupDetailsMember(
+          targetUser.groupMemberId,
+        );
         if (!member || !member.group) {
           return [];
         }
-        const groupAdmins = await this.groupMemberService.getGroupMembersForMessaging(
-          member.group.id,
-          'admins',
-        );
+        const groupAdmins =
+          await this.groupMemberService.getGroupMembersForMessaging(
+            member.group.id,
+            'admins',
+          );
         return groupAdmins.map((admin) => ({
           userId: admin.user.id,
           email: admin.user.email || undefined,
@@ -577,33 +599,44 @@ export class UnifiedMessagingService {
 
       case 'event_attendee':
         if (!targetUser.attendeeId) {
-          throw new BadRequestException('attendeeId required for event_attendee target');
+          throw new BadRequestException(
+            'attendeeId required for event_attendee target',
+          );
         }
         // Get the specific event attendee
-        const attendee = await this.eventAttendeeService.showEventAttendee(targetUser.attendeeId);
+        const attendee = await this.eventAttendeeService.showEventAttendee(
+          targetUser.attendeeId,
+        );
         if (!attendee || !attendee.user) {
           return [];
         }
-        return [{
-          userId: attendee.user.id,
-          email: attendee.user.email || undefined,
-          phoneNumber: undefined,
-          preferredChannels: [MessageChannel.EMAIL],
-        }];
+        return [
+          {
+            userId: attendee.user.id,
+            email: attendee.user.email || undefined,
+            phoneNumber: undefined,
+            preferredChannels: [MessageChannel.EMAIL],
+          },
+        ];
 
       case 'event_organizers':
         if (!targetUser.attendeeId) {
-          throw new BadRequestException('attendeeId required for event_organizers target');
+          throw new BadRequestException(
+            'attendeeId required for event_organizers target',
+          );
         }
         // Get event from the attendee and find all organizers
-        const eventAttendee = await this.eventAttendeeService.showEventAttendee(targetUser.attendeeId);
+        const eventAttendee = await this.eventAttendeeService.showEventAttendee(
+          targetUser.attendeeId,
+        );
         if (!eventAttendee || !eventAttendee.event) {
           return [];
         }
-        const organizers = await this.eventAttendeeService.getAttendeesForMessaging(
-          eventAttendee.event.id,
-          'admins',
-        );
+        const organizers =
+          await this.eventAttendeeService.getAttendeesForMessaging(
+            eventAttendee.event.id,
+            'admins',
+          );
         return organizers.map((organizer) => ({
           userId: organizer.user.id,
           email: organizer.user.email || undefined,
@@ -612,7 +645,9 @@ export class UnifiedMessagingService {
         }));
 
       default:
-        throw new BadRequestException(`Unknown target user type: ${targetUser.type}`);
+        throw new BadRequestException(
+          `Unknown target user type: ${targetUser.type}`,
+        );
     }
   }
 
@@ -635,13 +670,23 @@ export class UnifiedMessagingService {
     channels?: MessageChannel[];
     systemReason?: string; // e.g., 'user_signup', 'password_reset', 'role_changed'
     metadata?: any;
+    tenantId?: string; // Optional - falls back to request tenantId if available
     targetUser?: {
-      type: 'group_member' | 'group_admins' | 'event_attendee' | 'event_organizers';
+      type:
+        | 'group_member'
+        | 'group_admins'
+        | 'event_attendee'
+        | 'event_organizers';
       groupMemberId?: number;
       attendeeId?: number;
     };
   }): Promise<MessageLogEntity | MessageLogEntity[]> {
-    const tenantId = this.request.tenantId;
+    const tenantId = options.tenantId || this.request?.tenantId;
+    
+    if (!tenantId) {
+      throw new Error('tenantId is required for sendSystemMessage');
+    }
+    
     const repository = await this.getLogRepository();
 
     // Get system user ID from config or use default admin (1)
@@ -668,12 +713,14 @@ export class UnifiedMessagingService {
         throw new NotFoundException('Recipient user not found');
       }
 
-      recipients = [{
-        userId: recipientUser.id,
-        email: recipientUser.email,
-        phoneNumber: undefined,
-        preferredChannels: options.channels || [MessageChannel.EMAIL],
-      }];
+      recipients = [
+        {
+          userId: recipientUser.id,
+          email: recipientUser.email,
+          phoneNumber: undefined,
+          preferredChannels: options.channels || [MessageChannel.EMAIL],
+        },
+      ];
     }
 
     if (recipients.length === 0) {
@@ -744,7 +791,9 @@ export class UnifiedMessagingService {
               recipientUserId: recipient.userId,
               channel,
               status: 'sent',
-              externalId: externalId as string || `sys_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              externalId:
+                (externalId as string) ||
+                `sys_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
               metadata: {
                 type: options.type,
                 systemReason: options.systemReason,
@@ -754,7 +803,6 @@ export class UnifiedMessagingService {
             });
             await repository.save(log);
             logs.push(log);
-
           } catch (error) {
             // Log failure
             const failedLog = repository.create({

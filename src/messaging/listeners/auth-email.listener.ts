@@ -9,6 +9,7 @@ import { MessageType } from '../interfaces/message.interface';
 export interface UserSignupEvent {
   email: string;
   hash: string;
+  tenantId?: string;
 }
 
 export interface PasswordResetEvent {
@@ -32,6 +33,11 @@ export class AuthEmailListener {
 
   @OnEvent('auth.user.signup')
   async handleUserSignup(event: UserSignupEvent): Promise<void> {
+    // Skip if no tenantId - fallback to original mail service
+    if (!event.tenantId) {
+      return;
+    }
+
     const context = {
       title: 'Confirm your email',
       text1: 'Welcome to our platform! Please confirm your email address.',
@@ -50,6 +56,7 @@ export class AuthEmailListener {
       context,
       type: MessageType.ADMIN_CONTACT,
       systemReason: 'user_signup',
+      tenantId: event.tenantId,
     });
   }
 

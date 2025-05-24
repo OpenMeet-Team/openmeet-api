@@ -243,6 +243,7 @@ export class AuthService {
     this.eventEmitter.emit('auth.user.signup', {
       email: dto.email,
       hash,
+      tenantId: this.request?.tenantId,
     });
 
     // Keep original mail service call as fallback for now

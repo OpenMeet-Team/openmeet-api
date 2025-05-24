@@ -40,11 +40,6 @@ npm run start:prod > prod.log 2>&1 &
 echo "Waiting for Maildev to be ready..."
 /opt/wait-for-it.sh maildev:1080
 
-sleep 30
-
-netstat -tulpen | grep LISTEN || true
-ps -ef || true
-
 echo "Waiting for API to be ready..."
 /opt/wait-for-it.sh api:3000 -t 30
 

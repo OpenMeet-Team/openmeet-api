@@ -819,7 +819,7 @@ export class GroupService {
 
     // Keep original mail service call as fallback for now
     await this.groupMailService.sendGroupMemberRoleUpdated(groupMemberId);
-    
+
     return showGroupMember;
   }
 

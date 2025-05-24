@@ -21,13 +21,16 @@ export class EventEmailListener {
   constructor(private readonly messagingService: UnifiedMessagingService) {}
 
   @OnEvent('event.attendee.joined')
-  async handleEventAttendeeJoined(event: EventAttendeeJoinedEvent): Promise<void> {
+  async handleEventAttendeeJoined(
+    event: EventAttendeeJoinedEvent,
+  ): Promise<void> {
     try {
       // Send system message notification to event organizers about new attendee
       await this.messagingService.sendSystemMessage({
         type: MessageType.EVENT_ANNOUNCEMENT,
         subject: 'New attendee joined your event',
-        content: 'A new attendee has joined your event. You can view the attendee details in the event management section.',
+        content:
+          'A new attendee has joined your event. You can view the attendee details in the event management section.',
         channels: [MessageChannel.EMAIL],
         templateId: 'event/attendee-guest-joined',
         metadata: {
@@ -47,7 +50,9 @@ export class EventEmailListener {
   }
 
   @OnEvent('event.attendee.status.changed')
-  async handleEventAttendeeStatusChanged(event: EventAttendeeStatusChangedEvent): Promise<void> {
+  async handleEventAttendeeStatusChanged(
+    event: EventAttendeeStatusChangedEvent,
+  ): Promise<void> {
     try {
       // Send system message notification to attendee about status change
       await this.messagingService.sendSystemMessage({
@@ -69,7 +74,10 @@ export class EventEmailListener {
         },
       });
     } catch (error) {
-      console.error('Error handling event attendee status changed event:', error);
+      console.error(
+        'Error handling event attendee status changed event:',
+        error,
+      );
     }
   }
 }

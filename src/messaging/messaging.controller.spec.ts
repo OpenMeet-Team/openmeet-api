@@ -404,7 +404,12 @@ describe('MessagingController', () => {
 
       const result = await controller.getAuditLog(mockRequest);
 
-      expect(mockAuditService.getAuditLog).toHaveBeenCalledWith('test-tenant', {}, 1, 50);
+      expect(mockAuditService.getAuditLog).toHaveBeenCalledWith(
+        'test-tenant',
+        {},
+        1,
+        50,
+      );
       expect(result).toEqual(expectedAuditLog);
     });
 
@@ -479,7 +484,12 @@ describe('MessagingController', () => {
         'non-existent-event',
       );
 
-      expect(mockAuditService.getAuditLog).toHaveBeenCalledWith('test-tenant', {}, 1, 50);
+      expect(mockAuditService.getAuditLog).toHaveBeenCalledWith(
+        'test-tenant',
+        {},
+        1,
+        50,
+      );
       expect(result).toEqual(expectedAuditLog);
     });
   });

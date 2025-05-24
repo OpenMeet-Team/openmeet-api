@@ -22,13 +22,16 @@ export class GroupEmailListener {
   constructor(private readonly messagingService: UnifiedMessagingService) {}
 
   @OnEvent('group.member.role.updated')
-  async handleGroupMemberRoleUpdated(event: GroupMemberRoleUpdatedEvent): Promise<void> {
+  async handleGroupMemberRoleUpdated(
+    event: GroupMemberRoleUpdatedEvent,
+  ): Promise<void> {
     try {
       // Send system message notification about role update
       await this.messagingService.sendSystemMessage({
         type: MessageType.GROUP_ANNOUNCEMENT,
         subject: 'Your group role has been updated',
-        content: 'Your role in the group has been updated. Please check the group details for more information.',
+        content:
+          'Your role in the group has been updated. Please check the group details for more information.',
         channels: [MessageChannel.EMAIL],
         templateId: 'group/group-member-role-updated',
         metadata: {
@@ -53,7 +56,8 @@ export class GroupEmailListener {
       await this.messagingService.sendSystemMessage({
         type: MessageType.GROUP_ANNOUNCEMENT,
         subject: 'New member joined your group',
-        content: 'A new member has joined your group. You can view the member details in the group management section.',
+        content:
+          'A new member has joined your group. You can view the member details in the group management section.',
         channels: [MessageChannel.EMAIL],
         templateId: 'group/group-guest-joined',
         metadata: {

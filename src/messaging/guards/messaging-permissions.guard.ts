@@ -70,17 +70,17 @@ export class MessagingPermissionsGuard implements CanActivate {
   private async checkPermissions(
     user: any,
     requirement: PermissionRequirement,
-    request: Request,
+    _request: Request,
   ): Promise<boolean> {
     // This is a simplified version - you may need to implement the full permission logic
     // based on your specific permission system
-    
+
     // For now, return true if user has any admin role
     // You can enhance this to match your specific permission checking logic
     const userPermissions = user.role?.permissions || [];
-    
-    return requirement.permissions.some(permission => 
-      userPermissions.includes(permission)
+
+    return await requirement.permissions.some((permission) =>
+      userPermissions.includes(permission),
     );
   }
 }
