@@ -19,7 +19,6 @@ import { MessagingController } from './messaging.controller';
 
 // External modules
 import { TenantModule } from '../tenant/tenant.module';
-import { MailModule } from '../mail/mail.module';
 import { GroupMemberModule } from '../group-member/group-member.module';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 import { GroupModule } from '../group/group.module';
@@ -37,7 +36,6 @@ import { AuthModule } from '../auth/auth.module';
       MessageAuditEntity,
     ]),
     TenantModule,
-    MailModule,
     forwardRef(() => GroupMemberModule),
     forwardRef(() => EventAttendeeModule),
     forwardRef(() => GroupModule),

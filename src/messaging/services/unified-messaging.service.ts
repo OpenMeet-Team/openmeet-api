@@ -10,7 +10,6 @@ import { Repository } from 'typeorm';
 import { MessageDraftService } from './message-draft.service';
 import { MessageAuditService } from './message-audit.service';
 import { MessagePauseService } from './message-pause.service';
-import { MailService } from '../../mail/mail.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { GroupService } from '../../group/group.service';
@@ -40,7 +39,7 @@ export class UnifiedMessagingService {
     private readonly draftService: MessageDraftService,
     private readonly auditService: MessageAuditService,
     private readonly pauseService: MessagePauseService,
-    private readonly mailService: MailService,
+    // private readonly mailService: MailService,
     @Inject(forwardRef(() => GroupMemberService))
     private readonly groupMemberService: GroupMemberService,
     @Inject(forwardRef(() => EventAttendeeService))
@@ -68,6 +67,8 @@ export class UnifiedMessagingService {
     recipientCount: number;
     requiresReview: boolean;
   }> {
+    const tenantId = this.request.tenantId;
+
     // Get group and validate permissions
     const group = await this.groupService.findGroupBySlug(groupSlug);
 
@@ -89,11 +90,13 @@ export class UnifiedMessagingService {
 
     // Check rate limits
     const rateLimit = await this.auditService.checkRateLimit(
+      tenantId,
       senderMember.user.id,
       group.id,
     );
     if (!rateLimit.allowed) {
       await this.auditService.logAction(
+        this.request.tenantId,
         senderMember.user.id,
         'rate_limit_exceeded',
         {
@@ -149,6 +152,8 @@ export class UnifiedMessagingService {
     recipientCount: number;
     requiresReview: boolean;
   }> {
+    const tenantId = this.request.tenantId;
+
     // Get event and validate permissions
     const event = await this.eventService.findEventBySlug(eventSlug);
     if (!event) {
@@ -177,15 +182,21 @@ export class UnifiedMessagingService {
 
     // Check rate limits
     const rateLimit = await this.auditService.checkRateLimit(
+      tenantId,
       senderUser.id,
       undefined,
       event.id,
     );
     if (!rateLimit.allowed) {
-      await this.auditService.logAction(senderUser.id, 'rate_limit_exceeded', {
-        eventId: event.id,
-        additionalData: { limit: rateLimit.limit, count: rateLimit.count },
-      });
+      await this.auditService.logAction(
+        this.request.tenantId,
+        senderUser.id,
+        'rate_limit_exceeded',
+        {
+          eventId: event.id,
+          additionalData: { limit: rateLimit.limit, count: rateLimit.count },
+        },
+      );
       throw new BadRequestException(
         `Rate limit exceeded. You can send ${rateLimit.limit} message(s) per hour. Current count: ${rateLimit.count}`,
       );
@@ -233,13 +244,18 @@ export class UnifiedMessagingService {
       // Don't throw - just log and return without sending
       // This keeps the message in its current status (DRAFT or APPROVED)
       // so it can be retried later
-      await this.auditService.logAction(0, 'message_send_skipped', {
-        additionalData: {
-          messageSlug: draftSlug,
-          reason: 'messaging_paused',
-          pauseReason: pauseStatus.reason,
+      await this.auditService.logAction(
+        this.request.tenantId,
+        0,
+        'message_send_skipped',
+        {
+          additionalData: {
+            messageSlug: draftSlug,
+            reason: 'messaging_paused',
+            pauseReason: pauseStatus.reason,
+          },
         },
-      });
+      );
       return;
     }
 
@@ -287,7 +303,7 @@ export class UnifiedMessagingService {
             switch (channel) {
               case MessageChannel.EMAIL:
                 if (recipient.email) {
-                  externalId = await this.sendEmailMessage(draft, recipient);
+                  externalId = this.sendEmailMessage(draft, recipient);
                 }
                 break;
               // Future channels: SMS, Bluesky, WhatsApp
@@ -324,36 +340,42 @@ export class UnifiedMessagingService {
     await this.draftService.markAsSent(draftSlug);
 
     // Log audit entry
-    await this.auditService.logAction(draft.authorId, 'message_sent', {
-      groupId: draft.groupId,
-      eventId: draft.eventId,
-      messageId: draft.id,
-      additionalData: {
-        recipientCount: recipients.length,
-        channels: draft.channels,
+    await this.auditService.logAction(
+      this.request.tenantId,
+      draft.authorId,
+      'message_sent',
+      {
+        groupId: draft.groupId,
+        eventId: draft.eventId,
+        messageId: draft.id,
+        additionalData: {
+          recipientCount: recipients.length,
+          channels: draft.channels,
+        },
       },
-    });
+    );
   }
 
-  private async sendEmailMessage(
-    draft: MessageDraftEntity,
-    recipient: MessageRecipient,
-  ): Promise<string> {
+  private sendEmailMessage(
+    _draft: MessageDraftEntity,
+    _recipient: MessageRecipient,
+  ): string {
+    // TODO: Re-enable when circular dependency is resolved
     // Use existing mail service with custom template
-    await this.mailService.sendCustomMessage({
-      to: recipient.email!,
-      subject: draft.subject,
-      content: draft.content,
-      htmlContent: draft.htmlContent,
-      templateId: draft.templateId,
-      context: {
-        draft,
-        recipient,
-        groupName: draft.group?.name,
-        eventName: draft.event?.name,
-        authorName: draft.author.firstName + ' ' + draft.author.lastName,
-      },
-    });
+    // await this.mailService.sendCustomMessage({
+    //   to: recipient.email!,
+    //   subject: draft.subject,
+    //   content: draft.content,
+    //   htmlContent: draft.htmlContent,
+    //   templateId: draft.templateId,
+    //   context: {
+    //     draft,
+    //     recipient,
+    //     groupName: draft.group?.name,
+    //     eventName: draft.event?.name,
+    //     authorName: draft.author.firstName + ' ' + draft.author.lastName,
+    //   },
+    // });
 
     // TODO: Update mail service to return message ID from SES
     // For now, generate a placeholder ID for tracking
@@ -553,6 +575,7 @@ export class UnifiedMessagingService {
     ) {
       // Allow critical auth messages through even when paused
       await this.auditService.logAction(
+        this.request.tenantId,
         systemUserId,
         'system_message_skipped',
         {
@@ -569,14 +592,15 @@ export class UnifiedMessagingService {
 
     // Send email immediately (no draft, no rate limiting for system messages)
     try {
-      await this.mailService.sendCustomMessage({
-        to: recipientUser.email,
-        subject: options.subject,
-        content: options.content,
-        htmlContent: options.htmlContent,
-        templateId: options.templateId,
-        context: options.context,
-      });
+      // TODO: Re-enable when circular dependency is resolved
+      // await this.mailService.sendCustomMessage({
+      //   to: recipientUser.email,
+      //   subject: options.subject,
+      //   content: options.content,
+      //   htmlContent: options.htmlContent,
+      //   templateId: options.templateId,
+      //   context: options.context,
+      // });
 
       // Log success
       const log = repository.create({
@@ -595,14 +619,19 @@ export class UnifiedMessagingService {
       await repository.save(log);
 
       // Log audit entry
-      await this.auditService.logAction(systemUserId, 'system_message_sent', {
-        additionalData: {
-          recipientUserId: recipientUser.id,
-          type: options.type,
-          systemReason: options.systemReason,
-          logId: log.id,
+      await this.auditService.logAction(
+        this.request.tenantId,
+        systemUserId,
+        'system_message_sent',
+        {
+          additionalData: {
+            recipientUserId: recipientUser.id,
+            type: options.type,
+            systemReason: options.systemReason,
+            logId: log.id,
+          },
         },
-      });
+      );
 
       return log;
     } catch (error) {

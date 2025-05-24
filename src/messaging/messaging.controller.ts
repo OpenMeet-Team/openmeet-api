@@ -11,6 +11,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -18,6 +19,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { Request } from 'express';
 
 import { UnifiedMessagingService } from './services/unified-messaging.service';
 import { MessageDraftService } from './services/message-draft.service';
@@ -196,6 +198,7 @@ export class MessagingController {
   @ApiOperation({ summary: 'Get messaging audit log' })
   @ApiResponse({ status: 200, description: 'Audit log entries' })
   async getAuditLog(
+    @Req() req: Request,
     @Query('userSlug') userSlug?: string,
     @Query('groupSlug') groupSlug?: string,
     @Query('eventSlug') eventSlug?: string,
@@ -205,6 +208,7 @@ export class MessagingController {
     @Query('page', new ParseIntPipe({ optional: true })) page = 1,
     @Query('limit', new ParseIntPipe({ optional: true })) limit = 50,
   ) {
+    const tenantId = (req as any).tenantId;
     // Convert slugs to IDs
     let userId: number | undefined;
     if (userSlug) {
@@ -238,17 +242,19 @@ export class MessagingController {
     if (startDate) filters.startDate = new Date(startDate);
     if (endDate) filters.endDate = new Date(endDate);
 
-    return await this.auditService.getAuditLog(filters, page, limit);
+    return await this.auditService.getAuditLog(tenantId, filters, page, limit);
   }
 
   @Get('rate-limit/check')
   @ApiOperation({ summary: 'Check current rate limit status' })
   @ApiResponse({ status: 200, description: 'Rate limit information' })
   async checkRateLimit(
+    @Req() req: Request,
     @AuthUser() user: UserEntity,
     @Query('groupSlug') groupSlug?: string,
     @Query('eventSlug') eventSlug?: string,
   ) {
+    const tenantId = (req as any).tenantId;
     // Convert slugs to IDs
     let groupId: number | undefined;
     if (groupSlug) {
@@ -266,7 +272,12 @@ export class MessagingController {
       }
     }
 
-    return await this.auditService.checkRateLimit(user.id, groupId, eventId);
+    return await this.auditService.checkRateLimit(
+      tenantId,
+      user.id,
+      groupId,
+      eventId,
+    );
   }
 
   // Pause management endpoints (admin only)

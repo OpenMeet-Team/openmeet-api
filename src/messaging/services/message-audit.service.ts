@@ -1,23 +1,21 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { MessageAuditEntity } from '../entities/message-audit.entity';
-import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 
 @Injectable()
 export class MessageAuditService {
-  constructor(
-    @Inject(REQUEST) private readonly request: any,
-    private readonly tenantService: TenantConnectionService,
-  ) {}
+  constructor(private readonly tenantService: TenantConnectionService) {}
 
-  private async getRepository(): Promise<Repository<MessageAuditEntity>> {
-    const tenantId = this.request.tenantId;
+  private async getRepository(
+    tenantId: string,
+  ): Promise<Repository<MessageAuditEntity>> {
     const dataSource = await this.tenantService.getTenantConnection(tenantId);
     return dataSource.getRepository(MessageAuditEntity);
   }
 
   async logAction(
+    tenantId: string,
     userId: number,
     action: MessageAuditEntity['action'],
     details?: {
@@ -27,8 +25,7 @@ export class MessageAuditService {
       additionalData?: Record<string, any>;
     },
   ): Promise<void> {
-    const tenantId = this.request.tenantId;
-    const repository = await this.getRepository();
+    const repository = await this.getRepository(tenantId);
 
     const auditEntry = repository.create({
       tenantId,
@@ -44,12 +41,13 @@ export class MessageAuditService {
   }
 
   async checkRateLimit(
+    tenantId: string,
     userId: number,
     groupId?: number,
     eventId?: number,
   ): Promise<{ allowed: boolean; count: number; limit: number }> {
-    const tenantId = this.request.tenantId;
-    const repository = await this.getRepository();
+    const dataSource = await this.tenantService.getTenantConnection(tenantId);
+    const repository = dataSource.getRepository(MessageAuditEntity);
 
     // Get tenant config for rate limits (default: 1 message per hour)
     const tenantConfig = this.tenantService.getTenantConfig(tenantId);
@@ -83,6 +81,7 @@ export class MessageAuditService {
   }
 
   async getAuditLog(
+    tenantId: string,
     filters: {
       userId?: number;
       groupId?: number;
@@ -94,8 +93,8 @@ export class MessageAuditService {
     page = 1,
     limit = 50,
   ): Promise<{ data: MessageAuditEntity[]; total: number }> {
-    const tenantId = this.request.tenantId;
-    const repository = await this.getRepository();
+    const dataSource = await this.tenantService.getTenantConnection(tenantId);
+    const repository = dataSource.getRepository(MessageAuditEntity);
 
     const queryBuilder = repository
       .createQueryBuilder('audit')

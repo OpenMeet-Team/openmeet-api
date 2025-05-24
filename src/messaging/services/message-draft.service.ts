@@ -104,6 +104,7 @@ export class MessageDraftService {
 
     // Log audit entry
     await this.auditService.logAction(
+      tenantId,
       author.id,
       request.requireReview ? 'review_requested' : 'draft_created',
       {
@@ -279,11 +280,16 @@ export class MessageDraftService {
 
     const updatedDraft = await repository.save(draft);
 
-    await this.auditService.logAction(reviewer.id, 'message_approved', {
-      groupId: draft.groupId,
-      eventId: draft.eventId,
-      messageId: draft.id,
-    });
+    await this.auditService.logAction(
+      tenantId,
+      reviewer.id,
+      'message_approved',
+      {
+        groupId: draft.groupId,
+        eventId: draft.eventId,
+        messageId: draft.id,
+      },
+    );
 
     return updatedDraft;
   }
@@ -322,12 +328,17 @@ export class MessageDraftService {
 
     const updatedDraft = await repository.save(draft);
 
-    await this.auditService.logAction(reviewer.id, 'message_rejected', {
-      groupId: draft.groupId,
-      eventId: draft.eventId,
-      messageId: draft.id,
-      additionalData: { reason },
-    });
+    await this.auditService.logAction(
+      tenantId,
+      reviewer.id,
+      'message_rejected',
+      {
+        groupId: draft.groupId,
+        eventId: draft.eventId,
+        messageId: draft.id,
+        additionalData: { reason },
+      },
+    );
 
     return updatedDraft;
   }
