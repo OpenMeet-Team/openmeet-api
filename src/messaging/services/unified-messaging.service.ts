@@ -57,9 +57,12 @@ export class UnifiedMessagingService {
     private readonly userService: UserService,
   ) {}
 
-  private async getLogRepository(): Promise<Repository<MessageLogEntity>> {
-    const tenantId = this.request.tenantId;
-    const dataSource = await this.tenantService.getTenantConnection(tenantId);
+  private async getLogRepository(tenantId?: string): Promise<Repository<MessageLogEntity>> {
+    const effectiveTenantId = tenantId || this.request?.tenantId;
+    if (!effectiveTenantId) {
+      throw new Error('tenantId is required for getLogRepository');
+    }
+    const dataSource = await this.tenantService.getTenantConnection(effectiveTenantId);
     return dataSource.getRepository(MessageLogEntity);
   }
 
@@ -265,7 +268,7 @@ export class UnifiedMessagingService {
     }
 
     const tenantId = this.request.tenantId;
-    const repository = await this.getLogRepository();
+    const repository = await this.getLogRepository(tenantId);
 
     // Get draft (using 0 for userId since this is admin/system access)
     const draft = await this.draftService.getDraft(draftSlug, 0);
@@ -687,7 +690,7 @@ export class UnifiedMessagingService {
       throw new Error('tenantId is required for sendSystemMessage');
     }
     
-    const repository = await this.getLogRepository();
+    const repository = await this.getLogRepository(tenantId);
 
     // Get system user ID from config or use default admin (1)
     const systemUserId =
