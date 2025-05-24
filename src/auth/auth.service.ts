@@ -37,6 +37,7 @@ import { RoleEnum } from '../role/role.enum';
 import { StatusEntity } from 'src/status/infrastructure/persistence/relational/entities/status.entity';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventQueryService } from '../event/services/event-query.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { REQUEST } from '@nestjs/core';
 
 @Injectable()
@@ -53,6 +54,7 @@ export class AuthService {
     private mailService: MailService,
     private readonly roleService: RoleService,
     private configService: ConfigService<AllConfigType>,
+    private readonly eventEmitter: EventEmitter2,
     @Inject(REQUEST) private readonly request?: any,
   ) {}
 
@@ -237,6 +239,13 @@ export class AuthService {
 
     const createdUser = await this.userService.findById(user.id);
 
+    // Emit event for new messaging system
+    this.eventEmitter.emit('auth.user.signup', {
+      email: dto.email,
+      hash,
+    });
+
+    // Keep original mail service call as fallback for now
     this.mailService
       .userSignUp({
         to: dto.email,
@@ -368,6 +377,14 @@ export class AuthService {
       },
     );
 
+    // Emit event for new messaging system
+    this.eventEmitter.emit('auth.password.reset', {
+      email,
+      hash,
+      tokenExpires,
+    });
+
+    // Keep original mail service call as fallback for now
     await this.mailService.forgotPassword({
       to: email,
       data: {
@@ -504,6 +521,13 @@ export class AuthService {
         },
       );
 
+      // Emit event for new messaging system
+      this.eventEmitter.emit('auth.email.change', {
+        email: userDto.email,
+        hash,
+      });
+
+      // Keep original mail service call as fallback for now
       await this.mailService.confirmNewEmail({
         to: userDto.email,
         data: {

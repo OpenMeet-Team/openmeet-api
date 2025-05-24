@@ -1,15 +1,19 @@
-import { Injectable } from '@nestjs/common';
-import { UnifiedMessagingService } from './unified-messaging.service';
-import { MessageType } from '../interfaces/message.interface';
-import { MailData } from '../../mail/interfaces/mail-data.interface';
+import { Injectable, Inject } from '@nestjs/common';
+import { REQUEST } from '@nestjs/core';
+import { MailData } from '../mail/interfaces/mail-data.interface';
+import { UnifiedMessagingService } from '../messaging/services/unified-messaging.service';
+import { MessageType } from '../messaging/interfaces/message.interface';
 
 /**
- * MailAdapterService provides a compatibility layer between the old mail service
- * and the new unified messaging system. This allows gradual migration.
+ * AuthEmailService handles authentication-related emails using the messaging system.
+ * This service is isolated to avoid circular dependencies between AuthModule and MessagingModule.
  */
 @Injectable()
-export class MailAdapterService {
-  constructor(private readonly messagingService: UnifiedMessagingService) {}
+export class AuthEmailService {
+  constructor(
+    @Inject(REQUEST) private readonly request: any,
+    private readonly messagingService: UnifiedMessagingService,
+  ) {}
 
   /**
    * Send user signup confirmation email
@@ -89,29 +93,6 @@ export class MailAdapterService {
       context,
       type: MessageType.ADMIN_CONTACT,
       systemReason: 'email_change',
-    });
-  }
-
-  /**
-   * Send custom message (generic fallback)
-   */
-  async sendCustomMessage(options: {
-    to: string;
-    subject: string;
-    content: string;
-    htmlContent?: string;
-    templateId?: string;
-    context?: any;
-  }): Promise<void> {
-    await this.messagingService.sendSystemMessage({
-      recipientEmail: options.to,
-      subject: options.subject,
-      content: options.content,
-      htmlContent: options.htmlContent,
-      templateId: options.templateId,
-      context: options.context,
-      type: MessageType.ADMIN_CONTACT,
-      systemReason: 'custom_message',
     });
   }
 }

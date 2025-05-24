@@ -758,6 +758,13 @@ export class GroupService {
         GroupRole.Guest,
       );
 
+      // Emit event for new messaging system
+      this.eventEmitter.emit('group.member.joined', {
+        groupMemberId: groupMember.id,
+        tenantId: this.request.tenantId,
+      });
+
+      // Keep original mail service call as fallback for now
       await this.groupMailService.sendGroupGuestJoined(groupMember.id);
     } else {
       await this.groupMemberService.createGroupMember(
@@ -804,7 +811,15 @@ export class GroupService {
     const showGroupMember =
       await this.groupMemberService.showGroupDetailsMember(groupMemberId);
 
+    // Emit event for new messaging system
+    this.eventEmitter.emit('group.member.role.updated', {
+      groupMemberId,
+      tenantId: this.request.tenantId,
+    });
+
+    // Keep original mail service call as fallback for now
     await this.groupMailService.sendGroupMemberRoleUpdated(groupMemberId);
+    
     return showGroupMember;
   }
 

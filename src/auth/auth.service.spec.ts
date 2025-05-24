@@ -14,6 +14,7 @@ import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import { GroupMemberService } from '../group-member/group-member.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -64,6 +65,10 @@ describe('AuthService', () => {
     getTenantSpecificRepository: jest.fn().mockResolvedValue(undefined),
   };
 
+  const mockEventEmitter = {
+    emit: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -83,6 +88,7 @@ describe('AuthService', () => {
           useValue: mockTenantConnectionService,
         },
         { provide: REQUEST, useValue: mockRequest },
+        { provide: EventEmitter2, useValue: mockEventEmitter },
       ],
     }).compile();
 

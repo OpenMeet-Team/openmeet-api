@@ -35,7 +35,7 @@ export class AddMessagingPermissions1748012720000
     `);
 
     // Associate group messaging permissions with appropriate roles
-    // Owner role gets both permissions
+    // Owner role gets both permissions - ensure it also keeps existing permissions
     await queryRunner.query(`
       INSERT INTO "${schema}"."groupRolePermissions" ("groupRoleId", "groupPermissionId")
       SELECT gr.id, gp.id
@@ -43,6 +43,20 @@ export class AddMessagingPermissions1748012720000
       CROSS JOIN "${schema}"."groupPermissions" gp
       WHERE gr.name = 'owner' 
       AND gp.name IN ('SEND_GROUP_MESSAGE', 'SEND_BULK_GROUP_MESSAGE')
+      AND NOT EXISTS (
+        SELECT 1 FROM "${schema}"."groupRolePermissions" grp
+        WHERE grp."groupRoleId" = gr.id AND grp."groupPermissionId" = gp.id
+      )
+    `);
+
+    // Ensure owner role has MANAGE_MEMBERS permission (in case seeds ran out of order)
+    await queryRunner.query(`
+      INSERT INTO "${schema}"."groupRolePermissions" ("groupRoleId", "groupPermissionId")
+      SELECT gr.id, gp.id
+      FROM "${schema}"."groupRoles" gr
+      CROSS JOIN "${schema}"."groupPermissions" gp
+      WHERE gr.name = 'owner' 
+      AND gp.name = 'MANAGE_MEMBERS'
       AND NOT EXISTS (
         SELECT 1 FROM "${schema}"."groupRolePermissions" grp
         WHERE grp."groupRoleId" = gr.id AND grp."groupPermissionId" = gp.id
@@ -63,6 +77,20 @@ export class AddMessagingPermissions1748012720000
       )
     `);
 
+    // Ensure admin role has MANAGE_MEMBERS permission (in case seeds ran out of order)
+    await queryRunner.query(`
+      INSERT INTO "${schema}"."groupRolePermissions" ("groupRoleId", "groupPermissionId")
+      SELECT gr.id, gp.id
+      FROM "${schema}"."groupRoles" gr
+      CROSS JOIN "${schema}"."groupPermissions" gp
+      WHERE gr.name = 'admin' 
+      AND gp.name = 'MANAGE_MEMBERS'
+      AND NOT EXISTS (
+        SELECT 1 FROM "${schema}"."groupRolePermissions" grp
+        WHERE grp."groupRoleId" = gr.id AND grp."groupPermissionId" = gp.id
+      )
+    `);
+
     // Moderator role gets only SEND_GROUP_MESSAGE
     await queryRunner.query(`
       INSERT INTO "${schema}"."groupRolePermissions" ("groupRoleId", "groupPermissionId")
@@ -71,6 +99,20 @@ export class AddMessagingPermissions1748012720000
       CROSS JOIN "${schema}"."groupPermissions" gp
       WHERE gr.name = 'moderator' 
       AND gp.name = 'SEND_GROUP_MESSAGE'
+      AND NOT EXISTS (
+        SELECT 1 FROM "${schema}"."groupRolePermissions" grp
+        WHERE grp."groupRoleId" = gr.id AND grp."groupPermissionId" = gp.id
+      )
+    `);
+
+    // Ensure moderator role has MANAGE_MEMBERS permission (in case seeds ran out of order)
+    await queryRunner.query(`
+      INSERT INTO "${schema}"."groupRolePermissions" ("groupRoleId", "groupPermissionId")
+      SELECT gr.id, gp.id
+      FROM "${schema}"."groupRoles" gr
+      CROSS JOIN "${schema}"."groupPermissions" gp
+      WHERE gr.name = 'moderator' 
+      AND gp.name = 'MANAGE_MEMBERS'
       AND NOT EXISTS (
         SELECT 1 FROM "${schema}"."groupRolePermissions" grp
         WHERE grp."groupRoleId" = gr.id AND grp."groupPermissionId" = gp.id

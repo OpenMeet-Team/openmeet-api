@@ -16,6 +16,7 @@ import { GroupService } from '../../group/group.service';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { UserService } from '../../user/user.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
+import { EMAIL_SENDER_TOKEN } from '../interfaces/email-sender.interface';
 import {
   MessageType,
   MessageChannel,
@@ -42,6 +43,7 @@ describe('UnifiedMessagingService', () => {
   let mockEventService: jest.Mocked<EventQueryService>;
   let mockUserService: jest.Mocked<UserService>;
   let mockRepository: jest.Mocked<Repository<any>>;
+  let mockEmailSender: jest.Mocked<any>;
 
   beforeEach(async () => {
     mockRequest = {
@@ -104,6 +106,10 @@ describe('UnifiedMessagingService', () => {
       findBySlug: jest.fn(),
     } as any;
 
+    mockEmailSender = {
+      sendEmail: jest.fn().mockResolvedValue('external-msg-id'),
+    } as any;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UnifiedMessagingService,
@@ -118,6 +124,7 @@ describe('UnifiedMessagingService', () => {
         { provide: GroupService, useValue: mockGroupService },
         { provide: EventQueryService, useValue: mockEventService },
         { provide: UserService, useValue: mockUserService },
+        { provide: EMAIL_SENDER_TOKEN, useValue: mockEmailSender },
       ],
     }).compile();
 

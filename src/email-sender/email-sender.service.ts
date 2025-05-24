@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { MailerService } from '../mailer/mailer.service';
+import { IEmailSender } from '../messaging/interfaces/email-sender.interface';
 
 /**
  * Low-level email sending service that can be used by both
  * MailService and MessagingService without circular dependencies
  */
 @Injectable()
-export class EmailSenderService {
+export class EmailSenderService implements IEmailSender {
   constructor(private readonly mailerService: MailerService) {}
 
   async sendEmail(options: {

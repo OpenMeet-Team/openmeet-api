@@ -1689,7 +1689,15 @@ export class EventManagementService {
         `[attendEvent] Sending mail for attendee: ${attendee.id}, with event: ${attendee.event?.id || 'undefined'}`,
       );
 
+      // Emit event for new messaging system
+      this.eventEmitter.emit('event.attendee.joined', {
+        attendeeId: attendee.id,
+        eventSlug: event.slug,
+        tenantId: this.request.tenantId,
+      });
+
       try {
+        // Keep original mail service call as fallback for now
         await this.eventMailService.sendMailAttendeeGuestJoined(attendee);
       } catch (error) {
         this.logger.error(
@@ -1802,6 +1810,15 @@ export class EventManagementService {
       updateEventAttendeeDto,
     );
 
+    // Emit event for new messaging system
+    this.eventEmitter.emit('event.attendee.status.changed', {
+      attendeeId,
+      eventSlug: slug,
+      newStatus: updateEventAttendeeDto.status,
+      tenantId: this.request.tenantId,
+    });
+
+    // Keep original mail service call as fallback for now
     await this.eventMailService.sendMailAttendeeStatusChanged(attendeeId);
 
     return await this.eventAttendeeService.showEventAttendee(attendeeId);
