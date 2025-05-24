@@ -24,15 +24,15 @@ services:
     networks:
       - api-network
 
-  # maildev:
-  #   build:
-  #     context: .
-  #     dockerfile: maildev.Dockerfile
-  #   ports:
-  #     - ${MAIL_CLIENT_PORT}:1080
-  #     - ${MAIL_PORT}:1025
-  #   networks:
-  #     - api-network
+  maildev:
+    build:
+      context: .
+      dockerfile: maildev.Dockerfile
+    ports:
+      - ${MAIL_CLIENT_PORT}:1080
+      - ${MAIL_PORT}:1025
+    networks:
+      - api-network
 
   pgadmin:
     image: dpage/pgadmin4
@@ -52,7 +52,7 @@ services:
     image: redis:7-alpine
     container_name: openmeet_redis
     ports:
-      - "39889:6379"
+      - "6379:6379"
     restart: always
     networks:
       - api-network

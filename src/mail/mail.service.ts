@@ -279,4 +279,43 @@ export class MailService {
       },
     });
   }
+
+  async sendCustomMessage(mailData: {
+    to: string;
+    subject: string;
+    content: string;
+    htmlContent?: string;
+    templateId?: string;
+    context?: Record<string, any>;
+  }): Promise<void> {
+    this.getTenantConfig();
+
+    // Use template if specified, otherwise use content directly
+    if (mailData.templateId) {
+      await this.mailerService.sendMjmlMail({
+        tenantConfig: this.tenantConfig,
+        to: mailData.to,
+        subject: mailData.subject,
+        templateName: `messaging/${mailData.templateId}`,
+        context: {
+          ...mailData.context,
+          content: mailData.content,
+          htmlContent: mailData.htmlContent,
+        },
+      });
+    } else {
+      // Send with default messaging template
+      await this.mailerService.sendMjmlMail({
+        tenantConfig: this.tenantConfig,
+        to: mailData.to,
+        subject: mailData.subject,
+        templateName: 'messaging/default-message',
+        context: {
+          ...mailData.context,
+          content: mailData.content,
+          htmlContent: mailData.htmlContent || mailData.content,
+        },
+      });
+    }
+  }
 }

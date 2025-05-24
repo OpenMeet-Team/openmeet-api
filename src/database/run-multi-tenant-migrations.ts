@@ -71,7 +71,11 @@ async function runMigrationsForAllTenants() {
         await queryRunner.query(`SET search_path TO "${schemaName}"`);
 
         console.log(`Starting migrations for ${schemaName}`);
-        await dataSource.runMigrations();
+
+        // Run migrations with 'each' transaction mode
+        // This runs each migration in its own transaction and commits between them
+        await dataSource.runMigrations({ transaction: 'each' });
+
         migratedTenants.push(tenant.id);
         console.log(`Migrations successfully applied to schema: ${schemaName}`);
 

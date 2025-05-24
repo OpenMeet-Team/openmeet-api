@@ -17,13 +17,10 @@ export class EventPermissionSeedService {
       await this.tenantConnectionService.getTenantConnection(tenantId);
 
     this.repository = dataSource.getRepository(EventPermissionEntity);
-    const count = await this.repository.count();
 
-    if (count === 0) {
-      // loop over GroupPermission and create permissions
-      for (const permission of Object.values(EventAttendeePermission)) {
-        await this.createPermissionIfNotExists(permission);
-      }
+    // Always check and create missing permissions individually
+    for (const permission of Object.values(EventAttendeePermission)) {
+      await this.createPermissionIfNotExists(permission);
     }
   }
 

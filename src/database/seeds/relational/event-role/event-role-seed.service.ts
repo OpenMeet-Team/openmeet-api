@@ -37,6 +37,9 @@ export class EventRoleSeedService {
       EventAttendeePermission.ManageDiscussions,
       EventAttendeePermission.ManageEvent,
       EventAttendeePermission.MessageAttendees,
+      EventAttendeePermission.SendEventMessage,
+      EventAttendeePermission.SendBulkEventMessage,
+      EventAttendeePermission.ContactEventOrganizers,
       EventAttendeePermission.ViewEvent,
       EventAttendeePermission.ViewDiscussion,
     ]);
@@ -48,6 +51,9 @@ export class EventRoleSeedService {
       EventAttendeePermission.DeleteAttendees,
       EventAttendeePermission.ManageDiscussions,
       EventAttendeePermission.MessageAttendees,
+      EventAttendeePermission.SendEventMessage,
+      EventAttendeePermission.SendBulkEventMessage,
+      EventAttendeePermission.ContactEventOrganizers,
       EventAttendeePermission.AttendEvent,
       EventAttendeePermission.CreateDiscussion,
       EventAttendeePermission.ViewEvent,
@@ -57,6 +63,7 @@ export class EventRoleSeedService {
     await this.createEventRoleIfNotExists(EventAttendeeRole.Participant, [
       EventAttendeePermission.AttendEvent,
       EventAttendeePermission.CreateDiscussion,
+      EventAttendeePermission.ContactEventOrganizers,
       EventAttendeePermission.ViewEvent,
       EventAttendeePermission.ViewDiscussion,
     ]);
@@ -64,6 +71,8 @@ export class EventRoleSeedService {
     await this.createEventRoleIfNotExists(EventAttendeeRole.Speaker, [
       EventAttendeePermission.AttendEvent,
       EventAttendeePermission.CreateDiscussion,
+      EventAttendeePermission.SendEventMessage,
+      EventAttendeePermission.ContactEventOrganizers,
       EventAttendeePermission.ViewEvent,
       EventAttendeePermission.ViewDiscussion,
     ]);
@@ -71,6 +80,7 @@ export class EventRoleSeedService {
     await this.createEventRoleIfNotExists(EventAttendeeRole.Guest, [
       EventAttendeePermission.AttendEvent,
       EventAttendeePermission.CreateDiscussion,
+      EventAttendeePermission.ContactEventOrganizers,
       EventAttendeePermission.ViewEvent,
       EventAttendeePermission.ViewDiscussion,
     ]);

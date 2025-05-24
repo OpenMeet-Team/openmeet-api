@@ -154,6 +154,7 @@ export class GroupMemberService {
       select: {
         id: true,
         user: {
+          id: true,
           slug: true,
           firstName: true,
           lastName: true,
@@ -389,6 +390,72 @@ export class GroupMemberService {
             path: true,
             fileName: false,
           },
+        },
+      },
+    });
+  }
+
+  async hasPermission(
+    groupMemberId: number,
+    permission: GroupPermission,
+  ): Promise<boolean> {
+    await this.getTenantSpecificEventRepository();
+    const groupMember = await this.groupMemberRepository.findOne({
+      where: { id: groupMemberId },
+      relations: ['groupRole', 'groupRole.groupPermissions'],
+    });
+
+    if (!groupMember || !groupMember.groupRole) {
+      return false;
+    }
+
+    return groupMember.groupRole.groupPermissions.some(
+      (perm) => perm.name === permission,
+    );
+  }
+
+  async getGroupMembersForMessaging(
+    groupId: number,
+    filter: string,
+  ): Promise<GroupMemberEntity[]> {
+    await this.getTenantSpecificEventRepository();
+
+    const whereCondition: any = {
+      group: { id: groupId },
+    };
+
+    // Apply filter
+    switch (filter) {
+      case 'members':
+        whereCondition.groupRole = { name: Not(GroupRole.Guest) };
+        break;
+      case 'admins':
+        whereCondition.groupRole = { name: GroupRole.Admin };
+        break;
+      case 'moderators':
+        whereCondition.groupRole = { name: GroupRole.Moderator };
+        break;
+      case 'all':
+      default:
+        // Include all members except guests
+        whereCondition.groupRole = { name: Not(GroupRole.Guest) };
+        break;
+    }
+
+    return await this.groupMemberRepository.find({
+      where: whereCondition,
+      relations: ['user', 'groupRole'],
+      select: {
+        id: true,
+        user: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          name: true,
+          email: true,
+        },
+        groupRole: {
+          name: true,
         },
       },
     });
