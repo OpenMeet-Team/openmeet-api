@@ -34,8 +34,8 @@ COPY --from=dependencies /usr/src/app/node_modules ./node_modules
 # Copy build files from build stage
 COPY --from=build /usr/src/app/dist ./dist
 
-# copy mail templates
-COPY --from=build /usr/src/app/src/mail/mail-templates ./src/mail/mail-templates
+# copy messaging templates
+COPY --from=build /usr/src/app/src/messaging/templates ./src/messaging/templates
 
 ARG GIT_REVISION
 RUN echo "Git revision: $GIT_REVISION"
