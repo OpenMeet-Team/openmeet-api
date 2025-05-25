@@ -5,6 +5,7 @@ import { TenantConnectionService } from '../tenant/tenant.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ejs from 'ejs';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const mjml = require('mjml');
 
 /**
@@ -18,11 +19,11 @@ export class EmailSenderService implements IEmailSender {
     private readonly tenantService: TenantConnectionService,
   ) {}
 
-  private async renderTemplate(
+  private renderTemplate(
     templatePath: string,
     context: any,
     tenantConfig: any,
-  ): Promise<{ html: string; text: string }> {
+  ): { html: string; text: string } {
     try {
       // Resolve relative template paths to absolute paths
       let resolvedPath = templatePath;
@@ -58,7 +59,7 @@ export class EmailSenderService implements IEmailSender {
 
       // Convert MJML to HTML
       const mjmlResult = mjml(renderedMjml);
-      
+
       if (mjmlResult.errors && mjmlResult.errors.length > 0) {
         console.warn('MJML rendering warnings:', mjmlResult.errors);
       }

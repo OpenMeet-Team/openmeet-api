@@ -3,7 +3,6 @@ import { Test } from '@nestjs/testing';
 import { UserService } from './user.service';
 import {
   mockFilesS3PresignedService,
-  mockMailService,
   mockRepository,
   mockRole,
   mockRoleService,
@@ -11,7 +10,6 @@ import {
   mockSubCategoryService,
   mockUser,
 } from '../test/mocks';
-import { MailService } from '../mail/mail.service';
 import { mockTenantConnectionService } from '../test/mocks';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { SubCategoryService } from '../sub-category/sub-category.service';
@@ -40,10 +38,6 @@ describe('UserService', () => {
         {
           provide: REQUEST,
           useValue: { tenantId: TESTING_TENANT_ID },
-        },
-        {
-          provide: MailService,
-          useValue: mockMailService,
         },
         {
           provide: SubCategoryService,

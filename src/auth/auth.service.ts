@@ -246,7 +246,6 @@ export class AuthService {
       tenantId: this.request?.tenantId,
     });
 
-
     return {
       refreshToken,
       token,
@@ -373,7 +372,6 @@ export class AuthService {
       hash,
       tokenExpires,
     });
-
   }
 
   async resetPassword(hash: string, password: string): Promise<void> {
@@ -509,7 +507,6 @@ export class AuthService {
         hash,
         tenantId: this.request?.tenantId,
       });
-
     }
 
     delete userDto.email;

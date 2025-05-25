@@ -67,10 +67,14 @@ export class AdminController {
         await this.adminService.simulateGroupGuestJoinedEmail(dto.email);
         break;
       case EmailSimulationType.EVENT_ATTENDEE_GUEST_JOINED:
-        await this.adminService.simulateEventAttendeeGuestJoinedEmail(dto.email);
+        await this.adminService.simulateEventAttendeeGuestJoinedEmail(
+          dto.email,
+        );
         break;
       case EmailSimulationType.EVENT_ATTENDEE_STATUS_CHANGED:
-        await this.adminService.simulateEventAttendeeStatusChangedEmail(dto.email);
+        await this.adminService.simulateEventAttendeeStatusChangedEmail(
+          dto.email,
+        );
         break;
       default:
         throw new Error('Unsupported email type');

@@ -3,7 +3,6 @@ import { REQUEST } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { UnifiedMessagingService } from '../messaging/services/unified-messaging.service';
 import { MessageType } from '../messaging/interfaces/message.interface';
-import * as path from 'path';
 
 export interface EmailSimulationRequest {
   email: string;
@@ -229,7 +228,8 @@ export class AdminService {
           name: 'Sample Event',
           slug: 'sample-event-def456',
         },
-        approvalAnswer: 'I am interested in learning more about this topic and connecting with like-minded people.',
+        approvalAnswer:
+          'I am interested in learning more about this topic and connecting with like-minded people.',
       },
     };
 

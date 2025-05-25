@@ -6,7 +6,7 @@ import { UserService } from '../user/user.service';
 import { SessionService } from '../session/session.service';
 import { UnauthorizedException } from '@nestjs/common';
 import { GroupService } from '../group/group.service';
-import { MailService } from '../mail/mail.service';
+import { UnifiedMessagingService } from '../messaging/services/unified-messaging.service';
 import { RoleService } from '../role/role.service';
 import { EventQueryService } from '../event/services/event-query.service';
 import { mockEventAttendeeService, mockEventQueryService } from '../test/mocks';
@@ -44,8 +44,8 @@ describe('AuthService', () => {
     findById: jest.fn(),
   };
 
-  const mockMailService = {
-    sendEmail: jest.fn(),
+  const mockMessagingService = {
+    sendSystemMessage: jest.fn(),
   };
 
   const mockRoleService = {
@@ -79,7 +79,7 @@ describe('AuthService', () => {
         { provide: ConfigService, useValue: mockConfigService },
         { provide: GroupService, useValue: mockGroupService },
         { provide: GroupMemberService, useValue: mockGroupMemberService },
-        { provide: MailService, useValue: mockMailService },
+        { provide: UnifiedMessagingService, useValue: mockMessagingService },
         { provide: RoleService, useValue: mockRoleService },
         { provide: EventQueryService, useValue: mockEventQueryService },
         { provide: EventAttendeeService, useValue: mockEventAttendeeService },

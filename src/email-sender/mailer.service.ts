@@ -34,9 +34,10 @@ export class MailerService {
   }
 
   async sendMail(options: MailOptions): Promise<any> {
-    const from = options.from || process.env.MAIL_FROM || 'noreply@openmeet.net';
+    const from =
+      options.from || process.env.MAIL_FROM || 'noreply@openmeet.net';
 
-    return this.transporter.sendMail({
+    return await this.transporter.sendMail({
       from,
       to: options.to,
       subject: options.subject,

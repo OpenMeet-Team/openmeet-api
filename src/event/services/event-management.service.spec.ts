@@ -23,7 +23,6 @@ import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UserService } from '../../user/user.service';
 import { EventRoleService } from '../../event-role/event-role.service';
-import { EventMailService } from '../../event-mail/event-mail.service';
 import { BlueskyService } from '../../bluesky/bluesky.service';
 import { stopCleanupInterval } from '../../database/data-source';
 import { EventManagementService } from './event-management.service';
@@ -226,13 +225,6 @@ describe('EventManagementService', () => {
             findById: jest.fn().mockResolvedValue(mockUser),
             getUserById: jest.fn().mockResolvedValue(mockUser),
             findByIdWithPreferences: jest.fn().mockResolvedValue(mockUser),
-          },
-        },
-        {
-          provide: EventMailService,
-          useValue: {
-            sendMailAttendeeGuestJoined: jest.fn(),
-            sendMailAttendeeStatusChanged: jest.fn(),
           },
         },
         {
@@ -565,10 +557,6 @@ describe('EventManagementService', () => {
       );
 
       // Mock eventMailService.sendMailAttendeeGuestJoined
-      const mockEventMailService = service[
-        'eventMailService'
-      ] as jest.Mocked<EventMailService>;
-      mockEventMailService.sendMailAttendeeGuestJoined.mockResolvedValueOnce();
 
       // Mock the extra findEventAttendeeByUserId call that happens after we find a duplicate
       mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
@@ -593,9 +581,6 @@ describe('EventManagementService', () => {
 
       expect(result).toBeDefined();
       expect(mockEventAttendeeService.create).toHaveBeenCalled();
-      expect(
-        mockEventMailService.sendMailAttendeeGuestJoined,
-      ).toHaveBeenCalled();
       expect(eventEmitter.emit).toHaveBeenCalledWith(
         'event.attendee.added',
         expect.any(Object),

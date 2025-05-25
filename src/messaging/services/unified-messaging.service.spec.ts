@@ -9,7 +9,6 @@ import { UnifiedMessagingService } from './unified-messaging.service';
 import { MessageDraftService } from './message-draft.service';
 import { MessageAuditService } from './message-audit.service';
 import { MessagePauseService } from './message-pause.service';
-import { MailService } from '../../mail/mail.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { GroupService } from '../../group/group.service';
@@ -36,14 +35,13 @@ describe('UnifiedMessagingService', () => {
   let mockDraftService: jest.Mocked<MessageDraftService>;
   let mockAuditService: jest.Mocked<MessageAuditService>;
   let mockPauseService: jest.Mocked<MessagePauseService>;
-  let mockMailService: jest.Mocked<MailService>;
+  let mockEmailSender: jest.Mocked<any>;
   let mockGroupMemberService: jest.Mocked<GroupMemberService>;
   let mockEventAttendeeService: jest.Mocked<EventAttendeeService>;
   let mockGroupService: jest.Mocked<GroupService>;
   let mockEventService: jest.Mocked<EventQueryService>;
   let mockUserService: jest.Mocked<UserService>;
   let mockRepository: jest.Mocked<Repository<any>>;
-  let mockEmailSender: jest.Mocked<any>;
 
   beforeEach(async () => {
     mockRequest = {
@@ -78,8 +76,8 @@ describe('UnifiedMessagingService', () => {
       isMessagingPaused: jest.fn(),
     } as any;
 
-    mockMailService = {
-      sendCustomMessage: jest.fn(),
+    mockEmailSender = {
+      sendEmail: jest.fn(),
     } as any;
 
     mockGroupMemberService = {
@@ -118,7 +116,7 @@ describe('UnifiedMessagingService', () => {
         { provide: MessageDraftService, useValue: mockDraftService },
         { provide: MessageAuditService, useValue: mockAuditService },
         { provide: MessagePauseService, useValue: mockPauseService },
-        { provide: MailService, useValue: mockMailService },
+        { provide: EMAIL_SENDER_TOKEN, useValue: mockEmailSender },
         { provide: GroupMemberService, useValue: mockGroupMemberService },
         { provide: EventAttendeeService, useValue: mockEventAttendeeService },
         { provide: GroupService, useValue: mockGroupService },
@@ -752,7 +750,7 @@ describe('UnifiedMessagingService', () => {
       expect(mockPauseService.isMessagingPaused).toHaveBeenCalled();
       expect(mockDraftService.getDraft).toHaveBeenCalledWith(draftSlug, 0);
       // Mail service is currently commented out due to circular dependency
-      // expect(mockMailService.sendCustomMessage).toHaveBeenCalled();
+      // expect(mockEmailSender.sendEmail).toHaveBeenCalled();
       expect(mockRepository.save).toHaveBeenCalledWith(
         expect.objectContaining({
           tenantId: 'test-tenant',
@@ -789,7 +787,7 @@ describe('UnifiedMessagingService', () => {
       );
 
       // Should NOT attempt to send emails
-      // expect(mockMailService.sendCustomMessage).not.toHaveBeenCalled();
+      // expect(mockEmailSender.sendEmail).not.toHaveBeenCalled();
 
       // Should NOT mark as sent
       expect(mockDraftService.markAsSent).not.toHaveBeenCalled();
@@ -811,7 +809,7 @@ describe('UnifiedMessagingService', () => {
 
     it.skip('should handle email send failures gracefully', async () => {
       // Skipping this test since mail service is currently disabled due to circular dependency
-      mockMailService.sendCustomMessage.mockRejectedValue(
+      mockEmailSender.sendEmail.mockRejectedValue(
         new Error('Email service unavailable'),
       );
 
@@ -892,11 +890,11 @@ describe('UnifiedMessagingService', () => {
         // First call - should not send
         await service.sendMessage(draftSlug);
 
-        expect(mockMailService.sendCustomMessage).not.toHaveBeenCalled();
+        expect(mockEmailSender.sendEmail).not.toHaveBeenCalled();
         expect(mockDraftService.markAsSent).not.toHaveBeenCalled();
 
         // Reset mocks
-        mockMailService.sendCustomMessage.mockClear();
+        mockEmailSender.sendEmail.mockClear();
         mockDraftService.markAsSent.mockClear();
         mockAuditService.logAction.mockClear();
 
@@ -908,7 +906,7 @@ describe('UnifiedMessagingService', () => {
         // Second call - should send successfully
         await service.sendMessage(draftSlug);
 
-        // expect(mockMailService.sendCustomMessage).toHaveBeenCalled();
+        // expect(mockEmailSender.sendEmail).toHaveBeenCalled();
         expect(mockDraftService.markAsSent).toHaveBeenCalledWith(draftSlug);
         expect(mockAuditService.logAction).toHaveBeenCalledWith(
           'test-tenant',

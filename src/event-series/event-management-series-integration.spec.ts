@@ -24,7 +24,6 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { EventRoleService } from '../event-role/event-role.service';
 import { UserService } from '../user/user.service';
-import { EventMailService } from '../event-mail/event-mail.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { BlueskyIdService } from '../bluesky/bluesky-id.service';
 import { RecurrenceFrequency } from '../event-series/interfaces/recurrence.interface';
@@ -156,12 +155,6 @@ describe('EventManagementService Integration with EventSeriesService', () => {
           provide: UserService,
           useValue: {
             findById: jest.fn().mockResolvedValue({}),
-          },
-        },
-        {
-          provide: EventMailService,
-          useValue: {
-            sendEventCreatedEmails: jest.fn(),
           },
         },
         {

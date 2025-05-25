@@ -8,6 +8,10 @@ const infrastructurePersistenceModule = RelationalFilePersistenceModule;
 @Module({
   imports: [infrastructurePersistenceModule, FilesS3PresignedModule],
   providers: [FileService],
-  exports: [FileService, infrastructurePersistenceModule, FilesS3PresignedModule],
+  exports: [
+    FileService,
+    infrastructurePersistenceModule,
+    FilesS3PresignedModule,
+  ],
 })
 export class FileModule {}
