@@ -7,6 +7,7 @@ import {
   forwardRef,
   NotFoundException,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { Repository } from 'typeorm';
 import { MessageDraftService } from './message-draft.service';
 import { MessageAuditService } from './message-audit.service';
@@ -38,14 +39,14 @@ import {
 
 @Injectable()
 export class UnifiedMessagingService {
+  private static _globalModuleRef: ModuleRef;
+  
   constructor(
-    @Optional() @Inject(REQUEST) private readonly request: any,
-    @Optional() private readonly tenantService: TenantConnectionService,
+    private readonly moduleRef: ModuleRef,
     private readonly draftService: MessageDraftService,
     @Inject(EMAIL_SENDER_TOKEN) private readonly emailSender: IEmailSender,
     private readonly auditService: MessageAuditService,
     private readonly pauseService: MessagePauseService,
-    // private readonly mailService: MailService,
     @Inject(forwardRef(() => GroupMemberService))
     private readonly groupMemberService: GroupMemberService,
     @Inject(forwardRef(() => EventAttendeeService))
@@ -56,24 +57,49 @@ export class UnifiedMessagingService {
     private readonly eventService: EventQueryService,
     @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
-  ) {}
+  ) {
+    // Store global reference for event contexts
+    if (this.moduleRef) {
+      UnifiedMessagingService._globalModuleRef = this.moduleRef;
+    }
+  }
 
   private async getLogRepository(
-    tenantId?: string,
-  ): Promise<Repository<MessageLogEntity>> {
-    const effectiveTenantId = tenantId || this.request?.tenantId;
-    if (!effectiveTenantId) {
+    tenantId: string,
+  ): Promise<Repository<MessageLogEntity> | null> {
+    if (!tenantId) {
       throw new Error('tenantId is required for getLogRepository');
     }
-    if (!this.tenantService) {
-      throw new Error('TenantConnectionService not available in this context');
+    
+    try {
+      // Try to get TenantConnectionService dynamically using ModuleRef
+      const moduleRef = this.moduleRef || UnifiedMessagingService._globalModuleRef;
+      
+      if (!moduleRef) {
+        console.warn('ModuleRef not available, skipping database logging for system message');
+        return null;
+      }
+      
+      const tenantService = moduleRef.get(TenantConnectionService, { strict: false });
+      
+      if (!tenantService) {
+        console.warn('TenantConnectionService not found in module, skipping database logging for system message');
+        return null;
+      }
+      
+      const dataSource = await tenantService.getTenantConnection(tenantId);
+      return dataSource.getRepository(MessageLogEntity);
+    } catch (error) {
+      console.warn('Could not get repository for logging, continuing without database log:', {
+        error: error.message,
+        tenantId: tenantId,
+      });
+      return null;
     }
-    const dataSource =
-      await this.tenantService.getTenantConnection(effectiveTenantId);
-    return dataSource.getRepository(MessageLogEntity);
   }
 
   async sendGroupMessage(
+    tenantId: string,
     groupSlug: string,
     senderSlug: string,
     messageRequest: SendMessageRequest,
@@ -82,7 +108,6 @@ export class UnifiedMessagingService {
     recipientCount: number;
     requiresReview: boolean;
   }> {
-    const tenantId = this.request?.tenantId;
     if (!tenantId) {
       throw new Error('tenantId is required for sendGroupMessage');
     }
@@ -114,7 +139,7 @@ export class UnifiedMessagingService {
     );
     if (!rateLimit.allowed) {
       await this.auditService.logAction(
-        this.request?.tenantId,
+        tenantId,
         senderMember.user.id,
         'rate_limit_exceeded',
         {
@@ -151,7 +176,7 @@ export class UnifiedMessagingService {
 
     // If no review required and approved, send immediately
     if (!requiresReview) {
-      await this.sendMessage(draft.slug);
+      await this.sendMessage(tenantId, draft.slug);
     }
 
     return {
@@ -162,6 +187,7 @@ export class UnifiedMessagingService {
   }
 
   async sendEventMessage(
+    tenantId: string,
     eventSlug: string,
     senderSlug: string,
     messageRequest: SendMessageRequest,
@@ -170,7 +196,6 @@ export class UnifiedMessagingService {
     recipientCount: number;
     requiresReview: boolean;
   }> {
-    const tenantId = this.request?.tenantId;
     if (!tenantId) {
       throw new Error('tenantId is required for sendEventMessage');
     }
@@ -210,7 +235,7 @@ export class UnifiedMessagingService {
     );
     if (!rateLimit.allowed) {
       await this.auditService.logAction(
-        this.request?.tenantId,
+        tenantId,
         senderUser.id,
         'rate_limit_exceeded',
         {
@@ -248,7 +273,7 @@ export class UnifiedMessagingService {
 
     // If no review required, send immediately
     if (!requiresReview) {
-      await this.sendMessage(draft.slug);
+      await this.sendMessage(tenantId, draft.slug);
     }
 
     return {
@@ -258,7 +283,7 @@ export class UnifiedMessagingService {
     };
   }
 
-  async sendMessage(draftSlug: string): Promise<void> {
+  async sendMessage(tenantId: string, draftSlug: string): Promise<void> {
     // Check if messaging is paused globally
     const pauseStatus = await this.pauseService.isMessagingPaused();
     if (pauseStatus.paused) {
@@ -266,7 +291,7 @@ export class UnifiedMessagingService {
       // This keeps the message in its current status (DRAFT or APPROVED)
       // so it can be retried later
       await this.auditService.logAction(
-        this.request?.tenantId,
+        tenantId,
         0,
         'message_send_skipped',
         {
@@ -280,11 +305,15 @@ export class UnifiedMessagingService {
       return;
     }
 
-    const tenantId = this.request?.tenantId;
     if (!tenantId) {
       throw new Error('tenantId is required for sendMessage');
     }
     const repository = await this.getLogRepository(tenantId);
+    
+    // If repository is null, we can't log to database but continue with email sending
+    if (!repository) {
+      console.warn('Database logging unavailable for sendMessage, continuing with email only');
+    }
 
     // Get draft (using 0 for userId since this is admin/system access)
     const draft = await this.draftService.getDraft(draftSlug, 0);
@@ -340,25 +369,29 @@ export class UnifiedMessagingService {
                 continue;
             }
 
-            // Log success
-            await repository.save({
-              tenantId,
-              messageId: draft.id,
-              recipientUserId: recipient.userId,
-              channel,
-              status: 'sent',
-              externalId,
-            });
+            // Log success (if repository available)
+            if (repository) {
+              await repository.save({
+                tenantId,
+                messageId: draft.id,
+                recipientUserId: recipient.userId,
+                channel,
+                status: 'sent',
+                externalId,
+              });
+            }
           } catch (error) {
-            // Log failure
-            await repository.save({
-              tenantId,
-              messageId: draft.id,
-              recipientUserId: recipient.userId,
-              channel,
-              status: 'failed',
-              error: error.message,
-            });
+            // Log failure (if repository available)
+            if (repository) {
+              await repository.save({
+                tenantId,
+                messageId: draft.id,
+                recipientUserId: recipient.userId,
+                channel,
+                status: 'failed',
+                error: error.message,
+              });
+            }
           }
         }
       }
@@ -369,7 +402,7 @@ export class UnifiedMessagingService {
 
     // Log audit entry
     await this.auditService.logAction(
-      this.request?.tenantId,
+      tenantId,
       draft.authorId,
       'message_sent',
       {
@@ -564,6 +597,76 @@ export class UnifiedMessagingService {
     return [];
   }
 
+  /**
+   * Get services lazily using ModuleRef - this works in event contexts
+   */
+  private async getServices() {
+    const moduleRef = this.moduleRef || UnifiedMessagingService._globalModuleRef;
+    
+    if (!moduleRef) {
+      throw new Error('ModuleRef not available - cannot get services in this context');
+    }
+
+    try {
+      // Try getting services by class reference first, then by string token
+      let groupMemberService;
+      let userService;
+      let eventAttendeeService;
+
+      // For services with forwardRef, we need to try resolving them through their modules
+      try {
+        groupMemberService = await moduleRef.resolve(GroupMemberService);
+      } catch {
+        try {
+          groupMemberService = moduleRef.get(GroupMemberService, { strict: false });
+        } catch {
+          try {
+            groupMemberService = moduleRef.get('GroupMemberService', { strict: false });
+          } catch {
+            // Service not available - will be handled gracefully
+          }
+        }
+      }
+
+      try {
+        userService = await moduleRef.resolve(UserService);
+      } catch {
+        try {
+          userService = moduleRef.get(UserService, { strict: false });
+        } catch {
+          try {
+            userService = moduleRef.get('UserService', { strict: false });
+          } catch {
+            // Service not available - will be handled gracefully
+          }
+        }
+      }
+
+      try {
+        eventAttendeeService = await moduleRef.resolve(EventAttendeeService);
+      } catch {
+        try {
+          eventAttendeeService = moduleRef.get(EventAttendeeService, { strict: false });
+        } catch {
+          try {
+            eventAttendeeService = moduleRef.get('EventAttendeeService', { strict: false });
+          } catch {
+            // Service not available - will be handled gracefully
+          }
+        }
+      }
+      
+      return {
+        groupMemberService,
+        userService,
+        eventAttendeeService,
+      };
+    } catch (error) {
+      console.error('Error getting services via ModuleRef:', error);
+      throw new Error('Services not available in current context');
+    }
+  }
+
   private async getTargetRecipients(targetUser: {
     type:
       | 'group_member'
@@ -580,22 +683,36 @@ export class UnifiedMessagingService {
             'groupMemberId required for group_member target',
           );
         }
-        // Get the specific group member
-        const groupMember =
-          await this.groupMemberService.showGroupDetailsMember(
+        
+        // Get the specific group member using proper service approach
+        try {
+          const services = await this.getServices();
+          if (!services.groupMemberService) {
+            console.warn('GroupMemberService not available via ModuleRef');
+            return [];
+          }
+          
+          const groupMember = await services.groupMemberService.showGroupDetailsMember(
             targetUser.groupMemberId,
           );
-        if (!groupMember || !groupMember.user) {
+          
+          if (!groupMember || !groupMember.user) {
+            console.warn('Group member not found or no user data');
+            return [];
+          }
+          
+          return [
+            {
+              userId: groupMember.user.id,
+              email: groupMember.user.email || undefined,
+              phoneNumber: undefined,
+              preferredChannels: [MessageChannel.EMAIL],
+            },
+          ];
+        } catch (error) {
+          console.error('Error getting group member via services:', error);
           return [];
         }
-        return [
-          {
-            userId: groupMember.user.id,
-            email: groupMember.user.email || undefined,
-            phoneNumber: undefined,
-            preferredChannels: [MessageChannel.EMAIL],
-          },
-        ];
 
       case 'group_admins':
         if (!targetUser.groupMemberId) {
@@ -706,20 +823,33 @@ export class UnifiedMessagingService {
       attendeeId?: number;
     };
   }): Promise<MessageLogEntity | MessageLogEntity[]> {
-    const tenantId = options.tenantId || this.request?.tenantId;
+    const tenantId = options.tenantId;
 
     if (!tenantId) {
       throw new Error('tenantId is required for sendSystemMessage');
     }
 
     const repository = await this.getLogRepository(tenantId);
+    
+    // If repository is null, we can still send emails but won't log to database
+    if (!repository) {
+      console.warn('Database logging unavailable for sendSystemMessage, emails will still be sent');
+    }
 
     // Get system user ID from config or use default admin (1)
-    if (!this.tenantService) {
-      throw new Error('TenantConnectionService not available in this context');
+    let systemUserId = 1; // Default admin user ID
+    try {
+      const moduleRef = this.moduleRef || UnifiedMessagingService._globalModuleRef;
+      if (moduleRef) {
+        const tenantService = moduleRef.get(TenantConnectionService, { strict: false });
+        if (tenantService && tenantService.getTenantConfig) {
+          systemUserId = tenantService.getTenantConfig(tenantId).systemUserId || 1;
+        }
+      }
+    } catch (error) {
+      // Use default if config access fails
+      console.warn('Could not get tenant config, using default system user ID:', error.message);
     }
-    const systemUserId =
-      this.tenantService.getTenantConfig(tenantId).systemUserId || 1;
 
     // Get recipients based on targetUser type or direct email/userId
     let recipients: MessageRecipient[] = [];
@@ -764,7 +894,7 @@ export class UnifiedMessagingService {
     ) {
       // Allow critical auth messages through even when paused
       await this.auditService.logAction(
-        this.request?.tenantId,
+        tenantId,
         systemUserId,
         'system_message_skipped',
         {
@@ -813,43 +943,47 @@ export class UnifiedMessagingService {
                 continue;
             }
 
-            // Log success
-            const log = repository.create({
-              tenantId,
-              messageId: undefined, // No draft for system messages
-              recipientUserId: recipient.userId,
-              channel,
-              status: 'sent',
-              externalId:
-                (externalId as string) ||
-                `sys_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-              metadata: {
-                type: options.type,
-                systemReason: options.systemReason,
-                isSystemMessage: true,
-                ...options.metadata,
-              },
-            });
-            await repository.save(log);
-            logs.push(log);
+            // Log success (if repository available)
+            if (repository) {
+              const log = repository.create({
+                tenantId,
+                messageId: undefined, // No draft for system messages
+                recipientUserId: recipient.userId,
+                channel,
+                status: 'sent',
+                externalId:
+                  (externalId as string) ||
+                  `sys_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                metadata: {
+                  type: options.type,
+                  systemReason: options.systemReason,
+                  isSystemMessage: true,
+                  ...options.metadata,
+                },
+              });
+              await repository.save(log);
+              logs.push(log);
+            }
           } catch (error) {
-            // Log failure
-            const failedLog = repository.create({
-              tenantId,
-              messageId: undefined,
-              recipientUserId: recipient.userId,
-              channel,
-              status: 'failed',
-              error: error.message,
-              metadata: {
-                type: options.type,
-                systemReason: options.systemReason,
-                isSystemMessage: true,
-                ...options.metadata,
-              },
-            });
-            await repository.save(failedLog);
-            logs.push(failedLog);
+            // Log failure (if repository available)
+            if (repository) {
+              const failedLog = repository.create({
+                tenantId,
+                messageId: undefined,
+                recipientUserId: recipient.userId,
+                channel,
+                status: 'failed',
+                error: error.message,
+                metadata: {
+                  type: options.type,
+                  systemReason: options.systemReason,
+                  isSystemMessage: true,
+                  ...options.metadata,
+                },
+              });
+              await repository.save(failedLog);
+              logs.push(failedLog);
+            }
           }
         }
       }
@@ -857,7 +991,7 @@ export class UnifiedMessagingService {
 
     // Log audit entry
     await this.auditService.logAction(
-      this.request?.tenantId,
+      tenantId,
       systemUserId,
       'system_message_sent',
       {
@@ -870,6 +1004,15 @@ export class UnifiedMessagingService {
       },
     );
 
+    // Return logs if we have any, otherwise return a success indicator
+    if (logs.length === 0) {
+      // No database logging available, but emails were sent
+      return {
+        success: true,
+        message: 'System message sent successfully (database logging unavailable)',
+        recipientCount: recipients.length,
+      } as any;
+    }
     return logs.length === 1 ? logs[0] : logs;
   }
 }

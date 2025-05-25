@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { UnifiedMessagingService } from '../services/unified-messaging.service';
+import { EventEmailService } from '../services/event-email.service';
 import { MessageType, MessageChannel } from '../interfaces/message.interface';
 
 export interface GroupMemberRoleUpdatedEvent {
@@ -19,41 +20,42 @@ export interface GroupMemberJoinedEvent {
 
 @Injectable()
 export class GroupEmailListener {
-  constructor(private readonly messagingService: UnifiedMessagingService) {}
+  constructor(
+    private readonly messagingService: UnifiedMessagingService,
+    private readonly eventEmailService: EventEmailService,
+  ) {}
 
   @OnEvent('group.member.role.updated')
   async handleGroupMemberRoleUpdated(
     event: GroupMemberRoleUpdatedEvent,
   ): Promise<void> {
     try {
-      // Send system message notification about role update
-      await this.messagingService.sendSystemMessage({
-        type: MessageType.GROUP_ANNOUNCEMENT,
-        subject: 'Your group role has been updated',
-        content:
-          'Your role in the group has been updated. Please check the group details for more information.',
-        channels: [MessageChannel.EMAIL],
-        templateId: 'group/group-member-role-updated',
-        metadata: {
-          eventType: 'group.member.role.updated',
-          groupMemberId: event.groupMemberId,
+      // Use dedicated event email service
+      if (event.userSlug && event.groupSlug && event.tenantId) {
+        const success = await this.eventEmailService.sendRoleUpdateEmail({
+          userSlug: event.userSlug,
+          groupSlug: event.groupSlug,
           tenantId: event.tenantId,
-        },
-        targetUser: {
-          type: 'group_member',
-          groupMemberId: event.groupMemberId,
-        },
-      });
+        });
+        
+        if (!success) {
+          console.warn('Role update email failed, but role change succeeded');
+        }
+      } else {
+        console.warn('Missing required event data for role update email');
+      }
     } catch (error) {
       console.error('Error handling group member role updated event:', error);
     }
   }
+
 
   @OnEvent('group.member.joined')
   async handleGroupMemberJoined(event: GroupMemberJoinedEvent): Promise<void> {
     try {
       // Send system message notification to group admins about new member
       await this.messagingService.sendSystemMessage({
+        tenantId: event.tenantId,
         type: MessageType.GROUP_ANNOUNCEMENT,
         subject: 'New member joined your group',
         content:

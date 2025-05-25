@@ -13,6 +13,10 @@ import { MessageDraftService } from './services/message-draft.service';
 import { MessageAuditService } from './services/message-audit.service';
 import { MessagePauseService } from './services/message-pause.service';
 import { MailAdapterService } from './services/mail-adapter.service';
+import { EventEmailService } from './services/event-email.service';
+import { MessageSenderService } from './services/message-sender.service';
+import { MessageLoggerService } from './services/message-logger.service';
+import { MessagePolicyService } from './services/message-policy.service';
 import { AuthEmailListener } from './listeners/auth-email.listener';
 import { GroupEmailListener } from './listeners/group-email.listener';
 import { EventEmailListener } from './listeners/event-email.listener';
@@ -42,7 +46,7 @@ import { ElastiCacheModule } from '../elasticache/elasticache.module';
       MessageLogEntity,
       MessageAuditEntity,
     ]),
-    TenantModule,
+    forwardRef(() => TenantModule),
     forwardRef(() => GroupMemberModule),
     forwardRef(() => EventAttendeeModule),
     forwardRef(() => GroupModule),
@@ -58,6 +62,10 @@ import { ElastiCacheModule } from '../elasticache/elasticache.module';
     MessageAuditService,
     MessagePauseService,
     MailAdapterService,
+    EventEmailService,
+    MessageSenderService,
+    MessageLoggerService,
+    MessagePolicyService,
     AuthEmailListener,
     GroupEmailListener,
     EventEmailListener,
@@ -74,6 +82,10 @@ import { ElastiCacheModule } from '../elasticache/elasticache.module';
     MessageAuditService,
     MessagePauseService,
     MailAdapterService,
+    EventEmailService,
+    MessageSenderService,
+    MessageLoggerService,
+    MessagePolicyService,
   ],
 })
 export class MessagingModule {}

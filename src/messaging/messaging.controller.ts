@@ -76,8 +76,10 @@ export class MessagingController {
     @Param('groupSlug') groupSlug: string,
     @AuthUser() user: UserEntity,
     @Body() messageRequest: SendMessageDto,
+    @Req() req: Request,
   ) {
-    return await this.messagingService.sendGroupMessage(groupSlug, user.slug, {
+    const tenantId = (req as any).tenantId;
+    return await this.messagingService.sendGroupMessage(tenantId, groupSlug, user.slug, {
       ...messageRequest,
       type: MessageType.GROUP_ANNOUNCEMENT,
     });
@@ -101,8 +103,10 @@ export class MessagingController {
     @Param('eventSlug') eventSlug: string,
     @AuthUser() user: UserEntity,
     @Body() messageRequest: SendMessageDto,
+    @Req() req: Request,
   ) {
-    return await this.messagingService.sendEventMessage(eventSlug, user.slug, {
+    const tenantId = (req as any).tenantId;
+    return await this.messagingService.sendEventMessage(tenantId, eventSlug, user.slug, {
       ...messageRequest,
       type: MessageType.EVENT_ANNOUNCEMENT,
     });
@@ -166,9 +170,11 @@ export class MessagingController {
   async approveDraft(
     @Param('slug') slug: string,
     @AuthUser() user: UserEntity,
+    @Req() req: Request,
   ) {
+    const tenantId = (req as any).tenantId;
     const approvedDraft = await this.draftService.approveDraft(slug, user.id);
-    await this.messagingService.sendMessage(slug);
+    await this.messagingService.sendMessage(tenantId, slug);
     return approvedDraft;
   }
 

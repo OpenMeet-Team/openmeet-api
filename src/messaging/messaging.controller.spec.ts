@@ -128,9 +128,11 @@ describe('MessagingController', () => {
         groupSlug,
         mockUser,
         messageRequest,
+        mockRequest,
       );
 
       expect(mockMessagingService.sendGroupMessage).toHaveBeenCalledWith(
+        mockRequest.tenantId,
         groupSlug,
         mockUser.slug,
         {
@@ -155,7 +157,7 @@ describe('MessagingController', () => {
       );
 
       await expect(
-        controller.sendGroupMessage(groupSlug, mockUser, messageRequest),
+        controller.sendGroupMessage(groupSlug, mockUser, messageRequest, mockRequest),
       ).rejects.toThrow('Permission denied');
     });
   });
@@ -182,9 +184,11 @@ describe('MessagingController', () => {
         eventSlug,
         mockUser,
         messageRequest,
+        mockRequest,
       );
 
       expect(mockMessagingService.sendEventMessage).toHaveBeenCalledWith(
+        mockRequest.tenantId,
         eventSlug,
         mockUser.slug,
         {
@@ -209,7 +213,7 @@ describe('MessagingController', () => {
       );
 
       await expect(
-        controller.sendEventMessage(eventSlug, mockUser, messageRequest),
+        controller.sendEventMessage(eventSlug, mockUser, messageRequest, mockRequest),
       ).rejects.toThrow('User not found');
     });
   });
@@ -351,13 +355,13 @@ describe('MessagingController', () => {
       mockDraftService.approveDraft.mockResolvedValue(approvedDraft);
       mockMessagingService.sendMessage.mockResolvedValue(undefined);
 
-      const result = await controller.approveDraft(slug, mockUser);
+      const result = await controller.approveDraft(slug, mockUser, mockRequest);
 
       expect(mockDraftService.approveDraft).toHaveBeenCalledWith(
         slug,
         mockUser.id,
       );
-      expect(mockMessagingService.sendMessage).toHaveBeenCalledWith(slug);
+      expect(mockMessagingService.sendMessage).toHaveBeenCalledWith(mockRequest.tenantId, slug);
       expect(result).toEqual(approvedDraft);
     });
   });

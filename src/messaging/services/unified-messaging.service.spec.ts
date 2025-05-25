@@ -185,6 +185,7 @@ describe('UnifiedMessagingService', () => {
       mockGroupMemberService.hasPermission.mockResolvedValue(true);
 
       const result = await service.sendGroupMessage(
+        'tenant123',
         groupSlug,
         senderSlug,
         messageRequest,
@@ -214,7 +215,7 @@ describe('UnifiedMessagingService', () => {
       );
 
       await expect(
-        service.sendGroupMessage(groupSlug, senderSlug, {
+        service.sendGroupMessage('tenant123', groupSlug, senderSlug, {
           type: MessageType.GROUP_ANNOUNCEMENT,
           subject: 'Test',
           content: 'Test',
@@ -227,7 +228,7 @@ describe('UnifiedMessagingService', () => {
       mockGroupMemberService.hasPermission.mockResolvedValue(false);
 
       await expect(
-        service.sendGroupMessage(groupSlug, senderSlug, {
+        service.sendGroupMessage('tenant123', groupSlug, senderSlug, {
           type: MessageType.GROUP_ANNOUNCEMENT,
           subject: 'Test',
           content: 'Test',
@@ -245,7 +246,7 @@ describe('UnifiedMessagingService', () => {
       mockGroupMemberService.hasPermission.mockResolvedValue(false);
 
       await expect(
-        service.sendGroupMessage(groupSlug, senderSlug, {
+        service.sendGroupMessage('tenant123', groupSlug, senderSlug, {
           type: MessageType.GROUP_ANNOUNCEMENT,
           subject: 'Test',
           content: 'Test',
@@ -268,7 +269,7 @@ describe('UnifiedMessagingService', () => {
       mockGroupMemberService.hasPermission.mockResolvedValue(true);
 
       await expect(
-        service.sendGroupMessage(groupSlug, senderSlug, {
+        service.sendGroupMessage('tenant123', groupSlug, senderSlug, {
           type: MessageType.GROUP_ANNOUNCEMENT,
           subject: 'Test',
           content: 'Test',
@@ -277,7 +278,7 @@ describe('UnifiedMessagingService', () => {
       ).rejects.toThrow(BadRequestException);
 
       expect(mockAuditService.logAction).toHaveBeenCalledWith(
-        'test-tenant',
+        'tenant123',
         1,
         'rate_limit_exceeded',
         expect.any(Object),
@@ -300,7 +301,7 @@ describe('UnifiedMessagingService', () => {
       );
       mockGroupMemberService.hasPermission.mockResolvedValue(true);
 
-      const result = await service.sendGroupMessage(groupSlug, senderSlug, {
+      const result = await service.sendGroupMessage('tenant123', groupSlug, senderSlug, {
         type: MessageType.GROUP_ANNOUNCEMENT,
         subject: 'Test',
         content: 'Test',
@@ -322,7 +323,7 @@ describe('UnifiedMessagingService', () => {
       it('should check SendGroupMessage permission for messages to specific members', async () => {
         mockGroupMemberService.hasPermission.mockResolvedValue(true);
 
-        await service.sendGroupMessage(groupSlug, senderSlug, {
+        await service.sendGroupMessage('tenant123', groupSlug, senderSlug, {
           type: MessageType.GROUP_ANNOUNCEMENT,
           subject: 'Test',
           content: 'Test',
@@ -339,7 +340,7 @@ describe('UnifiedMessagingService', () => {
       it('should check SendGroupMessage permission for messages with specific user IDs', async () => {
         mockGroupMemberService.hasPermission.mockResolvedValue(true);
 
-        await service.sendGroupMessage(groupSlug, senderSlug, {
+        await service.sendGroupMessage('tenant123', groupSlug, senderSlug, {
           type: MessageType.GROUP_ANNOUNCEMENT,
           subject: 'Test',
           content: 'Test',
@@ -356,7 +357,7 @@ describe('UnifiedMessagingService', () => {
       it('should check SendBulkGroupMessage permission for messages to all members', async () => {
         mockGroupMemberService.hasPermission.mockResolvedValue(true);
 
-        await service.sendGroupMessage(groupSlug, senderSlug, {
+        await service.sendGroupMessage('tenant123', groupSlug, senderSlug, {
           type: MessageType.GROUP_ANNOUNCEMENT,
           subject: 'Test',
           content: 'Test',
@@ -373,7 +374,7 @@ describe('UnifiedMessagingService', () => {
       it('should check SendGroupMessage permission for messages to admins', async () => {
         mockGroupMemberService.hasPermission.mockResolvedValue(true);
 
-        await service.sendGroupMessage(groupSlug, senderSlug, {
+        await service.sendGroupMessage('tenant123', groupSlug, senderSlug, {
           type: MessageType.GROUP_ANNOUNCEMENT,
           subject: 'Test',
           content: 'Test',
@@ -390,7 +391,7 @@ describe('UnifiedMessagingService', () => {
       it('should check SendGroupMessage permission for messages to moderators', async () => {
         mockGroupMemberService.hasPermission.mockResolvedValue(true);
 
-        await service.sendGroupMessage(groupSlug, senderSlug, {
+        await service.sendGroupMessage('tenant123', groupSlug, senderSlug, {
           type: MessageType.GROUP_ANNOUNCEMENT,
           subject: 'Test',
           content: 'Test',
@@ -412,7 +413,7 @@ describe('UnifiedMessagingService', () => {
         );
 
         await expect(
-          service.sendGroupMessage(groupSlug, 'non-member', {
+          service.sendGroupMessage('tenant123', groupSlug, 'non-member', {
             type: MessageType.GROUP_ANNOUNCEMENT,
             subject: 'Test',
             content: 'Test',
@@ -434,7 +435,7 @@ describe('UnifiedMessagingService', () => {
         mockGroupMemberService.hasPermission.mockResolvedValue(false);
 
         await expect(
-          service.sendGroupMessage(groupSlug, senderSlug, {
+          service.sendGroupMessage('tenant123', groupSlug, senderSlug, {
             type: MessageType.GROUP_ANNOUNCEMENT,
             subject: 'Test',
             content: 'Test',
@@ -507,6 +508,7 @@ describe('UnifiedMessagingService', () => {
       mockEventAttendeeService.hasPermission.mockResolvedValue(true);
 
       const result = await service.sendEventMessage(
+        'tenant123',
         eventSlug,
         senderSlug,
         messageRequest,
@@ -535,7 +537,7 @@ describe('UnifiedMessagingService', () => {
       mockUserService.findBySlug.mockResolvedValue(null);
 
       await expect(
-        service.sendEventMessage(eventSlug, senderSlug, {
+        service.sendEventMessage('tenant123', eventSlug, senderSlug, {
           type: MessageType.EVENT_ANNOUNCEMENT,
           subject: 'Test',
           content: 'Test',
@@ -548,7 +550,7 @@ describe('UnifiedMessagingService', () => {
       mockEventAttendeeService.findByUserAndEvent.mockResolvedValue(null);
 
       await expect(
-        service.sendEventMessage(eventSlug, senderSlug, {
+        service.sendEventMessage('tenant123', eventSlug, senderSlug, {
           type: MessageType.EVENT_ANNOUNCEMENT,
           subject: 'Test',
           content: 'Test',
@@ -561,7 +563,7 @@ describe('UnifiedMessagingService', () => {
       mockEventAttendeeService.hasPermission.mockResolvedValue(false);
 
       await expect(
-        service.sendEventMessage(eventSlug, senderSlug, {
+        service.sendEventMessage('tenant123', eventSlug, senderSlug, {
           type: MessageType.EVENT_ANNOUNCEMENT,
           subject: 'Test',
           content: 'Test',
@@ -584,7 +586,7 @@ describe('UnifiedMessagingService', () => {
       mockEventAttendeeService.hasPermission.mockResolvedValue(true);
 
       await expect(
-        service.sendEventMessage(eventSlug, senderSlug, {
+        service.sendEventMessage('tenant123', eventSlug, senderSlug, {
           type: MessageType.EVENT_ANNOUNCEMENT,
           subject: 'Test',
           content: 'Test',
@@ -597,7 +599,7 @@ describe('UnifiedMessagingService', () => {
       it('should check SendEventMessage permission for messages to specific attendees', async () => {
         mockEventAttendeeService.hasPermission.mockResolvedValue(true);
 
-        await service.sendEventMessage(eventSlug, senderSlug, {
+        await service.sendEventMessage('tenant123', eventSlug, senderSlug, {
           type: MessageType.EVENT_ANNOUNCEMENT,
           subject: 'Test',
           content: 'Test',
@@ -614,7 +616,7 @@ describe('UnifiedMessagingService', () => {
       it('should check SendEventMessage permission for messages with specific user IDs', async () => {
         mockEventAttendeeService.hasPermission.mockResolvedValue(true);
 
-        await service.sendEventMessage(eventSlug, senderSlug, {
+        await service.sendEventMessage('tenant123', eventSlug, senderSlug, {
           type: MessageType.EVENT_ANNOUNCEMENT,
           subject: 'Test',
           content: 'Test',
@@ -631,7 +633,7 @@ describe('UnifiedMessagingService', () => {
       it('should check SendBulkEventMessage permission for messages to all attendees', async () => {
         mockEventAttendeeService.hasPermission.mockResolvedValue(true);
 
-        await service.sendEventMessage(eventSlug, senderSlug, {
+        await service.sendEventMessage('tenant123', eventSlug, senderSlug, {
           type: MessageType.EVENT_ANNOUNCEMENT,
           subject: 'Test',
           content: 'Test',
@@ -648,7 +650,7 @@ describe('UnifiedMessagingService', () => {
       it('should check SendEventMessage permission for messages to event admins', async () => {
         mockEventAttendeeService.hasPermission.mockResolvedValue(true);
 
-        await service.sendEventMessage(eventSlug, senderSlug, {
+        await service.sendEventMessage('tenant123', eventSlug, senderSlug, {
           type: MessageType.EVENT_ANNOUNCEMENT,
           subject: 'Test',
           content: 'Test',
@@ -668,7 +670,7 @@ describe('UnifiedMessagingService', () => {
         mockEventAttendeeService.findByUserAndEvent.mockResolvedValue(null);
 
         await expect(
-          service.sendEventMessage(eventSlug, senderSlug, {
+          service.sendEventMessage('tenant123', eventSlug, senderSlug, {
             type: MessageType.EVENT_ANNOUNCEMENT,
             subject: 'Test',
             content: 'Test',
@@ -690,7 +692,7 @@ describe('UnifiedMessagingService', () => {
         mockEventAttendeeService.hasPermission.mockResolvedValue(false);
 
         await expect(
-          service.sendEventMessage(eventSlug, senderSlug, {
+          service.sendEventMessage('tenant123', eventSlug, senderSlug, {
             type: MessageType.EVENT_ANNOUNCEMENT,
             subject: 'Test',
             content: 'Test',
@@ -745,7 +747,7 @@ describe('UnifiedMessagingService', () => {
     });
 
     it('should send message when not paused', async () => {
-      await service.sendMessage(draftSlug);
+      await service.sendMessage('tenant123', draftSlug);
 
       expect(mockPauseService.isMessagingPaused).toHaveBeenCalled();
       expect(mockDraftService.getDraft).toHaveBeenCalledWith(draftSlug, 0);
@@ -753,7 +755,7 @@ describe('UnifiedMessagingService', () => {
       // expect(mockEmailSender.sendEmail).toHaveBeenCalled();
       expect(mockRepository.save).toHaveBeenCalledWith(
         expect.objectContaining({
-          tenantId: 'test-tenant',
+          tenantId: 'tenant123',
           messageId: 1,
           recipientUserId: 2,
           channel: MessageChannel.EMAIL,
@@ -770,11 +772,11 @@ describe('UnifiedMessagingService', () => {
         reason: 'System maintenance',
       } as any);
 
-      await service.sendMessage(draftSlug);
+      await service.sendMessage('tenant123', draftSlug);
 
       // Should log the skip action
       expect(mockAuditService.logAction).toHaveBeenCalledWith(
-        'test-tenant',
+        'tenant123',
         0,
         'message_send_skipped',
         expect.objectContaining({
@@ -802,7 +804,7 @@ describe('UnifiedMessagingService', () => {
         status: MessageStatus.SENT,
       });
 
-      await expect(service.sendMessage(draftSlug)).rejects.toThrow(
+      await expect(service.sendMessage('tenant123', draftSlug)).rejects.toThrow(
         BadRequestException,
       );
     });
@@ -813,7 +815,7 @@ describe('UnifiedMessagingService', () => {
         new Error('Email service unavailable'),
       );
 
-      await service.sendMessage(draftSlug);
+      await service.sendMessage('tenant123', draftSlug);
 
       expect(mockRepository.save).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -844,7 +846,7 @@ describe('UnifiedMessagingService', () => {
         } as any,
       ]);
 
-      await service.sendMessage(draftSlug);
+      await service.sendMessage('tenant123', draftSlug);
 
       expect(
         mockEventAttendeeService.getAttendeesForMessaging,
@@ -869,7 +871,7 @@ describe('UnifiedMessagingService', () => {
 
       // Note: getUserRecipients is not fully implemented in the service
       // This test documents expected behavior
-      await service.sendMessage(draftSlug);
+      await service.sendMessage('tenant123', draftSlug);
 
       expect(
         mockGroupMemberService.getGroupMembersForMessaging,
@@ -888,7 +890,7 @@ describe('UnifiedMessagingService', () => {
         } as any);
 
         // First call - should not send
-        await service.sendMessage(draftSlug);
+        await service.sendMessage('tenant123', draftSlug);
 
         expect(mockEmailSender.sendEmail).not.toHaveBeenCalled();
         expect(mockDraftService.markAsSent).not.toHaveBeenCalled();
@@ -904,12 +906,12 @@ describe('UnifiedMessagingService', () => {
         } as any);
 
         // Second call - should send successfully
-        await service.sendMessage(draftSlug);
+        await service.sendMessage('tenant123', draftSlug);
 
         // expect(mockEmailSender.sendEmail).toHaveBeenCalled();
         expect(mockDraftService.markAsSent).toHaveBeenCalledWith(draftSlug);
         expect(mockAuditService.logAction).toHaveBeenCalledWith(
-          'test-tenant',
+          'tenant123',
           1,
           'message_sent',
           expect.any(Object),
@@ -928,7 +930,7 @@ describe('UnifiedMessagingService', () => {
           reason: 'System maintenance',
         } as any);
 
-        await service.sendMessage(draftSlug);
+        await service.sendMessage('tenant123', draftSlug);
 
         // Should not change the draft status
         expect(mockDraftService.markAsSent).not.toHaveBeenCalled();
