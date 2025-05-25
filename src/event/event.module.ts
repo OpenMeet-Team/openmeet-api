@@ -34,7 +34,7 @@ import { MetricsModule } from '../metrics/metrics.module';
     TypeOrmModule.forFeature([EventEntity]),
     TenantModule,
     forwardRef(() => GroupMemberModule),
-    CategoryModule,
+    forwardRef(() => CategoryModule),
     forwardRef(() => AuthModule),
     forwardRef(() => EventAttendeeModule),
     FileModule,

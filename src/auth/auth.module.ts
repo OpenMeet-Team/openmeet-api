@@ -24,7 +24,7 @@ import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
     forwardRef(() => GroupModule),
     forwardRef(() => GroupMemberModule),
     forwardRef(() => EventModule),
-    forwardRef(() => CategoryModule),
+    CategoryModule,
     EventAttendeeModule,
     SessionModule,
     PassportModule,
