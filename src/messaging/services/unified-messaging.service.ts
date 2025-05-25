@@ -327,7 +327,11 @@ export class UnifiedMessagingService {
             switch (channel) {
               case MessageChannel.EMAIL:
                 if (recipient.email) {
-                  externalId = await this.sendEmailMessage(draft, recipient, tenantId);
+                  externalId = await this.sendEmailMessage(
+                    draft,
+                    recipient,
+                    tenantId,
+                  );
                 }
                 break;
               // Future channels: SMS, Bluesky, WhatsApp

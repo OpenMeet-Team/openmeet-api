@@ -1,0 +1,38 @@
+<mjml>
+  <mj-head>
+    <mj-title><%= tenantConfig.tenantName %> - Confirm New Email</mj-title>
+    <mj-preview>Confirm your new email address</mj-preview>
+    <mj-attributes>
+      <mj-all font-family="Arial, sans-serif"></mj-all>
+    </mj-attributes>
+  </mj-head>
+  <mj-body>
+    <%- include('../layouts/header.mjml.ejs', { tenantConfig: tenantConfig }) %>
+    
+    <mj-section>
+      <mj-column>
+        <mj-text font-size="16px" color="#333333" line-height="1.6">
+          Hello,<br><br>
+          Please confirm your new email address for your <%= tenantConfig.tenantName %> account.<br><br>
+          Click the button below to complete the email change.
+        </mj-text>
+        
+        <mj-button 
+          background-color="#00838f" 
+          color="white"
+          font-size="16px"
+          border-radius="4px"
+          padding="15px 30px"
+          href="<%= url %>">
+          Confirm New Email
+        </mj-button>
+        
+        <mj-text font-size="14px" color="#666666" line-height="1.6">
+          If you didn't request this email change, you can safely ignore this email.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+    
+    <%- include('../layouts/footer.mjml.ejs', { tenantConfig: tenantConfig }) %>
+  </mj-body>
+</mjml>

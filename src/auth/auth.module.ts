@@ -6,7 +6,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { AnonymousStrategy } from './strategies/anonymous.strategy';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
-import { MailModule } from '../mail/mail.module';
+import { MessagingModule } from '../messaging/messaging.module';
 import { SessionModule } from '../session/session.module';
 import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
@@ -28,7 +28,7 @@ import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
     EventAttendeeModule,
     SessionModule,
     PassportModule,
-    MailModule,
+    MessagingModule,
     RoleModule,
     JwtModule.register({}),
     forwardRef(() => AuthBlueskyModule),

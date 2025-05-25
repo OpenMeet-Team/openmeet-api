@@ -19,7 +19,10 @@ export class AdminService {
   ) {}
 
   async simulateSignupEmail(email: string): Promise<void> {
-    console.log('[DEBUG] AdminService.simulateSignupEmail called with email:', email);
+    console.log(
+      '[DEBUG] AdminService.simulateSignupEmail called with email:',
+      email,
+    );
     const tenantId = this.request.tenantId;
     console.log('[DEBUG] AdminService tenantId:', tenantId);
 
@@ -37,27 +40,24 @@ export class AdminService {
       app_name: 'OpenMeet',
     };
 
-    console.log('[DEBUG] AdminService about to call messagingService.sendSystemMessage');
+    console.log(
+      '[DEBUG] AdminService about to call messagingService.sendSystemMessage',
+    );
     try {
       await this.messagingService.sendSystemMessage({
         recipientEmail: email,
         subject: context.title,
         content: `${context.text1}\n\n${context.url}\n\n${context.text2}\n\n${context.text3}`,
         htmlContent: undefined,
-        templateId: path.join(
-          this.configService.getOrThrow('app.workingDirectory'),
-          'src',
-          'messaging',
-          'templates',
-          'auth',
-          'activation.hbs',
-        ),
+        templateId: 'auth/activation.mjml.ejs',
         context,
         type: MessageType.ADMIN_CONTACT,
         systemReason: 'email_simulation_signup',
         tenantId,
       });
-      console.log('[DEBUG] AdminService sendSystemMessage completed successfully');
+      console.log(
+        '[DEBUG] AdminService sendSystemMessage completed successfully',
+      );
     } catch (error) {
       console.error('[DEBUG] AdminService sendSystemMessage failed:', error);
       throw error;
@@ -89,14 +89,7 @@ export class AdminService {
       subject: context.title,
       content: `${context.text1}\n\n${context.url}\n\n${context.text2}\n\n${context.text3}\n\n${context.text4}`,
       htmlContent: undefined,
-      templateId: path.join(
-        this.configService.getOrThrow('app.workingDirectory'),
-        'src',
-        'messaging',
-        'templates',
-        'auth',
-        'reset-password.hbs',
-      ),
+      templateId: 'auth/reset-password.mjml.ejs',
       context,
       type: MessageType.ADMIN_CONTACT,
       systemReason: 'email_simulation_password_reset',
@@ -127,7 +120,7 @@ export class AdminService {
       content: `${context.text1}\n\n${context.url}\n\n${context.text2}\n\n${context.text3}`,
       htmlContent: undefined,
       templateId: path.join(
-        this.configService.getOrThrow('app.workingDirectory'),
+        this.configService.getOrThrow('app.workingDirectory', { infer: true }),
         'src',
         'messaging',
         'templates',

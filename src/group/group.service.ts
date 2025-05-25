@@ -34,7 +34,6 @@ import { EventEntity } from '../event/infrastructure/persistence/relational/enti
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
 import { GroupRoleService } from '../group-role/group-role.service';
-import { MailService } from '../mail/mail.service';
 import { generateShortCode } from '../utils/short-code';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
 import { MatrixMessage } from '../matrix/matrix-types';
@@ -43,7 +42,6 @@ import { UserService } from '../user/user.service';
 import { HomeQuery } from '../home/dto/home-query.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupRoleEntity } from '../group-role/infrastructure/persistence/relational/entities/group-role.entity';
-import { GroupMailService } from '../group-mail/group-mail.service';
 import { AuditLoggerService } from '../logger/audit-logger.provider';
 import { Trace } from '../utils/trace.decorator';
 import { EventQueryService } from '../event/services/event-query.service';
@@ -73,11 +71,9 @@ export class GroupService {
     private readonly eventRecommendationService: EventRecommendationService,
     private readonly fileService: FilesS3PresignedService,
     private readonly groupRoleService: GroupRoleService,
-    private readonly mailService: MailService,
     // ZulipService has been removed
     private readonly userService: UserService,
     private readonly eventEmitter: EventEmitter2,
-    private readonly groupMailService: GroupMailService,
     @Inject(forwardRef(() => ChatRoomService))
     private readonly chatRoomService: ChatRoomService,
     @Inject(forwardRef(() => DiscussionService))
@@ -763,9 +759,6 @@ export class GroupService {
         groupMemberId: groupMember.id,
         tenantId: this.request.tenantId,
       });
-
-      // Keep original mail service call as fallback for now
-      await this.groupMailService.sendGroupGuestJoined(groupMember.id);
     } else {
       await this.groupMemberService.createGroupMember(
         { userId: userEntity.id, groupId: groupEntity.id },
@@ -816,9 +809,6 @@ export class GroupService {
       groupMemberId,
       tenantId: this.request.tenantId,
     });
-
-    // Keep original mail service call as fallback for now
-    await this.groupMailService.sendGroupMemberRoleUpdated(groupMemberId);
 
     return showGroupMember;
   }

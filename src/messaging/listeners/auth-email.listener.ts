@@ -21,6 +21,7 @@ export interface PasswordResetEvent {
 export interface EmailChangeEvent {
   email: string;
   hash: string;
+  tenantId?: string;
 }
 
 /**
@@ -53,7 +54,7 @@ export class AuthEmailListener {
         subject: context.title,
         content: `${context.text1}\n\n${context.url}\n\n${context.text2}\n\n${context.text3}`,
         htmlContent: undefined,
-        templateId: 'auth/activation.hbs',
+        templateId: 'auth/activation.mjml.ejs',
         context,
         type: MessageType.ADMIN_CONTACT,
         systemReason: 'user_signup',
@@ -86,7 +87,7 @@ export class AuthEmailListener {
       subject: context.title,
       content: `${context.text1}\n\n${context.url}\n\n${context.text2}\n\n${context.text3}\n\n${context.text4}`,
       htmlContent: undefined,
-      templateId: 'auth/reset-password.hbs',
+      templateId: 'auth/reset-password.mjml.ejs',
       context,
       type: MessageType.ADMIN_CONTACT,
       systemReason: 'password_reset',
@@ -108,10 +109,11 @@ export class AuthEmailListener {
       subject: context.title,
       content: `${context.text1}\n\n${context.url}\n\n${context.text2}`,
       htmlContent: undefined,
-      templateId: 'auth/confirm-new-email.hbs',
+      templateId: 'auth/confirm-new-email.mjml.ejs',
       context,
       type: MessageType.ADMIN_CONTACT,
       systemReason: 'email_change',
+      tenantId: event.tenantId,
     });
   }
 }

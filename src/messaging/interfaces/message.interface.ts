@@ -3,6 +3,7 @@ export enum MessageType {
   EVENT_ANNOUNCEMENT = 'event_announcement',
   INDIVIDUAL_MESSAGE = 'individual_message',
   ADMIN_CONTACT = 'admin_contact',
+  CHAT_NOTIFICATION = 'chat_notification',
 }
 
 export enum MessageStatus {

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UnifiedMessagingService } from './unified-messaging.service';
 import { MessageType } from '../interfaces/message.interface';
-import { MailData } from '../../mail/interfaces/mail-data.interface';
+import { MailData } from '../interfaces/mail-data.interface';
 
 /**
  * MailAdapterService provides a compatibility layer between the old mail service
@@ -21,8 +21,8 @@ export class MailAdapterService {
       text1: 'Welcome to our platform! Please confirm your email address.',
       text2: 'Click the link above to activate your account.',
       text3: 'If you did not create this account, please ignore this email.',
-      url: `${process.env.FRONTEND_DOMAIN}/auth/confirm-email/${mailData.data.hash}`,
-      hash: mailData.data.hash,
+      url: `${process.env.FRONTEND_DOMAIN}/auth/confirm-email/${mailData.data?.hash}`,
+      hash: mailData.data?.hash,
     };
 
     await this.messagingService.sendSystemMessage({
@@ -30,7 +30,7 @@ export class MailAdapterService {
       subject: context.title,
       content: `${context.text1}\n\n${context.url}\n\n${context.text2}\n\n${context.text3}`,
       htmlContent: undefined, // Will use template
-      templateId: 'auth/activation.hbs',
+      templateId: 'auth/activation.mjml.ejs',
       context,
       type: MessageType.ADMIN_CONTACT,
       systemReason: 'user_signup',
@@ -50,9 +50,9 @@ export class MailAdapterService {
       text2: 'Click the link above to reset your password.',
       text3: 'This link will expire soon for security reasons.',
       text4: 'If you did not request this reset, please ignore this email.',
-      url: `${process.env.FRONTEND_DOMAIN}/auth/password-change/${mailData.data.hash}`,
-      hash: mailData.data.hash,
-      tokenExpires: mailData.data.tokenExpires,
+      url: `${process.env.FRONTEND_DOMAIN}/auth/password-change/${mailData.data?.hash}`,
+      hash: mailData.data?.hash,
+      tokenExpires: mailData.data?.tokenExpires,
     };
 
     await this.messagingService.sendSystemMessage({
@@ -60,7 +60,7 @@ export class MailAdapterService {
       subject: context.title,
       content: `${context.text1}\n\n${context.url}\n\n${context.text2}\n\n${context.text3}\n\n${context.text4}`,
       htmlContent: undefined,
-      templateId: 'auth/reset-password.hbs',
+      templateId: 'auth/reset-password.mjml.ejs',
       context,
       type: MessageType.ADMIN_CONTACT,
       systemReason: 'password_reset',
@@ -76,8 +76,8 @@ export class MailAdapterService {
       title: 'Confirm your new email',
       text1: 'Please confirm your new email address.',
       text2: 'If you did not request this change, please ignore this email.',
-      url: `${process.env.FRONTEND_DOMAIN}/auth/confirm-new-email/${mailData.data.hash}`,
-      hash: mailData.data.hash,
+      url: `${process.env.FRONTEND_DOMAIN}/auth/confirm-new-email/${mailData.data?.hash}`,
+      hash: mailData.data?.hash,
     };
 
     await this.messagingService.sendSystemMessage({
@@ -85,7 +85,7 @@ export class MailAdapterService {
       subject: context.title,
       content: `${context.text1}\n\n${context.url}\n\n${context.text2}`,
       htmlContent: undefined,
-      templateId: 'auth/confirm-new-email.hbs',
+      templateId: 'auth/confirm-new-email.mjml.ejs',
       context,
       type: MessageType.ADMIN_CONTACT,
       systemReason: 'email_change',

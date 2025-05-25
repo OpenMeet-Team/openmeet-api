@@ -1,0 +1,40 @@
+<mjml>
+  <mj-head>
+    <mj-title><%= (tenantConfig && tenantConfig.tenantName) || 'OpenMeet' %> - Account Activation</mj-title>
+    <mj-preview>Activate your <%= (tenantConfig && tenantConfig.tenantName) || 'OpenMeet' %> account</mj-preview>
+    <mj-attributes>
+      <mj-all font-family="Inter, sans-serif" />
+      <mj-text font-size="15px" color="#1E1A43" />
+      <mj-button font-size="15px" color="#1E1A43" font-weight="700" border-radius="6px" />
+    </mj-attributes>
+  </mj-head>
+  <mj-body background-color="#F5F5FA">
+    <%- include('../layouts/header.mjml.ejs', { tenantConfig: tenantConfig }) %>
+    
+    <mj-section>
+      <mj-column>
+        <mj-text font-size="16px" color="#333333" line-height="1.6">
+          Hello,<br><br>
+          Welcome to <%= (tenantConfig && tenantConfig.tenantName) || 'OpenMeet' %>!<br><br>
+          Please click the button below to activate your account and complete your registration.
+        </mj-text>
+        
+        <mj-button 
+          background-color="#00838f" 
+          color="white"
+          font-size="16px"
+          border-radius="4px"
+          padding="15px 30px"
+          href="<%= url %>">
+          Activate Account
+        </mj-button>
+        
+        <mj-text font-size="14px" color="#666666" line-height="1.6">
+          If you didn't request this activation, you can safely ignore this email.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+    
+    <%- include('../layouts/footer.mjml.ejs', { tenantConfig: tenantConfig }) %>
+  </mj-body>
+</mjml>

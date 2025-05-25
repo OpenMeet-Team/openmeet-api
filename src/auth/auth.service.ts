@@ -24,7 +24,7 @@ import { JwtRefreshPayloadType } from './strategies/types/jwt-refresh-payload.ty
 import { JwtPayloadType } from './strategies/types/jwt-payload.type';
 import { UserService } from '../user/user.service';
 import { AllConfigType } from '../config/config.type';
-import { MailService } from '../mail/mail.service';
+import { UnifiedMessagingService } from '../messaging/services/unified-messaging.service';
 import { Session } from '../session/domain/session';
 import { SessionService } from '../session/session.service';
 import { StatusEnum } from '../status/status.enum';
@@ -51,7 +51,7 @@ export class AuthService {
     private sessionService: SessionService,
     private eventQueryService: EventQueryService,
     private eventAttendeeService: EventAttendeeService,
-    private mailService: MailService,
+    private messagingService: UnifiedMessagingService,
     private readonly roleService: RoleService,
     private configService: ConfigService<AllConfigType>,
     private readonly eventEmitter: EventEmitter2,
@@ -246,17 +246,6 @@ export class AuthService {
       tenantId: this.request?.tenantId,
     });
 
-    // Keep original mail service call as fallback for now
-    this.mailService
-      .userSignUp({
-        to: dto.email,
-        data: {
-          hash,
-        },
-      })
-      .catch((err) => {
-        console.log(err);
-      });
 
     return {
       refreshToken,
@@ -385,14 +374,6 @@ export class AuthService {
       tokenExpires,
     });
 
-    // Keep original mail service call as fallback for now
-    await this.mailService.forgotPassword({
-      to: email,
-      data: {
-        hash,
-        tokenExpires,
-      },
-    });
   }
 
   async resetPassword(hash: string, password: string): Promise<void> {
@@ -526,15 +507,9 @@ export class AuthService {
       this.eventEmitter.emit('auth.email.change', {
         email: userDto.email,
         hash,
+        tenantId: this.request?.tenantId,
       });
 
-      // Keep original mail service call as fallback for now
-      await this.mailService.confirmNewEmail({
-        to: userDto.email,
-        data: {
-          hash,
-        },
-      });
     }
 
     delete userDto.email;

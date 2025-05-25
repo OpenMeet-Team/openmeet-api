@@ -16,6 +16,7 @@ import { MailAdapterService } from './services/mail-adapter.service';
 import { AuthEmailListener } from './listeners/auth-email.listener';
 import { GroupEmailListener } from './listeners/group-email.listener';
 import { EventEmailListener } from './listeners/event-email.listener';
+import { ChatEmailListener } from './listeners/chat-email.listener';
 
 // Controllers
 import { MessagingController } from './messaging.controller';
@@ -60,6 +61,7 @@ import { ElastiCacheModule } from '../elasticache/elasticache.module';
     AuthEmailListener,
     GroupEmailListener,
     EventEmailListener,
+    ChatEmailListener,
     {
       provide: EMAIL_SENDER_TOKEN,
       useExisting: EmailSenderService,

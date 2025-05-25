@@ -18,7 +18,6 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FilesS3PresignedService } from '../../file/infrastructure/uploader/s3-presigned/file.service';
 import { EventRoleService } from '../../event-role/event-role.service';
 import { UserService } from '../../user/user.service';
-import { EventMailService } from '../../event-mail/event-mail.service';
 import { AuditLoggerService } from '../../logger/audit-logger.provider';
 import { BlueskyService } from '../../bluesky/bluesky.service';
 import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
@@ -66,7 +65,6 @@ export class EventManagementService {
     private readonly fileService: FilesS3PresignedService,
     private readonly eventRoleService: EventRoleService,
     private readonly userService: UserService,
-    private readonly eventMailService: EventMailService,
     @Inject(forwardRef(() => BlueskyService))
     private readonly blueskyService: BlueskyService,
     @Inject(forwardRef(() => BlueskyIdService))
@@ -1696,17 +1694,6 @@ export class EventManagementService {
         tenantId: this.request.tenantId,
       });
 
-      try {
-        // Keep original mail service call as fallback for now
-        await this.eventMailService.sendMailAttendeeGuestJoined(attendee);
-      } catch (error) {
-        this.logger.error(
-          `[attendEvent] Error sending mail for attendee ${attendee.id}: ${error.message}`,
-          error.stack,
-        );
-        // Continue execution - don't let mail errors affect the overall operation
-      }
-
       // Emit event for other parts of the system
       this.eventEmitter.emit('event.attendee.added', {
         eventId: event.id,
@@ -1817,9 +1804,6 @@ export class EventManagementService {
       newStatus: updateEventAttendeeDto.status,
       tenantId: this.request.tenantId,
     });
-
-    // Keep original mail service call as fallback for now
-    await this.eventMailService.sendMailAttendeeStatusChanged(attendeeId);
 
     return await this.eventAttendeeService.showEventAttendee(attendeeId);
   }
