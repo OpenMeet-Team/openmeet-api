@@ -1,36 +1,52 @@
-<%- include('./../layouts/header.mjml.ejs') %>
+<mjml>
+  <mj-head>
+    <mj-title><%= (tenantConfig && tenantConfig.tenantName) || 'OpenMeet' %> - Role Updated</mj-title>
+    <mj-preview>Your group role has been updated</mj-preview>
+    <mj-attributes>
+      <mj-all font-family="Inter, sans-serif" />
+      <mj-text font-size="15px" color="#1E1A43" />
+      <mj-button font-size="15px" color="#1E1A43" font-weight="700" border-radius="6px" />
+    </mj-attributes>
+  </mj-head>
+  <mj-body background-color="#F5F5FA">
+    <%- include('./../layouts/header.mjml.ejs', { tenantConfig: tenantConfig }) %>
 
-      <!-- Main Content -->
-      <mj-section>
-        <mj-column>
-
-          <% if (groupMember?.user?.name) { %>
-            <mj-text>
-              Hello <%= groupMember?.user?.name %>,
-            </mj-text>
-          <% } %>
-
+    <!-- Main Content -->
+    <mj-section>
+      <mj-column>
+        <% if (groupMember?.user?.name) { %>
           <mj-text>
-            Your role on the group <strong>
-              <a href="<%= tenantConfig?.frontendDomain + '/groups/' + groupMember?.group?.slug %>"><%= groupMember?.group?.name %></a>
-            </strong> has been updated to <strong>
-              <%= groupMember?.groupRole?.name %>
-            </strong>.
+            Hello <%= groupMember?.user?.name %>,
           </mj-text>
-
+        <% } else { %>
           <mj-text>
-            Please review your role on the group.
+            Hello,
           </mj-text>
-        </mj-column>
-      </mj-section>
+        <% } %>
 
-      <!-- Button -->
-      <mj-section padding="20px">
-        <mj-column>
-          <mj-button href="<%= tenantConfig?.frontendDomain + '/groups/' + groupMember?.group?.slug %>" background-color="#7B71DA" color="#FFFFFF" font-size="16px">
-            View Group
-          </mj-button>
-        </mj-column>
-      </mj-section>
+        <mj-text>
+          Your role on the group <strong>
+            <a href="<%= (tenantConfig?.frontendDomain || '#') + '/groups/' + groupMember?.group?.slug %>"><%= groupMember?.group?.name %></a>
+          </strong> has been updated to <strong>
+            <%= groupMember?.groupRole?.name %>
+          </strong>.
+        </mj-text>
 
-<%- include('./../layouts/footer.mjml.ejs') %>
+        <mj-text>
+          Please review your role on the group.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Button -->
+    <mj-section padding="20px">
+      <mj-column>
+        <mj-button href="<%= (tenantConfig?.frontendDomain || '#') + '/groups/' + groupMember?.group?.slug %>" background-color="#7B71DA" color="#FFFFFF" font-size="16px">
+          View Group
+        </mj-button>
+      </mj-column>
+    </mj-section>
+
+    <%- include('./../layouts/footer.mjml.ejs', { tenantConfig: tenantConfig }) %>
+  </mj-body>
+</mjml>

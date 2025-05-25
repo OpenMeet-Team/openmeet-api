@@ -1,32 +1,44 @@
-<%- include('./../layouts/header.mjml.ejs') %>
+<mjml>
+  <mj-head>
+    <mj-title><%= (tenantConfig && tenantConfig.tenantName) || 'OpenMeet' %> - New Message</mj-title>
+    <mj-preview>You have a new message</mj-preview>
+    <mj-attributes>
+      <mj-all font-family="Inter, sans-serif" />
+      <mj-text font-size="15px" color="#1E1A43" />
+      <mj-button font-size="15px" color="#1E1A43" font-weight="700" border-radius="6px" />
+    </mj-attributes>
+  </mj-head>
+  <mj-body background-color="#F5F5FA">
+    <%- include('./../layouts/header.mjml.ejs', { tenantConfig: tenantConfig }) %>
 
-      <!-- Main Content -->
-      <mj-section>
-        <mj-column>
+    <!-- Main Content -->
+    <mj-section>
+      <mj-column>
+        <mj-text>
+          Hello,
+        </mj-text>
 
-          <mj-text>
-            Hello,
-          </mj-text>
+        <mj-text>
+          You have a new message from <strong>
+            <a href="<%= (tenantConfig?.frontendDomain || '#') + '/members/' + participant?.slug %>"><%= participant?.firstName %> <%= participant?.lastName %></a>
+          </strong>.
+        </mj-text>
 
-          <mj-text>
-            You have a new message from <strong>
-              <a href="<%= tenantConfig?.frontendDomain + '/members/' + participant?.slug %>"><%= participant?.firstName %> <%= participant?.lastName %></a>
-            </strong>.
-          </mj-text>
+        <mj-text>
+          Please review the message and reply to the participant.
+        </mj-text>
+      </mj-column>
+    </mj-section>
 
-          <mj-text>
-            Please review the message and reply to the participant.
-          </mj-text>
-        </mj-column>
-      </mj-section>
+    <!-- Button -->
+    <mj-section padding="20px">
+      <mj-column>
+        <mj-button href="<%= (tenantConfig?.frontendDomain || '#') + '/messages?user=' + participant?.slug %>" background-color="#7B71DA" color="#FFFFFF" font-size="16px">
+          View Message
+        </mj-button>
+      </mj-column>
+    </mj-section>
 
-      <!-- Button -->
-      <mj-section padding="20px">
-        <mj-column>
-          <mj-button href="<%= tenantConfig?.frontendDomain + '/messages?user=' + participant?.slug %>" background-color="#7B71DA" color="#FFFFFF" font-size="16px">
-            View Message
-          </mj-button>
-        </mj-column>
-      </mj-section>
-
-<%- include('./../layouts/footer.mjml.ejs') %>
+    <%- include('./../layouts/footer.mjml.ejs', { tenantConfig: tenantConfig }) %>
+  </mj-body>
+</mjml>

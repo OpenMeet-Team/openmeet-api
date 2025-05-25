@@ -119,17 +119,158 @@ export class AdminService {
       subject: context.title,
       content: `${context.text1}\n\n${context.url}\n\n${context.text2}\n\n${context.text3}`,
       htmlContent: undefined,
-      templateId: path.join(
-        this.configService.getOrThrow('app.workingDirectory', { infer: true }),
-        'src',
-        'messaging',
-        'templates',
-        'auth',
-        'confirm-new-email.hbs',
-      ),
+      templateId: 'auth/confirm-new-email.mjml.ejs',
       context,
       type: MessageType.ADMIN_CONTACT,
       systemReason: 'email_simulation_email_change',
+      tenantId,
+    });
+  }
+
+  async simulateChatNewMessageEmail(email: string): Promise<void> {
+    const tenantId = this.request.tenantId;
+    const context = {
+      title: 'New message received',
+      participant: {
+        firstName: 'Demo',
+        lastName: 'Sender',
+        slug: 'demo-sender-abc123',
+      },
+    };
+
+    await this.messagingService.sendSystemMessage({
+      recipientEmail: email,
+      subject: context.title,
+      content: `You have a new message from ${context.participant.firstName} ${context.participant.lastName}.`,
+      htmlContent: undefined,
+      templateId: 'chat/chat-new-message.mjml.ejs',
+      context,
+      type: MessageType.ADMIN_CONTACT,
+      systemReason: 'email_simulation_chat_new_message',
+      tenantId,
+    });
+  }
+
+  async simulateGroupMemberRoleUpdatedEmail(email: string): Promise<void> {
+    const tenantId = this.request.tenantId;
+    const context = {
+      title: 'Your role has been updated',
+      groupMember: {
+        user: {
+          name: 'Demo User',
+          firstName: 'Demo',
+          lastName: 'User',
+          slug: 'demo-user-abc123',
+        },
+        group: {
+          name: 'Sample Group',
+          slug: 'sample-group-def456',
+        },
+        groupRole: {
+          name: 'Moderator',
+        },
+      },
+    };
+
+    await this.messagingService.sendSystemMessage({
+      recipientEmail: email,
+      subject: context.title,
+      content: `Your role in ${context.groupMember.group.name} has been updated to ${context.groupMember.groupRole.name}.`,
+      htmlContent: undefined,
+      templateId: 'group/group-member-role-updated.mjml.ejs',
+      context,
+      type: MessageType.ADMIN_CONTACT,
+      systemReason: 'email_simulation_group_member_role_updated',
+      tenantId,
+    });
+  }
+
+  async simulateGroupGuestJoinedEmail(email: string): Promise<void> {
+    const tenantId = this.request.tenantId;
+    const context = {
+      title: 'New member joined your group',
+      groupMember: {
+        user: {
+          firstName: 'Demo',
+          lastName: 'Guest',
+          slug: 'demo-guest-abc123',
+        },
+        group: {
+          name: 'Sample Group',
+          slug: 'sample-group-def456',
+        },
+      },
+    };
+
+    await this.messagingService.sendSystemMessage({
+      recipientEmail: email,
+      subject: context.title,
+      content: `${context.groupMember.user.firstName} ${context.groupMember.user.lastName} has joined ${context.groupMember.group.name}.`,
+      htmlContent: undefined,
+      templateId: 'group/group-guest-joined.mjml.ejs',
+      context,
+      type: MessageType.ADMIN_CONTACT,
+      systemReason: 'email_simulation_group_guest_joined',
+      tenantId,
+    });
+  }
+
+  async simulateEventAttendeeGuestJoinedEmail(email: string): Promise<void> {
+    const tenantId = this.request.tenantId;
+    const context = {
+      title: 'New attendee joined your event',
+      eventAttendee: {
+        user: {
+          firstName: 'Demo',
+          lastName: 'Attendee',
+          slug: 'demo-attendee-abc123',
+        },
+        event: {
+          name: 'Sample Event',
+          slug: 'sample-event-def456',
+        },
+        approvalAnswer: 'I am interested in learning more about this topic and connecting with like-minded people.',
+      },
+    };
+
+    await this.messagingService.sendSystemMessage({
+      recipientEmail: email,
+      subject: context.title,
+      content: `${context.eventAttendee.user.firstName} ${context.eventAttendee.user.lastName} has joined ${context.eventAttendee.event.name}.`,
+      htmlContent: undefined,
+      templateId: 'event/attendee-guest-joined.mjml.ejs',
+      context,
+      type: MessageType.ADMIN_CONTACT,
+      systemReason: 'email_simulation_event_attendee_guest_joined',
+      tenantId,
+    });
+  }
+
+  async simulateEventAttendeeStatusChangedEmail(email: string): Promise<void> {
+    const tenantId = this.request.tenantId;
+    const context = {
+      title: 'Event attendance status changed',
+      eventAttendee: {
+        event: {
+          name: 'Sample Event',
+          slug: 'sample-event-def456',
+        },
+        status: 'Confirmed',
+        role: {
+          name: 'Attendee',
+        },
+      },
+    };
+
+    await this.messagingService.sendSystemMessage({
+      recipientEmail: email,
+      subject: context.title,
+      content: `Your status for ${context.eventAttendee.event.name} has been updated to ${context.eventAttendee.status}.`,
+      htmlContent: undefined,
+      templateId: 'event/attendee-status-changed.mjml.ejs',
+      context,
+      type: MessageType.ADMIN_CONTACT,
+      systemReason: 'email_simulation_event_attendee_status_changed',
       tenantId,
     });
   }

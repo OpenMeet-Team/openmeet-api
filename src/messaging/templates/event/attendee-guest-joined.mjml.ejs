@@ -1,43 +1,53 @@
-<%- include('./../layouts/header.mjml.ejs') %>
+<mjml>
+  <mj-head>
+    <mj-title><%= (tenantConfig && tenantConfig.tenantName) || 'OpenMeet' %> - New Event Attendee</mj-title>
+    <mj-preview>New attendee joined your event</mj-preview>
+    <mj-attributes>
+      <mj-all font-family="Inter, sans-serif" />
+      <mj-text font-size="15px" color="#1E1A43" />
+      <mj-button font-size="15px" color="#1E1A43" font-weight="700" border-radius="6px" />
+    </mj-attributes>
+  </mj-head>
+  <mj-body background-color="#F5F5FA">
+    <%- include('./../layouts/header.mjml.ejs', { tenantConfig: tenantConfig }) %>
 
-      <!-- Main Content -->
-      <mj-section>
-        <mj-column>
+    <!-- Main Content -->
+    <mj-section>
+      <mj-column>
+        <mj-text>
+          Hello,
+        </mj-text>
 
+        <mj-text>
+          A new event attendee <strong>
+            <a href="<%= (tenantConfig?.frontendDomain || '#') + '/members/' + eventAttendee?.user?.slug %>"><%= eventAttendee?.user?.firstName %> <%= eventAttendee?.user?.lastName %></a>
+          </strong>, has requested to join your event <strong>
+            <a href="<%= (tenantConfig?.frontendDomain || '#') + '/events/' + eventAttendee?.event?.slug %>"><%= eventAttendee?.event?.name %></a>
+          </strong>.
+        </mj-text>
+
+        <% if (eventAttendee?.approvalAnswer) { %>
+          <mj-text>Applied with the following answer:</mj-text>
           <mj-text>
-            Hello,
+            <%= eventAttendee?.approvalAnswer %>
           </mj-text>
+        <% } %>
 
-          <mj-text>
-            A new event attendee <strong>
-              <a href="<%= tenantConfig?.frontendDomain + '/members/' + eventAttendee?.user?.slug %>"><%= eventAttendee?.user?.firstName %> <%= eventAttendee?.user?.lastName %></a>
-            </strong>, has requested to join your event <strong>
-              <a href="<%= tenantConfig?.frontendDomain + '/events/' + eventAttendee?.event?.slug %>"><%= eventAttendee?.event?.name %></a>
-            </strong>.
-          </mj-text>
+        <mj-text>
+          Please review their request and change their status or role on the event.
+        </mj-text>
+      </mj-column>
+    </mj-section>
 
-          <!-- Approval question -->
-          <% if (eventAttendee?.approvalAnswer) { %>
-            <mj-text>Applied with the following answer:</mj-text>
-            <mj-text>
-              <%= eventAttendee?.approvalAnswer %>
-            </mj-text>
-          <% } %>
+    <!-- Button -->
+    <mj-section padding="20px">
+      <mj-column>
+        <mj-button href="<%= (tenantConfig?.frontendDomain || '#') + '/events/' + eventAttendee?.event?.slug %>" background-color="#7B71DA" color="#FFFFFF" font-size="16px">
+          View Event
+        </mj-button>
+      </mj-column>
+    </mj-section>
 
-          <mj-text>
-            Please review their request and change their status or role on the event.
-          </mj-text>
-
-        </mj-column>
-      </mj-section>
-
-      <!-- Button -->
-      <mj-section padding="20px">
-        <mj-column>
-          <mj-button href="<%= tenantConfig?.frontendDomain + '/events/' + eventAttendee?.event?.slug %>" background-color="#7B71DA" color="#FFFFFF" font-size="16px">
-            View Event
-          </mj-button>
-        </mj-column>
-      </mj-section>
-
-<%- include('./../layouts/footer.mjml.ejs') %>
+    <%- include('./../layouts/footer.mjml.ejs', { tenantConfig: tenantConfig }) %>
+  </mj-body>
+</mjml>
