@@ -10,6 +10,7 @@ echo "Waiting for Redis to be ready..."
 echo "Running database migrations..."
 npm run migration:run:tenants
 
+apk add postgresql-client
 echo "Debugging: Checking migration results..."
 PGPASSWORD=secret psql -h postgres -U root api -c "SELECT 'Migration check - tenant_testing tables:' as status; SELECT tablename FROM pg_tables WHERE schemaname = 'tenant_testing' ORDER BY tablename;"
 PGPASSWORD=secret psql -h postgres -U root api -c "SELECT 'Migration check - tenant_testing enums:' as status; SELECT typname FROM pg_type WHERE typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'tenant_testing') AND typtype = 'e';"
