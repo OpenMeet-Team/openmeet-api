@@ -1,54 +1,43 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmailService } from './event-email.service';
-import { MessageSenderService } from './message-sender.service';
-import { MessageLoggerService } from './message-logger.service';
-import { MessagePolicyService } from './message-policy.service';
-import { UserService } from '../../user/user.service';
-import { MessageType } from '../interfaces/message.interface';
+import { GroupMemberService } from '../../group-member/group-member.service';
+import { TenantConnectionService } from '../../tenant/tenant.service';
+import { UnifiedMessagingService } from './unified-messaging.service';
+import { MessageType, MessageChannel } from '../interfaces/message.interface';
 
 describe('EventEmailService', () => {
   let service: EventEmailService;
-  let mockMessageSender: jest.Mocked<MessageSenderService>;
-  let mockMessageLogger: jest.Mocked<MessageLoggerService>;
-  let mockMessagePolicy: jest.Mocked<MessagePolicyService>;
-  let mockUserService: jest.Mocked<UserService>;
+  let mockGroupMemberService: jest.Mocked<GroupMemberService>;
+  let mockTenantService: jest.Mocked<TenantConnectionService>;
+  let mockMessagingService: jest.Mocked<UnifiedMessagingService>;
 
   beforeEach(async () => {
-    mockMessageSender = {
-      sendSystemEmail: jest.fn(),
+    mockGroupMemberService = {
+      getGroupMemberForEmailTemplate: jest.fn(),
     } as any;
 
-    mockMessageLogger = {
-      logSystemEmail: jest.fn(),
+    mockTenantService = {
+      getTenantConfig: jest.fn(),
     } as any;
 
-    mockMessagePolicy = {
-      checkPolicies: jest.fn(),
+    mockMessagingService = {
+      sendSystemMessage: jest.fn(),
     } as any;
-
-    mockUserService = {
-      findBySlug: jest.fn(),
-    } as any;
-
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EventEmailService,
         {
-          provide: MessageSenderService,
-          useValue: mockMessageSender,
+          provide: GroupMemberService,
+          useValue: mockGroupMemberService,
         },
         {
-          provide: MessageLoggerService,
-          useValue: mockMessageLogger,
+          provide: TenantConnectionService,
+          useValue: mockTenantService,
         },
         {
-          provide: MessagePolicyService,
-          useValue: mockMessagePolicy,
-        },
-        {
-          provide: UserService,
-          useValue: mockUserService,
+          provide: UnifiedMessagingService,
+          useValue: mockMessagingService,
         },
       ],
     }).compile();
@@ -57,10 +46,9 @@ describe('EventEmailService', () => {
     jest.clearAllMocks();
   });
 
-  describe('sendRoleUpdateEmail', () => {
+  describe('sendRoleUpdateEmailByMemberId', () => {
     const mockRoleUpdateData = {
-      userSlug: 'test-user',
-      groupSlug: 'test-group',
+      groupMemberId: 101,
       tenantId: 'tenant123',
     };
 
@@ -72,119 +60,120 @@ describe('EventEmailService', () => {
       lastName: 'User',
     };
 
+    const mockGroup = {
+      id: 1,
+      slug: 'test-group',
+      name: 'Test Group',
+    };
+
+    const mockGroupMember = {
+      id: 1,
+      user: mockUser,
+      group: mockGroup,
+      groupRole: {
+        id: 1,
+        name: 'Admin',
+      },
+    };
+
+    const mockTenantConfig = {
+      id: 'tenant123',
+      name: 'Test Tenant',
+      frontendDomain: 'https://test.example.com',
+      logoUrl: 'https://test.example.com/logo.png',
+      companyDomain: 'test.example.com',
+      confirmEmail: true,
+      mailDefaultEmail: 'noreply@test.example.com',
+      mailDefaultName: 'Test Tenant',
+      googleClientId: 'test-google-client-id',
+      googleClientSecret: 'test-google-client-secret',
+      githubClientId: 'test-github-client-id',
+      githubClientSecret: 'test-github-client-secret',
+      systemUserId: 1,
+      messagingRateLimit: 10,
+    };
+
     beforeEach(() => {
-      mockUserService.findBySlug.mockResolvedValue(mockUser as any);
-      mockMessagePolicy.checkPolicies.mockResolvedValue({ allowed: true });
-      mockMessageSender.sendSystemEmail.mockResolvedValue('ext_123');
-      mockMessageLogger.logSystemEmail.mockResolvedValue(true);
+      mockGroupMemberService.getGroupMemberForEmailTemplate = jest
+        .fn()
+        .mockResolvedValue(mockGroupMember);
+      mockTenantService.getTenantConfig.mockReturnValue(mockTenantConfig);
+      mockMessagingService.sendSystemMessage.mockResolvedValue({} as any);
     });
 
-    it('should send role update email successfully', async () => {
-      const result = await service.sendRoleUpdateEmail(mockRoleUpdateData);
+    it('should send role update email with template successfully', async () => {
+      const result =
+        await service.sendRoleUpdateEmailByMemberId(mockRoleUpdateData);
 
-      expect(mockUserService.findBySlug).toHaveBeenCalledWith(mockRoleUpdateData.userSlug);
-      
-      expect(mockMessagePolicy.checkPolicies).toHaveBeenCalledWith({
-        tenantId: mockRoleUpdateData.tenantId,
-        userId: mockUser.id,
-        systemReason: 'role_updated',
-        skipRateLimit: true,
-      });
+      expect(
+        mockGroupMemberService.getGroupMemberForEmailTemplate,
+      ).toHaveBeenCalledWith(mockRoleUpdateData.groupMemberId);
+      expect(mockTenantService.getTenantConfig).toHaveBeenCalledWith(
+        mockRoleUpdateData.tenantId,
+      );
 
-      expect(mockMessageSender.sendSystemEmail).toHaveBeenCalledWith({
+      expect(mockMessagingService.sendSystemMessage).toHaveBeenCalledWith({
         recipientEmail: mockUser.email,
         subject: 'Your group role has been updated',
-        text: `Your role in the group "${mockRoleUpdateData.groupSlug}" has been updated. Please check the group details for more information.`,
-        html: `<p>Your role in the group "<strong>${mockRoleUpdateData.groupSlug}</strong>" has been updated.</p><p>Please check the group details for more information.</p>`,
-        tenantId: mockRoleUpdateData.tenantId,
-      });
-
-      expect(mockMessageLogger.logSystemEmail).toHaveBeenCalledWith({
-        tenantId: mockRoleUpdateData.tenantId,
-        recipientUserId: mockUser.id,
-        status: 'sent',
-        externalId: 'ext_123',
+        content: `Your role in the group "${mockGroup.name}" has been updated to ${mockGroupMember.groupRole.name}. Please check the group details for more information.`,
+        templateId: 'group/group-member-role-updated',
+        context: {
+          groupMember: mockGroupMember,
+          tenantConfig: mockTenantConfig,
+        },
         type: MessageType.GROUP_ANNOUNCEMENT,
+        channels: [MessageChannel.EMAIL],
         systemReason: 'role_updated',
+        tenantId: mockRoleUpdateData.tenantId,
       });
 
       expect(result).toBe(true);
     });
 
-    it('should handle user not found', async () => {
-      mockUserService.findBySlug.mockResolvedValue(null);
+    it('should handle group member not found', async () => {
+      mockGroupMemberService.getGroupMemberForEmailTemplate.mockRejectedValue(
+        new Error('Group member not found'),
+      );
 
-      const result = await service.sendRoleUpdateEmail(mockRoleUpdateData);
+      const result =
+        await service.sendRoleUpdateEmailByMemberId(mockRoleUpdateData);
 
-      expect(mockUserService.findBySlug).toHaveBeenCalledWith(mockRoleUpdateData.userSlug);
-      expect(mockMessageSender.sendSystemEmail).not.toHaveBeenCalled();
+      expect(
+        mockGroupMemberService.getGroupMemberForEmailTemplate,
+      ).toHaveBeenCalledWith(mockRoleUpdateData.groupMemberId);
+      expect(mockMessagingService.sendSystemMessage).not.toHaveBeenCalled();
       expect(result).toBe(false);
     });
 
+    it('should handle group member without email', async () => {
+      const mockGroupMemberWithoutEmail = {
+        ...mockGroupMember,
+        user: { ...mockGroupMember.user, email: null },
+      } as any;
+      mockGroupMemberService.getGroupMemberForEmailTemplate.mockResolvedValue(
+        mockGroupMemberWithoutEmail,
+      );
 
-    it('should handle policy check denial', async () => {
-      mockMessagePolicy.checkPolicies.mockResolvedValue({
-        allowed: false,
-        reason: 'Messaging is paused',
-      });
+      const result =
+        await service.sendRoleUpdateEmailByMemberId(mockRoleUpdateData);
 
-      const result = await service.sendRoleUpdateEmail(mockRoleUpdateData);
-
-      expect(mockMessagePolicy.checkPolicies).toHaveBeenCalled();
-      expect(mockMessageSender.sendSystemEmail).not.toHaveBeenCalled();
+      expect(
+        mockGroupMemberService.getGroupMemberForEmailTemplate,
+      ).toHaveBeenCalled();
+      expect(mockMessagingService.sendSystemMessage).not.toHaveBeenCalled();
       expect(result).toBe(false);
     });
 
-    it('should handle email sending failure', async () => {
-      mockMessageSender.sendSystemEmail.mockResolvedValue(null);
+    it('should handle service errors gracefully', async () => {
+      mockGroupMemberService.getGroupMemberForEmailTemplate.mockRejectedValue(
+        new Error('Database connection failed'),
+      );
 
-      const result = await service.sendRoleUpdateEmail(mockRoleUpdateData);
-
-      expect(mockMessageSender.sendSystemEmail).toHaveBeenCalled();
-      expect(mockMessageLogger.logSystemEmail).toHaveBeenCalledWith({
-        tenantId: mockRoleUpdateData.tenantId,
-        recipientUserId: mockUser.id,
-        status: 'failed',
-        type: MessageType.GROUP_ANNOUNCEMENT,
-        systemReason: 'role_updated',
-      });
-      expect(result).toBe(false);
-    });
-
-    it('should handle user service error', async () => {
-      mockUserService.findBySlug.mockRejectedValue(new Error('Database connection failed'));
-
-      const result = await service.sendRoleUpdateEmail(mockRoleUpdateData);
+      const result =
+        await service.sendRoleUpdateEmailByMemberId(mockRoleUpdateData);
 
       expect(result).toBe(false);
     });
-
-    it('should handle group service error', async () => {
-      mockUserService.findBySlug.mockRejectedValue(new Error('Database connection failed'));
-
-      const result = await service.sendRoleUpdateEmail(mockRoleUpdateData);
-
-      expect(result).toBe(false);
-    });
-
-    it('should handle policy check error', async () => {
-      mockMessagePolicy.checkPolicies.mockRejectedValue(new Error('Policy service unavailable'));
-
-      const result = await service.sendRoleUpdateEmail(mockRoleUpdateData);
-
-      expect(result).toBe(false);
-    });
-
-    it('should continue even if logging fails', async () => {
-      mockMessageLogger.logSystemEmail.mockResolvedValue(false);
-
-      const result = await service.sendRoleUpdateEmail(mockRoleUpdateData);
-
-      expect(mockMessageSender.sendSystemEmail).toHaveBeenCalled();
-      expect(mockMessageLogger.logSystemEmail).toHaveBeenCalled();
-      expect(result).toBe(true); // Still succeeds even if logging fails
-    });
-
   });
 
   describe('service initialization', () => {
@@ -193,10 +182,9 @@ describe('EventEmailService', () => {
     });
 
     it('should have all dependencies injected', () => {
-      expect(service['messageSender']).toBeDefined();
-      expect(service['messageLogger']).toBeDefined();
-      expect(service['messagePolicy']).toBeDefined();
-      expect(service['userService']).toBeDefined();
+      expect(service['groupMemberService']).toBeDefined();
+      expect(service['tenantService']).toBeDefined();
+      expect(service['messagingService']).toBeDefined();
     });
   });
 });

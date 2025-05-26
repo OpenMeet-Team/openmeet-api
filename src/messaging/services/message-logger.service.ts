@@ -21,11 +21,11 @@ export interface LogEmailOptions {
  */
 @Injectable()
 export class MessageLoggerService {
-  constructor(
-    private readonly tenantService: TenantConnectionService,
-  ) {}
+  constructor(private readonly tenantService: TenantConnectionService) {}
 
-  private async getLogRepository(tenantId: string): Promise<Repository<MessageLogEntity> | null> {
+  private async getLogRepository(
+    tenantId: string,
+  ): Promise<Repository<MessageLogEntity> | null> {
     try {
       const dataSource = await this.tenantService.getTenantConnection(tenantId);
       return dataSource.getRepository(MessageLogEntity);
@@ -49,7 +49,9 @@ export class MessageLoggerService {
         recipientUserId: options.recipientUserId,
         channel: options.channel,
         status: options.status,
-        externalId: options.externalId || `email_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        externalId:
+          options.externalId ||
+          `email_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         error: options.error,
         metadata: {
           isSystemMessage: !options.messageId,

@@ -1,7 +1,6 @@
 import {
   Injectable,
   Inject,
-  Optional,
   ForbiddenException,
   BadRequestException,
   forwardRef,
@@ -17,7 +16,6 @@ import { EventAttendeeService } from '../../event-attendee/event-attendee.servic
 import { GroupService } from '../../group/group.service';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { UserService } from '../../user/user.service';
-import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import {
   IEmailSender,
@@ -40,7 +38,7 @@ import {
 @Injectable()
 export class UnifiedMessagingService {
   private static _globalModuleRef: ModuleRef;
-  
+
   constructor(
     private readonly moduleRef: ModuleRef,
     private readonly draftService: MessageDraftService,
@@ -70,30 +68,40 @@ export class UnifiedMessagingService {
     if (!tenantId) {
       throw new Error('tenantId is required for getLogRepository');
     }
-    
+
     try {
       // Try to get TenantConnectionService dynamically using ModuleRef
-      const moduleRef = this.moduleRef || UnifiedMessagingService._globalModuleRef;
-      
+      const moduleRef =
+        this.moduleRef || UnifiedMessagingService._globalModuleRef;
+
       if (!moduleRef) {
-        console.warn('ModuleRef not available, skipping database logging for system message');
+        console.warn(
+          'ModuleRef not available, skipping database logging for system message',
+        );
         return null;
       }
-      
-      const tenantService = moduleRef.get(TenantConnectionService, { strict: false });
-      
+
+      const tenantService = moduleRef.get(TenantConnectionService, {
+        strict: false,
+      });
+
       if (!tenantService) {
-        console.warn('TenantConnectionService not found in module, skipping database logging for system message');
+        console.warn(
+          'TenantConnectionService not found in module, skipping database logging for system message',
+        );
         return null;
       }
-      
+
       const dataSource = await tenantService.getTenantConnection(tenantId);
       return dataSource.getRepository(MessageLogEntity);
     } catch (error) {
-      console.warn('Could not get repository for logging, continuing without database log:', {
-        error: error.message,
-        tenantId: tenantId,
-      });
+      console.warn(
+        'Could not get repository for logging, continuing without database log:',
+        {
+          error: error.message,
+          tenantId: tenantId,
+        },
+      );
       return null;
     }
   }
@@ -290,18 +298,13 @@ export class UnifiedMessagingService {
       // Don't throw - just log and return without sending
       // This keeps the message in its current status (DRAFT or APPROVED)
       // so it can be retried later
-      await this.auditService.logAction(
-        tenantId,
-        0,
-        'message_send_skipped',
-        {
-          additionalData: {
-            messageSlug: draftSlug,
-            reason: 'messaging_paused',
-            pauseReason: pauseStatus.reason,
-          },
+      await this.auditService.logAction(tenantId, 0, 'message_send_skipped', {
+        additionalData: {
+          messageSlug: draftSlug,
+          reason: 'messaging_paused',
+          pauseReason: pauseStatus.reason,
         },
-      );
+      });
       return;
     }
 
@@ -309,10 +312,12 @@ export class UnifiedMessagingService {
       throw new Error('tenantId is required for sendMessage');
     }
     const repository = await this.getLogRepository(tenantId);
-    
+
     // If repository is null, we can't log to database but continue with email sending
     if (!repository) {
-      console.warn('Database logging unavailable for sendMessage, continuing with email only');
+      console.warn(
+        'Database logging unavailable for sendMessage, continuing with email only',
+      );
     }
 
     // Get draft (using 0 for userId since this is admin/system access)
@@ -601,10 +606,13 @@ export class UnifiedMessagingService {
    * Get services lazily using ModuleRef - this works in event contexts
    */
   private async getServices() {
-    const moduleRef = this.moduleRef || UnifiedMessagingService._globalModuleRef;
-    
+    const moduleRef =
+      this.moduleRef || UnifiedMessagingService._globalModuleRef;
+
     if (!moduleRef) {
-      throw new Error('ModuleRef not available - cannot get services in this context');
+      throw new Error(
+        'ModuleRef not available - cannot get services in this context',
+      );
     }
 
     try {
@@ -618,10 +626,14 @@ export class UnifiedMessagingService {
         groupMemberService = await moduleRef.resolve(GroupMemberService);
       } catch {
         try {
-          groupMemberService = moduleRef.get(GroupMemberService, { strict: false });
+          groupMemberService = moduleRef.get(GroupMemberService, {
+            strict: false,
+          });
         } catch {
           try {
-            groupMemberService = moduleRef.get('GroupMemberService', { strict: false });
+            groupMemberService = moduleRef.get('GroupMemberService', {
+              strict: false,
+            });
           } catch {
             // Service not available - will be handled gracefully
           }
@@ -646,16 +658,20 @@ export class UnifiedMessagingService {
         eventAttendeeService = await moduleRef.resolve(EventAttendeeService);
       } catch {
         try {
-          eventAttendeeService = moduleRef.get(EventAttendeeService, { strict: false });
+          eventAttendeeService = moduleRef.get(EventAttendeeService, {
+            strict: false,
+          });
         } catch {
           try {
-            eventAttendeeService = moduleRef.get('EventAttendeeService', { strict: false });
+            eventAttendeeService = moduleRef.get('EventAttendeeService', {
+              strict: false,
+            });
           } catch {
             // Service not available - will be handled gracefully
           }
         }
       }
-      
+
       return {
         groupMemberService,
         userService,
@@ -683,7 +699,7 @@ export class UnifiedMessagingService {
             'groupMemberId required for group_member target',
           );
         }
-        
+
         // Get the specific group member using proper service approach
         try {
           const services = await this.getServices();
@@ -691,16 +707,17 @@ export class UnifiedMessagingService {
             console.warn('GroupMemberService not available via ModuleRef');
             return [];
           }
-          
-          const groupMember = await services.groupMemberService.showGroupDetailsMember(
-            targetUser.groupMemberId,
-          );
-          
+
+          const groupMember =
+            await services.groupMemberService.showGroupDetailsMember(
+              targetUser.groupMemberId,
+            );
+
           if (!groupMember || !groupMember.user) {
             console.warn('Group member not found or no user data');
             return [];
           }
-          
+
           return [
             {
               userId: groupMember.user.id,
@@ -830,25 +847,34 @@ export class UnifiedMessagingService {
     }
 
     const repository = await this.getLogRepository(tenantId);
-    
+
     // If repository is null, we can still send emails but won't log to database
     if (!repository) {
-      console.warn('Database logging unavailable for sendSystemMessage, emails will still be sent');
+      console.warn(
+        'Database logging unavailable for sendSystemMessage, emails will still be sent',
+      );
     }
 
     // Get system user ID from config or use default admin (1)
     let systemUserId = 1; // Default admin user ID
     try {
-      const moduleRef = this.moduleRef || UnifiedMessagingService._globalModuleRef;
+      const moduleRef =
+        this.moduleRef || UnifiedMessagingService._globalModuleRef;
       if (moduleRef) {
-        const tenantService = moduleRef.get(TenantConnectionService, { strict: false });
+        const tenantService = moduleRef.get(TenantConnectionService, {
+          strict: false,
+        });
         if (tenantService && tenantService.getTenantConfig) {
-          systemUserId = tenantService.getTenantConfig(tenantId).systemUserId || 1;
+          systemUserId =
+            tenantService.getTenantConfig(tenantId).systemUserId || 1;
         }
       }
     } catch (error) {
       // Use default if config access fails
-      console.warn('Could not get tenant config, using default system user ID:', error.message);
+      console.warn(
+        'Could not get tenant config, using default system user ID:',
+        error.message,
+      );
     }
 
     // Get recipients based on targetUser type or direct email/userId
@@ -1009,7 +1035,8 @@ export class UnifiedMessagingService {
       // No database logging available, but emails were sent
       return {
         success: true,
-        message: 'System message sent successfully (database logging unavailable)',
+        message:
+          'System message sent successfully (database logging unavailable)',
         recipientCount: recipients.length,
       } as any;
     }

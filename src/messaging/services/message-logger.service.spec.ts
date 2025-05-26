@@ -58,7 +58,9 @@ describe('MessageLoggerService', () => {
 
       const result = await service.logEmail(mockLogOptions);
 
-      expect(mockTenantConnection.getTenantConnection).toHaveBeenCalledWith(mockLogOptions.tenantId);
+      expect(mockTenantConnection.getTenantConnection).toHaveBeenCalledWith(
+        mockLogOptions.tenantId,
+      );
       expect(mockMessageLogRepository.create).toHaveBeenCalledWith({
         tenantId: mockLogOptions.tenantId,
         messageId: mockLogOptions.messageId,
@@ -71,7 +73,9 @@ describe('MessageLoggerService', () => {
           isSystemMessage: !mockLogOptions.messageId,
         },
       });
-      expect(mockMessageLogRepository.save).toHaveBeenCalledWith(mockMessageLog);
+      expect(mockMessageLogRepository.save).toHaveBeenCalledWith(
+        mockMessageLog,
+      );
       expect(result).toBe(true);
     });
 
@@ -116,7 +120,9 @@ describe('MessageLoggerService', () => {
     it('should handle repository save failure gracefully', async () => {
       const mockMessageLog = { id: 1, ...mockLogOptions };
       mockMessageLogRepository.create.mockReturnValue(mockMessageLog as any);
-      mockMessageLogRepository.save.mockRejectedValue(new Error('Database error'));
+      mockMessageLogRepository.save.mockRejectedValue(
+        new Error('Database error'),
+      );
 
       const result = await service.logEmail(mockLogOptions);
 

@@ -79,10 +79,15 @@ export class MessagingController {
     @Req() req: Request,
   ) {
     const tenantId = (req as any).tenantId;
-    return await this.messagingService.sendGroupMessage(tenantId, groupSlug, user.slug, {
-      ...messageRequest,
-      type: MessageType.GROUP_ANNOUNCEMENT,
-    });
+    return await this.messagingService.sendGroupMessage(
+      tenantId,
+      groupSlug,
+      user.slug,
+      {
+        ...messageRequest,
+        type: MessageType.GROUP_ANNOUNCEMENT,
+      },
+    );
   }
 
   @Post('events/:eventSlug/send')
@@ -106,10 +111,15 @@ export class MessagingController {
     @Req() req: Request,
   ) {
     const tenantId = (req as any).tenantId;
-    return await this.messagingService.sendEventMessage(tenantId, eventSlug, user.slug, {
-      ...messageRequest,
-      type: MessageType.EVENT_ANNOUNCEMENT,
-    });
+    return await this.messagingService.sendEventMessage(
+      tenantId,
+      eventSlug,
+      user.slug,
+      {
+        ...messageRequest,
+        type: MessageType.EVENT_ANNOUNCEMENT,
+      },
+    );
   }
 
   @Get('drafts')

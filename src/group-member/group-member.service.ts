@@ -217,7 +217,7 @@ export class GroupMemberService {
 
     // If validation passes, proceed with the role change
     targetGroupMember.groupRole = newGroupRole;
-    const updatedGroupMember = await this.groupMemberRepository.save(targetGroupMember);
+    await this.groupMemberRepository.save(targetGroupMember);
 
     // Emit event for email notification
     const eventData = {
@@ -226,7 +226,7 @@ export class GroupMemberService {
       groupSlug: targetGroupMember.group.slug,
       userSlug: targetGroupMember.user.slug,
     };
-    
+
     console.log('EMITTING group.member.role.updated event:', eventData);
     this.eventEmitter.emit('group.member.role.updated', eventData);
 
@@ -348,6 +348,39 @@ export class GroupMemberService {
     const groupMember = await this.groupMemberRepository.findOne({
       where: { id: groupMemberId },
       relations: ['user', 'group', 'groupRole', 'groupRole.groupPermissions'],
+    });
+
+    if (!groupMember) {
+      throw new NotFoundException('Group member not found');
+    }
+    return groupMember;
+  }
+
+  async getGroupMemberForEmailTemplate(groupMemberId: number) {
+    await this.getTenantSpecificEventRepository();
+    const groupMember = await this.groupMemberRepository.findOne({
+      where: { id: groupMemberId },
+      relations: ['user', 'group', 'groupRole'],
+      select: {
+        id: true,
+        user: {
+          id: true,
+          slug: true,
+          name: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+        },
+        group: {
+          id: true,
+          slug: true,
+          name: true,
+        },
+        groupRole: {
+          id: true,
+          name: true,
+        },
+      },
     });
 
     if (!groupMember) {

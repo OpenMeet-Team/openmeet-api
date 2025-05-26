@@ -41,8 +41,15 @@ export class MessagePolicyService {
         const pauseStatus = await this.pauseService.isMessagingPaused();
         if (pauseStatus.paused) {
           // Allow critical system messages through pause
-          const criticalReasons = ['user_signup', 'password_reset', 'account_verification'];
-          if (!options.systemReason || !criticalReasons.includes(options.systemReason)) {
+          const criticalReasons = [
+            'user_signup',
+            'password_reset',
+            'account_verification',
+          ];
+          if (
+            !options.systemReason ||
+            !criticalReasons.includes(options.systemReason)
+          ) {
             return {
               allowed: false,
               reason: `Messaging is paused: ${pauseStatus.reason}`,
@@ -73,14 +80,26 @@ export class MessagePolicyService {
     } catch (error) {
       console.error('Error checking message policies:', error);
       // Default to allowing if policy check fails
-      return { allowed: true, reason: 'Policy check failed, allowing by default' };
+      return {
+        allowed: true,
+        reason: 'Policy check failed, allowing by default',
+      };
     }
   }
 
   async logPolicyViolation(options: {
     tenantId: string;
     userId: number;
-    action: 'draft_created' | 'message_sent' | 'review_requested' | 'message_approved' | 'message_rejected' | 'rate_limit_exceeded' | 'message_send_skipped' | 'system_message_sent' | 'system_message_skipped';
+    action:
+      | 'draft_created'
+      | 'message_sent'
+      | 'review_requested'
+      | 'message_approved'
+      | 'message_rejected'
+      | 'rate_limit_exceeded'
+      | 'message_send_skipped'
+      | 'system_message_sent'
+      | 'system_message_skipped';
     reason: string;
     additionalData?: any;
   }): Promise<void> {

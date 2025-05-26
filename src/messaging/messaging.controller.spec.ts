@@ -157,7 +157,12 @@ describe('MessagingController', () => {
       );
 
       await expect(
-        controller.sendGroupMessage(groupSlug, mockUser, messageRequest, mockRequest),
+        controller.sendGroupMessage(
+          groupSlug,
+          mockUser,
+          messageRequest,
+          mockRequest,
+        ),
       ).rejects.toThrow('Permission denied');
     });
   });
@@ -213,7 +218,12 @@ describe('MessagingController', () => {
       );
 
       await expect(
-        controller.sendEventMessage(eventSlug, mockUser, messageRequest, mockRequest),
+        controller.sendEventMessage(
+          eventSlug,
+          mockUser,
+          messageRequest,
+          mockRequest,
+        ),
       ).rejects.toThrow('User not found');
     });
   });
@@ -361,7 +371,10 @@ describe('MessagingController', () => {
         slug,
         mockUser.id,
       );
-      expect(mockMessagingService.sendMessage).toHaveBeenCalledWith(mockRequest.tenantId, slug);
+      expect(mockMessagingService.sendMessage).toHaveBeenCalledWith(
+        mockRequest.tenantId,
+        slug,
+      );
       expect(result).toEqual(approvedDraft);
     });
   });

@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { GroupEmailListener, GroupMemberRoleUpdatedEvent, GroupMemberJoinedEvent } from './group-email.listener';
+import {
+  GroupEmailListener,
+  GroupMemberRoleUpdatedEvent,
+  GroupMemberJoinedEvent,
+} from './group-email.listener';
 import { EventEmailService } from '../services/event-email.service';
 import { UnifiedMessagingService } from '../services/unified-messaging.service';
 
@@ -10,7 +14,7 @@ describe('GroupEmailListener', () => {
 
   beforeEach(async () => {
     mockEventEmailService = {
-      sendRoleUpdateEmail: jest.fn(),
+      sendRoleUpdateEmailByMemberId: jest.fn(),
     } as any;
 
     mockMessagingService = {
@@ -44,60 +48,68 @@ describe('GroupEmailListener', () => {
     };
 
     it('should handle role updated event successfully', async () => {
-      mockEventEmailService.sendRoleUpdateEmail.mockResolvedValue(true);
+      mockEventEmailService.sendRoleUpdateEmailByMemberId.mockResolvedValue(true);
 
       await listener.handleGroupMemberRoleUpdated(mockRoleUpdatedEvent);
 
-      expect(mockEventEmailService.sendRoleUpdateEmail).toHaveBeenCalledWith({
-        userSlug: mockRoleUpdatedEvent.userSlug,
-        groupSlug: mockRoleUpdatedEvent.groupSlug,
+      expect(mockEventEmailService.sendRoleUpdateEmailByMemberId).toHaveBeenCalledWith({
+        groupMemberId: mockRoleUpdatedEvent.groupMemberId,
         tenantId: mockRoleUpdatedEvent.tenantId,
       });
-      expect(mockEventEmailService.sendRoleUpdateEmail).toHaveBeenCalledTimes(1);
+      expect(mockEventEmailService.sendRoleUpdateEmailByMemberId).toHaveBeenCalledTimes(
+        1,
+      );
     });
 
     it('should handle email sending failure gracefully', async () => {
-      mockEventEmailService.sendRoleUpdateEmail.mockResolvedValue(false);
+      mockEventEmailService.sendRoleUpdateEmailByMemberId.mockResolvedValue(false);
 
       // Should not throw an error
-      await expect(listener.handleGroupMemberRoleUpdated(mockRoleUpdatedEvent)).resolves.toBeUndefined();
+      await expect(
+        listener.handleGroupMemberRoleUpdated(mockRoleUpdatedEvent),
+      ).resolves.toBeUndefined();
 
-      expect(mockEventEmailService.sendRoleUpdateEmail).toHaveBeenCalledWith({
-        userSlug: mockRoleUpdatedEvent.userSlug,
-        groupSlug: mockRoleUpdatedEvent.groupSlug,
+      expect(mockEventEmailService.sendRoleUpdateEmailByMemberId).toHaveBeenCalledWith({
+        groupMemberId: mockRoleUpdatedEvent.groupMemberId,
         tenantId: mockRoleUpdatedEvent.tenantId,
       });
     });
 
     it('should handle service error gracefully', async () => {
-      mockEventEmailService.sendRoleUpdateEmail.mockRejectedValue(new Error('Service unavailable'));
+      mockEventEmailService.sendRoleUpdateEmailByMemberId.mockRejectedValue(
+        new Error('Service unavailable'),
+      );
 
       // Should not throw an error
-      await expect(listener.handleGroupMemberRoleUpdated(mockRoleUpdatedEvent)).resolves.toBeUndefined();
+      await expect(
+        listener.handleGroupMemberRoleUpdated(mockRoleUpdatedEvent),
+      ).resolves.toBeUndefined();
 
-      expect(mockEventEmailService.sendRoleUpdateEmail).toHaveBeenCalledTimes(1);
+      expect(mockEventEmailService.sendRoleUpdateEmailByMemberId).toHaveBeenCalledTimes(
+        1,
+      );
     });
 
-    it('should handle missing userSlug gracefully', async () => {
+    it('should handle missing groupMemberId gracefully', async () => {
       const incompleteEvent = {
         ...mockRoleUpdatedEvent,
-        userSlug: undefined,
+        groupMemberId: undefined,
       } as any;
 
       await listener.handleGroupMemberRoleUpdated(incompleteEvent);
 
-      expect(mockEventEmailService.sendRoleUpdateEmail).not.toHaveBeenCalled();
+      expect(mockEventEmailService.sendRoleUpdateEmailByMemberId).not.toHaveBeenCalled();
     });
 
-    it('should handle missing groupSlug gracefully', async () => {
+    it('should handle invalid groupMemberId gracefully', async () => {
       const incompleteEvent = {
         ...mockRoleUpdatedEvent,
-        groupSlug: undefined,
+        groupMemberId: 0,
       } as any;
 
       await listener.handleGroupMemberRoleUpdated(incompleteEvent);
 
-      expect(mockEventEmailService.sendRoleUpdateEmail).not.toHaveBeenCalled();
+      expect(mockEventEmailService.sendRoleUpdateEmailByMemberId).not.toHaveBeenCalled();
     });
 
     it('should handle missing tenantId gracefully', async () => {
@@ -108,20 +120,18 @@ describe('GroupEmailListener', () => {
 
       await listener.handleGroupMemberRoleUpdated(incompleteEvent);
 
-      expect(mockEventEmailService.sendRoleUpdateEmail).not.toHaveBeenCalled();
+      expect(mockEventEmailService.sendRoleUpdateEmailByMemberId).not.toHaveBeenCalled();
     });
 
-    it('should handle empty strings gracefully', async () => {
+    it('should handle empty tenantId gracefully', async () => {
       const eventWithEmptyStrings = {
         ...mockRoleUpdatedEvent,
-        userSlug: '',
-        groupSlug: '',
         tenantId: '',
       };
 
       await listener.handleGroupMemberRoleUpdated(eventWithEmptyStrings);
 
-      expect(mockEventEmailService.sendRoleUpdateEmail).not.toHaveBeenCalled();
+      expect(mockEventEmailService.sendRoleUpdateEmailByMemberId).not.toHaveBeenCalled();
     });
   });
 
@@ -142,7 +152,8 @@ describe('GroupEmailListener', () => {
         tenantId: mockMemberJoinedEvent.tenantId,
         type: 'group_announcement',
         subject: 'New member joined your group',
-        content: 'A new member has joined your group. You can view the member details in the group management section.',
+        content:
+          'A new member has joined your group. You can view the member details in the group management section.',
         channels: ['email'],
         templateId: 'group/group-guest-joined',
         metadata: {
@@ -159,10 +170,14 @@ describe('GroupEmailListener', () => {
     });
 
     it('should handle service error gracefully', async () => {
-      mockMessagingService.sendSystemMessage.mockRejectedValue(new Error('Database connection failed'));
+      mockMessagingService.sendSystemMessage.mockRejectedValue(
+        new Error('Database connection failed'),
+      );
 
       // Should not throw an error
-      await expect(listener.handleGroupMemberJoined(mockMemberJoinedEvent)).resolves.toBeUndefined();
+      await expect(
+        listener.handleGroupMemberJoined(mockMemberJoinedEvent),
+      ).resolves.toBeUndefined();
 
       expect(mockMessagingService.sendSystemMessage).toHaveBeenCalledTimes(1);
     });
@@ -189,26 +204,26 @@ describe('GroupEmailListener', () => {
         tenantId: 'tenant123',
         groupMemberId: 1,
       };
-      mockEventEmailService.sendRoleUpdateEmail.mockResolvedValue(false);
+      mockEventEmailService.sendRoleUpdateEmailByMemberId.mockResolvedValue(false);
 
       await listener.handleGroupMemberRoleUpdated(mockEvent);
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'Role update email failed, but role change succeeded'
+        'Role update email failed, but role change succeeded',
       );
     });
 
     it('should log warning when required event data is missing', async () => {
       const incompleteEvent = {
-        userSlug: 'user',
-        groupSlug: undefined,
+        groupMemberId: undefined,
         tenantId: 'tenant',
       } as any;
 
       await listener.handleGroupMemberRoleUpdated(incompleteEvent);
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'Missing required event data for role update email'
+        'Missing required event data for role update email:',
+        incompleteEvent,
       );
     });
 
@@ -220,13 +235,13 @@ describe('GroupEmailListener', () => {
         groupMemberId: 1,
       };
       const error = new Error('Service crashed');
-      mockEventEmailService.sendRoleUpdateEmail.mockRejectedValue(error);
+      mockEventEmailService.sendRoleUpdateEmailByMemberId.mockRejectedValue(error);
 
       await listener.handleGroupMemberRoleUpdated(mockEvent);
 
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         'Error handling group member role updated event:',
-        error
+        error,
       );
     });
   });

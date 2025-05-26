@@ -30,25 +30,27 @@ export class GroupEmailListener {
     event: GroupMemberRoleUpdatedEvent,
   ): Promise<void> {
     try {
-      // Use dedicated event email service
-      if (event.userSlug && event.groupSlug && event.tenantId) {
-        const success = await this.eventEmailService.sendRoleUpdateEmail({
-          userSlug: event.userSlug,
-          groupSlug: event.groupSlug,
-          tenantId: event.tenantId,
-        });
-        
+      // Use EventEmailService with proper template context
+      if (event.groupMemberId && event.tenantId) {
+        const success =
+          await this.eventEmailService.sendRoleUpdateEmailByMemberId({
+            groupMemberId: event.groupMemberId,
+            tenantId: event.tenantId,
+          });
+
         if (!success) {
           console.warn('Role update email failed, but role change succeeded');
         }
       } else {
-        console.warn('Missing required event data for role update email');
+        console.warn(
+          'Missing required event data for role update email:',
+          event,
+        );
       }
     } catch (error) {
       console.error('Error handling group member role updated event:', error);
     }
   }
-
 
   @OnEvent('group.member.joined')
   async handleGroupMemberJoined(event: GroupMemberJoinedEvent): Promise<void> {

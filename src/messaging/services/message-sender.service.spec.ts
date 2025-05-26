@@ -1,6 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MessageSenderService } from './message-sender.service';
-import { IEmailSender, EMAIL_SENDER_TOKEN } from '../interfaces/email-sender.interface';
+import {
+  IEmailSender,
+  EMAIL_SENDER_TOKEN,
+} from '../interfaces/email-sender.interface';
 
 describe('MessageSenderService', () => {
   let service: MessageSenderService;
@@ -159,7 +162,9 @@ describe('MessageSenderService', () => {
         ...mockSystemEmailOptions,
         recipientEmail: 'not-an-email',
       };
-      mockEmailSender.sendEmail.mockRejectedValue(new Error('Invalid email format'));
+      mockEmailSender.sendEmail.mockRejectedValue(
+        new Error('Invalid email format'),
+      );
 
       const result = await service.sendSystemEmail(optionsWithBadEmail);
 

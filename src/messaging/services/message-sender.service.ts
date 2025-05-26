@@ -1,6 +1,8 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { EMAIL_SENDER_TOKEN, IEmailSender } from '../interfaces/email-sender.interface';
-import { MessageChannel } from '../interfaces/message.interface';
+import {
+  EMAIL_SENDER_TOKEN,
+  IEmailSender,
+} from '../interfaces/email-sender.interface';
 
 export interface SendEmailOptions {
   to: string;

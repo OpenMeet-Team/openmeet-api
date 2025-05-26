@@ -124,7 +124,9 @@ describe('MessagePolicyService', () => {
     });
 
     it('should handle pause check failure gracefully', async () => {
-      mockMessagePause.isMessagingPaused.mockRejectedValue(new Error('Redis connection failed'));
+      mockMessagePause.isMessagingPaused.mockRejectedValue(
+        new Error('Redis connection failed'),
+      );
 
       const result = await service.checkPolicies(mockPolicyOptions);
 
@@ -138,7 +140,9 @@ describe('MessagePolicyService', () => {
       mockMessagePause.isMessagingPaused.mockResolvedValue({
         paused: false,
       });
-      mockMessageAudit.checkRateLimit.mockRejectedValue(new Error('Database connection failed'));
+      mockMessageAudit.checkRateLimit.mockRejectedValue(
+        new Error('Database connection failed'),
+      );
 
       const result = await service.checkPolicies(mockPolicyOptions);
 

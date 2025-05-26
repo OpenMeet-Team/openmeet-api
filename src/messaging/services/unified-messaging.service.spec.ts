@@ -301,13 +301,18 @@ describe('UnifiedMessagingService', () => {
       );
       mockGroupMemberService.hasPermission.mockResolvedValue(true);
 
-      const result = await service.sendGroupMessage('tenant123', groupSlug, senderSlug, {
-        type: MessageType.GROUP_ANNOUNCEMENT,
-        subject: 'Test',
-        content: 'Test',
-        channels: [MessageChannel.EMAIL],
-        recipientFilter: 'all',
-      });
+      const result = await service.sendGroupMessage(
+        'tenant123',
+        groupSlug,
+        senderSlug,
+        {
+          type: MessageType.GROUP_ANNOUNCEMENT,
+          subject: 'Test',
+          content: 'Test',
+          channels: [MessageChannel.EMAIL],
+          recipientFilter: 'all',
+        },
+      );
 
       expect(result.requiresReview).toBe(true);
       expect(mockDraftService.createDraft).toHaveBeenCalledWith(
