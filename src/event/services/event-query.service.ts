@@ -7,7 +7,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { Repository, MoreThan, Brackets } from 'typeorm';
+import { Repository, Brackets } from 'typeorm';
 import { instanceToPlain } from 'class-transformer';
 import { EventEntity } from '../infrastructure/persistence/relational/entities/event.entity';
 import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
@@ -362,10 +362,10 @@ export class EventQueryService {
       // Currently active events without endDate: startDate <= now AND startDate > (now - 1 hour)
       eventQuery.andWhere(
         '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))',
-        { 
+        {
           now: new Date(),
-          oneHourAgo: new Date(Date.now() - 60 * 60 * 1000) // 1 hour ago
-        }
+          oneHourAgo: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
+        },
       );
     }
 
@@ -580,15 +580,15 @@ export class EventQueryService {
     await this.initializeRepository();
     const now = new Date();
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    
+
     const events = await this.eventRepository
       .createQueryBuilder('event')
       .where('event.group.id = :groupId', { groupId })
       .andWhere('event.status = :status', { status: EventStatus.Published })
       .andWhere(
-        '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))'
+        '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))',
+        { now, oneHourAgo },
       )
-      .setParameters({ now, oneHourAgo })
       .limit(limit)
       .getMany();
 
@@ -680,15 +680,17 @@ export class EventQueryService {
       .leftJoinAndSelect('event.attendees', 'attendees')
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.image', 'image')
-      .where('event.visibility = :visibility', { visibility: EventVisibility.Public })
+      .where('event.visibility = :visibility', {
+        visibility: EventVisibility.Public,
+      })
       .andWhere('event.status = :status', { status: EventStatus.Published })
       .andWhere(
-        '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))'
+        '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))',
+        {
+          now: new Date(),
+          oneHourAgo: new Date(Date.now() - 60 * 60 * 1000),
+        },
       )
-      .setParameters({ 
-        now: new Date(),
-        oneHourAgo: new Date(Date.now() - 60 * 60 * 1000)
-      })
       .orderBy('RANDOM()')
       .limit(5)
       .getMany();
@@ -765,13 +767,13 @@ export class EventQueryService {
       .leftJoinAndSelect('event.image', 'image')
       .where('event.user.id = :userId', { userId })
       .andWhere(
-        '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))'
+        '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))',
+        {
+          now: new Date(),
+          oneHourAgo: new Date(Date.now() - 60 * 60 * 1000),
+        },
       )
       .andWhere('event.status = :status', { status: EventStatus.Published })
-      .setParameters({ 
-        now: new Date(),
-        oneHourAgo: new Date(Date.now() - 60 * 60 * 1000)
-      })
       .orderBy('event.startDate', 'ASC')
       .getOne();
 
@@ -853,13 +855,13 @@ export class EventQueryService {
       .leftJoinAndSelect('attendee.user', 'user')
       .where('attendee.user.id = :userId', { userId })
       .andWhere(
-        '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))'
+        '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))',
+        {
+          now: new Date(),
+          oneHourAgo: new Date(Date.now() - 60 * 60 * 1000),
+        },
       )
       .andWhere('event.status = :status', { status: EventStatus.Published })
-      .setParameters({ 
-        now: new Date(),
-        oneHourAgo: new Date(Date.now() - 60 * 60 * 1000)
-      })
       .orderBy('event.startDate', 'ASC')
       .limit(5)
       .getMany();
