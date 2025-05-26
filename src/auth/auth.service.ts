@@ -242,6 +242,7 @@ export class AuthService {
     // Emit event for new messaging system
     this.eventEmitter.emit('auth.user.signup', {
       email: dto.email,
+      userId: user.id,
       hash,
       tenantId: this.request?.tenantId,
     });

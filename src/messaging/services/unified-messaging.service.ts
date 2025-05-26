@@ -5,6 +5,7 @@ import {
   BadRequestException,
   forwardRef,
   NotFoundException,
+  Scope,
 } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { Repository } from 'typeorm';
@@ -820,6 +821,7 @@ export class UnifiedMessagingService {
   async sendSystemMessage(options: {
     recipientEmail?: string;
     recipientUserId?: number;
+    recipientUserData?: { id: number; email: string }; // Allow passing user data directly
     subject: string;
     content: string;
     htmlContent?: string;
@@ -843,6 +845,7 @@ export class UnifiedMessagingService {
     const tenantId = options.tenantId;
 
     if (!tenantId) {
+      console.error('UnifiedMessagingService: No tenantId provided');
       throw new Error('tenantId is required for sendSystemMessage');
     }
 
@@ -885,12 +888,27 @@ export class UnifiedMessagingService {
     } else {
       // Legacy single recipient handling
       let recipientUser: any;
-      if (options.recipientUserId) {
-        recipientUser = await this.userService.findOne(options.recipientUserId);
-      } else if (options.recipientEmail) {
-        recipientUser = await this.userService.findByEmail(
-          options.recipientEmail,
-        );
+      
+      // If user data is provided directly, use it (avoids circular dependency)
+      if (options.recipientUserData) {
+        recipientUser = options.recipientUserData;
+      } else {
+        // Fall back to UserService lookup (may cause circular dependency in some contexts)
+        try {
+          // Get UserService through ModuleRef with resolve for request-scoped services
+          const moduleRef = this.moduleRef || UnifiedMessagingService._globalModuleRef;
+          const contextId = { id: Math.random() }; // Create a context for resolve
+          const userService = await moduleRef.resolve(UserService, contextId);
+          
+          if (options.recipientUserId) {
+            recipientUser = await userService.findOne(options.recipientUserId);
+          } else if (options.recipientEmail) {
+            recipientUser = await userService.findByEmail(options.recipientEmail);
+          }
+        } catch (error) {
+          console.error('Failed to resolve UserService:', error);
+          throw new Error('UserService not available - consider passing recipientUserData directly');
+        }
       }
 
       if (!recipientUser) {
@@ -912,26 +930,36 @@ export class UnifiedMessagingService {
     }
 
     // Check if messaging is paused (but allow system messages through)
-    const pauseStatus = await this.pauseService.isMessagingPaused();
+    let pauseStatus = { paused: false };
+    try {
+      if (this.pauseService) {
+        pauseStatus = await this.pauseService.isMessagingPaused();
+      }
+    } catch (error) {
+      console.warn('Could not check messaging pause status:', error.message);
+    }
+    
     if (
       pauseStatus.paused &&
       options.systemReason !== 'user_signup' &&
       options.systemReason !== 'password_reset'
     ) {
       // Allow critical auth messages through even when paused
-      await this.auditService.logAction(
-        tenantId,
-        systemUserId,
-        'system_message_skipped',
-        {
-          additionalData: {
-            recipientCount: recipients.length,
-            type: options.type,
-            systemReason: options.systemReason,
-            reason: 'messaging_paused',
+      if (this.auditService) {
+        await this.auditService.logAction(
+          tenantId,
+          systemUserId,
+          'system_message_skipped',
+          {
+            additionalData: {
+              recipientCount: recipients.length,
+              type: options.type,
+              systemReason: options.systemReason,
+              reason: 'messaging_paused',
+            },
           },
-        },
-      );
+        );
+      }
       throw new BadRequestException('Messaging is currently paused');
     }
 
@@ -948,7 +976,22 @@ export class UnifiedMessagingService {
             switch (channel) {
               case MessageChannel.EMAIL:
                 if (recipient.email) {
-                  const result = await this.emailSender.sendEmail({
+                  // Get email sender - try injected first, fall back to ModuleRef
+                  let emailSender = this.emailSender;
+                  if (!emailSender) {
+                    try {
+                      const moduleRef = this.moduleRef || UnifiedMessagingService._globalModuleRef;
+                      emailSender = moduleRef.get(EMAIL_SENDER_TOKEN, { strict: false });
+                    } catch (error) {
+                      console.warn('Could not resolve email sender via ModuleRef:', error.message);
+                    }
+                  }
+                  
+                  if (!emailSender) {
+                    throw new Error('Email sender service not available');
+                  }
+                  
+                  const result = await emailSender.sendEmail({
                     to: recipient.email,
                     subject: options.subject,
                     text: options.content,

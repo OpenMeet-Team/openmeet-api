@@ -31,9 +31,9 @@ export class CreateMessagingTables1747425000000 implements MigrationInterface {
       CREATE TYPE "${schema}"."message_recipient_filter" AS ENUM ('all', 'members', 'attendees', 'admins', 'moderators')
     `);
 
-    // Create message_drafts table
+    // Create messageDrafts table
     await queryRunner.query(`
-      CREATE TABLE IF NOT EXISTS "${schema}"."message_drafts" (
+      CREATE TABLE IF NOT EXISTS "${schema}"."messageDrafts" (
         "id" SERIAL PRIMARY KEY,
         "slug" VARCHAR(255) NOT NULL UNIQUE,
         "tenantId" VARCHAR(50) NOT NULL,
@@ -58,12 +58,12 @@ export class CreateMessagingTables1747425000000 implements MigrationInterface {
       )
     `);
 
-    // Create message_logs table
+    // Create messageLogs table
     await queryRunner.query(`
-      CREATE TABLE IF NOT EXISTS "${schema}"."message_logs" (
+      CREATE TABLE IF NOT EXISTS "${schema}"."messageLogs" (
         "id" SERIAL PRIMARY KEY,
         "tenantId" VARCHAR(50) NOT NULL,
-        "messageId" INTEGER REFERENCES "${schema}"."message_drafts"(id) ON DELETE CASCADE,
+        "messageId" INTEGER REFERENCES "${schema}"."messageDrafts"(id) ON DELETE CASCADE,
         "recipientUserId" INTEGER NOT NULL REFERENCES "${schema}"."users"(id) ON DELETE CASCADE,
         "channel" "${schema}"."message_channel" NOT NULL,
         "status" "${schema}"."message_log_status" NOT NULL,
@@ -75,168 +75,168 @@ export class CreateMessagingTables1747425000000 implements MigrationInterface {
       )
     `);
 
-    // Create message_audit table
+    // Create messageAudit table
     await queryRunner.query(`
-      CREATE TABLE IF NOT EXISTS "${schema}"."message_audit" (
+      CREATE TABLE IF NOT EXISTS "${schema}"."messageAudit" (
         "id" SERIAL PRIMARY KEY,
         "tenantId" VARCHAR(50) NOT NULL,
         "userId" INTEGER NOT NULL REFERENCES "${schema}"."users"(id) ON DELETE CASCADE,
         "action" "${schema}"."message_audit_action" NOT NULL,
         "groupId" INTEGER REFERENCES "${schema}"."groups"(id) ON DELETE CASCADE,
         "eventId" INTEGER REFERENCES "${schema}"."events"(id) ON DELETE CASCADE,
-        "messageId" INTEGER REFERENCES "${schema}"."message_drafts"(id) ON DELETE CASCADE,
+        "messageId" INTEGER REFERENCES "${schema}"."messageDrafts"(id) ON DELETE CASCADE,
         "details" JSON,
         "createdAt" TIMESTAMP NOT NULL DEFAULT now()
       )
     `);
 
-    // Create indexes for message_drafts
+    // Create indexes for messageDrafts
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "IDX_${schema}_message_drafts_slug" 
-      ON "${schema}"."message_drafts" ("slug")
+      CREATE INDEX IF NOT EXISTS "IDX_${schema}_messageDrafts_slug" 
+      ON "${schema}"."messageDrafts" ("slug")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "IDX_${schema}_message_drafts_tenantId_status" 
-      ON "${schema}"."message_drafts" ("tenantId", "status")
+      CREATE INDEX IF NOT EXISTS "IDX_${schema}_messageDrafts_tenantId_status" 
+      ON "${schema}"."messageDrafts" ("tenantId", "status")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "IDX_${schema}_message_drafts_tenantId_authorId" 
-      ON "${schema}"."message_drafts" ("tenantId", "authorId")
+      CREATE INDEX IF NOT EXISTS "IDX_${schema}_messageDrafts_tenantId_authorId" 
+      ON "${schema}"."messageDrafts" ("tenantId", "authorId")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "IDX_${schema}_message_drafts_tenantId_groupId" 
-      ON "${schema}"."message_drafts" ("tenantId", "groupId")
+      CREATE INDEX IF NOT EXISTS "IDX_${schema}_messageDrafts_tenantId_groupId" 
+      ON "${schema}"."messageDrafts" ("tenantId", "groupId")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "IDX_${schema}_message_drafts_tenantId_eventId" 
-      ON "${schema}"."message_drafts" ("tenantId", "eventId")
+      CREATE INDEX IF NOT EXISTS "IDX_${schema}_messageDrafts_tenantId_eventId" 
+      ON "${schema}"."messageDrafts" ("tenantId", "eventId")
     `);
 
-    // Create indexes for message_logs
+    // Create indexes for messageLogs
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "IDX_${schema}_message_logs_tenantId_messageId" 
-      ON "${schema}"."message_logs" ("tenantId", "messageId")
-    `);
-
-    await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "IDX_${schema}_message_logs_tenantId_recipientUserId" 
-      ON "${schema}"."message_logs" ("tenantId", "recipientUserId")
+      CREATE INDEX IF NOT EXISTS "IDX_${schema}_messageLogs_tenantId_messageId" 
+      ON "${schema}"."messageLogs" ("tenantId", "messageId")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "IDX_${schema}_message_logs_tenantId_status" 
-      ON "${schema}"."message_logs" ("tenantId", "status")
+      CREATE INDEX IF NOT EXISTS "IDX_${schema}_messageLogs_tenantId_recipientUserId" 
+      ON "${schema}"."messageLogs" ("tenantId", "recipientUserId")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "IDX_${schema}_message_logs_tenantId_channel" 
-      ON "${schema}"."message_logs" ("tenantId", "channel")
-    `);
-
-    // Create indexes for message_audit
-    await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "IDX_${schema}_message_audit_tenantId_userId" 
-      ON "${schema}"."message_audit" ("tenantId", "userId")
+      CREATE INDEX IF NOT EXISTS "IDX_${schema}_messageLogs_tenantId_status" 
+      ON "${schema}"."messageLogs" ("tenantId", "status")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "IDX_${schema}_message_audit_tenantId_action" 
-      ON "${schema}"."message_audit" ("tenantId", "action")
+      CREATE INDEX IF NOT EXISTS "IDX_${schema}_messageLogs_tenantId_channel" 
+      ON "${schema}"."messageLogs" ("tenantId", "channel")
+    `);
+
+    // Create indexes for messageAudit
+    await queryRunner.query(`
+      CREATE INDEX IF NOT EXISTS "IDX_${schema}_messageAudit_tenantId_userId" 
+      ON "${schema}"."messageAudit" ("tenantId", "userId")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "IDX_${schema}_message_audit_tenantId_groupId" 
-      ON "${schema}"."message_audit" ("tenantId", "groupId")
+      CREATE INDEX IF NOT EXISTS "IDX_${schema}_messageAudit_tenantId_action" 
+      ON "${schema}"."messageAudit" ("tenantId", "action")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "IDX_${schema}_message_audit_tenantId_eventId" 
-      ON "${schema}"."message_audit" ("tenantId", "eventId")
+      CREATE INDEX IF NOT EXISTS "IDX_${schema}_messageAudit_tenantId_groupId" 
+      ON "${schema}"."messageAudit" ("tenantId", "groupId")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "IDX_${schema}_message_audit_tenantId_createdAt" 
-      ON "${schema}"."message_audit" ("tenantId", "createdAt")
+      CREATE INDEX IF NOT EXISTS "IDX_${schema}_messageAudit_tenantId_eventId" 
+      ON "${schema}"."messageAudit" ("tenantId", "eventId")
+    `);
+
+    await queryRunner.query(`
+      CREATE INDEX IF NOT EXISTS "IDX_${schema}_messageAudit_tenantId_createdAt" 
+      ON "${schema}"."messageAudit" ("tenantId", "createdAt")
     `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     const schema = queryRunner.connection.options.name || 'public';
 
-    // Drop indexes for message_audit
+    // Drop indexes for messageAudit
     await queryRunner.query(`
-      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_message_audit_tenantId_createdAt"
+      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_messageAudit_tenantId_createdAt"
     `);
 
     await queryRunner.query(`
-      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_message_audit_tenantId_eventId"
+      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_messageAudit_tenantId_eventId"
     `);
 
     await queryRunner.query(`
-      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_message_audit_tenantId_groupId"
+      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_messageAudit_tenantId_groupId"
     `);
 
     await queryRunner.query(`
-      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_message_audit_tenantId_action"
+      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_messageAudit_tenantId_action"
     `);
 
     await queryRunner.query(`
-      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_message_audit_tenantId_userId"
+      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_messageAudit_tenantId_userId"
     `);
 
-    // Drop indexes for message_logs
+    // Drop indexes for messageLogs
     await queryRunner.query(`
-      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_message_logs_tenantId_channel"
-    `);
-
-    await queryRunner.query(`
-      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_message_logs_tenantId_status"
+      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_messageLogs_tenantId_channel"
     `);
 
     await queryRunner.query(`
-      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_message_logs_tenantId_recipientUserId"
+      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_messageLogs_tenantId_status"
     `);
 
     await queryRunner.query(`
-      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_message_logs_tenantId_messageId"
-    `);
-
-    // Drop indexes for message_drafts
-    await queryRunner.query(`
-      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_message_drafts_tenantId_eventId"
+      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_messageLogs_tenantId_recipientUserId"
     `);
 
     await queryRunner.query(`
-      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_message_drafts_tenantId_groupId"
+      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_messageLogs_tenantId_messageId"
+    `);
+
+    // Drop indexes for messageDrafts
+    await queryRunner.query(`
+      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_messageDrafts_tenantId_eventId"
     `);
 
     await queryRunner.query(`
-      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_message_drafts_tenantId_authorId"
+      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_messageDrafts_tenantId_groupId"
     `);
 
     await queryRunner.query(`
-      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_message_drafts_tenantId_status"
+      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_messageDrafts_tenantId_authorId"
     `);
 
     await queryRunner.query(`
-      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_message_drafts_slug"
+      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_messageDrafts_tenantId_status"
+    `);
+
+    await queryRunner.query(`
+      DROP INDEX IF EXISTS "${schema}"."IDX_${schema}_messageDrafts_slug"
     `);
 
     // Drop tables
     await queryRunner.query(`
-      DROP TABLE IF EXISTS "${schema}"."message_audit"
+      DROP TABLE IF EXISTS "${schema}"."messageAudit"
     `);
 
     await queryRunner.query(`
-      DROP TABLE IF EXISTS "${schema}"."message_logs"
+      DROP TABLE IF EXISTS "${schema}"."messageLogs"
     `);
 
     await queryRunner.query(`
-      DROP TABLE IF EXISTS "${schema}"."message_drafts"
+      DROP TABLE IF EXISTS "${schema}"."messageDrafts"
     `);
 
     // Revert eventPermissions back to varchar

@@ -48,28 +48,36 @@ describe('GroupEmailListener', () => {
     };
 
     it('should handle role updated event successfully', async () => {
-      mockEventEmailService.sendRoleUpdateEmailByMemberId.mockResolvedValue(true);
+      mockEventEmailService.sendRoleUpdateEmailByMemberId.mockResolvedValue(
+        true,
+      );
 
       await listener.handleGroupMemberRoleUpdated(mockRoleUpdatedEvent);
 
-      expect(mockEventEmailService.sendRoleUpdateEmailByMemberId).toHaveBeenCalledWith({
+      expect(
+        mockEventEmailService.sendRoleUpdateEmailByMemberId,
+      ).toHaveBeenCalledWith({
         groupMemberId: mockRoleUpdatedEvent.groupMemberId,
         tenantId: mockRoleUpdatedEvent.tenantId,
       });
-      expect(mockEventEmailService.sendRoleUpdateEmailByMemberId).toHaveBeenCalledTimes(
-        1,
-      );
+      expect(
+        mockEventEmailService.sendRoleUpdateEmailByMemberId,
+      ).toHaveBeenCalledTimes(1);
     });
 
     it('should handle email sending failure gracefully', async () => {
-      mockEventEmailService.sendRoleUpdateEmailByMemberId.mockResolvedValue(false);
+      mockEventEmailService.sendRoleUpdateEmailByMemberId.mockResolvedValue(
+        false,
+      );
 
       // Should not throw an error
       await expect(
         listener.handleGroupMemberRoleUpdated(mockRoleUpdatedEvent),
       ).resolves.toBeUndefined();
 
-      expect(mockEventEmailService.sendRoleUpdateEmailByMemberId).toHaveBeenCalledWith({
+      expect(
+        mockEventEmailService.sendRoleUpdateEmailByMemberId,
+      ).toHaveBeenCalledWith({
         groupMemberId: mockRoleUpdatedEvent.groupMemberId,
         tenantId: mockRoleUpdatedEvent.tenantId,
       });
@@ -85,9 +93,9 @@ describe('GroupEmailListener', () => {
         listener.handleGroupMemberRoleUpdated(mockRoleUpdatedEvent),
       ).resolves.toBeUndefined();
 
-      expect(mockEventEmailService.sendRoleUpdateEmailByMemberId).toHaveBeenCalledTimes(
-        1,
-      );
+      expect(
+        mockEventEmailService.sendRoleUpdateEmailByMemberId,
+      ).toHaveBeenCalledTimes(1);
     });
 
     it('should handle missing groupMemberId gracefully', async () => {
@@ -98,7 +106,9 @@ describe('GroupEmailListener', () => {
 
       await listener.handleGroupMemberRoleUpdated(incompleteEvent);
 
-      expect(mockEventEmailService.sendRoleUpdateEmailByMemberId).not.toHaveBeenCalled();
+      expect(
+        mockEventEmailService.sendRoleUpdateEmailByMemberId,
+      ).not.toHaveBeenCalled();
     });
 
     it('should handle invalid groupMemberId gracefully', async () => {
@@ -109,7 +119,9 @@ describe('GroupEmailListener', () => {
 
       await listener.handleGroupMemberRoleUpdated(incompleteEvent);
 
-      expect(mockEventEmailService.sendRoleUpdateEmailByMemberId).not.toHaveBeenCalled();
+      expect(
+        mockEventEmailService.sendRoleUpdateEmailByMemberId,
+      ).not.toHaveBeenCalled();
     });
 
     it('should handle missing tenantId gracefully', async () => {
@@ -120,7 +132,9 @@ describe('GroupEmailListener', () => {
 
       await listener.handleGroupMemberRoleUpdated(incompleteEvent);
 
-      expect(mockEventEmailService.sendRoleUpdateEmailByMemberId).not.toHaveBeenCalled();
+      expect(
+        mockEventEmailService.sendRoleUpdateEmailByMemberId,
+      ).not.toHaveBeenCalled();
     });
 
     it('should handle empty tenantId gracefully', async () => {
@@ -131,7 +145,9 @@ describe('GroupEmailListener', () => {
 
       await listener.handleGroupMemberRoleUpdated(eventWithEmptyStrings);
 
-      expect(mockEventEmailService.sendRoleUpdateEmailByMemberId).not.toHaveBeenCalled();
+      expect(
+        mockEventEmailService.sendRoleUpdateEmailByMemberId,
+      ).not.toHaveBeenCalled();
     });
   });
 
@@ -204,7 +220,9 @@ describe('GroupEmailListener', () => {
         tenantId: 'tenant123',
         groupMemberId: 1,
       };
-      mockEventEmailService.sendRoleUpdateEmailByMemberId.mockResolvedValue(false);
+      mockEventEmailService.sendRoleUpdateEmailByMemberId.mockResolvedValue(
+        false,
+      );
 
       await listener.handleGroupMemberRoleUpdated(mockEvent);
 
@@ -235,7 +253,9 @@ describe('GroupEmailListener', () => {
         groupMemberId: 1,
       };
       const error = new Error('Service crashed');
-      mockEventEmailService.sendRoleUpdateEmailByMemberId.mockRejectedValue(error);
+      mockEventEmailService.sendRoleUpdateEmailByMemberId.mockRejectedValue(
+        error,
+      );
 
       await listener.handleGroupMemberRoleUpdated(mockEvent);
 

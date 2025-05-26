@@ -91,18 +91,6 @@ export class EmailSenderService implements IEmailSender {
     from?: { name: string; email: string };
     tenantId?: string;
   }): Promise<string | void> {
-    console.log('[DEBUG] EmailSenderService.sendEmail called with options:', {
-      to: options.to,
-      subject: options.subject,
-      templatePath: options.templatePath,
-      hasContext: !!options.context,
-      hasText: !!options.text,
-      hasHtml: !!options.html,
-    });
-
-    console.log(
-      '[DEBUG] EmailSenderService about to call mailerService.sendMail',
-    );
     try {
       // Get tenant config if tenantId is provided
       let tenantConfig = {};
@@ -115,15 +103,16 @@ export class EmailSenderService implements IEmailSender {
 
       // If templatePath is provided, render the MJML template
       if (options.templatePath && options.context) {
-        console.log('[DEBUG] Rendering MJML template:', options.templatePath);
         const rendered = await this.renderTemplate(
           options.templatePath,
           options.context,
           tenantConfig,
         );
         html = rendered.html;
-        text = rendered.text;
-        console.log('[DEBUG] Template rendered successfully');
+        // Only use template-generated text if no explicit text was provided
+        if (!options.text) {
+          text = rendered.text;
+        }
       }
 
       await this.mailerService.sendMail({
@@ -135,11 +124,8 @@ export class EmailSenderService implements IEmailSender {
           ? `${options.from.name} <${options.from.email}>`
           : undefined,
       });
-      console.log(
-        '[DEBUG] EmailSenderService.sendEmail completed - email sent to mailer',
-      );
     } catch (error) {
-      console.error('[DEBUG] EmailSenderService.sendMail failed:', error);
+      console.error('EmailSenderService.sendMail failed:', error);
       throw error;
     }
 

@@ -12,7 +12,7 @@ import { GroupEntity } from '../../group/infrastructure/persistence/relational/e
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
 import { MessageDraftEntity } from './message-draft.entity';
 
-@Entity('message_audit')
+@Entity('messageAudit')
 @Index(['tenantId', 'userId'])
 @Index(['tenantId', 'action'])
 @Index(['tenantId', 'groupId'])

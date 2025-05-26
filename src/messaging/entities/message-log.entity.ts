@@ -11,7 +11,7 @@ import { UserEntity } from '../../user/infrastructure/persistence/relational/ent
 import { MessageDraftEntity } from './message-draft.entity';
 import { MessageChannel } from '../interfaces/message.interface';
 
-@Entity('message_logs')
+@Entity('messageLogs')
 @Index(['tenantId', 'messageId'])
 @Index(['tenantId', 'recipientUserId'])
 @Index(['tenantId', 'status'])

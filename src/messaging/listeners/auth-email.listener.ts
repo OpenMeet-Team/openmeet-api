@@ -8,6 +8,7 @@ import { MessageType } from '../interfaces/message.interface';
  */
 export interface UserSignupEvent {
   email: string;
+  userId: number;
   hash: string;
   tenantId?: string;
 }
@@ -48,11 +49,24 @@ export class AuthEmailListener {
       hash: event.hash,
     };
 
+    // Create clean plain text version
+    const plainTextContent = `Hello,
+
+Welcome to OpenMeet!
+
+Please click the link below to activate your account and complete your registration:
+
+${context.url}
+
+If you didn't request this activation, you can safely ignore this email.
+
+© 2025 OpenMeet. All rights reserved.`;
+
     try {
       await this.messagingService.sendSystemMessage({
-        recipientEmail: event.email,
+        recipientUserData: { id: event.userId, email: event.email },
         subject: context.title,
-        content: `${context.text1}\n\n${context.url}\n\n${context.text2}\n\n${context.text3}`,
+        content: plainTextContent,
         htmlContent: undefined,
         templateId: 'auth/activation.mjml.ejs',
         context,

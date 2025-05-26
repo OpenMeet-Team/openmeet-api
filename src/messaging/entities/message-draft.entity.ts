@@ -17,7 +17,7 @@ import {
   MessageChannel,
 } from '../interfaces/message.interface';
 
-@Entity('message_drafts')
+@Entity('messageDrafts')
 @Index(['tenantId', 'status'])
 @Index(['tenantId', 'authorId'])
 @Index(['tenantId', 'groupId'])
