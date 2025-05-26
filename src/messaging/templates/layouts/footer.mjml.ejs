@@ -1,0 +1,12 @@
+<!-- Footer -->
+<mj-section background-color="#F5F5FA" padding="20px">
+  <mj-column>
+    <mj-text align="center" color="#1E1A43">
+      © <%= currentYear %> <%= (tenantConfig && tenantConfig.name) || 'OpenMeet' %>. All rights reserved.
+    </mj-text>
+    <mj-text align="center">
+      <a href="<%= (tenantConfig && tenantConfig.companyDomain) || '#' %>/privacy" style="color: #7B71DA; text-decoration: none;">Privacy Policy</a> |
+      <a href="<%= (tenantConfig && tenantConfig.companyDomain) || '#' %>/terms" style="color: #7B71DA; text-decoration: none;">Terms of Service</a>
+    </mj-text>
+  </mj-column>
+</mj-section>

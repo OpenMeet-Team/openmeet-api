@@ -13,7 +13,6 @@ import { FileModule } from '../file/file.module';
 import { EventRoleService } from '../event-role/event-role.service';
 import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
-import { EventMailModule } from '../event-mail/event-mail.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
 import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
 import { EventManagementService } from './services/event-management.service';
@@ -35,13 +34,12 @@ import { MetricsModule } from '../metrics/metrics.module';
     TypeOrmModule.forFeature([EventEntity]),
     TenantModule,
     forwardRef(() => GroupMemberModule),
-    CategoryModule,
+    forwardRef(() => CategoryModule),
     forwardRef(() => AuthModule),
     forwardRef(() => EventAttendeeModule),
     FileModule,
     UserModule,
     forwardRef(() => GroupModule),
-    EventMailModule,
     BlueskyModule,
     ShadowAccountModule,
     forwardRef(() => ChatModule),

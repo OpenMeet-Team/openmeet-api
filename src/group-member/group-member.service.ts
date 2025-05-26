@@ -5,6 +5,7 @@ import {
   Scope,
   ForbiddenException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { GroupMemberEntity } from './infrastructure/persistence/relational/entities/group-member.entity';
 import { Not, Repository } from 'typeorm';
@@ -34,6 +35,7 @@ export class GroupMemberService {
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly groupRoleService: GroupRoleService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async getTenantSpecificEventRepository() {
@@ -154,6 +156,7 @@ export class GroupMemberService {
       select: {
         id: true,
         user: {
+          id: true,
           slug: true,
           firstName: true,
           lastName: true,
@@ -215,6 +218,17 @@ export class GroupMemberService {
     // If validation passes, proceed with the role change
     targetGroupMember.groupRole = newGroupRole;
     await this.groupMemberRepository.save(targetGroupMember);
+
+    // Emit event for email notification
+    const eventData = {
+      groupMemberId: groupMemberId,
+      tenantId: this.request.tenantId,
+      groupSlug: targetGroupMember.group.slug,
+      userSlug: targetGroupMember.user.slug,
+    };
+
+    console.log('EMITTING group.member.role.updated event:', eventData);
+    this.eventEmitter.emit('group.member.role.updated', eventData);
 
     return await this.groupMemberRepository.findOne({
       where: { id: groupMemberId },
@@ -342,6 +356,39 @@ export class GroupMemberService {
     return groupMember;
   }
 
+  async getGroupMemberForEmailTemplate(groupMemberId: number) {
+    await this.getTenantSpecificEventRepository();
+    const groupMember = await this.groupMemberRepository.findOne({
+      where: { id: groupMemberId },
+      relations: ['user', 'group', 'groupRole'],
+      select: {
+        id: true,
+        user: {
+          id: true,
+          slug: true,
+          name: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+        },
+        group: {
+          id: true,
+          slug: true,
+          name: true,
+        },
+        groupRole: {
+          id: true,
+          name: true,
+        },
+      },
+    });
+
+    if (!groupMember) {
+      throw new NotFoundException('Group member not found');
+    }
+    return groupMember;
+  }
+
   async getMailServiceGroupMembersByPermission(
     groupId: number,
     permission: GroupPermission,
@@ -389,6 +436,72 @@ export class GroupMemberService {
             path: true,
             fileName: false,
           },
+        },
+      },
+    });
+  }
+
+  async hasPermission(
+    groupMemberId: number,
+    permission: GroupPermission,
+  ): Promise<boolean> {
+    await this.getTenantSpecificEventRepository();
+    const groupMember = await this.groupMemberRepository.findOne({
+      where: { id: groupMemberId },
+      relations: ['groupRole', 'groupRole.groupPermissions'],
+    });
+
+    if (!groupMember || !groupMember.groupRole) {
+      return false;
+    }
+
+    return groupMember.groupRole.groupPermissions.some(
+      (perm) => perm.name === permission,
+    );
+  }
+
+  async getGroupMembersForMessaging(
+    groupId: number,
+    filter: string,
+  ): Promise<GroupMemberEntity[]> {
+    await this.getTenantSpecificEventRepository();
+
+    const whereCondition: any = {
+      group: { id: groupId },
+    };
+
+    // Apply filter
+    switch (filter) {
+      case 'members':
+        whereCondition.groupRole = { name: Not(GroupRole.Guest) };
+        break;
+      case 'admins':
+        whereCondition.groupRole = { name: GroupRole.Admin };
+        break;
+      case 'moderators':
+        whereCondition.groupRole = { name: GroupRole.Moderator };
+        break;
+      case 'all':
+      default:
+        // Include all members except guests
+        whereCondition.groupRole = { name: Not(GroupRole.Guest) };
+        break;
+    }
+
+    return await this.groupMemberRepository.find({
+      where: whereCondition,
+      relations: ['user', 'groupRole'],
+      select: {
+        id: true,
+        user: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          name: true,
+          email: true,
+        },
+        groupRole: {
+          name: true,
         },
       },
     });

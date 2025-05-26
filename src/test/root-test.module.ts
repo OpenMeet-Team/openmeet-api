@@ -8,7 +8,6 @@ import { GroupMemberModule } from '../group-member/group-member.module';
 import { FileModule } from '../file/file.module';
 import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
-import { EventMailModule } from '../event-mail/event-mail.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
 import { ChatModule } from '../chat/chat.module';
 import { EventManagementService } from '../event/services/event-management.service';
@@ -39,7 +38,6 @@ import { ConfigModule } from '@nestjs/config';
     FileModule,
     UserModule,
     forwardRef(() => GroupModule),
-    EventMailModule,
     BlueskyModule,
     forwardRef(() => ChatModule),
   ],

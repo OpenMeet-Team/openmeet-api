@@ -18,7 +18,6 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FilesS3PresignedService } from '../../file/infrastructure/uploader/s3-presigned/file.service';
 import { EventRoleService } from '../../event-role/event-role.service';
 import { UserService } from '../../user/user.service';
-import { EventMailService } from '../../event-mail/event-mail.service';
 import { AuditLoggerService } from '../../logger/audit-logger.provider';
 import { BlueskyService } from '../../bluesky/bluesky.service';
 import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
@@ -66,7 +65,6 @@ export class EventManagementService {
     private readonly fileService: FilesS3PresignedService,
     private readonly eventRoleService: EventRoleService,
     private readonly userService: UserService,
-    private readonly eventMailService: EventMailService,
     @Inject(forwardRef(() => BlueskyService))
     private readonly blueskyService: BlueskyService,
     @Inject(forwardRef(() => BlueskyIdService))
@@ -1689,15 +1687,12 @@ export class EventManagementService {
         `[attendEvent] Sending mail for attendee: ${attendee.id}, with event: ${attendee.event?.id || 'undefined'}`,
       );
 
-      try {
-        await this.eventMailService.sendMailAttendeeGuestJoined(attendee);
-      } catch (error) {
-        this.logger.error(
-          `[attendEvent] Error sending mail for attendee ${attendee.id}: ${error.message}`,
-          error.stack,
-        );
-        // Continue execution - don't let mail errors affect the overall operation
-      }
+      // Emit event for new messaging system
+      this.eventEmitter.emit('event.attendee.joined', {
+        attendeeId: attendee.id,
+        eventSlug: event.slug,
+        tenantId: this.request.tenantId,
+      });
 
       // Emit event for other parts of the system
       this.eventEmitter.emit('event.attendee.added', {
@@ -1802,7 +1797,13 @@ export class EventManagementService {
       updateEventAttendeeDto,
     );
 
-    await this.eventMailService.sendMailAttendeeStatusChanged(attendeeId);
+    // Emit event for new messaging system
+    this.eventEmitter.emit('event.attendee.status.changed', {
+      attendeeId,
+      eventSlug: slug,
+      newStatus: updateEventAttendeeDto.status,
+      tenantId: this.request.tenantId,
+    });
 
     return await this.eventAttendeeService.showEventAttendee(attendeeId);
   }

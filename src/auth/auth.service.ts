@@ -24,7 +24,7 @@ import { JwtRefreshPayloadType } from './strategies/types/jwt-refresh-payload.ty
 import { JwtPayloadType } from './strategies/types/jwt-payload.type';
 import { UserService } from '../user/user.service';
 import { AllConfigType } from '../config/config.type';
-import { MailService } from '../mail/mail.service';
+import { UnifiedMessagingService } from '../messaging/services/unified-messaging.service';
 import { Session } from '../session/domain/session';
 import { SessionService } from '../session/session.service';
 import { StatusEnum } from '../status/status.enum';
@@ -37,6 +37,7 @@ import { RoleEnum } from '../role/role.enum';
 import { StatusEntity } from 'src/status/infrastructure/persistence/relational/entities/status.entity';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventQueryService } from '../event/services/event-query.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { REQUEST } from '@nestjs/core';
 
 @Injectable()
@@ -50,9 +51,10 @@ export class AuthService {
     private sessionService: SessionService,
     private eventQueryService: EventQueryService,
     private eventAttendeeService: EventAttendeeService,
-    private mailService: MailService,
+    private messagingService: UnifiedMessagingService,
     private readonly roleService: RoleService,
     private configService: ConfigService<AllConfigType>,
+    private readonly eventEmitter: EventEmitter2,
     @Inject(REQUEST) private readonly request?: any,
   ) {}
 
@@ -237,16 +239,13 @@ export class AuthService {
 
     const createdUser = await this.userService.findById(user.id);
 
-    this.mailService
-      .userSignUp({
-        to: dto.email,
-        data: {
-          hash,
-        },
-      })
-      .catch((err) => {
-        console.log(err);
-      });
+    // Emit event for new messaging system
+    this.eventEmitter.emit('auth.user.signup', {
+      email: dto.email,
+      userId: user.id,
+      hash,
+      tenantId: this.request?.tenantId,
+    });
 
     return {
       refreshToken,
@@ -368,12 +367,11 @@ export class AuthService {
       },
     );
 
-    await this.mailService.forgotPassword({
-      to: email,
-      data: {
-        hash,
-        tokenExpires,
-      },
+    // Emit event for new messaging system
+    this.eventEmitter.emit('auth.password.reset', {
+      email,
+      hash,
+      tokenExpires,
     });
   }
 
@@ -504,11 +502,11 @@ export class AuthService {
         },
       );
 
-      await this.mailService.confirmNewEmail({
-        to: userDto.email,
-        data: {
-          hash,
-        },
+      // Emit event for new messaging system
+      this.eventEmitter.emit('auth.email.change', {
+        email: userDto.email,
+        hash,
+        tenantId: this.request?.tenantId,
       });
     }
 

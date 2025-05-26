@@ -1,0 +1,133 @@
+import { Injectable } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
+import { UnifiedMessagingService } from '../services/unified-messaging.service';
+import { MessageType } from '../interfaces/message.interface';
+
+/**
+ * Events that can be emitted for authentication emails
+ */
+export interface UserSignupEvent {
+  email: string;
+  userId: number;
+  hash: string;
+  tenantId?: string;
+}
+
+export interface PasswordResetEvent {
+  email: string;
+  hash: string;
+  tokenExpires: number;
+}
+
+export interface EmailChangeEvent {
+  email: string;
+  hash: string;
+  tenantId?: string;
+}
+
+/**
+ * AuthEmailListener handles authentication email events using the messaging system.
+ * This avoids circular dependencies by using an event-driven approach.
+ */
+@Injectable()
+export class AuthEmailListener {
+  constructor(private readonly messagingService: UnifiedMessagingService) {}
+
+  @OnEvent('auth.user.signup')
+  async handleUserSignup(event: UserSignupEvent): Promise<void> {
+    // Skip if no tenantId - fallback to original mail service
+    if (!event.tenantId) {
+      return;
+    }
+
+    const context = {
+      title: 'Confirm your email',
+      text1: 'Welcome to our platform! Please confirm your email address.',
+      text2: 'Click the link above to activate your account.',
+      text3: 'If you did not create this account, please ignore this email.',
+      url: `${process.env.FRONTEND_DOMAIN}/auth/confirm-email/${event.hash}`,
+      hash: event.hash,
+    };
+
+    // Create clean plain text version
+    const plainTextContent = `Hello,
+
+Welcome to OpenMeet!
+
+Please click the link below to activate your account and complete your registration:
+
+${context.url}
+
+If you didn't request this activation, you can safely ignore this email.
+
+© 2025 OpenMeet. All rights reserved.`;
+
+    try {
+      await this.messagingService.sendSystemMessage({
+        recipientUserData: { id: event.userId, email: event.email },
+        subject: context.title,
+        content: plainTextContent,
+        htmlContent: undefined,
+        templateId: 'auth/activation.mjml.ejs',
+        context,
+        type: MessageType.ADMIN_CONTACT,
+        systemReason: 'user_signup',
+        tenantId: event.tenantId,
+      });
+    } catch (error) {
+      console.error(
+        'Failed to send signup email via messaging service:',
+        error,
+      );
+      // Don't throw - let the user signup succeed even if email fails
+    }
+  }
+
+  @OnEvent('auth.password.reset')
+  async handlePasswordReset(event: PasswordResetEvent): Promise<void> {
+    const context = {
+      title: 'Reset your password',
+      text1: 'You requested a password reset for your account.',
+      text2: 'Click the link above to reset your password.',
+      text3: 'This link will expire soon for security reasons.',
+      text4: 'If you did not request this reset, please ignore this email.',
+      url: `${process.env.FRONTEND_DOMAIN}/auth/password-change/${event.hash}`,
+      hash: event.hash,
+      tokenExpires: event.tokenExpires,
+    };
+
+    await this.messagingService.sendSystemMessage({
+      recipientEmail: event.email,
+      subject: context.title,
+      content: `${context.text1}\n\n${context.url}\n\n${context.text2}\n\n${context.text3}\n\n${context.text4}`,
+      htmlContent: undefined,
+      templateId: 'auth/reset-password.mjml.ejs',
+      context,
+      type: MessageType.ADMIN_CONTACT,
+      systemReason: 'password_reset',
+    });
+  }
+
+  @OnEvent('auth.email.change')
+  async handleEmailChange(event: EmailChangeEvent): Promise<void> {
+    const context = {
+      title: 'Confirm your new email',
+      text1: 'Please confirm your new email address.',
+      text2: 'If you did not request this change, please ignore this email.',
+      url: `${process.env.FRONTEND_DOMAIN}/auth/confirm-new-email/${event.hash}`,
+      hash: event.hash,
+    };
+
+    await this.messagingService.sendSystemMessage({
+      recipientEmail: event.email,
+      subject: context.title,
+      content: `${context.text1}\n\n${context.url}\n\n${context.text2}`,
+      htmlContent: undefined,
+      templateId: 'auth/confirm-new-email.mjml.ejs',
+      context,
+      type: MessageType.ADMIN_CONTACT,
+      systemReason: 'email_change',
+      tenantId: event.tenantId,
+    });
+  }
+}

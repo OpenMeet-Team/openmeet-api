@@ -6,7 +6,7 @@ import { UserService } from '../user/user.service';
 import { SessionService } from '../session/session.service';
 import { UnauthorizedException } from '@nestjs/common';
 import { GroupService } from '../group/group.service';
-import { MailService } from '../mail/mail.service';
+import { UnifiedMessagingService } from '../messaging/services/unified-messaging.service';
 import { RoleService } from '../role/role.service';
 import { EventQueryService } from '../event/services/event-query.service';
 import { mockEventAttendeeService, mockEventQueryService } from '../test/mocks';
@@ -14,6 +14,7 @@ import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import { GroupMemberService } from '../group-member/group-member.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -43,8 +44,8 @@ describe('AuthService', () => {
     findById: jest.fn(),
   };
 
-  const mockMailService = {
-    sendEmail: jest.fn(),
+  const mockMessagingService = {
+    sendSystemMessage: jest.fn(),
   };
 
   const mockRoleService = {
@@ -64,6 +65,10 @@ describe('AuthService', () => {
     getTenantSpecificRepository: jest.fn().mockResolvedValue(undefined),
   };
 
+  const mockEventEmitter = {
+    emit: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -74,7 +79,7 @@ describe('AuthService', () => {
         { provide: ConfigService, useValue: mockConfigService },
         { provide: GroupService, useValue: mockGroupService },
         { provide: GroupMemberService, useValue: mockGroupMemberService },
-        { provide: MailService, useValue: mockMailService },
+        { provide: UnifiedMessagingService, useValue: mockMessagingService },
         { provide: RoleService, useValue: mockRoleService },
         { provide: EventQueryService, useValue: mockEventQueryService },
         { provide: EventAttendeeService, useValue: mockEventAttendeeService },
@@ -83,6 +88,7 @@ describe('AuthService', () => {
           useValue: mockTenantConnectionService,
         },
         { provide: REQUEST, useValue: mockRequest },
+        { provide: EventEmitter2, useValue: mockEventEmitter },
       ],
     }).compile();
 

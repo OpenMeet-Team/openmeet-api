@@ -25,14 +25,12 @@ import {
   mockFilesS3PresignedService,
   mockGroup,
   mockGroupAboutResponse,
-  mockGroupMailService,
   mockGroupMember,
   mockGroupMemberService,
   mockGroupRoleService,
   mockGroups,
   mockGroupsQuery,
   mockGroupUserPermission,
-  mockMailService,
   mockPagination,
   mockRepository,
   mockTenantConnectionService,
@@ -45,12 +43,10 @@ import { mockUser } from '../test/mocks';
 import { DeleteResult, Repository } from 'typeorm';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { GroupRoleService } from '../group-role/group-role.service';
-import { MailService } from '../mail/mail.service';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
 import { MatrixChatProviderAdapter } from '../chat/adapters/matrix-chat-provider.adapter';
 import { UserService } from '../user/user.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { GroupMailService } from '../group-mail/group-mail.service';
 import { ChatRoomService } from '../chat/rooms/chat-room.service';
 import { DiscussionService } from '../chat/services/discussion.service';
 
@@ -106,10 +102,6 @@ describe('GroupService', () => {
           useValue: mockGroupRoleService,
         },
         {
-          provide: MailService,
-          useValue: mockMailService,
-        },
-        {
           provide: MatrixChatProviderAdapter,
           useValue: mockMatrixService,
         },
@@ -122,10 +114,6 @@ describe('GroupService', () => {
           useValue: {
             emit: jest.fn(),
           },
-        },
-        {
-          provide: GroupMailService,
-          useValue: mockGroupMailService,
         },
         {
           provide: ChatRoomService,

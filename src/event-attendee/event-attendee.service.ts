@@ -1122,4 +1122,92 @@ export class EventAttendeeService {
 
     return updatedAttendee;
   }
+
+  async hasPermission(
+    attendeeId: number,
+    permission: EventAttendeePermission,
+  ): Promise<boolean> {
+    await this.getTenantSpecificEventRepository();
+    const attendee = await this.eventAttendeesRepository.findOne({
+      where: { id: attendeeId },
+      relations: ['role', 'role.permissions'],
+    });
+
+    if (!attendee || !attendee.role) {
+      return false;
+    }
+
+    return attendee.role.permissions.some((perm) => perm.name === permission);
+  }
+
+  async getAttendeesForMessaging(
+    eventId: number,
+    filter: string,
+  ): Promise<EventAttendeesEntity[]> {
+    await this.getTenantSpecificEventRepository();
+
+    const whereCondition: any = {
+      event: { id: eventId },
+      status: In([
+        EventAttendeeStatus.Confirmed,
+        EventAttendeeStatus.Attended,
+        EventAttendeeStatus.Maybe,
+      ]),
+    };
+
+    // Apply filter based on roles/permissions
+    switch (filter) {
+      case 'admins':
+        whereCondition.role = {
+          permissions: {
+            name: EventAttendeePermission.ManageEvent,
+          },
+        };
+        break;
+      case 'moderators':
+        whereCondition.role = {
+          permissions: {
+            name: EventAttendeePermission.ManageAttendees,
+          },
+        };
+        break;
+      case 'attendees':
+      case 'all':
+      default:
+        // Include all confirmed attendees
+        break;
+    }
+
+    return await this.eventAttendeesRepository.find({
+      where: whereCondition,
+      relations: ['user', 'role'],
+      select: {
+        id: true,
+        user: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          name: true,
+          email: true,
+        },
+        role: {
+          name: true,
+        },
+      },
+    });
+  }
+
+  async findByUserAndEvent(
+    userId: number,
+    eventId: number,
+  ): Promise<EventAttendeesEntity | null> {
+    await this.getTenantSpecificEventRepository();
+    return await this.eventAttendeesRepository.findOne({
+      where: {
+        user: { id: userId },
+        event: { id: eventId },
+      },
+      relations: ['user', 'role', 'role.permissions', 'event'],
+    });
+  }
 }

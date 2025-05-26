@@ -1,0 +1,12 @@
+<!-- Header -->
+<mj-section background-color="#ffffff" padding="20px" border-radius="10px">
+  <mj-column>
+    <% if (tenantConfig.logoUrl) { %>
+      <mj-image src="<%= tenantConfig.logoUrl %>" alt="<%= tenantConfig.name %>" width="150px"
+        href="<%= tenantConfig.frontendDomain %>" />
+    <% } %>
+    <mj-text align="center" color="#1E1A43" font-size="24px" font-weight="600">
+      Welcome to <%= tenantConfig.name || 'OpenMeet' %>
+    </mj-text>
+  </mj-column>
+</mj-section>
