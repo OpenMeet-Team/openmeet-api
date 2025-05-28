@@ -329,4 +329,31 @@ export class MailService {
       },
     });
   }
+
+  async sendMemberContactNotification(
+    mailData: MailData<{
+      group: any;
+      member: any;
+      contactType: string;
+      subject: string;
+      message: string;
+    }>,
+  ): Promise<void> {
+    this.getTenantConfig();
+
+    await this.mailerService.sendMjmlMail({
+      tenantConfig: this.tenantConfig,
+      to: mailData.to,
+      subject: `Member ${mailData.data.contactType} - ${mailData.data.subject}`,
+      templateName: 'group/member-contact-notification',
+      context: {
+        tenantConfig: this.tenantConfig,
+        group: mailData.data.group,
+        member: mailData.data.member,
+        contactType: mailData.data.contactType,
+        subject: mailData.data.subject,
+        message: mailData.data.message,
+      },
+    });
+  }
 }

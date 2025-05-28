@@ -6,6 +6,7 @@ import { UserService } from '../user/user.service';
 import { mockGroupMember, mockGroup } from '../test/mocks/group-mocks';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { mockUser } from '../test/mocks/user-mocks';
+import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 
 describe('GroupMailService', () => {
   let service: GroupMailService;
@@ -23,6 +24,7 @@ describe('GroupMailService', () => {
             groupGuestJoined: jest.fn(),
             groupMemberRoleUpdated: jest.fn(),
             sendAdminGroupMessage: jest.fn(),
+            sendMemberContactNotification: jest.fn(),
           },
         },
         {
@@ -30,6 +32,7 @@ describe('GroupMailService', () => {
           useValue: {
             getMailServiceGroupMember: jest.fn(),
             getMailServiceGroupMembersByPermission: jest.fn(),
+            getSpecificGroupMembers: jest.fn(),
           },
         },
         {
@@ -216,6 +219,189 @@ describe('GroupMailService', () => {
           'Subject',
           'Message',
           'test@example.com',
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('sendAdminMessageToMembers with targeted messaging', () => {
+    it('should send message to specific users when targetUserIds provided', async () => {
+      const specificUser1 = {
+        ...mockUser,
+        id: 1,
+        email: 'user1@example.com',
+      } as UserEntity;
+      const specificUser2 = {
+        ...mockUser,
+        id: 2,
+        email: 'user2@example.com',
+      } as UserEntity;
+      const targetUserIds = [1, 2];
+
+      userService.findById.mockResolvedValue(mockUser);
+      groupMemberService.getSpecificGroupMembers.mockResolvedValue([
+        specificUser1,
+        specificUser2,
+      ]);
+      mailService.sendAdminGroupMessage.mockResolvedValue(undefined);
+
+      const result = await service.sendAdminMessageToMembers(
+        mockGroup,
+        1,
+        'Test Subject',
+        'Test Message',
+        targetUserIds,
+      );
+
+      // Should call getSpecificGroupMembers instead of getMailServiceGroupMembersByPermission
+      expect(groupMemberService.getSpecificGroupMembers).toHaveBeenCalledWith(
+        mockGroup.id,
+        targetUserIds,
+      );
+      expect(
+        groupMemberService.getMailServiceGroupMembersByPermission,
+      ).not.toHaveBeenCalled();
+
+      // Should send emails to admin + 2 specific users
+      expect(mailService.sendAdminGroupMessage).toHaveBeenCalledTimes(3);
+      expect(result.deliveredCount).toBe(3);
+      expect(result.success).toBe(true);
+    });
+
+    it('should send message to all members when targetUserIds not provided', async () => {
+      const allMembers = [
+        { ...mockUser, id: 1, email: 'user1@example.com' } as UserEntity,
+        { ...mockUser, id: 2, email: 'user2@example.com' } as UserEntity,
+        { ...mockUser, id: 3, email: 'user3@example.com' } as UserEntity,
+      ];
+
+      userService.findById.mockResolvedValue(mockUser);
+      groupMemberService.getMailServiceGroupMembersByPermission.mockResolvedValue(
+        allMembers,
+      );
+      mailService.sendAdminGroupMessage.mockResolvedValue(undefined);
+
+      const result = await service.sendAdminMessageToMembers(
+        mockGroup,
+        1,
+        'Test Subject',
+        'Test Message',
+        // No targetUserIds provided
+      );
+
+      // Should call getMailServiceGroupMembersByPermission when no specific targeting
+      expect(
+        groupMemberService.getMailServiceGroupMembersByPermission,
+      ).toHaveBeenCalled();
+      expect(groupMemberService.getSpecificGroupMembers).not.toHaveBeenCalled();
+
+      // Should send emails to admin + 3 members
+      expect(mailService.sendAdminGroupMessage).toHaveBeenCalledTimes(4);
+      expect(result.deliveredCount).toBe(4);
+      expect(result.success).toBe(true);
+    });
+
+    it('should throw NotFoundException when no specific members found', async () => {
+      const targetUserIds = [999]; // Non-existent user
+
+      userService.findById.mockResolvedValue(mockUser);
+      groupMemberService.getSpecificGroupMembers.mockResolvedValue([]);
+
+      await expect(
+        service.sendAdminMessageToMembers(
+          mockGroup,
+          1,
+          'Test Subject',
+          'Test Message',
+          targetUserIds,
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('sendMemberContactToAdmins', () => {
+    it('should send member contact message to all group admins', async () => {
+      const admin1 = {
+        ...mockUser,
+        id: 10,
+        email: 'admin1@example.com',
+      } as UserEntity;
+      const admin2 = {
+        ...mockUser,
+        id: 11,
+        email: 'admin2@example.com',
+      } as UserEntity;
+      const member = {
+        ...mockUser,
+        id: 5,
+        email: 'member@example.com',
+      } as UserEntity;
+
+      userService.findById.mockResolvedValue(member);
+      groupMemberService.getMailServiceGroupMembersByPermission.mockResolvedValue(
+        [admin1, admin2],
+      );
+      (
+        mailService.sendMemberContactNotification as jest.Mock
+      ).mockResolvedValue(undefined);
+
+      const result = await service.sendMemberContactToAdmins(
+        mockGroup,
+        5,
+        'question',
+        'Test Subject',
+        'Test Message',
+      );
+
+      // Should get group admins
+      expect(
+        groupMemberService.getMailServiceGroupMembersByPermission,
+      ).toHaveBeenCalledWith(
+        mockGroup.id,
+        'MANAGE_MEMBERS', // GroupPermission.ManageMembers
+      );
+
+      // Should send notification to both admins
+      expect(
+        mailService.sendMemberContactNotification as jest.Mock,
+      ).toHaveBeenCalledTimes(2);
+      expect(result.deliveredCount).toBe(2);
+      expect(result.success).toBe(true);
+    });
+
+    it('should throw NotFoundException when member not found', async () => {
+      userService.findById.mockResolvedValue(null);
+
+      await expect(
+        service.sendMemberContactToAdmins(
+          mockGroup,
+          999,
+          'question',
+          'Test Subject',
+          'Test Message',
+        ),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException when no admins found', async () => {
+      const member = {
+        ...mockUser,
+        id: 5,
+        email: 'member@example.com',
+      } as UserEntity;
+
+      userService.findById.mockResolvedValue(member);
+      groupMemberService.getMailServiceGroupMembersByPermission.mockResolvedValue(
+        [],
+      );
+
+      await expect(
+        service.sendMemberContactToAdmins(
+          mockGroup,
+          5,
+          'question',
+          'Test Subject',
+          'Test Message',
         ),
       ).rejects.toThrow(NotFoundException);
     });

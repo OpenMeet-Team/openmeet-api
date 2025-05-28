@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { GroupMemberEntity } from './infrastructure/persistence/relational/entities/group-member.entity';
-import { Not, Repository } from 'typeorm';
+import { Not, Repository, In } from 'typeorm';
 import {
   CreateGroupMemberDto,
   UpdateGroupMemberRoleDto,
@@ -262,15 +262,17 @@ export class GroupMemberService {
       take: limit,
       relations: ['user.photo', 'groupRole'],
       select: {
-        id: false,
+        id: true,
         groupRole: {
           name: true,
         },
         user: {
+          id: true,
           slug: true,
           name: true,
           firstName: true,
           lastName: true,
+          email: true,
           photo: {
             path: true,
             fileName: false,
@@ -355,6 +357,30 @@ export class GroupMemberService {
             name: permission,
           },
         },
+      },
+      relations: ['user'],
+      select: {
+        user: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          name: true,
+          email: true,
+        },
+      },
+    });
+    return groupMembers.map((member) => member.user);
+  }
+
+  async getSpecificGroupMembers(
+    groupId: number,
+    userIds: number[],
+  ): Promise<UserEntity[]> {
+    await this.getTenantSpecificEventRepository();
+    const groupMembers = await this.groupMemberRepository.find({
+      where: {
+        group: { id: groupId },
+        user: { id: In(userIds) },
       },
       relations: ['user'],
       select: {

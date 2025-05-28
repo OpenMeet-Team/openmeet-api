@@ -286,6 +286,102 @@ describe('Group Admin Messaging API (e2e)', () => {
           })
           .expect(422);
       });
+
+      it('should send admin message to specific users when targetUserIds provided', async () => {
+        console.log('\n=== Testing targeted messaging with targetUserIds ===');
+
+        const messageStartTime = Date.now();
+
+        // Target only the first 2 members
+        const targetUserIds = [memberUsers[0].id, memberUsers[1].id];
+        const messageData = {
+          subject: 'Targeted Message Test',
+          message: 'This message should only go to specific members.',
+          targetUserIds: targetUserIds,
+        };
+
+        const response = await serverApp
+          .post(`/api/groups/${testGroup.slug}/admin-message`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send(messageData)
+          .expect(201);
+
+        // Verify response structure
+        expect(response.body.success).toBe(true);
+        expect(response.body.deliveredCount).toBe(3); // 2 targeted members + 1 admin copy
+        expect(response.body.failedCount).toBe(0);
+        expect(response.body.messageId).toBeDefined();
+
+        // Wait a moment for emails to be processed
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        // Check emails in MailDev
+        const emails = await mailDevService.getEmailsSince(messageStartTime);
+        const targetedEmails = emails.filter((email: any) =>
+          email.subject?.includes('Targeted Message Test'),
+        );
+
+        console.log(`Found ${targetedEmails.length} targeted emails`);
+
+        // Should have emails for admin + 2 targeted members only
+        expect(targetedEmails.length).toBe(3);
+
+        // Verify recipients
+        const recipients = targetedEmails.flatMap((email: any) =>
+          email.to.map((to: any) => to.address),
+        );
+
+        expect(recipients).toContain(adminUser.email);
+        expect(recipients).toContain(memberUsers[0].email);
+        expect(recipients).toContain(memberUsers[1].email);
+        expect(recipients).not.toContain(memberUsers[2].email); // Should not get email
+
+        console.log('✓ Targeted messaging working correctly');
+      }, 15000);
+
+      it('should handle empty targetUserIds array by sending to all members', async () => {
+        const messageStartTime = Date.now();
+
+        const messageData = {
+          subject: 'Empty Array Test',
+          message: 'This should go to all members when targetUserIds is empty.',
+          targetUserIds: [],
+        };
+
+        const response = await serverApp
+          .post(`/api/groups/${testGroup.slug}/admin-message`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send(messageData)
+          .expect(201);
+
+        // Should behave like normal admin message (all members + admin)
+        expect(response.body.deliveredCount).toBe(4); // 3 members + 1 admin
+
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        const emails = await mailDevService.getEmailsSince(messageStartTime);
+        const allMemberEmails = emails.filter((email: any) =>
+          email.subject?.includes('Empty Array Test'),
+        );
+
+        expect(allMemberEmails.length).toBe(4); // All members + admin
+      }, 15000);
+
+      it('should validate targetUserIds are valid group members', async () => {
+        const messageData = {
+          subject: 'Invalid Users Test',
+          message: 'This should fail.',
+          targetUserIds: [999, 1000], // Non-existent user IDs
+        };
+
+        const response = await serverApp
+          .post(`/api/groups/${testGroup.slug}/admin-message`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send(messageData)
+          .expect(404); // Should fail with not found
+
+        expect(response.body.message).toContain('No members found');
+      });
     });
 
     describe('POST /:slug/admin-message/preview', () => {
@@ -363,6 +459,167 @@ describe('Group Admin Messaging API (e2e)', () => {
           .set('Authorization', `Bearer ${adminToken}`)
           .send(previewData)
           .expect(422);
+      });
+    });
+
+    describe('POST /:slug/contact-admins', () => {
+      it('should allow member to contact group admins', async () => {
+        console.log('\n=== Testing POST /api/groups/:slug/contact-admins ===');
+
+        const contactStartTime = Date.now();
+        const memberToken = memberTokens[0]; // Use first member
+        const memberUser = memberUsers[0];
+
+        const contactData = {
+          subject: 'Question about group events',
+          message:
+            'Hi admins,\n\nI have a question about the upcoming events.\n\nThanks!',
+          contactType: 'question',
+        };
+
+        const response = await serverApp
+          .post(`/api/groups/${testGroup.slug}/contact-admins`)
+          .set('Authorization', `Bearer ${memberToken}`)
+          .send(contactData)
+          .expect(201);
+
+        // Verify response structure
+        expect(response.body.success).toBe(true);
+        expect(response.body.deliveredCount).toBe(1); // 1 admin gets notification
+        expect(response.body.failedCount).toBe(0);
+        expect(response.body.messageId).toBeDefined();
+        expect(response.body.messageId).toMatch(/^member_contact_/);
+
+        // Wait for emails to be processed
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        // Check emails in MailDev
+        const emails = await mailDevService.getEmailsSince(contactStartTime);
+        const contactEmails = emails.filter((email: any) =>
+          email.subject?.includes(
+            'Member question - Question about group events',
+          ),
+        );
+
+        console.log(`Found ${contactEmails.length} member contact emails`);
+
+        expect(contactEmails.length).toBe(1); // Admin should get notification
+
+        const contactEmail = contactEmails[0];
+        expect(contactEmail.to[0].address).toBe(adminUser.email);
+        expect(contactEmail.html).toContain(memberUser.firstName);
+        expect(contactEmail.html).toContain(memberUser.lastName);
+        expect(contactEmail.html).toContain('question');
+        expect(contactEmail.html).toContain('Question about group events');
+        expect(contactEmail.html).toContain(
+          'I have a question about the upcoming events',
+        );
+        expect(contactEmail.html).toContain(`mailto:${memberUser.email}`); // Reply link
+
+        console.log('✓ Member contact functionality working correctly');
+      }, 15000);
+
+      it('should handle different contact types', async () => {
+        const contactTypes = ['question', 'report', 'feedback'];
+
+        for (const contactType of contactTypes) {
+          const contactStartTime = Date.now();
+          const memberToken = memberTokens[1]; // Use second member
+
+          const contactData = {
+            subject: `Test ${contactType}`,
+            message: `This is a test ${contactType} message.`,
+            contactType: contactType,
+          };
+
+          const response = await serverApp
+            .post(`/api/groups/${testGroup.slug}/contact-admins`)
+            .set('Authorization', `Bearer ${memberToken}`)
+            .send(contactData)
+            .expect(201);
+
+          expect(response.body.success).toBe(true);
+
+          // Wait for email processing
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // Verify email subject includes contact type
+          const emails = await mailDevService.getEmailsSince(contactStartTime);
+          const typeEmails = emails.filter((email: any) =>
+            email.subject?.includes(
+              `Member ${contactType} - Test ${contactType}`,
+            ),
+          );
+
+          expect(typeEmails.length).toBe(1);
+
+          console.log(`✓ Contact type '${contactType}' working`);
+        }
+      }, 20000);
+
+      it('should require authentication for member contact', async () => {
+        const contactData = {
+          subject: 'Test Subject',
+          message: 'Test message',
+          contactType: 'question',
+        };
+
+        await serverApp
+          .post(`/api/groups/${testGroup.slug}/contact-admins`)
+          .send(contactData)
+          .expect(401); // Unauthorized
+      });
+
+      it('should validate contact input data', async () => {
+        const memberToken = memberTokens[0];
+
+        // Test missing subject
+        await serverApp
+          .post(`/api/groups/${testGroup.slug}/contact-admins`)
+          .set('Authorization', `Bearer ${memberToken}`)
+          .send({
+            message: 'Test message',
+            contactType: 'question',
+          })
+          .expect(422);
+
+        // Test invalid contact type
+        await serverApp
+          .post(`/api/groups/${testGroup.slug}/contact-admins`)
+          .set('Authorization', `Bearer ${memberToken}`)
+          .send({
+            subject: 'Test Subject',
+            message: 'Test message',
+            contactType: 'invalid_type',
+          })
+          .expect(422);
+
+        // Test message too long
+        await serverApp
+          .post(`/api/groups/${testGroup.slug}/contact-admins`)
+          .set('Authorization', `Bearer ${memberToken}`)
+          .send({
+            subject: 'Test Subject',
+            message: 'x'.repeat(5001), // Exceeds 5000 char limit
+            contactType: 'question',
+          })
+          .expect(422);
+      });
+
+      it('should handle non-existent group for member contact', async () => {
+        const memberToken = memberTokens[0];
+
+        const contactData = {
+          subject: 'Test Subject',
+          message: 'Test message',
+          contactType: 'question',
+        };
+
+        await serverApp
+          .post('/api/groups/non-existent-group/contact-admins')
+          .set('Authorization', `Bearer ${memberToken}`)
+          .send(contactData)
+          .expect(404); // Not Found - group doesn't exist
       });
     });
   });
