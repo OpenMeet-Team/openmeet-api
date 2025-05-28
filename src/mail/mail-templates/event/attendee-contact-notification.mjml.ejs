@@ -1,0 +1,64 @@
+<%- include('./../layouts/header.mjml.ejs') %>
+
+      <!-- Main Content -->
+      <mj-section>
+        <mj-column>
+
+          <mj-text>
+            Hello,
+          </mj-text>
+
+          <mj-text>
+            <strong><%= attendee?.firstName %> <%= attendee?.lastName %></strong> from the event <strong>
+              <a href="<%= tenantConfig?.frontendDomain + '/events/' + event?.slug %>"><%= event?.name %></a>
+            </strong> has sent you a <%= contactType %>:
+          </mj-text>
+
+          <!-- Subject -->
+          <mj-text font-size="18px" font-weight="bold" padding-top="20px">
+            <%= subject %>
+          </mj-text>
+
+          <!-- Message Content -->
+          <mj-text padding-top="10px" line-height="1.5">
+            <%- message.replace(/\n/g, '<br>') %>
+          </mj-text>
+
+        </mj-column>
+      </mj-section>
+
+      <!-- Action Buttons -->
+      <mj-section padding="20px">
+        <mj-column>
+          <mj-button href="<%= tenantConfig?.frontendDomain + '/events/' + event?.slug %>/attendees" background-color="#7B71DA" color="#FFFFFF" font-size="16px">
+            View Event Attendees
+          </mj-button>
+        </mj-column>
+      </mj-section>
+
+      <!-- Additional Actions -->
+      <mj-section padding="10px">
+        <mj-column>
+          <mj-button href="<%= tenantConfig?.frontendDomain + '/events/' + event?.slug %>" background-color="#6c757d" color="#FFFFFF" font-size="14px">
+            View Event
+          </mj-button>
+        </mj-column>
+      </mj-section>
+
+      <!-- Contact Info -->
+      <mj-section padding="10px">
+        <mj-column>
+          <mj-text font-size="12px" color="#666666">
+            This <%= contactType %> was sent by <%= attendee?.firstName %> <%= attendee?.lastName %> 
+            from the event "<%= event?.name %>".
+          </mj-text>
+          <mj-text font-size="12px" color="#666666">
+            Contact type: <%= contactType %>
+          </mj-text>
+          <mj-text font-size="12px" color="#666666">
+            To reply to this attendee, visit the event page and use the event messaging features.
+          </mj-text>
+        </mj-column>
+      </mj-section>
+
+<%- include('./../layouts/footer.mjml.ejs') %>

@@ -153,6 +153,11 @@ export class MailerService {
           context,
           tenantConfig,
         );
+      } else if (templateName === 'event/attendee-contact-notification') {
+        text = this.generateAttendeeContactNotificationPlainText(
+          context,
+          tenantConfig,
+        );
       }
 
       await this.transporter.sendMail({
@@ -246,6 +251,35 @@ This ${contactType} was sent by ${member?.firstName} ${member?.lastName} from th
 Contact type: ${contactType}
 
 To reply to this member, visit the group page and use the group messaging features.
+
+--
+${tenantConfig?.name || 'OpenMeet'}
+`;
+  }
+
+  private generateAttendeeContactNotificationPlainText(
+    context: Record<string, any>,
+    tenantConfig: any,
+  ): string {
+    const { event, attendee, subject, message, contactType } = context;
+    const eventUrl = `${tenantConfig?.frontendDomain}/events/${event?.slug}`;
+    const attendeesUrl = `${tenantConfig?.frontendDomain}/events/${event?.slug}/attendees`;
+
+    return `Hello,
+
+${attendee?.firstName} ${attendee?.lastName} from the event ${event?.name} has sent you a ${contactType}:
+
+${subject}
+
+${message}
+
+View Event Attendees: ${attendeesUrl}
+View Event: ${eventUrl}
+
+This ${contactType} was sent by ${attendee?.firstName} ${attendee?.lastName} from the event "${event?.name}".
+Contact type: ${contactType}
+
+To reply to this attendee, visit the event page and use the event messaging features.
 
 --
 ${tenantConfig?.name || 'OpenMeet'}

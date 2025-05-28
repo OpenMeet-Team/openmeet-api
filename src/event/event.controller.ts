@@ -49,6 +49,7 @@ import {
   SendAdminMessageDto,
   PreviewAdminMessageDto,
 } from './dto/admin-message.dto';
+import { ContactOrganizersDto } from './dto/contact-organizers.dto';
 import { EventMailService } from '../event-mail/event-mail.service';
 import { AdminMessageResult } from './interfaces/admin-message-result.interface';
 
@@ -540,5 +541,30 @@ export class EventController {
     );
 
     return { message: 'Preview email sent successfully' };
+  }
+
+  @Post(':slug/contact-organizers')
+  @ApiOperation({
+    summary: 'Send message from attendee to event organizers',
+    description:
+      'Allows event attendees to send a message to all event organizers',
+  })
+  async contactOrganizers(
+    @Param('slug') slug: string,
+    @Body() contactOrganizersDto: ContactOrganizersDto,
+    @AuthUser() user: User,
+  ) {
+    const event = await this.eventQueryService.showEvent(slug);
+    if (!event) {
+      throw new NotFoundException(`Event with slug ${slug} not found`);
+    }
+
+    return await this.eventMailService.sendAttendeeContactToOrganizers(
+      event,
+      user.id,
+      contactOrganizersDto.contactType,
+      contactOrganizersDto.subject,
+      contactOrganizersDto.message,
+    );
   }
 }

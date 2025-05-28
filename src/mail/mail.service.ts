@@ -356,4 +356,31 @@ export class MailService {
       },
     });
   }
+
+  async sendAttendeeContactNotification(
+    mailData: MailData<{
+      event: any;
+      attendee: any;
+      contactType: string;
+      subject: string;
+      message: string;
+    }>,
+  ): Promise<void> {
+    this.getTenantConfig();
+
+    await this.mailerService.sendMjmlMail({
+      tenantConfig: this.tenantConfig,
+      to: mailData.to,
+      subject: `Attendee ${mailData.data.contactType} - ${mailData.data.subject}`,
+      templateName: 'event/attendee-contact-notification',
+      context: {
+        tenantConfig: this.tenantConfig,
+        event: mailData.data.event,
+        attendee: mailData.data.attendee,
+        contactType: mailData.data.contactType,
+        subject: mailData.data.subject,
+        message: mailData.data.message,
+      },
+    });
+  }
 }
