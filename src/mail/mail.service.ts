@@ -279,4 +279,54 @@ export class MailService {
       },
     });
   }
+
+  async sendAdminGroupMessage(
+    mailData: MailData<{
+      group: any;
+      admin: any;
+      subject: string;
+      message: string;
+    }>,
+  ): Promise<void> {
+    this.getTenantConfig();
+
+    await this.mailerService.sendMjmlMail({
+      tenantConfig: this.tenantConfig,
+      to: mailData.to,
+      subject: `[${mailData.data.group.name}] ${mailData.data.subject}`,
+      templateName: 'group/admin-message-to-members',
+      context: {
+        tenantConfig: this.tenantConfig,
+        group: mailData.data.group,
+        admin: mailData.data.admin,
+        subject: mailData.data.subject,
+        message: mailData.data.message,
+      },
+    });
+  }
+
+  async sendAdminEventMessage(
+    mailData: MailData<{
+      event: any;
+      admin: any;
+      subject: string;
+      message: string;
+    }>,
+  ): Promise<void> {
+    this.getTenantConfig();
+
+    await this.mailerService.sendMjmlMail({
+      tenantConfig: this.tenantConfig,
+      to: mailData.to,
+      subject: `[${mailData.data.event.name}] ${mailData.data.subject}`,
+      templateName: 'event/admin-message-to-attendees',
+      context: {
+        tenantConfig: this.tenantConfig,
+        event: mailData.data.event,
+        admin: mailData.data.admin,
+        subject: mailData.data.subject,
+        message: mailData.data.message,
+      },
+    });
+  }
 }

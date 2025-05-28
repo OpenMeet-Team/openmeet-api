@@ -17,6 +17,7 @@ import {
   mockGroupAboutResponse,
   mockDiscussions,
   mockEventAttendeeService,
+  mockGroupMailService,
 } from '../test/mocks';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { CreateGroupDto } from './dto/create-group.dto';
@@ -29,6 +30,7 @@ import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventQueryService } from '../event/services/event-query.service';
 import { VisibilityGuard } from '../shared/guard/visibility.guard';
 import { mockEventQueryService } from '../test/mocks';
+import { GroupMailService } from '../group-mail/group-mail.service';
 
 describe('GroupController', () => {
   let controller: GroupController;
@@ -65,6 +67,10 @@ describe('GroupController', () => {
         {
           provide: EventQueryService,
           useValue: mockEventQueryService,
+        },
+        {
+          provide: GroupMailService,
+          useValue: mockGroupMailService,
         },
         // Mock Reflector
         {

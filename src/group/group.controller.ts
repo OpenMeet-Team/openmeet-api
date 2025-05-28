@@ -29,13 +29,21 @@ import { MatrixMessage } from '../matrix/matrix-types';
 import { Permissions } from '../shared/guard/permissions.decorator';
 import { PermissionsGuard } from '../shared/guard/permissions.guard';
 import { GroupPermission, UserPermission } from '../core/constants/constant';
+import { GroupMailService } from '../group-mail/group-mail.service';
+import {
+  SendAdminMessageDto,
+  PreviewAdminMessageDto,
+} from './dto/admin-message.dto';
 
 @ApiTags('Groups')
 @Controller('groups')
 @ApiBearerAuth()
 @UseGuards(JWTAuthGuard)
 export class GroupController {
-  constructor(private readonly groupService: GroupService) {}
+  constructor(
+    private readonly groupService: GroupService,
+    private readonly groupMailService: GroupMailService,
+  ) {}
 
   @Permissions({
     context: 'user',
@@ -301,5 +309,57 @@ export class GroupController {
     @Param('slug') slug?: string,
   ): Promise<EventEntity[]> {
     return await this.groupService.showGroupRecommendedEvents(slug);
+  }
+
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.ManageMembers],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Post(':slug/admin-message')
+  @ApiOperation({
+    summary: 'Send admin message to all group members',
+    description:
+      'Allows group admins to send a message to all group members via email',
+  })
+  async sendAdminMessage(
+    @Param('slug') slug: string,
+    @Body() sendAdminMessageDto: SendAdminMessageDto,
+    @AuthUser() user: User,
+  ) {
+    const group = await this.groupService.getGroupBySlug(slug);
+    return await this.groupMailService.sendAdminMessageToMembers(
+      group,
+      user.id,
+      sendAdminMessageDto.subject,
+      sendAdminMessageDto.message,
+    );
+  }
+
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.ManageMembers],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Post(':slug/admin-message/preview')
+  @ApiOperation({
+    summary: 'Preview admin message by sending to test email',
+    description:
+      'Allows group admins to preview the admin message by sending it to a test email address',
+  })
+  async previewAdminMessage(
+    @Param('slug') slug: string,
+    @Body() previewAdminMessageDto: PreviewAdminMessageDto,
+    @AuthUser() user: User,
+  ) {
+    const group = await this.groupService.getGroupBySlug(slug);
+    await this.groupMailService.previewAdminMessage(
+      group,
+      user.id,
+      previewAdminMessageDto.subject,
+      previewAdminMessageDto.message,
+      previewAdminMessageDto.testEmail,
+    );
+    return { message: 'Preview email sent successfully' };
   }
 }

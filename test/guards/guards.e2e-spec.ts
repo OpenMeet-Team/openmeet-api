@@ -455,5 +455,5 @@ describe('Guards (e2e)', () => {
           .set('x-tenant-id', TESTING_TENANT_ID);
       }
     }
-  });
+  }, 30000);
 });

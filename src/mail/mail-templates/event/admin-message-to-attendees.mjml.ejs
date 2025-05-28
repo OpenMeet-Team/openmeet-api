@@ -1,0 +1,49 @@
+<%- include('./../layouts/header.mjml.ejs') %>
+
+      <!-- Main Content -->
+      <mj-section>
+        <mj-column>
+
+          <mj-text>
+            Hello,
+          </mj-text>
+
+          <mj-text>
+            <strong><%= admin?.firstName %> <%= admin?.lastName %></strong> from <strong>
+              <a href="<%= tenantConfig?.frontendDomain + '/events/' + event?.slug %>"><%= event?.name %></a>
+            </strong> has sent you a message:
+          </mj-text>
+
+          <!-- Subject -->
+          <mj-text font-size="18px" font-weight="bold" padding-top="20px">
+            <%= subject %>
+          </mj-text>
+
+          <!-- Message Content -->
+          <mj-text padding-top="10px" line-height="1.5">
+            <%- message.replace(/\n/g, '<br>') %>
+          </mj-text>
+
+        </mj-column>
+      </mj-section>
+
+      <!-- Button -->
+      <mj-section padding="20px">
+        <mj-column>
+          <mj-button href="<%= tenantConfig?.frontendDomain + '/events/' + event?.slug %>" background-color="#7B71DA" color="#FFFFFF" font-size="16px">
+            View Event
+          </mj-button>
+        </mj-column>
+      </mj-section>
+
+      <!-- Sender Info -->
+      <mj-section padding="10px">
+        <mj-column>
+          <mj-text font-size="12px" color="#666666">
+            This message was sent by <%= admin?.firstName %> <%= admin?.lastName %> 
+            from the event "<%= event?.name %>".
+          </mj-text>
+        </mj-column>
+      </mj-section>
+
+<%- include('./../layouts/footer.mjml.ejs') %>

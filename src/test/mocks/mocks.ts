@@ -14,8 +14,12 @@ import {
   mockEventMailService,
   mockEventRole,
 } from './event-mocks';
-import { mockUser } from './user-mocks';
-import { mockGroupMember, mockGroups } from './group-mocks';
+import { mockUser, mockUserService } from './user-mocks';
+import {
+  mockGroupMember,
+  mockGroups,
+  mockGroupMailService,
+} from './group-mocks';
 import { mockEventQueryService } from './event-query-mocks';
 import { mockEventManagementService } from './event-management-mocks';
 import { mockEventRecommendationService } from './event-recommendation-mocks';
@@ -33,6 +37,8 @@ export {
   mockEventRoleService,
   mockEventMailService,
   mockEventRole,
+  mockGroupMailService,
+  mockUserService,
 };
 
 export const mockCategory = {

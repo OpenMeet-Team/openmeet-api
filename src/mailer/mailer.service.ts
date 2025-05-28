@@ -142,6 +142,14 @@ export class MailerService {
         currentYear: new Date().getFullYear(),
       });
 
+      // Generate plain text version for admin messages
+      let text: string | undefined;
+      if (templateName === 'group/admin-message-to-members') {
+        text = this.generateGroupAdminMessagePlainText(context, tenantConfig);
+      } else if (templateName === 'event/admin-message-to-attendees') {
+        text = this.generateEventAdminMessagePlainText(context, tenantConfig);
+      }
+
       await this.transporter.sendMail({
         from: {
           name:
@@ -154,11 +162,60 @@ export class MailerService {
         to,
         subject,
         html,
+        text,
       });
     } catch (error) {
       console.error('Failed to send email:', error);
       throw error;
     }
+  }
+
+  private generateGroupAdminMessagePlainText(
+    context: Record<string, any>,
+    tenantConfig: any,
+  ): string {
+    const { group, admin, subject, message } = context;
+    const groupUrl = `${tenantConfig?.frontendDomain}/groups/${group?.slug}`;
+
+    return `Hello,
+
+${admin?.firstName} ${admin?.lastName} from ${group?.name} has sent you a message:
+
+${subject}
+
+${message}
+
+View Group: ${groupUrl}
+
+This message was sent by ${admin?.firstName} ${admin?.lastName} from the group "${group?.name}".
+
+--
+${tenantConfig?.name || 'OpenMeet'}
+`;
+  }
+
+  private generateEventAdminMessagePlainText(
+    context: Record<string, any>,
+    tenantConfig: any,
+  ): string {
+    const { event, admin, subject, message } = context;
+    const eventUrl = `${tenantConfig?.frontendDomain}/events/${event?.slug}`;
+
+    return `Hello,
+
+${admin?.firstName} ${admin?.lastName} from ${event?.name} has sent you a message:
+
+${subject}
+
+${message}
+
+View Event: ${eventUrl}
+
+This message was sent by ${admin?.firstName} ${admin?.lastName} from the event "${event?.name}".
+
+--
+${tenantConfig?.name || 'OpenMeet'}
+`;
   }
 
   async renderTemplate(
