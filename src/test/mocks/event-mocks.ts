@@ -114,4 +114,14 @@ export const mockEventService = {
 export const mockEventMailService = {
   sendMailAttendeeGuestJoined: jest.fn().mockResolvedValue(undefined),
   sendMailAttendeeStatusChanged: jest.fn().mockResolvedValue(undefined),
+  sendAdminMessageToAttendees: jest.fn().mockResolvedValue({
+    success: true,
+    deliveredCount: 1,
+    failedCount: 0,
+    messageId: 'test_event_msg_123',
+  }),
+  previewAdminMessage: jest.fn().mockResolvedValue({
+    success: true,
+    messageId: 'preview_event_msg_123',
+  }),
 };

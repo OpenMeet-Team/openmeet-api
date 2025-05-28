@@ -36,7 +36,11 @@ export const mockGroupUserPermission = {
 export const mockGroupMember = {
   id: 1,
   user: mockUser,
-  group: { id: 1, slug: 'test-group' },
+  group: {
+    id: 1,
+    slug: 'test-group',
+    name: 'Test Group',
+  },
 } as GroupMemberEntity;
 
 export const mockGroupMembers = [mockGroupMember];
@@ -106,4 +110,14 @@ export const mockGroupService = {
 export const mockGroupMailService = {
   sendGroupGuestJoined: jest.fn().mockResolvedValue(mockGroupMember),
   sendGroupMemberRoleUpdated: jest.fn().mockResolvedValue(mockGroupMember),
+  sendAdminMessageToMembers: jest.fn().mockResolvedValue({
+    success: true,
+    deliveredCount: 1,
+    failedCount: 0,
+    messageId: 'test_msg_123',
+  }),
+  previewAdminMessage: jest.fn().mockResolvedValue({
+    success: true,
+    messageId: 'preview_msg_123',
+  }),
 };

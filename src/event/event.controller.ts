@@ -45,6 +45,12 @@ import { EventRecommendationService } from './services/event-recommendation.serv
 import { ICalendarService } from './services/ical/ical.service';
 import { EventSeriesOccurrenceService } from '../event-series/services/event-series-occurrence.service';
 import { Logger } from '@nestjs/common';
+import {
+  SendAdminMessageDto,
+  PreviewAdminMessageDto,
+} from './dto/admin-message.dto';
+import { EventMailService } from '../event-mail/event-mail.service';
+import { AdminMessageResult } from './interfaces/admin-message-result.interface';
 
 @ApiTags('Events')
 @Controller('events')
@@ -60,6 +66,7 @@ export class EventController {
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly iCalendarService: ICalendarService,
     private readonly eventSeriesOccurrenceService: EventSeriesOccurrenceService,
+    private readonly eventMailService: EventMailService,
   ) {}
 
   @Get()
@@ -476,5 +483,62 @@ export class EventController {
         `Completed getEventsBySeries for ${seriesSlug} at ${new Date().toISOString()}`,
       );
     }
+  }
+
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.MessageAttendees],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Post(':slug/admin-message')
+  @ApiOperation({ summary: 'Send admin message to all event attendees' })
+  @Trace('event.sendAdminMessage')
+  async sendAdminMessage(
+    @Param('slug') slug: string,
+    @Body() sendAdminMessageDto: SendAdminMessageDto,
+    @AuthUser() user: User,
+  ): Promise<AdminMessageResult> {
+    const event = await this.eventQueryService.showEvent(slug);
+    if (!event) {
+      throw new NotFoundException(`Event with slug ${slug} not found`);
+    }
+
+    const result = await this.eventMailService.sendAdminMessageToAttendees(
+      event,
+      user.id,
+      sendAdminMessageDto.subject,
+      sendAdminMessageDto.message,
+    );
+
+    return result;
+  }
+
+  @Permissions({
+    context: 'event',
+    permissions: [EventAttendeePermission.MessageAttendees],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Post(':slug/admin-message/preview')
+  @ApiOperation({ summary: 'Send preview of admin message to test email' })
+  @Trace('event.previewAdminMessage')
+  async previewAdminMessage(
+    @Param('slug') slug: string,
+    @Body() previewAdminMessageDto: PreviewAdminMessageDto,
+    @AuthUser() user: User,
+  ): Promise<{ message: string }> {
+    const event = await this.eventQueryService.showEvent(slug);
+    if (!event) {
+      throw new NotFoundException(`Event with slug ${slug} not found`);
+    }
+
+    await this.eventMailService.previewAdminMessage(
+      event,
+      user.id,
+      previewAdminMessageDto.subject,
+      previewAdminMessageDto.message,
+      previewAdminMessageDto.testEmail,
+    );
+
+    return { message: 'Preview email sent successfully' };
   }
 }

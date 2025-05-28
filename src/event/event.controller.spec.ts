@@ -14,6 +14,7 @@ import {
   mockEvent,
   mockEventAttendee,
   mockEventAttendeeService,
+  mockEventMailService,
   mockGroupMemberService,
   mockGroupService,
   mockUser,
@@ -32,6 +33,7 @@ import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
 import { ICalendarService } from './services/ical/ical.service';
 import { EventSeriesOccurrenceService } from '../event-series/services/event-series-occurrence.service';
+import { EventMailService } from '../event-mail/event-mail.service';
 
 const createEventDto: CreateEventDto = {
   name: 'Test Event',
@@ -148,6 +150,10 @@ describe('EventController', () => {
         {
           provide: EventSeriesOccurrenceService,
           useValue: mockEventSeriesOccurrenceService,
+        },
+        {
+          provide: EventMailService,
+          useValue: mockEventMailService,
         },
         // EventDiscussionService has been moved to ChatController
         {

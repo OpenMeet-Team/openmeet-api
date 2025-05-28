@@ -18,7 +18,6 @@ import { MailModule } from '../mail/mail.module';
 import { EventRoleService } from '../event-role/event-role.service';
 import { AuthModule } from '../auth/auth.module';
 import { GroupListener } from './group.listener';
-import { GroupMailService } from '../group-mail/group-mail.service';
 import { GroupMailModule } from '../group-mail/group-mail.module';
 import { EventModule } from '../event/event.module';
 import { EventMailModule } from '../event-mail/event-mail.module';
@@ -56,7 +55,6 @@ import { ConfigModule } from '@nestjs/config';
     GroupRoleService,
     EventRoleService,
     GroupListener,
-    GroupMailService,
   ],
   exports: [GroupService],
 })

@@ -5,9 +5,11 @@ import {
   mockEventAttendeeService,
   mockMailService,
   mockTenantConnectionService,
+  mockUserService,
 } from '../test/mocks';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
+import { UserService } from '../user/user.service';
 
 describe('EventMailService', () => {
   let service: EventMailService;
@@ -27,6 +29,10 @@ describe('EventMailService', () => {
         {
           provide: EventAttendeeService,
           useValue: mockEventAttendeeService,
+        },
+        {
+          provide: UserService,
+          useValue: mockUserService,
         },
       ],
     }).compile();
