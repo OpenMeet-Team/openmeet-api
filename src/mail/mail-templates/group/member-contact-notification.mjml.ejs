@@ -30,8 +30,8 @@
       <!-- Action Buttons -->
       <mj-section padding="20px">
         <mj-column>
-          <mj-button href="mailto:<%= member?.email %>?subject=Re: <%= subject %>" background-color="#7B71DA" color="#FFFFFF" font-size="16px">
-            Reply to Member
+          <mj-button href="<%= tenantConfig?.frontendDomain + '/groups/' + group?.slug %>/members" background-color="#7B71DA" color="#FFFFFF" font-size="16px">
+            View Group Members
           </mj-button>
         </mj-column>
       </mj-section>
@@ -50,10 +50,13 @@
         <mj-column>
           <mj-text font-size="12px" color="#666666">
             This <%= contactType %> was sent by <%= member?.firstName %> <%= member?.lastName %> 
-            (<%- member?.email %>) from the group "<%= group?.name %>".
+            from the group "<%= group?.name %>".
           </mj-text>
           <mj-text font-size="12px" color="#666666">
             Contact type: <%= contactType %>
+          </mj-text>
+          <mj-text font-size="12px" color="#666666">
+            To reply to this member, visit the group page and use the group messaging features.
           </mj-text>
         </mj-column>
       </mj-section>

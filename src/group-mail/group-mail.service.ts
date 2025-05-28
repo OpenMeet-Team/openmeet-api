@@ -156,7 +156,7 @@ export class GroupMailService {
     subject: string,
     message: string,
     testEmail: string,
-    targetUserIds?: number[], // Optional array of specific user IDs to target
+    _targetUserIds?: number[], // Optional array of specific user IDs to target
   ): Promise<void> {
     // Get admin info
     const admin = await this.userService.findById(adminUserId);

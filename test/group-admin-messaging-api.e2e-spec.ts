@@ -432,6 +432,11 @@ describe('Group Admin Messaging API (e2e)', () => {
         expect(previewEmail.html).toContain(adminUser.firstName);
         expect(previewEmail.html).toContain(testGroup.name);
 
+        // Verify plain text version exists
+        expect(previewEmail.text).toBeDefined();
+        expect(previewEmail.text).toContain(adminUser.firstName);
+        expect(previewEmail.text).toContain(testGroup.name);
+
         // Verify no preview emails sent to actual group members
         for (const memberUser of memberUsers) {
           const memberPreviewEmails = recentEmails.filter(
@@ -514,7 +519,17 @@ describe('Group Admin Messaging API (e2e)', () => {
         expect(contactEmail.html).toContain(
           'I have a question about the upcoming events',
         );
-        expect(contactEmail.html).toContain(`mailto:${memberUser.email}`); // Reply link
+        // Verify email address is NOT exposed for security
+        expect(contactEmail.html).not.toContain(memberUser.email);
+        // Verify safe reply instructions are included
+        expect(contactEmail.html).toContain('View Group Members');
+
+        // Verify plain text version exists and is secure
+        expect(contactEmail.text).toBeDefined();
+        expect(contactEmail.text).toContain(memberUser.firstName);
+        expect(contactEmail.text).toContain(memberUser.lastName);
+        expect(contactEmail.text).not.toContain(memberUser.email);
+        expect(contactEmail.text).toContain('View Group Members');
 
         console.log('✓ Member contact functionality working correctly');
       }, 15000);

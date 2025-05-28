@@ -142,12 +142,17 @@ export class MailerService {
         currentYear: new Date().getFullYear(),
       });
 
-      // Generate plain text version for admin messages
+      // Generate plain text version for all templates
       let text: string | undefined;
       if (templateName === 'group/admin-message-to-members') {
         text = this.generateGroupAdminMessagePlainText(context, tenantConfig);
       } else if (templateName === 'event/admin-message-to-attendees') {
         text = this.generateEventAdminMessagePlainText(context, tenantConfig);
+      } else if (templateName === 'group/member-contact-notification') {
+        text = this.generateMemberContactNotificationPlainText(
+          context,
+          tenantConfig,
+        );
       }
 
       await this.transporter.sendMail({
@@ -212,6 +217,35 @@ ${message}
 View Event: ${eventUrl}
 
 This message was sent by ${admin?.firstName} ${admin?.lastName} from the event "${event?.name}".
+
+--
+${tenantConfig?.name || 'OpenMeet'}
+`;
+  }
+
+  private generateMemberContactNotificationPlainText(
+    context: Record<string, any>,
+    tenantConfig: any,
+  ): string {
+    const { group, member, subject, message, contactType } = context;
+    const groupUrl = `${tenantConfig?.frontendDomain}/groups/${group?.slug}`;
+    const membersUrl = `${tenantConfig?.frontendDomain}/groups/${group?.slug}/members`;
+
+    return `Hello,
+
+${member?.firstName} ${member?.lastName} from the group ${group?.name} has sent you a ${contactType}:
+
+${subject}
+
+${message}
+
+View Group Members: ${membersUrl}
+View Group: ${groupUrl}
+
+This ${contactType} was sent by ${member?.firstName} ${member?.lastName} from the group "${group?.name}".
+Contact type: ${contactType}
+
+To reply to this member, visit the group page and use the group messaging features.
 
 --
 ${tenantConfig?.name || 'OpenMeet'}
