@@ -1,0 +1,64 @@
+<%- include('./../layouts/header.mjml.ejs') %>
+
+      <!-- Main Content -->
+      <mj-section>
+        <mj-column>
+
+          <mj-text>
+            Hello,
+          </mj-text>
+
+          <mj-text>
+            <strong><%= member?.firstName %> <%= member?.lastName %></strong> from the group <strong>
+              <a href="<%= tenantConfig?.frontendDomain + '/groups/' + group?.slug %>"><%= group?.name %></a>
+            </strong> has sent you a <%= contactType %>:
+          </mj-text>
+
+          <!-- Subject -->
+          <mj-text font-size="18px" font-weight="bold" padding-top="20px">
+            <%= subject %>
+          </mj-text>
+
+          <!-- Message Content -->
+          <mj-text padding-top="10px" line-height="1.5">
+            <%- message.replace(/\n/g, '<br>') %>
+          </mj-text>
+
+        </mj-column>
+      </mj-section>
+
+      <!-- Action Buttons -->
+      <mj-section padding="20px">
+        <mj-column>
+          <mj-button href="<%= tenantConfig?.frontendDomain + '/groups/' + group?.slug %>/members" background-color="#7B71DA" color="#FFFFFF" font-size="16px">
+            View Group Members
+          </mj-button>
+        </mj-column>
+      </mj-section>
+
+      <!-- Additional Actions -->
+      <mj-section padding="10px">
+        <mj-column>
+          <mj-button href="<%= tenantConfig?.frontendDomain + '/groups/' + group?.slug %>" background-color="#6c757d" color="#FFFFFF" font-size="14px">
+            View Group
+          </mj-button>
+        </mj-column>
+      </mj-section>
+
+      <!-- Contact Info -->
+      <mj-section padding="10px">
+        <mj-column>
+          <mj-text font-size="12px" color="#666666">
+            This <%= contactType %> was sent by <%= member?.firstName %> <%= member?.lastName %> 
+            from the group "<%= group?.name %>".
+          </mj-text>
+          <mj-text font-size="12px" color="#666666">
+            Contact type: <%= contactType %>
+          </mj-text>
+          <mj-text font-size="12px" color="#666666">
+            To reply to this member, visit the group page and use the group messaging features.
+          </mj-text>
+        </mj-column>
+      </mj-section>
+
+<%- include('./../layouts/footer.mjml.ejs') %>

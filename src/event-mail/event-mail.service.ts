@@ -180,4 +180,66 @@ export class EventMailService {
       },
     });
   }
+
+  async sendAttendeeContactToOrganizers(
+    event: any, // Event entity passed from calling code
+    attendeeUserId: number,
+    contactType: string,
+    subject: string,
+    message: string,
+  ): Promise<AdminMessageResult> {
+    // Get attendee info
+    const attendee = await this.userService.findById(attendeeUserId);
+
+    if (!attendee) {
+      throw new NotFoundException('Attendee user not found');
+    }
+
+    // Get all event organizers (users with ManageEvent permission)
+    const organizers =
+      await this.eventAttendeeService.getMailServiceEventAttendeesByPermission(
+        event.id,
+        EventAttendeePermission.ManageEvent, // Target event organizers
+      );
+
+    if (organizers.length === 0) {
+      throw new NotFoundException('No organizers found for this event');
+    }
+
+    let deliveredCount = 0;
+    let failedCount = 0;
+    const errors: string[] = [];
+
+    // Send notification to all organizers
+    for (const organizer of organizers) {
+      if (organizer.email) {
+        try {
+          await this.mailService.sendAttendeeContactNotification({
+            to: organizer.email,
+            data: {
+              event,
+              attendee,
+              contactType,
+              subject,
+              message,
+            },
+          });
+          deliveredCount++;
+        } catch (error) {
+          failedCount++;
+          errors.push(
+            `Failed to send to organizer ${organizer.email}: ${error.message}`,
+          );
+        }
+      }
+    }
+
+    return {
+      success: failedCount === 0,
+      messageId: `attendee_contact_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      deliveredCount,
+      failedCount,
+      errors: failedCount > 0 ? errors : undefined,
+    };
+  }
 }

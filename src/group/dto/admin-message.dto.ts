@@ -1,5 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, MaxLength, IsEmail } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  MaxLength,
+  IsEmail,
+  IsOptional,
+  IsArray,
+  IsInt,
+} from 'class-validator';
 
 export class SendAdminMessageDto {
   @ApiProperty({
@@ -20,6 +28,17 @@ export class SendAdminMessageDto {
   @IsString()
   @MaxLength(5000)
   message: string;
+
+  @ApiProperty({
+    description:
+      'Optional array of specific user IDs to send to. If not provided, sends to all members',
+    example: [1, 2, 3],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  targetUserIds?: number[];
 }
 
 export class PreviewAdminMessageDto extends SendAdminMessageDto {

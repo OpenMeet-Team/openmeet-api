@@ -34,6 +34,7 @@ import {
   SendAdminMessageDto,
   PreviewAdminMessageDto,
 } from './dto/admin-message.dto';
+import { ContactAdminsDto } from './dto/contact-admins.dto';
 
 @ApiTags('Groups')
 @Controller('groups')
@@ -333,6 +334,7 @@ export class GroupController {
       user.id,
       sendAdminMessageDto.subject,
       sendAdminMessageDto.message,
+      sendAdminMessageDto.targetUserIds,
     );
   }
 
@@ -359,7 +361,28 @@ export class GroupController {
       previewAdminMessageDto.subject,
       previewAdminMessageDto.message,
       previewAdminMessageDto.testEmail,
+      previewAdminMessageDto.targetUserIds,
     );
     return { message: 'Preview email sent successfully' };
+  }
+
+  @Post(':slug/contact-admins')
+  @ApiOperation({
+    summary: 'Send message from member to group admins',
+    description: 'Allows group members to send a message to all group admins',
+  })
+  async contactAdmins(
+    @Param('slug') slug: string,
+    @Body() contactAdminsDto: ContactAdminsDto,
+    @AuthUser() user: User,
+  ) {
+    const group = await this.groupService.getGroupBySlug(slug);
+    return await this.groupMailService.sendMemberContactToAdmins(
+      group,
+      user.id,
+      contactAdminsDto.contactType,
+      contactAdminsDto.subject,
+      contactAdminsDto.message,
+    );
   }
 }
