@@ -38,6 +38,8 @@ export class GroupRoleSeedService {
       GroupPermission.ManageReports,
       GroupPermission.ManageBilling,
       GroupPermission.CreateEvent,
+      GroupPermission.ContactMembers,
+      GroupPermission.ContactAdmins,
       GroupPermission.SeeGroup,
       GroupPermission.SeeEvents,
       GroupPermission.SeeDiscussions,
@@ -51,15 +53,20 @@ export class GroupRoleSeedService {
       GroupPermission.ManageReports,
       GroupPermission.CreateEvent,
       GroupPermission.MessageDiscussion,
+      GroupPermission.ContactMembers,
+      GroupPermission.ContactAdmins,
       GroupPermission.SeeGroup,
       GroupPermission.SeeEvents,
       GroupPermission.SeeDiscussions,
       GroupPermission.SeeMembers,
     ]);
-    await this.createGroupRoleIfNotExists(GroupRole.Guest, []);
+    await this.createGroupRoleIfNotExists(GroupRole.Guest, [
+      GroupPermission.ContactAdmins,
+    ]);
     await this.createGroupRoleIfNotExists(GroupRole.Member, [
       GroupPermission.MessageDiscussion,
       GroupPermission.MessageMember,
+      GroupPermission.ContactAdmins,
       GroupPermission.SeeMembers,
       GroupPermission.SeeEvents,
       GroupPermission.SeeDiscussions,
@@ -69,6 +76,7 @@ export class GroupRoleSeedService {
       GroupPermission.ManageMembers,
       GroupPermission.ManageDiscussions,
       GroupPermission.MessageDiscussion,
+      GroupPermission.ContactAdmins,
       GroupPermission.SeeGroup,
       GroupPermission.SeeEvents,
       GroupPermission.SeeDiscussions,
@@ -76,27 +84,34 @@ export class GroupRoleSeedService {
     ]);
   }
 
-  // Helper method to create group roles with assigned permissions
+  // Helper method to create or update group roles with assigned permissions (idempotent)
   private async createGroupRoleIfNotExists(
     roleName: string,
     permissionNames: string[],
   ) {
-    const count = await this.groupRoleRepository.count({
+    // Check if role exists
+    let groupRole = await this.groupRoleRepository.findOne({
       where: { name: roleName as GroupRole },
+      relations: ['groupPermissions'],
     });
 
-    if (!count) {
-      const groupRole = this.groupRoleRepository.create({
+    if (!groupRole) {
+      // Create new role
+      groupRole = this.groupRoleRepository.create({
         name: roleName as GroupRole,
       });
-
-      // Assign permissions to the group role
-      const permissions =
-        await this.getGroupPermissionsByNames(permissionNames);
-
-      groupRole.groupPermissions = permissions;
-      await this.groupRoleRepository.save(groupRole);
+      console.log(`Creating new role: ${roleName}`);
+    } else {
+      console.log(`Updating existing role: ${roleName}`);
     }
+
+    // Always update permissions to ensure they include any new permissions
+    // This makes seeding idempotent - safe to re-run
+    const permissions = await this.getGroupPermissionsByNames(permissionNames);
+    groupRole.groupPermissions = permissions;
+    await this.groupRoleRepository.save(groupRole);
+    
+    console.log(`Role ${roleName} now has ${permissions.length} permissions: ${permissions.map(p => p.name).join(', ')}`);
   }
 
   // Fetch group permissions by their names

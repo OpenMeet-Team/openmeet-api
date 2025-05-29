@@ -314,7 +314,7 @@ export class GroupController {
 
   @Permissions({
     context: 'group',
-    permissions: [GroupPermission.ManageMembers],
+    permissions: [GroupPermission.ContactMembers],
   })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/admin-message')
@@ -340,7 +340,7 @@ export class GroupController {
 
   @Permissions({
     context: 'group',
-    permissions: [GroupPermission.ManageMembers],
+    permissions: [GroupPermission.ContactMembers],
   })
   @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/admin-message/preview')
@@ -366,6 +366,11 @@ export class GroupController {
     return { message: 'Preview email sent successfully' };
   }
 
+  @Permissions({
+    context: 'group',
+    permissions: [GroupPermission.ContactAdmins],
+  })
+  @UseGuards(JWTAuthGuard, PermissionsGuard)
   @Post(':slug/contact-admins')
   @ApiOperation({
     summary: 'Send message from member to group admins',

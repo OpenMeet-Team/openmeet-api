@@ -1,6 +1,6 @@
 import * as request from 'supertest';
-import { 
-  TESTING_APP_URL, 
+import {
+  TESTING_APP_URL,
   TESTING_TENANT_ID,
   TESTING_MAIL_HOST,
   TESTING_MAIL_PORT,
@@ -20,7 +20,7 @@ describe('Event Contact Organizers (e2e)', () => {
     // Create a test user and get auth token
     const timestamp = Date.now();
     const userEmail = `test-user-contact-${timestamp}@example.com`;
-    
+
     const userResponse = await serverApp
       .post('/api/v1/auth/email/register')
       .send({
@@ -117,14 +117,16 @@ describe('Event Contact Organizers (e2e)', () => {
       expect(response.body).toHaveProperty('messageId');
 
       // Check for emails sent (if MailDev is available)
-      const recentEmails = await mailDevService.getEmailsSince(timestampBeforeRequest);
-      const contactEmails = recentEmails.filter((email: any) => 
-        email.subject?.includes('Attendee question')
+      const recentEmails = await mailDevService.getEmailsSince(
+        timestampBeforeRequest,
+      );
+      const contactEmails = recentEmails.filter((email: any) =>
+        email.subject?.includes('Attendee question'),
       );
 
       if (contactEmails.length > 0) {
         expect(contactEmails.length).toBeGreaterThan(0);
-        
+
         // Verify email content
         const firstEmail = contactEmails[0];
         expect(firstEmail.subject).toContain('question');
@@ -184,7 +186,7 @@ describe('Event Contact Organizers (e2e)', () => {
 
   it('should handle invalid event slug', async () => {
     const invalidSlug = 'non-existent-event-slug';
-    
+
     const contactData = {
       contactType: 'question',
       subject: 'Test subject',

@@ -71,7 +71,15 @@ async function runMigrationsForAllTenants() {
         await queryRunner.query(`SET search_path TO "${schemaName}"`);
 
         console.log(`Starting migrations for ${schemaName}`);
-        await dataSource.runMigrations();
+        // Run migrations one by one to ensure each commits before the next starts
+        // This is critical for enum changes to be available in subsequent migrations
+        const hasPendingMigrations = await dataSource.showMigrations();
+        if (hasPendingMigrations) {
+          console.log('Running migrations one by one with individual transactions...');
+          await dataSource.runMigrations({ transaction: 'each' });
+        } else {
+          console.log('No pending migrations to run.');
+        }
         migratedTenants.push(tenant.id);
         console.log(`Migrations successfully applied to schema: ${schemaName}`);
 
