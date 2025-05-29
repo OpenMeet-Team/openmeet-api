@@ -634,7 +634,7 @@ describe('Group Admin Messaging API (e2e)', () => {
           .post('/api/groups/non-existent-group/contact-admins')
           .set('Authorization', `Bearer ${memberToken}`)
           .send(contactData)
-          .expect(404); // Not Found - group doesn't exist
+          .expect(403); // Forbidden - security: don't leak info about non-existent groups
       });
     });
   });

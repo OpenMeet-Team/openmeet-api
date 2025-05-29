@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { EventPermissionSeedService } from './event-permission/event-permission-seed.service';
 import { EventRoleSeedService } from './event-role/event-role-seed.service';
