@@ -1,8 +1,6 @@
 # to run in development use this command 
 # `` sudo docker-compose -f docker-compose-dev.yml up --build ``
 
-version: '3.8'
-
 services:
   postgres:
     # use the db with postGIS extentions
@@ -52,7 +50,7 @@ services:
     image: redis:7-alpine
     container_name: openmeet_redis
     ports:
-      - "39889:6379"
+      - "6379:6379"
     restart: always
     networks:
       - api-network

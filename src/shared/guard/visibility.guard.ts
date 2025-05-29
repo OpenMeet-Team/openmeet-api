@@ -82,10 +82,16 @@ export class VisibilityGuard implements CanActivate {
         case GroupVisibility.Public:
           return true;
         case GroupVisibility.Authenticated:
+          if (!user) {
+            throw new ForbiddenException(
+              'This group requires authentication. Please log in to view the group details.',
+            );
+          }
+          break;
         case GroupVisibility.Private:
           if (!user) {
             throw new ForbiddenException(
-              'VisibilityGuard: This group is not public',
+              'This is a private group. Please log in and request to join to view the group details.',
             );
           }
           break;

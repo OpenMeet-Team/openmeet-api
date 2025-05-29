@@ -897,9 +897,9 @@ export class MatrixUserService
 
               // Only broadcast new message events (not state events, typing, etc.)
               if (event.getType() === 'm.room.message') {
-                this.logger.debug(
-                  `Got new message event in room ${room.roomId} from user ${event.getSender()}`,
-                );
+                // this.logger.debug(
+                //   `Got new message event in room ${room.roomId} from user ${event.getSender()}`,
+                // );
 
                 // Use the injected MatrixGateway instance
                 if (
@@ -920,9 +920,9 @@ export class MatrixUserService
 
                   // Broadcast the event to all connected clients
                   this.matrixGateway.broadcastRoomEvent(room.roomId, eventData);
-                  this.logger.debug(
-                    `Broadcast Matrix message event for room ${room.roomId} (tenant: ${tenantId || 'default'})`,
-                  );
+                  // this.logger.debug(
+                  //   `Broadcast Matrix message event for room ${room.roomId} (tenant: ${tenantId || 'default'})`,
+                  // );
                 } else {
                   this.logger.warn(
                     'Could not get MatrixGateway instance to broadcast event',

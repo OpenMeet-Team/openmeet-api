@@ -4,32 +4,60 @@
 
 This document defines the requirements, architecture, and design decisions for OpenMeet's unified messaging system. The goal is to enable various types of communication between users across multiple channels while maintaining privacy, preventing abuse, and providing a good user experience.
 
-## 🎯 Current Implementation Status (January 2025)
+## 🎯 Current Implementation Status (May 2025)
 
 ### ✅ **Fully Implemented & Production Ready**
 - **Group Admin Messaging**: Complete admin-to-member messaging with targeted user selection
 - **Event Admin Messaging**: Complete organizer-to-attendee messaging 
 - **Member-to-Admin Contact**: Complete member-to-admin contact system for groups
+- **Event Attendee-to-Organizer Contact**: ✅ **NEWLY IMPLEMENTED** - Complete reverse communication for events
 - **Email Security**: All templates secured with no email address leakage, HTML + plain text versions
 - **Preview Functionality**: Test emails before sending to recipients
 - **Delivery Tracking**: Success/failure counts and comprehensive error handling
 - **Permission-Based Access**: Secure role-based messaging controls
+- **Comprehensive Test Coverage**: All messaging features tested with timeout-resistant test suites
 
-### 🚧 **Next Priority Implementation (Phase 2.5)**
-- **Event Attendee-to-Organizer Contact**: Missing reverse communication for events
-  - **Gap**: Events missing equivalent of group member-to-admin contact system
-  - **Solution**: Mirror existing group contact pattern for events (5 dev hours estimated)
-  - **Files Ready**: Proven patterns from group implementation can be directly adapted
+### 🚨 **CRITICAL: Permission Architecture Refactor Required**
+**Current Problem**: `ManageMembers` permission incorrectly used for messaging functionality, creating architectural confusion between membership management and communication permissions.
+
+**Root Cause**: During rapid development, `ManageMembers` was used as a proxy for "admin-level users who can message members" but this conflates two distinct concerns.
+
+**Impact**: 
+- Backend endpoints use `ManageMembers` for `admin-message` functionality (lines 317, 343 in group.controller.ts)
+- Frontend UI shows messaging buttons based on membership management permissions
+- Violates separation of concerns principle
+- Creates technical debt and confusion for future development
+- Makes it difficult to grant messaging permissions independently of membership management
+
+### 🎯 **Required Permission Architecture Changes**
+**New Permission Model**:
+```typescript
+// Separate permissions for distinct concerns:
+ManageMembers = 'MANAGE_MEMBERS'      // Add/remove/approve members, change roles
+ContactMembers = 'CONTACT_MEMBERS'    // Send broadcast messages to group members  
+ContactAdmins = 'CONTACT_ADMINS'      // Send escalation messages to group leadership
+MessageDiscussion = 'MESSAGE_DISCUSSION' // Post in group discussion/chat rooms (existing)
+```
+
+**Migration Strategy**: See `/design-notes/permissions-refactor-messaging.md` for detailed migration plan ensuring zero production downtime.
 
 ### 🔄 **Current Messaging Flow Coverage**
 ```
 ✅ Group Admin → Group Members (with targeting)
 ✅ Group Members → Group Admins (secure contact system)
 ✅ Event Organizers → Event Attendees  
-🚧 Event Attendees → Event Organizers (MISSING - Phase 2.5)
+✅ Event Attendees → Event Organizers (NEWLY COMPLETED)
 ✅ System → All Users (transactional emails)
 ✅ Member ↔ Member (Matrix chat)
 ```
+
+### 📊 **Feature Parity Achievement**
+**✅ COMPLETE PARITY**: Events and Groups now have identical messaging capabilities:
+- **Admin/Organizer → Members/Attendees**: Both implemented
+- **Member/Attendee → Admin/Organizer**: Both implemented  
+- **Preview & Delivery Tracking**: Both implemented
+- **Email Security Standards**: Both implemented
+- **Permission-Based Access**: Both implemented
 
 ### 📧 **Email Infrastructure Status**
 - **MJML Templates**: Professional responsive design with tenant branding
@@ -572,164 +600,352 @@ After Phase 1, admins will have:
 - **Safe Reply Workflow**: ✅ Contact admin emails direct to platform instead of exposing member emails
 - **Template Security Audit**: ✅ All templates reviewed and secured
 
-### **Phase 2.5: Event Attendee-to-Organizer Messaging 🚧 PLANNED**
+### **Phase 2.5: Event Attendee-to-Organizer Messaging ✅ COMPLETED**
 *Goal: Enable event attendees to contact event organizers/hosts similar to group member-to-admin system*
 
-> **📋 NEXT PRIORITY**: Implement missing reverse communication channel for events. Currently, event organizers can message attendees, but attendees cannot contact organizers.
+> **✅ COMPLETED**: Reverse communication channel for events successfully implemented. Events now have full messaging parity with groups.
 
-#### **Gap Analysis: Event vs Group Messaging Parity**
+#### **✅ Implementation Achievement: Complete Event-Group Messaging Parity**
 
-**✅ What Events Have (Same as Groups):**
-- **Event organizers can message ALL attendees**: `EventMailService.sendAdminMessageToAttendees()`
-- **Preview functionality**: `POST /events/:slug/admin-message/preview`
-- **Professional email templates**: MJML with HTML/plain text versions
-- **Permission-based access**: Event organizer permissions
+**✅ What We Successfully Implemented:**
 
-**❌ What Events Are Missing (Groups Have This):**
-- **Attendee-to-organizer contact**: No equivalent to `GroupMailService.sendMemberContactToAdmins()`
-- **Contact API endpoint**: No equivalent to `POST /groups/:slug/contact-admins`
-- **Attendee contact templates**: No equivalent to `member-contact-notification.mjml.ejs`
-- **Frontend UI**: No "Contact Event Organizers" button on event pages
+**Backend Infrastructure:**
+- **EventMailService.sendAttendeeContactToOrganizers()**: ✅ Full implementation mirroring group pattern
+- **ContactOrganizersDto**: ✅ Validation DTO with contact types ('question', 'report', 'feedback')
+- **POST /events/:slug/contact-organizers**: ✅ API endpoint with proper authentication and validation
+- **Email Templates**: ✅ Professional MJML template with HTML and plain text versions
+- **Permission-Based Access**: ✅ Proper attendee verification and organizer targeting
+- **Delivery Tracking**: ✅ Full AdminMessageResult with success/failure counts
 
-#### **Planned Implementation: Mirror Group Pattern**
+**Frontend Implementation:**
+- **ContactEventOrganizersDialogComponent.vue**: ✅ Complete form with validation and error handling
+- **useContactEventOrganizersDialog.ts**: ✅ Composable for dialog management
+- **Event Store Integration**: ✅ actionContactOrganizers() method with analytics tracking
+- **Event Page Integration**: ✅ "Contact Organizers" button for attendees (not organizers)
+- **API Integration**: ✅ Complete events API with proper TypeScript types
 
-**New Backend Components:**
+**Security & Quality:**
+- **Email Security**: ✅ No email address leakage, safe reply workflows
+- **Plain Text Support**: ✅ Accessibility-compliant email versions  
+- **Comprehensive Testing**: ✅ Full e2e test suite with timeout handling
+- **Permission UI Logic**: ✅ Button only shows for attendees who aren't organizers
+
+**✅ Events Now Have Complete Parity With Groups:**
+- **Organizer → Attendees**: Both have admin messaging ✅
+- **Attendee/Member → Organizer/Admin**: Both have contact systems ✅  
+- **Email Templates**: Both have professional MJML templates ✅
+- **Security Standards**: Both follow same email security patterns ✅
+- **Frontend UX**: Both have consistent dialog and button patterns ✅
+
+#### **Actual Implementation Results (5 hours total)**
+
+**✅ Successfully Completed All Planned Work:**
+- **Backend**: EventMailService.sendAttendeeContactToOrganizers(), ContactOrganizersDto, API endpoint
+- **Email Template**: attendee-contact-notification.mjml.ejs with HTML/plain text versions
+- **Frontend**: ContactEventOrganizersDialogComponent.vue, composable, store integration
+- **UI Integration**: "Contact Organizers" button properly placed on event pages
+- **Testing**: Comprehensive e2e test suite with timeout handling
+- **Security**: Full email security compliance with no address leakage
+
+### **🚀 NEXT PHASE: Architectural Refactoring & Code Quality (Phase 3)**
+*Goal: Consolidate patterns, improve maintainability, and prepare for advanced features*
+
+> **📋 CURRENT STATE ANALYSIS**: We now have complete messaging functionality but with some technical debt from rapid implementation. Time to consolidate and create a more robust foundation.
+
+#### **🎯 Strategic Goals for Phase 3**
+
+**1. Code Consolidation & DRY Principles**
+- Eliminate duplicate patterns between GroupMailService and EventMailService
+- Create unified messaging abstractions
+- Reduce code duplication in frontend components
+- Standardize error handling and validation patterns
+
+**2. Improved Architecture**
+- Introduce unified MessagingService layer
+- Create reusable MessageTemplate system  
+- Implement proper separation of concerns
+- Add proper dependency injection patterns
+
+**3. Enhanced Developer Experience**
+- Clear interfaces and contracts
+- Better TypeScript types and generics
+- Improved test utilities and patterns
+- Comprehensive documentation
+
+**4. Performance & Scalability Preparation**
+- Optimize email delivery patterns
+- Add caching for template rendering
+- Prepare for batch processing
+- Implement proper error recovery
+
+#### **📊 Current Technical Debt Analysis**
+
+**Backend Duplication Issues:**
 ```typescript
-// ADD: Method to EventMailService (mirror GroupMailService.sendMemberContactToAdmins)
-async sendAttendeeContactToOrganizers(
-  event: any,
-  attendeeUserId: number,
-  contactType: 'question' | 'report' | 'feedback',
-  subject: string,
-  message: string,
-): Promise<AdminMessageResult>
+// PROBLEM: Nearly identical code in two services
+GroupMailService.sendMemberContactToAdmins()   // 95% same logic
+EventMailService.sendAttendeeContactToOrganizers()  // 95% same logic
 
-// ADD: New DTO (mirror ContactAdminsDto)
-export class ContactEventOrganizersDto {
-  @IsNotEmpty() @IsString() @MaxLength(200) subject: string;
-  @IsNotEmpty() @IsString() @MaxLength(5000) message: string;
-  @IsNotEmpty() @IsIn(['question', 'report', 'feedback']) contactType: string;
+GroupMailService.sendAdminMessageToMembers()   // 90% same logic  
+EventMailService.sendAdminMessageToAttendees()    // 90% same logic
+```
+
+**Frontend Pattern Repetition:**
+```typescript
+// PROBLEM: Copy-paste components with minimal differences
+ContactAdminsDialogComponent.vue          // Group version
+ContactEventOrganizersDialogComponent.vue    // Event version - 95% identical
+
+useContactAdminsDialog.ts                 // Group version
+useContactEventOrganizersDialog.ts           // Event version - 95% identical
+```
+
+**Email Template Duplication:**
+```html
+<!-- PROBLEM: Nearly identical templates -->
+group/member-contact-notification.mjml.ejs    <!-- Group version -->
+event/attendee-contact-notification.mjml.ejs  <!-- Event version - 90% same -->
+```
+
+#### **🏗️ Proposed Unified Architecture**
+
+**1. Universal Messaging Service**
+```typescript
+// NEW: Unified service that handles both groups and events
+export class UniversalMessagingService {
+  // Replace both GroupMailService and EventMailService methods
+  async sendContactMessage<T extends GroupEntity | EventEntity>(
+    context: MessagingContext<T>,
+    sender: UserEntity,
+    recipients: UserEntity[],
+    contactData: ContactMessageData
+  ): Promise<AdminMessageResult>
+
+  async sendAdminMessage<T extends GroupEntity | EventEntity>(
+    context: MessagingContext<T>,
+    admin: UserEntity,
+    recipients: UserEntity[],
+    messageData: AdminMessageData
+  ): Promise<AdminMessageResult>
 }
 
-// ADD: New endpoint to EventController
-@Post(':slug/contact-organizers')
-@ApiOperation({ summary: 'Send message from attendee to event organizers' })
-async contactOrganizers(
-  @Param('slug') slug: string,
-  @Body() contactDto: ContactEventOrganizersDto,
-  @AuthUser() user: User,
+interface MessagingContext<T> {
+  entity: T;  // GroupEntity | EventEntity
+  type: 'group' | 'event';
+  getAdmins(): Promise<UserEntity[]>;
+  getMembers(): Promise<UserEntity[]>;
+  getPermissionName(): string;
+}
+```
+
+**2. Unified Frontend Components**
+```typescript
+// NEW: Generic contact dialog that works for both groups and events
+<ContactEntityDialog 
+  :entity="group|event"
+  :entity-type="'group'|'event'"
+  :contact-action="contactAction"
+/>
+
+// NEW: Generic composable
+export function useContactEntityDialog<T extends 'group' | 'event'>() {
+  const showContactDialog = (entity: EntityType<T>) => { /* unified logic */ }
+}
+```
+
+**3. Template System Refactoring**
+```typescript
+// NEW: Template inheritance and composition
+interface EmailTemplateContext {
+  entity: GroupEntity | EventEntity;
+  entityType: 'group' | 'event';
+  sender: UserEntity;
+  recipients: UserEntity[];
+  messageData: ContactMessageData | AdminMessageData;
+}
+
+// Base template with shared layout
+contact-notification-base.mjml.ejs
+├── entity-specific-header.mjml.ejs   // Group vs Event differences
+├── shared-message-body.mjml.ejs      // Common message content
+└── entity-specific-footer.mjml.ejs   // Group vs Event differences
+```
+
+#### **🎢 Implementation Strategy: Gradual Migration**
+
+**Phase 3.1: Backend Unification (Week 1)**
+```typescript
+// STEP 1: Create unified messaging interfaces
+interface ContactMessageUseCase {
+  execute(context: MessagingContext, data: ContactMessageData): Promise<AdminMessageResult>;
+}
+
+interface AdminMessageUseCase {
+  execute(context: MessagingContext, data: AdminMessageData): Promise<AdminMessageResult>;
+}
+
+// STEP 2: Create adapters for existing services
+class GroupMessagingAdapter implements MessagingContext<GroupEntity> {
+  constructor(private groupService: GroupService, private groupMemberService: GroupMemberService) {}
+  
+  async getAdmins(): Promise<UserEntity[]> {
+    return this.groupMemberService.getMailServiceGroupMembersByPermission(
+      this.entity.id, 
+      GroupPermission.ManageMembers
+    );
+  }
+}
+
+class EventMessagingAdapter implements MessagingContext<EventEntity> {
+  constructor(private eventService: EventService, private eventAttendeeService: EventAttendeeService) {}
+  
+  async getAdmins(): Promise<UserEntity[]> {
+    return this.eventAttendeeService.getMailServiceEventAttendeesByPermission(
+      this.entity.id,
+      EventAttendeePermission.ManageEvent
+    );
+  }
+}
+
+// STEP 3: Unified service implementation
+class UniversalMessagingService {
+  async sendContactMessage<T>(
+    context: MessagingContext<T>,
+    sender: UserEntity,
+    data: ContactMessageData
+  ): Promise<AdminMessageResult> {
+    const admins = await context.getAdmins();
+    // Unified email sending logic
+    return this.deliverEmails(context, sender, admins, data);
+  }
+}
+```
+
+**Phase 3.2: Frontend Consolidation (Week 2)**  
+```typescript
+// STEP 1: Create generic contact dialog
+<template>
+  <q-dialog ref="dialogRef" @hide="onDialogHide" persistent>
+    <q-card style="min-width: 600px; max-width: 800px">
+      <q-card-section class="row items-center q-pb-none">
+        <div class="text-h6">Contact {{ entityDisplayName }}</div>
+        <!-- ... rest of unified template ... -->
+      </q-card-section>
+    </q-card>
+  </q-dialog>
+</template>
+
+<script setup lang="ts" generic="T extends 'group' | 'event'">
+interface Props {
+  entity: EntityType<T>
+  entityType: T
+}
+
+const props = defineProps<Props>()
+
+// Unified logic that adapts based on entityType
+const entityDisplayName = computed(() => 
+  props.entityType === 'group' ? 'Group Admins' : 'Event Organizers'
 )
+
+const contactAction = computed(() =>
+  props.entityType === 'group' 
+    ? () => groupStore.actionContactAdmins(/* ... */)
+    : () => eventStore.actionContactOrganizers(/* ... */)
+)
+</script>
 ```
 
-**New Email Template:**
-```
-src/mail/mail-templates/event/
-└── attendee-contact-notification.mjml.ejs  # NEW - notify organizers when attendee contacts them
-```
+**Phase 3.3: Template Unification (Week 2)**
+```html
+<!-- NEW: Unified base template -->
+<%- include('./../layouts/header.mjml.ejs') %>
 
-**New Frontend Components:**
-```typescript
-// CREATE: ContactEventOrganizersDialogComponent.vue (mirror ContactAdminsDialogComponent)
-// CREATE: useContactEventOrganizersDialog.ts composable
-// UPDATE: Event pages to include "Contact Organizers" button for attendees
-```
+<!-- Dynamic header based on entity type -->
+<% if (entityType === 'group') { %>
+  <%- include('./partials/group-contact-header.mjml.ejs') %>
+<% } else { %>
+  <%- include('./partials/event-contact-header.mjml.ejs') %>
+<% } %>
 
-#### **Implementation Strategy: Reuse Proven Patterns**
+<!-- Shared message content -->
+<%- include('./partials/shared-message-content.mjml.ejs') %>
 
-**Step 1: Backend Implementation (1.5 hours)**
-- Copy `GroupMailService.sendMemberContactToAdmins()` pattern to `EventMailService`
-- Copy `ContactAdminsDto` pattern to create `ContactEventOrganizersDto`
-- Add `POST /events/:slug/contact-organizers` endpoint (mirror group pattern)
-- Identify event organizers using existing event permission patterns
+<!-- Dynamic footer based on entity type -->
+<% if (entityType === 'group') { %>
+  <%- include('./partials/group-contact-footer.mjml.ejs') %>
+<% } else { %>
+  <%- include('./partials/event-contact-footer.mjml.ejs') %>
+<% } %>
 
-**Step 2: Email Template (30 minutes)**
-- Copy `member-contact-notification.mjml.ejs` template structure
-- Adapt for event context (event name, organizer roles, event-specific messaging)
-- Add plain text version following established security patterns
-- Ensure no email address leakage (follow group template security)
-
-**Step 3: Frontend Implementation (2 hours)**
-- Copy `ContactAdminsDialogComponent.vue` to `ContactEventOrganizersDialogComponent.vue`
-- Adapt form for event context and organizer messaging
-- Copy `useContactAdminsDialog.ts` pattern for event organizers
-- Add "Contact Organizers" button to event pages (EventPage.vue, event sticky component)
-
-**Step 4: Integration & Testing (1 hour)**
-- Add frontend store action `actionContactEventOrganizers()` (mirror group pattern)
-- Write tests copying group contact admin test patterns
-- Ensure email security compliance (no email leakage, plain text versions)
-
-#### **User Experience Flow (Mirror Group Pattern)**
-
-**Attendee Contact Flow:**
-1. Attendee visits event page
-2. **NEW**: Clicks "Contact Event Organizers" button (for non-organizers)
-3. **NEW**: Selects contact type (question/report/feedback) and writes message
-4. **NEW**: Submits via `POST /events/:slug/contact-organizers` endpoint
-5. **NEW**: All event organizers get email notification with attendee context
-6. **NEW**: Organizers can reply using platform messaging features
-
-#### **Technical Implementation Details**
-
-**Event Organizer Identification:**
-```typescript
-// Reuse existing event permission patterns to find organizers
-async getEventOrganizers(eventId: number): Promise<UserEntity[]> {
-  // Get users with event management permissions
-  // Similar to how group admins are identified in groups
-}
+<%- include('./../layouts/footer.mjml.ejs') %>
 ```
 
-**Email Template Context:**
-```typescript
-interface AttendeeContactNotificationData {
-  event: EventEntity;           // Event context (name, slug, etc.)
-  attendee: UserEntity;         // Attendee who sent message (name only, no email)
-  organizers: UserEntity[];     // Event organizers receiving notification
-  contactType: string;          // 'question' | 'report' | 'feedback'
-  subject: string;              // Message subject
-  message: string;              // Message content
-  replyInstructions: string;    // Safe reply workflow (no email exposure)
-}
-```
+#### **🎯 Expected Benefits After Phase 3**
 
-#### **Security & Privacy (Same as Groups)**
-- **No Email Address Exposure**: Attendee email not included in templates
-- **Safe Reply Workflow**: Organizers directed to platform messaging instead of direct email
-- **Plain Text Versions**: Both HTML and plain text email versions
-- **Contact Type Categorization**: Proper message categorization for organizer workflow
+**Code Quality Improvements:**
+- **50% reduction in duplicated code** between group and event messaging
+- **Unified testing patterns** with shared test utilities
+- **Consistent error handling** across all messaging features
+- **Improved TypeScript safety** with proper generics and constraints
 
-#### **Implementation Time Estimate**
-- **Total**: 5 developer hours (leveraging existing group patterns)
-- **Backend**: 2 hours (EventMailService, DTO, Controller endpoint)
-- **Email Template**: 0.5 hour (copy and adapt group template)
-- **Frontend**: 2 hours (dialog component, integration, UI placement)
-- **Testing**: 0.5 hour (copy and adapt group test patterns)
+**Developer Experience:**
+- **Single source of truth** for messaging logic
+- **Easier feature additions** (new entity types, new message types)
+- **Better maintainability** with clear separation of concerns  
+- **Comprehensive documentation** with architectural decision records
 
-#### **Files to Create/Modify**
-```
-CREATE:
-- src/event-mail/dto/contact-event-organizers.dto.ts
-- src/mail/mail-templates/event/attendee-contact-notification.mjml.ejs
-- frontend/src/components/event/ContactEventOrganizersDialogComponent.vue
-- frontend/src/composables/useContactEventOrganizersDialog.ts
-- frontend/src/components/event/__tests__/ContactEventOrganizersDialogComponent.vitest.spec.ts
+**Performance & Scalability:**
+- **Optimized email delivery** with unified batching logic
+- **Template caching** for improved rendering performance
+- **Proper error recovery** with unified retry mechanisms
+- **Foundation for advanced features** (message queues, analytics, etc.)
 
-MODIFY:
-- src/event-mail/event-mail.service.ts (add sendAttendeeContactToOrganizers)
-- src/event/event.controller.ts (add contact-organizers endpoint)
-- src/mail/mail.service.ts (add sendAttendeeContactNotification method)
-- src/mailer/mailer.service.ts (add plain text generator for attendee contact)
-- frontend/src/stores/event-store.ts (add actionContactEventOrganizers)
-- frontend/src/pages/EventPage.vue (add Contact Organizers button)
-```
+**User Experience:**
+- **Consistent UX patterns** across all messaging features
+- **Faster load times** with optimized components
+- **Better error messages** with unified error handling
+- **Smoother interactions** with improved validation
 
-#### **Benefits of This Implementation**
-- **✅ Feature Parity**: Events will have same messaging capabilities as groups
-- **✅ Proven Patterns**: Reusing tested, secure code from group implementation
-- **✅ Security Compliant**: Same email security standards as group messaging
-- **✅ User Consistency**: Same UX patterns across groups and events
-- **✅ Low Risk**: Building on working foundation with minimal new complexity
+#### **📋 Implementation Roadmap**
+
+**Week 1: Backend Architecture**
+- Create messaging interfaces and adapters (16 hours)
+- Implement UniversalMessagingService (12 hours)  
+- Write migration tests ensuring no functionality regression (8 hours)
+- Update API controllers to use new service (4 hours)
+
+**Week 2: Frontend & Templates**
+- Create unified contact dialog component (12 hours)
+- Refactor existing pages to use new component (8 hours)
+- Unify email templates with composition pattern (8 hours)
+- Comprehensive testing of unified components (8 hours)
+
+**Week 3: Documentation & Polish**
+- Write architectural documentation (8 hours)
+- Create developer guide for adding new entity types (4 hours)
+- Performance testing and optimization (8 hours)
+- Code review and final refinements (8 hours)
+
+#### **🔄 Migration Strategy: Zero Downtime**
+
+**Backward Compatibility:**
+- Keep existing services operational during migration
+- Feature flags for gradual rollout of new architecture
+- Comprehensive testing in staging before production deployment
+- Ability to rollback to previous implementation if needed
+
+**Quality Assurance:**
+- All existing tests must pass with new implementation
+- New unified tests to cover edge cases
+- Performance benchmarks to ensure no regression
+- Manual testing of all user flows
+
+**Risk Mitigation:**
+- Incremental deployment with feature flags
+- Monitoring and alerting for any issues
+- Quick rollback procedures if problems arise
+- Team training on new architecture patterns
 
 #### **Implementation Strategy - Extend Current System**
 
@@ -1337,6 +1553,121 @@ interface ChannelPreferences {
 - **Phase 4**: Twilio (SMS), WhatsApp Business API
 - **Phase 5**: Additional API providers as needed
 - **Phase 6**: Message queue infrastructure (RabbitMQ/Redis)
+
+---
+
+## Architecture Research Questions
+
+*These questions will help inform our technical and UX decisions for the unified messaging system.*
+
+### **Channel Strategy & User Behavior**
+
+1. **Primary Communication Channels**
+   - What messaging platforms do you currently use for community/group organization? (Email, Discord, Slack, WhatsApp, SMS, etc.)
+   - Which channels do you check most frequently throughout the day?
+   - How do you prefer to receive urgent notifications vs. regular updates?
+
+2. **Multi-Channel Preferences**
+   - Would you prefer different channels for different types of messages? (e.g., urgent event updates via SMS, general announcements via email)
+   - How many notification channels is too many? What's the sweet spot?
+   - Do you prefer consolidated notifications (one email with everything) or separate notifications per topic?
+
+3. **Privacy vs. Convenience Balance**
+   - How important is it that other members can't see your email address/phone number?
+   - Would you trade some privacy for more convenient communication (e.g., direct replies)?
+   - Are you comfortable with email threads that include multiple group members?
+
+### **User Experience & Workflow**
+
+4. **Message Composition & Formatting**
+   - Should admins compose one message that adapts to each channel, or customize per channel?
+   - How important are rich formatting features (bold, links, images) in group communications?
+   - Would you want message previews showing how they'll appear in different channels?
+
+5. **Cross-Channel Conversations**
+   - If an admin emails the group, where should member replies go? (Same channel, chat room, platform, member's choice)
+   - How do you handle conversations that start in one channel but need to continue elsewhere?
+   - Should conversation history be unified across channels or kept separate?
+
+6. **Notification Management**
+   - How do you currently manage notification overload from multiple groups/events?
+   - Would you want quiet hours settings? Time zone considerations?
+   - Should there be different urgency levels (immediate, normal, digest)?
+
+### **Technical Architecture & Scalability**
+
+7. **Channel Reliability & Fallbacks**
+   - What should happen when your preferred channel is unavailable? (Auto-fallback, wait, skip)
+   - How quickly should the system try alternative channels?
+   - For critical messages, would you want redundant delivery across multiple channels?
+
+8. **Group Size & Performance**
+   - At what group size do messaging patterns change? (10 members vs 100 vs 1000)
+   - How do expectations differ between small intimate groups and large communities?
+   - What messaging features become more/less important as groups grow?
+
+9. **Integration & Interoperability**
+   - Should the system integrate with existing tools (Google Calendar, Slack workspaces, Discord servers)?
+   - How important is import/export of conversation history?
+   - Would you want two-way sync with external platforms?
+
+### **Community Management & Moderation**
+
+10. **Admin Control & Moderation**
+    - What level of message moderation do you expect in community platforms?
+    - Should there be approval workflows for certain types of messages?
+    - How should spam and inappropriate content be handled across different channels?
+
+11. **Member Permissions & Roles**
+    - Should different member types have different messaging privileges?
+    - How granular should message-sending permissions be?
+    - Should new members have restricted messaging until verified?
+
+12. **Analytics & Insights**
+    - What messaging analytics would be valuable for community organizers?
+    - Should there be delivery/read receipts across channels?
+    - How important is A/B testing for message effectiveness?
+
+### **Platform-Specific Questions**
+
+13. **Matrix Integration**
+    - Are you familiar with Matrix for community chat?
+    - How important is end-to-end encryption for community communications?
+    - Would you prefer Matrix rooms or traditional forums for group discussions?
+
+14. **Social Media Integration**
+    - Should group announcements automatically post to social platforms (Bluesky, Twitter)?
+    - How do you balance public visibility with member privacy?
+    - Would you want social media replies to feed back into group conversations?
+
+15. **Mobile & Real-Time Features**
+    - How important are push notifications vs. email for different message types?
+    - Should there be real-time chat features or is async communication sufficient?
+    - What mobile messaging behaviors should we accommodate?
+
+### **Implementation Priorities**
+
+16. **Feature Importance Ranking**
+    - Rank these features by importance: multi-channel delivery, rich formatting, conversation threading, message scheduling, delivery analytics, end-to-end encryption
+    - Which features are "must-have" vs "nice-to-have" for your use cases?
+    - What would make you switch from your current messaging solution?
+
+17. **Rollout Strategy**
+    - Would you prefer gradual feature rollout or complete implementation before launch?
+    - How important is backward compatibility with existing workflows?
+    - What level of migration assistance would you need from current tools?
+
+### **Open-Ended Feedback**
+
+18. **Current Pain Points**
+    - What frustrates you most about current community/group messaging tools?
+    - Describe a recent situation where group communication broke down - what went wrong?
+    - What messaging features do you wish existed but haven't seen implemented well?
+
+19. **Ideal Future State**
+    - If you could design the perfect community messaging system, what would it look like?
+    - How should messaging evolve as communities grow and mature?
+    - What would make group communication feel effortless and natural?
 
 ---
 

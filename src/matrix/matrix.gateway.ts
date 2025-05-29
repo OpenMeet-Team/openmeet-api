@@ -294,7 +294,7 @@ export class MatrixGateway
       // Store the user ID in socket data for connection management
       client.data.matrixClientInitialized = true;
 
-      this.logger.log(`Matrix client initialized for user ${userId}`);
+      this.logger.log(`Matrix client initialized for user ${finalUser.slug}`);
     } catch (error) {
       this.logger.error(`Failed to initialize Matrix client: ${error.message}`);
 
@@ -577,7 +577,7 @@ export class MatrixGateway
     // Use the authenticated user's Matrix ID from socket data
     const matrixUserId = client.data.matrixUserId;
 
-    this.logger.debug(`Fetching rooms for Matrix user: ${matrixUserId}`);
+    this.logger.debug(`Fetching rooms for Matrix user: ${user.slug}`);
 
     // Get rooms using the user's Matrix client
     const rooms =
@@ -590,10 +590,8 @@ export class MatrixGateway
     for (const room of rooms) {
       await client.join(room.roomId);
       userRoomSet.add(room.roomId);
-      this.logger.debug(
-        `User ${client.data.userId} joined room ${room.roomId}`,
-      );
     }
+    this.logger.debug(`User ${user.slug} joined ${rooms.length} rooms`);
 
     // Store the mapping
     if (matrixUserId) {
