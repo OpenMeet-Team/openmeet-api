@@ -590,10 +590,8 @@ export class MatrixGateway
     for (const room of rooms) {
       await client.join(room.roomId);
       userRoomSet.add(room.roomId);
-      this.logger.debug(
-        `User ${client.data.userId} joined room ${room.roomId}`,
-      );
     }
+    this.logger.debug(`User ${client.data.userId} joined ${rooms.length} rooms`);
 
     // Store the mapping
     if (matrixUserId) {
