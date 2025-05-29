@@ -110,8 +110,10 @@ export class GroupRoleSeedService {
     const permissions = await this.getGroupPermissionsByNames(permissionNames);
     groupRole.groupPermissions = permissions;
     await this.groupRoleRepository.save(groupRole);
-    
-    console.log(`Role ${roleName} now has ${permissions.length} permissions: ${permissions.map(p => p.name).join(', ')}`);
+
+    console.log(
+      `Role ${roleName} now has ${permissions.length} permissions: ${permissions.map((p) => p.name).join(', ')}`,
+    );
   }
 
   // Fetch group permissions by their names

@@ -75,7 +75,9 @@ async function runMigrationsForAllTenants() {
         // This is critical for enum changes to be available in subsequent migrations
         const hasPendingMigrations = await dataSource.showMigrations();
         if (hasPendingMigrations) {
-          console.log('Running migrations one by one with individual transactions...');
+          console.log(
+            'Running migrations one by one with individual transactions...',
+          );
           await dataSource.runMigrations({ transaction: 'each' });
         } else {
           console.log('No pending migrations to run.');
