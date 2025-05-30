@@ -111,6 +111,15 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           }
         }
 
+        // If it's a PayloadTooLargeException (413), provide a user-friendly message
+        if (
+          exception instanceof HttpException &&
+          status === HttpStatus.PAYLOAD_TOO_LARGE
+        ) {
+          errorResponse.message =
+            'File is too large. Please choose a smaller file.';
+        }
+
         response.status(status).json(errorResponse);
       } finally {
         span.end();
