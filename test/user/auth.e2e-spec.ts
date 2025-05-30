@@ -17,7 +17,7 @@ describe('Auth Module', () => {
   const mail = `http://${TESTING_MAIL_HOST}:${TESTING_MAIL_PORT}`;
   const newUserFirstName = `Tester${Date.now()}`;
   const newUserLastName = `E2E`;
-  const newUserEmail = `User.${Date.now()}@openmeet.net`;
+  const newUserEmail = `User.${Date.now()}.${Math.random().toString(36).substring(7)}@openmeet.net`;
   const newUserPassword = `secret`;
 
   let authToken: string;

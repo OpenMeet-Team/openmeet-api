@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { TESTING_APP_URL, TESTING_TENANT_ID } from './utils/constants';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import {
   createGroup,
   createEvent,
@@ -9,13 +9,13 @@ import {
   updateGroupMemberRole,
   getGroupMembers,
   getCurrentUser,
-} from './utils/functions';
+} from '../utils/functions';
 import {
   EventType,
   EventStatus,
   GroupStatus,
   GroupVisibility,
-} from '../src/core/constants/constant';
+} from '../../src/core/constants/constant';
 
 // Helper functions for the tests
 async function createAndLoginUser(

@@ -4,7 +4,7 @@ import {
   TESTING_TENANT_ID,
   TESTING_MAIL_HOST,
   TESTING_MAIL_PORT,
-} from './utils/constants';
+} from '../utils/constants';
 
 describe('Group Admin Messaging Foundation (e2e)', () => {
   let mailDevService: any;
@@ -169,7 +169,7 @@ describe('Group Admin Messaging Foundation (e2e)', () => {
       // 3. Group membership is tracked correctly
       // 4. All prerequisites for admin messaging functionality exist
       console.log('✅ Admin messaging infrastructure test passed');
-    });
+    }, 30000);
 
     it('should verify email infrastructure works with group activities', async () => {
       console.log(

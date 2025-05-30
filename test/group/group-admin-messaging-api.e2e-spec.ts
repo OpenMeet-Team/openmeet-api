@@ -4,7 +4,7 @@ import {
   TESTING_TENANT_ID,
   TESTING_MAIL_HOST,
   TESTING_MAIL_PORT,
-} from './utils/constants';
+} from '../utils/constants';
 
 describe('Group Admin Messaging API (e2e)', () => {
   let mailDevService: any;
