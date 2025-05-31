@@ -209,7 +209,7 @@ describe('User Service Comprehensive Tests', () => {
         .post('/api/v1/users')
         .set('x-tenant-id', TESTING_TENANT_ID)
         .send({
-          email: 'unauthorized@test.com',
+          email: 'openmeet-test.unauthorized@openmeet.net',
           password: 'password123',
           firstName: 'Test',
           lastName: 'User',
@@ -256,7 +256,7 @@ describe('User Service Comprehensive Tests', () => {
     });
 
     it('should reject duplicate email', async () => {
-      const email = `duplicate-${Date.now()}@test.com`;
+      const email = `openmeet-test.duplicate-${Date.now()}@openmeet.net`;
 
       // Create first user
       await request(app)
