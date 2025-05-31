@@ -140,11 +140,31 @@ export class AuthService {
       tenantId,
     });
 
-    const user = await this.userService.findOrCreateUser(
-      socialData,
-      authProvider,
-      tenantId,
-    );
+    let user;
+    try {
+      user = await this.userService.findOrCreateUser(
+        socialData,
+        authProvider,
+        tenantId,
+      );
+    } catch (error) {
+      if (error instanceof UnprocessableEntityException) {
+        const errorData = error.getResponse() as any;
+        // Re-throw social auth errors with more context for frontend handling
+        if (errorData?.errors?.email) {
+          throw new UnprocessableEntityException({
+            status: HttpStatus.UNPROCESSABLE_ENTITY,
+            errors: {
+              social_auth: errorData.errors.email,
+              auth_provider: authProvider,
+              suggested_provider: errorData.errors.email.includes('google') ? 'google' : 
+                                 errorData.errors.email.includes('github') ? 'github' : 'email',
+            },
+          });
+        }
+      }
+      throw error;
+    }
 
     if (!user) {
       this.logger.error('User not found or created', {
