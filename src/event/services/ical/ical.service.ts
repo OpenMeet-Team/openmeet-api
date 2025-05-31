@@ -22,6 +22,9 @@ export class ICalendarService {
   public createCalendarEvent(
     event: EventEntity,
   ): ReturnType<ReturnType<typeof icalGenerator>['createEvent']> {
+    // Use event's timezone or fallback to UTC
+    const timezone = event.timeZone || 'UTC';
+
     // Create the basic event
     const calEvent = icalGenerator().createEvent({
       summary: event.name,
@@ -29,7 +32,8 @@ export class ICalendarService {
       location: event.location,
       start: new Date(event.startDate),
       end: event.endDate ? new Date(event.endDate) : undefined,
-      timezone: 'UTC',
+      timezone: timezone,
+      allDay: event.isAllDay || false,
     });
 
     // Set the UID
@@ -255,6 +259,85 @@ export class ICalendarService {
         }
       });
     }
+
+    return calendar.toString();
+  }
+
+  /**
+   * Generate an iCalendar feed for multiple events
+   * Used for calendar subscription feeds (user/group calendars)
+   */
+  generateICalendarForEvents(events: EventEntity[]): string {
+    const calendar = icalGenerator({
+      name: 'OpenMeet Calendar',
+      timezone: 'UTC', // Default timezone for calendar itself
+      prodId: {
+        company: 'OpenMeet',
+        product: 'Calendar',
+        language: 'EN',
+      },
+    });
+
+    // Set calendar method
+    calendar.method('PUBLISH' as any);
+
+    // Process each event
+    const calendarEvents = events.map((event) => {
+      const calEvent = this.createCalendarEvent(event);
+
+      // Add recurrence rules if this is a series event
+      if (
+        event.series &&
+        event.series.recurrenceRule &&
+        typeof event.series.recurrenceRule === 'object'
+      ) {
+        try {
+          const recurrenceRule = event.series
+            .recurrenceRule as unknown as RecurrenceRule;
+          const rruleString = this.createRRule(recurrenceRule);
+          calEvent.repeating(rruleString);
+
+          // Add exception dates if available
+          if (
+            event.series.recurrenceExceptions &&
+            event.series.recurrenceExceptions.length > 0
+          ) {
+            const exdates = event.series.recurrenceExceptions.map(
+              (date) => new Date(date),
+            );
+
+            exdates.forEach((date) => {
+              const dateStr =
+                date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+              (calEvent as any).addProperty('EXDATE', dateStr);
+            });
+          }
+        } catch (error) {
+          this.logger.error(
+            `Error adding recurrence rule for event ${event.slug}`,
+            error,
+          );
+        }
+      }
+
+      // Add attendees if available
+      if (event.attendees && event.attendees.length > 0) {
+        event.attendees.forEach((attendee) => {
+          if (attendee.user && attendee.user.email) {
+            calEvent.createAttendee({
+              name: attendee.user.name || '',
+              email: attendee.user.email || '',
+              rsvp: true,
+            });
+          }
+        });
+      }
+
+      return calEvent;
+    });
+
+    // Add all events to the calendar
+    calendar.events(calendarEvents);
 
     return calendar.toString();
   }
