@@ -13,7 +13,7 @@ describe('User Self-Update (/auth/me) - UI Path', () => {
 
     beforeAll(async () => {
       // Create a test user using the registration endpoint
-      testEmail = `test-user-${Date.now()}@test.com`;
+      testEmail = `openmeet-test.user-${Date.now()}@openmeet.net`;
       const userData = await createTestUser(
         app,
         TESTING_TENANT_ID,
@@ -146,7 +146,7 @@ describe('User Self-Update (/auth/me) - UI Path', () => {
     });
 
     describe('Email Changes', () => {
-      const newEmail = `updated-${Date.now()}@test.com`;
+      const newEmail = `openmeet-test.updated-${Date.now()}@openmeet.net`;
 
       it('should handle email change requests', async () => {
         const response = await request(app)
@@ -167,7 +167,7 @@ describe('User Self-Update (/auth/me) - UI Path', () => {
         const anotherUser = await createTestUser(
           app,
           TESTING_TENANT_ID,
-          `another-user-${Date.now()}@test.com`,
+          `openmeet-test.another-${Date.now()}@openmeet.net`,
           'Another',
           'User',
         );
