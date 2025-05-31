@@ -411,15 +411,43 @@ export class UserService {
       };
     }
 
-    const newUser = (await this.create(
-      createUserData,
-      tenantId,
-    )) as unknown as UserEntity;
+    try {
+      const newUser = (await this.create(
+        createUserData,
+        tenantId,
+      )) as unknown as UserEntity;
 
-    this.logger.debug('findOrCreateUser: created user', {
-      newUser,
-    });
-    return newUser;
+      this.logger.debug('findOrCreateUser: created user', {
+        newUser,
+      });
+      return newUser;
+    } catch (error) {
+      // Check if this is an email already exists error
+      if (error instanceof UnprocessableEntityException) {
+        const errorData = error.getResponse() as any;
+        if (errorData?.errors?.email === 'emailAlreadyExists') {
+          // Find the existing user to determine what auth method they used
+          const existingUser = await this.findByEmail(
+            profile.email || null,
+            tenantId,
+          );
+
+          let authMethod = 'email/password';
+          if (existingUser?.provider) {
+            authMethod = existingUser.provider;
+          }
+
+          throw new UnprocessableEntityException({
+            status: HttpStatus.UNPROCESSABLE_ENTITY,
+            errors: {
+              email: `An account with this email already exists. Please sign in using your ${authMethod} account instead.`,
+            },
+          });
+        }
+      }
+      // Re-throw any other errors
+      throw error;
+    }
   }
 
   // Method removed as part of Zulip removal
@@ -487,7 +515,7 @@ export class UserService {
     }
 
     if (clonedPayload.role?.id) {
-      const role = await this.roleService.findByName(RoleEnum.User);
+      const role = await this.roleService.findByName(RoleEnum.User, tenantId);
       if (!role) {
         throw new Error(`Role not found: ${RoleEnum.User}`);
       }
@@ -522,7 +550,15 @@ export class UserService {
       }
     }
 
-    await this.usersRepository.save({ id, ...clonedPayload }); // FIXME:
+    // Find the existing user first to preserve required fields like slug
+    const existingUser = await this.usersRepository.findOne({ where: { id } });
+    if (!existingUser) {
+      throw new Error(`User with ID ${id} not found`);
+    }
+
+    // Use Object.assign to merge existing user with updates, following event service pattern
+    const userToSave = Object.assign(existingUser, clonedPayload);
+    await this.usersRepository.save(userToSave);
 
     const user = await this.findById(id, tenantId);
     this.eventEmitter.emit('user.updated', user);

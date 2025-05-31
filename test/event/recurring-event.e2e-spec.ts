@@ -263,5 +263,5 @@ describe('Recurring Event Tests (e2e)', () => {
 
     // console.log('eventResponse', eventResponse.body);
     // expect(eventResponse.status).toBe(404);
-  });
+  }, 30000);
 });

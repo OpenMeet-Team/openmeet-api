@@ -1,5 +1,6 @@
 import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { IS_PUBLIC_KEY } from '../core/constants/constant';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -7,6 +8,18 @@ export class RolesGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     console.log('RolesGuard canActivate');
+
+    // Check if the route is public
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (isPublic) {
+      console.log('RolesGuard: Route is public, allowing access');
+      return true;
+    }
+
     const roles = this.reflector.getAllAndOverride<(number | string)[]>(
       'roles',
       [context.getClass(), context.getHandler()],
