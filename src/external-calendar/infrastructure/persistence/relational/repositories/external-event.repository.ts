@@ -141,4 +141,25 @@ export class ExternalEventRepository {
       } as FindOptionsWhere<ExternalEventEntity>,
     });
   }
+
+  async findByCalendarSourceAndTimeRange(
+    tenantId: string,
+    calendarSourceId: number,
+    startTime: Date,
+    endTime: Date,
+  ): Promise<ExternalEventEntity[]> {
+    const repository = await this.getRepository(tenantId);
+    
+    // Find events that overlap with the given time range
+    // An event overlaps if: event.startTime < endTime AND event.endTime > startTime
+    return repository
+      .createQueryBuilder('externalEvent')
+      .where('externalEvent.calendarSourceId = :calendarSourceId', {
+        calendarSourceId,
+      })
+      .andWhere('externalEvent.startTime < :endTime', { endTime })
+      .andWhere('externalEvent.endTime > :startTime', { startTime })
+      .orderBy('externalEvent.startTime', 'ASC')
+      .getMany();
+  }
 }

@@ -76,6 +76,16 @@ export class CalendarSourceService {
     });
   }
 
+  async findAllActiveSources(tenantId: string): Promise<CalendarSourceEntity[]> {
+    const repository = await this.getRepository(tenantId);
+
+    return repository.find({
+      where: { isActive: true },
+      relations: ['user'],
+      order: { lastSyncedAt: 'ASC' }, // Prioritize sources that haven't been synced recently
+    });
+  }
+
   async findOne(id: number, tenantId: string): Promise<CalendarSourceEntity> {
     const repository = await this.getRepository(tenantId);
 
@@ -91,6 +101,21 @@ export class CalendarSourceService {
     return calendarSource;
   }
 
+  async findByUlid(ulid: string, tenantId: string): Promise<CalendarSourceEntity> {
+    const repository = await this.getRepository(tenantId);
+
+    const calendarSource = await repository.findOne({
+      where: { ulid },
+      relations: ['user'],
+    });
+
+    if (!calendarSource) {
+      throw new NotFoundException(`Calendar source with ULID ${ulid} not found`);
+    }
+
+    return calendarSource;
+  }
+
   async update(
     id: number,
     updateCalendarSourceDto: UpdateCalendarSourceDto,
@@ -99,6 +124,20 @@ export class CalendarSourceService {
     const repository = await this.getRepository(tenantId);
 
     const calendarSource = await this.findOne(id, tenantId);
+
+    Object.assign(calendarSource, updateCalendarSourceDto);
+
+    return repository.save(calendarSource);
+  }
+
+  async updateByUlid(
+    ulid: string,
+    updateCalendarSourceDto: UpdateCalendarSourceDto,
+    tenantId: string,
+  ): Promise<CalendarSourceEntity> {
+    const repository = await this.getRepository(tenantId);
+
+    const calendarSource = await this.findByUlid(ulid, tenantId);
 
     Object.assign(calendarSource, updateCalendarSourceDto);
 
@@ -161,6 +200,19 @@ export class CalendarSourceService {
     const repository = await this.getRepository(tenantId);
 
     const calendarSource = await this.findOne(id, tenantId);
+    calendarSource.lastSyncedAt = lastSyncedAt;
+
+    return repository.save(calendarSource);
+  }
+
+  async updateSyncStatusByUlid(
+    ulid: string,
+    lastSyncedAt: Date,
+    tenantId: string,
+  ): Promise<CalendarSourceEntity> {
+    const repository = await this.getRepository(tenantId);
+
+    const calendarSource = await this.findByUlid(ulid, tenantId);
     calendarSource.lastSyncedAt = lastSyncedAt;
 
     return repository.save(calendarSource);
