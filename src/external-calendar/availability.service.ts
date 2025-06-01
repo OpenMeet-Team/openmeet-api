@@ -37,7 +37,9 @@ export class AvailabilityService {
     calendarSourceIds: string[],
     tenantId: string,
   ): Promise<AvailabilityResult> {
-    this.logger.log(`Checking availability for user ${userId} from ${startTime} to ${endTime}`);
+    this.logger.log(
+      `Checking availability for user ${userId} from ${startTime} to ${endTime}`,
+    );
 
     // Validate time range
     if (endTime <= startTime) {
@@ -45,25 +47,30 @@ export class AvailabilityService {
     }
 
     // Get calendar sources to check
-    const calendarSources = await this.getCalendarSources(userId, calendarSourceIds, tenantId);
+    const calendarSources = await this.getCalendarSources(
+      userId,
+      calendarSourceIds,
+      tenantId,
+    );
 
     // Check each calendar source for conflicts
     const conflicts: string[] = [];
     const conflictingEvents: ConflictEvent[] = [];
 
     for (const calendarSource of calendarSources) {
-      const events = await this.externalEventRepository.findByCalendarSourceAndTimeRange(
-        tenantId,
-        calendarSource.id,
-        startTime,
-        endTime,
-      );
+      const events =
+        await this.externalEventRepository.findByCalendarSourceAndTimeRange(
+          tenantId,
+          calendarSource.id,
+          startTime,
+          endTime,
+        );
 
       if (events.length > 0) {
         conflicts.push(calendarSource.ulid);
-        
+
         // Convert events to conflict format
-        const sourceConflicts = events.map(event => ({
+        const sourceConflicts = events.map((event) => ({
           eventId: event.externalId,
           title: event.summary || 'Untitled Event',
           startTime: event.startTime,
@@ -77,7 +84,9 @@ export class AvailabilityService {
 
     const available = conflicts.length === 0;
 
-    this.logger.log(`Availability check for user ${userId}: ${available ? 'available' : `${conflicts.length} conflicts found`}`);
+    this.logger.log(
+      `Availability check for user ${userId}: ${available ? 'available' : `${conflicts.length} conflicts found`}`,
+    );
 
     return {
       available,
@@ -93,7 +102,9 @@ export class AvailabilityService {
     calendarSourceIds: string[],
     tenantId: string,
   ): Promise<ConflictEvent[]> {
-    this.logger.log(`Getting conflicts for user ${userId} from ${startTime} to ${endTime}`);
+    this.logger.log(
+      `Getting conflicts for user ${userId} from ${startTime} to ${endTime}`,
+    );
 
     // Validate time range
     if (endTime <= startTime) {
@@ -101,21 +112,26 @@ export class AvailabilityService {
     }
 
     // Get calendar sources to check
-    const calendarSources = await this.getCalendarSources(userId, calendarSourceIds, tenantId);
+    const calendarSources = await this.getCalendarSources(
+      userId,
+      calendarSourceIds,
+      tenantId,
+    );
 
     // Get all events from all specified calendar sources
     const allConflicts: ConflictEvent[] = [];
 
     for (const calendarSource of calendarSources) {
-      const events = await this.externalEventRepository.findByCalendarSourceAndTimeRange(
-        tenantId,
-        calendarSource.id,
-        startTime,
-        endTime,
-      );
+      const events =
+        await this.externalEventRepository.findByCalendarSourceAndTimeRange(
+          tenantId,
+          calendarSource.id,
+          startTime,
+          endTime,
+        );
 
       // Convert events to conflict format
-      const sourceConflicts = events.map(event => ({
+      const sourceConflicts = events.map((event) => ({
         eventId: event.externalId,
         title: event.summary || 'Untitled Event',
         startTime: event.startTime,
@@ -129,7 +145,9 @@ export class AvailabilityService {
     // Sort by start time
     allConflicts.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
 
-    this.logger.log(`Found ${allConflicts.length} conflicts for user ${userId}`);
+    this.logger.log(
+      `Found ${allConflicts.length} conflicts for user ${userId}`,
+    );
 
     return allConflicts;
   }
@@ -149,11 +167,16 @@ export class AvailabilityService {
     const calendarSources: any[] = [];
     for (const ulid of calendarSourceIds) {
       try {
-        const calendarSource = await this.calendarSourceService.findByUlid(ulid, tenantId);
-        
+        const calendarSource = await this.calendarSourceService.findByUlid(
+          ulid,
+          tenantId,
+        );
+
         // Verify user ownership
         if (calendarSource.userId !== userId) {
-          throw new NotFoundException(`Calendar source ${ulid} not found or access denied`);
+          throw new NotFoundException(
+            `Calendar source ${ulid} not found or access denied`,
+          );
         }
 
         calendarSources.push(calendarSource);

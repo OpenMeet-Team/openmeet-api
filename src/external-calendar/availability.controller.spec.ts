@@ -57,7 +57,9 @@ describe('AvailabilityController', () => {
         conflictingEvents: [],
       };
 
-      availabilityService.checkAvailability.mockResolvedValue(mockAvailabilityResult);
+      availabilityService.checkAvailability.mockResolvedValue(
+        mockAvailabilityResult,
+      );
 
       const result = await controller.checkAvailability(
         mockAvailabilityDto,
@@ -76,7 +78,7 @@ describe('AvailabilityController', () => {
         mockAvailabilityDto.startTime,
         mockAvailabilityDto.endTime,
         mockAvailabilityDto.calendarSourceIds,
-        'test-tenant-1'
+        'test-tenant-1',
       );
     });
 
@@ -97,7 +99,9 @@ describe('AvailabilityController', () => {
         conflictingEvents: mockConflicts,
       };
 
-      availabilityService.checkAvailability.mockResolvedValue(mockAvailabilityResult);
+      availabilityService.checkAvailability.mockResolvedValue(
+        mockAvailabilityResult,
+      );
 
       const result = await controller.checkAvailability(
         mockAvailabilityDto,
@@ -120,21 +124,21 @@ describe('AvailabilityController', () => {
       };
 
       availabilityService.checkAvailability.mockRejectedValue(
-        new BadRequestException('End time must be after start time')
+        new BadRequestException('End time must be after start time'),
       );
 
       await expect(
-        controller.checkAvailability(invalidDto, mockUser)
+        controller.checkAvailability(invalidDto, mockUser),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('should handle non-existent calendar sources', async () => {
       availabilityService.checkAvailability.mockRejectedValue(
-        new NotFoundException('One or more calendar sources not found')
+        new NotFoundException('One or more calendar sources not found'),
       );
 
       await expect(
-        controller.checkAvailability(mockAvailabilityDto, mockUser)
+        controller.checkAvailability(mockAvailabilityDto, mockUser),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -150,7 +154,9 @@ describe('AvailabilityController', () => {
         conflictingEvents: [],
       };
 
-      availabilityService.checkAvailability.mockResolvedValue(mockAvailabilityResult);
+      availabilityService.checkAvailability.mockResolvedValue(
+        mockAvailabilityResult,
+      );
 
       const result = await controller.checkAvailability(emptyDto, mockUser);
 
@@ -160,7 +166,7 @@ describe('AvailabilityController', () => {
         emptyDto.startTime,
         emptyDto.endTime,
         [],
-        'test-tenant-1'
+        'test-tenant-1',
       );
     });
   });
@@ -208,7 +214,7 @@ describe('AvailabilityController', () => {
         mockConflictsDto.startTime,
         mockConflictsDto.endTime,
         mockConflictsDto.calendarSourceIds,
-        'test-tenant-1'
+        'test-tenant-1',
       );
     });
 
@@ -235,11 +241,11 @@ describe('AvailabilityController', () => {
       };
 
       availabilityService.getConflicts.mockRejectedValue(
-        new BadRequestException('Invalid date range')
+        new BadRequestException('Invalid date range'),
       );
 
       await expect(
-        controller.getConflicts(invalidDto, mockUser)
+        controller.getConflicts(invalidDto, mockUser),
       ).rejects.toThrow(BadRequestException);
     });
   });

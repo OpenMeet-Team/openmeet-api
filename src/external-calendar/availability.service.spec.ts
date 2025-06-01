@@ -65,19 +65,21 @@ describe('AvailabilityService', () => {
 
     it('should return available when no conflicts exist', async () => {
       const calendarSourceIds = ['calendar_ulid_1', 'calendar_ulid_2'];
-      
+
       calendarSourceService.findByUlid
         .mockResolvedValueOnce(mockCalendarSource1)
         .mockResolvedValueOnce(mockCalendarSource2);
 
-      externalEventRepository.findByCalendarSourceAndTimeRange.mockResolvedValue([]);
+      externalEventRepository.findByCalendarSourceAndTimeRange.mockResolvedValue(
+        [],
+      );
 
       const result = await service.checkAvailability(
         userId,
         startTime,
         endTime,
         calendarSourceIds,
-        tenantId
+        tenantId,
       );
 
       expect(result).toEqual({
@@ -87,7 +89,9 @@ describe('AvailabilityService', () => {
       });
 
       expect(calendarSourceService.findByUlid).toHaveBeenCalledTimes(2);
-      expect(externalEventRepository.findByCalendarSourceAndTimeRange).toHaveBeenCalledTimes(2);
+      expect(
+        externalEventRepository.findByCalendarSourceAndTimeRange,
+      ).toHaveBeenCalledTimes(2);
     });
 
     it('should return conflicts when events overlap', async () => {
@@ -107,14 +111,16 @@ describe('AvailabilityService', () => {
       };
 
       calendarSourceService.findByUlid.mockResolvedValue(mockCalendarSource1);
-      externalEventRepository.findByCalendarSourceAndTimeRange.mockResolvedValue([conflictingEvent as any]);
+      externalEventRepository.findByCalendarSourceAndTimeRange.mockResolvedValue(
+        [conflictingEvent as any],
+      );
 
       const result = await service.checkAvailability(
         userId,
         startTime,
         endTime,
         calendarSourceIds,
-        tenantId
+        tenantId,
       );
 
       expect(result).toEqual({
@@ -133,50 +139,82 @@ describe('AvailabilityService', () => {
     });
 
     it('should use all user calendars when calendarSourceIds is empty', async () => {
-      calendarSourceService.findAllByUser.mockResolvedValue([mockCalendarSource1, mockCalendarSource2]);
-      externalEventRepository.findByCalendarSourceAndTimeRange.mockResolvedValue([]);
+      calendarSourceService.findAllByUser.mockResolvedValue([
+        mockCalendarSource1,
+        mockCalendarSource2,
+      ]);
+      externalEventRepository.findByCalendarSourceAndTimeRange.mockResolvedValue(
+        [],
+      );
 
       const result = await service.checkAvailability(
         userId,
         startTime,
         endTime,
         [],
-        tenantId
+        tenantId,
       );
 
       expect(result.available).toBe(true);
-      expect(calendarSourceService.findAllByUser).toHaveBeenCalledWith(userId, tenantId);
-      expect(externalEventRepository.findByCalendarSourceAndTimeRange).toHaveBeenCalledTimes(2);
+      expect(calendarSourceService.findAllByUser).toHaveBeenCalledWith(
+        userId,
+        tenantId,
+      );
+      expect(
+        externalEventRepository.findByCalendarSourceAndTimeRange,
+      ).toHaveBeenCalledTimes(2);
     });
 
     it('should throw BadRequestException for invalid time range', async () => {
       const invalidEndTime = new Date('2024-01-15T09:00:00Z'); // Before start time
 
       await expect(
-        service.checkAvailability(userId, startTime, invalidEndTime, [], tenantId)
+        service.checkAvailability(
+          userId,
+          startTime,
+          invalidEndTime,
+          [],
+          tenantId,
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw NotFoundException for non-existent calendar source', async () => {
       const calendarSourceIds = ['non_existent_ulid'];
-      
+
       calendarSourceService.findByUlid.mockRejectedValue(
-        new NotFoundException('Calendar source with ULID non_existent_ulid not found')
+        new NotFoundException(
+          'Calendar source with ULID non_existent_ulid not found',
+        ),
       );
 
       await expect(
-        service.checkAvailability(userId, startTime, endTime, calendarSourceIds, tenantId)
+        service.checkAvailability(
+          userId,
+          startTime,
+          endTime,
+          calendarSourceIds,
+          tenantId,
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
     it('should validate user ownership of calendar sources', async () => {
       const otherUserCalendar = { ...mockCalendarSource1, userId: 999 };
       const calendarSourceIds = ['calendar_ulid_1'];
-      
-      calendarSourceService.findByUlid.mockResolvedValue(otherUserCalendar as CalendarSourceEntity);
+
+      calendarSourceService.findByUlid.mockResolvedValue(
+        otherUserCalendar as CalendarSourceEntity,
+      );
 
       await expect(
-        service.checkAvailability(userId, startTime, endTime, calendarSourceIds, tenantId)
+        service.checkAvailability(
+          userId,
+          startTime,
+          endTime,
+          calendarSourceIds,
+          tenantId,
+        ),
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -219,14 +257,16 @@ describe('AvailabilityService', () => {
       ];
 
       calendarSourceService.findByUlid.mockResolvedValue(mockCalendarSource1);
-      externalEventRepository.findByCalendarSourceAndTimeRange.mockResolvedValue(events as any);
+      externalEventRepository.findByCalendarSourceAndTimeRange.mockResolvedValue(
+        events as any,
+      );
 
       const result = await service.getConflicts(
         userId,
         startTime,
         endTime,
         calendarSourceIds,
-        tenantId
+        tenantId,
       );
 
       expect(result).toHaveLength(2);
@@ -241,16 +281,18 @@ describe('AvailabilityService', () => {
 
     it('should return empty array when no events found', async () => {
       const calendarSourceIds = ['calendar_ulid_1'];
-      
+
       calendarSourceService.findByUlid.mockResolvedValue(mockCalendarSource1);
-      externalEventRepository.findByCalendarSourceAndTimeRange.mockResolvedValue([]);
+      externalEventRepository.findByCalendarSourceAndTimeRange.mockResolvedValue(
+        [],
+      );
 
       const result = await service.getConflicts(
         userId,
         startTime,
         endTime,
         calendarSourceIds,
-        tenantId
+        tenantId,
       );
 
       expect(result).toEqual([]);
@@ -258,37 +300,41 @@ describe('AvailabilityService', () => {
 
     it('should handle multiple calendar sources', async () => {
       const calendarSourceIds = ['calendar_ulid_1', 'calendar_ulid_2'];
-      const events1 = [{
-        id: 1,
-        ulid: 'event_ulid_1',
-        externalId: 'event_1',
-        summary: 'Work Meeting',
-        startTime: new Date('2024-01-15T10:00:00Z'),
-        endTime: new Date('2024-01-15T11:00:00Z'),
-        isAllDay: false,
-        status: 'busy' as const,
-        calendarSourceId: 1,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }];
-      const events2 = [{
-        id: 2,
-        ulid: 'event_ulid_2',
-        externalId: 'event_2',
-        summary: 'Personal Appointment',
-        startTime: new Date('2024-01-15T14:00:00Z'),
-        endTime: new Date('2024-01-15T15:00:00Z'),
-        isAllDay: false,
-        status: 'busy' as const,
-        calendarSourceId: 2,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }];
+      const events1 = [
+        {
+          id: 1,
+          ulid: 'event_ulid_1',
+          externalId: 'event_1',
+          summary: 'Work Meeting',
+          startTime: new Date('2024-01-15T10:00:00Z'),
+          endTime: new Date('2024-01-15T11:00:00Z'),
+          isAllDay: false,
+          status: 'busy' as const,
+          calendarSourceId: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+      const events2 = [
+        {
+          id: 2,
+          ulid: 'event_ulid_2',
+          externalId: 'event_2',
+          summary: 'Personal Appointment',
+          startTime: new Date('2024-01-15T14:00:00Z'),
+          endTime: new Date('2024-01-15T15:00:00Z'),
+          isAllDay: false,
+          status: 'busy' as const,
+          calendarSourceId: 2,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
 
       calendarSourceService.findByUlid
         .mockResolvedValueOnce(mockCalendarSource1)
         .mockResolvedValueOnce(mockCalendarSource2);
-      
+
       externalEventRepository.findByCalendarSourceAndTimeRange
         .mockResolvedValueOnce(events1 as any)
         .mockResolvedValueOnce(events2 as any);
@@ -298,7 +344,7 @@ describe('AvailabilityService', () => {
         startTime,
         endTime,
         calendarSourceIds,
-        tenantId
+        tenantId,
       );
 
       expect(result).toHaveLength(2);

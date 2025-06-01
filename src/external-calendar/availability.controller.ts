@@ -6,7 +6,12 @@ import {
   Logger,
   Inject,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { REQUEST } from '@nestjs/core';
 import { Request } from 'express';
@@ -30,8 +35,8 @@ export class AvailabilityController {
 
   @Post('check')
   @ApiOperation({ summary: 'Check availability for a specific time slot' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Availability check result',
     schema: {
       type: 'object',
@@ -54,7 +59,9 @@ export class AvailabilityController {
     message: string;
   }> {
     const tenantId = this.request.tenantId;
-    this.logger.log(`Checking availability for user ${user.id} from ${checkAvailabilityDto.startTime} to ${checkAvailabilityDto.endTime}`);
+    this.logger.log(
+      `Checking availability for user ${user.id} from ${checkAvailabilityDto.startTime} to ${checkAvailabilityDto.endTime}`,
+    );
 
     try {
       const result = await this.availabilityService.checkAvailability(
@@ -65,26 +72,31 @@ export class AvailabilityController {
         tenantId,
       );
 
-      this.logger.log(`Availability check for user ${user.id}: ${result.available ? 'available' : 'conflicts found'}`);
+      this.logger.log(
+        `Availability check for user ${user.id}: ${result.available ? 'available' : 'conflicts found'}`,
+      );
 
       return {
         available: result.available,
         conflicts: result.conflicts,
         conflictingEvents: result.conflictingEvents,
-        message: result.available 
+        message: result.available
           ? 'No conflicts found - time slot is available'
           : 'Time slot has conflicts with existing events',
       };
     } catch (error) {
-      this.logger.error(`Availability check failed for user ${user.id}:`, error.message);
+      this.logger.error(
+        `Availability check failed for user ${user.id}:`,
+        error.message,
+      );
       throw error;
     }
   }
 
   @Post('conflicts')
   @ApiOperation({ summary: 'Get all conflicts for a time range' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Conflicts found in the time range',
     schema: {
       type: 'object',
@@ -114,7 +126,9 @@ export class AvailabilityController {
     };
   }> {
     const tenantId = this.request.tenantId;
-    this.logger.log(`Getting conflicts for user ${user.id} from ${getConflictsDto.startTime} to ${getConflictsDto.endTime}`);
+    this.logger.log(
+      `Getting conflicts for user ${user.id} from ${getConflictsDto.startTime} to ${getConflictsDto.endTime}`,
+    );
 
     try {
       const conflicts = await this.availabilityService.getConflicts(
@@ -125,7 +139,9 @@ export class AvailabilityController {
         tenantId,
       );
 
-      this.logger.log(`Found ${conflicts.length} conflicts for user ${user.id}`);
+      this.logger.log(
+        `Found ${conflicts.length} conflicts for user ${user.id}`,
+      );
 
       return {
         conflicts,
@@ -136,7 +152,10 @@ export class AvailabilityController {
         },
       };
     } catch (error) {
-      this.logger.error(`Get conflicts failed for user ${user.id}:`, error.message);
+      this.logger.error(
+        `Get conflicts failed for user ${user.id}:`,
+        error.message,
+      );
       throw error;
     }
   }

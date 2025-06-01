@@ -22,7 +22,8 @@ export class GetConflictsDto {
   endTime: Date;
 
   @ApiProperty({
-    description: 'List of calendar source ULIDs to search (optional - if empty, searches all user calendars)',
+    description:
+      'List of calendar source ULIDs to search (optional - if empty, searches all user calendars)',
     example: ['calendar_ulid_1', 'calendar_ulid_2'],
     required: false,
   })

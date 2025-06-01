@@ -6,11 +6,15 @@ import {
   Body,
   UseGuards,
   UnauthorizedException,
-  BadRequestException,
   Logger,
   Inject,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { REQUEST } from '@nestjs/core';
@@ -36,9 +40,11 @@ export class ExternalCalendarController {
   ) {}
 
   @Get('auth/:type')
-  @ApiOperation({ summary: 'Get OAuth authorization URL for calendar provider' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiOperation({
+    summary: 'Get OAuth authorization URL for calendar provider',
+  })
+  @ApiResponse({
+    status: 200,
     description: 'Authorization URL generated successfully',
     schema: {
       type: 'object',
@@ -48,33 +54,44 @@ export class ExternalCalendarController {
       },
     },
   })
-  @ApiResponse({ status: 400, description: 'Unsupported calendar type or OAuth not supported' })
-  async getAuthorizationUrl(
+  @ApiResponse({
+    status: 400,
+    description: 'Unsupported calendar type or OAuth not supported',
+  })
+  getAuthorizationUrl(
     @Param('type') type: CalendarSourceType,
     @AuthUser() user: UserEntity,
-  ): Promise<{
+  ): {
     authorizationUrl: string;
     state: string;
-  }> {
-    this.logger.log(`Generating OAuth URL for ${type} calendar for user ${user.id}`);
+  } {
+    this.logger.log(
+      `Generating OAuth URL for ${type} calendar for user ${user.id}`,
+    );
 
     try {
-      const authorizationUrl = this.externalCalendarService.getAuthorizationUrl(type, user.id);
-      
+      const authorizationUrl = this.externalCalendarService.getAuthorizationUrl(
+        type,
+        user.id,
+      );
+
       return {
         authorizationUrl,
         state: user.id.toString(),
       };
     } catch (error) {
-      this.logger.error(`Failed to generate OAuth URL for ${type}:`, error.message);
+      this.logger.error(
+        `Failed to generate OAuth URL for ${type}:`,
+        error.message,
+      );
       throw error;
     }
   }
 
   @Post('callback/:type')
   @ApiOperation({ summary: 'Handle OAuth callback and create calendar source' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Calendar connected successfully',
     schema: {
       type: 'object',
@@ -85,8 +102,14 @@ export class ExternalCalendarController {
       },
     },
   })
-  @ApiResponse({ status: 400, description: 'Invalid authorization code or callback data' })
-  @ApiResponse({ status: 401, description: 'State parameter mismatch - unauthorized' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid authorization code or callback data',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'State parameter mismatch - unauthorized',
+  })
   async handleOAuthCallback(
     @Param('type') type: CalendarSourceType,
     @Body() callbackDto: OAuthCallbackDto,
@@ -97,21 +120,28 @@ export class ExternalCalendarController {
     message: string;
   }> {
     const tenantId = this.request.tenantId;
-    this.logger.log(`Handling OAuth callback for ${type} calendar for user ${user.id}`);
+    this.logger.log(
+      `Handling OAuth callback for ${type} calendar for user ${user.id}`,
+    );
 
     // Verify state parameter matches user ID (security check)
     if (callbackDto.state !== user.id.toString()) {
-      this.logger.warn(`State mismatch for user ${user.id}: expected ${user.id}, got ${callbackDto.state}`);
-      throw new UnauthorizedException('Invalid state parameter - authorization request mismatch');
+      this.logger.warn(
+        `State mismatch for user ${user.id}: expected ${user.id}, got ${callbackDto.state}`,
+      );
+      throw new UnauthorizedException(
+        'Invalid state parameter - authorization request mismatch',
+      );
     }
 
     try {
       // Exchange authorization code for tokens
-      const tokenResponse = await this.externalCalendarService.exchangeAuthorizationCode(
-        type,
-        callbackDto.code,
-        user.id,
-      );
+      const tokenResponse =
+        await this.externalCalendarService.exchangeAuthorizationCode(
+          type,
+          callbackDto.code,
+          user.id,
+        );
 
       // Create calendar source
       const createCalendarSourceDto: CreateCalendarSourceDto = {
@@ -130,7 +160,9 @@ export class ExternalCalendarController {
         tenantId,
       );
 
-      this.logger.log(`Successfully connected ${type} calendar for user ${user.id}`);
+      this.logger.log(
+        `Successfully connected ${type} calendar for user ${user.id}`,
+      );
 
       return {
         success: true,
@@ -145,8 +177,8 @@ export class ExternalCalendarController {
 
   @Post('sync/:calendarSourceId')
   @ApiOperation({ summary: 'Trigger manual sync for calendar source' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Calendar sync completed',
     schema: {
       type: 'object',
@@ -157,7 +189,10 @@ export class ExternalCalendarController {
       },
     },
   })
-  @ApiResponse({ status: 401, description: 'Calendar source not found or not owned by user' })
+  @ApiResponse({
+    status: 401,
+    description: 'Calendar source not found or not owned by user',
+  })
   async syncCalendarSource(
     @Param('calendarSourceId') calendarSourceId: string,
     @AuthUser() user: UserEntity,
@@ -167,7 +202,9 @@ export class ExternalCalendarController {
     message: string;
   }> {
     const tenantId = this.request.tenantId;
-    this.logger.log(`Manual sync requested for calendar source ${calendarSourceId} by user ${user.id}`);
+    this.logger.log(
+      `Manual sync requested for calendar source ${calendarSourceId} by user ${user.id}`,
+    );
 
     // Verify user owns this calendar source
     const calendarSource = await this.calendarSourceService.findByUlid(
@@ -176,7 +213,9 @@ export class ExternalCalendarController {
     );
 
     if (!calendarSource || calendarSource.userId !== user.id) {
-      throw new UnauthorizedException('Calendar source not found or access denied');
+      throw new UnauthorizedException(
+        'Calendar source not found or access denied',
+      );
     }
 
     try {
@@ -200,20 +239,23 @@ export class ExternalCalendarController {
       return {
         success: syncResult.success,
         syncResult,
-        message: syncResult.success 
+        message: syncResult.success
           ? 'Calendar sync completed successfully'
           : `Calendar sync failed: ${syncResult.error}`,
       };
     } catch (error) {
-      this.logger.error(`Sync failed for calendar source ${calendarSourceId}:`, error.message);
+      this.logger.error(
+        `Sync failed for calendar source ${calendarSourceId}:`,
+        error.message,
+      );
       throw error;
     }
   }
 
   @Get('test/:calendarSourceId')
   @ApiOperation({ summary: 'Test calendar connection' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Connection test result',
     schema: {
       type: 'object',
@@ -224,7 +266,10 @@ export class ExternalCalendarController {
       },
     },
   })
-  @ApiResponse({ status: 401, description: 'Calendar source not found or not owned by user' })
+  @ApiResponse({
+    status: 401,
+    description: 'Calendar source not found or not owned by user',
+  })
   async testConnection(
     @Param('calendarSourceId') calendarSourceId: string,
     @AuthUser() user: UserEntity,
@@ -234,7 +279,9 @@ export class ExternalCalendarController {
     message: string;
   }> {
     const tenantId = this.request.tenantId;
-    this.logger.log(`Connection test requested for calendar source ${calendarSourceId} by user ${user.id}`);
+    this.logger.log(
+      `Connection test requested for calendar source ${calendarSourceId} by user ${user.id}`,
+    );
 
     // Verify user owns this calendar source
     const calendarSource = await this.calendarSourceService.findByUlid(
@@ -243,7 +290,9 @@ export class ExternalCalendarController {
     );
 
     if (!calendarSource || calendarSource.userId !== user.id) {
-      throw new UnauthorizedException('Calendar source not found or access denied');
+      throw new UnauthorizedException(
+        'Calendar source not found or access denied',
+      );
     }
 
     try {
@@ -252,18 +301,23 @@ export class ExternalCalendarController {
         tenantId,
       );
 
-      this.logger.log(`Connection test for calendar source ${calendarSourceId}: ${connected ? 'success' : 'failed'}`);
+      this.logger.log(
+        `Connection test for calendar source ${calendarSourceId}: ${connected ? 'success' : 'failed'}`,
+      );
 
       return {
         success: true,
         connected,
-        message: connected 
+        message: connected
           ? 'Calendar connection is working'
           : 'Calendar connection failed - check credentials',
       };
     } catch (error) {
-      this.logger.error(`Connection test failed for calendar source ${calendarSourceId}:`, error.message);
-      
+      this.logger.error(
+        `Connection test failed for calendar source ${calendarSourceId}:`,
+        error.message,
+      );
+
       return {
         success: false,
         connected: false,

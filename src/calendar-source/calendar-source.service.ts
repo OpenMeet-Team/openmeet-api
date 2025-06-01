@@ -76,7 +76,9 @@ export class CalendarSourceService {
     });
   }
 
-  async findAllActiveSources(tenantId: string): Promise<CalendarSourceEntity[]> {
+  async findAllActiveSources(
+    tenantId: string,
+  ): Promise<CalendarSourceEntity[]> {
     const repository = await this.getRepository(tenantId);
 
     return repository.find({
@@ -101,7 +103,10 @@ export class CalendarSourceService {
     return calendarSource;
   }
 
-  async findByUlid(ulid: string, tenantId: string): Promise<CalendarSourceEntity> {
+  async findByUlid(
+    ulid: string,
+    tenantId: string,
+  ): Promise<CalendarSourceEntity> {
     const repository = await this.getRepository(tenantId);
 
     const calendarSource = await repository.findOne({
@@ -110,7 +115,9 @@ export class CalendarSourceService {
     });
 
     if (!calendarSource) {
-      throw new NotFoundException(`Calendar source with ULID ${ulid} not found`);
+      throw new NotFoundException(
+        `Calendar source with ULID ${ulid} not found`,
+      );
     }
 
     return calendarSource;

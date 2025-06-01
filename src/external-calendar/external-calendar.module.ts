@@ -13,23 +13,23 @@ import googleConfig from '../auth-google/config/google.config';
 
 @Module({
   imports: [
-    ConfigModule.forFeature(googleConfig), 
+    ConfigModule.forFeature(googleConfig),
     ScheduleModule.forRoot(),
-    TenantModule, 
-    CalendarSourceModule
+    TenantModule,
+    CalendarSourceModule,
   ],
   controllers: [ExternalCalendarController, AvailabilityController],
   providers: [
-    ExternalCalendarService, 
+    ExternalCalendarService,
     AvailabilityService,
     CalendarSyncScheduler,
-    ExternalEventRepository
+    ExternalEventRepository,
   ],
   exports: [
-    ExternalCalendarService, 
+    ExternalCalendarService,
     AvailabilityService,
     CalendarSyncScheduler,
-    ExternalEventRepository
+    ExternalEventRepository,
   ],
 })
 export class ExternalCalendarModule {}

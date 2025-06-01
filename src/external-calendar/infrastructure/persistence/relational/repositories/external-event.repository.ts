@@ -149,7 +149,7 @@ export class ExternalEventRepository {
     endTime: Date,
   ): Promise<ExternalEventEntity[]> {
     const repository = await this.getRepository(tenantId);
-    
+
     // Find events that overlap with the given time range
     // An event overlaps if: event.startTime < endTime AND event.endTime > startTime
     return repository

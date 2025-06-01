@@ -22,7 +22,7 @@ export class CalendarSyncScheduler {
     try {
       // Get all tenant IDs
       const tenantIds = await this.tenantConnectionService.getAllTenantIds();
-      
+
       if (tenantIds.length === 0) {
         this.logger.debug('No tenants found, skipping sync');
         return;
@@ -36,12 +36,17 @@ export class CalendarSyncScheduler {
           const syncedCount = await this.syncTenantCalendars(tenantId);
           totalSynced += syncedCount;
         } catch (error) {
-          this.logger.error(`Failed to sync calendars for tenant ${tenantId}:`, error.message);
+          this.logger.error(
+            `Failed to sync calendars for tenant ${tenantId}:`,
+            error.message,
+          );
           // Continue with other tenants even if one fails
         }
       }
 
-      this.logger.log(`Periodic sync completed: ${totalSynced} calendar sources synced across ${tenantIds.length} tenants`);
+      this.logger.log(
+        `Periodic sync completed: ${totalSynced} calendar sources synced across ${tenantIds.length} tenants`,
+      );
     } catch (error) {
       this.logger.error('Periodic sync failed:', error.message);
     }
@@ -51,7 +56,8 @@ export class CalendarSyncScheduler {
     this.logger.debug(`Syncing calendars for tenant: ${tenantId}`);
 
     // Get all active calendar sources for this tenant
-    const calendarSources = await this.calendarSourceService.findAllActiveSources(tenantId);
+    const calendarSources =
+      await this.calendarSourceService.findAllActiveSources(tenantId);
 
     if (calendarSources.length === 0) {
       this.logger.debug(`No calendar sources found for tenant: ${tenantId}`);
@@ -70,13 +76,15 @@ export class CalendarSyncScheduler {
       } catch (error) {
         this.logger.error(
           `Failed to sync calendar source ${calendarSource.ulid} for tenant ${tenantId}:`,
-          error.message
+          error.message,
         );
         // Continue with other calendar sources even if one fails
       }
     }
 
-    this.logger.debug(`Synced ${syncedCount}/${calendarSources.length} calendar sources for tenant: ${tenantId}`);
+    this.logger.debug(
+      `Synced ${syncedCount}/${calendarSources.length} calendar sources for tenant: ${tenantId}`,
+    );
     return syncedCount;
   }
 
@@ -84,7 +92,9 @@ export class CalendarSyncScheduler {
     calendarSource: CalendarSourceEntity,
     tenantId: string,
   ): Promise<void> {
-    this.logger.log(`Syncing calendar source: ${calendarSource.name} (${calendarSource.ulid})`);
+    this.logger.log(
+      `Syncing calendar source: ${calendarSource.name} (${calendarSource.ulid})`,
+    );
 
     try {
       // Perform the sync
@@ -101,19 +111,19 @@ export class CalendarSyncScheduler {
       );
 
       this.logger.log(
-        `Successfully synced calendar source ${calendarSource.ulid}: ${syncResult.eventsCount} events`
+        `Successfully synced calendar source ${calendarSource.ulid}: ${syncResult.eventsCount} events`,
       );
     } catch (error) {
       this.logger.error(
         `Sync failed for calendar source ${calendarSource.ulid}:`,
-        error.message
+        error.message,
       );
       // Re-throw to be handled by the calling method
       throw error;
     }
   }
 
-  async needsSync(calendarSource: CalendarSourceEntity): Promise<boolean> {
+  needsSync(calendarSource: CalendarSourceEntity): boolean {
     // Inactive sources should not be synced
     if (!calendarSource.isActive) {
       return false;
@@ -126,7 +136,8 @@ export class CalendarSyncScheduler {
 
     // Calculate if the source is overdue for sync based on its sync frequency
     const syncFrequencyMs = calendarSource.syncFrequency * 60 * 1000; // Convert minutes to milliseconds
-    const timeSinceLastSync = Date.now() - calendarSource.lastSyncedAt.getTime();
+    const timeSinceLastSync =
+      Date.now() - calendarSource.lastSyncedAt.getTime();
 
     return timeSinceLastSync >= syncFrequencyMs;
   }

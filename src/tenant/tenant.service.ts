@@ -105,7 +105,7 @@ export class TenantConnectionService implements OnModuleInit {
       async (span) => {
         try {
           const tenants = await this.getAllTenants();
-          const tenantIds = tenants.map(tenant => tenant.id);
+          const tenantIds = tenants.map((tenant) => tenant.id);
           span.setAttribute('tenantIdsCount', tenantIds.length);
           return tenantIds;
         } catch (error) {

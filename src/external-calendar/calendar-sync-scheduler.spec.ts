@@ -86,25 +86,37 @@ describe('CalendarSyncScheduler', () => {
         lastSyncedAt: new Date(),
       };
 
-      externalCalendarService.syncCalendarSource.mockResolvedValue(mockSyncResult);
-      calendarSourceService.updateSyncStatus.mockResolvedValue(mockCalendarSource1);
+      externalCalendarService.syncCalendarSource.mockResolvedValue(
+        mockSyncResult,
+      );
+      calendarSourceService.updateSyncStatus.mockResolvedValue(
+        mockCalendarSource1,
+      );
 
       await scheduler.handlePeriodicSync();
 
       expect(tenantConnectionService.getAllTenantIds).toHaveBeenCalled();
-      expect(calendarSourceService.findAllActiveSources).toHaveBeenCalledTimes(2);
-      expect(calendarSourceService.findAllActiveSources).toHaveBeenCalledWith('tenant-1');
-      expect(calendarSourceService.findAllActiveSources).toHaveBeenCalledWith('tenant-2');
+      expect(calendarSourceService.findAllActiveSources).toHaveBeenCalledTimes(
+        2,
+      );
+      expect(calendarSourceService.findAllActiveSources).toHaveBeenCalledWith(
+        'tenant-1',
+      );
+      expect(calendarSourceService.findAllActiveSources).toHaveBeenCalledWith(
+        'tenant-2',
+      );
 
       // Both sources should be synced as they are overdue
-      expect(externalCalendarService.syncCalendarSource).toHaveBeenCalledTimes(2);
+      expect(externalCalendarService.syncCalendarSource).toHaveBeenCalledTimes(
+        2,
+      );
       expect(externalCalendarService.syncCalendarSource).toHaveBeenCalledWith(
         mockCalendarSource1,
-        'tenant-1'
+        'tenant-1',
       );
       expect(externalCalendarService.syncCalendarSource).toHaveBeenCalledWith(
         mockCalendarSource2,
-        'tenant-2'
+        'tenant-2',
       );
 
       expect(calendarSourceService.updateSyncStatus).toHaveBeenCalledTimes(2);
@@ -120,7 +132,9 @@ describe('CalendarSyncScheduler', () => {
       recentlySync.lastSyncedAt = new Date(Date.now() - 30 * 60 * 1000); // 30 minutes ago
 
       tenantConnectionService.getAllTenantIds.mockResolvedValue(['tenant-1']);
-      calendarSourceService.findAllActiveSources.mockResolvedValue([recentlySync]);
+      calendarSourceService.findAllActiveSources.mockResolvedValue([
+        recentlySync,
+      ]);
 
       await scheduler.handlePeriodicSync();
 
@@ -130,7 +144,9 @@ describe('CalendarSyncScheduler', () => {
 
     it('should handle sync failures gracefully', async () => {
       tenantConnectionService.getAllTenantIds.mockResolvedValue(['tenant-1']);
-      calendarSourceService.findAllActiveSources.mockResolvedValue([mockCalendarSource1]);
+      calendarSourceService.findAllActiveSources.mockResolvedValue([
+        mockCalendarSource1,
+      ]);
 
       const syncError = new Error('Google API rate limit exceeded');
       externalCalendarService.syncCalendarSource.mockRejectedValue(syncError);
@@ -157,17 +173,30 @@ describe('CalendarSyncScheduler', () => {
 
       await scheduler.handlePeriodicSync();
 
-      expect(calendarSourceService.findAllActiveSources).toHaveBeenCalledWith('tenant-1');
+      expect(calendarSourceService.findAllActiveSources).toHaveBeenCalledWith(
+        'tenant-1',
+      );
       expect(externalCalendarService.syncCalendarSource).not.toHaveBeenCalled();
     });
 
     it('should respect individual source sync frequencies', async () => {
       // Create calendar sources with different sync frequencies
-      const hourlySync = { ...mockCalendarSource1, syncFrequency: 60, lastSyncedAt: new Date(Date.now() - 90 * 60 * 1000) }; // 90 min ago, should sync
-      const dailySync = { ...mockCalendarSource2, syncFrequency: 1440, lastSyncedAt: new Date(Date.now() - 12 * 60 * 60 * 1000) }; // 12 hours ago, should not sync
+      const hourlySync = {
+        ...mockCalendarSource1,
+        syncFrequency: 60,
+        lastSyncedAt: new Date(Date.now() - 90 * 60 * 1000),
+      }; // 90 min ago, should sync
+      const dailySync = {
+        ...mockCalendarSource2,
+        syncFrequency: 1440,
+        lastSyncedAt: new Date(Date.now() - 12 * 60 * 60 * 1000),
+      }; // 12 hours ago, should not sync
 
       tenantConnectionService.getAllTenantIds.mockResolvedValue(['tenant-1']);
-      calendarSourceService.findAllActiveSources.mockResolvedValue([hourlySync, dailySync] as any);
+      calendarSourceService.findAllActiveSources.mockResolvedValue([
+        hourlySync,
+        dailySync,
+      ] as any);
 
       const mockSyncResult = {
         success: true,
@@ -175,15 +204,19 @@ describe('CalendarSyncScheduler', () => {
         lastSyncedAt: new Date(),
       };
 
-      externalCalendarService.syncCalendarSource.mockResolvedValue(mockSyncResult);
+      externalCalendarService.syncCalendarSource.mockResolvedValue(
+        mockSyncResult,
+      );
 
       await scheduler.handlePeriodicSync();
 
       // Only the hourly sync should be called
-      expect(externalCalendarService.syncCalendarSource).toHaveBeenCalledTimes(1);
+      expect(externalCalendarService.syncCalendarSource).toHaveBeenCalledTimes(
+        1,
+      );
       expect(externalCalendarService.syncCalendarSource).toHaveBeenCalledWith(
         hourlySync,
-        'tenant-1'
+        'tenant-1',
       );
     });
   });
@@ -198,10 +231,10 @@ describe('CalendarSyncScheduler', () => {
     });
 
     it('should return true for sources overdue for sync', async () => {
-      const overdue = { 
-        ...mockCalendarSource1, 
-        syncFrequency: 30, 
-        lastSyncedAt: new Date(Date.now() - 45 * 60 * 1000) // 45 minutes ago
+      const overdue = {
+        ...mockCalendarSource1,
+        syncFrequency: 30,
+        lastSyncedAt: new Date(Date.now() - 45 * 60 * 1000), // 45 minutes ago
       };
 
       const result = await scheduler.needsSync(overdue as any);
@@ -210,10 +243,10 @@ describe('CalendarSyncScheduler', () => {
     });
 
     it('should return false for sources not yet due for sync', async () => {
-      const notDue = { 
-        ...mockCalendarSource1, 
-        syncFrequency: 60, 
-        lastSyncedAt: new Date(Date.now() - 30 * 60 * 1000) // 30 minutes ago
+      const notDue = {
+        ...mockCalendarSource1,
+        syncFrequency: 60,
+        lastSyncedAt: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes ago
       };
 
       const result = await scheduler.needsSync(notDue as any);
@@ -222,7 +255,11 @@ describe('CalendarSyncScheduler', () => {
     });
 
     it('should return false for inactive sources', async () => {
-      const inactive = { ...mockCalendarSource1, isActive: false, lastSyncedAt: null };
+      const inactive = {
+        ...mockCalendarSource1,
+        isActive: false,
+        lastSyncedAt: null,
+      };
 
       const result = await scheduler.needsSync(inactive as any);
 

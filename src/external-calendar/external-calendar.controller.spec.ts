@@ -78,17 +78,20 @@ describe('ExternalCalendarController', () => {
       ],
     }).compile();
 
-    controller = module.get<ExternalCalendarController>(ExternalCalendarController);
+    controller = module.get<ExternalCalendarController>(
+      ExternalCalendarController,
+    );
     externalCalendarService = module.get(ExternalCalendarService);
     calendarSourceService = module.get(CalendarSourceService);
   });
 
   describe('getAuthorizationUrl', () => {
-    it('should return Google OAuth authorization URL', async () => {
-      const mockAuthUrl = 'https://accounts.google.com/oauth/authorize?client_id=test&scope=calendar';
+    it('should return Google OAuth authorization URL', () => {
+      const mockAuthUrl =
+        'https://accounts.google.com/oauth/authorize?client_id=test&scope=calendar';
       externalCalendarService.getAuthorizationUrl.mockReturnValue(mockAuthUrl);
 
-      const result = await controller.getAuthorizationUrl(
+      const result = controller.getAuthorizationUrl(
         CalendarSourceType.GOOGLE,
         mockUser,
       );
@@ -99,34 +102,33 @@ describe('ExternalCalendarController', () => {
       });
       expect(externalCalendarService.getAuthorizationUrl).toHaveBeenCalledWith(
         CalendarSourceType.GOOGLE,
-        mockUser.id
+        mockUser.id,
       );
     });
 
-    it('should throw BadRequestException for invalid calendar type', async () => {
+    it('should throw BadRequestException for invalid calendar type', () => {
       externalCalendarService.getAuthorizationUrl.mockImplementation(() => {
         throw new BadRequestException('Unsupported calendar type');
       });
 
-      await expect(
+      expect(() =>
         controller.getAuthorizationUrl(
           'invalid' as CalendarSourceType,
           mockUser,
-        )
-      ).rejects.toThrow(BadRequestException);
+        ),
+      ).toThrow(BadRequestException);
     });
 
-    it('should throw BadRequestException for non-OAuth calendar types', async () => {
+    it('should throw BadRequestException for non-OAuth calendar types', () => {
       externalCalendarService.getAuthorizationUrl.mockImplementation(() => {
-        throw new BadRequestException('iCal URL sources do not require authorization');
+        throw new BadRequestException(
+          'iCal URL sources do not require authorization',
+        );
       });
 
-      await expect(
-        controller.getAuthorizationUrl(
-          CalendarSourceType.ICAL,
-          mockUser,
-        )
-      ).rejects.toThrow(BadRequestException);
+      expect(() =>
+        controller.getAuthorizationUrl(CalendarSourceType.ICAL, mockUser),
+      ).toThrow(BadRequestException);
     });
   });
 
@@ -143,7 +145,9 @@ describe('ExternalCalendarController', () => {
         expiresAt: new Date(Date.now() + 3600000),
       };
 
-      externalCalendarService.exchangeAuthorizationCode.mockResolvedValue(mockTokenResponse);
+      externalCalendarService.exchangeAuthorizationCode.mockResolvedValue(
+        mockTokenResponse,
+      );
       calendarSourceService.create.mockResolvedValue(mockCalendarSource);
 
       const result = await controller.handleOAuthCallback(
@@ -158,10 +162,12 @@ describe('ExternalCalendarController', () => {
         message: 'Google Calendar connected successfully',
       });
 
-      expect(externalCalendarService.exchangeAuthorizationCode).toHaveBeenCalledWith(
+      expect(
+        externalCalendarService.exchangeAuthorizationCode,
+      ).toHaveBeenCalledWith(
         CalendarSourceType.GOOGLE,
         mockCallbackDto.code,
-        mockUser.id
+        mockUser.id,
       );
 
       expect(calendarSourceService.create).toHaveBeenCalledWith(
@@ -173,7 +179,7 @@ describe('ExternalCalendarController', () => {
           expiresAt: mockTokenResponse.expiresAt,
         }),
         mockUser,
-        'test-tenant-1'
+        'test-tenant-1',
       );
     });
 
@@ -188,13 +194,13 @@ describe('ExternalCalendarController', () => {
           CalendarSourceType.GOOGLE,
           invalidCallbackDto,
           mockUser,
-        )
+        ),
       ).rejects.toThrow(UnauthorizedException);
     });
 
     it('should handle OAuth exchange errors gracefully', async () => {
       externalCalendarService.exchangeAuthorizationCode.mockRejectedValue(
-        new BadRequestException('Invalid authorization code')
+        new BadRequestException('Invalid authorization code'),
       );
 
       await expect(
@@ -202,7 +208,7 @@ describe('ExternalCalendarController', () => {
           CalendarSourceType.GOOGLE,
           mockCallbackDto,
           mockUser,
-        )
+        ),
       ).rejects.toThrow(BadRequestException);
     });
   });
@@ -216,8 +222,12 @@ describe('ExternalCalendarController', () => {
       };
 
       calendarSourceService.findByUlid.mockResolvedValue(mockCalendarSource);
-      externalCalendarService.syncCalendarSource.mockResolvedValue(mockSyncResult);
-      calendarSourceService.updateSyncStatusByUlid.mockResolvedValue(mockCalendarSource);
+      externalCalendarService.syncCalendarSource.mockResolvedValue(
+        mockSyncResult,
+      );
+      calendarSourceService.updateSyncStatusByUlid.mockResolvedValue(
+        mockCalendarSource,
+      );
 
       const result = await controller.syncCalendarSource(
         mockCalendarSource.ulid,
@@ -232,11 +242,11 @@ describe('ExternalCalendarController', () => {
 
       expect(calendarSourceService.findByUlid).toHaveBeenCalledWith(
         mockCalendarSource.ulid,
-        'test-tenant-1'
+        'test-tenant-1',
       );
       expect(externalCalendarService.syncCalendarSource).toHaveBeenCalledWith(
         mockCalendarSource,
-        'test-tenant-1'
+        'test-tenant-1',
       );
     });
 
@@ -244,10 +254,7 @@ describe('ExternalCalendarController', () => {
       calendarSourceService.findByUlid.mockResolvedValue(null as any);
 
       await expect(
-        controller.syncCalendarSource(
-          'invalid_ulid',
-          mockUser,
-        )
+        controller.syncCalendarSource('invalid_ulid', mockUser),
       ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -259,18 +266,19 @@ describe('ExternalCalendarController', () => {
       };
 
       calendarSourceService.findByUlid.mockResolvedValue(mockCalendarSource);
-      externalCalendarService.syncCalendarSource.mockResolvedValue(mockSyncResult);
-      calendarSourceService.updateSyncStatusByUlid.mockResolvedValue(mockCalendarSource);
-
-      await controller.syncCalendarSource(
-        mockCalendarSource.ulid,
-        mockUser,
+      externalCalendarService.syncCalendarSource.mockResolvedValue(
+        mockSyncResult,
       );
+      calendarSourceService.updateSyncStatusByUlid.mockResolvedValue(
+        mockCalendarSource,
+      );
+
+      await controller.syncCalendarSource(mockCalendarSource.ulid, mockUser);
 
       expect(calendarSourceService.updateSyncStatusByUlid).toHaveBeenCalledWith(
         mockCalendarSource.ulid,
         mockSyncResult.lastSyncedAt,
-        'test-tenant-1'
+        'test-tenant-1',
       );
     });
   });
@@ -293,7 +301,7 @@ describe('ExternalCalendarController', () => {
 
       expect(externalCalendarService.testConnection).toHaveBeenCalledWith(
         mockCalendarSource,
-        'test-tenant-1'
+        'test-tenant-1',
       );
     });
 
@@ -317,10 +325,7 @@ describe('ExternalCalendarController', () => {
       calendarSourceService.findByUlid.mockResolvedValue(null as any);
 
       await expect(
-        controller.testConnection(
-          'invalid_ulid',
-          mockUser,
-        )
+        controller.testConnection('invalid_ulid', mockUser),
       ).rejects.toThrow(UnauthorizedException);
     });
   });

@@ -8,8 +8,11 @@ import {
   Delete,
   UseGuards,
   Query,
+  Inject,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { REQUEST } from '@nestjs/core';
 
 import { CalendarSourceService } from './calendar-source.service';
 import { CreateCalendarSourceDto } from './dto/create-calendar-source.dto';
@@ -27,7 +30,20 @@ import { PaginationDto } from '../utils/dto/pagination.dto';
 @ApiBearerAuth()
 @UseGuards(JWTAuthGuard)
 export class CalendarSourceController {
-  constructor(private readonly calendarSourceService: CalendarSourceService) {}
+  constructor(
+    private readonly calendarSourceService: CalendarSourceService,
+    @Inject(REQUEST) private readonly request: Request & { tenantId: string },
+  ) {}
+
+  private getTenantId(): string {
+    const tenantId = this.request.tenantId;
+    if (!tenantId) {
+      throw new BadRequestException(
+        'Missing tenant ID. Tenant ID is required for all calendar operations.',
+      );
+    }
+    return tenantId;
+  }
 
   @Post()
   @ApiOperation({ summary: 'Create a new calendar source connection' })
@@ -35,14 +51,14 @@ export class CalendarSourceController {
     @Body() createCalendarSourceDto: CreateCalendarSourceDto,
     @AuthUser() user: User,
   ): Promise<CalendarSourceEntity> {
-    // TODO: Get tenantId from request context
+    const tenantId = this.getTenantId();
     // Convert User domain object to UserEntity - this is a temporary solution
     // TODO: Refactor to avoid this conversion by updating the service interface
     const userEntity = { id: user.id } as UserEntity;
     return this.calendarSourceService.create(
       createCalendarSourceDto,
       userEntity,
-      'default-tenant',
+      tenantId,
     );
   }
 
@@ -55,7 +71,8 @@ export class CalendarSourceController {
     @Query() query: QueryCalendarSourceDto,
     @AuthUser() user: User,
   ): Promise<CalendarSourceEntity[]> {
-    return this.calendarSourceService.findAllByUser(user.id, 'default-tenant');
+    const tenantId = this.getTenantId();
+    return this.calendarSourceService.findAllByUser(user.id, tenantId);
   }
 
   @Get(':id')
@@ -64,14 +81,15 @@ export class CalendarSourceController {
     @Param('id') id: string,
     @AuthUser() user: User,
   ): Promise<CalendarSourceEntity> {
+    const tenantId = this.getTenantId();
     const calendarSource = await this.calendarSourceService.findOne(
       parseInt(id),
-      'default-tenant',
+      tenantId,
     );
     await this.calendarSourceService.validateOwnership(
       parseInt(id),
       user.id,
-      'default-tenant',
+      tenantId,
     );
     return calendarSource;
   }
@@ -83,27 +101,29 @@ export class CalendarSourceController {
     @Body() updateCalendarSourceDto: UpdateCalendarSourceDto,
     @AuthUser() user: User,
   ): Promise<CalendarSourceEntity> {
+    const tenantId = this.getTenantId();
     await this.calendarSourceService.validateOwnership(
       parseInt(id),
       user.id,
-      'default-tenant',
+      tenantId,
     );
     return this.calendarSourceService.update(
       parseInt(id),
       updateCalendarSourceDto,
-      'default-tenant',
+      tenantId,
     );
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a calendar source' })
   async remove(@Param('id') id: string, @AuthUser() user: User): Promise<void> {
+    const tenantId = this.getTenantId();
     await this.calendarSourceService.validateOwnership(
       parseInt(id),
       user.id,
-      'default-tenant',
+      tenantId,
     );
-    return this.calendarSourceService.remove(parseInt(id), 'default-tenant');
+    return this.calendarSourceService.remove(parseInt(id), tenantId);
   }
 
   @Post(':id/sync')
