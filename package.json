@@ -194,7 +194,10 @@
     ],
     "transformIgnorePatterns": [
       "node_modules/(?!matrix-js-sdk)"
-    ]
+    ],
+    "maxWorkers": "30%",
+    "workerIdleMemoryLimit": "1024MB",
+    "forceExit": true
   },
   "engines": {
     "node": ">=16.0.0",
