@@ -21,24 +21,19 @@ import { CalendarFeedService } from './calendar-feed.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { JWTAuthGuard } from '../auth/auth.guard';
 import { Public } from '../auth/decorators/public.decorator';
+import { AuthUser } from '../core/decorators/auth-user.decorator';
 
 @ApiTags('Calendar Feeds')
 @Controller({ path: 'calendar', scope: Scope.REQUEST })
 export class CalendarFeedController {
   constructor(private readonly calendarFeedService: CalendarFeedService) {}
 
-  @Get('users/:userSlug/calendar.ics')
-  @Public()
+  @Get('my/calendar.ics')
   @UseGuards(JWTAuthGuard)
   @ApiOperation({
-    summary: 'Get user calendar feed',
+    summary: 'Get authenticated user calendar feed',
     description:
-      'Returns iCalendar (.ics) feed for all events a user organizes or attends',
-  })
-  @ApiParam({
-    name: 'userSlug',
-    description: 'User slug identifier',
-    example: 'john-doe',
+      'Returns iCalendar (.ics) feed for all events the authenticated user organizes or attends',
   })
   @ApiQuery({
     name: 'start',
@@ -61,25 +56,21 @@ export class CalendarFeedController {
       },
     },
   })
-  @ApiResponse({
-    status: 404,
-    description: 'User not found',
-  })
   async getUserCalendar(
-    @Param('userSlug') userSlug: string,
+    @AuthUser() user: UserEntity,
     @Res() res: Response,
     @Query('start') startDate?: string,
     @Query('end') endDate?: string,
   ): Promise<void> {
     const icalContent = await this.calendarFeedService.getUserCalendarFeed(
-      userSlug,
+      user.id,
       startDate,
       endDate,
     );
 
     // Set appropriate headers for iCalendar response
     res.set('Content-Type', 'text/calendar; charset=utf-8');
-    res.set('Content-Disposition', `attachment; filename="${userSlug}.ics"`);
+    res.set('Content-Disposition', `attachment; filename="${user.slug}.ics"`);
     res.send(icalContent);
   }
 

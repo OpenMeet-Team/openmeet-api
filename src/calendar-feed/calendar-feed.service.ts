@@ -6,35 +6,31 @@ import {
 
 import { ICalendarService } from '../event/services/ical/ical.service';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
-import { UserService } from '../user/user.service';
 import { GroupService } from '../group/group.service';
 import { EventQueryService } from '../event/services/event-query.service';
 
 @Injectable()
 export class CalendarFeedService {
   constructor(
-    private readonly userService: UserService,
     private readonly groupService: GroupService,
     private readonly eventQueryService: EventQueryService,
     private readonly iCalendarService: ICalendarService,
   ) {}
 
   async getUserCalendarFeed(
-    userSlug: string,
-    _startDate?: string,
-    _endDate?: string,
+    userId: number,
+    startDate?: string,
+    endDate?: string,
   ): Promise<string> {
-    // Find user by slug
-    const user = await this.userService.getUserBySlug(userSlug);
-    if (!user) {
-      throw new NotFoundException(`User with slug ${userSlug} not found`);
-    }
-
-    // TODO: Add findUserEvents method to EventQueryService
-    // For now, we'll need to use direct repository access until the service method is implemented
-    throw new Error(
-      'findUserEvents method not yet implemented in EventQueryService',
+    // Get user's events using the event query service directly with user ID
+    const events = await this.eventQueryService.findUserEvents(
+      userId,
+      startDate,
+      endDate,
     );
+
+    // Generate iCalendar feed
+    return this.iCalendarService.generateICalendarForEvents(events);
   }
 
   async getGroupCalendarFeed(
@@ -55,11 +51,16 @@ export class CalendarFeedService {
       throw new ForbiddenException('Access denied to private group calendar');
     }
 
-    // TODO: Add findGroupEvents method to EventQueryService
-    // For now, we'll need to use direct repository access until the service method is implemented
-    throw new Error(
-      'findGroupEvents method not yet implemented in EventQueryService',
+    // Get group's events using the event query service
+    const events = await this.eventQueryService.findGroupEvents(
+      groupSlug,
+      startDate,
+      endDate,
+      userId,
     );
+
+    // Generate iCalendar feed
+    return this.iCalendarService.generateICalendarForEvents(events);
   }
 
   validateFeedAccess(group: GroupEntity, userId?: number): boolean {

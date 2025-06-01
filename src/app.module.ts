@@ -56,6 +56,7 @@ import { InterceptorsModule } from './core/interceptors.module';
 import { ShadowAccountModule } from './shadow-account/shadow-account.module';
 import { CalendarSourceModule } from './calendar-source/calendar-source.module';
 import { CalendarFeedModule } from './calendar-feed/calendar-feed.module';
+import { ExternalCalendarModule } from './external-calendar/external-calendar.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -141,6 +142,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     EventSeriesModule,
     CalendarSourceModule,
     CalendarFeedModule,
+    ExternalCalendarModule,
   ],
   providers: [
     TenantConnectionService,

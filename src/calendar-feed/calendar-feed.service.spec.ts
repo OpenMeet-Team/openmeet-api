@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CalendarFeedService } from './calendar-feed.service';
-import { UserService } from '../user/user.service';
 import { GroupService } from '../group/group.service';
 import { EventQueryService } from '../event/services/event-query.service';
 import { ICalendarService } from '../event/services/ical/ical.service';
@@ -11,12 +10,10 @@ import { NotFoundException, ForbiddenException } from '@nestjs/common';
 
 describe('CalendarFeedService', () => {
   let service: CalendarFeedService;
-  let mockUserService: jest.Mocked<UserService>;
   let mockGroupService: jest.Mocked<GroupService>;
   let mockEventQueryService: jest.Mocked<EventQueryService>;
   let mockICalendarService: jest.Mocked<ICalendarService>;
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const createMockEvent = (
     overrides: Partial<EventEntity> = {},
   ): EventEntity => {
@@ -34,16 +31,6 @@ describe('CalendarFeedService', () => {
     return Object.assign(event, overrides);
   };
 
-  const createMockUser = (overrides: Partial<UserEntity> = {}): UserEntity => {
-    const user = new UserEntity();
-    user.id = 1;
-    user.slug = 'test-user';
-    user.email = 'test@example.com';
-    user.firstName = 'Test';
-    user.lastName = 'User';
-    return Object.assign(user, overrides);
-  };
-
   const createMockGroup = (
     overrides: Partial<GroupEntity> = {},
   ): GroupEntity => {
@@ -57,10 +44,6 @@ describe('CalendarFeedService', () => {
   };
 
   beforeEach(async () => {
-    mockUserService = {
-      getUserBySlug: jest.fn(),
-    } as any;
-
     mockGroupService = {
       findGroupBySlug: jest.fn(),
     } as any;
@@ -77,10 +60,6 @@ describe('CalendarFeedService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CalendarFeedService,
-        {
-          provide: UserService,
-          useValue: mockUserService,
-        },
         {
           provide: GroupService,
           useValue: mockGroupService,
@@ -104,41 +83,88 @@ describe('CalendarFeedService', () => {
   });
 
   describe('getUserCalendarFeed', () => {
-    it('should throw error indicating missing implementation', async () => {
-      const userSlug = 'test-user';
-      const user = createMockUser();
+    it('should generate iCal feed for user events', async () => {
+      const userId = 1;
+      const events = [
+        createMockEvent({ name: 'Event 1' }),
+        createMockEvent({ name: 'Event 2', id: 2 }),
+      ];
+      const expectedIcal = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\n...';
 
-      mockUserService.getUserBySlug.mockResolvedValue(user);
-
-      await expect(service.getUserCalendarFeed(userSlug)).rejects.toThrow(
-        'findUserEvents method not yet implemented in EventQueryService',
+      mockEventQueryService.findUserEvents.mockResolvedValue(events);
+      mockICalendarService.generateICalendarForEvents.mockReturnValue(
+        expectedIcal,
       );
 
-      expect(mockUserService.getUserBySlug).toHaveBeenCalledWith(userSlug);
+      const result = await service.getUserCalendarFeed(userId);
+
+      expect(mockEventQueryService.findUserEvents).toHaveBeenCalledWith(
+        userId,
+        undefined,
+        undefined,
+      );
+      expect(
+        mockICalendarService.generateICalendarForEvents,
+      ).toHaveBeenCalledWith(events);
+      expect(result).toBe(expectedIcal);
     });
 
-    it('should throw NotFoundException when user not found', async () => {
-      const userSlug = 'nonexistent-user';
-      mockUserService.getUserBySlug.mockResolvedValue(null);
+    it('should filter events by date range when provided', async () => {
+      const userId = 1;
+      const startDate = '2024-01-01';
+      const endDate = '2024-12-31';
+      const events = [createMockEvent()];
+      const expectedIcal = 'BEGIN:VCALENDAR...';
 
-      await expect(service.getUserCalendarFeed(userSlug)).rejects.toThrow(
-        NotFoundException,
+      mockEventQueryService.findUserEvents.mockResolvedValue(events);
+      mockICalendarService.generateICalendarForEvents.mockReturnValue(
+        expectedIcal,
       );
+
+      const result = await service.getUserCalendarFeed(
+        userId,
+        startDate,
+        endDate,
+      );
+
+      expect(mockEventQueryService.findUserEvents).toHaveBeenCalledWith(
+        userId,
+        startDate,
+        endDate,
+      );
+      expect(result).toBe(expectedIcal);
     });
   });
 
   describe('getGroupCalendarFeed', () => {
-    it('should throw error indicating missing implementation for public groups', async () => {
+    it('should generate iCal feed for public group events', async () => {
       const groupSlug = 'test-group';
       const group = createMockGroup({ visibility: 'public' as any });
+      const events = [
+        createMockEvent({ name: 'Group Event 1' }),
+        createMockEvent({ name: 'Group Event 2', id: 2 }),
+      ];
+      const expectedIcal = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\n...';
 
       mockGroupService.findGroupBySlug.mockResolvedValue(group);
-
-      await expect(service.getGroupCalendarFeed(groupSlug)).rejects.toThrow(
-        'findGroupEvents method not yet implemented in EventQueryService',
+      mockEventQueryService.findGroupEvents.mockResolvedValue(events);
+      mockICalendarService.generateICalendarForEvents.mockReturnValue(
+        expectedIcal,
       );
 
+      const result = await service.getGroupCalendarFeed(groupSlug);
+
       expect(mockGroupService.findGroupBySlug).toHaveBeenCalledWith(groupSlug);
+      expect(mockEventQueryService.findGroupEvents).toHaveBeenCalledWith(
+        groupSlug,
+        undefined,
+        undefined,
+        undefined,
+      );
+      expect(
+        mockICalendarService.generateICalendarForEvents,
+      ).toHaveBeenCalledWith(events);
+      expect(result).toBe(expectedIcal);
     });
 
     it('should throw NotFoundException when group not found', async () => {
@@ -167,14 +193,29 @@ describe('CalendarFeedService', () => {
       const groupSlug = 'private-group';
       const userId = 1;
       const group = createMockGroup({ visibility: 'private' as any });
+      const events = [createMockEvent()];
+      const expectedIcal = 'BEGIN:VCALENDAR...';
 
       mockGroupService.findGroupBySlug.mockResolvedValue(group);
-
-      await expect(
-        service.getGroupCalendarFeed(groupSlug, undefined, undefined, userId),
-      ).rejects.toThrow(
-        'findGroupEvents method not yet implemented in EventQueryService',
+      mockEventQueryService.findGroupEvents.mockResolvedValue(events);
+      mockICalendarService.generateICalendarForEvents.mockReturnValue(
+        expectedIcal,
       );
+
+      const result = await service.getGroupCalendarFeed(
+        groupSlug,
+        undefined,
+        undefined,
+        userId,
+      );
+
+      expect(mockEventQueryService.findGroupEvents).toHaveBeenCalledWith(
+        groupSlug,
+        undefined,
+        undefined,
+        userId,
+      );
+      expect(result).toBe(expectedIcal);
     });
   });
 

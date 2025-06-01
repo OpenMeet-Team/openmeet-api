@@ -1232,4 +1232,91 @@ export class EventQueryService {
       return [[], 0];
     }
   }
+
+  /**
+   * Find all events for a specific user (organized or attended)
+   * Used by calendar feed generation
+   */
+  @Trace('event-query.findUserEvents')
+  async findUserEvents(
+    userId: number,
+    startDate?: string,
+    endDate?: string,
+  ): Promise<EventEntity[]> {
+    await this.initializeRepository();
+
+    const query = this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.user', 'user')
+      .leftJoinAndSelect('event.group', 'group')
+      .leftJoinAndSelect('event.categories', 'categories')
+      .leftJoinAndSelect('event.series', 'series')
+      .leftJoinAndSelect('event.attendees', 'attendees')
+      .where('(event.userId = :userId OR attendees.userId = :userId)', {
+        userId,
+      })
+      .orderBy('event.startDate', 'ASC');
+
+    // Apply date filters if provided
+    if (startDate) {
+      query.andWhere('event.startDate >= :startDate', { startDate });
+    }
+    if (endDate) {
+      query.andWhere('event.startDate <= :endDate', { endDate });
+    }
+
+    return query.getMany();
+  }
+
+  /**
+   * Find all events for a specific group
+   * Used by calendar feed generation
+   */
+  @Trace('event-query.findGroupEvents')
+  async findGroupEvents(
+    groupSlug: string,
+    startDate?: string,
+    endDate?: string,
+    userId?: number,
+  ): Promise<EventEntity[]> {
+    await this.initializeRepository();
+
+    let query = this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.user', 'user')
+      .leftJoinAndSelect('event.group', 'group')
+      .leftJoinAndSelect('event.categories', 'categories')
+      .leftJoinAndSelect('event.series', 'series')
+      .where('event.group.slug = :groupSlug', { groupSlug });
+
+    // For private groups, ensure user is a member (if userId provided)
+    if (userId) {
+      query = query
+        .leftJoinAndSelect('event.group.members', 'groupMembers')
+        .andWhere(
+          '(group.visibility = :publicVisibility OR groupMembers.userId = :userId)',
+          {
+            publicVisibility: 'public',
+            userId,
+          },
+        );
+    } else {
+      // No user context, only return public group events
+      query = query.andWhere('group.visibility = :publicVisibility', {
+        publicVisibility: 'public',
+      });
+    }
+
+    // Apply date filters if provided
+    if (startDate) {
+      query.andWhere('event.startDate >= :startDate', { startDate });
+    }
+    if (endDate) {
+      query.andWhere('event.startDate <= :endDate', { endDate });
+    }
+
+    query = query.orderBy('event.startDate', 'ASC');
+
+    return query.getMany();
+  }
 }

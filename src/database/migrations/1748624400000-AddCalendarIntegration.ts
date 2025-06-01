@@ -56,8 +56,47 @@ export class AddCalendarIntegration1748624400000 implements MigrationInterface {
       ADD COLUMN "calendarWorkDays" integer[] DEFAULT ARRAY[1,2,3,4,5]
     `);
 
+    // Create external events status enum
+    await queryRunner.query(`
+      CREATE TYPE "${schema}"."external_event_status_enum" AS ENUM('busy', 'free', 'tentative')
+    `);
+
+    // Create externalEvents table for caching external calendar events
+    await queryRunner.query(`
+      CREATE TABLE "${schema}"."externalEvents" (
+        "id" SERIAL NOT NULL,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
+        "updatedAt" TIMESTAMP NOT NULL DEFAULT now(),
+        "ulid" character(26) NOT NULL,
+        "externalId" character varying(255) NOT NULL,
+        "summary" text,
+        "startTime" TIMESTAMP WITH TIME ZONE NOT NULL,
+        "endTime" TIMESTAMP WITH TIME ZONE NOT NULL,
+        "isAllDay" boolean NOT NULL DEFAULT false,
+        "status" "${schema}"."external_event_status_enum" NOT NULL DEFAULT 'busy',
+        "location" text,
+        "description" text,
+        "calendarSourceId" integer NOT NULL,
+        CONSTRAINT "UQ_${schema}_externalEvents_ulid" UNIQUE ("ulid"),
+        CONSTRAINT "UQ_${schema}_externalEvents_source_external" UNIQUE ("calendarSourceId", "externalId"),
+        CONSTRAINT "PK_${schema}_externalEvents_id" PRIMARY KEY ("id")
+      )
+    `);
+
+    // Create indexes for external events
+    await queryRunner.query(`
+      CREATE INDEX "IDX_${schema}_externalEvents_source_time" ON "${schema}"."externalEvents" ("calendarSourceId", "startTime", "endTime")
+    `);
+
+    // Add foreign key constraint for external events
+    await queryRunner.query(`
+      ALTER TABLE "${schema}"."externalEvents" 
+      ADD CONSTRAINT "FK_${schema}_externalEvents_calendarSourceId" 
+      FOREIGN KEY ("calendarSourceId") REFERENCES "${schema}"."calendarSources"("id") ON DELETE CASCADE
+    `);
+
     console.log(
-      `Created calendarSources table and related structures in schema: ${schema}`,
+      `Created calendarSources and externalEvents tables with related structures in schema: ${schema}`,
     );
   }
 
@@ -74,29 +113,50 @@ export class AddCalendarIntegration1748624400000 implements MigrationInterface {
       DROP COLUMN IF EXISTS "calendarWorkDays"
     `);
 
-    // Drop foreign key constraint
+    // Drop external events foreign key constraint
+    await queryRunner.query(`
+      ALTER TABLE "${schema}"."externalEvents" 
+      DROP CONSTRAINT IF EXISTS "FK_${schema}_externalEvents_calendarSourceId"
+    `);
+
+    // Drop external events indexes
+    await queryRunner.query(`
+      DROP INDEX IF EXISTS "IDX_${schema}_externalEvents_source_time"
+    `);
+
+    // Drop external events table
+    await queryRunner.query(`
+      DROP TABLE IF EXISTS "${schema}"."externalEvents"
+    `);
+
+    // Drop external events enum type
+    await queryRunner.query(`
+      DROP TYPE IF EXISTS "${schema}"."external_event_status_enum"
+    `);
+
+    // Drop calendar sources foreign key constraint
     await queryRunner.query(`
       ALTER TABLE "${schema}"."calendarSources" 
       DROP CONSTRAINT IF EXISTS "FK_${schema}_calendarSources_userId"
     `);
 
-    // Drop indexes
+    // Drop calendar sources indexes
     await queryRunner.query(`
       DROP INDEX IF EXISTS "IDX_${schema}_calendarSources_userId_isActive"
     `);
 
-    // Drop table
+    // Drop calendar sources table
     await queryRunner.query(`
       DROP TABLE IF EXISTS "${schema}"."calendarSources"
     `);
 
-    // Drop enum type
+    // Drop calendar sources enum type
     await queryRunner.query(`
       DROP TYPE IF EXISTS "${schema}"."calendar_source_type_enum"
     `);
 
     console.log(
-      `Dropped calendarSources table and related structures from schema: ${schema}`,
+      `Dropped calendarSources and externalEvents tables with related structures from schema: ${schema}`,
     );
   }
 }

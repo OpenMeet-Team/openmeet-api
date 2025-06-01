@@ -41,7 +41,10 @@ describe('CalendarFeedController', () => {
 
   describe('getUserCalendar', () => {
     it('should return user calendar iCal with correct content type', async () => {
-      const userSlug = 'test-user';
+      const mockUser = {
+        id: 1,
+        slug: 'test-user',
+      } as UserEntity;
       const mockIcal = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n';
       const mockResponse = {
         set: jest.fn(),
@@ -51,14 +54,14 @@ describe('CalendarFeedController', () => {
       mockCalendarFeedService.getUserCalendarFeed.mockResolvedValue(mockIcal);
 
       await controller.getUserCalendar(
-        userSlug,
+        mockUser,
         mockResponse as any,
         undefined,
         undefined,
       );
 
       expect(mockCalendarFeedService.getUserCalendarFeed).toHaveBeenCalledWith(
-        userSlug,
+        mockUser.id,
         undefined,
         undefined,
       );
@@ -68,13 +71,16 @@ describe('CalendarFeedController', () => {
       );
       expect(mockResponse.set).toHaveBeenCalledWith(
         'Content-Disposition',
-        `attachment; filename="${userSlug}.ics"`,
+        `attachment; filename="${mockUser.slug}.ics"`,
       );
       expect(mockResponse.send).toHaveBeenCalledWith(mockIcal);
     });
 
     it('should pass date range parameters', async () => {
-      const userSlug = 'test-user';
+      const mockUser = {
+        id: 1,
+        slug: 'test-user',
+      } as UserEntity;
       const startDate = '2024-01-01';
       const endDate = '2024-12-31';
       const mockIcal = 'BEGIN:VCALENDAR...';
@@ -86,21 +92,24 @@ describe('CalendarFeedController', () => {
       mockCalendarFeedService.getUserCalendarFeed.mockResolvedValue(mockIcal);
 
       await controller.getUserCalendar(
-        userSlug,
+        mockUser,
         mockResponse as any,
         startDate,
         endDate,
       );
 
       expect(mockCalendarFeedService.getUserCalendarFeed).toHaveBeenCalledWith(
-        userSlug,
+        mockUser.id,
         startDate,
         endDate,
       );
     });
 
     it('should handle service errors', async () => {
-      const userSlug = 'nonexistent-user';
+      const mockUser = {
+        id: 999,
+        slug: 'nonexistent-user',
+      } as UserEntity;
       const mockResponse = {
         set: jest.fn(),
         send: jest.fn(),
@@ -112,7 +121,7 @@ describe('CalendarFeedController', () => {
 
       await expect(
         controller.getUserCalendar(
-          userSlug,
+          mockUser,
           mockResponse as any,
           undefined,
           undefined,
@@ -259,7 +268,10 @@ describe('CalendarFeedController', () => {
 
   describe('response headers', () => {
     it('should set correct iCalendar content type and filename', async () => {
-      const slug = 'test-calendar';
+      const mockUser = {
+        id: 1,
+        slug: 'test-calendar',
+      } as UserEntity;
       const mockResponse = {
         set: jest.fn(),
         send: jest.fn(),
@@ -270,7 +282,7 @@ describe('CalendarFeedController', () => {
       );
 
       await controller.getUserCalendar(
-        slug,
+        mockUser,
         mockResponse as any,
         undefined,
         undefined,
@@ -282,7 +294,7 @@ describe('CalendarFeedController', () => {
       );
       expect(mockResponse.set).toHaveBeenCalledWith(
         'Content-Disposition',
-        `attachment; filename="${slug}.ics"`,
+        `attachment; filename="${mockUser.slug}.ics"`,
       );
     });
 
