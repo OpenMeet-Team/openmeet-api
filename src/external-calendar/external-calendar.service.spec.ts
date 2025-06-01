@@ -432,23 +432,25 @@ describe('ExternalCalendarService', () => {
         },
       };
 
-      const moduleWithoutConfig: TestingModule = await Test.createTestingModule({
-        providers: [
-          ExternalCalendarService,
-          {
-            provide: ExternalEventRepository,
-            useValue: mockExternalEventRepository,
-          },
-          {
-            provide: TenantConnectionService,
-            useValue: mockTenantServiceWithoutConfig,
-          },
-          {
-            provide: REQUEST,
-            useValue: mockRequest,
-          },
-        ],
-      }).compile();
+      const moduleWithoutConfig: TestingModule = await Test.createTestingModule(
+        {
+          providers: [
+            ExternalCalendarService,
+            {
+              provide: ExternalEventRepository,
+              useValue: mockExternalEventRepository,
+            },
+            {
+              provide: TenantConnectionService,
+              useValue: mockTenantServiceWithoutConfig,
+            },
+            {
+              provide: REQUEST,
+              useValue: mockRequest,
+            },
+          ],
+        },
+      ).compile();
 
       const serviceWithoutConfig =
         await moduleWithoutConfig.resolve<ExternalCalendarService>(
