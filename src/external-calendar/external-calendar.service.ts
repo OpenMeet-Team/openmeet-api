@@ -476,7 +476,7 @@ export class ExternalCalendarService {
     const oauth2Client = new google.auth.OAuth2(
       this.tenantConfig.googleClientId,
       this.tenantConfig.googleClientSecret,
-      `${this.tenantConfig.frontendDomain}/auth/google/calendar/callback`,
+      `${this.tenantConfig.frontendDomain}/auth/calendar/callback?type=google`,
     );
 
     const scopes = ['https://www.googleapis.com/auth/calendar.readonly'];
@@ -516,7 +516,7 @@ export class ExternalCalendarService {
     const oauth2Client = new google.auth.OAuth2(
       this.tenantConfig.googleClientId,
       this.tenantConfig.googleClientSecret,
-      `${this.tenantConfig.frontendDomain}/auth/google/calendar/callback`,
+      `${this.tenantConfig.frontendDomain}/auth/calendar/callback`,
     );
 
     try {

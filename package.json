@@ -38,6 +38,7 @@
     "start:swc": "TZ=UTC nest start -b swc -w",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "test": "jest",
+    "test:local": "jest --maxWorkers=6",
     "test:all": "npm run lint && jest && npm run test:e2e",
     "test:watch": "jest --watch",
     "test:e2e:watch": "env-cmd jest --watch --config ./test/jest-e2e.json",
@@ -195,7 +196,6 @@
     "transformIgnorePatterns": [
       "node_modules/(?!matrix-js-sdk)"
     ],
-    "maxWorkers": "50%",
     "workerIdleMemoryLimit": "512MB",
     "forceExit": true
   },
