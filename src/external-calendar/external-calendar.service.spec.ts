@@ -1,13 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { BadRequestException, UnauthorizedException, REQUEST } from '@nestjs/common';
 import axios from 'axios';
 import * as ical from 'node-ical';
 import { ExternalCalendarService } from './external-calendar.service';
 import { ExternalEventRepository } from './infrastructure/persistence/relational/repositories/external-event.repository';
 import { CalendarSourceEntity } from '../calendar-source/infrastructure/persistence/relational/entities/calendar-source.entity';
 import { CalendarSourceType } from '../calendar-source/dto/create-calendar-source.dto';
-import googleConfig from '../auth-google/config/google.config';
+import { TenantConnectionService } from '../tenant/tenant.service';
 
 // Mock axios
 jest.mock('axios');
@@ -74,6 +73,7 @@ jest.mock('googleapis', () => ({
 describe('ExternalCalendarService', () => {
   let service: ExternalCalendarService;
   let mockExternalEventRepository: jest.Mocked<ExternalEventRepository>;
+  let mockTenantConnectionService: jest.Mocked<TenantConnectionService>;
 
   // Helper to create DateWithTimeZone object for node-ical
   const createDateWithTz = (date: Date | string): any => {
@@ -112,8 +112,23 @@ describe('ExternalCalendarService', () => {
       findByExternalId: jest.fn(),
     } as any;
 
+    mockTenantConnectionService = {
+      getTenantConfig: jest.fn().mockReturnValue({
+        id: 'test-tenant',
+        name: 'Test Tenant',
+        frontendDomain: 'https://test.example.com',
+        googleClientId: 'mock_google_client_id',
+        googleClientSecret: 'mock_google_client_secret',
+      }),
+    } as any;
+
+    const mockRequest = {
+      headers: {
+        'x-tenant-id': 'test-tenant',
+      },
+    };
+
     const module: TestingModule = await Test.createTestingModule({
-      imports: [ConfigModule.forFeature(googleConfig)],
       providers: [
         ExternalCalendarService,
         {
@@ -121,19 +136,17 @@ describe('ExternalCalendarService', () => {
           useValue: mockExternalEventRepository,
         },
         {
-          provide: googleConfig.KEY,
-          useValue: {
-            clientId: 'mock_google_client_id',
-            clientSecret: 'mock_google_client_secret',
-          },
+          provide: TenantConnectionService,
+          useValue: mockTenantConnectionService,
+        },
+        {
+          provide: REQUEST,
+          useValue: mockRequest,
         },
       ],
     }).compile();
 
     service = module.get<ExternalCalendarService>(ExternalCalendarService);
-
-    // Set environment variable for tests
-    process.env.FRONTEND_DOMAIN = 'https://test.example.com';
   });
 
   describe('syncCalendarSource', () => {
@@ -398,27 +411,41 @@ describe('ExternalCalendarService', () => {
       expect(result).toBe(false);
     });
 
-    it('should throw error when Google OAuth credentials not configured', async () => {
-      // Create a module without Google config
-      const moduleWithoutConfig: TestingModule = await Test.createTestingModule(
-        {
-          imports: [ConfigModule.forFeature(googleConfig)],
-          providers: [
-            ExternalCalendarService,
-            {
-              provide: ExternalEventRepository,
-              useValue: mockExternalEventRepository,
-            },
-            {
-              provide: googleConfig.KEY,
-              useValue: {
-                clientId: undefined,
-                clientSecret: undefined,
-              },
-            },
-          ],
+    it('should throw error when Google OAuth credentials not configured for tenant', async () => {
+      // Create a mock tenant service without Google credentials
+      const mockTenantServiceWithoutConfig = {
+        getTenantConfig: jest.fn().mockReturnValue({
+          id: 'test-tenant',
+          name: 'Test Tenant',
+          frontendDomain: 'https://test.example.com',
+          googleClientId: undefined,
+          googleClientSecret: undefined,
+        }),
+      };
+
+      const mockRequest = {
+        headers: {
+          'x-tenant-id': 'test-tenant',
         },
-      ).compile();
+      };
+
+      const moduleWithoutConfig: TestingModule = await Test.createTestingModule({
+        providers: [
+          ExternalCalendarService,
+          {
+            provide: ExternalEventRepository,
+            useValue: mockExternalEventRepository,
+          },
+          {
+            provide: TenantConnectionService,
+            useValue: mockTenantServiceWithoutConfig,
+          },
+          {
+            provide: REQUEST,
+            useValue: mockRequest,
+          },
+        ],
+      }).compile();
 
       const serviceWithoutConfig =
         moduleWithoutConfig.get<ExternalCalendarService>(
@@ -431,7 +458,7 @@ describe('ExternalCalendarService', () => {
 
       expect(() =>
         serviceWithoutConfig.getAuthorizationUrl(CalendarSourceType.GOOGLE, 1),
-      ).toThrow('Google OAuth credentials not configured');
+      ).toThrow('Google OAuth credentials not configured for tenant');
     });
 
     it('should handle Google Calendar sync with missing tokens', async () => {
