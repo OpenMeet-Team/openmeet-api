@@ -4,15 +4,17 @@ import {
   BadRequestException,
   UnauthorizedException,
   Inject,
+  Scope,
 } from '@nestjs/common';
-import { ConfigType } from '@nestjs/config';
+import { REQUEST } from '@nestjs/core';
 import { google } from 'googleapis';
 import axios from 'axios';
 import * as ical from 'node-ical';
 import { CalendarSourceEntity } from '../calendar-source/infrastructure/persistence/relational/entities/calendar-source.entity';
 import { CalendarSourceType } from '../calendar-source/dto/create-calendar-source.dto';
 import { ExternalEventRepository } from './infrastructure/persistence/relational/repositories/external-event.repository';
-import googleConfig from '../auth-google/config/google.config';
+import { TenantConnectionService } from '../tenant/tenant.service';
+import { TenantConfig } from '../core/constants/constant';
 
 export interface ExternalEvent {
   sourceId: string;
@@ -33,15 +35,20 @@ export interface SyncResult {
   lastSyncedAt: Date;
 }
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST, durable: true })
 export class ExternalCalendarService {
   private readonly logger = new Logger(ExternalCalendarService.name);
+  private tenantConfig: TenantConfig;
 
   constructor(
-    @Inject(googleConfig.KEY)
-    private readonly googleConfiguration: ConfigType<typeof googleConfig>,
+    @Inject(REQUEST) private readonly request: any,
+    private readonly tenantConnectionService: TenantConnectionService,
     private readonly externalEventRepository: ExternalEventRepository,
-  ) {}
+  ) {
+    this.tenantConfig = this.tenantConnectionService.getTenantConfig(
+      this.request.headers['x-tenant-id'],
+    );
+  }
 
   /**
    * Sync events from an external calendar source
@@ -179,15 +186,17 @@ export class ExternalCalendarService {
     tenantId: string,
   ): Promise<SyncResult> {
     if (
-      !this.googleConfiguration.clientId ||
-      !this.googleConfiguration.clientSecret
+      !this.tenantConfig.googleClientId ||
+      !this.tenantConfig.googleClientSecret
     ) {
-      throw new BadRequestException('Google OAuth credentials not configured');
+      throw new BadRequestException(
+        'Google OAuth credentials not configured for tenant',
+      );
     }
 
     const oauth2Client = new google.auth.OAuth2(
-      this.googleConfiguration.clientId,
-      this.googleConfiguration.clientSecret,
+      this.tenantConfig.googleClientId,
+      this.tenantConfig.googleClientSecret,
     );
 
     oauth2Client.setCredentials({
@@ -456,16 +465,18 @@ export class ExternalCalendarService {
 
   private getGoogleAuthUrl(userId: number): string {
     if (
-      !this.googleConfiguration.clientId ||
-      !this.googleConfiguration.clientSecret
+      !this.tenantConfig.googleClientId ||
+      !this.tenantConfig.googleClientSecret
     ) {
-      throw new BadRequestException('Google OAuth credentials not configured');
+      throw new BadRequestException(
+        'Google OAuth credentials not configured for tenant',
+      );
     }
 
     const oauth2Client = new google.auth.OAuth2(
-      this.googleConfiguration.clientId,
-      this.googleConfiguration.clientSecret,
-      `${process.env.FRONTEND_DOMAIN}/auth/google/calendar/callback`,
+      this.tenantConfig.googleClientId,
+      this.tenantConfig.googleClientSecret,
+      `${this.tenantConfig.frontendDomain}/auth/google/calendar/callback`,
     );
 
     const scopes = ['https://www.googleapis.com/auth/calendar.readonly'];
@@ -494,16 +505,18 @@ export class ExternalCalendarService {
     expiresAt?: Date;
   }> {
     if (
-      !this.googleConfiguration.clientId ||
-      !this.googleConfiguration.clientSecret
+      !this.tenantConfig.googleClientId ||
+      !this.tenantConfig.googleClientSecret
     ) {
-      throw new BadRequestException('Google OAuth credentials not configured');
+      throw new BadRequestException(
+        'Google OAuth credentials not configured for tenant',
+      );
     }
 
     const oauth2Client = new google.auth.OAuth2(
-      this.googleConfiguration.clientId,
-      this.googleConfiguration.clientSecret,
-      `${process.env.FRONTEND_DOMAIN}/auth/google/calendar/callback`,
+      this.tenantConfig.googleClientId,
+      this.tenantConfig.googleClientSecret,
+      `${this.tenantConfig.frontendDomain}/auth/google/calendar/callback`,
     );
 
     try {
@@ -549,15 +562,17 @@ export class ExternalCalendarService {
     expiresAt?: Date;
   }> {
     if (
-      !this.googleConfiguration.clientId ||
-      !this.googleConfiguration.clientSecret
+      !this.tenantConfig.googleClientId ||
+      !this.tenantConfig.googleClientSecret
     ) {
-      throw new BadRequestException('Google OAuth credentials not configured');
+      throw new BadRequestException(
+        'Google OAuth credentials not configured for tenant',
+      );
     }
 
     const oauth2Client = new google.auth.OAuth2(
-      this.googleConfiguration.clientId,
-      this.googleConfiguration.clientSecret,
+      this.tenantConfig.googleClientId,
+      this.tenantConfig.googleClientSecret,
     );
 
     oauth2Client.setCredentials({
