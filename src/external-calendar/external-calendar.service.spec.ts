@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, UnauthorizedException, REQUEST } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { REQUEST } from '@nestjs/core';
 import axios from 'axios';
 import * as ical from 'node-ical';
 import { ExternalCalendarService } from './external-calendar.service';
@@ -146,7 +147,9 @@ describe('ExternalCalendarService', () => {
       ],
     }).compile();
 
-    service = module.get<ExternalCalendarService>(ExternalCalendarService);
+    service = await module.resolve<ExternalCalendarService>(
+      ExternalCalendarService,
+    );
   });
 
   describe('syncCalendarSource', () => {
@@ -448,7 +451,7 @@ describe('ExternalCalendarService', () => {
       }).compile();
 
       const serviceWithoutConfig =
-        moduleWithoutConfig.get<ExternalCalendarService>(
+        await moduleWithoutConfig.resolve<ExternalCalendarService>(
           ExternalCalendarService,
         );
 
