@@ -284,7 +284,9 @@ export class EventQueryService {
             status: EventAttendeeStatus.Confirmed,
           }),
       )
-      .where('event.status = :status', { status: EventStatus.Published })
+      .where('event.status IN (:...statuses)', { 
+        statuses: [EventStatus.Published, EventStatus.Cancelled] 
+      })
       .orderBy('event.startDate', 'ASC')
       .addOrderBy('event.id', 'ASC');
 
@@ -356,15 +358,17 @@ export class EventQueryService {
     } else if (toDate) {
       eventQuery.andWhere('event.startDate <= :toDate', { toDate });
     } else {
-      // Show future events and currently active events
+      // Show future events, currently active events, and past events from the last 3 months
       // Future events: startDate > now
-      // Currently active events with endDate: startDate <= now AND endDate > now
-      // Currently active events without endDate: startDate <= now AND startDate > (now - 1 hour)
+      // Currently active events: startDate <= now AND endDate > now
+      // Past events: endDate <= now AND endDate > (now - 3 months)
+      const threeMonthsAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000); // 3 months ago
+      
       eventQuery.andWhere(
-        '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))',
+        '(event.startDate > :now OR (event.startDate <= :now AND event.endDate > :now) OR (event.endDate <= :now AND event.endDate > :threeMonthsAgo))',
         {
           now: new Date(),
-          oneHourAgo: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
+          threeMonthsAgo,
         },
       );
     }
@@ -476,7 +480,9 @@ export class EventQueryService {
     await this.initializeRepository();
     const eventQuery = this.eventRepository
       .createQueryBuilder('event')
-      .where('event.status = :status', { status: EventStatus.Published })
+      .where('event.status IN (:...statuses)', { 
+        statuses: [EventStatus.Published, EventStatus.Cancelled] 
+      })
       .select(['event.name', 'event.slug']);
 
     if (query.search) {
