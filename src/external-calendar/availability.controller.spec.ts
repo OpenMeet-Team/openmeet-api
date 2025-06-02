@@ -45,8 +45,8 @@ describe('AvailabilityController', () => {
 
   describe('checkAvailability', () => {
     const mockAvailabilityDto = {
-      startTime: new Date('2024-01-15T10:00:00Z'),
-      endTime: new Date('2024-01-15T11:00:00Z'),
+      startTime: '2024-01-15T10:00:00Z',
+      endTime: '2024-01-15T11:00:00Z',
       calendarSourceIds: ['calendar_ulid_1', 'calendar_ulid_2'],
     };
 
@@ -118,8 +118,8 @@ describe('AvailabilityController', () => {
 
     it('should handle invalid time range', async () => {
       const invalidDto = {
-        startTime: new Date('2024-01-15T11:00:00Z'),
-        endTime: new Date('2024-01-15T10:00:00Z'), // End before start
+        startTime: '2024-01-15T11:00:00Z',
+        endTime: '2024-01-15T10:00:00Z', // End before start
         calendarSourceIds: ['calendar_ulid_1'],
       };
 

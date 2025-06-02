@@ -8,6 +8,7 @@ import { ExternalEventRepository } from './infrastructure/persistence/relational
 import { CalendarSourceEntity } from '../calendar-source/infrastructure/persistence/relational/entities/calendar-source.entity';
 import { CalendarSourceType } from '../calendar-source/dto/create-calendar-source.dto';
 import { TenantConnectionService } from '../tenant/tenant.service';
+import { CalendarSourceService } from '../calendar-source/calendar-source.service';
 
 // Mock axios
 jest.mock('axios');
@@ -129,6 +130,10 @@ describe('ExternalCalendarService', () => {
       },
     };
 
+    const mockCalendarSourceService = {
+      findByUlid: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ExternalCalendarService,
@@ -139,6 +144,10 @@ describe('ExternalCalendarService', () => {
         {
           provide: TenantConnectionService,
           useValue: mockTenantConnectionService,
+        },
+        {
+          provide: CalendarSourceService,
+          useValue: mockCalendarSourceService,
         },
         {
           provide: REQUEST,
@@ -432,6 +441,10 @@ describe('ExternalCalendarService', () => {
         },
       };
 
+      const mockCalendarSourceServiceLocal = {
+        findByUlid: jest.fn(),
+      };
+
       const moduleWithoutConfig: TestingModule = await Test.createTestingModule(
         {
           providers: [
@@ -443,6 +456,10 @@ describe('ExternalCalendarService', () => {
             {
               provide: TenantConnectionService,
               useValue: mockTenantServiceWithoutConfig,
+            },
+            {
+              provide: CalendarSourceService,
+              useValue: mockCalendarSourceServiceLocal,
             },
             {
               provide: REQUEST,
