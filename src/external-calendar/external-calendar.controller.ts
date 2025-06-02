@@ -25,6 +25,7 @@ import { CalendarSourceService } from '../calendar-source/calendar-source.servic
 import { CalendarSourceType } from '../calendar-source/dto/create-calendar-source.dto';
 import { CreateCalendarSourceDto } from '../calendar-source/dto/create-calendar-source.dto';
 import { OAuthCallbackDto } from './dto/oauth-callback.dto';
+import { GetEventsDto } from './dto/get-events.dto';
 
 @ApiTags('External Calendar')
 @Controller('external-calendar')
@@ -323,6 +324,79 @@ export class ExternalCalendarController {
         connected: false,
         message: `Connection test error: ${error.message}`,
       };
+    }
+  }
+
+  @Post('events')
+  @ApiOperation({ summary: 'Get external calendar events for date range' })
+  @ApiResponse({
+    status: 200,
+    description: 'External events retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        events: { type: 'array' },
+        totalCount: { type: 'number' },
+        dateRange: {
+          type: 'object',
+          properties: {
+            startTime: { type: 'string' },
+            endTime: { type: 'string' },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid date range or parameters',
+  })
+  async getEvents(
+    @Body() getEventsDto: GetEventsDto,
+    @AuthUser() user: UserEntity,
+  ): Promise<{
+    events: any[];
+    totalCount: number;
+    dateRange: {
+      startTime: string;
+      endTime: string;
+    };
+  }> {
+    const tenantId = this.request.tenantId;
+    this.logger.log(
+      `Getting external events for user ${user.id} from ${getEventsDto.startTime} to ${getEventsDto.endTime}`,
+    );
+
+    try {
+      const startTime = new Date(getEventsDto.startTime);
+      const endTime = new Date(getEventsDto.endTime);
+
+      const result = await this.externalCalendarService.getExternalEvents(
+        user.id,
+        startTime,
+        endTime,
+        getEventsDto.calendarSourceIds,
+        tenantId,
+      );
+
+      this.logger.log(
+        `Found ${result.totalCount} external events for user ${user.id}`,
+      );
+
+      return {
+        events: result.events,
+        totalCount: result.totalCount,
+        dateRange: {
+          startTime: getEventsDto.startTime,
+          endTime: getEventsDto.endTime,
+        },
+      };
+    } catch (error) {
+      this.logger.error(
+        `Get external events failed for user ${user.id}:`,
+        error.message,
+      );
+      throw error;
     }
   }
 

@@ -1,5 +1,6 @@
 import { Injectable, Scope } from '@nestjs/common';
 import { Repository, FindOptionsWhere } from 'typeorm';
+import { ulid } from 'ulid';
 import { ExternalEventEntity } from '../entities/external-event.entity';
 import { TenantConnectionService } from '../../../../../tenant/tenant.service';
 
@@ -98,6 +99,7 @@ export class ExternalEventRepository {
 
     // Use PostgreSQL's ON CONFLICT DO UPDATE for efficient upserts
     const values = externalEvents.map((event) => ({
+      ulid: ulid(),
       externalId: event.externalId,
       summary: event.summary,
       startTime: event.startTime,
@@ -114,16 +116,19 @@ export class ExternalEventRepository {
       .insert()
       .into(ExternalEventEntity)
       .values(values as any) // Cast to any to avoid TypeORM's complex type inference
-      .orUpdate([
-        'summary',
-        'startTime',
-        'endTime',
-        'isAllDay',
-        'status',
-        'location',
-        'description',
-        'updatedAt',
-      ])
+      .orUpdate(
+        [
+          'summary',
+          'startTime',
+          'endTime',
+          'isAllDay',
+          'status',
+          'location',
+          'description',
+          'updatedAt',
+        ],
+        ['calendarSourceId', 'externalId'],
+      )
       .updateEntity(false)
       .execute();
   }
@@ -161,5 +166,36 @@ export class ExternalEventRepository {
       .andWhere('externalEvent.endTime > :startTime', { startTime })
       .orderBy('externalEvent.startTime', 'ASC')
       .getMany();
+  }
+
+  async findByUserAndTimeRange(
+    tenantId: string,
+    userId: number,
+    startTime: Date,
+    endTime: Date,
+    calendarSourceIds?: number[],
+  ): Promise<ExternalEventEntity[]> {
+    const repository = await this.getRepository(tenantId);
+
+    // Build query to find events for user's calendar sources
+    const queryBuilder = repository
+      .createQueryBuilder('externalEvent')
+      .leftJoinAndSelect('externalEvent.calendarSource', 'calendarSource')
+      .where('calendarSource.userId = :userId', { userId })
+      .andWhere('calendarSource.isActive = true')
+      .andWhere('externalEvent.startTime < :endTime', { endTime })
+      .andWhere('externalEvent.endTime > :startTime', { startTime });
+
+    // Filter by specific calendar sources if provided
+    if (calendarSourceIds && calendarSourceIds.length > 0) {
+      queryBuilder.andWhere(
+        'externalEvent.calendarSourceId IN (:...calendarSourceIds)',
+        {
+          calendarSourceIds,
+        },
+      );
+    }
+
+    return queryBuilder.orderBy('externalEvent.startTime', 'ASC').getMany();
   }
 }

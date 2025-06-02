@@ -12,6 +12,7 @@ import axios from 'axios';
 import * as ical from 'node-ical';
 import { CalendarSourceEntity } from '../calendar-source/infrastructure/persistence/relational/entities/calendar-source.entity';
 import { CalendarSourceType } from '../calendar-source/dto/create-calendar-source.dto';
+import { CalendarSourceService } from '../calendar-source/calendar-source.service';
 import { ExternalEventRepository } from './infrastructure/persistence/relational/repositories/external-event.repository';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { TenantConfig } from '../core/constants/constant';
@@ -44,6 +45,7 @@ export class ExternalCalendarService {
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly externalEventRepository: ExternalEventRepository,
+    private readonly calendarSourceService: CalendarSourceService,
   ) {
     this.tenantConfig = this.tenantConnectionService.getTenantConfig(
       this.request.headers['x-tenant-id'],
@@ -177,6 +179,91 @@ export class ExternalCalendarService {
         `Connection test failed for calendar source ${calendarSource.id}: ${error.message}`,
       );
       return false;
+    }
+  }
+
+  /**
+   * Get external events for display in calendar
+   */
+  async getExternalEvents(
+    userId: number,
+    startTime: Date,
+    endTime: Date,
+    calendarSourceIds: string[] | undefined,
+    tenantId: string,
+  ): Promise<{
+    events: any[];
+    totalCount: number;
+  }> {
+    this.logger.log(
+      `Getting external events for user ${userId} from ${startTime.toISOString()} to ${endTime.toISOString()}`,
+    );
+
+    try {
+      // Convert calendar source ULIDs to IDs if provided
+      let calendarSourceNumericIds: number[] | undefined;
+      if (calendarSourceIds && calendarSourceIds.length > 0) {
+        // Need to lookup the numeric IDs from ULIDs
+        calendarSourceNumericIds = [];
+
+        for (const ulid of calendarSourceIds) {
+          try {
+            const source = await this.calendarSourceService.findByUlid(
+              ulid,
+              tenantId,
+            );
+            if (source.userId === userId) {
+              calendarSourceNumericIds.push(source.id);
+            }
+          } catch {
+            this.logger.warn(
+              `Calendar source not found or inaccessible: ${ulid}`,
+            );
+          }
+        }
+      }
+
+      // Get events from the repository
+      const events = await this.externalEventRepository.findByUserAndTimeRange(
+        tenantId,
+        userId,
+        startTime,
+        endTime,
+        calendarSourceNumericIds,
+      );
+
+      this.logger.log(
+        `Found ${events.length} external events for user ${userId}`,
+      );
+
+      // Format events for API response
+      const formattedEvents = events.map((event) => ({
+        id: event.ulid,
+        externalId: event.externalId,
+        title: event.summary,
+        startTime: event.startTime,
+        endTime: event.endTime,
+        isAllDay: event.isAllDay,
+        status: event.status,
+        location: event.location,
+        description: event.description,
+        calendarSource: {
+          ulid: event.calendarSource?.ulid,
+          name: event.calendarSource?.name,
+          type: event.calendarSource?.type,
+        },
+      }));
+
+      return {
+        events: formattedEvents,
+        totalCount: formattedEvents.length,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Failed to get external events for user ${userId}: ${error.message}`,
+        error.stack,
+      );
+      throw error;
     }
   }
 
@@ -516,7 +603,7 @@ export class ExternalCalendarService {
     const oauth2Client = new google.auth.OAuth2(
       this.tenantConfig.googleClientId,
       this.tenantConfig.googleClientSecret,
-      `${this.tenantConfig.frontendDomain}/auth/calendar/callback`,
+      `${this.tenantConfig.frontendDomain}/auth/calendar/callback?type=google`,
     );
 
     try {

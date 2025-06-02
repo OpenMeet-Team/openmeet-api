@@ -32,8 +32,8 @@ export class AvailabilityService {
 
   async checkAvailability(
     userId: number,
-    startTime: Date,
-    endTime: Date,
+    startTime: string | Date,
+    endTime: string | Date,
     calendarSourceIds: string[],
     tenantId: string,
   ): Promise<AvailabilityResult> {
@@ -41,8 +41,13 @@ export class AvailabilityService {
       `Checking availability for user ${userId} from ${startTime} to ${endTime}`,
     );
 
+    // Convert string dates to Date objects
+    const startDate =
+      typeof startTime === 'string' ? new Date(startTime) : startTime;
+    const endDate = typeof endTime === 'string' ? new Date(endTime) : endTime;
+
     // Validate time range
-    if (endTime <= startTime) {
+    if (endDate <= startDate) {
       throw new BadRequestException('End time must be after start time');
     }
 
@@ -62,8 +67,8 @@ export class AvailabilityService {
         await this.externalEventRepository.findByCalendarSourceAndTimeRange(
           tenantId,
           calendarSource.id,
-          startTime,
-          endTime,
+          startDate,
+          endDate,
         );
 
       if (events.length > 0) {
@@ -97,8 +102,8 @@ export class AvailabilityService {
 
   async getConflicts(
     userId: number,
-    startTime: Date,
-    endTime: Date,
+    startTime: string | Date,
+    endTime: string | Date,
     calendarSourceIds: string[],
     tenantId: string,
   ): Promise<ConflictEvent[]> {
@@ -106,8 +111,13 @@ export class AvailabilityService {
       `Getting conflicts for user ${userId} from ${startTime} to ${endTime}`,
     );
 
+    // Convert string dates to Date objects
+    const startDate =
+      typeof startTime === 'string' ? new Date(startTime) : startTime;
+    const endDate = typeof endTime === 'string' ? new Date(endTime) : endTime;
+
     // Validate time range
-    if (endTime <= startTime) {
+    if (endDate <= startDate) {
       throw new BadRequestException('Invalid date range');
     }
 
@@ -126,8 +136,8 @@ export class AvailabilityService {
         await this.externalEventRepository.findByCalendarSourceAndTimeRange(
           tenantId,
           calendarSource.id,
-          startTime,
-          endTime,
+          startDate,
+          endDate,
         );
 
       // Convert events to conflict format

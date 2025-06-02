@@ -1,5 +1,4 @@
 import { IsArray, IsDateString, IsNotEmpty, IsOptional } from 'class-validator';
-import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CheckAvailabilityDto {
@@ -9,8 +8,7 @@ export class CheckAvailabilityDto {
   })
   @IsDateString()
   @IsNotEmpty()
-  @Type(() => Date)
-  startTime: Date;
+  startTime: string;
 
   @ApiProperty({
     description: 'End time for the availability check',
@@ -18,8 +16,7 @@ export class CheckAvailabilityDto {
   })
   @IsDateString()
   @IsNotEmpty()
-  @Type(() => Date)
-  endTime: Date;
+  endTime: string;
 
   @ApiProperty({
     description:

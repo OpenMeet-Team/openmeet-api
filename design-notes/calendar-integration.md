@@ -867,6 +867,25 @@ ALTER TABLE users ADD COLUMN calendar_work_days INTEGER[] DEFAULT ARRAY[1,2,3,4,
 - ✅ **API Documentation**: Complete Swagger/OpenAPI documentation
 - ✅ **TDD Implementation**: 29 new tests following test-driven development
 
+### ✅ **Phase 3.5: Unified Calendar View - COMPLETE**
+- ✅ **UnifiedCalendarComponent**: Complete Vue component with multi-source event display
+  - Multi-source Events: OpenMeet events, group events, external calendar conflicts
+  - Visual Differentiation: Color-coded by source (blue: personal, green: groups, orange: conflicts)
+  - Interactive Navigation: Month/week/day views with date controls
+  - Conflict Detection: Real-time display with conflict summary banners
+  - Responsive Design: Compact mode for widgets, full mode for dedicated views
+- ✅ **CustomCalendar Implementation**: Full custom calendar component replacing QCalendar
+  - Event Deduplication: Signature-based deduplication across all event sources
+  - Precise Event Positioning: Minute-based positioning for accurate time display
+  - Visual Day Selection: Orange highlighting with separate click areas for selection vs creation
+  - Timezone-Aware Date Handling: Local timezone formatting to prevent date shifts
+  - External Event Title Display: Robust title detection with multiple field fallbacks
+  - View Mode Switching: Proper date synchronization when switching between day/week/month views
+- ✅ **HomePage Integration**: Calendar integrated into home page user view
+- ✅ **Event Navigation**: Click-through from external events to conflict resolution
+- ✅ **Testing**: Component testing with 29 passing tests
+- ✅ **Production Ready**: Clean builds, ESLint compliant, type-safe implementation
+
 ### 🔄 **Phase 4: Advanced Features - PLANNED**
 - 🔄 Smart scheduling service
 - 🔄 Advanced scheduling UI
@@ -892,13 +911,23 @@ ALTER TABLE users ADD COLUMN calendar_work_days INTEGER[] DEFAULT ARRAY[1,2,3,4,
 9. 🔄 Build calendar connection UI components
 
 ### Current Status Summary  
-**Phase 3 Progress: 100% COMPLETE**
-- ✅ **ExternalCalendarController**: Complete OAuth flow, manual sync, connection testing
-- ✅ **AvailabilityController**: Check availability and find conflicts APIs
-- ✅ **AvailabilityService**: Business logic for conflict detection across calendar sources
-- ✅ **Enhanced CalendarSourceService**: ULID-based methods following OpenMeet guidelines
-- ✅ **Enhanced ExternalEventRepository**: Time range queries for availability checking
-- ✅ **TDD Implementation**: 61 total tests passing (32 from Phase 2 + 29 new in Phase 3)
-- ✅ **API Integration**: All controllers properly registered in ExternalCalendarModule
-- ✅ **Tenant Isolation**: All operations maintain proper tenant separation
+**Phase 3.5 Progress: 100% COMPLETE**
+- ✅ **Backend Foundation**: Complete external calendar integration (61 tests passing)
+  - ExternalCalendarController: OAuth flow, manual sync, connection testing
+  - AvailabilityController: Check availability and find conflicts APIs
+  - AvailabilityService: Business logic for conflict detection across calendar sources
+  - Enhanced CalendarSourceService: ULID-based methods following OpenMeet guidelines
+  - Enhanced ExternalEventRepository: Time range queries for availability checking
+- ✅ **Frontend Calendar Implementation**: Complete unified calendar view
+  - CustomCalendar Vue component: Full custom implementation with precise event positioning
+  - UnifiedCalendarComponent: Multi-source event aggregation and display
+  - External Event Title Display: Robust field detection (summary/title/name/subject)
+  - Timezone Handling: Local timezone formatting preventing date shift issues
+  - Event Deduplication: Signature-based deduplication across all sources
+  - Visual Enhancements: Day selection feedback, separate click areas, precise positioning
+- ✅ **Integration & Polish**: Production-ready implementation
+  - HomePage Integration: Calendar widget on user home page
+  - Event Navigation: Click-through from external events to proper event handling
+  - Testing: 29 frontend tests + 61 backend tests = 90 total tests passing
+  - Code Quality: ESLint compliant, TypeScript type-safe, clean builds
 - 🔄 **Phase 4**: Background scheduling and advanced features (next phase)
