@@ -12,6 +12,11 @@ This design document outlines the comprehensive calendar integration for OpenMee
 3. **As an event attendee**, I want to see upcoming OpenMeet events alongside my other commitments
 4. **As an event creator**, I want to find available times that work for attendees
 5. **As a group organizer**, I want to share our group calendar with members
+6. as a group member, I want to see the group calendar in my calendar app all group events should show in a faded color while events we're attending are marked as such
+7. as a group member I want to be able to download all group events as a .ics file
+8. as a user I want to be able to download all my events as a .ics file
+9. as a user I want to be able to download all my group events as a .ics file
+10. 
 
 ### User Experience Scenarios
 
