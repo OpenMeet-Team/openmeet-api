@@ -175,7 +175,10 @@ describe('EventQueryService', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             group: { id: 1 },
-            status: EventStatus.Published,
+            status: expect.objectContaining({
+              _type: 'in',
+              _value: [EventStatus.Published, EventStatus.Cancelled],
+            }),
           }),
           take: 3,
         }),

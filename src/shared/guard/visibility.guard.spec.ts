@@ -12,6 +12,7 @@ import { GroupMemberService } from '../../group-member/group-member.service';
 import {
   EventVisibility,
   GroupVisibility,
+  EventStatus,
 } from '../../core/constants/constant';
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
@@ -73,6 +74,7 @@ describe('VisibilityGuard', () => {
     it('should allow access to public events', async () => {
       mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
         visibility: EventVisibility.Public,
+        status: EventStatus.Published,
       } as unknown as EventEntity);
 
       const context = mockContext({
@@ -99,6 +101,7 @@ describe('VisibilityGuard', () => {
     it('should throw ForbiddenException for private event without user', async () => {
       mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
         visibility: EventVisibility.Private,
+        status: EventStatus.Published,
       } as unknown as EventEntity);
 
       const context = mockContext({
@@ -113,6 +116,7 @@ describe('VisibilityGuard', () => {
     it('should check both header and params for event slug', async () => {
       mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
         visibility: EventVisibility.Public,
+        status: EventStatus.Published,
       } as unknown as EventEntity);
 
       const context = mockContext({
@@ -188,6 +192,7 @@ describe('VisibilityGuard', () => {
     it('should require authentication for events with authenticated visibility', async () => {
       mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
         visibility: EventVisibility.Authenticated,
+        status: EventStatus.Published,
       } as unknown as EventEntity);
 
       const context = mockContext({
@@ -203,6 +208,7 @@ describe('VisibilityGuard', () => {
     it('should allow authenticated users to access authenticated events', async () => {
       mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
         visibility: EventVisibility.Authenticated,
+        status: EventStatus.Published,
       } as unknown as EventEntity);
 
       const context = mockContext({

@@ -1498,14 +1498,15 @@ export class EventManagementService {
 
     // Determine the appropriate role based on group membership
     let attendeeRole = EventAttendeeRole.Participant; // Default role
-    
+
     // If event belongs to a group, check if user is owner/admin
     if (event.group && event.group.id) {
-      const userGroupMember = await this.groupMemberService.findGroupMemberByUserId(
-        event.group.id,
-        userId,
-      );
-      
+      const userGroupMember =
+        await this.groupMemberService.findGroupMemberByUserId(
+          event.group.id,
+          userId,
+        );
+
       if (userGroupMember) {
         const userGroupRole = userGroupMember.groupRole?.name;
         if (userGroupRole === 'owner' || userGroupRole === 'admin') {
@@ -1513,10 +1514,9 @@ export class EventManagementService {
         }
       }
     }
-    
-    const participantRole = await this.eventRoleService.getRoleByName(
-      attendeeRole,
-    );
+
+    const participantRole =
+      await this.eventRoleService.getRoleByName(attendeeRole);
 
     // Calculate the appropriate status based on event settings
     let attendeeStatus = EventAttendeeStatus.Confirmed;

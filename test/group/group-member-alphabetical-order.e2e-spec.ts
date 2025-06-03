@@ -1,8 +1,5 @@
 import * as request from 'supertest';
-import {
-  TESTING_APP_URL,
-  TESTING_TENANT_ID,
-} from '../utils/constants';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import {
   createTestUser,
   createGroup,
@@ -15,7 +12,7 @@ describe('Group Member Alphabetical Order (e2e)', () => {
   let serverApp: any;
   let groupOwner: any;
   let testGroup: any;
-  let testMembers: any[] = [];
+  const testMembers: any[] = [];
 
   beforeAll(async () => {
     // Set up server app agent with tenant
@@ -58,10 +55,15 @@ describe('Group Member Alphabetical Order (e2e)', () => {
         memberData[i].firstName,
         memberData[i].lastName,
       );
-      
+
       // Have each member join the group
-      await joinGroup(TESTING_APP_URL, testTenantId, testGroup.slug, member.token);
-      
+      await joinGroup(
+        TESTING_APP_URL,
+        testTenantId,
+        testGroup.slug,
+        member.token,
+      );
+
       testMembers.push({
         ...member,
         firstName: memberData[i].firstName,
@@ -79,8 +81,9 @@ describe('Group Member Alphabetical Order (e2e)', () => {
     );
 
     // Filter out the group owner and focus on the test members we added
-    const membersSortedByApi = members.filter((member: any) => 
-      member.user.firstName !== 'Group' || member.user.lastName !== 'Owner'
+    const membersSortedByApi = members.filter(
+      (member: any) =>
+        member.user.firstName !== 'Group' || member.user.lastName !== 'Owner',
     );
 
     // Expected order based on lastName then firstName
@@ -94,10 +97,16 @@ describe('Group Member Alphabetical Order (e2e)', () => {
     ];
 
     // Verify we have the expected number of members
-    expect(membersSortedByApi.length).toBeGreaterThanOrEqual(expectedOrder.length);
+    expect(membersSortedByApi.length).toBeGreaterThanOrEqual(
+      expectedOrder.length,
+    );
 
     // Check that members are sorted correctly
-    for (let i = 0; i < Math.min(membersSortedByApi.length - 1, expectedOrder.length - 1); i++) {
+    for (
+      let i = 0;
+      i < Math.min(membersSortedByApi.length - 1, expectedOrder.length - 1);
+      i++
+    ) {
       const currentMember = membersSortedByApi[i];
       const nextMember = membersSortedByApi[i + 1];
 
@@ -106,12 +115,16 @@ describe('Group Member Alphabetical Order (e2e)', () => {
 
       // Primary sort: lastName should be in ascending order
       if (currentLastName !== nextLastName) {
-        expect(currentLastName.localeCompare(nextLastName)).toBeLessThanOrEqual(0);
+        expect(currentLastName.localeCompare(nextLastName)).toBeLessThanOrEqual(
+          0,
+        );
       } else {
         // Secondary sort: if lastNames are equal, firstName should be in ascending order
         const currentFirstName = currentMember.user.firstName;
         const nextFirstName = nextMember.user.firstName;
-        expect(currentFirstName.localeCompare(nextFirstName)).toBeLessThanOrEqual(0);
+        expect(
+          currentFirstName.localeCompare(nextFirstName),
+        ).toBeLessThanOrEqual(0);
       }
     }
 
@@ -125,11 +138,11 @@ describe('Group Member Alphabetical Order (e2e)', () => {
     let lastFoundIndex = -1;
     for (const expectedMember of expectedOrder) {
       const foundIndex = actualOrder.findIndex(
-        (actual: any) => 
-          actual.firstName === expectedMember.firstName && 
-          actual.lastName === expectedMember.lastName
+        (actual: any) =>
+          actual.firstName === expectedMember.firstName &&
+          actual.lastName === expectedMember.lastName,
       );
-      
+
       if (foundIndex !== -1) {
         expect(foundIndex).toBeGreaterThan(lastFoundIndex);
         lastFoundIndex = foundIndex;
@@ -155,8 +168,13 @@ describe('Group Member Alphabetical Order (e2e)', () => {
         sameSurnameMembers[i].firstName,
         sameSurnameMembers[i].lastName,
       );
-      
-      await joinGroup(TESTING_APP_URL, testTenantId, testGroup.slug, member.token);
+
+      await joinGroup(
+        TESTING_APP_URL,
+        testTenantId,
+        testGroup.slug,
+        member.token,
+      );
       addedMembers.push(member);
     }
 
@@ -168,14 +186,16 @@ describe('Group Member Alphabetical Order (e2e)', () => {
     );
 
     // Find members with the same last name
-    const sameNameMembers = members.filter((member: any) => 
-      member.user.lastName === 'SameName'
+    const sameNameMembers = members.filter(
+      (member: any) => member.user.lastName === 'SameName',
     );
 
     expect(sameNameMembers.length).toBe(3);
 
     // Verify they are sorted by first name
-    const firstNames = sameNameMembers.map((member: any) => member.user.firstName);
+    const firstNames = sameNameMembers.map(
+      (member: any) => member.user.firstName,
+    );
     const expectedFirstNames = ['Adam', 'Mike', 'Zoe']; // Alphabetical order
 
     expect(firstNames).toEqual(expectedFirstNames);

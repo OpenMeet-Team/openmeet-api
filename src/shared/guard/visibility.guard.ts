@@ -9,6 +9,7 @@ import {
 import {
   EventVisibility,
   GroupVisibility,
+  EventStatus,
 } from '../../core/constants/constant';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { GroupService } from '../../group/group.service';
@@ -34,6 +35,15 @@ export class VisibilityGuard implements CanActivate {
     if (eventSlug) {
       const event = await this.eventQueryService.findEventBySlug(eventSlug);
       if (!event) {
+        throw new NotFoundException('VisibilityGuard: Event not found');
+      }
+
+      // Only allow access to published and cancelled events
+      // Draft and pending events should only be accessible via dashboard/edit routes
+      if (
+        event.status !== EventStatus.Published &&
+        event.status !== EventStatus.Cancelled
+      ) {
         throw new NotFoundException('VisibilityGuard: Event not found');
       }
 

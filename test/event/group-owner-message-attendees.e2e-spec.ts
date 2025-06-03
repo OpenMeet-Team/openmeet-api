@@ -71,7 +71,12 @@ describe('Group Owner Message Event Attendees (e2e)', () => {
     });
 
     // Have the member join the group
-    await joinGroup(TESTING_APP_URL, testTenantId, testGroup.slug, member.token);
+    await joinGroup(
+      TESTING_APP_URL,
+      testTenantId,
+      testGroup.slug,
+      member.token,
+    );
 
     // Have the member attend the event
     await serverApp
@@ -116,7 +121,8 @@ describe('Group Owner Message Event Attendees (e2e)', () => {
   it('should allow group owner to send message to event attendees', async () => {
     const messageData = {
       subject: 'Test message from group owner',
-      message: 'This is a test message from the group owner to all event attendees.',
+      message:
+        'This is a test message from the group owner to all event attendees.',
     };
 
     const timestampBeforeRequest = Date.now();
@@ -162,7 +168,9 @@ describe('Group Owner Message Event Attendees (e2e)', () => {
       expect(response.body.message).toContain('not found');
     } else if (response.status === 403) {
       // This would be unexpected - group owner should have permission
-      console.warn('Group owner was denied permission - this may indicate a bug');
+      console.warn(
+        'Group owner was denied permission - this may indicate a bug',
+      );
     }
   }, 15000);
 
