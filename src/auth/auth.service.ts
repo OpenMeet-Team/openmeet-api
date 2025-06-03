@@ -157,8 +157,11 @@ export class AuthService {
             errors: {
               social_auth: errorData.errors.email,
               auth_provider: authProvider,
-              suggested_provider: errorData.errors.email.includes('google') ? 'google' : 
-                                 errorData.errors.email.includes('github') ? 'github' : 'email',
+              suggested_provider: errorData.errors.email.includes('google')
+                ? 'google'
+                : errorData.errors.email.includes('github')
+                  ? 'github'
+                  : 'email',
             },
           });
         }

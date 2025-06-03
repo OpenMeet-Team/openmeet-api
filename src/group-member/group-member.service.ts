@@ -261,6 +261,12 @@ export class GroupMemberService {
       },
       take: limit,
       relations: ['user.photo', 'groupRole'],
+      order: {
+        user: {
+          lastName: 'ASC',
+          firstName: 'ASC',
+        },
+      },
       select: {
         id: true,
         groupRole: {

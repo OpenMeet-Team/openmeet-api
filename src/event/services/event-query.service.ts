@@ -7,7 +7,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import { Repository, Brackets } from 'typeorm';
+import { Repository, Brackets, In } from 'typeorm';
 import { instanceToPlain } from 'class-transformer';
 import { EventEntity } from '../infrastructure/persistence/relational/entities/event.entity';
 import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
@@ -284,7 +284,9 @@ export class EventQueryService {
             status: EventAttendeeStatus.Confirmed,
           }),
       )
-      .where('event.status = :status', { status: EventStatus.Published })
+      .where('event.status IN (:...statuses)', {
+        statuses: [EventStatus.Published, EventStatus.Cancelled],
+      })
       .orderBy('event.startDate', 'ASC')
       .addOrderBy('event.id', 'ASC');
 
@@ -356,15 +358,12 @@ export class EventQueryService {
     } else if (toDate) {
       eventQuery.andWhere('event.startDate <= :toDate', { toDate });
     } else {
-      // Show future events and currently active events
-      // Future events: startDate > now
-      // Currently active events with endDate: startDate <= now AND endDate > now
-      // Currently active events without endDate: startDate <= now AND startDate > (now - 1 hour)
+      // Default behavior: show future events and currently active events only
+      // Past events are only shown on user's personal dashboard
       eventQuery.andWhere(
-        '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))',
+        '(event.startDate > :now OR (event.startDate <= :now AND event.endDate > :now))',
         {
           now: new Date(),
-          oneHourAgo: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
         },
       );
     }
@@ -476,7 +475,9 @@ export class EventQueryService {
     await this.initializeRepository();
     const eventQuery = this.eventRepository
       .createQueryBuilder('event')
-      .where('event.status = :status', { status: EventStatus.Published })
+      .where('event.status IN (:...statuses)', {
+        statuses: [EventStatus.Published, EventStatus.Cancelled],
+      })
       .select(['event.name', 'event.slug']);
 
     if (query.search) {
@@ -551,7 +552,7 @@ export class EventQueryService {
     const events = await this.eventRepository.find({
       where: {
         group: { id: groupId },
-        status: EventStatus.Published,
+        status: In([EventStatus.Published, EventStatus.Cancelled]),
       },
       take: limit,
     });
@@ -584,7 +585,9 @@ export class EventQueryService {
     const events = await this.eventRepository
       .createQueryBuilder('event')
       .where('event.group.id = :groupId', { groupId })
-      .andWhere('event.status = :status', { status: EventStatus.Published })
+      .andWhere('event.status IN (:...statuses)', {
+        statuses: [EventStatus.Published, EventStatus.Cancelled],
+      })
       .andWhere(
         '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))',
         { now, oneHourAgo },
