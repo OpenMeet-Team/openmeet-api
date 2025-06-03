@@ -1,20 +1,19 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, Scope } from '@nestjs/common';
 
 import { ICalendarService } from '../event/services/ical/ical.service';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { GroupService } from '../group/group.service';
 import { EventQueryService } from '../event/services/event-query.service';
+import { AuthService } from '../auth/auth.service';
+import { GroupPermission } from '../core/constants/constant';
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class CalendarFeedService {
   constructor(
     private readonly groupService: GroupService,
     private readonly eventQueryService: EventQueryService,
     private readonly iCalendarService: ICalendarService,
+    private readonly authService: AuthService,
   ) {}
 
   async getUserCalendarFeed(
@@ -39,19 +38,8 @@ export class CalendarFeedService {
     endDate?: string,
     userId?: number,
   ): Promise<string> {
-    // Find group by slug
-    const group = await this.groupService.findGroupBySlug(groupSlug);
-    if (!group) {
-      throw new NotFoundException(`Group with slug ${groupSlug} not found`);
-    }
-
-    // Check access permissions
-    const hasAccess = this.validateFeedAccess(group, userId);
-    if (!hasAccess) {
-      throw new ForbiddenException('Access denied to private group calendar');
-    }
-
     // Get group's events using the event query service
+    // Since both services are now request-scoped, tenant context is automatically available
     const events = await this.eventQueryService.findGroupEvents(
       groupSlug,
       startDate,
@@ -63,24 +51,88 @@ export class CalendarFeedService {
     return this.iCalendarService.generateICalendarForEvents(events);
   }
 
-  validateFeedAccess(group: GroupEntity, userId?: number): boolean {
+  async findGroupBySlug(groupSlug: string): Promise<GroupEntity | null> {
+    try {
+      // Both services are now request-scoped, so tenant context is automatically available
+      return await this.groupService.findGroupBySlug(groupSlug);
+    } catch {
+      // Log error for debugging
+      return null;
+    }
+  }
+
+  private async findGroupForCalendarAccess(
+    groupSlug: string,
+  ): Promise<GroupEntity | null> {
+    try {
+      // We need to access the group repository directly to load the createdBy relationship
+      // Since GroupService.findGroupBySlug doesn't load it
+      const group = await this.groupService.findGroupBySlug(groupSlug);
+      return group;
+    } catch {
+      return null;
+    }
+  }
+
+  async validateFeedAccess(
+    group: GroupEntity,
+    userSlug?: string,
+  ): Promise<boolean> {
     // Public groups are accessible to everyone
     if (group.visibility === 'public') {
       return true;
     }
 
-    // Private groups require user authentication
+    // Private groups require user authentication and proper permissions
     if (group.visibility === 'private') {
-      if (!userId) {
+      if (!userSlug) {
         return false;
       }
 
-      // For private groups, assume access if userId is provided
-      // The actual membership check happens in the query
-      return true;
+      try {
+        // Use the same permission checking pattern as PermissionsGuard
+        // Check if user has SEE_EVENTS permission for this group
+        const groupMember =
+          await this.authService.getGroupMemberByUserSlugAndGroupSlug(
+            userSlug,
+            group.slug,
+          );
+
+        if (!groupMember) {
+          return false;
+        }
+
+        if (!groupMember.groupRole?.groupPermissions) {
+          return false;
+        }
+
+        // Check if user has SEE_EVENTS permission
+        const hasPermission = this.hasRequiredPermissions(
+          groupMember.groupRole.groupPermissions,
+          [GroupPermission.SeeEvents],
+        );
+
+        return hasPermission;
+      } catch {
+        // If we can't check permissions, deny access
+        return false;
+      }
     }
 
     return false;
+  }
+
+  private hasRequiredPermissions(
+    userPermissions: any[],
+    requiredPermissions: string[],
+  ): boolean {
+    if (!userPermissions || !Array.isArray(userPermissions)) {
+      return false;
+    }
+
+    return requiredPermissions.every((required) =>
+      userPermissions.some((p) => p.name === required),
+    );
   }
 
   getDefaultDateRange(): { startDate: string; endDate: string } {

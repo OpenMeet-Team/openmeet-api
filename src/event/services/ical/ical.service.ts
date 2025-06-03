@@ -55,9 +55,22 @@ export class ICalendarService {
 
     // Add the organizer if available
     if (event.user && event.user.email) {
+      // Build a fallback name from firstName/lastName if name is empty
+      let organizerName = event.user.name;
+      if (!organizerName || organizerName.trim() === '') {
+        const firstName = (event.user as any).firstName || '';
+        const lastName = (event.user as any).lastName || '';
+        organizerName = `${firstName} ${lastName}`.trim();
+
+        // If still empty, use email username as fallback
+        if (!organizerName) {
+          organizerName = event.user.email.split('@')[0];
+        }
+      }
+
       calEvent.organizer({
-        name: event.user.name || '',
-        email: event.user.email || '',
+        name: organizerName,
+        email: event.user.email,
       });
     }
 

@@ -3,16 +3,17 @@ import { CalendarFeedService } from './calendar-feed.service';
 import { GroupService } from '../group/group.service';
 import { EventQueryService } from '../event/services/event-query.service';
 import { ICalendarService } from '../event/services/ical/ical.service';
+import { AuthService } from '../auth/auth.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
-import { NotFoundException, ForbiddenException } from '@nestjs/common';
 
 describe('CalendarFeedService', () => {
   let service: CalendarFeedService;
   let mockGroupService: jest.Mocked<GroupService>;
   let mockEventQueryService: jest.Mocked<EventQueryService>;
   let mockICalendarService: jest.Mocked<ICalendarService>;
+  let mockAuthService: jest.Mocked<AuthService>;
 
   const createMockEvent = (
     overrides: Partial<EventEntity> = {},
@@ -57,6 +58,10 @@ describe('CalendarFeedService', () => {
       generateICalendarForEvents: jest.fn(),
     } as any;
 
+    mockAuthService = {
+      getGroupMemberByUserSlugAndGroupSlug: jest.fn(),
+    } as any;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CalendarFeedService,
@@ -72,10 +77,14 @@ describe('CalendarFeedService', () => {
           provide: ICalendarService,
           useValue: mockICalendarService,
         },
+        {
+          provide: AuthService,
+          useValue: mockAuthService,
+        },
       ],
     }).compile();
 
-    service = module.get<CalendarFeedService>(CalendarFeedService);
+    service = await module.resolve<CalendarFeedService>(CalendarFeedService);
   });
 
   afterEach(() => {
@@ -139,14 +148,12 @@ describe('CalendarFeedService', () => {
   describe('getGroupCalendarFeed', () => {
     it('should generate iCal feed for public group events', async () => {
       const groupSlug = 'test-group';
-      const group = createMockGroup({ visibility: 'public' as any });
       const events = [
         createMockEvent({ name: 'Group Event 1' }),
         createMockEvent({ name: 'Group Event 2', id: 2 }),
       ];
       const expectedIcal = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\n...';
 
-      mockGroupService.findGroupBySlug.mockResolvedValue(group);
       mockEventQueryService.findGroupEvents.mockResolvedValue(events);
       mockICalendarService.generateICalendarForEvents.mockReturnValue(
         expectedIcal,
@@ -154,7 +161,6 @@ describe('CalendarFeedService', () => {
 
       const result = await service.getGroupCalendarFeed(groupSlug);
 
-      expect(mockGroupService.findGroupBySlug).toHaveBeenCalledWith(groupSlug);
       expect(mockEventQueryService.findGroupEvents).toHaveBeenCalledWith(
         groupSlug,
         undefined,
@@ -167,36 +173,12 @@ describe('CalendarFeedService', () => {
       expect(result).toBe(expectedIcal);
     });
 
-    it('should throw NotFoundException when group not found', async () => {
-      const groupSlug = 'nonexistent-group';
-      mockGroupService.findGroupBySlug.mockRejectedValue(
-        new NotFoundException('Group not found'),
-      );
-
-      await expect(service.getGroupCalendarFeed(groupSlug)).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('should require authentication for private group feeds', async () => {
-      const groupSlug = 'private-group';
-      const group = createMockGroup({ visibility: 'private' as any });
-
-      mockGroupService.findGroupBySlug.mockResolvedValue(group);
-
-      await expect(service.getGroupCalendarFeed(groupSlug)).rejects.toThrow(
-        ForbiddenException,
-      );
-    });
-
-    it('should allow private group access with user ID', async () => {
-      const groupSlug = 'private-group';
+    it('should pass user ID when provided', async () => {
+      const groupSlug = 'test-group';
       const userId = 1;
-      const group = createMockGroup({ visibility: 'private' as any });
       const events = [createMockEvent()];
       const expectedIcal = 'BEGIN:VCALENDAR...';
 
-      mockGroupService.findGroupBySlug.mockResolvedValue(group);
       mockEventQueryService.findGroupEvents.mockResolvedValue(events);
       mockICalendarService.generateICalendarForEvents.mockReturnValue(
         expectedIcal,
@@ -220,28 +202,40 @@ describe('CalendarFeedService', () => {
   });
 
   describe('validateFeedAccess', () => {
-    it('should allow access to public group feeds', () => {
+    it('should allow access to public group feeds', async () => {
       const group = createMockGroup({ visibility: 'public' as any });
 
-      const result = service.validateFeedAccess(group);
+      const result = await service.validateFeedAccess(group);
 
       expect(result).toBe(true);
     });
 
-    it('should deny access to private group feeds without user', () => {
+    it('should deny access to private group feeds without user', async () => {
       const group = createMockGroup({ visibility: 'private' as any });
 
-      const result = service.validateFeedAccess(group);
+      const result = await service.validateFeedAccess(group);
 
       expect(result).toBe(false);
     });
 
-    it('should allow access to private group feeds for members', () => {
+    it('should allow access to private group feeds for members', async () => {
       const group = createMockGroup({ visibility: 'private' as any });
-      const userId = 1;
+      const userSlug = 'test-user';
+      const mockGroupMember = {
+        groupRole: {
+          groupPermissions: [{ name: 'SEE_EVENTS' }],
+        },
+      };
 
-      const result = service.validateFeedAccess(group, userId);
+      mockAuthService.getGroupMemberByUserSlugAndGroupSlug.mockResolvedValue(
+        mockGroupMember as any,
+      );
 
+      const result = await service.validateFeedAccess(group, userSlug);
+
+      expect(
+        mockAuthService.getGroupMemberByUserSlugAndGroupSlug,
+      ).toHaveBeenCalledWith(userSlug, group.slug);
       expect(result).toBe(true);
     });
   });

@@ -1,11 +1,11 @@
 import request from 'supertest';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
-import { 
-  createTestUser, 
-  createGroup, 
-  createEvent, 
+import {
+  createTestUser,
+  createGroup,
+  createEvent,
   joinGroup,
-  loginAsTester
+  approveMember,
 } from '../utils/functions';
 
 // Set a global timeout for all tests in this file
@@ -27,7 +27,7 @@ describe('Calendar Download (e2e)', () => {
       TESTING_TENANT_ID,
       `calendar-test-user1-${Date.now()}@example.com`,
       'Calendar',
-      'User1'
+      'User1',
     );
     user1Token = user1.token;
 
@@ -36,7 +36,7 @@ describe('Calendar Download (e2e)', () => {
       TESTING_TENANT_ID,
       `calendar-test-user2-${Date.now()}@example.com`,
       'Calendar',
-      'User2'
+      'User2',
     );
     user2Token = user2.token;
 
@@ -69,7 +69,6 @@ describe('Calendar Download (e2e)', () => {
       categories: [1], // Use existing category 1
       status: 'published', // Ensure event is published
     });
-
   });
 
   afterAll(async () => {
@@ -81,14 +80,14 @@ describe('Calendar Download (e2e)', () => {
           .set('Authorization', `Bearer ${user1Token}`)
           .set('x-tenant-id', TESTING_TENANT_ID);
       }
-      
+
       if (publicGroup?.slug) {
         await request(TESTING_APP_URL)
           .delete(`/api/groups/${publicGroup.slug}`)
           .set('Authorization', `Bearer ${user1Token}`)
           .set('x-tenant-id', TESTING_TENANT_ID);
       }
-      
+
       if (privateGroup?.slug) {
         await request(TESTING_APP_URL)
           .delete(`/api/groups/${privateGroup.slug}`)
@@ -108,7 +107,9 @@ describe('Calendar Download (e2e)', () => {
 
       expect(response.status).toBe(200);
       expect(response.headers['content-type']).toContain('text/calendar');
-      expect(response.headers['content-disposition']).toContain(`filename="${publicGroup.slug}.ics"`);
+      expect(response.headers['content-disposition']).toContain(
+        `filename="${publicGroup.slug}.ics"`,
+      );
       expect(response.text).toContain('BEGIN:VCALENDAR');
       expect(response.text).toContain('END:VCALENDAR');
     });
@@ -132,7 +133,9 @@ describe('Calendar Download (e2e)', () => {
 
       expect(response.status).toBe(200);
       expect(response.headers['content-type']).toContain('text/calendar');
-      expect(response.headers['content-disposition']).toContain(`filename="${publicGroup.slug}.ics"`);
+      expect(response.headers['content-disposition']).toContain(
+        `filename="${publicGroup.slug}.ics"`,
+      );
     });
   });
 
@@ -143,7 +146,7 @@ describe('Calendar Download (e2e)', () => {
         .set('x-tenant-id', TESTING_TENANT_ID);
 
       expect(response.status).toBe(403);
-      expect(response.body.message).toContain('denied');
+      expect(response.body.message).toContain('Authentication required');
     });
 
     it('should deny non-members access to private group calendar', async () => {
@@ -153,7 +156,9 @@ describe('Calendar Download (e2e)', () => {
         .set('x-tenant-id', TESTING_TENANT_ID);
 
       expect(response.status).toBe(403);
-      expect(response.body.message).toContain('Access denied to private group calendar');
+      expect(response.body.message).toContain(
+        'Access denied to private group calendar',
+      );
     });
 
     it('should allow group owner to download private group calendar', async () => {
@@ -169,8 +174,22 @@ describe('Calendar Download (e2e)', () => {
     });
 
     it('should allow group members to download private group calendar', async () => {
-      // First, have user2 join the private group
-      await joinGroup(TESTING_APP_URL, TESTING_TENANT_ID, privateGroup.slug, user2Token);
+      // First, have user2 join the private group (becomes a guest)
+      const joinResult = await joinGroup(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        privateGroup.slug,
+        user2Token,
+      );
+
+      // Then approve user2 to become a member with SEE_EVENTS permission
+      await approveMember(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        privateGroup.slug,
+        joinResult.id,
+        user1Token,
+      );
 
       const response = await request(TESTING_APP_URL)
         .get(`/api/calendar/groups/${privateGroup.slug}/calendar.ics`)
@@ -193,7 +212,9 @@ describe('Calendar Download (e2e)', () => {
 
       expect(response.status).toBe(200);
       expect(response.headers['content-type']).toContain('text/calendar');
-      expect(response.headers['content-disposition']).toContain(`filename="${user1.slug}.ics"`);
+      expect(response.headers['content-disposition']).toContain(
+        `filename="${user1.slug}.ics"`,
+      );
       expect(response.text).toContain('BEGIN:VCALENDAR');
       expect(response.text).toContain('END:VCALENDAR');
     });
@@ -214,7 +235,9 @@ describe('Calendar Download (e2e)', () => {
 
       expect(response.status).toBe(200);
       expect(response.headers['content-type']).toContain('text/calendar');
-      expect(response.headers['content-disposition']).toContain(`filename="${user1.slug}.ics"`);
+      expect(response.headers['content-disposition']).toContain(
+        `filename="${user1.slug}.ics"`,
+      );
     });
   });
 
@@ -255,15 +278,18 @@ describe('Calendar Download (e2e)', () => {
         .set('x-tenant-id', TESTING_TENANT_ID);
 
       expect(response.status).toBe(404);
-      expect(response.body.message).toContain('Group with ID non-existent-group not found');
+      expect(response.body.message).toContain(
+        'Group with slug non-existent-group not found',
+      );
     });
 
-    it('should return 404 for missing tenant ID (group lookup fails)', async () => {
-      const response = await request(TESTING_APP_URL)
-        .get(`/api/calendar/groups/${publicGroup.slug}/calendar.ics`);
+    it('should return 401 for missing tenant ID', async () => {
+      const response = await request(TESTING_APP_URL).get(
+        `/api/calendar/groups/${publicGroup.slug}/calendar.ics`,
+      );
 
-      expect(response.status).toBe(404);
-      expect(response.body.message).toContain('Group with ID');
+      expect(response.status).toBe(401);
+      expect(response.body.message).toContain('Tenant');
     });
   });
 });

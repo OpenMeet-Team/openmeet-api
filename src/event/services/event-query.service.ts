@@ -1255,6 +1255,9 @@ export class EventQueryService {
       .where('(event.userId = :userId OR attendees.userId = :userId)', {
         userId,
       })
+      .andWhere('event.status IN (:...statuses)', {
+        statuses: [EventStatus.Published, EventStatus.Cancelled],
+      })
       .orderBy('event.startDate', 'ASC');
 
     // Apply date filters if provided
@@ -1287,12 +1290,15 @@ export class EventQueryService {
       .leftJoinAndSelect('event.group', 'group')
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.series', 'series')
-      .where('event.group.slug = :groupSlug', { groupSlug });
+      .where('group.slug = :groupSlug', { groupSlug })
+      .andWhere('event.status IN (:...statuses)', {
+        statuses: [EventStatus.Published, EventStatus.Cancelled],
+      });
 
     // For private groups, ensure user is a member (if userId provided)
     if (userId) {
       query = query
-        .leftJoinAndSelect('event.group.members', 'groupMembers')
+        .leftJoin('group.groupMembers', 'groupMembers')
         .andWhere(
           '(group.visibility = :publicVisibility OR groupMembers.userId = :userId)',
           {
