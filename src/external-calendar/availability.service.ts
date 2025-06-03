@@ -184,15 +184,19 @@ export class AvailabilityService {
 
         // Verify user ownership
         if (calendarSource.userId !== userId) {
-          throw new NotFoundException(
-            `Calendar source ${ulid} not found or access denied`,
+          this.logger.warn(
+            `User ${userId} attempted to access calendar source ${ulid} they don't own`,
           );
+          continue; // Skip this source instead of throwing error
         }
 
         calendarSources.push(calendarSource);
       } catch (error) {
         if (error instanceof NotFoundException) {
-          throw new NotFoundException(`One or more calendar sources not found`);
+          this.logger.warn(
+            `Calendar source ${ulid} not found for user ${userId}, skipping`,
+          );
+          continue; // Skip missing sources instead of throwing error
         }
         throw error;
       }

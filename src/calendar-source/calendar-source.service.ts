@@ -245,4 +245,26 @@ export class CalendarSourceService {
       }
     }
   }
+
+  async validateOwnershipByUlid(
+    ulid: string,
+    userId: number,
+    tenantId: string,
+  ): Promise<CalendarSourceEntity> {
+    const calendarSource = await this.findByUlid(ulid, tenantId);
+
+    if (calendarSource.userId !== userId) {
+      throw new ForbiddenException(
+        'You can only access your own calendar sources',
+      );
+    }
+
+    return calendarSource;
+  }
+
+  async removeByUlid(ulid: string, tenantId: string): Promise<void> {
+    const repository = await this.getRepository(tenantId);
+    const calendarSource = await this.findByUlid(ulid, tenantId);
+    await repository.remove(calendarSource);
+  }
 }

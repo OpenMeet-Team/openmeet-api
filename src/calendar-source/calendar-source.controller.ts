@@ -82,16 +82,12 @@ export class CalendarSourceController {
     @AuthUser() user: User,
   ): Promise<CalendarSourceEntity> {
     const tenantId = this.getTenantId();
-    const calendarSource = await this.calendarSourceService.findOne(
-      parseInt(id),
-      tenantId,
-    );
-    await this.calendarSourceService.validateOwnership(
-      parseInt(id),
+    await this.calendarSourceService.validateOwnershipByUlid(
+      id,
       user.id,
       tenantId,
     );
-    return calendarSource;
+    return this.calendarSourceService.findByUlid(id, tenantId);
   }
 
   @Patch(':id')
@@ -102,13 +98,13 @@ export class CalendarSourceController {
     @AuthUser() user: User,
   ): Promise<CalendarSourceEntity> {
     const tenantId = this.getTenantId();
-    await this.calendarSourceService.validateOwnership(
-      parseInt(id),
+    await this.calendarSourceService.validateOwnershipByUlid(
+      id,
       user.id,
       tenantId,
     );
-    return this.calendarSourceService.update(
-      parseInt(id),
+    return this.calendarSourceService.updateByUlid(
+      id,
       updateCalendarSourceDto,
       tenantId,
     );
@@ -118,12 +114,12 @@ export class CalendarSourceController {
   @ApiOperation({ summary: 'Delete a calendar source' })
   async remove(@Param('id') id: string, @AuthUser() user: User): Promise<void> {
     const tenantId = this.getTenantId();
-    await this.calendarSourceService.validateOwnership(
-      parseInt(id),
+    await this.calendarSourceService.validateOwnershipByUlid(
+      id,
       user.id,
       tenantId,
     );
-    return this.calendarSourceService.remove(parseInt(id), tenantId);
+    return this.calendarSourceService.removeByUlid(id, tenantId);
   }
 
   @Post(':id/sync')

@@ -943,7 +943,7 @@ END:VCALENDAR`;
         const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
         const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
         const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        
+
         mockedIcal.parseICS.mockReturnValue({
           'meeting-1@apple.com': {
             type: 'VEVENT',
@@ -960,7 +960,9 @@ END:VCALENDAR`;
             uid: 'vacation-day@apple.com',
             summary: 'Company Retreat',
             start: nextWeek.toISOString().split('T')[0], // All-day event format
-            end: new Date(nextWeek.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            end: new Date(nextWeek.getTime() + 24 * 60 * 60 * 1000)
+              .toISOString()
+              .split('T')[0],
             status: 'CONFIRMED',
             location: 'Mountain Resort',
             description: 'Annual company retreat',
@@ -1061,7 +1063,9 @@ END:VCALENDAR`;
         const startDate = new Date(Date.now() + 24 * 60 * 60 * 1000); // Start tomorrow
         const recurringEvents: any = {};
         for (let i = 0; i < 4; i++) {
-          const eventDate = new Date(startDate.getTime() + i * 7 * 24 * 60 * 60 * 1000);
+          const eventDate = new Date(
+            startDate.getTime() + i * 7 * 24 * 60 * 60 * 1000,
+          );
           const eventId = `weekly-standup@apple.com-${i}`;
           recurringEvents[eventId] = {
             type: 'VEVENT',
@@ -1154,7 +1158,7 @@ END:VCALENDAR`;
 
         const eventDate1 = new Date(Date.now() + 24 * 60 * 60 * 1000); // Tomorrow
         const eventDate2 = new Date(Date.now() + 48 * 60 * 60 * 1000); // Day after tomorrow
-        
+
         mockedIcal.parseICS.mockReturnValue({
           'abc123def456@google.com': {
             type: 'VEVENT',
@@ -1171,7 +1175,9 @@ END:VCALENDAR`;
             uid: 'xyz789uvw012@google.com',
             summary: 'Team Building Day',
             start: createDateWithTz(eventDate2),
-            end: createDateWithTz(new Date(eventDate2.getTime() + 24 * 60 * 60 * 1000)),
+            end: createDateWithTz(
+              new Date(eventDate2.getTime() + 24 * 60 * 60 * 1000),
+            ),
             status: 'CONFIRMED',
             location: 'Offsite Location',
             description: 'Team building activities and workshops',
@@ -1280,28 +1286,34 @@ END:VCALENDAR`;
 
         const outlookEvent1 = new Date(Date.now() + 24 * 60 * 60 * 1000); // Tomorrow
         const outlookEvent2 = new Date(Date.now() + 48 * 60 * 60 * 1000); // Day after tomorrow
-        
+
         mockedIcal.parseICS.mockReturnValue({
-          '040000008200E00074C5B7101A82E0080000000020240305T100000@outlook.com': {
-            type: 'VEVENT',
-            uid: '040000008200E00074C5B7101A82E0080000000020240305T100000@outlook.com',
-            summary: 'Project Status Meeting',
-            start: createDateWithTz(outlookEvent1),
-            end: createDateWithTz(new Date(outlookEvent1.getTime() + 90 * 60 * 1000)), // 1.5 hours
-            status: 'CONFIRMED',
-            location: 'Microsoft Teams Meeting',
-            description: 'Weekly project status meeting with stakeholders',
-          },
-          '040000008200E00074C5B7101A82E0080000000020240306T153000@outlook.com': {
-            type: 'VEVENT',
-            uid: '040000008200E00074C5B7101A82E0080000000020240306T153000@outlook.com',
-            summary: 'Optional Training Session',
-            start: createDateWithTz(outlookEvent2),
-            end: createDateWithTz(new Date(outlookEvent2.getTime() + 60 * 60 * 1000)),
-            status: 'TENTATIVE',
-            location: 'Training Room B',
-            description: 'Optional training session on new tools',
-          },
+          '040000008200E00074C5B7101A82E0080000000020240305T100000@outlook.com':
+            {
+              type: 'VEVENT',
+              uid: '040000008200E00074C5B7101A82E0080000000020240305T100000@outlook.com',
+              summary: 'Project Status Meeting',
+              start: createDateWithTz(outlookEvent1),
+              end: createDateWithTz(
+                new Date(outlookEvent1.getTime() + 90 * 60 * 1000),
+              ), // 1.5 hours
+              status: 'CONFIRMED',
+              location: 'Microsoft Teams Meeting',
+              description: 'Weekly project status meeting with stakeholders',
+            },
+          '040000008200E00074C5B7101A82E0080000000020240306T153000@outlook.com':
+            {
+              type: 'VEVENT',
+              uid: '040000008200E00074C5B7101A82E0080000000020240306T153000@outlook.com',
+              summary: 'Optional Training Session',
+              start: createDateWithTz(outlookEvent2),
+              end: createDateWithTz(
+                new Date(outlookEvent2.getTime() + 60 * 60 * 1000),
+              ),
+              status: 'TENTATIVE',
+              location: 'Training Room B',
+              description: 'Optional training session on new tools',
+            },
         } as any);
 
         const result = await service.syncCalendarSource(
@@ -1316,14 +1328,16 @@ END:VCALENDAR`;
           1,
           expect.arrayContaining([
             expect.objectContaining({
-              externalId: '040000008200E00074C5B7101A82E0080000000020240305T100000@outlook.com',
+              externalId:
+                '040000008200E00074C5B7101A82E0080000000020240305T100000@outlook.com',
               summary: 'Project Status Meeting',
               status: 'busy',
               location: 'Microsoft Teams Meeting',
               description: 'Weekly project status meeting with stakeholders',
             }),
             expect.objectContaining({
-              externalId: '040000008200E00074C5B7101A82E0080000000020240306T153000@outlook.com',
+              externalId:
+                '040000008200E00074C5B7101A82E0080000000020240306T153000@outlook.com',
               summary: 'Optional Training Session',
               status: 'tentative',
               location: 'Training Room B',
@@ -1353,7 +1367,9 @@ END:VCALENDAR`;
             uid: 'business-meeting',
             summary: 'Important <script>alert("xss")</script> Business Meeting',
             start: createDateWithTz(tomorrow),
-            end: createDateWithTz(new Date(tomorrow.getTime() + 2 * 60 * 60 * 1000)),
+            end: createDateWithTz(
+              new Date(tomorrow.getTime() + 2 * 60 * 60 * 1000),
+            ),
             status: 'CONFIRMED',
             location: 'Conference Room A',
             description: 'Quarterly business review with executives',
@@ -1362,18 +1378,27 @@ END:VCALENDAR`;
             type: 'VEVENT',
             uid: 'cancelled-appointment',
             summary: 'Doctor Appointment',
-            start: createDateWithTz(new Date(tomorrow.getTime() + 3 * 60 * 60 * 1000)),
-            end: createDateWithTz(new Date(tomorrow.getTime() + 4 * 60 * 60 * 1000)),
+            start: createDateWithTz(
+              new Date(tomorrow.getTime() + 3 * 60 * 60 * 1000),
+            ),
+            end: createDateWithTz(
+              new Date(tomorrow.getTime() + 4 * 60 * 60 * 1000),
+            ),
             status: 'CANCELLED',
             location: 'Medical Center',
-            description: 'Annual checkup - cancelled due to scheduling conflict',
+            description:
+              'Annual checkup - cancelled due to scheduling conflict',
           },
           'tentative-lunch': {
             type: 'VEVENT',
             uid: 'tentative-lunch',
             summary: 'Lunch with Client',
-            start: createDateWithTz(new Date(nextWeek.getTime() + 12 * 60 * 60 * 1000)),
-            end: createDateWithTz(new Date(nextWeek.getTime() + 13 * 60 * 60 * 1000)),
+            start: createDateWithTz(
+              new Date(nextWeek.getTime() + 12 * 60 * 60 * 1000),
+            ),
+            end: createDateWithTz(
+              new Date(nextWeek.getTime() + 13 * 60 * 60 * 1000),
+            ),
             status: 'TENTATIVE',
             location: 'Downtown Restaurant',
             description: 'Potential lunch meeting - awaiting confirmation',
@@ -1383,7 +1408,9 @@ END:VCALENDAR`;
             uid: 'all-day-conference',
             summary: 'Tech Conference 2024',
             start: nextWeek.toISOString().split('T')[0],
-            end: new Date(nextWeek.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            end: new Date(nextWeek.getTime() + 24 * 60 * 60 * 1000)
+              .toISOString()
+              .split('T')[0],
             status: 'CONFIRMED',
             location: 'Convention Center',
             description: 'Annual technology conference with industry leaders',
@@ -1393,8 +1420,12 @@ END:VCALENDAR`;
             type: 'VEVENT',
             uid: 'no-status-event',
             summary: 'Event Without Status',
-            start: createDateWithTz(new Date(nextWeek.getTime() + 15 * 60 * 60 * 1000)),
-            end: createDateWithTz(new Date(nextWeek.getTime() + 16 * 60 * 60 * 1000)),
+            start: createDateWithTz(
+              new Date(nextWeek.getTime() + 15 * 60 * 60 * 1000),
+            ),
+            end: createDateWithTz(
+              new Date(nextWeek.getTime() + 16 * 60 * 60 * 1000),
+            ),
             // No status field
             location: 'Unknown',
             description: 'Event with missing status information',
@@ -1410,16 +1441,29 @@ END:VCALENDAR`;
         expect(result.eventsCount).toBe(5);
 
         // Verify event status mapping
-        const storedEvents = mockExternalEventRepository.upsertMany.mock.calls[0][2];
-        const businessMeeting = storedEvents.find(e => e.externalId === 'business-meeting');
-        const cancelledEvent = storedEvents.find(e => e.externalId === 'cancelled-appointment');
-        const tentativeEvent = storedEvents.find(e => e.externalId === 'tentative-lunch');
-        const allDayEvent = storedEvents.find(e => e.externalId === 'all-day-conference');
-        const noStatusEvent = storedEvents.find(e => e.externalId === 'no-status-event');
+        const storedEvents =
+          mockExternalEventRepository.upsertMany.mock.calls[0][2];
+        const businessMeeting = storedEvents.find(
+          (e) => e.externalId === 'business-meeting',
+        );
+        const cancelledEvent = storedEvents.find(
+          (e) => e.externalId === 'cancelled-appointment',
+        );
+        const tentativeEvent = storedEvents.find(
+          (e) => e.externalId === 'tentative-lunch',
+        );
+        const allDayEvent = storedEvents.find(
+          (e) => e.externalId === 'all-day-conference',
+        );
+        const noStatusEvent = storedEvents.find(
+          (e) => e.externalId === 'no-status-event',
+        );
 
         expect(businessMeeting).toBeDefined();
         expect(businessMeeting!.status).toBe('busy');
-        expect(businessMeeting!.summary).toBe('Important scriptalert("xss")/script Business Meeting'); // XSS cleaned
+        expect(businessMeeting!.summary).toBe(
+          'Important scriptalert("xss")/script Business Meeting',
+        ); // XSS cleaned
         expect(cancelledEvent).toBeDefined();
         expect(cancelledEvent!.status).toBe('free');
         expect(tentativeEvent).toBeDefined();
@@ -1444,11 +1488,15 @@ END:VCALENDAR`;
         const now = new Date();
         const oneMonthAgo = new Date();
         oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-        const justOverOneMonthAgo = new Date(oneMonthAgo.getTime() - 24 * 60 * 60 * 1000);
+        const justOverOneMonthAgo = new Date(
+          oneMonthAgo.getTime() - 24 * 60 * 60 * 1000,
+        );
         const oneYearFromNow = new Date();
         oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
-        const justOverOneYearFromNow = new Date(oneYearFromNow.getTime() + 24 * 60 * 60 * 1000);
-        
+        const justOverOneYearFromNow = new Date(
+          oneYearFromNow.getTime() + 24 * 60 * 60 * 1000,
+        );
+
         // Adjust oneMonthAgo to be exactly at the boundary (should be included)
         const exactlyOneMonthAgo = new Date();
         exactlyOneMonthAgo.setMonth(exactlyOneMonthAgo.getMonth() - 1);
@@ -1459,7 +1507,9 @@ END:VCALENDAR`;
             uid: 'too-old-event',
             summary: 'Too Old Event',
             start: createDateWithTz(justOverOneMonthAgo),
-            end: createDateWithTz(new Date(justOverOneMonthAgo.getTime() + 60 * 60 * 1000)),
+            end: createDateWithTz(
+              new Date(justOverOneMonthAgo.getTime() + 60 * 60 * 1000),
+            ),
             status: 'CONFIRMED',
           },
           'just-old-enough': {
@@ -1467,7 +1517,9 @@ END:VCALENDAR`;
             uid: 'just-old-enough',
             summary: 'Just Old Enough',
             start: createDateWithTz(exactlyOneMonthAgo),
-            end: createDateWithTz(new Date(exactlyOneMonthAgo.getTime() + 60 * 60 * 1000)),
+            end: createDateWithTz(
+              new Date(exactlyOneMonthAgo.getTime() + 60 * 60 * 1000),
+            ),
             status: 'CONFIRMED',
           },
           'current-event': {
@@ -1483,7 +1535,9 @@ END:VCALENDAR`;
             uid: 'just-far-enough',
             summary: 'Just Far Enough',
             start: createDateWithTz(oneYearFromNow),
-            end: createDateWithTz(new Date(oneYearFromNow.getTime() + 60 * 60 * 1000)),
+            end: createDateWithTz(
+              new Date(oneYearFromNow.getTime() + 60 * 60 * 1000),
+            ),
             status: 'CONFIRMED',
           },
           'too-far-future': {
@@ -1491,7 +1545,9 @@ END:VCALENDAR`;
             uid: 'too-far-future',
             summary: 'Too Far Future',
             start: createDateWithTz(justOverOneYearFromNow),
-            end: createDateWithTz(new Date(justOverOneYearFromNow.getTime() + 60 * 60 * 1000)),
+            end: createDateWithTz(
+              new Date(justOverOneYearFromNow.getTime() + 60 * 60 * 1000),
+            ),
             status: 'CONFIRMED',
           },
         } as any);
@@ -1504,8 +1560,9 @@ END:VCALENDAR`;
         expect(result.success).toBe(true);
         expect(result.eventsCount).toBeGreaterThanOrEqual(2); // At least current and future events within range
 
-        const storedEvents = mockExternalEventRepository.upsertMany.mock.calls[0][2];
-        const eventIds = storedEvents.map(e => e.externalId);
+        const storedEvents =
+          mockExternalEventRepository.upsertMany.mock.calls[0][2];
+        const eventIds = storedEvents.map((e) => e.externalId);
         expect(eventIds).toContain('current-event');
         expect(eventIds).toContain('just-far-enough');
         expect(eventIds).not.toContain('too-old-event');
@@ -1532,10 +1589,13 @@ END:VCALENDAR`;
             uid: 'integration-test-event',
             summary: 'Integration Test Event',
             start: createDateWithTz(eventDate),
-            end: createDateWithTz(new Date(eventDate.getTime() + 90 * 60 * 1000)), // 1.5 hours
+            end: createDateWithTz(
+              new Date(eventDate.getTime() + 90 * 60 * 1000),
+            ), // 1.5 hours
             status: 'CONFIRMED',
             location: 'Test Location with Special Chars: <>&"\'',
-            description: 'Detailed event description for integration testing\nWith multiple lines\nAnd special characters: <script>test</script>',
+            description:
+              'Detailed event description for integration testing\nWith multiple lines\nAnd special characters: <script>test</script>',
           },
         } as any);
 
@@ -1563,7 +1623,9 @@ END:VCALENDAR`;
         );
 
         // Verify parsing was called
-        expect(mockedIcal.parseICS).toHaveBeenCalledWith('Complete integration test data');
+        expect(mockedIcal.parseICS).toHaveBeenCalledWith(
+          'Complete integration test data',
+        );
 
         // Verify database storage with complete event data
         expect(mockExternalEventRepository.upsertMany).toHaveBeenCalledTimes(1);
@@ -1579,16 +1641,20 @@ END:VCALENDAR`;
               isAllDay: false,
               status: 'busy',
               location: 'Test Location with Special Chars: <>&"\'',
-              description: 'Detailed event description for integration testing\nWith multiple lines\nAnd special characters: <script>test</script>',
+              description:
+                'Detailed event description for integration testing\nWith multiple lines\nAnd special characters: <script>test</script>',
               calendarSourceId: 1,
             }),
           ]),
         );
 
         // Verify the exact dates were preserved
-        const storedEvent = mockExternalEventRepository.upsertMany.mock.calls[0][2][0];
+        const storedEvent =
+          mockExternalEventRepository.upsertMany.mock.calls[0][2][0];
         expect(storedEvent.startTime).toEqual(eventDate);
-        expect(storedEvent.endTime).toEqual(new Date(eventDate.getTime() + 90 * 60 * 1000));
+        expect(storedEvent.endTime).toEqual(
+          new Date(eventDate.getTime() + 90 * 60 * 1000),
+        );
       });
     });
   });
