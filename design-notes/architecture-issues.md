@@ -321,3 +321,178 @@ The Matrix chat server being used for event and group communication has severe s
 - Implement global toggle for Matrix integration
 - Add per-event and per-group chat enablement flags
 - Develop retention policy for automatic room cleanup 
+
+## Data Integrity Issues
+
+### Event Series Group Association Bug
+
+**Issue Identified:** 2025-06-03
+
+**Description:**  
+Events created as part of a series are not properly inheriting the group association from their template event, resulting in orphaned events that don't appear in group event listings:
+
+1. **Missing Group ID Inheritance:**
+   - When events are generated from a series template, the `groupId` field is not being set from the template event
+   - This results in series events having NULL `groupId` values while the template event has the correct group association
+   - Events without `groupId` are excluded from group event queries, making them effectively invisible in the UI
+
+2. **Series Event Generation Process:**
+   - The event series generation/materialization process creates events with `seriesSlug` correctly set
+   - However, it fails to copy the `groupId` from the template event to the generated occurrences
+   - This suggests the issue is in the event creation logic within the series occurrence service
+
+3. **Query Filtering Impact:**
+   - The `findEventsForGroup` method in `EventQueryService` filters events by `group: { id: groupId }`
+   - Events with NULL `groupId` are never returned by this query, regardless of their series association
+   - This breaks the display of complete event series in group views
+
+4. **Database State Inconsistency:**
+   - Example case: Event `testing-should-be-in-series-egb1s7` was part of series `monday-morning-coding-session-pfp1hm-series`
+   - Template events in the series had `groupId = 2` (OpenMeet Guides group)
+   - Generated series event had `groupId = NULL`, making it invisible in group listings
+   - Calendar view shows incomplete series information
+
+**Impacts:**
+- Users see incomplete event series in group calendars and event lists
+- Events appear to be missing from series when viewed from group pages
+- Series functionality appears broken from a user perspective
+- Data integrity is compromised, making it difficult to track which events belong to which groups
+- Group administrators cannot see all events they should be managing
+
+**Root Cause Analysis:**
+The issue likely stems from the event series occurrence generation process not properly copying all relevant fields from the template event. The series creation correctly sets the `seriesSlug` relationship but fails to inherit group membership.
+
+**Immediate Fix Applied:**
+- Manually updated the affected event in database: `UPDATE events SET groupId = 2 WHERE slug = 'testing-should-be-in-series-egb1s7'`
+- This restored the event to proper group association and made it visible in group event listings
+
+**Proposed Long-term Solutions:**
+
+1. **Event Series Generation Fix:**
+   - Update the event series occurrence generation logic to copy `groupId` from template event
+   - Ensure all template event properties that should be inherited are properly copied to occurrences
+   - Add validation to verify group association is maintained during series event creation
+
+2. **Template Event Property Inheritance:**
+   - Review which fields should be inherited from template events to series occurrences
+   - Create a standardized list of properties that must be copied during series generation
+   - Implement automated copying of these properties in the series service
+
+3. **Data Integrity Validation:**
+   - Add database constraints or validation checks to ensure series events have proper group association
+   - Implement automated checks to detect and report orphaned events missing group associations
+   - Create a migration script to identify and fix existing orphaned series events
+
+4. **Series Service Improvements:**
+   - Refactor the event series occurrence service to use a more robust property copying mechanism
+   - Add logging to track when events are created without proper group association
+   - Implement verification steps after series event creation to ensure all required fields are set
+
+5. **Automated Testing:**
+   - Add integration tests to verify that series events properly inherit group membership
+   - Test the complete flow from series creation through event generation and group listing
+   - Ensure tests cover edge cases like series spanning multiple groups or template events changing groups
+
+**Next Steps:**
+- Investigate the event series occurrence generation code to identify where group inheritance fails
+- Implement property copying fix in the series service
+- Create a data migration to identify and fix any existing orphaned series events in production
+- Add automated tests to prevent regression of this issue
+- Consider adding database-level constraints to prevent future occurrences
+
+## Authorization and Visibility Architecture Issues
+
+### Inconsistent Auth/Visibility Pattern Across Services
+
+**Issue Identified:** 2025-06-03
+
+**Description:**  
+The codebase has inconsistent approaches to handling authentication and visibility concerns across different services, creating maintenance complexity and architectural debt:
+
+1. **Mixed Authorization Patterns:**
+   - **Calendar Service (Good Pattern):** Uses clean guard-based architecture with `VisibilityGuard` handling optional JWT auth + visibility logic
+   - **Event/Group Services (Problematic Pattern):** Authorization and visibility logic mixed directly into controllers and services
+   - This inconsistency makes the codebase harder to understand and maintain
+
+2. **Auth Logic Coupling Issues:**
+   - Event and Group controllers have authorization checks scattered throughout controller methods
+   - Services contain visibility logic that should be handled at the guard level
+   - Business logic is tightly coupled with authorization concerns
+   - Repeated auth/visibility checks across multiple methods and services
+
+3. **Testing and Maintenance Complexity:**
+   - Authorization logic mixed into business logic makes unit testing more complex
+   - Changes to auth requirements require updates across multiple services and controllers
+   - Inconsistent patterns make it harder for developers to understand how to implement new features
+   - Code duplication of auth/visibility checks across different endpoints
+
+4. **Guard Pattern Benefits (Calendar Service Example):**
+   - Clean separation of concerns: guards handle auth, controllers handle business logic
+   - Reusable authorization logic across multiple endpoints
+   - Easier to test auth logic in isolation
+   - Consistent behavior across all endpoints using the same guard
+   - Clearer code that follows single responsibility principle
+
+**Current Problematic Examples:**
+- Event controllers mixing `@UseGuards(JWTAuthGuard)`, `@Public()`, and visibility checks
+- Group services containing authorization logic alongside business logic
+- Repeated patterns of "check if user exists, then check permissions" across multiple methods
+- Visibility rules embedded in service methods rather than centralized
+
+**Impacts:**
+- Inconsistent user experience across different API endpoints
+- Higher maintenance burden when auth requirements change
+- Increased complexity for new developers learning the codebase
+- More opportunities for security bugs due to scattered auth logic
+- Difficulty in implementing consistent auth policies across the application
+
+**Proposed Solutions:**
+
+1. **Standardize on Guard-Based Architecture:**
+   - Migrate Event and Group controllers to use guard-based auth patterns like Calendar service
+   - Create reusable guards for common auth/visibility patterns
+   - Remove auth logic from service classes and move to appropriate guards
+
+2. **Create Standardized Auth Guards:**
+   - Extend the `VisibilityGuard` pattern to handle different resource types (events, groups, etc.)
+   - Create specialized guards for different permission levels (public, member-only, admin-only)
+   - Implement resource-specific visibility rules in dedicated guard classes
+
+3. **Refactor Controllers to Use Guards:**
+   - Remove inline auth checks from controller methods
+   - Apply appropriate guards at the controller or method level
+   - Make controllers focus purely on business logic delegation
+   - Standardize on `@Public()` + `@UseGuards(VisibilityGuard)` pattern for public-with-auth endpoints
+
+4. **Extract Auth Logic from Services:**
+   - Remove authorization concerns from service classes
+   - Make services assume authorization has already been handled by guards
+   - Focus services on pure business logic without auth considerations
+   - Create clear interfaces between auth layer and business logic layer
+
+5. **Documentation and Standards:**
+   - Document the standard auth patterns developers should follow
+   - Create guidelines for when to use which type of guard
+   - Establish code review standards to prevent regression to mixed patterns
+
+**Benefits of Standardization:**
+- Consistent auth behavior across all API endpoints
+- Easier maintenance and testing of auth logic
+- Clearer separation of concerns throughout the codebase
+- Reduced code duplication and potential for auth bugs
+- Better developer experience when implementing new features
+
+**Migration Strategy:**
+1. **Phase 1:** Audit current auth patterns across Event and Group controllers
+2. **Phase 2:** Create standardized guards based on Calendar service pattern
+3. **Phase 3:** Migrate Event controllers to use new guard-based approach
+4. **Phase 4:** Migrate Group controllers to use new guard-based approach  
+5. **Phase 5:** Remove auth logic from service classes
+6. **Phase 6:** Update documentation and establish coding standards
+
+**Next Steps:**
+- Conduct comprehensive audit of auth patterns across Event and Group services
+- Design standardized guard architecture based on Calendar service success
+- Create migration plan with backwards compatibility considerations
+- Implement new guards and begin controller migration
+- Update coding standards documentation to prevent future inconsistencies

@@ -35,11 +35,17 @@ async function bootstrap() {
           'https://localdev.openmeet.net',
           'http://localdev.openmeet.net',
           'https://platform.openmeet.net',
-          'https://platform-dev.openmeet.net'
+          'https://platform-dev.openmeet.net',
         ],
         credentials: true,
-        allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID'],
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
+        allowedHeaders: [
+          'Content-Type',
+          'Authorization',
+          'X-Tenant-ID',
+          'x-group-slug',
+          'x-event-slug',
+        ],
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
       },
       bufferLogs: false, // Changed from true to false to output logs immediately
     });

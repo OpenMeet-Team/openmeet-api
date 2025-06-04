@@ -554,6 +554,7 @@ export class EventQueryService {
         group: { id: groupId },
         status: In([EventStatus.Published, EventStatus.Cancelled]),
       },
+      relations: ['user', 'group', 'categories', 'series'],
       take: limit,
     });
 

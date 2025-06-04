@@ -108,10 +108,15 @@ export class AuthService {
       .update(randomStringGenerator())
       .digest('hex');
 
+    console.log('🔐 Session Debug - Creating new session for user:', user.id);
+    console.log('  - Generated hash:', hash.substring(0, 10) + '...');
+
     const session = await this.sessionService.create({
       user,
       hash,
     });
+
+    console.log('✅ Session Debug - Created session ID:', session.id);
 
     const { token, refreshToken, tokenExpires } = await this.getTokensData({
       id: user.id,
@@ -546,20 +551,47 @@ export class AuthService {
   async refreshToken(
     data: Pick<JwtRefreshPayloadType, 'sessionId' | 'hash'>,
   ): Promise<Omit<LoginResponseDto, 'user'>> {
+    console.log(
+      '🔄 RefreshToken Debug - Starting refresh for sessionId:',
+      data.sessionId,
+    );
     const session = await this.sessionService.findById(data.sessionId);
 
     if (!session) {
+      console.log(
+        '❌ RefreshToken Debug - Session not found for sessionId:',
+        data.sessionId,
+      );
       throw new UnauthorizedException();
     }
 
+    console.log('🔄 RefreshToken Debug - Found session:');
+    console.log('  - Session ID:', session.id);
+    console.log('  - Session deletedAt:', session.deletedAt);
+    console.log('  - Client hash:', data.hash?.substring(0, 10) + '...');
+    console.log('  - Server hash:', session.hash?.substring(0, 10) + '...');
+    console.log('  - Hashes match:', session.hash === data.hash);
+
     if (session.hash !== data.hash) {
+      console.log('❌ RefreshToken Debug - Hash mismatch!');
+      console.log('  - Full client hash:', data.hash);
+      console.log('  - Full server hash:', session.hash);
       throw new UnauthorizedException();
     }
+
+    console.log(
+      '✅ RefreshToken Debug - Hash validation passed, proceeding with refresh',
+    );
 
     const hash = crypto
       .createHash('sha256')
       .update(randomStringGenerator())
       .digest('hex');
+
+    console.log(
+      '🔄 RefreshToken Debug - Generated new hash:',
+      hash.substring(0, 10) + '...',
+    );
 
     const user = await this.userService.findById(session.user.id);
 
@@ -567,9 +599,15 @@ export class AuthService {
       throw new UnauthorizedException();
     }
 
+    console.log(
+      '🔄 RefreshToken Debug - Updating session',
+      session.id,
+      'with new hash',
+    );
     await this.sessionService.update(session.id, {
       hash,
     });
+    console.log('✅ RefreshToken Debug - Session hash updated successfully');
 
     const { token, refreshToken, tokenExpires } = await this.getTokensData({
       id: session.user.id,
