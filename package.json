@@ -38,6 +38,7 @@
     "start:swc": "TZ=UTC nest start -b swc -w",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "test": "jest",
+    "test:local": "jest --maxWorkers=6",
     "test:all": "npm run lint && jest && npm run test:e2e",
     "test:watch": "jest --watch",
     "test:e2e:watch": "env-cmd jest --watch --config ./test/jest-e2e.json",
@@ -90,6 +91,7 @@
     "fb": "2.0.0",
     "generic-pool": "^3.9.0",
     "google-auth-library": "9.14.1",
+    "googleapis": "^149.0.0",
     "handlebars": "4.7.8",
     "ical-generator": "^8.1.1",
     "ioredis": "^5.5.0",
@@ -101,6 +103,7 @@
     "multer-s3": "3.0.1",
     "nanoid": "^3.3.6",
     "nestjs-i18n": "10.4.9",
+    "node-ical": "^0.20.1",
     "nodemailer": "6.9.15",
     "passport": "0.7.0",
     "passport-anonymous": "1.0.1",
@@ -192,7 +195,9 @@
     ],
     "transformIgnorePatterns": [
       "node_modules/(?!matrix-js-sdk)"
-    ]
+    ],
+    "workerIdleMemoryLimit": "512MB",
+    "forceExit": true
   },
   "engines": {
     "node": ">=16.0.0",

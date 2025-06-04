@@ -286,6 +286,26 @@ async function joinGroup(app, tenantId, groupSlug, userToken) {
   return joinResponse.body;
 }
 
+async function approveMember(
+  app,
+  tenantId,
+  groupSlug,
+  groupMemberId,
+  ownerToken,
+) {
+  const approveResponse = await request(app)
+    .post(`/api/groups/${groupSlug}/members/${groupMemberId}/approve`)
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .set('x-tenant-id', tenantId);
+
+  if (approveResponse.status !== 201) {
+    console.error('Failed to approve member:', approveResponse.body);
+    throw new Error(`Failed to approve member: ${approveResponse.status}`);
+  }
+
+  return approveResponse.body;
+}
+
 async function updateGroupMemberRole(
   app,
   tenantId,
@@ -359,6 +379,7 @@ export {
   getAllEvents,
   createTestUser,
   joinGroup,
+  approveMember,
   updateGroupMemberRole,
   getGroupMembers,
   getCurrentUser,

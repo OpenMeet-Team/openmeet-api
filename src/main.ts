@@ -28,7 +28,25 @@ async function bootstrap() {
   startupLog('Bootstrap starting - creating NestJS application');
   try {
     const app = await NestFactory.create(AppModule, {
-      cors: true,
+      cors: {
+        origin: [
+          'http://localhost:9005',
+          'https://localhost:9005',
+          'https://localdev.openmeet.net',
+          'http://localdev.openmeet.net',
+          'https://platform.openmeet.net',
+          'https://platform-dev.openmeet.net',
+        ],
+        credentials: true,
+        allowedHeaders: [
+          'Content-Type',
+          'Authorization',
+          'X-Tenant-ID',
+          'x-group-slug',
+          'x-event-slug',
+        ],
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      },
       bufferLogs: false, // Changed from true to false to output logs immediately
     });
     startupLog('NestJS application created successfully');

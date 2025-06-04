@@ -97,4 +97,25 @@ export class TenantConnectionService implements OnModuleInit {
       },
     );
   }
+
+  async getAllTenantIds(): Promise<string[]> {
+    return this.tracer.startActiveSpan(
+      'getAllTenantIds',
+      { kind: SpanKind.CLIENT },
+      async (span) => {
+        try {
+          const tenants = await this.getAllTenants();
+          const tenantIds = tenants.map((tenant) => tenant.id);
+          span.setAttribute('tenantIdsCount', tenantIds.length);
+          return tenantIds;
+        } catch (error) {
+          span.recordException(error);
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw error;
+        } finally {
+          span.end();
+        }
+      },
+    );
+  }
 }
