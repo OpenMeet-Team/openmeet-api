@@ -632,7 +632,10 @@ export class EventQueryService {
       .leftJoinAndSelect('attendee.role', 'role')
       .leftJoinAndSelect('role.permissions', 'permissions')
       .where('event.user.id = :userId', { userId })
-      .orWhere('attendee.id IS NOT NULL')
+      .orWhere(
+        '(attendee.id IS NOT NULL AND attendee.status != :cancelledStatus)',
+        { cancelledStatus: EventAttendeeStatus.Cancelled },
+      )
       // Load all attendees count in a single query using COUNT subquery
       .loadRelationCountAndMap(
         'event.attendeesCount',
@@ -866,6 +869,9 @@ export class EventQueryService {
         },
       )
       .andWhere('event.status = :status', { status: EventStatus.Published })
+      .andWhere('attendee.status != :cancelledStatus', {
+        cancelledStatus: EventAttendeeStatus.Cancelled,
+      })
       .orderBy('event.startDate', 'ASC')
       .limit(5)
       .getMany();
