@@ -86,6 +86,8 @@ describe('Auth Module', () => {
       });
     });
 
+    // SKIPPED: Email confirmation tests fail - returns 422 instead of expected 204/404
+    // Email confirmation logic needs to be fixed before enabling these tests
     describe.skip('Confirm email', () => {
       it('should successfully: /api/v1/auth/email/confirm (POST)', async () => {
         const response = await serverEmail.get('/email');
@@ -238,27 +240,38 @@ describe('Auth Module', () => {
         .expect(401);
     });
 
+    // SKIPPED: Profile update test fails due to authentication token invalidation during test execution
+    // Returns 401 Unauthorized instead of expected 422 - token management in tests needs fixing
     it.skip('should update profile successfully: /api/v1/auth/me (PATCH)', async () => {
       const newUserNewName = Date.now();
       const newUserNewPassword = 'new-secret';
       const newUserApiToken = await request(app)
         .post('/api/v1/auth/email/login')
+        .set('x-tenant-id', TESTING_TENANT_ID)
         .send({ email: newUserEmail, password: newUserPassword })
         .then(({ body }) => body.token);
 
-      await request(app)
+      const response = await request(app)
         .patch('/api/v1/auth/me')
+        .set('x-tenant-id', TESTING_TENANT_ID)
         .auth(newUserApiToken, {
           type: 'bearer',
         })
         .send({
           firstName: newUserNewName,
           password: newUserNewPassword,
-        })
-        .expect(422);
+        });
+
+      console.log('Update without oldPassword - Status:', response.status);
+      console.log(
+        'Update without oldPassword - Body:',
+        JSON.stringify(response.body, null, 2),
+      );
+      expect(response.status).toBe(422);
 
       await request(app)
         .patch('/api/v1/auth/me')
+        .set('x-tenant-id', TESTING_TENANT_ID)
         .auth(newUserApiToken, {
           type: 'bearer',
         })
@@ -271,6 +284,7 @@ describe('Auth Module', () => {
 
       await request(app)
         .post('/api/v1/auth/email/login')
+        .set('x-tenant-id', TESTING_TENANT_ID)
         .send({ email: newUserEmail, password: newUserNewPassword })
         .expect(200)
         .expect(({ body }) => {
@@ -279,6 +293,7 @@ describe('Auth Module', () => {
 
       await request(app)
         .patch('/api/v1/auth/me')
+        .set('x-tenant-id', TESTING_TENANT_ID)
         .auth(newUserApiToken, {
           type: 'bearer',
         })
@@ -286,8 +301,7 @@ describe('Auth Module', () => {
         .expect(200);
     });
 
-    // I believe this to be a bug, -tom
-    it.skip('should update profile email successfully: /api/v1/auth/me (PATCH)', async () => {
+    it('should update profile email successfully: /api/v1/auth/me (PATCH)', async () => {
       const newUserFirstName = `Tester${Date.now()}`;
       const newUserLastName = `E2E`;
       const newUserEmail = `user.${Date.now()}@openmeet.net`;
@@ -369,15 +383,18 @@ describe('Auth Module', () => {
         .expect(200);
     });
 
-    it.skip('should delete profile successfully: /api/v1/auth/me (DELETE)', async () => {
+    it('should delete profile successfully: /api/v1/auth/me (DELETE)', async () => {
       const newUserApiToken = await serverApp
         .post('/api/v1/auth/email/login')
         .send({ email: newUserEmail, password: newUserPassword })
         .then(({ body }) => body.token);
 
-      await serverApp.delete('/api/v1/auth/me').auth(newUserApiToken, {
-        type: 'bearer',
-      });
+      await serverApp
+        .delete('/api/v1/auth/me')
+        .set('x-tenant-id', TESTING_TENANT_ID)
+        .auth(newUserApiToken, {
+          type: 'bearer',
+        });
 
       return serverApp
         .post('/api/v1/auth/email/login')
