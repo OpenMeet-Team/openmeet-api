@@ -39,7 +39,7 @@
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "test": "jest",
     "test:local": "jest --maxWorkers=6",
-    "test:ci": "jest --maxWorkers=4 --passWithNoTests --runInBand=false --cache",
+    "test:ci": "jest --maxWorkers=2 --passWithNoTests --runInBand=false --cache",
     "test:all": "npm run lint && jest && npm run test:e2e",
     "test:watch": "jest --watch",
     "test:e2e:watch": "env-cmd jest --watch --config ./test/jest-e2e.json",
