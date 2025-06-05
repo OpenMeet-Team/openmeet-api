@@ -448,7 +448,27 @@ export class AuthService {
   }
 
   async me(userJwtPayload: JwtPayloadType): Promise<NullableType<User>> {
-    return this.userService.findById(userJwtPayload.id);
+    try {
+      return await this.userService.findById(userJwtPayload.id);
+    } catch (error) {
+      this.logger.error('Error in me() method:', {
+        userId: userJwtPayload.id,
+        error: error.message,
+        stack: error.stack,
+      });
+
+      // If it's a database/tenant connection issue, throw a proper HTTP exception
+      if (
+        error.message?.includes('Tenant ID is required') ||
+        error.message?.includes('Connection') ||
+        error.message?.includes('database')
+      ) {
+        throw new UnauthorizedException('Authentication session expired');
+      }
+
+      // For other errors, also treat as unauthorized to be safe
+      throw new UnauthorizedException('User authentication failed');
+    }
   }
 
   async update(
