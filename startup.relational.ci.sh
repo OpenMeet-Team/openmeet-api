@@ -50,6 +50,6 @@ echo "Waiting for API to be ready..."
 
 # Run the E2E tests
 echo "Running E2E tests..."
-npm run test:e2e -- --runInBand
+npm run test:e2e
 
 
