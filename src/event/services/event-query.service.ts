@@ -699,7 +699,7 @@ export class EventQueryService {
         },
       )
       .orderBy('RANDOM()')
-      .limit(5)
+      .limit(4)
       .getMany();
 
     this.logger.debug(`Found ${events.length} featured events`);
