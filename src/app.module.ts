@@ -57,6 +57,7 @@ import { ShadowAccountModule } from './shadow-account/shadow-account.module';
 import { CalendarSourceModule } from './calendar-source/calendar-source.module';
 import { CalendarFeedModule } from './calendar-feed/calendar-feed.module';
 import { ExternalCalendarModule } from './external-calendar/external-calendar.module';
+import { SitemapModule } from './sitemap/sitemap.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -143,6 +144,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     CalendarSourceModule,
     CalendarFeedModule,
     ExternalCalendarModule,
+    SitemapModule,
   ],
   providers: [
     TenantConnectionService,

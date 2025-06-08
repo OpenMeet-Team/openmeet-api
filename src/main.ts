@@ -32,6 +32,8 @@ async function bootstrap() {
         origin: [
           'http://localhost:9005',
           'https://localhost:9005',
+          'http://localhost:8087',
+          'https://localhost:8087',
           'https://localdev.openmeet.net',
           'http://localdev.openmeet.net',
           'https://platform.openmeet.net',
