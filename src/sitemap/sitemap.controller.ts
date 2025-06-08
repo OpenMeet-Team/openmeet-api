@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Response, Request } from 'express';
 import { SitemapService } from './sitemap.service';
 import { Public } from '../auth/decorators/public.decorator';
+import { getTenantConfig } from '../utils/tenant-config';
 
 @ApiTags('Sitemap')
 @Controller('sitemap')
@@ -14,7 +15,7 @@ export class SitemapController {
   @ApiOperation({
     summary: 'Generate XML sitemap for public events and groups',
     description:
-      'Returns an XML sitemap containing all public events and groups for search engine indexing',
+      'Returns an XML sitemap containing all public events and groups for search engine indexing. If x-tenant-id header is provided, returns tenant-specific sitemap.',
   })
   @ApiResponse({
     status: 200,
@@ -27,11 +28,21 @@ export class SitemapController {
     },
   })
   async getSitemap(@Res() res: Response, @Req() req: Request): Promise<void> {
-    const protocol = req.get('x-forwarded-proto') || req.protocol;
-    const host = req.get('host');
-    const baseUrl = `${protocol}://${host}`;
+    // Extract tenant ID from header, query parameter, or leave undefined for all tenants
+    const tenantId = req.get('x-tenant-id') || (req.query?.tenantId as string);
 
-    const urls = await this.sitemapService.generateSitemapUrls(baseUrl);
+    if (!tenantId) {
+      throw new Error('Tenant ID is required for sitemap generation');
+    }
+
+    // Get the tenant's frontend domain from configuration
+    const tenantConfig = getTenantConfig(tenantId);
+    const baseUrl = tenantConfig.frontendDomain;
+
+    const urls = await this.sitemapService.generateSitemapUrls(
+      baseUrl,
+      tenantId,
+    );
     const xml = this.sitemapService.generateXmlSitemap(urls);
 
     res.set({

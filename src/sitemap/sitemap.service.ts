@@ -1,13 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Injectable, Logger, Inject, Scope } from '@nestjs/common';
+import { REQUEST } from '@nestjs/core';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
-import {
-  EventStatus,
-  EventVisibility,
-  GroupVisibility,
-} from '../core/constants/constant';
+import { EventQueryService } from '../event/services/event-query.service';
+import { GroupService } from '../group/group.service';
 
 export interface SitemapUrl {
   loc: string;
@@ -23,68 +19,107 @@ export interface SitemapUrl {
   priority?: string;
 }
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class SitemapService {
   private readonly logger = new Logger(SitemapService.name);
 
   constructor(
-    @InjectRepository(EventEntity)
-    private readonly eventRepository: Repository<EventEntity>,
-    @InjectRepository(GroupEntity)
-    private readonly groupRepository: Repository<GroupEntity>,
+    @Inject(REQUEST) private readonly request: any,
+    private readonly eventQueryService: EventQueryService,
+    private readonly groupService: GroupService,
   ) {}
 
-  async getPublicEvents(): Promise<EventEntity[]> {
-    return await this.eventRepository.find({
-      where: {
-        visibility: EventVisibility.Public,
-        status: EventStatus.Published,
-      },
-      select: ['slug', 'updatedAt', 'startDate'],
-      order: { updatedAt: 'DESC' },
+  async getPublicEvents(tenantId: string): Promise<EventEntity[]> {
+    // Set tenant ID on request for service layer
+    this.request.tenantId = tenantId;
+
+    // SEO-focused filters: only upcoming events in next 6 months
+    const now = new Date();
+    const sixMonthsFromNow = new Date();
+    sixMonthsFromNow.setMonth(sixMonthsFromNow.getMonth() + 6);
+
+    // Format dates as YYYY-MM-DD as expected by the DTO
+    const fromDate = now.toISOString().split('T')[0];
+    const toDate = sixMonthsFromNow.toISOString().split('T')[0];
+
+    // Use the event query service to get filtered public events
+    const queryEventDto = {
+      fromDate,
+      toDate,
+      includeRecurring: true,
+      expandRecurring: false,
+    } as any; // Type assertion to avoid DTO validation issues
+    
+    const result = await this.eventQueryService.showAllEvents(
+      { page: 1, limit: 1000 }, // Reasonable limit for SEO
+      queryEventDto,
+      undefined, // No user (public access)
+    );
+
+    // Filter events to only include those with 5+ attendees
+    const events = result.data || [];
+    return events.filter((event: any) => {
+      return (event.attendeesCount || 0) >= 5;
     });
   }
 
-  async getPublicGroups(): Promise<GroupEntity[]> {
-    return await this.groupRepository.find({
-      where: {
-        visibility: GroupVisibility.Public,
-      },
-      select: ['slug', 'updatedAt'],
-      order: { updatedAt: 'DESC' },
+  async getPublicGroups(tenantId: string): Promise<GroupEntity[]> {
+    // Set tenant ID on request for service layer
+    this.request.tenantId = tenantId;
+
+    // Use the group service to get public groups
+    const queryGroupDto = {} as any; // Type assertion to avoid DTO validation issues
+    
+    const result = await this.groupService.showAll(
+      { page: 1, limit: 1000 }, // Reasonable limit for SEO
+      queryGroupDto,
+      undefined, // No user (public access)
+    );
+
+    // Filter groups to only include active ones (with 3+ members)
+    const groups = result.data || [];
+    return groups.filter((group: any) => {
+      return (group.groupMembersCount || 0) >= 3;
     });
   }
 
-  generateSitemapUrls(baseUrl: string): Promise<SitemapUrl[]> {
-    return this.generateSitemapUrlsInternal(baseUrl);
+  generateSitemapUrls(
+    baseUrl: string,
+    tenantId?: string,
+  ): Promise<SitemapUrl[]> {
+    return this.generateSitemapUrlsInternal(baseUrl, tenantId);
   }
 
   private async generateSitemapUrlsInternal(
     baseUrl: string,
+    tenantId?: string,
   ): Promise<SitemapUrl[]> {
     const urls: SitemapUrl[] = [];
 
     try {
-      // Add public events
-      const events = await this.getPublicEvents();
-      for (const event of events) {
-        urls.push({
-          loc: `${baseUrl}/events/${event.slug}`,
-          lastmod: event.updatedAt?.toISOString(),
-          changefreq: this.getEventChangeFreq(event.startDate),
-          priority: this.getEventPriority(event.startDate),
-        });
-      }
+      // Only include events and groups if a tenant ID is provided
+      if (tenantId) {
+        // Add public events for the specific tenant
+        const events = await this.getPublicEvents(tenantId);
+        for (const event of events) {
+          urls.push({
+            loc: `${baseUrl}/events/${event.slug}`,
+            lastmod: event.updatedAt?.toISOString(),
+            changefreq: this.getEventChangeFreq(event.startDate),
+            priority: this.getEventPriority(event.startDate),
+          });
+        }
 
-      // Add public groups
-      const groups = await this.getPublicGroups();
-      for (const group of groups) {
-        urls.push({
-          loc: `${baseUrl}/groups/${group.slug}`,
-          lastmod: group.updatedAt?.toISOString(),
-          changefreq: 'weekly',
-          priority: '0.8',
-        });
+        // Add public groups for the specific tenant
+        const groups = await this.getPublicGroups(tenantId);
+        for (const group of groups) {
+          urls.push({
+            loc: `${baseUrl}/groups/${group.slug}`,
+            lastmod: group.updatedAt?.toISOString(),
+            changefreq: 'weekly',
+            priority: '0.8',
+          });
+        }
       }
 
       // Add static pages
