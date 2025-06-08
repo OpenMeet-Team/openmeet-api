@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { parseString } from 'xml2js';
+import { promisify } from 'util';
 import { SitemapService } from './sitemap.service';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
@@ -9,6 +11,8 @@ import {
   EventVisibility,
   GroupVisibility,
 } from '../core/constants/constant';
+
+const parseXml = promisify(parseString);
 
 describe('SitemapService', () => {
   let service: SitemapService;
@@ -113,8 +117,12 @@ describe('SitemapService', () => {
         },
       ];
 
-      jest.spyOn(service, 'getPublicEvents').mockResolvedValue(mockEvents as any);
-      jest.spyOn(service, 'getPublicGroups').mockResolvedValue(mockGroups as any);
+      jest
+        .spyOn(service, 'getPublicEvents')
+        .mockResolvedValue(mockEvents as any);
+      jest
+        .spyOn(service, 'getPublicGroups')
+        .mockResolvedValue(mockGroups as any);
 
       const result = await service.generateSitemapUrls('https://example.com');
 
@@ -151,7 +159,9 @@ describe('SitemapService', () => {
       const result = service.generateXmlSitemap(urls);
 
       expect(result).toContain('<?xml version="1.0" encoding="UTF-8"?>');
-      expect(result).toContain('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">');
+      expect(result).toContain(
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+      );
       expect(result).toContain('<loc>https://example.com/events/event-1</loc>');
       expect(result).toContain('<lastmod>2023-01-01T00:00:00.000Z</lastmod>');
       expect(result).toContain('<changefreq>daily</changefreq>');
@@ -168,7 +178,100 @@ describe('SitemapService', () => {
 
       const result = service.generateXmlSitemap(urls);
 
-      expect(result).toContain('<loc>https://example.com/events/event&amp;test</loc>');
+      expect(result).toContain(
+        '<loc>https://example.com/events/event&amp;test</loc>',
+      );
+    });
+  });
+
+  describe('XML validation', () => {
+    it('should generate valid XML that can be parsed', async () => {
+      const urls = [
+        {
+          loc: 'https://example.com/events/event-1',
+          lastmod: '2023-01-01T00:00:00.000Z',
+          changefreq: 'daily' as const,
+          priority: '1.0',
+        },
+        {
+          loc: 'https://example.com/groups/group-1',
+          lastmod: '2023-01-01T00:00:00.000Z',
+          changefreq: 'weekly' as const,
+          priority: '0.8',
+        },
+      ];
+
+      const xmlString = service.generateXmlSitemap(urls);
+
+      // Should not throw when parsing
+      const parsedXml = await parseXml(xmlString);
+
+      expect(parsedXml).toBeDefined();
+      expect(parsedXml.urlset).toBeDefined();
+      expect(parsedXml.urlset.url).toHaveLength(2);
+    });
+
+    it('should generate XML with correct structure and namespace', async () => {
+      const urls = [
+        {
+          loc: 'https://example.com/test',
+          lastmod: '2023-01-01T00:00:00.000Z',
+          changefreq: 'daily' as const,
+          priority: '1.0',
+        },
+      ];
+
+      const xmlString = service.generateXmlSitemap(urls);
+      const parsedXml = await parseXml(xmlString);
+
+      // Check root element
+      expect(parsedXml.urlset).toBeDefined();
+      expect(parsedXml.urlset.$).toEqual({
+        xmlns: 'http://www.sitemaps.org/schemas/sitemap/0.9',
+      });
+
+      // Check URL structure
+      const url = parsedXml.urlset.url[0];
+      expect(url.loc[0]).toBe('https://example.com/test');
+      expect(url.lastmod[0]).toBe('2023-01-01T00:00:00.000Z');
+      expect(url.changefreq[0]).toBe('daily');
+      expect(url.priority[0]).toBe('1.0');
+    });
+
+    it('should generate valid XML even with special characters', async () => {
+      const urls = [
+        {
+          loc: 'https://example.com/events/café&bar<test>',
+          lastmod: '2023-01-01T00:00:00.000Z',
+        },
+      ];
+
+      const xmlString = service.generateXmlSitemap(urls);
+
+      // Should not throw when parsing
+      const parsedXml = await parseXml(xmlString);
+
+      expect(parsedXml).toBeDefined();
+      expect(parsedXml.urlset.url[0].loc[0]).toBe(
+        'https://example.com/events/café&bar<test>',
+      );
+    });
+
+    it('should generate XML with minimal URL data', async () => {
+      const urls = [
+        {
+          loc: 'https://example.com/minimal',
+        },
+      ];
+
+      const xmlString = service.generateXmlSitemap(urls);
+      const parsedXml = await parseXml(xmlString);
+
+      const url = parsedXml.urlset.url[0];
+      expect(url.loc[0]).toBe('https://example.com/minimal');
+      expect(url.lastmod).toBeUndefined();
+      expect(url.changefreq).toBeUndefined();
+      expect(url.priority).toBeUndefined();
     });
   });
 });
