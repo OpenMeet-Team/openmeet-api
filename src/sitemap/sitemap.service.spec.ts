@@ -1,50 +1,48 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { REQUEST } from '@nestjs/core';
 import { parseString } from 'xml2js';
 import { promisify } from 'util';
 import { SitemapService } from './sitemap.service';
-import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
-import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
-import {
-  EventStatus,
-  EventVisibility,
-  GroupVisibility,
-} from '../core/constants/constant';
+import { EventQueryService } from '../event/services/event-query.service';
+import { GroupService } from '../group/group.service';
 
 const parseXml = promisify(parseString);
 
 describe('SitemapService', () => {
   let service: SitemapService;
-  let eventRepository: Repository<EventEntity>;
-  let groupRepository: Repository<GroupEntity>;
+  let eventQueryService: jest.Mocked<EventQueryService>;
+  let groupService: jest.Mocked<GroupService>;
 
   beforeEach(async () => {
+    const mockEventQueryService = {
+      showAllEvents: jest.fn(),
+    };
+
+    const mockGroupService = {
+      showAll: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SitemapService,
         {
-          provide: getRepositoryToken(EventEntity),
-          useValue: {
-            find: jest.fn(),
-          },
+          provide: REQUEST,
+          useValue: { tenantId: 'test-tenant' },
         },
         {
-          provide: getRepositoryToken(GroupEntity),
-          useValue: {
-            find: jest.fn(),
-          },
+          provide: EventQueryService,
+          useValue: mockEventQueryService,
+        },
+        {
+          provide: GroupService,
+          useValue: mockGroupService,
         },
       ],
     }).compile();
 
-    service = module.get<SitemapService>(SitemapService);
-    eventRepository = module.get<Repository<EventEntity>>(
-      getRepositoryToken(EventEntity),
-    );
-    groupRepository = module.get<Repository<GroupEntity>>(
-      getRepositoryToken(GroupEntity),
-    );
+    service = await module.resolve<SitemapService>(SitemapService);
+    eventQueryService = module.get(EventQueryService);
+    groupService = module.get(GroupService);
   });
 
   it('should be defined', () => {
@@ -52,52 +50,73 @@ describe('SitemapService', () => {
   });
 
   describe('getPublicEvents', () => {
-    it('should return only public published events', async () => {
+    it('should return events with 5+ attendees after filtering', async () => {
       const mockEvents = [
         {
           slug: 'event-1',
           updatedAt: new Date('2023-01-01'),
           startDate: new Date('2023-12-01'),
+          attendeesCount: 7,
+        },
+        {
+          slug: 'event-2',
+          updatedAt: new Date('2023-01-02'),
+          startDate: new Date('2023-12-02'),
+          attendeesCount: 3, // This should be filtered out
         },
       ];
 
-      jest.spyOn(eventRepository, 'find').mockResolvedValue(mockEvents as any);
-
-      const result = await service.getPublicEvents();
-
-      expect(eventRepository.find).toHaveBeenCalledWith({
-        where: {
-          visibility: EventVisibility.Public,
-          status: EventStatus.Published,
-        },
-        select: ['slug', 'updatedAt', 'startDate'],
-        order: { updatedAt: 'DESC' },
+      eventQueryService.showAllEvents.mockResolvedValue({
+        data: mockEvents,
+        total: mockEvents.length,
       });
-      expect(result).toEqual(mockEvents);
+
+      const result = await service.getPublicEvents('test-tenant');
+
+      expect(eventQueryService.showAllEvents).toHaveBeenCalledWith(
+        { page: 1, limit: 1000 },
+        expect.objectContaining({
+          fromDate: expect.any(String),
+          toDate: expect.any(String),
+          includeRecurring: true,
+          expandRecurring: false,
+        }),
+        undefined,
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0].slug).toBe('event-1');
     });
   });
 
   describe('getPublicGroups', () => {
-    it('should return only public groups', async () => {
+    it('should return groups with 3+ members after filtering', async () => {
       const mockGroups = [
         {
           slug: 'group-1',
           updatedAt: new Date('2023-01-01'),
+          groupMembersCount: 5,
+        },
+        {
+          slug: 'group-2',
+          updatedAt: new Date('2023-01-02'),
+          groupMembersCount: 2, // This should be filtered out
         },
       ];
 
-      jest.spyOn(groupRepository, 'find').mockResolvedValue(mockGroups as any);
-
-      const result = await service.getPublicGroups();
-
-      expect(groupRepository.find).toHaveBeenCalledWith({
-        where: {
-          visibility: GroupVisibility.Public,
-        },
-        select: ['slug', 'updatedAt'],
-        order: { updatedAt: 'DESC' },
+      groupService.showAll.mockResolvedValue({
+        data: mockGroups,
+        total: mockGroups.length,
       });
-      expect(result).toEqual(mockGroups);
+
+      const result = await service.getPublicGroups('test-tenant');
+
+      expect(groupService.showAll).toHaveBeenCalledWith(
+        { page: 1, limit: 1000 },
+        {},
+        undefined,
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0].slug).toBe('group-1');
     });
   });
 
@@ -108,23 +127,28 @@ describe('SitemapService', () => {
           slug: 'event-1',
           updatedAt: new Date('2023-01-01'),
           startDate: new Date('2023-12-01'),
+          attendeesCount: 7,
         },
       ];
       const mockGroups = [
         {
           slug: 'group-1',
           updatedAt: new Date('2023-01-01'),
+          groupMembersCount: 5,
         },
       ];
 
-      jest
-        .spyOn(service, 'getPublicEvents')
-        .mockResolvedValue(mockEvents as any);
-      jest
-        .spyOn(service, 'getPublicGroups')
-        .mockResolvedValue(mockGroups as any);
+      eventQueryService.showAllEvents.mockResolvedValue({
+        data: mockEvents,
+        total: mockEvents.length,
+      });
 
-      const result = await service.generateSitemapUrls('https://example.com');
+      groupService.showAll.mockResolvedValue({
+        data: mockGroups,
+        total: mockGroups.length,
+      });
+
+      const result = await service.generateSitemapUrls('https://example.com', 'test-tenant');
 
       expect(result).toEqual(
         expect.arrayContaining([
