@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Response, Request } from 'express';
 import { SitemapService } from './sitemap.service';
 import { Public } from '../auth/decorators/public.decorator';
+import { TenantPublic } from '../tenant/tenant-public.decorator';
 import {
   getTenantConfig,
   getTenantByFrontendDomain,
@@ -63,6 +64,7 @@ export class RootSitemapController {
 
   @Get('sitemap.xml')
   @Public()
+  @TenantPublic()
   @ApiOperation({
     summary: 'Generate XML sitemap at root path for platform domain routing',
     description:
