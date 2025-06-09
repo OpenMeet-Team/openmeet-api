@@ -39,3 +39,4 @@ lerna-debug.log*
 /files
 .env
 /ormconfig.json
+src/.jest-cache/
