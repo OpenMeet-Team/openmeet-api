@@ -53,31 +53,3 @@ export class SitemapController {
     res.send(xml);
   }
 }
-
-@Controller()
-export class RootSitemapController {
-  constructor(private readonly sitemapService: SitemapService) {}
-
-  @Get('sitemap.xml')
-  @Public()
-  @ApiOperation({
-    summary: 'Generate XML sitemap at root path',
-    description: 'Handles sitemap.xml requests at the root path for compatibility',
-  })
-  async getRootSitemap(@Res() res: Response, @Req() req: Request): Promise<void> {
-    const tenantId = req.get('x-tenant-id') || (req.query?.tenantId as string) || 'lsdfaopkljdfs';
-
-    const tenantConfig = getTenantConfig(tenantId);
-    const baseUrl = tenantConfig.frontendDomain;
-
-    const urls = await this.sitemapService.generateSitemapUrls(baseUrl, tenantId);
-    const xml = this.sitemapService.generateXmlSitemap(urls);
-
-    res.set({
-      'Content-Type': 'application/xml',
-      'Cache-Control': 'public, max-age=3600',
-    });
-
-    res.send(xml);
-  }
-}
