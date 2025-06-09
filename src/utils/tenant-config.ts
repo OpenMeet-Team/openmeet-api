@@ -47,3 +47,29 @@ export function getTenantConfig(tenantId: string): TenantConfig {
   }
   return tenant;
 }
+
+export function getTenantByFrontendDomain(domain: string): TenantConfig | null {
+  const tenants = fetchTenants();
+
+  // First try exact match
+  let tenant = tenants.find((t) => t.frontendDomain === domain);
+  if (tenant) {
+    return tenant;
+  }
+
+  // Try with https:// prefix
+  const httpsUrl = `https://${domain}`;
+  tenant = tenants.find((t) => t.frontendDomain === httpsUrl);
+  if (tenant) {
+    return tenant;
+  }
+
+  // Try without protocol (in case stored domain includes protocol)
+  tenant = tenants.find((t) => {
+    if (!t.frontendDomain) return false;
+    const storedDomain = t.frontendDomain.replace(/^https?:\/\//, '');
+    return storedDomain === domain;
+  });
+
+  return tenant || null;
+}

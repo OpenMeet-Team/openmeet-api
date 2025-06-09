@@ -148,7 +148,10 @@ describe('SitemapService', () => {
         total: mockGroups.length,
       });
 
-      const result = await service.generateSitemapUrls('https://example.com', 'test-tenant');
+      const result = await service.generateSitemapUrls(
+        'https://example.com',
+        'test-tenant',
+      );
 
       expect(result).toEqual(
         expect.arrayContaining([
