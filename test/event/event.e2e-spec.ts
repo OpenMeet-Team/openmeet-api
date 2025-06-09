@@ -657,6 +657,10 @@ describe('EventController (e2e)', () => {
       .delete(`/api/events/${testEvent.slug}`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
+
+    if (deleteEventResponse.status !== 200) {
+      console.log('deleteEventResponse', deleteEventResponse.body);
+    }
     expect(deleteEventResponse.status).toBe(200);
   });
 

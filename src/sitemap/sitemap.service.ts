@@ -49,7 +49,7 @@ export class SitemapService {
       includeRecurring: true,
       expandRecurring: false,
     } as any; // Type assertion to avoid DTO validation issues
-    
+
     const result = await this.eventQueryService.showAllEvents(
       { page: 1, limit: 1000 }, // Reasonable limit for SEO
       queryEventDto,
@@ -69,7 +69,7 @@ export class SitemapService {
 
     // Use the group service to get public groups
     const queryGroupDto = {} as any; // Type assertion to avoid DTO validation issues
-    
+
     const result = await this.groupService.showAll(
       { page: 1, limit: 1000 }, // Reasonable limit for SEO
       queryGroupDto,
