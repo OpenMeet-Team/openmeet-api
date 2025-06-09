@@ -163,7 +163,7 @@ async function bootstrap() {
     app.setGlobalPrefix(
       configService.getOrThrow('app.apiPrefix', { infer: true }),
       {
-        exclude: ['/health/liveness', '/health/readiness', '/metrics', '/'],
+        exclude: ['/health/liveness', '/health/readiness', '/metrics', '/', '/sitemap.xml'],
       },
     );
     startupLog('Health and metrics endpoints configured');
