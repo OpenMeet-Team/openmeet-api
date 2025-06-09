@@ -22,6 +22,7 @@ describe('VisibilityGuard', () => {
   let guard: VisibilityGuard;
   let eventQueryService: jest.Mocked<EventQueryService>;
   let groupService: jest.Mocked<GroupService>;
+  let groupMemberService: jest.Mocked<GroupMemberService>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -55,6 +56,7 @@ describe('VisibilityGuard', () => {
     guard = module.get<VisibilityGuard>(VisibilityGuard);
     eventQueryService = module.get(EventQueryService);
     groupService = module.get(GroupService);
+    groupMemberService = module.get(GroupMemberService);
   });
 
   const mockContext = (params: any = {}) => {
@@ -185,6 +187,68 @@ describe('VisibilityGuard', () => {
 
       await expect(guard.canActivate(context)).resolves.toBe(true);
       expect(groupService.findGroupBySlug).toHaveBeenCalledWith('header-group');
+    });
+
+    // FAILING TEST: This test should fail because the current implementation
+    // doesn't check group membership for private groups
+    it('should allow authenticated group members to access private groups', async () => {
+      const mockGroup = {
+        id: 1,
+        visibility: GroupVisibility.Private,
+      } as unknown as GroupEntity;
+      const mockUser = { id: 123, slug: 'test-user' };
+      const mockGroupMember = {
+        id: 1,
+        userId: 123,
+        groupId: 1,
+        user: mockUser,
+      };
+
+      groupService.findGroupBySlug.mockResolvedValue(mockGroup);
+      groupMemberService.findGroupMemberByUserId.mockResolvedValue(
+        mockGroupMember,
+      );
+
+      const context = mockContext({
+        headers: { 'x-group-slug': 'private-group' },
+        user: mockUser,
+      });
+
+      // This should pass - authenticated group members should access private groups
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+      expect(groupMemberService.findGroupMemberByUserId).toHaveBeenCalledWith(
+        1,
+        123,
+      );
+    });
+
+    // FAILING TEST: This test should fail because the current implementation
+    // doesn't check group membership for private groups
+    it('should deny authenticated non-members access to private groups', async () => {
+      const mockGroup = {
+        id: 1,
+        visibility: GroupVisibility.Private,
+      } as unknown as GroupEntity;
+      const mockUser = { id: 123, slug: 'test-user' };
+
+      groupService.findGroupBySlug.mockResolvedValue(mockGroup);
+      groupMemberService.findGroupMemberByUserId.mockResolvedValue(null); // Not a member
+
+      const context = mockContext({
+        headers: { 'x-group-slug': 'private-group' },
+        user: mockUser,
+      });
+
+      // This should throw ForbiddenException for non-members
+      await expect(guard.canActivate(context)).rejects.toThrow(
+        new ForbiddenException(
+          'You must be a member of this private group to access it.',
+        ),
+      );
+      expect(groupMemberService.findGroupMemberByUserId).toHaveBeenCalledWith(
+        1,
+        123,
+      );
     });
   });
 

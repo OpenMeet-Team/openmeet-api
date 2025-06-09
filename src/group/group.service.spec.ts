@@ -19,7 +19,6 @@ import {
   mockCategoryService,
   mockChatRoomService,
   mockDiscussionService,
-  mockDiscussions,
   mockEvent,
   mockFile,
   mockFilesS3PresignedService,
@@ -58,6 +57,9 @@ describe('GroupService', () => {
   let service: GroupService;
 
   beforeEach(async () => {
+    // Clear all mocks before each test to prevent test interference
+    jest.clearAllMocks();
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         GroupService,
@@ -88,10 +90,6 @@ describe('GroupService', () => {
         {
           provide: EventQueryService,
           useValue: mockEventQueryService,
-        },
-        {
-          provide: EventManagementService,
-          useValue: mockEventManagementService,
         },
         {
           provide: EventRecommendationService,
@@ -132,10 +130,6 @@ describe('GroupService', () => {
           useValue: mockChatRoomService,
         },
         {
-          provide: 'DiscussionService',
-          useValue: mockDiscussionService,
-        },
-        {
           provide: DiscussionService,
           useValue: mockDiscussionService,
         },
@@ -145,6 +139,11 @@ describe('GroupService', () => {
     service = await module.resolve<GroupService>(GroupService);
 
     await service.getTenantSpecificGroupRepository();
+  });
+
+  afterEach(() => {
+    // Clean up mocks after each test
+    jest.restoreAllMocks();
   });
 
   it('should be defined', () => {
@@ -436,15 +435,66 @@ describe('GroupService', () => {
   });
 
   describe('showGroupDiscussions', () => {
-    it('should return group discussions', async () => {
-      jest
-        .spyOn(service['groupRepository'], 'findOne')
-        .mockResolvedValue(mockGroup as GroupEntity);
-      jest
-        .spyOn(service, 'showGroupDiscussions')
-        .mockResolvedValue(mockDiscussions);
+    it('should call discussion service and return messages', async () => {
       const result = await service.showGroupDiscussions(mockGroup.slug);
-      expect(result).toEqual(mockDiscussions);
+
+      expect(result).toEqual({ messages: [] });
+      expect(
+        mockDiscussionService.getGroupDiscussionMessages,
+      ).toHaveBeenCalledWith(
+        mockGroup.slug,
+        null, // null userId for unauthenticated access
+        50, // default limit
+        undefined, // no 'from' parameter
+        TESTING_TENANT_ID,
+      );
+    });
+
+    it('should return empty messages when discussion service has empty response', async () => {
+      const result = await service.showGroupDiscussions('any-valid-slug');
+
+      expect(result).toEqual({ messages: [] });
+    });
+
+    it('should return actual messages when discussion service provides them', async () => {
+      const mockMessages = [
+        { id: 'msg_1', content: 'Hello world', sender: 'user1' },
+        { id: 'msg_2', content: 'How are you?', sender: 'user2' },
+      ];
+
+      mockDiscussionService.getGroupDiscussionMessages.mockResolvedValueOnce({
+        messages: mockMessages,
+        end: 'end_token',
+        roomId: '!test:matrix.org',
+      });
+
+      const result = await service.showGroupDiscussions('group-with-messages');
+
+      expect(result).toEqual({ messages: mockMessages });
+    });
+
+    it('should handle discussion service errors gracefully', async () => {
+      mockDiscussionService.getGroupDiscussionMessages.mockRejectedValueOnce(
+        new Error('Matrix service unavailable'),
+      );
+
+      const result = await service.showGroupDiscussions('failing-group');
+
+      expect(result).toEqual({ messages: [] });
+    });
+
+    it('should handle multiple calls correctly', async () => {
+      const promises = [
+        service.showGroupDiscussions('group-a'),
+        service.showGroupDiscussions('group-b'),
+        service.showGroupDiscussions('group-c'),
+      ];
+
+      const results = await Promise.all(promises);
+
+      results.forEach((result) => {
+        expect(result).toEqual({ messages: [] });
+      });
     });
   });
 

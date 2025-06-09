@@ -13,6 +13,7 @@ import {
 } from '../../core/constants/constant';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { GroupService } from '../../group/group.service';
+import { GroupMemberService } from '../../group-member/group-member.service';
 import { EventQueryService } from '../../event/services/event-query.service';
 
 @Injectable()
@@ -22,6 +23,7 @@ export class VisibilityGuard implements CanActivate {
     private readonly eventQueryService: EventQueryService,
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly groupService: GroupService,
+    private readonly groupMemberService: GroupMemberService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -102,6 +104,17 @@ export class VisibilityGuard implements CanActivate {
           if (!user) {
             throw new ForbiddenException(
               'This is a private group. Please log in and request to join to view the group details.',
+            );
+          }
+          // Check if user is a member of the private group
+          const groupMember =
+            await this.groupMemberService.findGroupMemberByUserId(
+              group.id,
+              user.id,
+            );
+          if (!groupMember) {
+            throw new ForbiddenException(
+              'You must be a member of this private group to access it.',
             );
           }
           break;

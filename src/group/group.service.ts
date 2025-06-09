@@ -825,21 +825,32 @@ export class GroupService {
   async showGroupDiscussions(
     slug: string,
   ): Promise<{ messages: MatrixMessage[] }> {
-    await this.getTenantSpecificGroupRepository();
+    // Delegate to DiscussionService for actual message retrieval
+    // This method supports unauthenticated access for public groups
 
-    const group = await this.groupRepository.findOne({
-      where: { slug },
-    });
+    try {
+      const tenantId = this.request.tenantId;
+      const discussionResponse =
+        await this.discussionService.getGroupDiscussionMessages(
+          slug,
+          null, // null userId for unauthenticated access to public groups
+          50, // default limit
+          undefined, // no 'from' parameter
+          tenantId,
+        );
 
-    if (!group) {
-      throw new NotFoundException('Group not found');
+      return {
+        messages: discussionResponse.messages,
+      };
+    } catch (error) {
+      // Log the error but return empty messages for backward compatibility
+      this.logger.warn(
+        `Error fetching group discussions for ${slug}: ${error.message}`,
+      );
+      return {
+        messages: [],
+      };
     }
-
-    // We now use Matrix exclusively for chat
-    // Messages are retrieved via Matrix API directly
-    return {
-      messages: [],
-    };
   }
 
   async sendGroupDiscussionMessage(

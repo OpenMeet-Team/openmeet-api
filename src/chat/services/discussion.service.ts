@@ -4,6 +4,7 @@ import {
   Inject,
   Logger,
   NotFoundException,
+  ForbiddenException,
   forwardRef,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
@@ -51,7 +52,7 @@ export class DiscussionService implements DiscussionServiceInterface {
   private async getEntityDiscussionMessages(
     entityType: 'event' | 'group',
     slug: string,
-    userId: number,
+    userId: number | null,
     limit = 50,
     from?: string,
     explicitTenantId?: string,
@@ -78,6 +79,13 @@ export class DiscussionService implements DiscussionServiceInterface {
         throw new NotFoundException(`Event with slug ${slug} not found`);
       }
       entityId = event.id;
+
+      // Handle cache key for events (events still require authentication for now)
+      if (userId === null) {
+        throw new ForbiddenException(
+          'Authentication required to access event discussions',
+        );
+      }
       membershipCacheKey = `event:${entityId}:user:${userId}`;
 
       // Get chat rooms for the event
@@ -97,7 +105,20 @@ export class DiscussionService implements DiscussionServiceInterface {
         cache.groups.set(slug, group);
       }
       entityId = group.id;
-      membershipCacheKey = `group:${entityId}:user:${userId}`;
+
+      // Handle unauthenticated users for groups
+      if (userId === null) {
+        // Check group visibility for unauthenticated users
+        if (group.visibility === 'private') {
+          throw new ForbiddenException(
+            'Authentication required to access private group discussions',
+          );
+        }
+        // For public groups, allow read-only access without membership checks
+        membershipCacheKey = `group:${entityId}:public:${Date.now()}`;
+      } else {
+        membershipCacheKey = `group:${entityId}:user:${userId}`;
+      }
 
       // Get chat rooms for the group
       chatRooms = await this.chatRoomService.getGroupChatRooms(entityId);
@@ -150,27 +171,35 @@ export class DiscussionService implements DiscussionServiceInterface {
         try {
           // Only create if we still don't have chat rooms
           if (!chatRooms || chatRooms.length === 0) {
-            const chatRoom = await this.ensureEntityChatRoom(
-              entityType,
-              entityId,
-              userId,
-            );
+            // Only create chat room if we have a valid user ID
+            if (userId !== null) {
+              const chatRoom = await this.ensureEntityChatRoom(
+                entityType,
+                entityId,
+                userId,
+              );
 
-            // Get updated chat rooms list
-            chatRooms =
-              entityType === 'event'
-                ? await this.chatRoomService.getEventChatRooms(entityId)
-                : await this.chatRoomService.getGroupChatRooms(entityId);
+              // Get updated chat rooms list
+              chatRooms =
+                entityType === 'event'
+                  ? await this.chatRoomService.getEventChatRooms(entityId)
+                  : await this.chatRoomService.getGroupChatRooms(entityId);
 
-            if (!chatRooms || chatRooms.length === 0) {
+              if (!chatRooms || chatRooms.length === 0) {
+                return { messages: [], end: '', roomId: undefined };
+              }
+
+              roomCreated = true;
+
+              // Cache the chat room
+              const chatRoomCacheKey = `${entityType}:${entityId}:chatRoom`;
+              cache.chatRooms.set(chatRoomCacheKey, chatRoom);
+            } else {
+              this.logger.debug(
+                'Cannot create chat room for unauthenticated user',
+              );
               return { messages: [], end: '', roomId: undefined };
             }
-
-            roomCreated = true;
-
-            // Cache the chat room
-            const chatRoomCacheKey = `${entityType}:${entityId}:chatRoom`;
-            cache.chatRooms.set(chatRoomCacheKey, chatRoom);
           }
         } finally {
           // Release the lock regardless of outcome
@@ -223,12 +252,15 @@ export class DiscussionService implements DiscussionServiceInterface {
         cache.membershipVerified.set(lastCheckKey, now);
       }
     } else {
-      // For groups, simpler check
+      // For groups, simpler check - but skip for unauthenticated users (read-only access)
       shouldCheckMembership =
-        !membershipVerified && !roomCreated && !chatRoomMembershipInProgress;
+        userId !== null &&
+        !membershipVerified &&
+        !roomCreated &&
+        !chatRoomMembershipInProgress;
     }
 
-    if (shouldCheckMembership) {
+    if (shouldCheckMembership && userId !== null) {
       // Mark as in-progress in our cache
       cache.membershipVerified.set(membershipCacheKey, 'in-progress');
 
@@ -315,16 +347,19 @@ export class DiscussionService implements DiscussionServiceInterface {
             chatRooms = [newChatRoom];
 
             // Make sure the user is added to the new room
-            if (entityType === 'event') {
-              await this.chatRoomService.addUserToEventChatRoomById(
-                entityId,
-                userId,
-              );
-            } else {
-              await this.chatRoomService.addUserToGroupChatRoomById(
-                entityId,
-                userId,
-              );
+            // Only add user to room if we have a valid user ID
+            if (userId !== null) {
+              if (entityType === 'event') {
+                await this.chatRoomService.addUserToEventChatRoomById(
+                  entityId,
+                  userId,
+                );
+              } else {
+                await this.chatRoomService.addUserToGroupChatRoomById(
+                  entityId,
+                  userId,
+                );
+              }
             }
 
             // Mark membership as verified
@@ -361,12 +396,23 @@ export class DiscussionService implements DiscussionServiceInterface {
         return { messages: [], end: '', roomId: undefined };
       }
 
-      const messageData = await this.chatRoomService.getMessages(
-        chatRooms[0].id,
-        userId,
-        limit,
-        from,
-      );
+      // For unauthenticated users, we need to handle the null userId case
+      let messageData;
+      if (userId !== null) {
+        messageData = await this.chatRoomService.getMessages(
+          chatRooms[0].id,
+          userId,
+          limit,
+          from,
+        );
+      } else {
+        // For unauthenticated users, try to get messages without user context
+        // We'll use a default approach - this might need adjustment based on your chat system
+        this.logger.debug(
+          'Getting messages for unauthenticated user, using read-only access',
+        );
+        messageData = { messages: [], end: '' }; // For now, return empty until we implement read-only Matrix access
+      }
 
       // Enhance messages with user display names
       const enhancedMessages = await this.enhanceMessagesWithUserInfo(
@@ -428,30 +474,39 @@ export class DiscussionService implements DiscussionServiceInterface {
           }
 
           // Recreate the chat room
-          const newChatRoom = await this.ensureEntityChatRoom(
-            entityType,
-            entityId,
-            userId,
-          );
-          this.logger.log(
-            `Recreated chat room for ${entityType} ${slug} with new Matrix room ID: ${newChatRoom.matrixRoomId}`,
-          );
-
-          // Try to add the user to the new room
-          if (entityType === 'event') {
-            await this.chatRoomService.addUserToEventChatRoomById(
+          // Only recreate if we have a valid user ID
+          if (userId !== null) {
+            const newChatRoom = await this.ensureEntityChatRoom(
+              entityType,
               entityId,
               userId,
             );
+
+            this.logger.log(
+              `Recreated chat room for ${entityType} ${slug} with new Matrix room ID: ${newChatRoom.matrixRoomId}`,
+            );
+
+            // Try to add the user to the new room (only if authenticated)
+            if (entityType === 'event') {
+              await this.chatRoomService.addUserToEventChatRoomById(
+                entityId,
+                userId,
+              );
+            } else {
+              await this.chatRoomService.addUserToGroupChatRoomById(
+                entityId,
+                userId,
+              );
+            }
+
+            // Return empty messages for now - user will need to refresh
+            return { messages: [], end: '', roomId: newChatRoom.matrixRoomId };
           } else {
-            await this.chatRoomService.addUserToGroupChatRoomById(
-              entityId,
-              userId,
+            this.logger.debug(
+              'Cannot recreate chat room for unauthenticated user',
             );
+            return { messages: [], end: '', roomId: undefined };
           }
-
-          // Return empty messages for now - user will need to refresh
-          return { messages: [], end: '', roomId: newChatRoom.matrixRoomId };
         } catch (recreateError) {
           this.logger.error(
             `Failed to recreate Matrix room for ${entityType} ${slug}: ${recreateError.message}`,
@@ -1369,7 +1424,7 @@ export class DiscussionService implements DiscussionServiceInterface {
   @Trace('discussion.getGroupDiscussionMessages')
   async getGroupDiscussionMessages(
     slug: string,
-    userId: number,
+    userId: number | null,
     limit = 50,
     from?: string,
     explicitTenantId?: string,

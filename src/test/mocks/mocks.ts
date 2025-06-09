@@ -100,6 +100,7 @@ export const mockDiscussionService = {
   sendGroupDiscussionMessage: jest.fn().mockResolvedValue({ id: 'msg_123456' }),
   addMemberToEventDiscussionBySlug: jest.fn().mockResolvedValue(undefined),
   removeMemberFromEventDiscussionBySlug: jest.fn().mockResolvedValue(undefined),
+  cleanupGroupChatRooms: jest.fn().mockResolvedValue(undefined),
 };
 
 export const mockCategoryService = {
