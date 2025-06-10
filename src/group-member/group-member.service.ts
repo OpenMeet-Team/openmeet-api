@@ -254,38 +254,35 @@ export class GroupMemberService {
 
   async findGroupDetailsMembers(groupId: number, limit: number): Promise<any> {
     await this.getTenantSpecificEventRepository();
-    return await this.groupMemberRepository.find({
-      where: {
-        group: { id: groupId },
-        // groupRole: { name: Not(GroupRole.Guest) }, // TODO for users allowed manage members display guests
-      },
-      take: limit,
-      relations: ['user.photo', 'groupRole'],
-      order: {
-        user: {
-          lastName: 'ASC',
-          firstName: 'ASC',
-        },
-      },
-      select: {
-        id: true,
-        groupRole: {
-          name: true,
-        },
-        user: {
-          id: true,
-          slug: true,
-          name: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          photo: {
-            path: true,
-            fileName: false,
-          },
-        },
-      },
-    });
+
+    // Use query builder to avoid ambiguous column reference issues with ordering
+    const query = this.groupMemberRepository
+      .createQueryBuilder('groupMember')
+      .leftJoinAndSelect('groupMember.user', 'user')
+      .leftJoinAndSelect('user.photo', 'photo')
+      .leftJoinAndSelect('groupMember.groupRole', 'groupRole')
+      .where('groupMember.group.id = :groupId', { groupId })
+      // TODO: for users allowed manage members display guests
+      // .andWhere('groupRole.name != :guestRole', { guestRole: GroupRole.Guest })
+      .orderBy('user.lastName', 'ASC')
+      .addOrderBy('user.firstName', 'ASC')
+      .select([
+        'groupMember.id',
+        'groupRole.name',
+        'user.id',
+        'user.slug',
+        'user.name',
+        'user.firstName',
+        'user.lastName',
+        'user.email',
+        'photo.path',
+      ]);
+
+    if (limit > 0) {
+      query.limit(limit);
+    }
+
+    return await query.getMany();
   }
 
   async approveMember(groupMemberId: number): Promise<any> {

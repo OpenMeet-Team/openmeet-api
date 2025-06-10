@@ -17,8 +17,12 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { JWTAuthGuard } from '../auth/auth.guard';
+import { OptionalJWTAuthGuard } from '../calendar-feed/optional-auth.guard';
+import { VisibilityGuard } from '../shared/guard/visibility.guard';
+import { Public } from '../auth/decorators/public.decorator';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
+import { Optional } from '@nestjs/common';
 import { DiscussionService } from './services/discussion.service';
 import { DiscussionMessagesResponseDto } from './dto/discussion-message.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -190,8 +194,14 @@ export class ChatController {
     );
   }
 
+  @Public()
+  @UseGuards(OptionalJWTAuthGuard, VisibilityGuard)
   @Get('group/:slug/messages')
-  @ApiOperation({ summary: 'Get messages from a group discussion' })
+  @ApiOperation({
+    summary: 'Get messages from a group discussion',
+    description:
+      'Public groups can be viewed by unauthenticated users. Private groups require authentication and membership.',
+  })
   @ApiResponse({
     status: 200,
     description: 'Messages from the group discussion',
@@ -199,21 +209,26 @@ export class ChatController {
   })
   async getGroupMessages(
     @Param('slug') slug: string,
-    @AuthUser() user: User,
     @Req() request: any,
     @Query('limit') limit?: number,
     @Query('from') from?: string,
+    @Optional() @AuthUser() user?: User,
   ): Promise<DiscussionMessagesResponseDto> {
+    // Set the group slug header for VisibilityGuard
+    request.headers['x-group-slug'] = slug;
+
     // Pass the tenant ID explicitly from the request
     const tenantId = request.tenantId;
     if (!tenantId) {
       throw new Error('Tenant ID is required');
     }
 
-    // Use the discussion service with explicit tenant ID
+    // Use the discussion service with optional userId for unauthenticated users
+    const userId = user?.id || null;
+
     return await this.discussionService.getGroupDiscussionMessages(
       slug,
-      user.id,
+      userId,
       limit,
       from,
       tenantId, // Pass tenant ID explicitly
