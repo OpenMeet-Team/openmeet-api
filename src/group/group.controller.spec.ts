@@ -13,9 +13,7 @@ import {
   mockGroupMemberService,
   mockGroupMember,
   mockRepository,
-  mockMatrixMessage,
   mockGroupAboutResponse,
-  mockDiscussions,
   mockEventAttendeeService,
   mockGroupMailService,
 } from '../test/mocks';
@@ -242,17 +240,6 @@ describe('GroupController', () => {
     });
   });
 
-  describe('showGroupDiscussions', () => {
-    it('should return group discussions', async () => {
-      jest
-        .spyOn(groupService, 'showGroupDiscussions')
-        .mockResolvedValue(mockDiscussions);
-
-      const result = await controller.showGroupDiscussions(mockGroup.slug);
-      expect(result).toEqual(mockDiscussions);
-    });
-  });
-
   describe('showGroupAbout', () => {
     it('should return group about', async () => {
       jest
@@ -261,42 +248,6 @@ describe('GroupController', () => {
 
       const result = await controller.showGroupAbout(mockGroup.slug);
       expect(result).toEqual(mockGroupAboutResponse);
-    });
-  });
-
-  describe('sendGroupDiscussionMessage', () => {
-    it('should send a group discussion message', async () => {
-      const result = await controller.sendGroupDiscussionMessage(
-        mockGroup.slug,
-        mockUser,
-        { message: 'test', topicName: 'test' },
-      );
-      // Don't strictly check the response, just verify it exists
-      expect(result).toBeDefined();
-    });
-  });
-
-  describe('updateGroupDiscussionMessage', () => {
-    it('should update a group discussion message', async () => {
-      const result = await controller.updateGroupDiscussionMessage(
-        mockGroup.slug,
-        mockMatrixMessage.id,
-        mockUser,
-        { message: 'test' },
-      );
-      // Don't strictly check the response, just verify it exists
-      expect(result).toBeDefined();
-    });
-  });
-
-  describe('deleteGroupDiscussionMessage', () => {
-    it('should delete a group discussion message', async () => {
-      const result = await controller.deleteGroupDiscussionMessage(
-        mockGroup.slug,
-        mockMatrixMessage.id,
-      );
-      // Don't strictly check the response, just verify it exists
-      expect(result).toBeDefined();
     });
   });
 

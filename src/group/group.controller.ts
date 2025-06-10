@@ -150,7 +150,6 @@ export class GroupController {
   async showGroupAbout(@Param('slug') slug: string): Promise<{
     events: EventEntity[];
     groupMembers: GroupMemberEntity[];
-    messages: MatrixMessage[];
   }> {
     return await this.groupService.showGroupAbout(slug);
   }
@@ -181,46 +180,6 @@ export class GroupController {
     @Param('slug') slug: string,
   ): Promise<{ messages: MatrixMessage[] }> {
     return this.groupService.showGroupDiscussions(slug);
-  }
-
-  @Public()
-  @UseGuards(JWTAuthGuard, VisibilityGuard)
-  @Post(':slug/discussions')
-  @ApiOperation({ summary: 'Send a message to a group discussion' })
-  async sendGroupDiscussionMessage(
-    @Param('slug') slug: string,
-    @AuthUser() user: User,
-    @Body() body: { message: string; topicName: string },
-  ): Promise<{ id: number }> {
-    return this.groupService.sendGroupDiscussionMessage(slug, user.id, body);
-  }
-
-  @Public()
-  @UseGuards(JWTAuthGuard, VisibilityGuard)
-  @Patch(':slug/discussions/:messageId')
-  @ApiOperation({ summary: 'Update a group discussion message' })
-  async updateGroupDiscussionMessage(
-    @Param('slug') slug: string,
-    @Param('messageId') messageId: number,
-    @AuthUser() user: User,
-    @Body() body: { message: string },
-  ): Promise<{ id: number }> {
-    return this.groupService.updateGroupDiscussionMessage(
-      messageId,
-      body.message,
-      user.id,
-    );
-  }
-
-  @Public()
-  @UseGuards(JWTAuthGuard, VisibilityGuard)
-  @Delete(':slug/discussions/:messageId')
-  @ApiOperation({ summary: 'Delete a group discussion message' })
-  async deleteGroupDiscussionMessage(
-    @Param('slug') slug: string,
-    @Param('messageId') messageId: number,
-  ): Promise<{ id: number }> {
-    return this.groupService.deleteGroupDiscussionMessage(messageId);
   }
 
   @Public()

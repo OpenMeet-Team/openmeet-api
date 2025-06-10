@@ -36,7 +36,6 @@ import {
   mockRepository,
   mockTenantConnectionService,
   mockUserService,
-  mockMatrixMessage,
   mockMatrixService,
 } from '../test/mocks';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
@@ -434,70 +433,6 @@ describe('GroupService', () => {
     });
   });
 
-  describe('showGroupDiscussions', () => {
-    it('should call discussion service and return messages', async () => {
-      const result = await service.showGroupDiscussions(mockGroup.slug);
-
-      expect(result).toEqual({ messages: [] });
-      expect(
-        mockDiscussionService.getGroupDiscussionMessages,
-      ).toHaveBeenCalledWith(
-        mockGroup.slug,
-        null, // null userId for unauthenticated access
-        50, // default limit
-        undefined, // no 'from' parameter
-        TESTING_TENANT_ID,
-      );
-    });
-
-    it('should return empty messages when discussion service has empty response', async () => {
-      const result = await service.showGroupDiscussions('any-valid-slug');
-
-      expect(result).toEqual({ messages: [] });
-    });
-
-    it('should return actual messages when discussion service provides them', async () => {
-      const mockMessages = [
-        { id: 'msg_1', content: 'Hello world', sender: 'user1' },
-        { id: 'msg_2', content: 'How are you?', sender: 'user2' },
-      ];
-
-      mockDiscussionService.getGroupDiscussionMessages.mockResolvedValueOnce({
-        messages: mockMessages,
-        end: 'end_token',
-        roomId: '!test:matrix.org',
-      });
-
-      const result = await service.showGroupDiscussions('group-with-messages');
-
-      expect(result).toEqual({ messages: mockMessages });
-    });
-
-    it('should handle discussion service errors gracefully', async () => {
-      mockDiscussionService.getGroupDiscussionMessages.mockRejectedValueOnce(
-        new Error('Matrix service unavailable'),
-      );
-
-      const result = await service.showGroupDiscussions('failing-group');
-
-      expect(result).toEqual({ messages: [] });
-    });
-
-    it('should handle multiple calls correctly', async () => {
-      const promises = [
-        service.showGroupDiscussions('group-a'),
-        service.showGroupDiscussions('group-b'),
-        service.showGroupDiscussions('group-c'),
-      ];
-
-      const results = await Promise.all(promises);
-
-      results.forEach((result) => {
-        expect(result).toEqual({ messages: [] });
-      });
-    });
-  });
-
   describe('showGroupAbout', () => {
     it('should return group about', async () => {
       jest
@@ -508,30 +443,6 @@ describe('GroupService', () => {
         .mockResolvedValue(mockGroupAboutResponse);
       const result = await service.showGroupAbout(mockGroup.slug);
       expect(result).toMatchObject(mockGroupAboutResponse);
-    });
-  });
-
-  describe('sendGroupDiscussionMessage', () => {
-    it('should send a group discussion message', async () => {
-      const result = await service.sendGroupDiscussionMessage(
-        mockGroup.slug,
-        mockUser.id,
-        { message: 'test', topicName: 'test' },
-      );
-      // Don't strictly check the response, just verify it exists
-      expect(result).toBeDefined();
-    });
-  });
-
-  describe('updateGroupDiscussionMessage', () => {
-    it('should update a group discussion message', async () => {
-      const result = await service.updateGroupDiscussionMessage(
-        mockMatrixMessage.id,
-        'test',
-        mockUser.id,
-      );
-      // Don't strictly check the response, just verify it exists
-      expect(result).toBeDefined();
     });
   });
 

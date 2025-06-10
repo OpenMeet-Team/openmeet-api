@@ -38,7 +38,6 @@ import { MailService } from '../mail/mail.service';
 import { generateShortCode } from '../utils/short-code';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
 import { MatrixMessage } from '../matrix/matrix-types';
-// ZulipService has been removed in favor of Matrix
 import { UserService } from '../user/user.service';
 import { HomeQuery } from '../home/dto/home-query.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -74,7 +73,6 @@ export class GroupService {
     private readonly fileService: FilesS3PresignedService,
     private readonly groupRoleService: GroupRoleService,
     private readonly mailService: MailService,
-    // ZulipService has been removed
     private readonly userService: UserService,
     private readonly eventEmitter: EventEmitter2,
     private readonly groupMailService: GroupMailService,
@@ -478,7 +476,6 @@ export class GroupService {
   async showGroupAbout(slug: string): Promise<{
     events: EventEntity[];
     groupMembers: GroupMemberEntity[];
-    messages: MatrixMessage[];
   }> {
     await this.getTenantSpecificGroupRepository();
     const group = await this.getGroupBySlug(slug);
@@ -498,7 +495,6 @@ export class GroupService {
     return {
       events: group.events,
       groupMembers: group.groupMembers,
-      messages: [], // Matrix messages are retrieved directly via the Matrix API
     };
   }
 
@@ -613,14 +609,10 @@ export class GroupService {
 
       // Directly handle chat room cleanup first to avoid foreign key issues
       try {
-        this.logger.log(
-          `Directly cleaning up chat rooms for group ${group.slug}`,
-        );
-
-        // Use the discussion service to clean up the chat rooms
-        await this.discussionService.cleanupGroupChatRooms(group.id, tenantId);
+        this.logger.log(`Cleaning up chat rooms for group ${group.slug}`);
 
         // Clear the matrixRoomId reference on the group entity
+        // Note: Matrix room cleanup should be handled by the Matrix service directly
         if (group.matrixRoomId) {
           group.matrixRoomId = '';
           await this.groupRepository.save(group);
@@ -851,64 +843,6 @@ export class GroupService {
         messages: [],
       };
     }
-  }
-
-  async sendGroupDiscussionMessage(
-    slug: string,
-    userId: number,
-    body: { message: string; topicName: string },
-  ): Promise<{ id: number }> {
-    await this.getTenantSpecificGroupRepository();
-
-    const group = await this.getGroupBySlug(slug);
-    const user = await this.userService.getUserById(userId);
-
-    // We now use Matrix exclusively for chat
-    // Group messages are sent via the Matrix API directly through the ChatService
-    // This method is kept for backward compatibility
-
-    // Create Matrix room if needed
-    if (!group.matrixRoomId) {
-      // Use the chatRoomService to create a Matrix room
-      // This is handled by the Matrix service in a proper implementation
-      // For now we just return a dummy response
-      console.log('Creating Matrix room for group would happen here');
-    }
-
-    // For now, we just return a dummy response
-    // In a real implementation, this would forward to the Matrix service
-    console.log('Matrix message would be sent here', {
-      group,
-      user,
-      message: body.message,
-      topic: body.topicName,
-    });
-
-    return { id: 0 };
-  }
-
-  // This method no longer uses await but maintains async signature for API compatibility
-  updateGroupDiscussionMessage(
-    messageId: number,
-    message: string,
-    userId: number,
-  ): Promise<{ id: number }> {
-    // We now use Matrix exclusively for chat
-    // In a real implementation, this would forward to the Matrix service
-    console.log('Matrix message update would happen here', {
-      messageId,
-      message,
-      userId,
-    });
-    return Promise.resolve({ id: messageId });
-  }
-
-  // This method no longer uses await but maintains async signature for API compatibility
-  deleteGroupDiscussionMessage(messageId: number): Promise<{ id: number }> {
-    // We now use Matrix exclusively for chat
-    // In a real implementation, this would forward to the Matrix service
-    console.log('Matrix message deletion would happen here', { messageId });
-    return Promise.resolve({ id: messageId });
   }
 
   async showDashboardGroups(userId: number): Promise<GroupEntity[]> {
