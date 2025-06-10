@@ -204,8 +204,7 @@ describe('ChatController', () => {
       );
     });
 
-    // FAILING TEST: This test should fail because the current implementation
-    // requires authentication and doesn't support optional users
+    // Test for unauthenticated access to public groups
     it('should get messages from a public group discussion for unauthenticated users', async () => {
       const groupSlug = 'public-group';
       const limit = 50;
@@ -244,8 +243,7 @@ describe('ChatController', () => {
       );
     });
 
-    // FAILING TEST: This test should fail because DiscussionService doesn't
-    // currently handle null userId
+    // Test for unauthenticated access to private groups (should be forbidden)
     it('should handle unauthenticated users trying to access private groups', async () => {
       const groupSlug = 'private-group';
       const mockRequest = {

@@ -189,8 +189,6 @@ describe('VisibilityGuard', () => {
       expect(groupService.findGroupBySlug).toHaveBeenCalledWith('header-group');
     });
 
-    // FAILING TEST: This test should fail because the current implementation
-    // doesn't check group membership for private groups
     it('should allow authenticated group members to access private groups', async () => {
       const mockGroup = {
         id: 1,
@@ -222,8 +220,6 @@ describe('VisibilityGuard', () => {
       );
     });
 
-    // FAILING TEST: This test should fail because the current implementation
-    // doesn't check group membership for private groups
     it('should deny authenticated non-members access to private groups', async () => {
       const mockGroup = {
         id: 1,

@@ -166,8 +166,7 @@ describe('DiscussionService', () => {
       expect(groupService.getGroupBySlug).toHaveBeenCalledWith(groupSlug);
     });
 
-    // FAILING TEST: This test should fail because the current implementation
-    // doesn't handle null userId
+    // Test for unauthenticated access to public groups
     it('should get messages for unauthenticated users viewing public groups', async () => {
       const userId = null; // Unauthenticated user
       const groupSlug = 'public-group';
@@ -194,8 +193,6 @@ describe('DiscussionService', () => {
       expect(chatRoomService.addUserToGroupChatRoomById).not.toHaveBeenCalled();
     });
 
-    // FAILING TEST: This test should fail because the current implementation
-    // doesn't handle group visibility checks for null userId
     it('should deny unauthenticated users access to private groups', async () => {
       const userId = null; // Unauthenticated user
       const groupSlug = 'private-group';
