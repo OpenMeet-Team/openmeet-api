@@ -48,7 +48,7 @@ services:
     depends_on:
       - postgres
     env_file:
-      - env-example-relational
+      - env-example-relational-ci
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8448/_matrix/client/versions"]
       interval: 10s
@@ -62,7 +62,7 @@ services:
     expose:
       - 3000
     env_file:
-      - env-example-relational
+      - env-example-relational-ci
     volumes:
       - ./matrix-config:/matrix-config
     depends_on:
