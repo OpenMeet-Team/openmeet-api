@@ -1,6 +1,8 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class FixChatRoomEventCascadeDelete1749597049000 implements MigrationInterface {
+export class FixChatRoomEventCascadeDelete1749597049000
+  implements MigrationInterface
+{
   name = 'FixChatRoomEventCascadeDelete1749597049000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

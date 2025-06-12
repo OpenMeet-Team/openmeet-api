@@ -1518,21 +1518,31 @@ export class EventManagementService {
     const participantRole =
       await this.eventRoleService.getRoleByName(attendeeRole);
 
-    // Calculate the appropriate status based on event settings
-    let attendeeStatus = EventAttendeeStatus.Confirmed;
-    if (event.allowWaitlist) {
-      const count = await this.eventAttendeeService.showEventAttendeesCount(
-        event.id,
-      );
-      if (count >= event.maxAttendees) {
-        attendeeStatus = EventAttendeeStatus.Waitlist;
-      }
-    }
-    if (event.requireApproval) {
-      attendeeStatus = EventAttendeeStatus.Pending;
-    }
+    // Determine the appropriate status - prioritize user's choice from DTO
+    let attendeeStatus: EventAttendeeStatus;
 
-    this.logger.debug(`[attendEvent] Calculated status: ${attendeeStatus}`);
+    if (createEventAttendeeDto.status) {
+      // User explicitly set a status (e.g., "cancelled" for RSVP No)
+      attendeeStatus = createEventAttendeeDto.status;
+      this.logger.debug(
+        `[attendEvent] Using status from DTO: ${attendeeStatus}`,
+      );
+    } else {
+      // Calculate status based on event settings (default behavior)
+      attendeeStatus = EventAttendeeStatus.Confirmed;
+      if (event.allowWaitlist) {
+        const count = await this.eventAttendeeService.showEventAttendeesCount(
+          event.id,
+        );
+        if (count >= event.maxAttendees) {
+          attendeeStatus = EventAttendeeStatus.Waitlist;
+        }
+      }
+      if (event.requireApproval) {
+        attendeeStatus = EventAttendeeStatus.Pending;
+      }
+      this.logger.debug(`[attendEvent] Calculated status: ${attendeeStatus}`);
+    }
 
     // If the attendee already exists and is not cancelled, return it
     if (

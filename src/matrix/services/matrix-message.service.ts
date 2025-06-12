@@ -107,9 +107,22 @@ export class MatrixMessageService implements IMatrixMessageProvider {
               finalToken = newToken;
 
               // Extract username for client cache clearing
-              const username = senderId.startsWith('@')
+              // senderId format: @username_tenantId:server.domain or @username:server.domain
+              let username = senderId.startsWith('@')
                 ? senderId.split(':')[0].substring(1)
                 : senderId;
+
+              // Remove tenant ID suffix if present (username_tenantId -> username)
+              // Use the known tenant ID to safely extract the user slug
+              if (
+                options.tenantId &&
+                username.endsWith(`_${options.tenantId}`)
+              ) {
+                username = username.substring(
+                  0,
+                  username.length - options.tenantId.length - 1,
+                );
+              }
 
               // Clear the client from the cache immediately to force recreation
               try {
@@ -298,6 +311,20 @@ export class MatrixMessageService implements IMatrixMessageProvider {
 
           throw new Error(
             `User ${userSlug} not in Matrix room ${roomId}. Please try again in a moment.`,
+          );
+        }
+
+        // Handle invalid token errors with helpful message
+        if (
+          error.message?.includes('M_UNKNOWN_TOKEN') ||
+          error.message?.includes('Invalid access token')
+        ) {
+          this.logger.warn(
+            `User ${userSlug} has invalid Matrix credentials: ${error.message}`,
+          );
+
+          throw new Error(
+            `Chat credentials have expired. Please refresh the page to reconnect to chat.`,
           );
         }
 
