@@ -2192,6 +2192,22 @@ export class ChatRoomService {
             this.logger.log(
               `Successfully refreshed Matrix token for user ${userId}`,
             );
+
+            // CRITICAL: Clear the cached Matrix client to force recreation with new token
+            try {
+              await this.matrixUserService.clearUserClients(
+                user.slug,
+                this.request.tenantId,
+              );
+              this.logger.debug(
+                `Cleared cached Matrix client for user ${user.slug} after token refresh`,
+              );
+            } catch (clearError) {
+              this.logger.warn(
+                `Error clearing cached Matrix client: ${clearError.message}`,
+              );
+              // Continue anyway - the new token should still work
+            }
           } else {
             this.logger.error(
               `Failed to generate new token for user ${userId}`,
