@@ -1544,15 +1544,66 @@ export class EventManagementService {
       this.logger.debug(`[attendEvent] Calculated status: ${attendeeStatus}`);
     }
 
-    // If the attendee already exists and is not cancelled, return it
+    // If the attendee already exists and status hasn't changed, return it
     if (
       eventAttendee &&
-      eventAttendee.status !== EventAttendeeStatus.Cancelled
+      eventAttendee.status !== EventAttendeeStatus.Cancelled &&
+      (!createEventAttendeeDto.status ||
+        eventAttendee.status === attendeeStatus)
     ) {
       this.logger.debug(
-        `[attendEvent] Using existing active attendance record`,
+        `[attendEvent] Using existing active attendance record with status ${eventAttendee.status}`,
       );
       return eventAttendee;
+    }
+
+    // If attendee exists with different status than requested, update it
+    if (
+      eventAttendee &&
+      createEventAttendeeDto.status &&
+      eventAttendee.status !== attendeeStatus
+    ) {
+      this.logger.debug(
+        `[attendEvent] Updating existing attendance record from ${eventAttendee.status} to ${attendeeStatus}`,
+      );
+
+      eventAttendee.status = attendeeStatus;
+
+      // Update source fields if provided
+      if (createEventAttendeeDto.sourceId) {
+        eventAttendee.sourceId = createEventAttendeeDto.sourceId;
+      }
+      if (createEventAttendeeDto.sourceType) {
+        eventAttendee.sourceType = createEventAttendeeDto.sourceType;
+      }
+      if (createEventAttendeeDto.sourceUrl) {
+        eventAttendee.sourceUrl = createEventAttendeeDto.sourceUrl;
+      }
+      if (createEventAttendeeDto.sourceData) {
+        eventAttendee.sourceData = createEventAttendeeDto.sourceData;
+      }
+
+      const updatedAttendee =
+        await this.eventAttendeeService.save(eventAttendee);
+
+      this.logger.debug(
+        `[attendEvent] Updated attendee record to status ${updatedAttendee.status}`,
+      );
+
+      // Emit event for status change
+      this.eventEmitter.emit('event.attendee.status.changed', {
+        eventId: event.id,
+        userId: user.id,
+        previousStatus: eventAttendee.status,
+        newStatus: attendeeStatus,
+        tenantId: this.request.tenantId,
+      });
+
+      // Get the updated record with relations for return
+      return await this.eventAttendeeService.findEventAttendeeByUserId(
+        event.id,
+        user.id,
+      );
     }
 
     let attendee;

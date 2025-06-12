@@ -12,6 +12,7 @@ const mockedAxios = axios as jest.Mocked<typeof axios>;
 describe('MatrixMessageService', () => {
   let service: MatrixMessageService;
   let matrixCoreService: MatrixCoreService;
+  let matrixUserService: MatrixUserService;
 
   // Mock Matrix client
   const mockMatrixClient = {
@@ -86,6 +87,7 @@ describe('MatrixMessageService', () => {
             generateNewAccessToken: jest
               .fn()
               .mockResolvedValue('new-access-token'),
+            clearUserClients: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],
@@ -93,6 +95,7 @@ describe('MatrixMessageService', () => {
 
     service = module.get<MatrixMessageService>(MatrixMessageService);
     matrixCoreService = module.get<MatrixCoreService>(MatrixCoreService);
+    matrixUserService = module.get<MatrixUserService>(MatrixUserService);
   });
 
   it('should be defined', () => {
@@ -242,6 +245,133 @@ describe('MatrixMessageService', () => {
       await expect(service.sendMessage(options)).rejects.toThrow(
         'Failed to send message to Matrix room: Failed to send message',
       );
+    });
+
+    it('should handle token refresh for cancelled attendees with correct username extraction', async () => {
+      // Mock invalid token scenario - verifyAccessToken returns false
+      (matrixUserService.verifyAccessToken as jest.Mock).mockResolvedValueOnce(
+        false,
+      );
+
+      // Mock successful token generation
+      (
+        matrixUserService.generateNewAccessToken as jest.Mock
+      ).mockResolvedValueOnce('refreshed-token-123');
+
+      // Mock successful client cache clearing
+      (matrixUserService.clearUserClients as jest.Mock).mockResolvedValueOnce(
+        undefined,
+      );
+
+      const options: SendMessageOptions = {
+        roomId: 'room-123',
+        content: 'test message from cancelled attendee',
+        userId: '@testuser_tenant123:matrix.openmeet.net', // Username with tenant ID suffix
+        accessToken: 'invalid-token',
+        tenantId: 'tenant123',
+      };
+
+      // Create a new mock client for the refreshed credentials
+      const mockRefreshedClient = {
+        ...mockMatrixClient,
+        startClient: jest.fn().mockResolvedValue(undefined),
+        stopClient: jest.fn().mockResolvedValue(undefined),
+      };
+      mockSdkCreateClient.mockReturnValueOnce(mockRefreshedClient);
+
+      const result = await service.sendMessage(options);
+
+      // Verify token verification was called
+      expect(matrixUserService.verifyAccessToken).toHaveBeenCalledWith(
+        '@testuser_tenant123:matrix.openmeet.net',
+        'invalid-token',
+      );
+
+      // Verify new token generation was called
+      expect(matrixUserService.generateNewAccessToken).toHaveBeenCalledWith(
+        '@testuser_tenant123:matrix.openmeet.net',
+      );
+
+      // Verify username extraction handled tenant ID suffix correctly - should extract 'testuser' from 'testuser_tenant123'
+      expect(matrixUserService.clearUserClients).toHaveBeenCalledWith(
+        'testuser', // Should be extracted correctly from '@testuser_tenant123:matrix.openmeet.net'
+        'tenant123',
+      );
+
+      // Verify client was created with the refreshed token
+      expect(mockSdkCreateClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: '@testuser_tenant123:matrix.openmeet.net',
+          accessToken: 'refreshed-token-123', // Should use the new token
+        }),
+      );
+
+      // Verify message was sent successfully
+      expect(mockRefreshedClient.sendEvent).toHaveBeenCalled();
+      expect(result).toBe('event-123');
+    });
+
+    it('should handle username extraction without tenant ID suffix', async () => {
+      // Test case where username doesn't have tenant ID suffix
+      (matrixUserService.verifyAccessToken as jest.Mock).mockResolvedValueOnce(
+        false,
+      );
+      (
+        matrixUserService.generateNewAccessToken as jest.Mock
+      ).mockResolvedValueOnce('new-token');
+      (matrixUserService.clearUserClients as jest.Mock).mockResolvedValueOnce(
+        undefined,
+      );
+
+      const options: SendMessageOptions = {
+        roomId: 'room-123',
+        content: 'test message',
+        userId: '@regularuser:matrix.openmeet.net', // Username without tenant suffix
+        accessToken: 'invalid-token',
+        tenantId: 'tenant123',
+      };
+
+      const mockClient = {
+        ...mockMatrixClient,
+        startClient: jest.fn(),
+        stopClient: jest.fn(),
+      };
+      mockSdkCreateClient.mockReturnValueOnce(mockClient);
+
+      await service.sendMessage(options);
+
+      // Should extract 'regularuser' and not try to remove tenant suffix
+      expect(matrixUserService.clearUserClients).toHaveBeenCalledWith(
+        'regularuser',
+        'tenant123',
+      );
+    });
+
+    it('should handle token refresh failure gracefully', async () => {
+      // Mock invalid token
+      (matrixUserService.verifyAccessToken as jest.Mock).mockResolvedValueOnce(
+        false,
+      );
+
+      // Mock token generation failure
+      (
+        matrixUserService.generateNewAccessToken as jest.Mock
+      ).mockResolvedValueOnce(null);
+
+      const options: SendMessageOptions = {
+        roomId: 'room-123',
+        content: 'test message',
+        userId: '@testuser:matrix.openmeet.net',
+        accessToken: 'invalid-token',
+        tenantId: 'tenant123',
+      };
+
+      await expect(service.sendMessage(options)).rejects.toThrow(
+        'Failed to refresh Matrix credentials',
+      );
+
+      // Verify token refresh was attempted
+      expect(matrixUserService.generateNewAccessToken).toHaveBeenCalled();
     });
   });
 

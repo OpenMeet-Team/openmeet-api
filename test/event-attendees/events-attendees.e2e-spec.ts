@@ -346,4 +346,81 @@ describe('EventAttendeeController (e2e)', () => {
 
     expect(attendeesResponse.status).toBe(404);
   });
+
+  it('should create cancelled attendee when RSVP No (with status)', async () => {
+    // Test the new two-button RSVP functionality - RSVP "No" should create cancelled attendee
+    const attendResponse = await request(TESTING_APP_URL)
+      .post(`/api/events/${testEvent.slug}/attend`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID)
+      .send({ status: EventAttendeeStatus.Cancelled });
+
+    expect(attendResponse.status).toBe(201);
+    expect(attendResponse.body.status).toBe(EventAttendeeStatus.Cancelled);
+    expect(attendResponse.body.user.slug).toBe(adminUser.slug);
+    expect(attendResponse.body.event.slug).toBe(testEvent.slug);
+
+    // Verify the user appears in attendees list with cancelled status
+    const getEventAttendeesResponse = await getEventAttendees(
+      token,
+      testEvent.slug,
+    );
+
+    expect(getEventAttendeesResponse.status).toBe(200);
+
+    const userAttendance = getEventAttendeesResponse.body.data.find(
+      (a) => a.user.slug === adminUser.slug,
+    );
+
+    expect(userAttendance).toBeDefined();
+    expect(userAttendance.status).toBe(EventAttendeeStatus.Cancelled);
+  });
+
+  it('should default to confirmed status when no status provided in attend request', async () => {
+    // Test that existing behavior is preserved - no status means confirmed
+    const attendResponse = await request(TESTING_APP_URL)
+      .post(`/api/events/${testEvent.slug}/attend`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID)
+      .send({}); // No status field
+
+    expect(attendResponse.status).toBe(201);
+    expect(attendResponse.body.status).toBe(EventAttendeeStatus.Confirmed);
+    expect(attendResponse.body.user.slug).toBe(adminUser.slug);
+  });
+
+  it('should allow transition from cancelled to confirmed attendance', async () => {
+    // First RSVP "No" (cancelled status)
+    const cancelledResponse = await request(TESTING_APP_URL)
+      .post(`/api/events/${testEvent.slug}/attend`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID)
+      .send({ status: EventAttendeeStatus.Cancelled });
+
+    expect(cancelledResponse.status).toBe(201);
+    expect(cancelledResponse.body.status).toBe(EventAttendeeStatus.Cancelled);
+
+    // Then RSVP "Yes" (confirmed status)
+    const confirmedResponse = await request(TESTING_APP_URL)
+      .post(`/api/events/${testEvent.slug}/attend`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID)
+      .send({ status: EventAttendeeStatus.Confirmed });
+
+    expect(confirmedResponse.status).toBe(201);
+    expect(confirmedResponse.body.status).toBe(EventAttendeeStatus.Confirmed);
+
+    // Verify final status in attendees list
+    const getEventAttendeesResponse = await getEventAttendees(
+      token,
+      testEvent.slug,
+    );
+
+    const userAttendance = getEventAttendeesResponse.body.data.find(
+      (a) => a.user.slug === adminUser.slug,
+    );
+
+    expect(userAttendance).toBeDefined();
+    expect(userAttendance.status).toBe(EventAttendeeStatus.Confirmed);
+  });
 });

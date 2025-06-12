@@ -729,6 +729,175 @@ describe('EventManagementService', () => {
         mockEventAttendeeService.findEventAttendeeByUserId,
       ).toHaveBeenCalledTimes(2);
     });
+
+    it('should respect status from CreateEventAttendeeDto when provided', async () => {
+      const targetEvent = findOneMockEventEntity;
+      const mockCancelledAttendee = {
+        id: 1,
+        status: EventAttendeeStatus.Cancelled,
+        user: mockUser,
+        event: targetEvent,
+        role: { id: 1, name: EventAttendeeRole.Participant },
+      } as any;
+
+      // Restore the original implementation for this test
+      jest.spyOn(service, 'attendEvent').mockRestore();
+
+      // Mock repository findOne to return the event
+      mockRepository.findOne.mockResolvedValueOnce(targetEvent);
+
+      // Mock userService.getUserById
+      const mockUserService = service[
+        'userService'
+      ] as jest.Mocked<UserService>;
+      mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
+
+      // Mock eventAttendeeService.findEventAttendeeByUserId to return null (no existing record)
+      const mockEventAttendeeService = service[
+        'eventAttendeeService'
+      ] as jest.Mocked<EventAttendeeService>;
+      mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+        null,
+      );
+
+      // Mock eventRoleService.getRoleByName
+      const mockEventRoleService = service[
+        'eventRoleService'
+      ] as jest.Mocked<EventRoleService>;
+      mockEventRoleService.getRoleByName.mockResolvedValueOnce({
+        id: 1,
+        name: EventAttendeeRole.Participant,
+        attendees: [],
+        permissions: [],
+      } as any);
+
+      // Mock eventAttendeeService.showEventAttendeesCount
+      mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(0);
+
+      // Mock eventAttendeeService.create to return cancelled attendee
+      mockEventAttendeeService.create.mockResolvedValueOnce(
+        mockCancelledAttendee,
+      );
+
+      // Mock eventMailService.sendMailAttendeeGuestJoined
+      const mockEventMailService = service[
+        'eventMailService'
+      ] as jest.Mocked<EventMailService>;
+      mockEventMailService.sendMailAttendeeGuestJoined.mockResolvedValueOnce();
+
+      // Mock the extra findEventAttendeeByUserId call that happens after creation
+      mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+        mockCancelledAttendee,
+      );
+
+      // Create DTO with cancelled status - this tests the new two-button RSVP functionality
+      const attendeeDto = {
+        status: EventAttendeeStatus.Cancelled, // Explicitly set cancelled status
+      };
+
+      const result = await service.attendEvent(
+        targetEvent.slug,
+        mockUser.id,
+        attendeeDto,
+      );
+
+      expect(result).toBeDefined();
+      expect(result.status).toBe(EventAttendeeStatus.Cancelled);
+
+      // Verify the eventAttendeeService.create was called with cancelled status
+      expect(mockEventAttendeeService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: EventAttendeeStatus.Cancelled,
+        }),
+      );
+
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'event.attendee.added',
+        expect.any(Object),
+      );
+    });
+
+    it('should default to confirmed status when no status provided in DTO', async () => {
+      const targetEvent = findOneMockEventEntity;
+      const mockConfirmedAttendee = {
+        id: 1,
+        status: EventAttendeeStatus.Confirmed,
+        user: mockUser,
+        event: targetEvent,
+        role: { id: 1, name: EventAttendeeRole.Participant },
+      } as any;
+
+      // Restore the original implementation for this test
+      jest.spyOn(service, 'attendEvent').mockRestore();
+
+      // Mock repository findOne to return the event
+      mockRepository.findOne.mockResolvedValueOnce(targetEvent);
+
+      // Mock userService.getUserById
+      const mockUserService = service[
+        'userService'
+      ] as jest.Mocked<UserService>;
+      mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
+
+      // Mock eventAttendeeService.findEventAttendeeByUserId to return null (no existing record)
+      const mockEventAttendeeService = service[
+        'eventAttendeeService'
+      ] as jest.Mocked<EventAttendeeService>;
+      mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+        null,
+      );
+
+      // Mock eventRoleService.getRoleByName
+      const mockEventRoleService = service[
+        'eventRoleService'
+      ] as jest.Mocked<EventRoleService>;
+      mockEventRoleService.getRoleByName.mockResolvedValueOnce({
+        id: 1,
+        name: EventAttendeeRole.Participant,
+        attendees: [],
+        permissions: [],
+      } as any);
+
+      // Mock eventAttendeeService.showEventAttendeesCount
+      mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(0);
+
+      // Mock eventAttendeeService.create to return confirmed attendee
+      mockEventAttendeeService.create.mockResolvedValueOnce(
+        mockConfirmedAttendee,
+      );
+
+      // Mock eventMailService.sendMailAttendeeGuestJoined
+      const mockEventMailService = service[
+        'eventMailService'
+      ] as jest.Mocked<EventMailService>;
+      mockEventMailService.sendMailAttendeeGuestJoined.mockResolvedValueOnce();
+
+      // Mock the extra findEventAttendeeByUserId call that happens after creation
+      mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+        mockConfirmedAttendee,
+      );
+
+      // Create DTO without status - should default to confirmed
+      const attendeeDto = {
+        // No status field provided
+      };
+
+      const result = await service.attendEvent(
+        targetEvent.slug,
+        mockUser.id,
+        attendeeDto,
+      );
+
+      expect(result).toBeDefined();
+      expect(result.status).toBe(EventAttendeeStatus.Confirmed);
+
+      // Verify the eventAttendeeService.create was called with confirmed status
+      expect(mockEventAttendeeService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: EventAttendeeStatus.Confirmed,
+        }),
+      );
+    });
   });
 
   describe('cancelAttendingEvent', () => {
