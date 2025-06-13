@@ -8,6 +8,8 @@ import axios from 'axios';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { UserService } from '../../user/user.service';
+import { TenantConnectionService } from '../../tenant/tenant.service';
 
 // Mock axios
 jest.mock('axios');
@@ -200,6 +202,30 @@ describe('Matrix Token Refresh Integration', () => {
         {
           provide: EventEmitter2,
           useValue: new EventEmitter2(),
+        },
+        {
+          provide: UserService,
+          useValue: {
+            getUserBySlugWithTenant: jest.fn().mockResolvedValue({
+              id: 1,
+              slug: 'admin',
+              matrixUserId: '@admin:matrix.org',
+            }),
+          },
+        },
+        {
+          provide: TenantConnectionService,
+          useValue: {
+            getTenantConnection: jest.fn().mockResolvedValue({
+              getRepository: jest.fn().mockReturnValue({
+                findOne: jest.fn().mockResolvedValue({
+                  id: 1,
+                  slug: 'test-event',
+                  matrixRoomId: 'room-123',
+                }),
+              }),
+            }),
+          },
         },
       ],
     }).compile();
