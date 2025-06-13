@@ -10,7 +10,6 @@ const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('MatrixTokenManagerService', () => {
   let service: MatrixTokenManagerService;
-  let configService: ConfigService;
   let eventEmitter: EventEmitter2;
 
   const mockConfig = {
@@ -60,7 +59,6 @@ describe('MatrixTokenManagerService', () => {
     }).compile();
 
     service = module.get<MatrixTokenManagerService>(MatrixTokenManagerService);
-    configService = module.get<ConfigService>(ConfigService);
     eventEmitter = module.get<EventEmitter2>(EventEmitter2);
 
     // Prevent the service from running onModuleInit during tests
@@ -133,7 +131,7 @@ describe('MatrixTokenManagerService', () => {
 
       // Start first regeneration (don't await yet)
       const promise1 = service.reportTokenInvalid();
-      
+
       // Start second regeneration immediately
       const promise2 = service.reportTokenInvalid();
 
@@ -221,7 +219,9 @@ describe('MatrixTokenManagerService', () => {
       (service as any).lastAdminTokenRefresh = 0;
 
       // Mock failed whoami response
-      mockedAxios.get.mockRejectedValueOnce(new Error('Token verification failed'));
+      mockedAxios.get.mockRejectedValueOnce(
+        new Error('Token verification failed'),
+      );
 
       // Mock successful regeneration
       mockedAxios.post.mockResolvedValueOnce({
@@ -236,10 +236,10 @@ describe('MatrixTokenManagerService', () => {
       const result = await (service as any).verifyAdminToken();
 
       expect(result).toBe(false); // Verification failed, but regeneration was triggered
-      
+
       // Wait a bit for the async regeneration to complete
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       // Now check that regeneration was called
       expect(mockedAxios.post).toHaveBeenCalled(); // Regeneration was called
     });
@@ -258,7 +258,10 @@ describe('MatrixTokenManagerService', () => {
         data: { access_token: 'user-token-123' },
       });
 
-      const token = await service.getValidUserToken('@user:example.org', 'tenant1');
+      const token = await service.getValidUserToken(
+        '@user:example.org',
+        'tenant1',
+      );
 
       expect(token).toBe('user-token-123');
       expect(eventEmitter.emit).toHaveBeenCalledWith(
@@ -282,7 +285,10 @@ describe('MatrixTokenManagerService', () => {
       });
 
       // First call should generate token
-      const token1 = await service.getValidUserToken('@user:example.org', 'tenant1');
+      const token1 = await service.getValidUserToken(
+        '@user:example.org',
+        'tenant1',
+      );
       expect(token1).toBe('user-token-123');
 
       // Mock token verification as valid (within 1 hour)
@@ -295,7 +301,10 @@ describe('MatrixTokenManagerService', () => {
       });
 
       // Second call should return cached token without API call
-      const token2 = await service.getValidUserToken('@user:example.org', 'tenant1');
+      const token2 = await service.getValidUserToken(
+        '@user:example.org',
+        'tenant1',
+      );
       expect(token2).toBe('user-token-123');
 
       // Should only have made one API call

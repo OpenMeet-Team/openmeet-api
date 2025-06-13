@@ -1,9 +1,13 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import axios from 'axios';
 import { MatrixCoreService } from './matrix-core.service';
 import { IMatrixMessageProvider } from '../types/matrix.interfaces';
 import { Message, SendMessageOptions } from '../types/matrix.types';
 import { MatrixUserService } from './matrix-user.service';
+import { UserService } from '../../user/user.service';
+import { TenantConnectionService } from '../../tenant/tenant.service';
+import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
 
 @Injectable()
 export class MatrixMessageService implements IMatrixMessageProvider {
@@ -13,7 +17,70 @@ export class MatrixMessageService implements IMatrixMessageProvider {
     private readonly matrixCoreService: MatrixCoreService,
     @Inject(forwardRef(() => MatrixUserService))
     private readonly matrixUserService: MatrixUserService,
+    private readonly eventEmitter: EventEmitter2,
+    @Inject(forwardRef(() => UserService))
+    private readonly userService: UserService,
+    private readonly tenantConnectionService: TenantConnectionService,
   ) {}
+
+  /**
+   * Helper method to find event and user information and trigger re-joining event
+   */
+  private async triggerUserRejoinEvent(
+    roomId: string,
+    userSlug: string,
+    tenantId: string,
+  ): Promise<void> {
+    try {
+      // Get user by slug
+      const user = await this.userService.getUserBySlugWithTenant(
+        userSlug,
+        tenantId,
+      );
+      if (!user) {
+        this.logger.warn(
+          `User with slug ${userSlug} not found in tenant ${tenantId}`,
+        );
+        return;
+      }
+
+      // Get database connection for the tenant to find the event by Matrix room ID
+      const dataSource =
+        await this.tenantConnectionService.getTenantConnection(tenantId);
+      const eventRepository = dataSource.getRepository(EventEntity);
+
+      // Find the event associated with this Matrix room ID
+      const event = await eventRepository.findOne({
+        where: { matrixRoomId: roomId },
+      });
+
+      if (!event) {
+        this.logger.warn(
+          `No event found with Matrix room ID ${roomId} in tenant ${tenantId}`,
+        );
+        return;
+      }
+
+      this.logger.log(
+        `Triggering event.attendee.updated to rejoin user ${userSlug} to event ${event.slug} room ${roomId}`,
+      );
+
+      // Trigger the event to add the user back to the chat room
+      this.eventEmitter.emit('event.attendee.updated', {
+        eventId: event.id,
+        userId: user.id,
+        status: 'confirmed', // Assume they should be confirmed if they're trying to interact
+        eventSlug: event.slug,
+        userSlug: user.slug,
+        tenantId: tenantId,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Error triggering user rejoin for ${userSlug} in room ${roomId}: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
 
   /**
    * Send a message to a room
@@ -308,6 +375,9 @@ export class MatrixMessageService implements IMatrixMessageProvider {
           this.logger.warn(
             `User ${userSlug} not in room ${roomId} when sending typing notification: ${error.message}. Triggering event.attendee.updated to add them.`,
           );
+
+          // Trigger the event to rejoin the user to the room
+          await this.triggerUserRejoinEvent(roomId, userSlug, tenantId);
 
           throw new Error(
             `User ${userSlug} not in Matrix room ${roomId}. Please try again in a moment.`,

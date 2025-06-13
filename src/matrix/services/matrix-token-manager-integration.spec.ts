@@ -1,6 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import { MatrixTokenManagerService } from './matrix-token-manager.service';
 import axios from 'axios';
 
@@ -13,7 +11,7 @@ describe('MatrixTokenManagerService - Integration Tests for Token Regeneration',
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    
+
     // Mock setInterval to prevent real timers
     jest.spyOn(global, 'setInterval').mockReturnValue(123 as any);
 
@@ -34,10 +32,13 @@ describe('MatrixTokenManagerService - Integration Tests for Token Regeneration',
                 defaultInitialDeviceDisplayName: 'OpenMeet Server',
               }),
             };
-            
+
             const eventEmitter = { emit: jest.fn() };
-            
-            return new MatrixTokenManagerService(configService as any, eventEmitter as any);
+
+            return new MatrixTokenManagerService(
+              configService as any,
+              eventEmitter as any,
+            );
           },
         },
       ],
@@ -66,7 +67,7 @@ describe('MatrixTokenManagerService - Integration Tests for Token Regeneration',
 
       // Verify: Should return true for successful regeneration
       expect(result).toBe(true);
-      
+
       // Verify: Token should be updated
       expect(service.getAdminToken()).toBe('new-token-123');
       expect(service.getAdminTokenState()).toBe('valid');
@@ -111,7 +112,7 @@ describe('MatrixTokenManagerService - Integration Tests for Token Regeneration',
 
   describe('Matrix Client Operations Integration', () => {
     it('should demonstrate the fix for withAdminClient retry logic', async () => {
-      // This test demonstrates how the MatrixClientOperationsService 
+      // This test demonstrates how the MatrixClientOperationsService
       // now waits for token regeneration instead of fire-and-forget
 
       // Setup: Mock token regeneration
@@ -124,7 +125,7 @@ describe('MatrixTokenManagerService - Integration Tests for Token Regeneration',
       });
 
       // Simulate the pattern: operation fails, token is regenerated, operation retries
-      
+
       // Step 1: Report invalid token (this is what happens when operation fails with 401)
       const regenerationResult = await service.reportTokenInvalid();
       expect(regenerationResult).toBe(true);
@@ -156,10 +157,12 @@ describe('MatrixTokenManagerService - Integration Tests for Token Regeneration',
 
       // Start regeneration
       const resultPromise = service.reportTokenInvalid();
-      
+
       // During regeneration, state might be 'regenerating' or 'invalid'
       // (depends on timing, but should not be 'valid' yet)
-      expect(['regenerating', 'invalid']).toContain(service.getAdminTokenState());
+      expect(['regenerating', 'invalid']).toContain(
+        service.getAdminTokenState(),
+      );
 
       // Wait for completion
       const result = await resultPromise;
