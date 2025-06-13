@@ -56,6 +56,7 @@ jest.mock('matrix-js-sdk', () => {
 
 describe('MatrixCoreService', () => {
   let service: MatrixCoreService;
+  let tokenManager: MatrixTokenManagerService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -85,6 +86,7 @@ describe('MatrixCoreService', () => {
           provide: MatrixTokenManagerService,
           useValue: {
             getAdminToken: jest.fn().mockReturnValue('admin-token'),
+            getAdminTokenState: jest.fn().mockReturnValue('valid'),
             getTokenState: jest.fn().mockReturnValue('valid'),
             reportTokenInvalid: jest.fn(),
             forceTokenRegeneration: jest.fn().mockResolvedValue(true),
@@ -103,6 +105,7 @@ describe('MatrixCoreService', () => {
     }).compile();
 
     service = module.get<MatrixCoreService>(MatrixCoreService);
+    tokenManager = module.get<MatrixTokenManagerService>(MatrixTokenManagerService);
 
     // Skip initialization to avoid side effects
     jest.spyOn(service, 'onModuleInit').mockImplementation(async () => {});
@@ -293,6 +296,179 @@ describe('MatrixCoreService', () => {
       const eventEmitter = service.getEventEmitter();
 
       expect(eventEmitter).toBe(mockEventEmitter);
+    });
+  });
+
+  describe('acquireClient - token regeneration fixes', () => {
+    let mockClientPool;
+
+    beforeEach(() => {
+      // Mock client pool
+      mockClientPool = {
+        acquire: jest.fn(),
+        release: jest.fn(),
+        drain: jest.fn().mockResolvedValue(undefined),
+        clear: jest.fn().mockResolvedValue(undefined),
+      };
+      (service as any).clientPool = mockClientPool;
+      
+      // Mock admin token access
+      (service as any).adminAccessToken = 'valid-token';
+      
+      // Ensure Matrix SDK is properly mocked
+      const mockSdk = require('matrix-js-sdk');
+      (service as any).matrixSdk = mockSdk;
+    });
+
+    it('should acquire client successfully when token is valid', async () => {
+      // Mock token manager to return valid state
+      (tokenManager.getAdminTokenState as jest.Mock).mockReturnValue('valid');
+      (tokenManager.getAdminToken as jest.Mock).mockReturnValue('valid-token');
+
+      // Mock client pool to return client with matching token
+      const mockClientWithContext = {
+        client: { ...mockMatrixClient, getAccessToken: () => 'valid-token' },
+        userId: '@admin:example.org',
+      };
+      mockClientPool.acquire.mockResolvedValue(mockClientWithContext);
+
+      const result = await service.acquireClient();
+
+      expect(result).toBe(mockClientWithContext);
+      expect(tokenManager.reportTokenInvalid).not.toHaveBeenCalled();
+    });
+
+    it('should regenerate token and retry when token is invalid', async () => {
+      // Mock token manager sequence: invalid -> valid after regeneration
+      (tokenManager.getAdminTokenState as jest.Mock)
+        .mockReturnValueOnce('invalid')
+        .mockReturnValue('valid');
+      
+      // Mock successful token regeneration
+      (tokenManager.reportTokenInvalid as jest.Mock).mockResolvedValue(true);
+      (tokenManager.getAdminToken as jest.Mock)
+        .mockReturnValue('new-valid-token');
+
+      // Mock client pool to return client with new token
+      const mockClientWithContext = {
+        client: { ...mockMatrixClient, getAccessToken: () => 'new-valid-token' },
+        userId: '@admin:example.org',
+      };
+      mockClientPool.acquire.mockResolvedValue(mockClientWithContext);
+
+      const result = await service.acquireClient();
+
+      // Check the result properties individually instead of exact object match
+      expect(result.client.getAccessToken()).toBe('new-valid-token');
+      expect(result.userId).toBe('@admin:example.org');
+      expect(tokenManager.reportTokenInvalid).toHaveBeenCalled();
+      expect(service['adminAccessToken']).toBe('new-valid-token');
+    });
+
+    it('should throw error when token regeneration fails', async () => {
+      // Mock token manager to indicate invalid state and failed regeneration
+      (tokenManager.getAdminTokenState as jest.Mock).mockReturnValue('invalid');
+      (tokenManager.reportTokenInvalid as jest.Mock).mockResolvedValue(false);
+
+      await expect(service.acquireClient()).rejects.toThrow(
+        'Cannot acquire Matrix client: admin token regeneration failed'
+      );
+    });
+
+    it('should reinitialize client pool when token has changed', async () => {
+      // Set service token to new-token  
+      (service as any).adminAccessToken = 'new-token';
+      
+      // Mock token manager to return valid state
+      (tokenManager.getAdminTokenState as jest.Mock).mockReturnValue('valid');
+      (tokenManager.getAdminToken as jest.Mock).mockReturnValue('new-token');
+
+      // Mock the SDK createClient to return a client with the right token
+      const mockSdk = require('matrix-js-sdk');
+      mockSdk.createClient.mockImplementation(() => ({
+        ...mockMatrixClient,
+        getAccessToken: () => 'new-token'
+      }));
+
+      // Mock client pool to return client with OLD token (indicating pool needs refresh)
+      const mockClientWithOldToken = {
+        client: { ...mockMatrixClient, getAccessToken: () => 'old-token' },
+        userId: '@admin:example.org',
+      };
+
+      mockClientPool.acquire
+        .mockResolvedValueOnce(mockClientWithOldToken); // First call returns old token
+
+      // Spy on initializeClientPool
+      const initializePoolSpy = jest.spyOn(service as any, 'initializeClientPool');
+
+      const result = await service.acquireClient();
+
+      // Check the result properties (the exact client will be different due to reinitialize)
+      expect(result.client.getAccessToken()).toBe('new-token');
+      expect(mockClientPool.release).toHaveBeenCalledWith(mockClientWithOldToken);
+      expect(mockClientPool.drain).toHaveBeenCalled();
+      expect(mockClientPool.clear).toHaveBeenCalled();
+      expect(initializePoolSpy).toHaveBeenCalled();
+    });
+
+    it('should handle M_UNKNOWN_TOKEN errors in client acquisition', async () => {
+      // Mock token manager to return valid state initially
+      (tokenManager.getAdminTokenState as jest.Mock).mockReturnValue('valid');
+      
+      // Mock client pool to throw M_UNKNOWN_TOKEN error
+      mockClientPool.acquire.mockRejectedValue({
+        message: 'M_UNKNOWN_TOKEN error',
+        data: { errcode: 'M_UNKNOWN_TOKEN' }
+      });
+
+      await expect(service.acquireClient()).rejects.toThrow('Cannot acquire Matrix client');
+      expect(tokenManager.reportTokenInvalid).toHaveBeenCalled();
+    });
+  });
+
+  describe('ensureValidAdminToken', () => {
+    it('should return true when token state is valid', async () => {
+      (tokenManager.getAdminTokenState as jest.Mock).mockReturnValue('valid');
+      (tokenManager.getAdminToken as jest.Mock).mockReturnValue('current-token');
+      (service as any).adminAccessToken = 'current-token';
+
+      const result = await service.ensureValidAdminToken();
+
+      expect(result).toBe(true);
+    });
+
+    it('should return true when token state is regenerating', async () => {
+      (tokenManager.getAdminTokenState as jest.Mock).mockReturnValue('regenerating');
+
+      const result = await service.ensureValidAdminToken();
+
+      expect(result).toBe(true);
+    });
+
+    it('should report invalid token and return false when state is invalid', async () => {
+      (tokenManager.getAdminTokenState as jest.Mock).mockReturnValue('invalid');
+      (tokenManager.reportTokenInvalid as jest.Mock).mockResolvedValue(false);
+
+      const result = await service.ensureValidAdminToken();
+
+      expect(result).toBe(false);
+      expect(tokenManager.reportTokenInvalid).toHaveBeenCalled();
+    });
+
+    it('should update admin token reference when token manager has newer token', async () => {
+      (tokenManager.getAdminTokenState as jest.Mock).mockReturnValue('valid');
+      (tokenManager.getAdminToken as jest.Mock).mockReturnValue('newer-token');
+      (service as any).adminAccessToken = 'older-token';
+
+      // Spy on createAdminClient - mock it to avoid side effects
+      const createAdminClientSpy = jest.spyOn(service as any, 'createAdminClient').mockImplementation(() => {});
+
+      const result = await service.ensureValidAdminToken();
+
+      expect(result).toBe(true);
+      expect(service['adminAccessToken']).toBe('newer-token');
+      expect(createAdminClientSpy).toHaveBeenCalled();
     });
   });
 });

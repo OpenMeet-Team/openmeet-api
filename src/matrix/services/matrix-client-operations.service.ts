@@ -144,12 +144,54 @@ export class MatrixClientOperationsService {
         error.stack,
       );
 
-      // If we get an unauthorized error, try to refresh the admin token
+      // If we get an unauthorized error, try to refresh the admin token and retry once
       if (error.response?.status === 401) {
         this.logger.warn(
-          'Admin token appears invalid, triggering regeneration',
+          'Admin token appears invalid, triggering regeneration and retrying once',
         );
-        void this.tokenManager.reportTokenInvalid();
+
+        // Wait for token regeneration to complete instead of fire-and-forget
+        const regenerated = await this.tokenManager.reportTokenInvalid();
+        if (regenerated) {
+          this.logger.log(
+            'Token regenerated successfully, retrying operation once',
+          );
+
+          try {
+            // Clean up the failed client before retrying
+            if (client && client.stopClient) {
+              try {
+                client.stopClient();
+              } catch (stopError) {
+                this.logger.debug(
+                  `Error stopping failed client: ${stopError.message}`,
+                );
+              }
+            }
+
+            // Get fresh token and retry operation once
+            const adminConfig = this.matrixCoreService.getConfig();
+            const freshToken = this.tokenManager.getAdminToken();
+
+            if (freshToken) {
+              client = this.matrixCoreService.getSdk().createClient({
+                baseUrl: adminConfig.baseUrl,
+                accessToken: freshToken,
+                userId: adminConfig.adminUserId,
+              });
+
+              const result = await operation(client);
+              return result;
+            }
+          } catch (retryError) {
+            this.logger.error(
+              `Retry after token regeneration failed: ${retryError.message}`,
+            );
+            throw retryError;
+          }
+        } else {
+          this.logger.error('Failed to regenerate admin token');
+        }
       }
 
       throw error;
