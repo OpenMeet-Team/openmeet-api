@@ -92,7 +92,7 @@ describe('Matrix Client Initialization Fix', () => {
       },
     ];
 
-    testScenarios.forEach(({ name, error, shouldRetry }) => {
+    testScenarios.forEach(({ error, shouldRetry }) => {
       const handleInitError = (error: Error) => {
         // Determine if we should retry based on error type
         const isRetryableError =

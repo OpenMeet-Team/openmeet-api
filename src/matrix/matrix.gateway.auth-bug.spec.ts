@@ -23,15 +23,6 @@ describe('Matrix Credentials Check Logic - Bug Reproduction', () => {
       // This test simulates the exact scenario from the logs where tom-scanlan-dvasc6
       // has valid Matrix credentials and is actively syncing with the Matrix server
 
-      const mockSocket = {
-        id: 'test-socket',
-        data: {},
-        handshake: {
-          auth: { token: 'valid-jwt' },
-          headers: {},
-        },
-      } as any as Socket;
-
       // Simulate the auth handler logic
       const hasMatrixCredentials = !!(
         mockUserWithCredentials.matrixUserId &&
@@ -96,7 +87,7 @@ describe('Matrix Credentials Check Logic - Bug Reproduction', () => {
         },
       ];
 
-      testCases.forEach(({ name, user, expected }) => {
+      testCases.forEach(({ user, expected }) => {
         const hasCredentials = !!(
           user.matrixUserId &&
           user.matrixAccessToken &&
@@ -106,7 +97,7 @@ describe('Matrix Credentials Check Logic - Bug Reproduction', () => {
       });
     });
 
-    it('should trace the full authentication flow', async () => {
+    it('should trace the full authentication flow', () => {
       // This test traces the exact flow from socket connection to join-room
 
       // Step 1: User connects with JWT
@@ -166,25 +157,21 @@ describe('Matrix Credentials Check Logic - Bug Reproduction', () => {
       expect(mockSocket.data.hasMatrixCredentials).toBeUndefined();
     });
 
-    it('should check if Matrix credentials are being fetched with proper includes', async () => {
+    it('should check if Matrix credentials are being fetched with proper includes', () => {
       // Verify that the UserService is fetching Matrix fields
 
       mockUserService.findByIdWithTenant.mockResolvedValue(
         mockUserWithCredentials,
       );
 
-      await mockUserService.findByIdWithTenant(
-        'tom-scanlan-dvasc6',
-        'lsdfaopkljdfs',
-      );
+      mockUserService.findByIdWithTenant('tom-scanlan-dvasc6', 'lsdfaopkljdfs');
 
       // The actual implementation might need to include specific fields
       // This could be the issue - Matrix fields not being selected in the query
       expect(mockUserService.findByIdWithTenant).toHaveBeenCalled();
 
       // Check if the returned user has all Matrix fields
-      const returnedUser =
-        await mockUserService.findByIdWithTenant.mock.results[0].value;
+      const returnedUser = mockUserWithCredentials;
       expect(returnedUser).toHaveProperty('matrixUserId');
       expect(returnedUser).toHaveProperty('matrixAccessToken');
       expect(returnedUser).toHaveProperty('matrixDeviceId');

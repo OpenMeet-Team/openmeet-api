@@ -633,10 +633,16 @@ export class MatrixGateway
         }
 
         // Check if the client has Matrix credentials
-        MatrixGatewayHelper.validateClientHasMatrixCredentials(
-          client,
-          this.logger,
-        );
+        const credentialCheck =
+          MatrixGatewayHelper.validateClientHasMatrixCredentials(
+            client,
+            this.logger,
+          );
+
+        // If client needs initialization, attempt to initialize it now
+        if (credentialCheck.needsInitialization) {
+          await this.initializeMatrixClientForConnection(client);
+        }
 
         return await this.sendTypingNotification(client, data);
       },
@@ -853,10 +859,16 @@ export class MatrixGateway
         );
 
         // Check if the client has initialized Matrix credentials
-        MatrixGatewayHelper.validateClientHasMatrixCredentials(
-          client,
-          this.logger,
-        );
+        const credentialCheck =
+          MatrixGatewayHelper.validateClientHasMatrixCredentials(
+            client,
+            this.logger,
+          );
+
+        // If client needs initialization, attempt to initialize it now
+        if (credentialCheck.needsInitialization) {
+          await this.initializeMatrixClientForConnection(client);
+        }
 
         // Send the message and get the result
         const result = await this.sendMatrixMessage(client, data);

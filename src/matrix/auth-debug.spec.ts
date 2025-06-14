@@ -3,7 +3,7 @@
  * This test simulates the exact production scenario
  */
 describe('Matrix WebSocket Auth Debug', () => {
-  it('should check database query behavior for Matrix credentials', async () => {
+  it('should check database query behavior for Matrix credentials', () => {
     // Simulate the exact user data from production
     const realProductionUser = {
       slug: 'tom-scanlan-dvasc6',
@@ -81,7 +81,7 @@ describe('Matrix WebSocket Auth Debug', () => {
       },
     ];
 
-    scenarios.forEach(({ name, userResult, expectedHasCredentials }) => {
+    scenarios.forEach(({ userResult, expectedHasCredentials }) => {
       const hasCredentials = userResult
         ? !!(
             userResult.matrixUserId?.trim() &&
@@ -142,7 +142,7 @@ describe('Matrix WebSocket Auth Debug', () => {
     };
 
     // Test the flow
-    expect(authenticateUser()).resolves.toEqual({
+    void expect(authenticateUser()).resolves.toEqual({
       authenticated: true,
       hasMatrixCredentials: true,
       userId: 'tom-scanlan-dvasc6',
