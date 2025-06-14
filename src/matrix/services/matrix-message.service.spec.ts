@@ -1,6 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { MatrixMessageService } from './matrix-message.service';
 import { MatrixCoreService } from './matrix-core.service';
+import { UserService } from '../../user/user.service';
+import { TenantConnectionService } from '../../tenant/tenant.service';
 import axios from 'axios';
 import { SendMessageOptions } from '../types/matrix.types';
 import { MatrixUserService } from './matrix-user.service';
@@ -13,6 +16,7 @@ describe('MatrixMessageService', () => {
   let service: MatrixMessageService;
   let matrixCoreService: MatrixCoreService;
   let matrixUserService: MatrixUserService;
+  let module: TestingModule;
 
   // Mock Matrix client
   const mockMatrixClient = {
@@ -58,7 +62,7 @@ describe('MatrixMessageService', () => {
       },
     });
 
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         MatrixMessageService,
         {
@@ -88,6 +92,36 @@ describe('MatrixMessageService', () => {
               .fn()
               .mockResolvedValue('new-access-token'),
             clearUserClients: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: EventEmitter2,
+          useValue: {
+            emit: jest.fn().mockReturnValue(true),
+          },
+        },
+        {
+          provide: UserService,
+          useValue: {
+            getUserBySlugWithTenant: jest.fn().mockResolvedValue({
+              id: 1,
+              slug: 'test-user',
+              matrixUserId: '@test:example.org',
+            }),
+          },
+        },
+        {
+          provide: TenantConnectionService,
+          useValue: {
+            getTenantConnection: jest.fn().mockResolvedValue({
+              getRepository: jest.fn().mockReturnValue({
+                findOne: jest.fn().mockResolvedValue({
+                  id: 1,
+                  slug: 'test-event',
+                  matrixRoomId: 'room-123',
+                }),
+              }),
+            }),
           },
         },
       ],
@@ -457,6 +491,51 @@ describe('MatrixMessageService', () => {
       ).rejects.toThrow(
         'Failed to send typing notification: Failed to send typing notification',
       );
+    });
+
+    it('should trigger event.attendee.updated when user is not in room', async () => {
+      const roomId = 'room-123';
+      const userSlug = 'test-user';
+      const tenantId = 'test-tenant';
+      const isTyping = true;
+
+      // Mock the Matrix client to return "not in room" error
+      const mockUserClient = { ...mockMatrixClient };
+      mockUserClient.sendTyping.mockRejectedValueOnce(
+        new Error('User @test:example.org not in room room-123'),
+      );
+
+      // Mock getClientForUser to return the mock client
+      const mockMatrixUserService =
+        module.get<MatrixUserService>(MatrixUserService);
+      (
+        mockMatrixUserService.getClientForUser as jest.Mock
+      ).mockResolvedValueOnce(mockUserClient);
+
+      // Mock the event emitter
+      const eventEmitter = module.get<EventEmitter2>(EventEmitter2);
+      const emitSpy = eventEmitter.emit as jest.Mock;
+
+      await expect(
+        service.sendTypingNotificationBySlug(
+          roomId,
+          userSlug,
+          isTyping,
+          tenantId,
+        ),
+      ).rejects.toThrow(
+        'User test-user not in Matrix room room-123. Please try again in a moment.',
+      );
+
+      // Verify that the event was emitted
+      expect(emitSpy).toHaveBeenCalledWith('event.attendee.updated', {
+        eventId: 1,
+        userId: 1,
+        status: 'confirmed',
+        eventSlug: 'test-event',
+        userSlug: 'test-user',
+        tenantId: 'test-tenant',
+      });
     });
   });
 
