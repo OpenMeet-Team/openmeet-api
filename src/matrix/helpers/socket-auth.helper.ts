@@ -122,11 +122,11 @@ export class SocketAuthHandler {
 
           this.logger.debug(`Found user ${userId} in database`);
 
-          // Check if user has Matrix credentials
+          // Check if user has Matrix credentials (with proper whitespace handling)
           const hasMatrixCredentials = !!(
-            user.matrixUserId &&
-            user.matrixAccessToken &&
-            user.matrixDeviceId
+            user.matrixUserId?.trim() &&
+            user.matrixAccessToken?.trim() &&
+            user.matrixDeviceId?.trim()
           );
 
           // Store minimal information in socket data

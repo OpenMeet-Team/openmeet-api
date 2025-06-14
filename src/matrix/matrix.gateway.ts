@@ -633,10 +633,16 @@ export class MatrixGateway
         }
 
         // Check if the client has Matrix credentials
-        MatrixGatewayHelper.validateClientHasMatrixCredentials(
-          client,
-          this.logger,
-        );
+        const credentialCheck =
+          MatrixGatewayHelper.validateClientHasMatrixCredentials(
+            client,
+            this.logger,
+          );
+
+        // If client needs initialization, attempt to initialize it now
+        if (credentialCheck.needsInitialization) {
+          await this.initializeMatrixClientForConnection(client);
+        }
 
         return await this.sendTypingNotification(client, data);
       },
@@ -714,10 +720,26 @@ export class MatrixGateway
         );
 
         // Check if the client has initialized Matrix credentials
-        MatrixGatewayHelper.validateClientHasMatrixCredentials(
-          client,
-          this.logger,
-        );
+        const credentialCheck =
+          MatrixGatewayHelper.validateClientHasMatrixCredentials(
+            client,
+            this.logger,
+          );
+
+        // If client needs initialization, attempt to initialize it now
+        if (credentialCheck.needsInitialization) {
+          this.logger.debug(
+            `Attempting to initialize Matrix client for user ${client.data.userId} during join-room`,
+          );
+          try {
+            await this.initializeMatrixClientForConnection(client);
+          } catch (error) {
+            this.logger.error(
+              `Failed to initialize Matrix client during join-room: ${error.message}`,
+            );
+            throw new WsException('Failed to initialize Matrix client');
+          }
+        }
 
         // Socket.io join room
         await client.join(data.roomId);
@@ -837,10 +859,16 @@ export class MatrixGateway
         );
 
         // Check if the client has initialized Matrix credentials
-        MatrixGatewayHelper.validateClientHasMatrixCredentials(
-          client,
-          this.logger,
-        );
+        const credentialCheck =
+          MatrixGatewayHelper.validateClientHasMatrixCredentials(
+            client,
+            this.logger,
+          );
+
+        // If client needs initialization, attempt to initialize it now
+        if (credentialCheck.needsInitialization) {
+          await this.initializeMatrixClientForConnection(client);
+        }
 
         // Send the message and get the result
         const result = await this.sendMatrixMessage(client, data);

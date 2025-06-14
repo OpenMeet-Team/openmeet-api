@@ -113,19 +113,30 @@ export class MatrixGatewayHelper {
    * @param client Socket client
    * @param logger Logger instance for error reporting
    * @throws WsException if credentials are missing
+   * @returns Object indicating if initialization is needed
    */
   static validateClientHasMatrixCredentials(
     client: Socket,
     logger: Logger,
-  ): void {
-    if (
-      !client.data?.hasMatrixCredentials ||
-      !client.data?.matrixClientInitialized
-    ) {
-      const userId = client.data?.userId;
+  ): { needsInitialization: boolean } {
+    const userId = client.data?.userId;
+
+    // First check if user has Matrix credentials at all
+    if (!client.data?.hasMatrixCredentials) {
       logger.warn(`User ${userId} missing Matrix credentials`);
       throw new WsException('Matrix credentials required');
     }
+
+    // If user has credentials but client isn't initialized, indicate initialization is needed
+    if (!client.data?.matrixClientInitialized) {
+      logger.debug(
+        `User ${userId} has Matrix credentials but client not initialized - will attempt initialization`,
+      );
+      return { needsInitialization: true };
+    }
+
+    // All good - user has credentials and client is initialized
+    return { needsInitialization: false };
   }
 
   /**
