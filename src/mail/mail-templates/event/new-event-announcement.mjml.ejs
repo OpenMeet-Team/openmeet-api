@@ -9,8 +9,12 @@
           </mj-text>
 
           <mj-text>
+            <% if (groupName && groupUrl) { %>
             A new event has been published in 
             <strong><a href="<%= groupUrl %>"><%= groupName %></a></strong>!
+            <% } else { %>
+            A new event has been published!
+            <% } %>
           </mj-text>
 
           <!-- Event Title -->
@@ -103,6 +107,7 @@
         </mj-column>
       </mj-section>
 
+      <% if (groupName && groupUrl) { %>
       <mj-section padding="10px 20px">
         <mj-column>
           <mj-button href="<%= groupUrl %>" background-color="transparent" color="#7B71DA" border="2px solid #7B71DA" font-size="14px">
@@ -110,13 +115,19 @@
           </mj-button>
         </mj-column>
       </mj-section>
+      <% } %>
 
       <!-- Footer Info -->
       <mj-section padding="10px">
         <mj-column>
           <mj-text font-size="12px" color="#666666">
+            <% if (groupName) { %>
             You received this email because you're a member of "<%= groupName %>" 
             and have opted to receive new event notifications.
+            <% } else { %>
+            You received this email because you've shown interest in this event 
+            and have opted to receive new event notifications.
+            <% } %>
           </mj-text>
           
           <mj-text font-size="12px" color="#666666" padding-top="10px">

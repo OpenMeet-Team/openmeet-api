@@ -151,7 +151,9 @@ export class EventAnnouncementService {
         try {
           await this.mailerService.sendMjmlMail({
             to: user.email!,
-            subject: `New Event: ${event.name} in ${event.group?.name}`,
+            subject: event.group?.name
+              ? `New Event: ${event.name} in ${event.group.name}`
+              : `New Event: ${event.name}`,
             templateName: 'event/new-event-announcement',
             context: {
               recipientName: user.firstName,
@@ -161,12 +163,14 @@ export class EventAnnouncementService {
               eventEndDateTime: event.endDate,
               eventTimeZone: event.timeZone,
               eventLocation: event.location,
-              groupName: event.group?.name,
+              groupName: event.group?.name || null,
               organizerName:
                 `${event.user?.firstName || ''} ${event.user?.lastName || ''}`.trim(),
               organizerSlug: event.user?.slug,
               eventUrl: `${tenantConfig?.frontendDomain}/events/${event.slug}`,
-              groupUrl: `${tenantConfig?.frontendDomain}/groups/${event.group?.slug}`,
+              groupUrl: event.group?.slug
+                ? `${tenantConfig?.frontendDomain}/groups/${event.group.slug}`
+                : null,
               organizerUrl: event.user?.slug
                 ? `${tenantConfig?.frontendDomain}/members/${event.user.slug}`
                 : null,
@@ -270,7 +274,9 @@ export class EventAnnouncementService {
         try {
           await this.mailerService.sendMjmlMail({
             to: user.email!,
-            subject: `Updated Event: ${event.name} in ${event.group?.name}`,
+            subject: event.group?.name
+              ? `Updated Event: ${event.name} in ${event.group.name}`
+              : `Updated Event: ${event.name}`,
             templateName: 'event/event-update-announcement',
             context: {
               recipientName: user.firstName,
@@ -280,12 +286,14 @@ export class EventAnnouncementService {
               eventEndDateTime: event.endDate,
               eventTimeZone: event.timeZone,
               eventLocation: event.location,
-              groupName: event.group?.name,
+              groupName: event.group?.name || null,
               organizerName:
                 `${event.user?.firstName || ''} ${event.user?.lastName || ''}`.trim(),
               organizerSlug: event.user?.slug,
               eventUrl: `${tenantConfig?.frontendDomain}/events/${event.slug}`,
-              groupUrl: `${tenantConfig?.frontendDomain}/groups/${event.group?.slug}`,
+              groupUrl: event.group?.slug
+                ? `${tenantConfig?.frontendDomain}/groups/${event.group.slug}`
+                : null,
               organizerUrl: event.user?.slug
                 ? `${tenantConfig?.frontendDomain}/members/${event.user.slug}`
                 : null,
@@ -367,7 +375,9 @@ export class EventAnnouncementService {
         try {
           await this.mailerService.sendMjmlMail({
             to: user.email!,
-            subject: `Cancelled Event: ${event.name} in ${event.group?.name}`,
+            subject: event.group?.name
+              ? `Cancelled Event: ${event.name} in ${event.group.name}`
+              : `Cancelled Event: ${event.name}`,
             templateName: 'event/event-cancellation-announcement',
             context: {
               recipientName: user.firstName,
@@ -377,12 +387,14 @@ export class EventAnnouncementService {
               eventEndDateTime: event.endDate,
               eventTimeZone: event.timeZone,
               eventLocation: event.location,
-              groupName: event.group?.name,
+              groupName: event.group?.name || null,
               organizerName:
                 `${event.user?.firstName || ''} ${event.user?.lastName || ''}`.trim(),
               organizerSlug: event.user?.slug,
               eventUrl: `${tenantConfig?.frontendDomain}/events/${event.slug}`,
-              groupUrl: `${tenantConfig?.frontendDomain}/groups/${event.group?.slug}`,
+              groupUrl: event.group?.slug
+                ? `${tenantConfig?.frontendDomain}/groups/${event.group.slug}`
+                : null,
               organizerUrl: event.user?.slug
                 ? `${tenantConfig?.frontendDomain}/members/${event.user.slug}`
                 : null,

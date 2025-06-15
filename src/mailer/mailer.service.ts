@@ -217,4 +217,3 @@ export class MailerService {
     return html;
   }
 }
-
