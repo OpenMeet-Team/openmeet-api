@@ -1,7 +1,6 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { REQUEST } from '@nestjs/core';
-import { Repository } from 'typeorm';
 import { MailerService } from '../../mailer/mailer.service';
 import { UserService } from '../../user/user.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
@@ -9,32 +8,23 @@ import { ConfigService } from '@nestjs/config';
 import { AllConfigType } from '../../config/config.type';
 import { EventStatus } from '../../core/constants/constant';
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
-import { GroupMemberEntity } from '../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
+import { EventQueryService } from '../../event/services/event-query.service';
+import { GroupMemberService } from '../../group-member/group-member.service';
 
 @Injectable()
 export class EventAnnouncementService {
   private readonly logger = new Logger(EventAnnouncementService.name);
-  private eventRepository: Repository<EventEntity>;
-  private groupMemberRepository: Repository<GroupMemberEntity>;
 
   constructor(
     private readonly mailerService: MailerService,
     private readonly userService: UserService,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly configService: ConfigService<AllConfigType>,
+    private readonly eventQueryService: EventQueryService,
+    private readonly groupMemberService: GroupMemberService,
     @Inject(REQUEST) private readonly request: any,
   ) {}
-
-  private async initializeRepository() {
-    if (!this.eventRepository || !this.groupMemberRepository) {
-      const tenantId = this.request.tenantId;
-      const dataSource =
-        await this.tenantConnectionService.getTenantConnection(tenantId);
-      this.eventRepository = dataSource.getRepository(EventEntity);
-      this.groupMemberRepository = dataSource.getRepository(GroupMemberEntity);
-    }
-  }
 
   private getTenantConfig() {
     const tenantId = this.request.tenantId;
@@ -45,25 +35,17 @@ export class EventAnnouncementService {
   }
 
   private async findEventBySlug(slug: string): Promise<EventEntity | null> {
-    await this.initializeRepository();
-    return this.eventRepository.findOne({
-      where: { slug },
-      relations: ['user', 'group', 'categories', 'image'],
-    });
+    return this.eventQueryService.findEventBySlug(slug);
   }
 
   private async getGroupMembersForEmail(
     groupId: number,
   ): Promise<UserEntity[]> {
-    await this.initializeRepository();
-
-    // For now, just get all group members - we can add permission filtering later
-    const groupMembers = await this.groupMemberRepository.find({
-      where: {
-        group: { id: groupId },
-      },
-      relations: ['user'],
-    });
+    // Get all group members using the service layer
+    const groupMembers = await this.groupMemberService.findGroupDetailsMembers(
+      groupId,
+      0,
+    );
 
     return groupMembers
       .map((member) => member.user)
@@ -155,12 +137,18 @@ export class EventAnnouncementService {
               eventTitle: event.name,
               eventDescription: event.description,
               eventDateTime: event.startDate,
+              eventEndDateTime: event.endDate,
+              eventTimeZone: event.timeZone,
               eventLocation: event.location,
               groupName: event.group?.name,
               organizerName:
                 `${event.user?.firstName || ''} ${event.user?.lastName || ''}`.trim(),
+              organizerSlug: event.user?.slug,
               eventUrl: `${tenantConfig?.frontendDomain}/events/${event.slug}`,
               groupUrl: `${tenantConfig?.frontendDomain}/groups/${event.group?.slug}`,
+              organizerUrl: event.user?.slug
+                ? `${tenantConfig?.frontendDomain}/members/${event.user.slug}`
+                : null,
             },
             tenantConfig,
           });
@@ -284,12 +272,18 @@ export class EventAnnouncementService {
               eventTitle: event.name,
               eventDescription: event.description,
               eventDateTime: event.startDate,
+              eventEndDateTime: event.endDate,
+              eventTimeZone: event.timeZone,
               eventLocation: event.location,
               groupName: event.group?.name,
               organizerName:
                 `${event.user?.firstName || ''} ${event.user?.lastName || ''}`.trim(),
+              organizerSlug: event.user?.slug,
               eventUrl: `${tenantConfig?.frontendDomain}/events/${event.slug}`,
               groupUrl: `${tenantConfig?.frontendDomain}/groups/${event.group?.slug}`,
+              organizerUrl: event.user?.slug
+                ? `${tenantConfig?.frontendDomain}/members/${event.user.slug}`
+                : null,
             },
             tenantConfig,
           });
@@ -391,12 +385,18 @@ export class EventAnnouncementService {
               eventTitle: event.name,
               eventDescription: event.description,
               eventDateTime: event.startDate,
+              eventEndDateTime: event.endDate,
+              eventTimeZone: event.timeZone,
               eventLocation: event.location,
               groupName: event.group?.name,
               organizerName:
                 `${event.user?.firstName || ''} ${event.user?.lastName || ''}`.trim(),
+              organizerSlug: event.user?.slug,
               eventUrl: `${tenantConfig?.frontendDomain}/events/${event.slug}`,
               groupUrl: `${tenantConfig?.frontendDomain}/groups/${event.group?.slug}`,
+              organizerUrl: event.user?.slug
+                ? `${tenantConfig?.frontendDomain}/members/${event.user.slug}`
+                : null,
             },
             tenantConfig,
           });

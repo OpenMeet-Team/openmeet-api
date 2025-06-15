@@ -94,6 +94,7 @@
     "google-auth-library": "9.14.1",
     "googleapis": "^149.0.0",
     "handlebars": "4.7.8",
+    "html-to-text": "^9.0.5",
     "ical-generator": "^8.1.1",
     "ioredis": "^5.5.0",
     "jwt-decode": "^4.0.0",
@@ -128,9 +129,9 @@
     "zulip-js": "^2.1.0"
   },
   "devDependencies": {
+    "@babel/runtime": ">=7.26.10",
     "@commitlint/cli": "19.5.0",
     "@commitlint/config-conventional": "19.5.0",
-    "@babel/runtime": ">=7.26.10",
     "@eslint/eslintrc": "^3.1.0",
     "@eslint/js": "^9.9.0",
     "@nestjs/cli": "10.4.8",

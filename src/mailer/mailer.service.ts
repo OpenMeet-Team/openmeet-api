@@ -158,6 +158,21 @@ export class MailerService {
           context,
           tenantConfig,
         );
+      } else if (templateName === 'event/new-event-announcement') {
+        text = this.generateNewEventAnnouncementPlainText(
+          context,
+          tenantConfig,
+        );
+      } else if (templateName === 'event/event-update-announcement') {
+        text = this.generateEventUpdateAnnouncementPlainText(
+          context,
+          tenantConfig,
+        );
+      } else if (templateName === 'event/event-cancellation-announcement') {
+        text = this.generateEventCancellationAnnouncementPlainText(
+          context,
+          tenantConfig,
+        );
       }
 
       await this.transporter.sendMail({
@@ -280,6 +295,286 @@ This ${contactType} was sent by ${attendee?.firstName} ${attendee?.lastName} fro
 Contact type: ${contactType}
 
 To reply to this attendee, visit the event page and use the event messaging features.
+
+--
+${tenantConfig?.name || 'OpenMeet'}
+`;
+  }
+
+  private generateNewEventAnnouncementPlainText(
+    context: Record<string, any>,
+    tenantConfig: any,
+  ): string {
+    const {
+      recipientName,
+      eventTitle,
+      eventDescription,
+      eventDateTime,
+      eventEndDateTime,
+      eventTimeZone,
+      eventLocation,
+      groupName,
+      organizerName,
+      eventUrl,
+      groupUrl,
+      organizerUrl,
+    } = context;
+
+    // Format date/time
+    const startDate = new Date(eventDateTime);
+    const endDate = eventEndDateTime ? new Date(eventEndDateTime) : null;
+    const timeZoneDisplay =
+      eventTimeZone && eventTimeZone !== 'UTC' ? eventTimeZone : 'UTC';
+
+    const formatDateTime = (date: Date) => {
+      return (
+        date.toLocaleDateString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }) +
+        ' at ' +
+        date.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+          timeZone: eventTimeZone || 'UTC',
+        })
+      );
+    };
+
+    const formatTime = (date: Date) => {
+      return date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: eventTimeZone || 'UTC',
+      });
+    };
+
+    let eventDetails = `When: ${formatDateTime(startDate)}`;
+    if (endDate) {
+      eventDetails += `\nEnds: ${formatTime(endDate)}`;
+    }
+    eventDetails += `\nTimezone: ${timeZoneDisplay}`;
+
+    if (eventLocation) {
+      eventDetails += `\nWhere: ${eventLocation}`;
+    }
+
+    let organizerInfo = '';
+    if (organizerName) {
+      organizerInfo = `\nOrganizer: ${organizerName}`;
+      if (organizerUrl) {
+        organizerInfo += ` (${organizerUrl})`;
+      }
+    }
+
+    return `Hello ${recipientName},
+
+A new event has been published in ${groupName}!
+
+${eventTitle}
+
+${eventDescription || ''}
+
+${eventDetails}${organizerInfo}
+
+View Event Details: ${eventUrl}
+Visit ${groupName}: ${groupUrl}
+
+You received this email because you're a member of "${groupName}" and have opted to receive new event notifications.
+
+To manage your notification preferences, visit your profile settings: ${tenantConfig?.frontendDomain}/dashboard/profile
+
+--
+${tenantConfig?.name || 'OpenMeet'}
+`;
+  }
+
+  private generateEventUpdateAnnouncementPlainText(
+    context: Record<string, any>,
+    tenantConfig: any,
+  ): string {
+    const {
+      recipientName,
+      eventTitle,
+      eventDescription,
+      eventDateTime,
+      eventEndDateTime,
+      eventTimeZone,
+      eventLocation,
+      groupName,
+      organizerName,
+      eventUrl,
+      groupUrl,
+      organizerUrl,
+    } = context;
+
+    // Format date/time
+    const startDate = new Date(eventDateTime);
+    const endDate = eventEndDateTime ? new Date(eventEndDateTime) : null;
+    const timeZoneDisplay =
+      eventTimeZone && eventTimeZone !== 'UTC' ? eventTimeZone : 'UTC';
+
+    const formatDateTime = (date: Date) => {
+      return (
+        date.toLocaleDateString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }) +
+        ' at ' +
+        date.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+          timeZone: eventTimeZone || 'UTC',
+        })
+      );
+    };
+
+    const formatTime = (date: Date) => {
+      return date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: eventTimeZone || 'UTC',
+      });
+    };
+
+    let eventDetails = `When: ${formatDateTime(startDate)}`;
+    if (endDate) {
+      eventDetails += `\nEnds: ${formatTime(endDate)}`;
+    }
+    eventDetails += `\nTimezone: ${timeZoneDisplay}`;
+
+    if (eventLocation) {
+      eventDetails += `\nWhere: ${eventLocation}`;
+    }
+
+    let organizerInfo = '';
+    if (organizerName) {
+      organizerInfo = `\nOrganizer: ${organizerName}`;
+      if (organizerUrl) {
+        organizerInfo += ` (${organizerUrl})`;
+      }
+    }
+
+    return `Hello ${recipientName},
+
+An event in ${groupName} has been updated with new information!
+
+📝 This event has been updated. Please review the latest details below.
+
+${eventTitle}
+
+${eventDescription || ''}
+
+${eventDetails}${organizerInfo}
+
+View Updated Event: ${eventUrl}
+Visit ${groupName}: ${groupUrl}
+
+You received this email because you're a member of "${groupName}" and have opted to receive event update notifications.
+
+To manage your notification preferences, visit your profile settings: ${tenantConfig?.frontendDomain}/dashboard/profile
+
+--
+${tenantConfig?.name || 'OpenMeet'}
+`;
+  }
+
+  private generateEventCancellationAnnouncementPlainText(
+    context: Record<string, any>,
+    tenantConfig: any,
+  ): string {
+    const {
+      recipientName,
+      eventTitle,
+      eventDescription,
+      eventDateTime,
+      eventEndDateTime,
+      eventTimeZone,
+      eventLocation,
+      groupName,
+      organizerName,
+      groupUrl,
+      organizerUrl,
+    } = context;
+
+    // Format date/time
+    const startDate = new Date(eventDateTime);
+    const endDate = eventEndDateTime ? new Date(eventEndDateTime) : null;
+    const timeZoneDisplay =
+      eventTimeZone && eventTimeZone !== 'UTC' ? eventTimeZone : 'UTC';
+
+    const formatDateTime = (date: Date) => {
+      return (
+        date.toLocaleDateString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }) +
+        ' at ' +
+        date.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+          timeZone: eventTimeZone || 'UTC',
+        })
+      );
+    };
+
+    const formatTime = (date: Date) => {
+      return date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: eventTimeZone || 'UTC',
+      });
+    };
+
+    let eventDetails = `Was scheduled for: ${formatDateTime(startDate)}`;
+    if (endDate) {
+      eventDetails += `\nWas to end: ${formatTime(endDate)}`;
+    }
+    eventDetails += `\nTimezone: ${timeZoneDisplay}`;
+
+    if (eventLocation) {
+      eventDetails += `\nLocation: ${eventLocation}`;
+    }
+
+    let organizerInfo = '';
+    if (organizerName) {
+      organizerInfo = `\nOrganizer: ${organizerName}`;
+      if (organizerUrl) {
+        organizerInfo += ` (${organizerUrl})`;
+      }
+    }
+
+    return `Hello ${recipientName},
+
+Unfortunately, an event in ${groupName} has been cancelled.
+
+❌ This event has been cancelled and will no longer take place.
+
+${eventTitle}
+
+${eventDescription || ''}
+
+${eventDetails}${organizerInfo}
+
+We apologize for any inconvenience this cancellation may cause. Please check the group for updates on future events.
+
+Visit ${groupName}: ${groupUrl}
+
+You received this email because you're a member of "${groupName}" and have opted to receive event cancellation notifications.
+
+To manage your notification preferences, visit your profile settings: ${tenantConfig?.frontendDomain}/dashboard/profile
 
 --
 ${tenantConfig?.name || 'OpenMeet'}

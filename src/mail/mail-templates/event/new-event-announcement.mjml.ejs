@@ -30,16 +30,41 @@
             📅 When:
           </mj-text>
           <mj-text padding="0 0 10px 0" background-color="#f8f9fa">
-            <%= new Date(eventDateTime).toLocaleDateString('en-US', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
-            }) %> at <%= new Date(eventDateTime).toLocaleTimeString('en-US', { 
-              hour: 'numeric', 
-              minute: '2-digit', 
-              hour12: true 
-            }) %>
+            <%
+              const startDate = new Date(eventDateTime);
+              const endDate = eventEndDateTime ? new Date(eventEndDateTime) : null;
+              const timeZoneDisplay = eventTimeZone && eventTimeZone !== 'UTC' ? eventTimeZone : 'UTC';
+              
+              const formatDateTime = (date) => {
+                return date.toLocaleDateString('en-US', { 
+                  weekday: 'long', 
+                  year: 'numeric', 
+                  month: 'long', 
+                  day: 'numeric' 
+                }) + ' at ' + date.toLocaleTimeString('en-US', { 
+                  hour: 'numeric', 
+                  minute: '2-digit', 
+                  hour12: true,
+                  timeZone: eventTimeZone || 'UTC'
+                });
+              };
+              
+              const formatTime = (date) => {
+                return date.toLocaleTimeString('en-US', { 
+                  hour: 'numeric', 
+                  minute: '2-digit', 
+                  hour12: true,
+                  timeZone: eventTimeZone || 'UTC'
+                });
+              };
+            %>
+            <%= formatDateTime(startDate) %>
+            <% if (endDate) { %>
+              <br>
+              <strong>Ends:</strong> <%= formatTime(endDate) %>
+            <% } %>
+            <br>
+            <em><%= timeZoneDisplay %></em>
           </mj-text>
 
           <!-- Location -->
@@ -58,7 +83,11 @@
             👤 Organizer:
           </mj-text>
           <mj-text padding="0 0 20px 0" background-color="#f8f9fa">
-            <%= organizerName %>
+            <% if (organizerUrl) { %>
+              <a href="<%= organizerUrl %>" style="color: #7B71DA; text-decoration: none;"><%= organizerName %></a>
+            <% } else { %>
+              <%= organizerName %>
+            <% } %>
           </mj-text>
           <% } %>
 

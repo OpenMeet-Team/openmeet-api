@@ -9,6 +9,8 @@ import { MailerModule } from '../mailer/mailer.module';
 import { TenantModule } from '../tenant/tenant.module';
 import { ConfigModule } from '@nestjs/config';
 import { UserModule } from '../user/user.module';
+import { EventModule } from '../event/event.module';
+import { GroupMemberModule } from '../group-member/group-member.module';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 
@@ -21,6 +23,8 @@ import { GroupMemberEntity } from '../group-member/infrastructure/persistence/re
     forwardRef(() => EventAttendeeModule),
     MailerModule,
     TenantModule,
+    forwardRef(() => EventModule),
+    forwardRef(() => GroupMemberModule),
   ],
   providers: [EventMailService, EventAnnouncementService, MailService],
   exports: [EventMailService, EventAnnouncementService],

@@ -6,11 +6,14 @@ import { EventAnnouncementService } from './event-announcement.service';
 import { MailerService } from '../../mailer/mailer.service';
 import { UserService } from '../../user/user.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
+import { EventQueryService } from '../../event/services/event-query.service';
+import { GroupMemberService } from '../../group-member/group-member.service';
 
 describe('EventAnnouncementService', () => {
   let service: EventAnnouncementService;
   let mailerService: jest.Mocked<MailerService>;
-  let tenantConnectionService: jest.Mocked<TenantConnectionService>;
+  let eventQueryService: jest.Mocked<any>;
+  let groupMemberService: jest.Mocked<any>;
 
   const mockRequest = {
     tenantId: 'test-tenant-123',
@@ -24,6 +27,7 @@ describe('EventAnnouncementService', () => {
     description: 'A test event',
     startDate: new Date('2025-07-01T10:00:00Z'),
     endDate: new Date('2025-07-01T12:00:00Z'),
+    timeZone: 'America/New_York',
     location: 'Test Location',
     status: 'published', // Default to published
     group: {
@@ -84,26 +88,20 @@ describe('EventAnnouncementService', () => {
       findMany: jest.fn(),
     };
 
-    const mockTenantConnectionService = {
-      getTenantConnection: jest.fn().mockResolvedValue({
-        getRepository: jest.fn().mockImplementation((entityClass) => {
-          if (entityClass.name === 'EventEntity') {
-            return {
-              findOne: jest.fn().mockImplementation((options) => {
-                if (options.where.slug === 'test-event') {
-                  return Promise.resolve(mockEvent);
-                }
-                return Promise.resolve(null);
-              }),
-            };
-          } else if (entityClass.name === 'GroupMemberEntity') {
-            return {
-              find: jest.fn().mockResolvedValue(mockGroupMembers),
-            };
-          }
-          return {};
-        }),
+    const mockEventQueryService = {
+      findEventBySlug: jest.fn().mockImplementation((slug) => {
+        if (slug === 'test-event') {
+          return Promise.resolve(mockEvent);
+        }
+        return Promise.resolve(null);
       }),
+    };
+
+    const mockGroupMemberService = {
+      findGroupDetailsMembers: jest.fn().mockResolvedValue(mockGroupMembers),
+    };
+
+    const mockTenantConnectionService = {
       getTenantConfig: jest.fn().mockReturnValue({
         name: 'Test Tenant',
         frontendDomain: 'https://test.openmeet.net',
@@ -146,6 +144,14 @@ describe('EventAnnouncementService', () => {
           useValue: mockConfigService,
         },
         {
+          provide: EventQueryService,
+          useValue: mockEventQueryService,
+        },
+        {
+          provide: GroupMemberService,
+          useValue: mockGroupMemberService,
+        },
+        {
           provide: REQUEST,
           useValue: mockRequest,
         },
@@ -154,7 +160,8 @@ describe('EventAnnouncementService', () => {
 
     service = module.get<EventAnnouncementService>(EventAnnouncementService);
     mailerService = module.get(MailerService);
-    tenantConnectionService = module.get(TenantConnectionService);
+    eventQueryService = module.get(EventQueryService);
+    groupMemberService = module.get(GroupMemberService);
   });
 
   it('should be defined', () => {
@@ -189,11 +196,15 @@ describe('EventAnnouncementService', () => {
           eventTitle: 'Test Event',
           eventDescription: 'A test event',
           eventDateTime: new Date('2025-07-01T10:00:00Z'),
+          eventEndDateTime: new Date('2025-07-01T12:00:00Z'),
+          eventTimeZone: 'America/New_York',
           eventLocation: 'Test Location',
           groupName: 'Test Group',
           organizerName: 'John Doe',
+          organizerSlug: 'organizer-user',
           eventUrl: expect.stringContaining('/events/test-event'),
           groupUrl: expect.stringContaining('/groups/test-group'),
+          organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
       });
@@ -207,11 +218,15 @@ describe('EventAnnouncementService', () => {
           eventTitle: 'Test Event',
           eventDescription: 'A test event',
           eventDateTime: new Date('2025-07-01T10:00:00Z'),
+          eventEndDateTime: new Date('2025-07-01T12:00:00Z'),
+          eventTimeZone: 'America/New_York',
           eventLocation: 'Test Location',
           groupName: 'Test Group',
           organizerName: 'John Doe',
+          organizerSlug: 'organizer-user',
           eventUrl: expect.stringContaining('/events/test-event'),
           groupUrl: expect.stringContaining('/groups/test-group'),
+          organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
       });
@@ -225,24 +240,26 @@ describe('EventAnnouncementService', () => {
           eventTitle: 'Test Event',
           eventDescription: 'A test event',
           eventDateTime: new Date('2025-07-01T10:00:00Z'),
+          eventEndDateTime: new Date('2025-07-01T12:00:00Z'),
+          eventTimeZone: 'America/New_York',
           eventLocation: 'Test Location',
           groupName: 'Test Group',
           organizerName: 'John Doe',
+          organizerSlug: 'organizer-user',
           eventUrl: expect.stringContaining('/events/test-event'),
           groupUrl: expect.stringContaining('/groups/test-group'),
+          organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
       });
     });
 
     it('should not send emails if the event has no group', async () => {
-      // Arrange - Mock repository to return event without group
+      // Arrange - Mock service to return event without group
       const eventWithoutGroup = { ...mockEvent, group: null };
-      tenantConnectionService.getTenantConnection.mockResolvedValueOnce({
-        getRepository: jest.fn().mockReturnValue({
-          findOne: jest.fn().mockResolvedValue(eventWithoutGroup),
-        }),
-      });
+      eventQueryService.findEventBySlug.mockResolvedValueOnce(
+        eventWithoutGroup,
+      );
 
       // Act
       await service.handleEventCreated({
@@ -258,20 +275,7 @@ describe('EventAnnouncementService', () => {
 
     it('should not send emails if group has no members', async () => {
       // Arrange - Mock empty group members
-      tenantConnectionService.getTenantConnection.mockResolvedValueOnce({
-        getRepository: jest.fn().mockImplementation((entityClass) => {
-          if (entityClass.name === 'EventEntity') {
-            return {
-              findOne: jest.fn().mockResolvedValue(mockEvent),
-            };
-          } else if (entityClass.name === 'GroupMemberEntity') {
-            return {
-              find: jest.fn().mockResolvedValue([]), // Empty group
-            };
-          }
-          return {};
-        }),
-      });
+      groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce([]);
 
       // Act
       await service.handleEventCreated({
@@ -295,20 +299,9 @@ describe('EventAnnouncementService', () => {
         },
       ];
 
-      tenantConnectionService.getTenantConnection.mockResolvedValueOnce({
-        getRepository: jest.fn().mockImplementation((entityClass) => {
-          if (entityClass.name === 'EventEntity') {
-            return {
-              findOne: jest.fn().mockResolvedValue(mockEvent),
-            };
-          } else if (entityClass.name === 'GroupMemberEntity') {
-            return {
-              find: jest.fn().mockResolvedValue(groupMembersIncludingOrganizer),
-            };
-          }
-          return {};
-        }),
-      });
+      groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce(
+        groupMembersIncludingOrganizer,
+      );
 
       // Act
       await service.handleEventCreated({
@@ -348,12 +341,8 @@ describe('EventAnnouncementService', () => {
     });
 
     it('should not send emails if event is not found', async () => {
-      // Arrange - Mock repository to return null for non-existent event
-      tenantConnectionService.getTenantConnection.mockResolvedValueOnce({
-        getRepository: jest.fn().mockReturnValue({
-          findOne: jest.fn().mockResolvedValue(null),
-        }),
-      });
+      // Arrange - Mock service to return null for non-existent event
+      eventQueryService.findEventBySlug.mockResolvedValueOnce(null);
 
       // Act
       await service.handleEventCreated({
@@ -395,11 +384,15 @@ describe('EventAnnouncementService', () => {
           eventTitle: 'Test Event',
           eventDescription: 'A test event',
           eventDateTime: new Date('2025-07-01T10:00:00Z'),
+          eventEndDateTime: new Date('2025-07-01T12:00:00Z'),
+          eventTimeZone: 'America/New_York',
           eventLocation: 'Test Location',
           groupName: 'Test Group',
           organizerName: 'John Doe',
+          organizerSlug: 'organizer-user',
           eventUrl: expect.stringContaining('/events/test-event'),
           groupUrl: expect.stringContaining('/groups/test-group'),
+          organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
       });
@@ -413,11 +406,15 @@ describe('EventAnnouncementService', () => {
           eventTitle: 'Test Event',
           eventDescription: 'A test event',
           eventDateTime: new Date('2025-07-01T10:00:00Z'),
+          eventEndDateTime: new Date('2025-07-01T12:00:00Z'),
+          eventTimeZone: 'America/New_York',
           eventLocation: 'Test Location',
           groupName: 'Test Group',
           organizerName: 'John Doe',
+          organizerSlug: 'organizer-user',
           eventUrl: expect.stringContaining('/events/test-event'),
           groupUrl: expect.stringContaining('/groups/test-group'),
+          organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
       });
@@ -431,33 +428,26 @@ describe('EventAnnouncementService', () => {
           eventTitle: 'Test Event',
           eventDescription: 'A test event',
           eventDateTime: new Date('2025-07-01T10:00:00Z'),
+          eventEndDateTime: new Date('2025-07-01T12:00:00Z'),
+          eventTimeZone: 'America/New_York',
           eventLocation: 'Test Location',
           groupName: 'Test Group',
           organizerName: 'John Doe',
+          organizerSlug: 'organizer-user',
           eventUrl: expect.stringContaining('/events/test-event'),
           groupUrl: expect.stringContaining('/groups/test-group'),
+          organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
       });
     });
 
     it('should not send emails if the updated event has no group', async () => {
-      // Arrange - Mock repository to return event without group
+      // Arrange - Mock service to return event without group
       const eventWithoutGroup = { ...mockEvent, group: null };
-      tenantConnectionService.getTenantConnection.mockResolvedValueOnce({
-        getRepository: jest.fn().mockImplementation((entityClass) => {
-          if (entityClass.name === 'EventEntity') {
-            return {
-              findOne: jest.fn().mockResolvedValue(eventWithoutGroup),
-            };
-          } else if (entityClass.name === 'GroupMemberEntity') {
-            return {
-              find: jest.fn().mockResolvedValue([]), // Empty group
-            };
-          }
-          return {};
-        }),
-      });
+      eventQueryService.findEventBySlug.mockResolvedValueOnce(
+        eventWithoutGroup,
+      );
 
       // Act
       await service.handleEventUpdated({
@@ -473,20 +463,7 @@ describe('EventAnnouncementService', () => {
 
     it('should not send emails if updated event group has no members', async () => {
       // Arrange - Mock empty group members
-      tenantConnectionService.getTenantConnection.mockResolvedValueOnce({
-        getRepository: jest.fn().mockImplementation((entityClass) => {
-          if (entityClass.name === 'EventEntity') {
-            return {
-              findOne: jest.fn().mockResolvedValue(mockEvent),
-            };
-          } else if (entityClass.name === 'GroupMemberEntity') {
-            return {
-              find: jest.fn().mockResolvedValue([]), // Empty group
-            };
-          }
-          return {};
-        }),
-      });
+      groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce([]);
 
       // Act
       await service.handleEventUpdated({
@@ -510,20 +487,9 @@ describe('EventAnnouncementService', () => {
         },
       ];
 
-      tenantConnectionService.getTenantConnection.mockResolvedValueOnce({
-        getRepository: jest.fn().mockImplementation((entityClass) => {
-          if (entityClass.name === 'EventEntity') {
-            return {
-              findOne: jest.fn().mockResolvedValue(mockEvent),
-            };
-          } else if (entityClass.name === 'GroupMemberEntity') {
-            return {
-              find: jest.fn().mockResolvedValue(groupMembersIncludingOrganizer),
-            };
-          }
-          return {};
-        }),
-      });
+      groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce(
+        groupMembersIncludingOrganizer,
+      );
 
       // Act
       await service.handleEventUpdated({
@@ -563,21 +529,8 @@ describe('EventAnnouncementService', () => {
     });
 
     it('should not send emails if updated event is not found', async () => {
-      // Arrange - Mock repository to return null for non-existent event
-      tenantConnectionService.getTenantConnection.mockResolvedValueOnce({
-        getRepository: jest.fn().mockImplementation((entityClass) => {
-          if (entityClass.name === 'EventEntity') {
-            return {
-              findOne: jest.fn().mockResolvedValue(null),
-            };
-          } else if (entityClass.name === 'GroupMemberEntity') {
-            return {
-              find: jest.fn().mockResolvedValue([]),
-            };
-          }
-          return {};
-        }),
-      });
+      // Arrange - Mock service to return null for non-existent event
+      eventQueryService.findEventBySlug.mockResolvedValueOnce(null);
 
       // Act
       await service.handleEventUpdated({
@@ -594,20 +547,10 @@ describe('EventAnnouncementService', () => {
     it('should send cancellation emails when event status is cancelled', async () => {
       // Arrange - Mock event with cancelled status
       const cancelledEvent = { ...mockEvent, status: 'cancelled' };
-      tenantConnectionService.getTenantConnection.mockResolvedValueOnce({
-        getRepository: jest.fn().mockImplementation((entityClass) => {
-          if (entityClass.name === 'EventEntity') {
-            return {
-              findOne: jest.fn().mockResolvedValue(cancelledEvent),
-            };
-          } else if (entityClass.name === 'GroupMemberEntity') {
-            return {
-              find: jest.fn().mockResolvedValue(mockGroupMembers),
-            };
-          }
-          return {};
-        }),
-      });
+      eventQueryService.findEventBySlug.mockResolvedValueOnce(cancelledEvent);
+      groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce(
+        mockGroupMembers,
+      );
 
       // Act
       await service.handleEventUpdated({
@@ -630,11 +573,15 @@ describe('EventAnnouncementService', () => {
           eventTitle: 'Test Event',
           eventDescription: 'A test event',
           eventDateTime: new Date('2025-07-01T10:00:00Z'),
+          eventEndDateTime: new Date('2025-07-01T12:00:00Z'),
+          eventTimeZone: 'America/New_York',
           eventLocation: 'Test Location',
           groupName: 'Test Group',
           organizerName: 'John Doe',
+          organizerSlug: 'organizer-user',
           eventUrl: expect.stringContaining('/events/test-event'),
           groupUrl: expect.stringContaining('/groups/test-group'),
+          organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
       });
@@ -663,11 +610,15 @@ describe('EventAnnouncementService', () => {
           eventTitle: 'Test Event',
           eventDescription: 'A test event',
           eventDateTime: new Date('2025-07-01T10:00:00Z'),
+          eventEndDateTime: new Date('2025-07-01T12:00:00Z'),
+          eventTimeZone: 'America/New_York',
           eventLocation: 'Test Location',
           groupName: 'Test Group',
           organizerName: 'John Doe',
+          organizerSlug: 'organizer-user',
           eventUrl: expect.stringContaining('/events/test-event'),
           groupUrl: expect.stringContaining('/groups/test-group'),
+          organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
       });
@@ -681,11 +632,15 @@ describe('EventAnnouncementService', () => {
           eventTitle: 'Test Event',
           eventDescription: 'A test event',
           eventDateTime: new Date('2025-07-01T10:00:00Z'),
+          eventEndDateTime: new Date('2025-07-01T12:00:00Z'),
+          eventTimeZone: 'America/New_York',
           eventLocation: 'Test Location',
           groupName: 'Test Group',
           organizerName: 'John Doe',
+          organizerSlug: 'organizer-user',
           eventUrl: expect.stringContaining('/events/test-event'),
           groupUrl: expect.stringContaining('/groups/test-group'),
+          organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
       });
@@ -699,11 +654,15 @@ describe('EventAnnouncementService', () => {
           eventTitle: 'Test Event',
           eventDescription: 'A test event',
           eventDateTime: new Date('2025-07-01T10:00:00Z'),
+          eventEndDateTime: new Date('2025-07-01T12:00:00Z'),
+          eventTimeZone: 'America/New_York',
           eventLocation: 'Test Location',
           groupName: 'Test Group',
           organizerName: 'John Doe',
+          organizerSlug: 'organizer-user',
           eventUrl: expect.stringContaining('/events/test-event'),
           groupUrl: expect.stringContaining('/groups/test-group'),
+          organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
       });
@@ -722,16 +681,7 @@ describe('EventAnnouncementService', () => {
 
     it('should not send emails if deleted event group has no members', async () => {
       // Arrange - Mock empty group members
-      tenantConnectionService.getTenantConnection.mockResolvedValueOnce({
-        getRepository: jest.fn().mockImplementation((entityClass) => {
-          if (entityClass.name === 'GroupMemberEntity') {
-            return {
-              find: jest.fn().mockResolvedValue([]), // Empty group
-            };
-          }
-          return {};
-        }),
-      });
+      groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce([]);
 
       // Act
       await service.handleEventDeleted(mockEvent);
@@ -750,16 +700,9 @@ describe('EventAnnouncementService', () => {
         },
       ];
 
-      tenantConnectionService.getTenantConnection.mockResolvedValueOnce({
-        getRepository: jest.fn().mockImplementation((entityClass) => {
-          if (entityClass.name === 'GroupMemberEntity') {
-            return {
-              find: jest.fn().mockResolvedValue(groupMembersIncludingOrganizer),
-            };
-          }
-          return {};
-        }),
-      });
+      groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce(
+        groupMembersIncludingOrganizer,
+      );
 
       // Act
       await service.handleEventDeleted(mockEvent);
