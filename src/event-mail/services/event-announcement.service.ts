@@ -11,6 +11,7 @@ import { EventEntity } from '../../event/infrastructure/persistence/relational/e
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
+import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 
 @Injectable()
 export class EventAnnouncementService {
@@ -23,6 +24,7 @@ export class EventAnnouncementService {
     private readonly configService: ConfigService<AllConfigType>,
     private readonly eventQueryService: EventQueryService,
     private readonly groupMemberService: GroupMemberService,
+    private readonly eventAttendeeService: EventAttendeeService,
     @Inject(REQUEST) private readonly request: any,
   ) {}
 
@@ -52,6 +54,41 @@ export class EventAnnouncementService {
       .filter((user) => user && user.email);
   }
 
+  private async getEventAttendeesForEmail(
+    eventId: number,
+  ): Promise<UserEntity[]> {
+    // Get all event attendees who should receive notifications
+    const attendees =
+      await this.eventAttendeeService.findEventAttendees(eventId);
+
+    return attendees
+      .map((attendee) => attendee.user)
+      .filter((user) => user && user.email);
+  }
+
+  private async getAllRecipientsForEvent(
+    event: EventEntity,
+  ): Promise<UserEntity[]> {
+    const recipients = new Map<number, UserEntity>();
+
+    // Get group members if event is part of a group
+    if (event.group) {
+      const groupMembers = await this.getGroupMembersForEmail(event.group.id);
+      groupMembers.forEach((user) => {
+        recipients.set(user.id, user);
+      });
+    }
+
+    // Get event attendees
+    const eventAttendees = await this.getEventAttendeesForEmail(event.id);
+    eventAttendees.forEach((user) => {
+      recipients.set(user.id, user);
+    });
+
+    // Convert Map back to array to remove duplicates
+    return Array.from(recipients.values());
+  }
+
   @OnEvent('event.created')
   async handleEventCreated(params: {
     eventId: number;
@@ -74,41 +111,25 @@ export class EventAnnouncementService {
         return;
       }
 
-      // Skip if event is not part of a group
-      if (!event.group) {
-        this.logger.log(
-          `Event ${params.slug} is not part of a group, skipping announcement`,
-        );
-        return;
-      }
+      // Get all recipients (group members + event attendees)
+      const allRecipients = await this.getAllRecipientsForEvent(event);
 
-      // Get all group members for email notifications
-      const groupMembers = await this.getGroupMembersForEmail(event.group.id);
-
-      if (!groupMembers || groupMembers.length === 0) {
+      if (!allRecipients || allRecipients.length === 0) {
         this.logger.log(
-          `Group ${event.group.slug} has no members, skipping announcement`,
+          `Event ${params.slug} has no recipients, skipping announcement`,
         );
         return;
       }
 
       this.logger.log(
-        `Found ${groupMembers.length} group members for announcement`,
+        `Found ${allRecipients.length} recipients (group members + attendees) for announcement`,
       );
 
-      // Filter members who want email notifications and exclude the organizer
-      const membersToNotify = groupMembers.filter((user) => {
+      // Filter recipients who want email notifications (including organizers)
+      const recipientsToNotify = allRecipients.filter((user) => {
         // Skip users without email addresses
         if (!user.email) {
           this.logger.debug(`Skipping user ${user.slug} with no email address`);
-          return false;
-        }
-
-        // Skip the event organizer
-        if (user.id === event.user?.id) {
-          this.logger.debug(
-            `Skipping organizer ${user.slug} from announcement`,
-          );
           return false;
         }
 
@@ -119,14 +140,14 @@ export class EventAnnouncementService {
       });
 
       this.logger.log(
-        `Sending announcements to ${membersToNotify.length} members`,
+        `Sending announcements to ${recipientsToNotify.length} recipients`,
       );
 
       // Get tenant configuration for emails
       const tenantConfig = this.getTenantConfig();
 
-      // Send emails to each member
-      const emailPromises = membersToNotify.map(async (user) => {
+      // Send emails to each recipient
+      const emailPromises = recipientsToNotify.map(async (user) => {
         try {
           await this.mailerService.sendMjmlMail({
             to: user.email!,
@@ -209,41 +230,25 @@ export class EventAnnouncementService {
         return;
       }
 
-      // Skip if event is not part of a group
-      if (!event.group) {
-        this.logger.log(
-          `Event ${params.slug} is not part of a group, skipping update announcement`,
-        );
-        return;
-      }
+      // Get all recipients (group members + event attendees)
+      const allRecipients = await this.getAllRecipientsForEvent(event);
 
-      // Get all group members for email notifications
-      const groupMembers = await this.getGroupMembersForEmail(event.group.id);
-
-      if (!groupMembers || groupMembers.length === 0) {
+      if (!allRecipients || allRecipients.length === 0) {
         this.logger.log(
-          `Group ${event.group.slug} has no members, skipping update announcement`,
+          `Event ${params.slug} has no recipients, skipping update announcement`,
         );
         return;
       }
 
       this.logger.log(
-        `Found ${groupMembers.length} group members for update announcement`,
+        `Found ${allRecipients.length} recipients (group members + attendees) for update announcement`,
       );
 
-      // Filter members who want email notifications and exclude the organizer
-      const membersToNotify = groupMembers.filter((user) => {
+      // Filter recipients who want email notifications and exclude the organizer
+      const recipientsToNotify = allRecipients.filter((user) => {
         // Skip users without email addresses
         if (!user.email) {
           this.logger.debug(`Skipping user ${user.slug} with no email address`);
-          return false;
-        }
-
-        // Skip the event organizer
-        if (user.id === event.user?.id) {
-          this.logger.debug(
-            `Skipping organizer ${user.slug} from update announcement`,
-          );
           return false;
         }
 
@@ -254,14 +259,14 @@ export class EventAnnouncementService {
       });
 
       this.logger.log(
-        `Sending update announcements to ${membersToNotify.length} members`,
+        `Sending update announcements to ${recipientsToNotify.length} recipients`,
       );
 
       // Get tenant configuration for emails
       const tenantConfig = this.getTenantConfig();
 
-      // Send emails to each member
-      const emailPromises = membersToNotify.map(async (user) => {
+      // Send emails to each recipient
+      const emailPromises = recipientsToNotify.map(async (user) => {
         try {
           await this.mailerService.sendMjmlMail({
             to: user.email!,
@@ -322,41 +327,25 @@ export class EventAnnouncementService {
     });
 
     try {
-      // Skip if event is not part of a group
-      if (!event.group) {
-        this.logger.log(
-          `Event ${event.slug} is not part of a group, skipping cancellation announcement`,
-        );
-        return;
-      }
+      // Get all recipients (group members + event attendees)
+      const allRecipients = await this.getAllRecipientsForEvent(event);
 
-      // Get all group members for email notifications
-      const groupMembers = await this.getGroupMembersForEmail(event.group.id);
-
-      if (!groupMembers || groupMembers.length === 0) {
+      if (!allRecipients || allRecipients.length === 0) {
         this.logger.log(
-          `Group ${event.group.slug} has no members, skipping cancellation announcement`,
+          `Event ${event.slug} has no recipients, skipping cancellation announcement`,
         );
         return;
       }
 
       this.logger.log(
-        `Found ${groupMembers.length} group members for cancellation announcement`,
+        `Found ${allRecipients.length} recipients (group members + attendees) for cancellation announcement`,
       );
 
-      // Filter members who want email notifications and exclude the organizer
-      const membersToNotify = groupMembers.filter((user) => {
+      // Filter recipients who want email notifications and exclude the organizer
+      const recipientsToNotify = allRecipients.filter((user) => {
         // Skip users without email addresses
         if (!user.email) {
           this.logger.debug(`Skipping user ${user.slug} with no email address`);
-          return false;
-        }
-
-        // Skip the event organizer
-        if (user.id === event.user?.id) {
-          this.logger.debug(
-            `Skipping organizer ${user.slug} from cancellation announcement`,
-          );
           return false;
         }
 
@@ -367,14 +356,14 @@ export class EventAnnouncementService {
       });
 
       this.logger.log(
-        `Sending cancellation announcements to ${membersToNotify.length} members`,
+        `Sending cancellation announcements to ${recipientsToNotify.length} recipients`,
       );
 
       // Get tenant configuration for emails
       const tenantConfig = this.getTenantConfig();
 
-      // Send emails to each member
-      const emailPromises = membersToNotify.map(async (user) => {
+      // Send emails to each recipient
+      const emailPromises = recipientsToNotify.map(async (user) => {
         try {
           await this.mailerService.sendMjmlMail({
             to: user.email!,

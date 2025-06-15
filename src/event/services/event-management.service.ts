@@ -1464,7 +1464,7 @@ export class EventManagementService {
           `[attendEvent] User ${userId} is not a member of group ${event.group.id}, denying event attendance`,
         );
         throw new BadRequestException(
-          `You must join the "${event.group.name}" group to attend this event. Visit the group page to request membership.`,
+          `You must be a member of the "${event.group.slug}" group to attend this event.`,
         );
       }
 

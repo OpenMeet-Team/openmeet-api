@@ -8,12 +8,14 @@ import { UserService } from '../../user/user.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
+import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 
 describe('EventAnnouncementService', () => {
   let service: EventAnnouncementService;
   let mailerService: jest.Mocked<MailerService>;
   let eventQueryService: jest.Mocked<any>;
   let groupMemberService: jest.Mocked<any>;
+  let eventAttendeeService: jest.Mocked<any>;
 
   const mockRequest = {
     tenantId: 'test-tenant-123',
@@ -77,6 +79,29 @@ describe('EventAnnouncementService', () => {
     },
   ];
 
+  const mockEventAttendees = [
+    {
+      id: 1,
+      user: {
+        id: 5,
+        slug: 'attendee-1',
+        firstName: 'David',
+        lastName: 'Brown',
+        email: 'david@example.com',
+      },
+    },
+    {
+      id: 2,
+      user: {
+        id: 6,
+        slug: 'attendee-2',
+        firstName: 'Emma',
+        lastName: 'Davis',
+        email: 'emma@example.com',
+      },
+    },
+  ];
+
   beforeEach(async () => {
     const mockMailerService = {
       sendMail: jest.fn(),
@@ -99,6 +124,10 @@ describe('EventAnnouncementService', () => {
 
     const mockGroupMemberService = {
       findGroupDetailsMembers: jest.fn().mockResolvedValue(mockGroupMembers),
+    };
+
+    const mockEventAttendeeService = {
+      findEventAttendees: jest.fn().mockResolvedValue(mockEventAttendees),
     };
 
     const mockTenantConnectionService = {
@@ -152,6 +181,10 @@ describe('EventAnnouncementService', () => {
           useValue: mockGroupMemberService,
         },
         {
+          provide: EventAttendeeService,
+          useValue: mockEventAttendeeService,
+        },
+        {
           provide: REQUEST,
           useValue: mockRequest,
         },
@@ -162,6 +195,7 @@ describe('EventAnnouncementService', () => {
     mailerService = module.get(MailerService);
     eventQueryService = module.get(EventQueryService);
     groupMemberService = module.get(GroupMemberService);
+    eventAttendeeService = module.get(EventAttendeeService);
   });
 
   it('should be defined', () => {
@@ -173,7 +207,7 @@ describe('EventAnnouncementService', () => {
       mailerService.sendMjmlMail.mockResolvedValue(undefined);
     });
 
-    it('should send announcement emails to group members when a new event is created', async () => {
+    it('should send announcement emails to group members and event attendees when a new event is created', async () => {
       // Act
       await service.handleEventCreated({
         eventId: 1,
@@ -182,10 +216,10 @@ describe('EventAnnouncementService', () => {
         tenantId: 'test-tenant-123',
       });
 
-      // Assert - emails should be sent to group members
+      // Assert - emails should be sent to group members + event attendees
 
-      // Should send emails to all members except the organizer (Alice, Bob, and Carol)
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(3);
+      // Should send emails to group members (Alice, Bob, Carol) + event attendees (David, Emma) = 5 total, excluding organizer
+      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(5);
 
       expect(mailerService.sendMjmlMail).toHaveBeenCalledWith({
         to: 'alice@example.com',
@@ -254,8 +288,8 @@ describe('EventAnnouncementService', () => {
       });
     });
 
-    it('should not send emails if the event has no group', async () => {
-      // Arrange - Mock service to return event without group
+    it('should send emails to event attendees even if the event has no group', async () => {
+      // Arrange - Mock service to return event without group but with attendees
       const eventWithoutGroup = { ...mockEvent, group: null };
       eventQueryService.findEventBySlug.mockResolvedValueOnce(
         eventWithoutGroup,
@@ -269,13 +303,30 @@ describe('EventAnnouncementService', () => {
         tenantId: 'test-tenant-123',
       });
 
-      // Assert
-      expect(mailerService.sendMjmlMail).not.toHaveBeenCalled();
+      // Assert - Should send emails to event attendees (David, Emma) even without a group
+      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(2);
     });
 
-    it('should not send emails if group has no members', async () => {
-      // Arrange - Mock empty group members
+    it('should send emails to event attendees even if group has no members', async () => {
+      // Arrange - Mock empty group members but event attendees exist
       groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce([]);
+
+      // Act
+      await service.handleEventCreated({
+        eventId: 1,
+        slug: 'test-event',
+        userId: 1,
+        tenantId: 'test-tenant-123',
+      });
+
+      // Assert - Should send emails to event attendees (David, Emma) even if group has no members
+      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not send emails if there are no group members and no event attendees', async () => {
+      // Arrange - Mock empty group members and empty event attendees
+      groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce([]);
+      eventAttendeeService.findEventAttendees.mockResolvedValueOnce([]);
 
       // Act
       await service.handleEventCreated({
@@ -289,7 +340,7 @@ describe('EventAnnouncementService', () => {
       expect(mailerService.sendMjmlMail).not.toHaveBeenCalled();
     });
 
-    it('should not send email to the event organizer if they are also a group member', async () => {
+    it('should send email to the event organizer if they are also a group member', async () => {
       // Arrange - add organizer as a group member
       const groupMembersIncludingOrganizer = [
         ...mockGroupMembers,
@@ -312,13 +363,13 @@ describe('EventAnnouncementService', () => {
       });
 
       // Assert
-      // Should still only send 3 emails (Alice, Bob, and Carol), not to the organizer
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(3);
+      // Should send 6 emails (Alice, Bob, Carol, David, Emma, John the organizer)
+      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(6);
 
-      // Verify organizer didn't receive an email
+      // Verify organizer received an email
       const emailCalls = mailerService.sendMjmlMail.mock.calls;
       const emailAddresses = emailCalls.map((call) => call[0].to);
-      expect(emailAddresses).not.toContain('organizer@example.com');
+      expect(emailAddresses).toContain('organizer@example.com');
     });
 
     it('should handle email sending failures gracefully', async () => {
@@ -337,7 +388,7 @@ describe('EventAnnouncementService', () => {
         }),
       ).resolves.not.toThrow();
 
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(3);
+      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(5);
     });
 
     it('should not send emails if event is not found', async () => {
@@ -373,7 +424,7 @@ describe('EventAnnouncementService', () => {
 
       // Assert - emails should be sent to group members
       // Should send emails to all members except the organizer (Alice, Bob, and Carol)
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(3);
+      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(5);
 
       expect(mailerService.sendMjmlMail).toHaveBeenCalledWith({
         to: 'alice@example.com',
@@ -442,8 +493,8 @@ describe('EventAnnouncementService', () => {
       });
     });
 
-    it('should not send emails if the updated event has no group', async () => {
-      // Arrange - Mock service to return event without group
+    it('should send emails to event attendees even if the updated event has no group', async () => {
+      // Arrange - Mock service to return event without group but with attendees
       const eventWithoutGroup = { ...mockEvent, group: null };
       eventQueryService.findEventBySlug.mockResolvedValueOnce(
         eventWithoutGroup,
@@ -457,13 +508,30 @@ describe('EventAnnouncementService', () => {
         tenantId: 'test-tenant-123',
       });
 
-      // Assert
-      expect(mailerService.sendMjmlMail).not.toHaveBeenCalled();
+      // Assert - Should send emails to event attendees (David, Emma) even without a group
+      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(2);
     });
 
-    it('should not send emails if updated event group has no members', async () => {
-      // Arrange - Mock empty group members
+    it('should send emails to event attendees even if updated event group has no members', async () => {
+      // Arrange - Mock empty group members but event attendees exist
       groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce([]);
+
+      // Act
+      await service.handleEventUpdated({
+        eventId: 1,
+        slug: 'test-event',
+        userId: 1,
+        tenantId: 'test-tenant-123',
+      });
+
+      // Assert - Should send emails to event attendees (David, Emma) even if group has no members
+      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not send emails if updated event has no group members and no event attendees', async () => {
+      // Arrange - Mock empty group members and empty event attendees
+      groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce([]);
+      eventAttendeeService.findEventAttendees.mockResolvedValueOnce([]);
 
       // Act
       await service.handleEventUpdated({
@@ -477,7 +545,7 @@ describe('EventAnnouncementService', () => {
       expect(mailerService.sendMjmlMail).not.toHaveBeenCalled();
     });
 
-    it('should not send update email to the event organizer if they are also a group member', async () => {
+    it('should send update email to the event organizer if they are also a group member', async () => {
       // Arrange - add organizer as a group member
       const groupMembersIncludingOrganizer = [
         ...mockGroupMembers,
@@ -500,13 +568,13 @@ describe('EventAnnouncementService', () => {
       });
 
       // Assert
-      // Should still only send 3 emails (Alice, Bob, and Carol), not to the organizer
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(3);
+      // Should send 6 emails (Alice, Bob, Carol, David, Emma, John the organizer)
+      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(6);
 
-      // Verify organizer didn't receive an email
+      // Verify organizer received an email
       const emailCalls = mailerService.sendMjmlMail.mock.calls;
       const emailAddresses = emailCalls.map((call) => call[0].to);
-      expect(emailAddresses).not.toContain('organizer@example.com');
+      expect(emailAddresses).toContain('organizer@example.com');
     });
 
     it('should handle email sending failures gracefully for updates', async () => {
@@ -525,7 +593,7 @@ describe('EventAnnouncementService', () => {
         }),
       ).resolves.not.toThrow();
 
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(3);
+      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(5);
     });
 
     it('should not send emails if updated event is not found', async () => {
@@ -561,7 +629,7 @@ describe('EventAnnouncementService', () => {
       });
 
       // Assert - should send cancellation emails, not update emails
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(3);
+      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(5);
 
       // Verify the emails use cancellation template and subject
       expect(mailerService.sendMjmlMail).toHaveBeenCalledWith({
@@ -599,7 +667,7 @@ describe('EventAnnouncementService', () => {
 
       // Assert - emails should be sent to group members
       // Should send emails to all members except the organizer (Alice, Bob, and Carol)
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(3);
+      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(5);
 
       expect(mailerService.sendMjmlMail).toHaveBeenCalledWith({
         to: 'alice@example.com',
@@ -668,20 +736,32 @@ describe('EventAnnouncementService', () => {
       });
     });
 
-    it('should not send emails if the deleted event has no group', async () => {
+    it('should send emails to event attendees even if the deleted event has no group', async () => {
       // Arrange - Event without group
       const eventWithoutGroup = { ...mockEvent, group: null };
 
       // Act
       await service.handleEventDeleted(eventWithoutGroup);
 
-      // Assert
-      expect(mailerService.sendMjmlMail).not.toHaveBeenCalled();
+      // Assert - Should send emails to event attendees (David, Emma) even without a group
+      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(2);
     });
 
-    it('should not send emails if deleted event group has no members', async () => {
-      // Arrange - Mock empty group members
+    it('should send emails to event attendees even if deleted event group has no members', async () => {
+      // Arrange - Mock empty group members but event attendees exist
       groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce([]);
+
+      // Act
+      await service.handleEventDeleted(mockEvent);
+
+      // Assert - Should send emails to event attendees (David, Emma) even if group has no members
+      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not send emails if deleted event has no group members and no event attendees', async () => {
+      // Arrange - Mock empty group members and empty event attendees
+      groupMemberService.findGroupDetailsMembers.mockResolvedValueOnce([]);
+      eventAttendeeService.findEventAttendees.mockResolvedValueOnce([]);
 
       // Act
       await service.handleEventDeleted(mockEvent);
@@ -690,7 +770,7 @@ describe('EventAnnouncementService', () => {
       expect(mailerService.sendMjmlMail).not.toHaveBeenCalled();
     });
 
-    it('should not send cancellation email to the event organizer if they are also a group member', async () => {
+    it('should send cancellation email to the event organizer if they are also a group member', async () => {
       // Arrange - add organizer as a group member
       const groupMembersIncludingOrganizer = [
         ...mockGroupMembers,
@@ -708,13 +788,13 @@ describe('EventAnnouncementService', () => {
       await service.handleEventDeleted(mockEvent);
 
       // Assert
-      // Should still only send 3 emails (Alice, Bob, and Carol), not to the organizer
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(3);
+      // Should send 6 emails (Alice, Bob, Carol, David, Emma, John the organizer)
+      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(6);
 
-      // Verify organizer didn't receive an email
+      // Verify organizer received an email
       const emailCalls = mailerService.sendMjmlMail.mock.calls;
       const emailAddresses = emailCalls.map((call) => call[0].to);
-      expect(emailAddresses).not.toContain('organizer@example.com');
+      expect(emailAddresses).toContain('organizer@example.com');
     });
 
     it('should handle email sending failures gracefully for cancellations', async () => {
@@ -728,7 +808,7 @@ describe('EventAnnouncementService', () => {
         service.handleEventDeleted(mockEvent),
       ).resolves.not.toThrow();
 
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(3);
+      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(5);
     });
   });
 });
