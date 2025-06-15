@@ -863,6 +863,14 @@ export class EventManagementService {
       }
     }
 
+    // Emit event update event
+    this.eventEmitter.emit('event.updated', {
+      eventId: updatedEvent.id,
+      slug: updatedEvent.slug,
+      userId: this.request.user?.id,
+      tenantId: this.request.tenantId,
+    });
+
     return updatedEvent;
   }
 
@@ -1456,7 +1464,7 @@ export class EventManagementService {
           `[attendEvent] User ${userId} is not a member of group ${event.group.id}, denying event attendance`,
         );
         throw new BadRequestException(
-          'You must be a member of this group to attend this event',
+          `You must be a member of the "${event.group.slug}" group to attend this event.`,
         );
       }
 
