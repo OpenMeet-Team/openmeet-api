@@ -473,6 +473,8 @@ export class RecurrencePatternService {
         return RecurrenceFrequency.WEEKLY;
       case 'MONTHLY':
         return RecurrenceFrequency.MONTHLY;
+      case 'YEARLY':
+        return RecurrenceFrequency.YEARLY;
       default:
         return RecurrenceFrequency.DAILY;
     }
@@ -491,6 +493,8 @@ export class RecurrencePatternService {
         return Frequency.WEEKLY;
       case RecurrenceFrequency.MONTHLY:
         return Frequency.MONTHLY;
+      case RecurrenceFrequency.YEARLY:
+        return Frequency.YEARLY;
       default:
         return Frequency.DAILY;
     }
