@@ -188,10 +188,12 @@ export class RecurrencePatternService {
     // Determine the date range for generation
     const effectiveStartDate =
       startAfterDate instanceof Date ? startAfterDate : dtstartDateObject;
+    // For yearly patterns, we need a longer window to see future occurrences
+    const yearsToLookAhead = rule.frequency === 'YEARLY' ? 5 : 1;
     const effectiveEndDate =
       rruleOptions.until instanceof Date
         ? rruleOptions.until
-        : addYears(effectiveStartDate, 1); // Changed from 10 years to 1 year to limit maximum occurrences
+        : addYears(effectiveStartDate, yearsToLookAhead);
 
     this.logger.debug('[generateOccurrences] Generating between', {
       start: effectiveStartDate.toISOString(),
@@ -473,6 +475,8 @@ export class RecurrencePatternService {
         return RecurrenceFrequency.WEEKLY;
       case 'MONTHLY':
         return RecurrenceFrequency.MONTHLY;
+      case 'YEARLY':
+        return RecurrenceFrequency.YEARLY;
       default:
         return RecurrenceFrequency.DAILY;
     }
@@ -491,6 +495,8 @@ export class RecurrencePatternService {
         return Frequency.WEEKLY;
       case RecurrenceFrequency.MONTHLY:
         return Frequency.MONTHLY;
+      case RecurrenceFrequency.YEARLY:
+        return Frequency.YEARLY;
       default:
         return Frequency.DAILY;
     }

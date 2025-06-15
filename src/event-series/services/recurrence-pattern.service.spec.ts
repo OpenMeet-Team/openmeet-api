@@ -62,6 +62,20 @@ describe('RecurrencePatternService', () => {
       expect(occurrences[2]).toBe('2023-02-01T10:00:00.000Z');
     });
 
+    it('should generate yearly occurrences', () => {
+      const startDate = new Date('2023-01-19T14:00:00Z');
+      const rule = {
+        frequency: RecurrenceFrequency.YEARLY,
+        interval: 1,
+      };
+      const occurrences = service.generateOccurrences(startDate, rule, {
+        count: 2,
+      });
+      expect(occurrences).toHaveLength(2);
+      expect(occurrences[0]).toBe('2023-01-19T14:00:00.000Z');
+      expect(occurrences[1]).toBe('2024-01-19T14:00:00.000Z');
+    });
+
     it('should handle DST transitions correctly', () => {
       const startDate = new Date('2023-03-10T10:00:00Z');
       const rule = {
