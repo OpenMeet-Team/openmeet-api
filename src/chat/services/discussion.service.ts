@@ -21,6 +21,12 @@ import { TenantConnectionService } from '../../tenant/tenant.service';
 import { Trace } from '../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
 import { DiscussionMessagesResponseDto } from '../dto/discussion-message.dto';
+import {
+  EventAttendeePermission,
+  GroupPermission,
+} from '../../core/constants/constant';
+import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
+import { GroupMemberService } from '../../group-member/group-member.service';
 
 /**
  * Service for handling discussions across different entities (events, groups, direct messages)
@@ -42,6 +48,10 @@ export class DiscussionService implements DiscussionServiceInterface {
     private readonly chatProvider: ChatProviderInterface,
     @Inject('ChatRoomManagerInterface')
     private readonly chatRoomManager: ChatRoomManagerInterface,
+    @Inject(forwardRef(() => EventAttendeeService))
+    private readonly eventAttendeeService: EventAttendeeService,
+    @Inject(forwardRef(() => GroupMemberService))
+    private readonly groupMemberService: GroupMemberService,
   ) {}
 
   /**
@@ -2280,6 +2290,314 @@ export class DiscussionService implements DiscussionServiceInterface {
         error.stack,
       );
       throw new Error(`Failed to create chat room: ${error.message}`);
+    }
+  }
+
+  /**
+   * Redact a message from an event discussion
+   */
+  @Trace('discussion.redactEventDiscussionMessage')
+  async redactEventDiscussionMessage(
+    eventSlug: string,
+    messageEventId: string,
+    userSlug: string,
+    tenantId: string,
+    reason?: string,
+  ): Promise<string> {
+    return this.redactEntityDiscussionMessage(
+      'event',
+      eventSlug,
+      messageEventId,
+      userSlug,
+      tenantId,
+      reason,
+    );
+  }
+
+  /**
+   * Redact a message from a group discussion
+   */
+  @Trace('discussion.redactGroupDiscussionMessage')
+  async redactGroupDiscussionMessage(
+    groupSlug: string,
+    messageEventId: string,
+    userSlug: string,
+    tenantId: string,
+    reason?: string,
+  ): Promise<string> {
+    return this.redactEntityDiscussionMessage(
+      'group',
+      groupSlug,
+      messageEventId,
+      userSlug,
+      tenantId,
+      reason,
+    );
+  }
+
+  /**
+   * Generic method to redact messages from either event or group discussions
+   * Permission logic:
+   * - Users can always redact their own messages (no special permission needed)
+   * - Users with ManageDiscussions permission can redact any message
+   */
+  @Trace('discussion.redactEntityDiscussionMessage')
+  private async redactEntityDiscussionMessage(
+    entityType: 'event' | 'group',
+    entitySlug: string,
+    messageEventId: string,
+    userSlug: string,
+    tenantId: string,
+    reason?: string,
+  ): Promise<string> {
+    if (!tenantId) {
+      this.logger.error('Tenant ID is required');
+      throw new Error('Tenant ID is required');
+    }
+
+    let entity;
+    let chatRooms;
+
+    // Get the user making the redaction request
+    const user = await this.userService.getUserBySlug(userSlug);
+    if (!user) {
+      throw new NotFoundException(`User with slug ${userSlug} not found`);
+    }
+
+    // Get entity and chat rooms
+    if (entityType === 'event') {
+      entity = await this.eventQueryService.showEventBySlug(entitySlug);
+      if (!entity) {
+        throw new NotFoundException(`Event with slug ${entitySlug} not found`);
+      }
+
+      chatRooms = await this.chatRoomService.getEventChatRooms(entity.id);
+    } else {
+      entity = await this.groupService.getGroupBySlug(entitySlug);
+      if (!entity) {
+        throw new NotFoundException(`Group with slug ${entitySlug} not found`);
+      }
+
+      chatRooms = await this.chatRoomService.getGroupChatRooms(entity.id);
+    }
+
+    if (!chatRooms || chatRooms.length === 0) {
+      throw new NotFoundException(
+        `No chat room found for ${entityType} ${entitySlug}`,
+      );
+    }
+
+    const chatRoom = chatRooms[0];
+
+    // Debug logging for redaction attempt
+    this.logger.log(
+      `Redaction attempt: User ${userSlug} trying to redact message ${messageEventId} in ${entityType} ${entitySlug}`,
+    );
+
+    // Check if user should have moderator permissions and sync if needed
+    const shouldHaveModeratorPermissions =
+      await this.shouldUserHaveModeratorPermissions(user, entity, entityType);
+
+    if (shouldHaveModeratorPermissions && user.matrixUserId) {
+      await this.syncUserMatrixPermissions(
+        user.matrixUserId,
+        chatRoom.matrixRoomId,
+        50, // Moderator level
+        `User ${user.slug} requires moderator permissions in ${entityType} ${entitySlug}`,
+      );
+    }
+
+    // Use the chat provider to redact the message
+    try {
+      const redactionEventId = await this.chatProvider.redactMessage({
+        roomId: chatRoom.matrixRoomId,
+        eventId: messageEventId,
+        reason,
+        userSlug,
+        tenantId,
+      });
+
+      this.logger.log(
+        `Successfully redacted message ${messageEventId} in ${entityType} ${entitySlug} by user ${userSlug}`,
+      );
+
+      return redactionEventId;
+    } catch (error) {
+      this.logger.error(
+        `Failed to redact message ${messageEventId} in ${entityType} ${entitySlug}: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Check if a user has a specific permission for an entity (event or group)
+   */
+  private async checkEntityPermission(
+    userId: number,
+    entityId: number,
+    entityType: 'event' | 'group',
+    permission: EventAttendeePermission | GroupPermission,
+  ): Promise<void> {
+    const tenantId = this.request?.tenantId;
+    if (!tenantId) {
+      throw new Error('Tenant ID is required');
+    }
+
+    if (entityType === 'event') {
+      // Check event attendee permissions
+      try {
+        const attendee = await this.eventAttendeeService.findEventAttendeeByUserId(
+          entityId,
+          userId,
+        );
+
+        if (!attendee) {
+          throw new ForbiddenException(
+            `User ${userId} is not an attendee of event ${entityId}`,
+          );
+        }
+
+        // Check if the attendee's role has the required permission
+        if (attendee.role && attendee.role.permissions) {
+          const hasPermission = attendee.role.permissions.some(
+            (p: any) => p.name === permission,
+          );
+
+          if (!hasPermission) {
+            throw new ForbiddenException(
+              `User ${userId} does not have permission ${permission} for event ${entityId}`,
+            );
+          }
+        } else {
+          throw new ForbiddenException(
+            `User ${userId} has no role or permissions for event ${entityId}`,
+          );
+        }
+      } catch (error) {
+        this.logger.error(`Error checking event permission: ${error.message}`);
+        throw error;
+      }
+    } else if (entityType === 'group') {
+      // Check group member permissions
+      try {
+        const member = await this.groupMemberService.findGroupMemberByUserId(
+          entityId,
+          userId,
+        );
+
+        if (!member) {
+          throw new ForbiddenException(
+            `User ${userId} is not a member of group ${entityId}`,
+          );
+        }
+
+        // Check if the member's role has the required permission
+        if (member.groupRole && member.groupRole.groupPermissions) {
+          const hasPermission = member.groupRole.groupPermissions.some(
+            (p: any) => p.name === permission,
+          );
+
+          if (!hasPermission) {
+            throw new ForbiddenException(
+              `User ${userId} does not have permission ${permission} for group ${entityId}`,
+            );
+          }
+        } else {
+          throw new ForbiddenException(
+            `User ${userId} has no role or permissions for group ${entityId}`,
+          );
+        }
+      } catch (error) {
+        this.logger.error(`Error checking group permission: ${error.message}`);
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Determine if a user should have moderator permissions based on their role
+   */
+  private async shouldUserHaveModeratorPermissions(
+    user: any,
+    entity: any,
+    entityType: 'event' | 'group',
+  ): Promise<boolean> {
+    if (entityType === 'event') {
+      // Event owners always have moderator permissions
+      if (entity.userId === user.id) {
+        this.logger.log(
+          `User ${user.slug} is the owner of event ${entity.slug}`,
+        );
+        return true;
+      }
+
+      // Check if user has ManageDiscussions permission via their role
+      try {
+        await this.checkEntityPermission(
+          user.id,
+          entity.id,
+          'event',
+          EventAttendeePermission.ManageDiscussions,
+        );
+        this.logger.log(
+          `User ${user.slug} has ManageDiscussions permission in event ${entity.slug}`,
+        );
+        return true;
+      } catch {
+        // User doesn't have ManageDiscussions permission
+        return false;
+      }
+    } else if (entityType === 'group') {
+      // Check if user has ManageDiscussions permission via their group role
+      try {
+        await this.checkEntityPermission(
+          user.id,
+          entity.id,
+          'group',
+          GroupPermission.ManageDiscussions,
+        );
+        this.logger.log(
+          `User ${user.slug} has ManageDiscussions permission in group ${entity.slug}`,
+        );
+        return true;
+      } catch {
+        // User doesn't have ManageDiscussions permission
+        return false;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Sync Matrix power level for a user in a room
+   */
+  private async syncUserMatrixPermissions(
+    matrixUserId: string,
+    matrixRoomId: string,
+    powerLevel: number,
+    reason: string,
+  ): Promise<void> {
+    try {
+      this.logger.log(`Syncing Matrix permissions: ${reason}`);
+
+      await this.chatRoomService.updateUserPowerLevel(
+        matrixRoomId,
+        matrixUserId,
+        powerLevel,
+      );
+
+      this.logger.log(
+        `Successfully synced Matrix power level ${powerLevel} for user ${matrixUserId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to sync Matrix permissions for user ${matrixUserId}: ${error.message}`,
+        error.stack,
+      );
+      // Don't throw - permission sync failures shouldn't block redaction attempts
     }
   }
 }

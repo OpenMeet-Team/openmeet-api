@@ -173,4 +173,17 @@ export interface ChatProviderInterface {
     isTyping: boolean,
     deviceId?: string,
   ): Promise<void>;
+
+  /**
+   * Redact (delete) a message from a room
+   * @param options Redaction options containing roomId, eventId, reason, userSlug, and tenantId
+   * @returns The ID of the redaction event
+   */
+  redactMessage(options: {
+    roomId: string;
+    eventId: string;
+    reason?: string;
+    userSlug: string;
+    tenantId: string;
+  }): Promise<string>;
 }

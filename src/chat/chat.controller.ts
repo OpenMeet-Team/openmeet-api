@@ -354,6 +354,99 @@ export class ChatController {
   }
 
   /**
+   * Message redaction endpoints
+   */
+  @Delete('event/:slug/message/:messageEventId')
+  @ApiOperation({ summary: 'Redact a message from an event discussion' })
+  async redactEventMessage(
+    @Param('slug') eventSlug: string,
+    @Param('messageEventId') messageEventId: string,
+    @Body() body: { reason?: string },
+    @AuthUser() user: User,
+    @Req() request: any,
+  ): Promise<{
+    success: boolean;
+    redactionEventId?: string;
+    message?: string;
+  }> {
+    const tenantId = request.tenantId;
+    if (!tenantId) {
+      throw new Error('Tenant ID is required');
+    }
+
+    try {
+      const redactionEventId =
+        await this.discussionService.redactEventDiscussionMessage(
+          eventSlug,
+          messageEventId,
+          user.slug,
+          tenantId,
+          body.reason,
+        );
+
+      return {
+        success: true,
+        redactionEventId,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error redacting message ${messageEventId} for event ${eventSlug}: ${error.message}`,
+        error.stack,
+      );
+
+      return {
+        success: false,
+        message: error.message || 'Failed to redact message',
+      };
+    }
+  }
+
+  @Delete('group/:slug/message/:messageEventId')
+  @ApiOperation({ summary: 'Redact a message from a group discussion' })
+  async redactGroupMessage(
+    @Param('slug') groupSlug: string,
+    @Param('messageEventId') messageEventId: string,
+    @Body() body: { reason?: string },
+    @AuthUser() user: User,
+    @Req() request: any,
+  ): Promise<{
+    success: boolean;
+    redactionEventId?: string;
+    message?: string;
+  }> {
+    const tenantId = request.tenantId;
+    if (!tenantId) {
+      throw new Error('Tenant ID is required');
+    }
+
+    try {
+      const redactionEventId =
+        await this.discussionService.redactGroupDiscussionMessage(
+          groupSlug,
+          messageEventId,
+          user.slug,
+          tenantId,
+          body.reason,
+        );
+
+      return {
+        success: true,
+        redactionEventId,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error redacting message ${messageEventId} for group ${groupSlug}: ${error.message}`,
+        error.stack,
+      );
+
+      return {
+        success: false,
+        message: error.message || 'Failed to redact message',
+      };
+    }
+  }
+
+  /**
    * Direct message endpoints (placeholders for future implementation)
    */
   @Post('direct/:recipientId/message')

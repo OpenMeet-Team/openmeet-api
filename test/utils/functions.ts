@@ -363,6 +363,114 @@ async function getCurrentUser(app, tenantId, userToken) {
   return userResponse.body;
 }
 
+async function sendEventMessage(
+  eventSlug: string,
+  message: string,
+  token: string,
+  app: string = TESTING_APP_URL,
+) {
+  // Join chat room first
+  await request(app)
+    .post(`/api/v1/chat/event/${eventSlug}/join`)
+    .set('Authorization', `Bearer ${token}`)
+    .set('x-tenant-id', TESTING_TENANT_ID);
+
+  // Send message
+  const response = await request(app)
+    .post(`/api/v1/chat/event/${eventSlug}/message`)
+    .set('Authorization', `Bearer ${token}`)
+    .set('x-tenant-id', TESTING_TENANT_ID)
+    .send({ message });
+
+  expect(response.status).toBe(200);
+  return response.body.id; // Returns the Matrix event ID
+}
+
+async function sendGroupMessage(
+  groupSlug: string,
+  message: string,
+  token: string,
+  app: string = TESTING_APP_URL,
+) {
+  // Join chat room first
+  await request(app)
+    .post(`/api/v1/chat/group/${groupSlug}/join`)
+    .set('Authorization', `Bearer ${token}`)
+    .set('x-tenant-id', TESTING_TENANT_ID);
+
+  // Send message
+  const response = await request(app)
+    .post(`/api/v1/chat/group/${groupSlug}/message`)
+    .set('Authorization', `Bearer ${token}`)
+    .set('x-tenant-id', TESTING_TENANT_ID)
+    .send({ message });
+
+  expect(response.status).toBe(200);
+  return response.body.id; // Returns the Matrix event ID
+}
+
+async function redactEventMessage(
+  eventSlug: string,
+  messageEventId: string,
+  token: string,
+  reason?: string,
+  app: string = TESTING_APP_URL,
+) {
+  const response = await request(app)
+    .delete(`/api/v1/chat/event/${eventSlug}/message/${messageEventId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .set('x-tenant-id', TESTING_TENANT_ID)
+    .send({ reason });
+
+  return response;
+}
+
+async function redactGroupMessage(
+  groupSlug: string,
+  messageEventId: string,
+  token: string,
+  reason?: string,
+  app: string = TESTING_APP_URL,
+) {
+  const response = await request(app)
+    .delete(`/api/v1/chat/group/${groupSlug}/message/${messageEventId}`)
+    .set('Authorization', `Bearer ${token}`)
+    .set('x-tenant-id', TESTING_TENANT_ID)
+    .send({ reason });
+
+  return response;
+}
+
+async function addUserToEvent(
+  eventSlug: string,
+  userSlug: string,
+  token: string,
+  app: string = TESTING_APP_URL,
+) {
+  const response = await request(app)
+    .post(`/api/v1/events/${eventSlug}/attendees`)
+    .set('Authorization', `Bearer ${token}`)
+    .set('x-tenant-id', TESTING_TENANT_ID)
+    .send({ userSlug, rsvpStatus: 'yes' });
+
+  return response.status === 200 || response.status === 201;
+}
+
+async function addUserToGroup(
+  groupSlug: string,
+  userSlug: string,
+  token: string,
+  app: string = TESTING_APP_URL,
+) {
+  const response = await request(app)
+    .post(`/api/v1/groups/${groupSlug}/members`)
+    .set('Authorization', `Bearer ${token}`)
+    .set('x-tenant-id', TESTING_TENANT_ID)
+    .send({ userSlug });
+
+  return response.status === 200 || response.status === 201;
+}
+
 export {
   getAuthToken,
   createGroup,
@@ -383,4 +491,10 @@ export {
   updateGroupMemberRole,
   getGroupMembers,
   getCurrentUser,
+  sendEventMessage,
+  sendGroupMessage,
+  redactEventMessage,
+  redactGroupMessage,
+  addUserToEvent,
+  addUserToGroup,
 };

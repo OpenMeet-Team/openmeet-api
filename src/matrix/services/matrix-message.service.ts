@@ -531,4 +531,100 @@ export class MatrixMessageService implements IMatrixMessageProvider {
       await this.matrixCoreService.releaseClient(client);
     }
   }
+
+  /**
+   * Redact (delete) a message from a room using user's credentials
+   */
+  async redactMessage(options: {
+    roomId: string;
+    eventId: string;
+    reason?: string;
+    userSlug: string;
+    tenantId: string;
+  }): Promise<string> {
+    const { roomId, eventId, reason, userSlug, tenantId } = options;
+
+    try {
+      this.logger.debug(
+        `Redacting message ${eventId} in room ${roomId} as user ${userSlug}`,
+      );
+
+      // Get Matrix client for this user - this handles all the credential management
+      const matrixClient = await this.matrixUserService.getClientForUser(
+        userSlug,
+        null,
+        tenantId,
+      );
+
+      // Debug: Check user's power level in the room before attempting redaction
+      try {
+        const matrixUserId = matrixClient.getUserId();
+        if (matrixUserId) {
+          const powerLevels = await matrixClient.getStateEvent(
+            roomId,
+            'm.room.power_levels',
+            '',
+          );
+          const userPowerLevel = powerLevels?.users?.[matrixUserId] || 0;
+          const redactLevel = powerLevels?.redact || 50; // Default redact level is usually 50
+
+          this.logger.log(
+            `Redaction debug: User ${userSlug} (${matrixUserId}) has power level ${userPowerLevel}, redact level required: ${redactLevel}`,
+          );
+
+          if (userPowerLevel < redactLevel) {
+            this.logger.warn(
+              `User ${userSlug} has insufficient power level (${userPowerLevel}) to redact messages (requires ${redactLevel})`,
+            );
+          }
+        }
+      } catch (debugError) {
+        this.logger.warn(
+          `Could not check power levels for redaction debug: ${debugError.message}`,
+        );
+      }
+
+      // Redact the message
+      const response = await matrixClient.redactEvent(roomId, eventId, reason);
+
+      this.logger.debug(
+        `Successfully redacted message ${eventId}, redaction event: ${response.event_id}`,
+      );
+
+      return response.event_id;
+    } catch (error) {
+      // Handle permission errors
+      if (error.message?.includes('M_FORBIDDEN')) {
+        this.logger.error(
+          `User ${userSlug} does not have permission to redact message ${eventId} in room ${roomId}`,
+        );
+        throw new Error('You do not have permission to redact this message');
+      }
+
+      // Handle token issues
+      if (
+        error.message?.includes('M_UNKNOWN_TOKEN') ||
+        error.message?.includes('Invalid access token')
+      ) {
+        this.logger.error(
+          `Authentication error for user ${userSlug}: ${error.message}`,
+        );
+        throw new Error(
+          'Chat authentication failed. Please refresh the page to reconnect.',
+        );
+      }
+
+      // Handle message not found
+      if (error.message?.includes('M_NOT_FOUND')) {
+        this.logger.warn(`Message ${eventId} not found in room ${roomId}`);
+        throw new Error('Message not found');
+      }
+
+      this.logger.error(
+        `Error redacting message ${eventId} in room ${roomId}: ${error.message}`,
+        error.stack,
+      );
+      throw new Error(`Failed to redact message: ${error.message}`);
+    }
+  }
 }

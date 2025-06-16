@@ -27,6 +27,7 @@ import { trace } from '@opentelemetry/api';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupService } from '../../group/group.service';
 import { ElastiCacheService } from '../../elasticache/elasticache.service';
+import { ChatPermissionEmitterService } from '../services/chat-permission-emitter.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class ChatRoomService {
@@ -161,6 +162,7 @@ export class ChatRoomService {
     private readonly groupService: GroupService,
     // We already have EventQueryService injected above, so we'll use that instead of EventService
     private readonly elastiCacheService: ElastiCacheService,
+    private readonly chatPermissionEmitter: ChatPermissionEmitterService,
   ) {
     void this.initializeRepositories();
   }
@@ -686,6 +688,24 @@ export class ChatRoomService {
         this.logger.log(
           `Added user ${userSlug} to event ${eventSlug} chat room`,
         );
+
+        // Emit event for permission synchronization
+        if (isJoined && userWithCredentials.matrixUserId) {
+          const attendee = event.attendees?.find((a) => a.user.id === user.id);
+          const userRole = attendee?.role?.name || 'ATTENDEE';
+
+          this.chatPermissionEmitter.emitUserJoinedChat({
+            userId: user.id,
+            userSlug,
+            matrixUserId: userWithCredentials.matrixUserId,
+            roomId: chatRoom.matrixRoomId,
+            entityId: event.id,
+            entitySlug: eventSlug,
+            entityType: 'event',
+            userRole,
+            tenantId: this.request.tenantId,
+          });
+        }
       } catch (error) {
         this.logger.error(
           `Failed to add user ${userSlug} to event ${eventSlug} chat room: ${error.message}`,
@@ -1825,6 +1845,23 @@ export class ChatRoomService {
         this.logger.log(
           `Added user ${userSlug} to group ${groupSlug} chat room`,
         );
+
+        // Emit event for permission synchronization
+        if (userWithCredentials.matrixUserId) {
+          // For now, we'll emit with a default role and let the listener determine the actual role
+          // The listener can query the GroupMemberService to get the user's actual role
+          this.chatPermissionEmitter.emitUserJoinedChat({
+            userId: user.id,
+            userSlug,
+            matrixUserId: userWithCredentials.matrixUserId,
+            roomId: chatRoom.matrixRoomId,
+            entityId: group.id,
+            entitySlug: groupSlug,
+            entityType: 'group',
+            userRole: 'MEMBER', // Default role, listener will determine actual role
+            tenantId: this.request.tenantId,
+          });
+        }
       }
     } catch (error) {
       this.logger.error(
@@ -2443,6 +2480,37 @@ export class ChatRoomService {
     } catch (error) {
       this.logger.error(
         `Error removing user ${userId} from event ${eventId} chat room: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Update Matrix power level for a user in a specific room
+   * Public method that can be called to fix moderator permissions
+   */
+  @Trace('chat-room.updateUserPowerLevel')
+  async updateUserPowerLevel(
+    matrixRoomId: string,
+    matrixUserId: string,
+    powerLevel: number,
+  ): Promise<void> {
+    try {
+      this.logger.log(
+        `Updating power level for user ${matrixUserId} in room ${matrixRoomId} to level ${powerLevel}`,
+      );
+
+      await this.matrixRoomService.setRoomPowerLevels(matrixRoomId, {
+        [matrixUserId]: powerLevel,
+      });
+
+      this.logger.log(
+        `Successfully updated power level for user ${matrixUserId} to ${powerLevel}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to update power level for user ${matrixUserId} in room ${matrixRoomId}: ${error.message}`,
         error.stack,
       );
       throw error;
