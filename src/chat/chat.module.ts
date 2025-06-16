@@ -12,6 +12,8 @@ import { EventModule } from '../event/event.module';
 import { GroupModule } from '../group/group.module';
 import { ChatListener } from './chat.listener';
 import { ChatRoomService } from './rooms/chat-room.service';
+import { ChatPermissionListener } from './listeners/chat-permission.listener';
+import { ChatPermissionEmitterService } from './services/chat-permission-emitter.service';
 import { ChatRoomEntity } from './infrastructure/persistence/relational/entities/chat-room.entity';
 import { GroupMemberModule } from '../group-member/group-member.module';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
@@ -52,6 +54,8 @@ import { ElastiCacheModule } from '../elasticache/elasticache.module';
     },
     MatrixChatServiceAdapter,
     ChatListener,
+    ChatPermissionListener,
+    ChatPermissionEmitterService,
   ],
   exports: [
     DiscussionService,
@@ -62,6 +66,7 @@ import { ElastiCacheModule } from '../elasticache/elasticache.module';
     'CHAT_SERVICE',
     MatrixChatServiceAdapter,
     ChatRoomService,
+    ChatPermissionEmitterService,
     TypeOrmModule,
   ],
 })

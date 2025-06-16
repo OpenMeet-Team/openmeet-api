@@ -8,6 +8,8 @@ import { ChatRoomService } from '../rooms/chat-room.service';
 import { UserService } from '../../user/user.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { GroupVisibility } from '../../core/constants/constant';
+import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
+import { GroupMemberService } from '../../group-member/group-member.service';
 
 // Mock services
 const mockGroupService = {
@@ -42,6 +44,14 @@ const mockChatProvider = {
 const mockChatRoomManager = {
   createRoom: jest.fn(),
   addUserToRoom: jest.fn(),
+};
+
+const mockEventAttendeeService = {
+  findEventAttendeeByUserId: jest.fn(),
+};
+
+const mockGroupMemberService = {
+  findGroupMemberByUserId: jest.fn(),
 };
 
 const mockRequest = {
@@ -90,6 +100,14 @@ describe('DiscussionService', () => {
         {
           provide: 'ChatRoomManagerInterface',
           useValue: mockChatRoomManager,
+        },
+        {
+          provide: EventAttendeeService,
+          useValue: mockEventAttendeeService,
+        },
+        {
+          provide: GroupMemberService,
+          useValue: mockGroupMemberService,
         },
         {
           provide: REQUEST,

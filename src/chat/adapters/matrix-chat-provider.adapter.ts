@@ -243,4 +243,29 @@ export class MatrixChatProviderAdapter implements ChatProviderInterface {
       throw new Error(`Failed to send typing notification: ${error.message}`);
     }
   }
+
+  @Trace('matrix-chat-provider.redactMessage')
+  async redactMessage(options: {
+    roomId: string;
+    eventId: string;
+    reason?: string;
+    userSlug: string;
+    tenantId: string;
+  }): Promise<string> {
+    try {
+      return await this.matrixMessageService.redactMessage({
+        roomId: options.roomId,
+        eventId: options.eventId,
+        reason: options.reason,
+        userSlug: options.userSlug,
+        tenantId: options.tenantId,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to redact message: ${error.message}`,
+        error.stack,
+      );
+      throw new Error(`Failed to redact message: ${error.message}`);
+    }
+  }
 }

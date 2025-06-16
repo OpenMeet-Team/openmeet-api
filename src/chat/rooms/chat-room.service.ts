@@ -27,6 +27,7 @@ import { trace } from '@opentelemetry/api';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupService } from '../../group/group.service';
 import { ElastiCacheService } from '../../elasticache/elasticache.service';
+import { ChatPermissionEmitterService } from '../services/chat-permission-emitter.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class ChatRoomService {
@@ -161,6 +162,7 @@ export class ChatRoomService {
     private readonly groupService: GroupService,
     // We already have EventQueryService injected above, so we'll use that instead of EventService
     private readonly elastiCacheService: ElastiCacheService,
+    private readonly chatPermissionEmitter: ChatPermissionEmitterService,
   ) {
     void this.initializeRepositories();
   }
@@ -680,12 +682,32 @@ export class ChatRoomService {
           await this.addUserToRoomInDatabase(chatRoom.id, user.id);
         }
 
-        // Mark as completed
-        this.markUserAsComplete(event.id, user.id);
+        // Only mark as completed if Matrix join actually succeeded
+        if (isJoined) {
+          this.markUserAsComplete(event.id, user.id);
+        }
 
         this.logger.log(
           `Added user ${userSlug} to event ${eventSlug} chat room`,
         );
+
+        // Emit event for permission synchronization
+        if (isJoined && userWithCredentials.matrixUserId) {
+          const attendee = event.attendees?.find((a) => a.user.id === user.id);
+          const userRole = attendee?.role?.name || 'ATTENDEE';
+
+          this.chatPermissionEmitter?.emitUserJoinedChat({
+            userId: user.id,
+            userSlug,
+            matrixUserId: userWithCredentials.matrixUserId,
+            roomId: chatRoom.matrixRoomId,
+            entityId: event.id,
+            entitySlug: eventSlug,
+            entityType: 'event',
+            userRole,
+            tenantId: this.request.tenantId,
+          });
+        }
       } catch (error) {
         this.logger.error(
           `Failed to add user ${userSlug} to event ${eventSlug} chat room: ${error.message}`,
@@ -1825,6 +1847,23 @@ export class ChatRoomService {
         this.logger.log(
           `Added user ${userSlug} to group ${groupSlug} chat room`,
         );
+
+        // Emit event for permission synchronization
+        if (userWithCredentials.matrixUserId) {
+          // For now, we'll emit with a default role and let the listener determine the actual role
+          // The listener can query the GroupMemberService to get the user's actual role
+          this.chatPermissionEmitter?.emitUserJoinedChat({
+            userId: user.id,
+            userSlug,
+            matrixUserId: userWithCredentials.matrixUserId,
+            roomId: chatRoom.matrixRoomId,
+            entityId: group.id,
+            entitySlug: groupSlug,
+            entityType: 'group',
+            userRole: 'MEMBER', // Default role, listener will determine actual role
+            tenantId: this.request.tenantId,
+          });
+        }
       }
     } catch (error) {
       this.logger.error(
@@ -2285,20 +2324,104 @@ export class ChatRoomService {
     }
 
     // Send the message using the user's Matrix credentials
-    return this.matrixMessageService.sendMessage({
-      roomId: chatRoom.matrixRoomId,
-      content: message,
-      userId: user.matrixUserId!, // Non-null assertion
-      accessToken: user.matrixAccessToken!, // Non-null assertion
-      deviceId: user.matrixDeviceId,
-      // Legacy/alternate field support
-      body: message,
-      formatted_body: formattedMessage,
-      format: formattedMessage ? 'org.matrix.custom.html' : undefined,
-      senderUserId: user.matrixUserId!, // Non-null assertion
-      senderAccessToken: user.matrixAccessToken!, // Non-null assertion
-      senderDeviceId: user.matrixDeviceId,
-    });
+    try {
+      return await this.matrixMessageService.sendMessage({
+        roomId: chatRoom.matrixRoomId,
+        content: message,
+        userId: user.matrixUserId!, // Non-null assertion
+        accessToken: user.matrixAccessToken!, // Non-null assertion
+        deviceId: user.matrixDeviceId,
+        // Legacy/alternate field support
+        body: message,
+        formatted_body: formattedMessage,
+        format: formattedMessage ? 'org.matrix.custom.html' : undefined,
+        senderUserId: user.matrixUserId!, // Non-null assertion
+        senderAccessToken: user.matrixAccessToken!, // Non-null assertion
+        senderDeviceId: user.matrixDeviceId,
+      });
+    } catch (error) {
+      // Check if this is a "user not in room" error
+      if (
+        error.message?.includes('not in room') ||
+        error.message?.includes('M_FORBIDDEN')
+      ) {
+        this.logger.warn(
+          `User ${user.slug} not in Matrix room ${chatRoom.matrixRoomId}. Attempting to add them and retry message sending.`,
+        );
+
+        try {
+          // Clear the cache entry to allow re-processing during recovery
+          if (chatRoom.event) {
+            const cacheKey = this.getChatMembershipCacheKey(chatRoom.event.id, user.id, 'event');
+            if (this.request.chatRoomMembershipCache?.[cacheKey]) {
+              delete this.request.chatRoomMembershipCache[cacheKey];
+              this.logger.debug(`Cleared cache entry for user ${user.id} in event ${chatRoom.event.id} during recovery`);
+            }
+          } else if (chatRoom.group) {
+            const cacheKey = this.getChatMembershipCacheKey(chatRoom.group.id, user.id, 'group');
+            if (this.request.chatRoomMembershipCache?.[cacheKey]) {
+              delete this.request.chatRoomMembershipCache[cacheKey];
+              this.logger.debug(`Cleared cache entry for user ${user.id} in group ${chatRoom.group.id} during recovery`);
+            }
+          }
+
+          // Determine room type and add user to the appropriate room
+          if (chatRoom.event) {
+            // This is an event chat room
+            this.logger.debug(
+              `Adding user ${user.slug} to event chat room for event ${chatRoom.event.slug}`,
+            );
+            await this.addUserToEventChatRoom(chatRoom.event.slug, user.slug);
+          } else if (chatRoom.group) {
+            // This is a group chat room
+            this.logger.debug(
+              `Adding user ${user.slug} to group chat room for group ${chatRoom.group.slug}`,
+            );
+            await this.addUserToGroupChatRoom(chatRoom.group.slug, user.slug);
+          } else {
+            this.logger.error(
+              `Chat room ${roomId} is not associated with an event or group`,
+            );
+            throw new Error(
+              'Unable to determine room type for membership recovery',
+            );
+          }
+
+          // Wait a moment for Matrix membership to propagate
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+
+          // Retry sending the message
+          this.logger.debug(
+            `Retrying message send for user ${user.slug} in room ${chatRoom.matrixRoomId}`,
+          );
+          return await this.matrixMessageService.sendMessage({
+            roomId: chatRoom.matrixRoomId,
+            content: message,
+            userId: user.matrixUserId!, // Non-null assertion
+            accessToken: user.matrixAccessToken!, // Non-null assertion
+            deviceId: user.matrixDeviceId,
+            // Legacy/alternate field support
+            body: message,
+            formatted_body: formattedMessage,
+            format: formattedMessage ? 'org.matrix.custom.html' : undefined,
+            senderUserId: user.matrixUserId!, // Non-null assertion
+            senderAccessToken: user.matrixAccessToken!, // Non-null assertion
+            senderDeviceId: user.matrixDeviceId,
+          });
+        } catch (retryError) {
+          this.logger.error(
+            `Failed to recover from room membership issue for user ${user.slug}: ${retryError.message}`,
+            retryError.stack,
+          );
+          throw new Error(
+            `Unable to send message: ${retryError.message}. Please try joining the chat room first.`,
+          );
+        }
+      }
+
+      // For other errors, re-throw as-is
+      throw error;
+    }
   }
 
   /**
@@ -2443,6 +2566,37 @@ export class ChatRoomService {
     } catch (error) {
       this.logger.error(
         `Error removing user ${userId} from event ${eventId} chat room: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Update Matrix power level for a user in a specific room
+   * Public method that can be called to fix moderator permissions
+   */
+  @Trace('chat-room.updateUserPowerLevel')
+  async updateUserPowerLevel(
+    matrixRoomId: string,
+    matrixUserId: string,
+    powerLevel: number,
+  ): Promise<void> {
+    try {
+      this.logger.log(
+        `Updating power level for user ${matrixUserId} in room ${matrixRoomId} to level ${powerLevel}`,
+      );
+
+      await this.matrixRoomService.setRoomPowerLevels(matrixRoomId, {
+        [matrixUserId]: powerLevel,
+      });
+
+      this.logger.log(
+        `Successfully updated power level for user ${matrixUserId} to ${powerLevel}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to update power level for user ${matrixUserId} in room ${matrixRoomId}: ${error.message}`,
         error.stack,
       );
       throw error;

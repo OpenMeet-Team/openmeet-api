@@ -57,6 +57,11 @@ export interface IMatrixClient {
     content: any,
     txnId?: string,
   ) => Promise<{ event_id: string }>;
+  redactEvent: (
+    roomId: string,
+    eventId: string,
+    reason?: string,
+  ) => Promise<{ event_id: string }>;
   sendTyping: (
     roomId: string,
     isTyping: boolean,
@@ -123,6 +128,13 @@ export interface IMatrixRoomProvider {
 
 export interface IMatrixMessageProvider {
   sendMessage: (options: any) => Promise<string>;
+  redactMessage: (options: {
+    roomId: string;
+    eventId: string;
+    reason?: string;
+    userSlug: string;
+    tenantId: string;
+  }) => Promise<string>;
   sendTypingNotification: (
     roomId: string,
     userId: string,
