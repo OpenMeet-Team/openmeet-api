@@ -317,8 +317,8 @@ export class EventSeriesOccurrenceService {
         resources: updatedTemplateEvent.resources,
         color: updatedTemplateEvent.color,
         conferenceData: updatedTemplateEvent.conferenceData,
-        // Add timeZone separately - don't try to access from template event
-        timeZone: 'UTC',
+        // Use series timezone instead of hardcoding UTC
+        timeZone: series.timeZone || 'UTC',
       };
 
       this.logger.debug(
