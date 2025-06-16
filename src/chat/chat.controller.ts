@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -47,11 +48,19 @@ export class ChatController {
     @Param('slug') slug: string,
     @Body() body: { message: string },
     @AuthUser() user: User,
+    @Req() request: any,
   ): Promise<{ id: string }> {
+    // Pass the tenant ID explicitly from the request
+    const tenantId = request.tenantId;
+    if (!tenantId) {
+      throw new BadRequestException('Tenant ID is required');
+    }
+
     return await this.discussionService.sendEventDiscussionMessage(
       slug,
       user.id,
       body,
+      tenantId, // Pass tenant ID explicitly
     );
   }
 
@@ -65,14 +74,22 @@ export class ChatController {
   async getEventMessages(
     @Param('slug') slug: string,
     @AuthUser() user: User,
+    @Req() request: any,
     @Query('limit') limit?: number,
     @Query('from') from?: string,
   ): Promise<DiscussionMessagesResponseDto> {
+    // Pass the tenant ID explicitly from the request
+    const tenantId = request.tenantId;
+    if (!tenantId) {
+      throw new BadRequestException('Tenant ID is required');
+    }
+
     return await this.discussionService.getEventDiscussionMessages(
       slug,
       user.id,
       limit,
       from,
+      tenantId, // Pass tenant ID explicitly
     );
   }
 
@@ -182,7 +199,7 @@ export class ChatController {
     // Pass the tenant ID explicitly from the request
     const tenantId = request.tenantId;
     if (!tenantId) {
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     // Use the discussion service with explicit tenant ID
@@ -220,7 +237,7 @@ export class ChatController {
     // Pass the tenant ID explicitly from the request
     const tenantId = request.tenantId;
     if (!tenantId) {
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     // Use the discussion service with optional userId for unauthenticated users
@@ -251,7 +268,7 @@ export class ChatController {
     // Pass the tenant ID explicitly from the request
     const tenantId = request.tenantId;
     if (!tenantId) {
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     try {
@@ -322,7 +339,7 @@ export class ChatController {
     // Pass the tenant ID explicitly from the request
     const tenantId = request.tenantId;
     if (!tenantId) {
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     return await this.discussionService.addMemberToGroupDiscussionBySlug(
@@ -343,7 +360,7 @@ export class ChatController {
     // Pass the tenant ID explicitly from the request
     const tenantId = request.tenantId;
     if (!tenantId) {
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     return await this.discussionService.removeMemberFromGroupDiscussionBySlug(
@@ -644,4 +661,5 @@ export class ChatController {
       };
     }
   }
+
 }

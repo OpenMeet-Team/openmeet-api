@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   Scope,
   Inject,
@@ -72,7 +73,7 @@ export class DiscussionService implements DiscussionServiceInterface {
 
     if (!tenantId) {
       this.logger.error('Tenant ID is required');
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     const cache = this.getRequestCache();
@@ -792,8 +793,17 @@ export class DiscussionService implements DiscussionServiceInterface {
     slug: string,
     userId: number,
     body: { message: string },
+    explicitTenantId?: string,
   ): Promise<{ id: string }> {
-    return this.sendEntityDiscussionMessage('event', slug, userId, body);
+    // Get tenant ID from explicit parameter or request context
+    const tenantId = explicitTenantId || this.request?.tenantId;
+
+    if (!tenantId) {
+      this.logger.error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
+    }
+
+    return this.sendEntityDiscussionMessage('event', slug, userId, body, tenantId);
   }
 
   @Trace('discussion.getEventDiscussionMessages')
@@ -802,8 +812,17 @@ export class DiscussionService implements DiscussionServiceInterface {
     userId: number,
     limit = 50,
     from?: string,
+    explicitTenantId?: string,
   ): Promise<DiscussionMessagesResponseDto> {
-    return this.getEntityDiscussionMessages('event', slug, userId, limit, from);
+    // Get tenant ID from explicit parameter or request context
+    const tenantId = explicitTenantId || this.request?.tenantId;
+
+    if (!tenantId) {
+      this.logger.error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
+    }
+
+    return this.getEntityDiscussionMessages('event', slug, userId, limit, from, tenantId);
   }
 
   /**
@@ -1199,7 +1218,7 @@ export class DiscussionService implements DiscussionServiceInterface {
 
     if (!tenantId) {
       this.logger.error('Tenant ID is required');
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     // Remove the user from the appropriate chat room
@@ -1299,7 +1318,7 @@ export class DiscussionService implements DiscussionServiceInterface {
 
     if (!tenantId) {
       this.logger.error('Tenant ID is required');
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     const cache = this.getRequestCache();
@@ -1418,7 +1437,7 @@ export class DiscussionService implements DiscussionServiceInterface {
 
     if (!tenantId) {
       this.logger.error('Tenant ID is required');
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     // Pass the tenant context to the entity discussion method
@@ -1444,7 +1463,7 @@ export class DiscussionService implements DiscussionServiceInterface {
 
     if (!tenantId) {
       this.logger.error('Tenant ID is required');
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     // Pass the tenant context to the entity discussion method
@@ -1469,7 +1488,7 @@ export class DiscussionService implements DiscussionServiceInterface {
 
     if (!tenantId) {
       this.logger.error('Tenant ID is required');
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     // Check if the group and user exist
@@ -1684,7 +1703,7 @@ export class DiscussionService implements DiscussionServiceInterface {
   ): Promise<{ groupId: number; userId: number }> {
     if (!tenantId) {
       this.logger.error('Tenant ID is required');
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     // Get the group ID
@@ -1709,7 +1728,7 @@ export class DiscussionService implements DiscussionServiceInterface {
   ): Promise<number> {
     if (!tenantId) {
       this.logger.error('Tenant ID is required');
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     try {
@@ -1736,7 +1755,7 @@ export class DiscussionService implements DiscussionServiceInterface {
   ): Promise<number> {
     if (!tenantId) {
       this.logger.error('Tenant ID is required');
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     try {
@@ -2061,7 +2080,7 @@ export class DiscussionService implements DiscussionServiceInterface {
   ): Promise<void> {
     if (!tenantId) {
       this.logger.error('Tenant ID is required');
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     // Find the event by slug
@@ -2126,7 +2145,7 @@ export class DiscussionService implements DiscussionServiceInterface {
   ): Promise<{ roomId?: string }> {
     if (!tenantId) {
       this.logger.error('Tenant ID is required');
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     // Find the event by slug
@@ -2185,7 +2204,7 @@ export class DiscussionService implements DiscussionServiceInterface {
   ): Promise<void> {
     if (!tenantId) {
       this.logger.error('Tenant ID is required');
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     // Find the group by slug
@@ -2247,7 +2266,7 @@ export class DiscussionService implements DiscussionServiceInterface {
   ): Promise<{ roomId?: string }> {
     if (!tenantId) {
       this.logger.error('Tenant ID is required');
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     // Find the group by slug
@@ -2352,7 +2371,7 @@ export class DiscussionService implements DiscussionServiceInterface {
   ): Promise<string> {
     if (!tenantId) {
       this.logger.error('Tenant ID is required');
-      throw new Error('Tenant ID is required');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     let entity;

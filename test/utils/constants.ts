@@ -1,4 +1,4 @@
-export const TESTING_TENANT_ID = process.env.TEST_TENANT_ID as string;
+export const TESTING_TENANT_ID = (process.env.TEST_TENANT_ID || process.env.TESTING_TENANT_ID) as string;
 export const TESTING_ADMIN_EMAIL = process.env.ADMIN_EMAIL as string;
 export const TESTING_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD as string;
 export const TESTING_ADMIN_ID = 1;

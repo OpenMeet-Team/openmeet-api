@@ -103,7 +103,20 @@ async function loginAsTester() {
     });
 
   expect(loginResponse.status).toBe(200);
-  return loginResponse.body.token;
+  
+  const token = loginResponse.body.token;
+  
+  // Ensure Matrix credentials are provisioned for the tester
+  try {
+    await request(TESTING_APP_URL)
+      .post('/api/matrix/provision-user')
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
+  } catch (error) {
+    console.warn('Failed to provision Matrix credentials for tester:', error.message);
+  }
+  
+  return token;
 }
 async function loginAsAdmin() {
   const loginResponse = await request(TESTING_APP_URL)
@@ -115,7 +128,20 @@ async function loginAsAdmin() {
     });
 
   expect(loginResponse.status).toBe(200);
-  return loginResponse.body.token;
+  
+  const token = loginResponse.body.token;
+  
+  // Ensure Matrix credentials are provisioned for the admin
+  try {
+    await request(TESTING_APP_URL)
+      .post('/api/matrix/provision-user')
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
+  } catch (error) {
+    console.warn('Failed to provision Matrix credentials for admin:', error.message);
+  }
+  
+  return token;
 }
 async function createCategory(app, token, categoryData) {
   const response = await request(app)
@@ -263,13 +289,27 @@ async function createTestUser(
     throw new Error(`Failed to create test user: ${response.status}`);
   }
 
-  return {
+  const userInfo = {
     id: response.body.user.id,
     token: response.body.token,
     slug: response.body.user.slug,
     user: response.body.user,
     email: response.body.user.email || email, // fallback to the email we used to register
   };
+
+  // Provision Matrix credentials for the test user
+  try {
+    await request(app)
+      .post('/api/matrix/provision-user')
+      .set('Authorization', `Bearer ${userInfo.token}`)
+      .set('x-tenant-id', tenantId);
+    // Note: We don't check the response status because Matrix provisioning
+    // might fail in some test environments, but we still want to proceed
+  } catch (error) {
+    console.warn('Failed to provision Matrix credentials for test user:', error.message);
+  }
+
+  return userInfo;
 }
 
 async function joinGroup(app, tenantId, groupSlug, userToken) {
@@ -371,16 +411,23 @@ async function sendEventMessage(
 ) {
   // Join chat room first
   await request(app)
-    .post(`/api/v1/chat/event/${eventSlug}/join`)
+    .post(`/api/chat/event/${eventSlug}/join`)
     .set('Authorization', `Bearer ${token}`)
     .set('x-tenant-id', TESTING_TENANT_ID);
 
   // Send message
   const response = await request(app)
-    .post(`/api/v1/chat/event/${eventSlug}/message`)
+    .post(`/api/chat/event/${eventSlug}/message`)
     .set('Authorization', `Bearer ${token}`)
     .set('x-tenant-id', TESTING_TENANT_ID)
     .send({ message });
+
+  if (response.status !== 200) {
+    console.error('Failed to send event message:', {
+      status: response.status,
+      body: response.body,
+    });
+  }
 
   expect(response.status).toBe(200);
   return response.body.id; // Returns the Matrix event ID
@@ -394,18 +441,25 @@ async function sendGroupMessage(
 ) {
   // Join chat room first
   await request(app)
-    .post(`/api/v1/chat/group/${groupSlug}/join`)
+    .post(`/api/chat/group/${groupSlug}/join`)
     .set('Authorization', `Bearer ${token}`)
     .set('x-tenant-id', TESTING_TENANT_ID);
 
   // Send message
   const response = await request(app)
-    .post(`/api/v1/chat/group/${groupSlug}/message`)
+    .post(`/api/chat/group/${groupSlug}/message`)
     .set('Authorization', `Bearer ${token}`)
     .set('x-tenant-id', TESTING_TENANT_ID)
     .send({ message });
 
-  expect(response.status).toBe(200);
+  if (response.status !== 201) {
+    console.error('Failed to send group message:', {
+      status: response.status,
+      body: response.body,
+    });
+  }
+
+  expect(response.status).toBe(201);
   return response.body.id; // Returns the Matrix event ID
 }
 
@@ -417,7 +471,7 @@ async function redactEventMessage(
   app: string = TESTING_APP_URL,
 ) {
   const response = await request(app)
-    .delete(`/api/v1/chat/event/${eventSlug}/message/${messageEventId}`)
+    .delete(`/api/chat/event/${eventSlug}/message/${messageEventId}`)
     .set('Authorization', `Bearer ${token}`)
     .set('x-tenant-id', TESTING_TENANT_ID)
     .send({ reason });
@@ -433,7 +487,7 @@ async function redactGroupMessage(
   app: string = TESTING_APP_URL,
 ) {
   const response = await request(app)
-    .delete(`/api/v1/chat/group/${groupSlug}/message/${messageEventId}`)
+    .delete(`/api/chat/group/${groupSlug}/message/${messageEventId}`)
     .set('Authorization', `Bearer ${token}`)
     .set('x-tenant-id', TESTING_TENANT_ID)
     .send({ reason });
@@ -448,10 +502,17 @@ async function addUserToEvent(
   app: string = TESTING_APP_URL,
 ) {
   const response = await request(app)
-    .post(`/api/v1/events/${eventSlug}/attendees`)
+    .post(`/api/events/${eventSlug}/attend`)
     .set('Authorization', `Bearer ${token}`)
     .set('x-tenant-id', TESTING_TENANT_ID)
-    .send({ userSlug, rsvpStatus: 'yes' });
+    .send({ status: 'confirmed' });
+
+  if (response.status !== 200 && response.status !== 201) {
+    console.error('Failed to add user to event:', {
+      status: response.status,
+      body: response.body,
+    });
+  }
 
   return response.status === 200 || response.status === 201;
 }

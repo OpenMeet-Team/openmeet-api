@@ -26,6 +26,8 @@ import {
 } from '../../core/constants/constant';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupService } from '../../group/group.service';
+import { ChatPermissionEmitterService } from '../services/chat-permission-emitter.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 describe('ChatRoomService', () => {
   let service: ChatRoomService;
@@ -192,6 +194,12 @@ describe('ChatRoomService', () => {
   };
 
   const mockRequestCache = new Map();
+
+  const mockChatPermissionEmitter = {
+    emitUserJoinedChat: jest.fn().mockResolvedValue(undefined),
+    emitUserLeftChat: jest.fn().mockResolvedValue(undefined),
+    emitPermissionSyncRequired: jest.fn().mockResolvedValue(undefined),
+  };
 
   beforeEach(async () => {
     // Initialize mock repositories with proper types
@@ -522,6 +530,16 @@ describe('ChatRoomService', () => {
             withLock: jest.fn().mockImplementation(async (key, fn) => {
               return await fn();
             }),
+          },
+        },
+        {
+          provide: ChatPermissionEmitterService,
+          useFactory: () => mockChatPermissionEmitter,
+        },
+        {
+          provide: EventEmitter2,
+          useValue: {
+            emit: jest.fn(),
           },
         },
       ],

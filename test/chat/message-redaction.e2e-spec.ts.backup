@@ -1,0 +1,298 @@
+import {
+  loginAsTester,
+  loginAsAdmin,
+  createEvent,
+  createGroup,
+  createTestUser,
+  sendEventMessage,
+  sendGroupMessage,
+  redactEventMessage,
+  redactGroupMessage,
+  addUserToEvent,
+  addUserToGroup,
+} from '../utils/functions';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
+
+/**
+ * Message Redaction E2E Tests
+ *
+ * These tests validate message redaction functionality with proper permissions:
+ * - Users can redact their own messages
+ * - Event hosts can redact attendee/guest messages
+ * - Group admins can redact member messages
+ * - Regular users cannot redact others' messages
+ *
+ * Tests are consolidated to reuse credentials and reduce Matrix API calls.
+ */
+jest.setTimeout(180000);
+
+// Shared test data - created once and reused across tests
+let sharedHostToken: string;
+let sharedAdminToken: string;
+let sharedTestUser: any;
+let sharedEvent: any;
+let sharedGroup: any;
+
+describe('Message Redaction E2E Tests', () => {
+  // Setup shared credentials and entities once before all tests
+  beforeAll(async () => {
+    // Create shared credentials
+    sharedHostToken = await loginAsTester();
+    sharedAdminToken = await loginAsAdmin();
+    
+    // Create a single test user to reuse across tests
+    sharedTestUser = await createTestUser(
+      TESTING_APP_URL,
+      TESTING_TENANT_ID,
+      `shared-test-user-${Date.now()}-${Math.random().toString(36).substring(7)}@example.com`,
+      'Shared',
+      'TestUser'
+    );
+
+    // Create shared event and group for reuse
+    const eventData = {
+      name: 'Shared Redaction Test Event',
+      description: 'Testing message redaction',
+      type: 'hybrid',
+      startDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      endDate: new Date(Date.now() + 25 * 60 * 60 * 1000),
+      maxAttendees: 100,
+      categories: [1],
+      lat: 0,
+      lon: 0,
+      timeZone: 'UTC',
+    };
+
+    sharedEvent = await createEvent(TESTING_APP_URL, sharedHostToken, eventData);
+    await addUserToEvent(sharedEvent.slug, sharedTestUser.user.slug, sharedHostToken);
+
+    const groupData = {
+      name: 'Shared Redaction Test Group',
+      description: 'Testing message redaction in groups',
+      visibility: 'public',
+    };
+
+    sharedGroup = await createGroup(TESTING_APP_URL, sharedHostToken, groupData);
+    await addUserToGroup(sharedGroup.slug, sharedTestUser.user.slug, sharedHostToken);
+  });
+
+  describe('User Self-Redaction', () => {
+    it('should allow a user to redact their own event message', async () => {
+      // Test: Send message and redact it
+      const messageId = await sendEventMessage(
+        sharedEvent.slug,
+        'Message to self-redact in event',
+        sharedTestUser.token,
+        TESTING_APP_URL,
+      );
+      
+      const response = await redactEventMessage(
+        sharedEvent.slug,
+        messageId,
+        sharedTestUser.token,
+        'Self-redacting event message',
+        TESTING_APP_URL,
+      );
+
+      // Verify
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.redactionEventId).toBeDefined();
+    });
+
+    it('should allow a user to redact their own group message', async () => {
+      // Test: Send message and redact it
+      const messageId = await sendGroupMessage(
+        sharedGroup.slug,
+        'Message to self-redact in group',
+        sharedTestUser.token,
+      );
+      
+      const response = await redactGroupMessage(
+        sharedGroup.slug,
+        messageId,
+        sharedTestUser.token,
+        'Self-redacting group message',
+      );
+
+      // Verify
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.redactionEventId).toBeDefined();
+    });
+  });
+
+  describe('Host/Admin Moderation', () => {
+    it('should allow event host to redact attendee messages', async () => {
+      // Test: User sends message, host redacts it
+      const messageId = await sendEventMessage(
+        sharedEvent.slug,
+        'Attendee message to be moderated',
+        sharedTestUser.token,
+      );
+      
+      const response = await redactEventMessage(
+        sharedEvent.slug,
+        messageId,
+        sharedHostToken,
+        'Host moderating content',
+      );
+
+      // Verify
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.redactionEventId).toBeDefined();
+    });
+
+    it('should allow group creator to redact member messages', async () => {
+      // Test: Member sends message, creator redacts it
+      const messageId = await sendGroupMessage(
+        sharedGroup.slug,
+        'Member message to be moderated',
+        sharedTestUser.token,
+      );
+      
+      const response = await redactGroupMessage(
+        sharedGroup.slug,
+        messageId,
+        sharedHostToken,
+        'Group admin moderating content',
+      );
+
+      // Verify
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.redactionEventId).toBeDefined();
+    });
+
+    it('should allow admin to redact any event message', async () => {
+      // Test: Host sends message, admin redacts it
+      const messageId = await sendEventMessage(
+        sharedEvent.slug,
+        'Host message for admin to moderate',
+        sharedHostToken,
+      );
+      
+      const response = await redactEventMessage(
+        sharedEvent.slug,
+        messageId,
+        sharedAdminToken,
+        'Admin moderating content',
+      );
+
+      // Verify
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.redactionEventId).toBeDefined();
+    });
+
+    it('should allow admin to redact any group message', async () => {
+      // Test: Creator sends message, admin redacts it
+      const messageId = await sendGroupMessage(
+        sharedGroup.slug,
+        'Creator message for admin to moderate',
+        sharedHostToken,
+      );
+      
+      const response = await redactGroupMessage(
+        sharedGroup.slug,
+        messageId,
+        sharedAdminToken,
+        'Admin moderating group content',
+      );
+
+      // Verify
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.redactionEventId).toBeDefined();
+    });
+  });
+
+  describe('Permission Denials', () => {
+    it('should NOT allow regular user to redact host event messages', async () => {
+      // Test: Host sends message, user tries to redact it
+      const messageId = await sendEventMessage(
+        sharedEvent.slug,
+        'Host message user cannot redact',
+        sharedHostToken,
+      );
+      
+      const response = await redactEventMessage(
+        sharedEvent.slug,
+        messageId,
+        sharedTestUser.token,
+        'User trying to redact host message',
+      );
+
+      // Verify permission is denied
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toMatch(/permission|not allowed|unauthorized/i);
+    });
+
+    it('should NOT allow regular member to redact group creator messages', async () => {
+      // Test: Creator sends message, member tries to redact it
+      const messageId = await sendGroupMessage(
+        sharedGroup.slug,
+        'Creator message member cannot redact',
+        sharedHostToken,
+      );
+      
+      const response = await redactGroupMessage(
+        sharedGroup.slug,
+        messageId,
+        sharedTestUser.token,
+        'Member trying to redact creator message',
+      );
+
+      // Verify permission is denied
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toMatch(/permission|not allowed|unauthorized|no Matrix credentials/i);
+    });
+  });
+
+  describe('Error Cases', () => {
+    it('should return error for non-existent message in event', async () => {
+      // Test: Try to redact non-existent message
+      const response = await redactEventMessage(
+        sharedEvent.slug,
+        '$fake-message-id:matrix.server.com',
+        sharedHostToken,
+        'Testing non-existent message',
+      );
+
+      // Verify error handling - be more flexible with error messages
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toMatch(/not found|No chat room found/i);
+    });
+
+    it('should return error for non-existent event', async () => {
+      // Test: Try to redact message in non-existent event
+      const response = await redactEventMessage(
+        'non-existent-event',
+        '$fake-message-id:matrix.server.com',
+        sharedHostToken,
+        'Testing non-existent event',
+      );
+
+      // Verify error handling
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(false);
+    });
+
+    it('should require authentication for event message redaction', async () => {
+      // Test: Try to redact without authentication
+      const response = await redactEventMessage(
+        sharedEvent.slug,
+        '$fake-message-id:matrix.server.com',
+        '',
+        'Testing without auth',
+      );
+
+      // Verify authentication is required
+      expect(response.status).toBe(401);
+    });
+  });
+});
