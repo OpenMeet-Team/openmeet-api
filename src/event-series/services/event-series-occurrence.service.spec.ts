@@ -27,6 +27,7 @@ const mockEventSeries: Partial<EventSeriesEntity> = {
   name: 'Test Series',
   slug: 'test-series',
   description: 'A test series description',
+  timeZone: 'America/New_York',
   recurrenceRule: {
     frequency: 'WEEKLY',
     interval: 1,
@@ -530,6 +531,56 @@ describe('EventSeriesOccurrenceService', () => {
       await expect(
         service.materializeOccurrence('test-series', '2025-10-03T15:00:00Z', 1),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should preserve series timezone when materializing occurrence', async () => {
+      const occurrenceDate = '2025-10-03T15:00:00Z';
+      const date = new Date(occurrenceDate);
+      const seriesSlug = 'test-series';
+      const userId = 1;
+      const expectedTimeZone = 'America/New_York';
+
+      // Setup mocks
+      recurrenceService.isDateInRecurrencePattern.mockReturnValue(true);
+      eventSeriesService.findBySlug.mockResolvedValue({
+        ...mockEventSeries,
+        timeZone: expectedTimeZone,
+      });
+      userService.findById.mockResolvedValue(mockUser);
+
+      // Mock template event lookup
+      eventQueryService.findEventBySlug.mockResolvedValueOnce(
+        mockTemplateEvent,
+      );
+
+      const newOccurrence = {
+        ...mockTemplateEvent,
+        id: 99,
+        startDate: date,
+        timeZone: expectedTimeZone,
+        seriesSlug: seriesSlug,
+      };
+
+      eventManagementService.create.mockResolvedValue(newOccurrence);
+
+      // Execute
+      const result = await service.materializeOccurrence(
+        seriesSlug,
+        occurrenceDate,
+        userId,
+      );
+
+      // Verify that create was called with the series timezone
+      expect(eventManagementService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          timeZone: expectedTimeZone,
+          seriesSlug: seriesSlug,
+          startDate: date,
+        }),
+        userId,
+      );
+
+      expect(result.timeZone).toBe(expectedTimeZone);
     });
   });
 
