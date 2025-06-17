@@ -9,10 +9,9 @@ import {
   BadRequestException,
   HttpCode,
   HttpStatus,
-  Redirect,
   Req,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { OidcService } from './services/oidc.service';
 import { UseGuards } from '@nestjs/common';
 import { JWTAuthGuard } from '../auth/auth.guard';
@@ -27,7 +26,8 @@ export class OidcController {
 
   @ApiOperation({
     summary: 'OIDC Discovery Document',
-    description: 'OpenID Connect discovery endpoint (.well-known/openid-configuration)',
+    description:
+      'OpenID Connect discovery endpoint (.well-known/openid-configuration)',
   })
   @Get('.well-known/openid-configuration')
   @Trace('oidc.api.discovery')
@@ -47,10 +47,12 @@ export class OidcController {
 
   @ApiOperation({
     summary: 'Authorization Endpoint',
-    description: 'OIDC authorization endpoint - redirects to login if not authenticated',
+    description:
+      'OIDC authorization endpoint - redirects to login if not authenticated',
   })
   @Get('auth')
   @UseGuards(JWTAuthGuard)
+  // eslint-disable-next-line @typescript-eslint/require-await
   async authorize(
     @AuthUser() user: any,
     @Req() request: Request,
@@ -72,7 +74,7 @@ export class OidcController {
     }
 
     // User is authenticated, generate authorization code and redirect
-    const result = await this.oidcService.handleAuthorization(
+    const result = this.oidcService.handleAuthorization(
       {
         client_id: clientId,
         redirect_uri: redirectUri,
@@ -84,7 +86,7 @@ export class OidcController {
       user.id,
       tenantId,
     );
-    
+
     // Redirect to Matrix server with authorization code
     return { url: result.redirect_url };
   }
@@ -134,7 +136,7 @@ export class OidcController {
     description: 'Entry point for OIDC authentication flow from Matrix clients',
   })
   @Get('login')
-  async loginEntry(
+  loginEntry(
     @Query('client_id') clientId: string,
     @Query('redirect_uri') redirectUri: string,
     @Query('response_type') responseType: string,
@@ -144,26 +146,30 @@ export class OidcController {
   ) {
     // Store OIDC parameters in session and redirect to OpenMeet login
     // This is for when users access Matrix through third-party clients
-    
+
     if (!clientId || !redirectUri || !responseType || !scope) {
       throw new BadRequestException('Missing required OIDC parameters');
     }
 
     // TODO: Store parameters in session/temporary storage
     // Then redirect to OpenMeet login page with return URL
-    
-    const loginUrl = `/auth/login?` + new URLSearchParams({
-      return_url: `/oidc/auth?` + new URLSearchParams({
-        client_id: clientId,
-        redirect_uri: redirectUri,
-        response_type: responseType,
-        scope,
-        ...(state && { state }),
-        ...(nonce && { nonce }),
-      }).toString(),
-    }).toString();
 
-    return { 
+    const loginUrl =
+      `/auth/login?` +
+      new URLSearchParams({
+        return_url:
+          `/oidc/auth?` +
+          new URLSearchParams({
+            client_id: clientId,
+            redirect_uri: redirectUri,
+            response_type: responseType,
+            scope,
+            ...(state && { state }),
+            ...(nonce && { nonce }),
+          }).toString(),
+      }).toString();
+
+    return {
       login_url: loginUrl,
       message: 'Redirect to OpenMeet login to complete OIDC authentication',
     };

@@ -106,7 +106,8 @@ describe('OidcService', () => {
   describe('handleAuthorization', () => {
     const authParams = {
       client_id: 'matrix_synapse',
-      redirect_uri: 'http://matrix-local.openmeet.test:8448/_synapse/client/oidc/callback',
+      redirect_uri:
+        'http://matrix-local.openmeet.test:8448/_synapse/client/oidc/callback',
       response_type: 'code',
       scope: 'openid profile email',
       state: 'test-state',
@@ -116,7 +117,11 @@ describe('OidcService', () => {
     it('should generate authorization code and redirect URL', async () => {
       mockJwtService.sign.mockReturnValue('mock-auth-code');
 
-      const result = await service.handleAuthorization(authParams, 123, 'tenant123');
+      const result = await service.handleAuthorization(
+        authParams,
+        123,
+        'tenant123',
+      );
 
       expect(result.authorization_code).toBe('mock-auth-code');
       expect(result.redirect_url).toContain('code=mock-auth-code');
@@ -128,7 +133,7 @@ describe('OidcService', () => {
           userId: 123,
           tenantId: 'tenant123',
         }),
-        { expiresIn: '10m' }
+        { expiresIn: '10m' },
       );
     });
 
@@ -136,7 +141,7 @@ describe('OidcService', () => {
       const invalidParams = { ...authParams, client_id: 'invalid_client' };
 
       await expect(
-        service.handleAuthorization(invalidParams, 123, 'tenant123')
+        service.handleAuthorization(invalidParams, 123, 'tenant123'),
       ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -144,15 +149,18 @@ describe('OidcService', () => {
       const invalidParams = { ...authParams, response_type: 'token' };
 
       await expect(
-        service.handleAuthorization(invalidParams, 123, 'tenant123')
+        service.handleAuthorization(invalidParams, 123, 'tenant123'),
       ).rejects.toThrow(UnauthorizedException);
     });
 
     it('should throw error for invalid redirect_uri', async () => {
-      const invalidParams = { ...authParams, redirect_uri: 'https://evil.com/callback' };
+      const invalidParams = {
+        ...authParams,
+        redirect_uri: 'https://evil.com/callback',
+      };
 
       await expect(
-        service.handleAuthorization(invalidParams, 123, 'tenant123')
+        service.handleAuthorization(invalidParams, 123, 'tenant123'),
       ).rejects.toThrow(UnauthorizedException);
     });
   });
@@ -161,7 +169,8 @@ describe('OidcService', () => {
     const tokenParams = {
       grant_type: 'authorization_code',
       code: 'mock-auth-code',
-      redirect_uri: 'http://matrix-local.openmeet.test:8448/_synapse/client/oidc/callback',
+      redirect_uri:
+        'http://matrix-local.openmeet.test:8448/_synapse/client/oidc/callback',
       client_id: 'matrix_synapse',
       client_secret: 'test-secret',
     };
@@ -198,7 +207,7 @@ describe('OidcService', () => {
       const invalidParams = { ...tokenParams, grant_type: 'implicit' };
 
       await expect(
-        service.exchangeCodeForTokens(invalidParams)
+        service.exchangeCodeForTokens(invalidParams),
       ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -206,7 +215,7 @@ describe('OidcService', () => {
       const invalidParams = { ...tokenParams, client_secret: 'wrong-secret' };
 
       await expect(
-        service.exchangeCodeForTokens(invalidParams)
+        service.exchangeCodeForTokens(invalidParams),
       ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -215,9 +224,9 @@ describe('OidcService', () => {
         throw new Error('Invalid token');
       });
 
-      await expect(
-        service.exchangeCodeForTokens(tokenParams)
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.exchangeCodeForTokens(tokenParams)).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('should throw error if user not found', async () => {
@@ -228,9 +237,9 @@ describe('OidcService', () => {
       });
       mockUserService.findById.mockResolvedValue(null);
 
-      await expect(
-        service.exchangeCodeForTokens(tokenParams)
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.exchangeCodeForTokens(tokenParams)).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 
@@ -258,9 +267,9 @@ describe('OidcService', () => {
         throw new Error('Invalid token');
       });
 
-      await expect(
-        service.getUserInfo('invalid-token')
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.getUserInfo('invalid-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 
@@ -280,8 +289,11 @@ describe('OidcService', () => {
 
     it('should handle user without Matrix ID', () => {
       const userWithoutMatrix = { ...mockUser, matrixUserId: null };
-      
-      const userInfo = service['mapUserToOidcClaims'](userWithoutMatrix, 'tenant123');
+
+      const userInfo = service['mapUserToOidcClaims'](
+        userWithoutMatrix,
+        'tenant123',
+      );
 
       expect(userInfo.matrix_handle).toBe('unknown');
       expect(userInfo.preferred_username).toBe('unknown');
@@ -296,7 +308,10 @@ describe('OidcService', () => {
         matrixUserId: null,
       };
 
-      const userInfo = service['mapUserToOidcClaims'](userWithOnlyEmail, 'tenant123');
+      const userInfo = service['mapUserToOidcClaims'](
+        userWithOnlyEmail,
+        'tenant123',
+      );
 
       expect(userInfo.name).toBe('test');
       expect(userInfo.sub).toBe('user123');
@@ -311,7 +326,10 @@ describe('OidcService', () => {
         matrixUserId: null,
       };
 
-      const userInfo = service['mapUserToOidcClaims'](userWithSlugOnly, 'tenant123');
+      const userInfo = service['mapUserToOidcClaims'](
+        userWithSlugOnly,
+        'tenant123',
+      );
 
       expect(userInfo.name).toBe('fallback-user');
     });

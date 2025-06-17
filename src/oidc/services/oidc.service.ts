@@ -36,7 +36,9 @@ export class OidcService {
    */
   @Trace('oidc.discovery')
   getDiscoveryDocument() {
-    const baseUrl = this.configService.get('app.baseUrl') || 'http://localhost:3000';
+    const baseUrl =
+      this.configService.get('app.baseUrl', { infer: true }) ||
+      'http://localhost:3000';
     const oidcBaseUrl = `${baseUrl}/oidc`;
 
     return {
@@ -51,7 +53,10 @@ export class OidcService {
       grant_types_supported: ['authorization_code', 'refresh_token'],
       subject_types_supported: ['public'],
       id_token_signing_alg_values_supported: ['HS256'],
-      token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
+      token_endpoint_auth_methods_supported: [
+        'client_secret_basic',
+        'client_secret_post',
+      ],
       claims_supported: [
         'sub',
         'name',
@@ -86,7 +91,7 @@ export class OidcService {
    * Handle authorization requests (start of OIDC flow)
    */
   @Trace('oidc.authorize')
-  async handleAuthorization(
+  handleAuthorization(
     params: {
       client_id: string;
       redirect_uri: string;
@@ -114,7 +119,7 @@ export class OidcService {
       'http://matrix-local.openmeet.test:8448/_synapse/client/oidc/callback',
       'https://matrix.openmeet.net/_synapse/client/oidc/callback',
     ];
-    
+
     if (!allowedRedirectUris.includes(params.redirect_uri)) {
       throw new UnauthorizedException('Invalid redirect_uri');
     }
@@ -158,7 +163,10 @@ export class OidcService {
     const authData = this.validateAuthCode(params.code);
 
     // Get user information
-    const user = await this.userService.findById(authData.userId, authData.tenantId);
+    const user = await this.userService.findById(
+      authData.userId,
+      authData.tenantId,
+    );
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
@@ -166,7 +174,11 @@ export class OidcService {
     // Generate tokens
     const userInfo = this.mapUserToOidcClaims(user, authData.tenantId);
     const accessToken = this.generateAccessToken(userInfo);
-    const idToken = this.generateIdToken(userInfo, params.client_id, authData.nonce);
+    const idToken = this.generateIdToken(
+      userInfo,
+      params.client_id,
+      authData.nonce,
+    );
 
     return {
       access_token: accessToken,
@@ -180,11 +192,12 @@ export class OidcService {
    * Get user info from access token
    */
   @Trace('oidc.userinfo')
+  // eslint-disable-next-line @typescript-eslint/require-await
   async getUserInfo(accessToken: string): Promise<OidcUserInfo> {
     try {
       const payload = this.jwtService.verify(accessToken);
       return payload;
-    } catch (error) {
+    } catch {
       throw new UnauthorizedException('Invalid access token');
     }
   }
@@ -192,7 +205,11 @@ export class OidcService {
   /**
    * Generate authorization code (temporary, short-lived)
    */
-  private generateAuthCode(params: any, userId: number, tenantId: string): string {
+  private generateAuthCode(
+    params: any,
+    userId: number,
+    tenantId: string,
+  ): string {
     const payload = {
       type: 'auth_code',
       client_id: params.client_id,
@@ -214,13 +231,13 @@ export class OidcService {
   private validateAuthCode(code: string): any {
     try {
       const payload = this.jwtService.verify(code);
-      
+
       if (payload.type !== 'auth_code') {
         throw new Error('Invalid code type');
       }
 
       return payload;
-    } catch (error) {
+    } catch {
       throw new UnauthorizedException('Invalid or expired authorization code');
     }
   }
@@ -228,10 +245,15 @@ export class OidcService {
   /**
    * Validate OIDC client credentials
    */
-  private async validateClient(clientId: string, clientSecret: string): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/require-await
+  private async validateClient(
+    clientId: string,
+    clientSecret: string,
+  ): Promise<void> {
     // TODO: Store client credentials securely (database or config)
     const validClients = {
-      'matrix_synapse': process.env.MATRIX_OIDC_CLIENT_SECRET || 'change-me-in-production',
+      matrix_synapse:
+        process.env.MATRIX_OIDC_CLIENT_SECRET || 'change-me-in-production',
     };
 
     if (!validClients[clientId] || validClients[clientId] !== clientSecret) {
@@ -249,13 +271,17 @@ export class OidcService {
   /**
    * Generate ID token (OIDC-specific)
    */
-  private generateIdToken(userInfo: OidcUserInfo, clientId: string, nonce?: string): string {
-    const payload = {
+  private generateIdToken(
+    userInfo: OidcUserInfo,
+    clientId: string,
+    nonce?: string,
+  ): string {
+    const payload: any = {
       ...userInfo,
       aud: clientId,
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + 3600,
-      iss: this.configService.get('app.baseUrl') + '/oidc',
+      iss: this.configService.get('app.baseUrl', { infer: true }) + '/oidc',
     };
 
     if (nonce) {
@@ -278,9 +304,10 @@ export class OidcService {
       }
     }
 
-    const displayName = [user.firstName, user.lastName]
-      .filter(Boolean)
-      .join(' ') || user.email?.split('@')[0] || user.slug;
+    const displayName =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') ||
+      user.email?.split('@')[0] ||
+      user.slug;
 
     return {
       sub: user.slug, // Use slug as stable user identifier

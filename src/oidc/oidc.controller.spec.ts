@@ -83,10 +83,11 @@ describe('OidcController', () => {
 
     it('should handle authorization request for authenticated user', async () => {
       const mockResult = {
-        redirect_url: 'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=abc123&state=test-state',
+        redirect_url:
+          'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=abc123&state=test-state',
         authorization_code: 'abc123',
       };
-      mockOidcService.handleAuthorization.mockResolvedValue(mockResult);
+      mockOidcService.handleAuthorization.mockReturnValue(mockResult);
 
       const result = await controller.authorize(
         mockUser,
@@ -207,11 +208,15 @@ describe('OidcController', () => {
       const result = await controller.userInfo('Bearer access-token-123');
 
       expect(result).toBe(mockUserInfo);
-      expect(mockOidcService.getUserInfo).toHaveBeenCalledWith('access-token-123');
+      expect(mockOidcService.getUserInfo).toHaveBeenCalledWith(
+        'access-token-123',
+      );
     });
 
     it('should throw UnauthorizedException for missing Authorization header', async () => {
-      await expect(controller.userInfo('')).rejects.toThrow(UnauthorizedException);
+      await expect(controller.userInfo('')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('should throw UnauthorizedException for non-Bearer token', async () => {
