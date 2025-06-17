@@ -163,17 +163,42 @@ oidc_providers:
     client_id: "matrix_synapse"
     user_mapping_provider:
       config:
-        localpart_template: "{{ user.preferred_username }}_{{ user.tenant_id }}"
+        localpart_template: "{{ user.matrix_handle }}"
         display_name_template: "{{ user.name }}"
         email_template: "{{ user.email }}"
 ```
 
+#### Matrix Handle System
+
+**User-Friendly Matrix IDs**: Users choose their own Matrix handles for clean, professional identities.
+
+```
+Matrix ID: @john.doe:matrix.openmeet.net  (Clean & Professional)
+Not:       @user-slug_tenant123:matrix.openmeet.net  (Clunky & Technical)
+```
+
+**Global Uniqueness**: Matrix handles are unique across all tenants to avoid conflicts and enable cross-tenant communication.
+
+**User Selection Process**:
+1. Account creation: "Choose your Matrix username: john.doe"
+2. Uniqueness validation: Real-time check against global database
+3. Handle reservation: Permanently associated with user account
+4. OIDC integration: Handle used for Matrix account creation
+
+**Tenant Isolation Strategy**: 
+- Matrix usernames are globally unique (no tenant prefixes)
+- Tenant isolation enforced via room membership and permissions
+- Admin bot ensures users only access rooms for their tenant
+- Cross-tenant communication possible if explicitly enabled
+
 #### User Experience Benefits
+- **Clean Matrix IDs**: Professional handles like @john.doe:matrix.openmeet.net
 - **Single Credentials**: One OpenMeet login works for web, mobile, and third-party Matrix clients
 - **Social Login Everywhere**: Google/Bluesky authentication available in any Matrix client
 - **Third-Party Client Support**: Element, FluffyChat, and other Matrix clients work natively
 - **Cross-Device Sync**: Messages sync seamlessly between OpenMeet web and Matrix mobile apps
 - **No Password Management**: Users never need separate Matrix passwords
+- **Easy Sharing**: Clean Matrix IDs can be shared with external contacts
 
 ## Security Model
 
@@ -285,10 +310,10 @@ Authorization: Bearer <oidc_access_token>
 
 Response:
 {
-  "sub": "user-slug_tenant123",
+  "sub": "john.doe",
   "name": "John Doe",
   "email": "john@example.com", 
-  "preferred_username": "user-slug",
+  "matrix_handle": "john.doe",
   "tenant_id": "tenant123",
   "tenant_domain": "acme.openmeet.net"
 }
@@ -302,7 +327,7 @@ Response:
 3. Redirects to OpenMeet → User logs in (Google/Bluesky/email)
 4. Returns to Matrix client with full access to OpenMeet rooms
 
-// Resulting Matrix User ID: @user-slug_tenant123:matrix.openmeet.net
+// Resulting Matrix User ID: @john.doe:matrix.openmeet.net
 ```
 
 ### Admin Bot Operations
@@ -396,4 +421,23 @@ POST /internal/matrix/permissions
 - No Matrix password management required
 - Industry-standard OIDC security
 - Third-party client support (Element, FluffyChat, etc.)
+**Status**: Approved - Implementation in progress
+
+### ADR-004: User-Chosen Matrix Handles
+**Decision**: Allow users to choose their own Matrix handles globally unique across all tenants
+**Rationale**: Provides clean, professional Matrix IDs that users can easily share and remember
+**Alternatives Considered**:
+- Tenant-prefixed usernames: `@user-slug_tenant123:matrix.openmeet.net` (clunky)
+- Email-based handles: `@john.doe.acme:matrix.openmeet.net` (exposes company info)
+- Tenant-specific domains: `@john.doe:acme.matrix.openmeet.net` (complex infrastructure)
+**Implementation**:
+- Global uniqueness enforced via database constraints
+- User selection during account creation with real-time validation
+- Tenant isolation via room membership rather than username prefixes
+- Clean Matrix IDs: `@john.doe:matrix.openmeet.net`
+**Benefits**:
+- Professional, shareable Matrix identities
+- No exposure of internal tenant structure
+- Cross-tenant communication capability if needed
+- Better user experience in third-party Matrix clients
 **Status**: Approved - Implementation in progress
