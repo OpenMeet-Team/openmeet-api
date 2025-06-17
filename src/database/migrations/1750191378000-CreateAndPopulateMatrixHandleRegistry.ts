@@ -68,20 +68,40 @@ export class CreateAndPopulateMatrixHandleRegistry1750191378000
 
       console.log(`📂 Processing schema: ${schemaName}`);
 
-      // Extract Matrix handles from existing users in this tenant
-      const existingUsers = await queryRunner.query(`
-        SELECT 
-          id as "userId",
-          "matrixUserId",
-          CASE 
-            WHEN "matrixUserId" IS NOT NULL AND "matrixUserId" LIKE '@%:%'
-            THEN SUBSTRING("matrixUserId" FROM 2 FOR POSITION(':' IN "matrixUserId") - 2)
-            ELSE NULL
-          END as extracted_handle
-        FROM "${schemaName}".users 
-        WHERE "matrixUserId" IS NOT NULL 
-        AND "matrixUserId" LIKE '@%:%'
+      // Check if the users table exists in this schema before querying
+      const tableExists = await queryRunner.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = '${schemaName}' 
+          AND table_name = 'users'
+        );
       `);
+
+      if (!tableExists[0].exists) {
+        console.log(`  ⚠️ Users table does not exist in schema ${schemaName}, skipping...`);
+        continue;
+      }
+
+      // Extract Matrix handles from existing users in this tenant
+      let existingUsers;
+      try {
+        existingUsers = await queryRunner.query(`
+          SELECT 
+            id as "userId",
+            "matrixUserId",
+            CASE 
+              WHEN "matrixUserId" IS NOT NULL AND "matrixUserId" LIKE '@%:%'
+              THEN SUBSTRING("matrixUserId" FROM 2 FOR POSITION(':' IN "matrixUserId") - 2)
+              ELSE NULL
+            END as extracted_handle
+          FROM "${schemaName}".users 
+          WHERE "matrixUserId" IS NOT NULL 
+          AND "matrixUserId" LIKE '@%:%'
+        `);
+      } catch (error) {
+        console.log(`  ⚠️ Error querying users in schema ${schemaName}: ${error.message}, skipping...`);
+        continue;
+      }
 
       // Determine tenant ID from schema name
       const tenantId =
