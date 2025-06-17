@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { MatrixHandleRegistryEntity } from '../infrastructure/persistence/relational/entities/matrix-handle-registry.entity';
+import { Trace } from '../../utils/trace.decorator';
 
 export interface MatrixHandleRegistration {
   id: number;
@@ -33,6 +34,7 @@ export class GlobalMatrixValidationService {
    * @param handle The proposed Matrix handle (without @ or domain)
    * @returns true if handle is available, false if taken
    */
+  @Trace('matrix.handle.checkUnique')
   async isMatrixHandleUnique(handle: string): Promise<boolean> {
     try {
       // Validate handle format
@@ -68,6 +70,7 @@ export class GlobalMatrixValidationService {
    * @param userId The user ID within the tenant
    * @throws Error if handle is already taken or invalid
    */
+  @Trace('matrix.handle.register')
   async registerMatrixHandle(
     handle: string,
     tenantId: string,
@@ -162,6 +165,7 @@ export class GlobalMatrixValidationService {
    * @param maxSuggestions Maximum number of suggestions to return
    * @returns Array of available handle suggestions
    */
+  @Trace('matrix.handle.suggest')
   async suggestAvailableHandles(
     desiredHandle: string,
     maxSuggestions = 5,
@@ -218,7 +222,7 @@ export class GlobalMatrixValidationService {
     // - Must be 1-255 characters
     // - Only lowercase letters, digits, '.', '_', '-', '='
     // - Cannot start with '_' (reserved for appservices)
-    const matrixLocalpartRegex = /^[a-z0-9.\-=]+$/;
+    const matrixLocalpartRegex = /^[a-z0-9.\-=_]+$/;
 
     return (
       handle.length >= 1 &&
@@ -238,7 +242,7 @@ export class GlobalMatrixValidationService {
 
     return handle
       .toLowerCase()
-      .replace(/[^a-z0-9.\-=]/g, '') // Remove invalid characters
+      .replace(/[^a-z0-9.\-=_]/g, '') // Remove invalid characters (keep underscores for now)
       .replace(/^_+/, '') // Remove leading underscores
       .slice(0, 255); // Limit length
   }

@@ -5,6 +5,7 @@ import { MatrixRoomService } from './services/matrix-room.service';
 import { MatrixMessageService } from './services/matrix-message.service';
 import { MatrixGateway } from './matrix.gateway';
 import { UserService } from '../user/user.service';
+import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
 import { ConfigService } from '@nestjs/config';
 import { REQUEST } from '@nestjs/core';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
@@ -112,6 +113,16 @@ describe('MatrixController', () => {
               }
               return null;
             }),
+          },
+        },
+        {
+          provide: GlobalMatrixValidationService,
+          useValue: {
+            isMatrixHandleUnique: jest.fn().mockResolvedValue(true),
+            registerMatrixHandle: jest.fn().mockResolvedValue(undefined),
+            suggestAvailableHandles: jest.fn().mockResolvedValue([]),
+            unregisterMatrixHandle: jest.fn().mockResolvedValue(undefined),
+            getMatrixHandleRegistration: jest.fn().mockResolvedValue(null),
           },
         },
         {

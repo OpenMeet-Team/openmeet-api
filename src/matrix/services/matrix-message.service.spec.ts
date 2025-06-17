@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MatrixMessageService } from './matrix-message.service';
 import { MatrixCoreService } from './matrix-core.service';
+import { GlobalMatrixValidationService } from './global-matrix-validation.service';
 import axios from 'axios';
 import { SendMessageOptions } from '../types/matrix.types';
 import { MatrixUserService } from './matrix-user.service';

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { GlobalMatrixValidationService } from './global-matrix-validation.service';
 import { MatrixUserService } from './matrix-user.service';
 import { UserService } from '../../user/user.service';
+import { Trace } from '../../utils/trace.decorator';
 
 export interface HandleMigrationResult {
   success: boolean;
@@ -34,6 +35,7 @@ export class MatrixHandleMigrationService {
    * @param newHandle Desired new Matrix handle
    * @returns Migration result with steps taken
    */
+  @Trace('matrix.handle.migrate')
   async migrateUserHandle(
     userId: number,
     tenantId: string,

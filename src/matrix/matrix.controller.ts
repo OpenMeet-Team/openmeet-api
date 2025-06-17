@@ -27,6 +27,7 @@ import { MatrixMessageService } from './services/matrix-message.service';
 import { MatrixGateway } from './matrix.gateway';
 import { MatrixPasswordDto } from './dto/matrix-password.dto';
 import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
+import { Trace } from '../utils/trace.decorator';
 
 @ApiTags('Matrix')
 @Controller({
@@ -68,6 +69,7 @@ export class MatrixController {
   @UseGuards(JWTAuthGuard)
   @HttpCode(HttpStatus.OK)
   @Get('handle/check')
+  @Trace('matrix.api.handleCheck')
   async checkMatrixHandle(@Query('handle') handle: string): Promise<{
     available: boolean;
     handle: string;
@@ -132,6 +134,7 @@ export class MatrixController {
   @UseGuards(JWTAuthGuard)
   @HttpCode(HttpStatus.OK)
   @Get('handle/suggest')
+  @Trace('matrix.api.handleSuggest')
   async suggestMatrixHandles(
     @Query('handle') desiredHandle: string,
     @Query('limit') limit?: string,
@@ -173,7 +176,129 @@ export class MatrixController {
   }
 
   @ApiOperation({
-    summary: 'Provision a Matrix user for the authenticated user',
+    summary: 'Provision a Matrix user with a chosen handle',
+    description:
+      'Creates a Matrix account with a user-chosen handle for clean Matrix IDs',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Matrix user provisioned successfully with chosen handle',
+    schema: {
+      properties: {
+        matrixUserId: {
+          type: 'string',
+          example: '@john.smith:matrix.openmeet.net',
+        },
+        handle: { type: 'string', example: 'john.smith' },
+        provisioned: { type: 'boolean', example: true },
+        success: { type: 'boolean', example: true },
+      },
+    },
+  })
+  @UseGuards(JWTAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('provision-user-with-handle')
+  @Trace('matrix.api.provisionWithHandle')
+  async provisionMatrixUserWithHandle(
+    @AuthUser() user: { id: number },
+    @Body() body: { handle?: string },
+  ): Promise<{
+    matrixUserId: string;
+    handle: string;
+    provisioned: boolean;
+    success: boolean;
+  }> {
+    const tenantId = this.request?.tenantId;
+    if (!tenantId) {
+      throw new BadRequestException('Tenant ID is required');
+    }
+
+    this.logger.log(
+      `Provisioning Matrix user with handle for user ID: ${user.id}, requested handle: ${body.handle || 'auto-generate'}`,
+    );
+
+    // Check if user already has Matrix credentials
+    const fullUser = await this.userService.findById(user.id);
+
+    if (
+      fullUser &&
+      fullUser.matrixUserId &&
+      fullUser.matrixAccessToken &&
+      fullUser.matrixDeviceId
+    ) {
+      // User already has Matrix account - extract existing handle
+      const existingHandle =
+        fullUser.matrixUserId.match(/@(.+):/)?.[1] || 'unknown';
+      this.logger.log(
+        `User ${user.id} already has Matrix credentials with handle: ${existingHandle}`,
+      );
+
+      return {
+        matrixUserId: fullUser.matrixUserId,
+        handle: existingHandle,
+        provisioned: false, // Already provisioned
+        success: true,
+      };
+    }
+
+    if (!fullUser) {
+      throw new Error(`User with ID ${user.id} not found`);
+    }
+
+    try {
+      // Use the new handle-based provisioning method
+      const matrixUserInfo =
+        await this.matrixUserService.provisionMatrixUserWithHandle(
+          fullUser,
+          tenantId,
+          user.id,
+          body.handle,
+        );
+
+      // Extract handle from the Matrix user ID
+      const handle = matrixUserInfo.userId.match(/@(.+):/)?.[1] || 'unknown';
+
+      // Update the user record with Matrix credentials
+      await this.userService.update(
+        user.id,
+        {
+          matrixUserId: matrixUserInfo.userId,
+          matrixAccessToken: matrixUserInfo.accessToken,
+          matrixDeviceId: matrixUserInfo.deviceId,
+          preferences: {
+            ...fullUser.preferences,
+            matrix: {
+              connected: true,
+              connectedAt: new Date(),
+            },
+          },
+        },
+        tenantId,
+      );
+
+      this.logger.log(
+        `Matrix user provisioned successfully for user ID: ${user.id} with handle: ${handle}`,
+      );
+
+      return {
+        matrixUserId: matrixUserInfo.userId,
+        handle,
+        provisioned: true,
+        success: true,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error provisioning Matrix user with handle: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  @ApiOperation({
+    summary: 'Provision a Matrix user for the authenticated user (legacy)',
+    description:
+      'Legacy endpoint using tenant-prefixed usernames. Use provision-user-with-handle instead.',
   })
   @ApiResponse({
     status: HttpStatus.OK,

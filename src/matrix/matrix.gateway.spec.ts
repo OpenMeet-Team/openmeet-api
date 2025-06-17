@@ -4,6 +4,7 @@ import { MatrixUserService } from './services/matrix-user.service';
 import { MatrixRoomService } from './services/matrix-room.service';
 import { MatrixMessageService } from './services/matrix-message.service';
 import { MatrixCoreService } from './services/matrix-core.service';
+import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
 import { UserService } from '../user/user.service';
 import { ChatRoomService } from '../chat/rooms/chat-room.service';
 import { JwtService } from '@nestjs/jwt';
@@ -202,6 +203,16 @@ describe('MatrixGateway', () => {
             resolve: jest.fn().mockResolvedValue({
               findById: jest.fn().mockResolvedValue(mockUser),
             }),
+          },
+        },
+        {
+          provide: GlobalMatrixValidationService,
+          useValue: {
+            isMatrixHandleUnique: jest.fn().mockResolvedValue(true),
+            registerMatrixHandle: jest.fn().mockResolvedValue(undefined),
+            suggestAvailableHandles: jest.fn().mockResolvedValue([]),
+            unregisterMatrixHandle: jest.fn().mockResolvedValue(undefined),
+            getMatrixHandleRegistration: jest.fn().mockResolvedValue(null),
           },
         },
       ],

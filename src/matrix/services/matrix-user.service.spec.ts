@@ -3,6 +3,7 @@ import { MatrixUserService } from './matrix-user.service';
 import { MatrixCoreService } from './matrix-core.service';
 import { ModuleRef } from '@nestjs/core';
 import { MatrixGateway } from '../matrix.gateway';
+import { GlobalMatrixValidationService } from './global-matrix-validation.service';
 import axios from 'axios';
 
 // Mock axios
@@ -135,6 +136,16 @@ describe('MatrixUserService', () => {
           provide: MatrixGateway,
           useValue: {
             broadcastRoomEvent: jest.fn(),
+          },
+        },
+        {
+          provide: GlobalMatrixValidationService,
+          useValue: {
+            isMatrixHandleUnique: jest.fn().mockResolvedValue(true),
+            registerMatrixHandle: jest.fn().mockResolvedValue(undefined),
+            suggestAvailableHandles: jest.fn().mockResolvedValue([]),
+            unregisterMatrixHandle: jest.fn().mockResolvedValue(undefined),
+            getMatrixHandleRegistration: jest.fn().mockResolvedValue(null),
           },
         },
       ],

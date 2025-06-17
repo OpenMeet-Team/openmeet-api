@@ -47,7 +47,9 @@ export class CreateAndPopulateMatrixHandleRegistry1750191378000
     await this.populateExistingHandles(queryRunner);
   }
 
-  private async populateExistingHandles(queryRunner: QueryRunner): Promise<void> {
+  private async populateExistingHandles(
+    queryRunner: QueryRunner,
+  ): Promise<void> {
     console.log('🔄 Starting population of existing Matrix handles...');
 
     // Get all tenant schemas
@@ -63,7 +65,7 @@ export class CreateAndPopulateMatrixHandleRegistry1750191378000
     // Extract handles from existing Matrix user IDs across all tenant schemas
     for (const schema of tenantSchemas) {
       const schemaName = schema.schema_name;
-      
+
       console.log(`📂 Processing schema: ${schemaName}`);
 
       // Extract Matrix handles from existing users in this tenant
@@ -82,7 +84,8 @@ export class CreateAndPopulateMatrixHandleRegistry1750191378000
       `);
 
       // Determine tenant ID from schema name
-      const tenantId = schemaName === 'public' ? '' : schemaName.replace('tenant_', '');
+      const tenantId =
+        schemaName === 'public' ? '' : schemaName.replace('tenant_', '');
 
       // Insert unique handles into registry (ignore duplicates due to unique constraint)
       for (const user of existingUsers) {
@@ -110,7 +113,9 @@ export class CreateAndPopulateMatrixHandleRegistry1750191378000
       }
 
       totalProcessed += existingUsers.length;
-      console.log(`  📊 Processed ${existingUsers.length} users from ${schemaName}`);
+      console.log(
+        `  📊 Processed ${existingUsers.length} users from ${schemaName}`,
+      );
     }
 
     // Report final statistics
@@ -122,10 +127,14 @@ export class CreateAndPopulateMatrixHandleRegistry1750191378000
     console.log('🎉 Matrix handle registry population complete!');
     console.log(`📈 Total users processed: ${totalProcessed}`);
     console.log(`✅ Total handles registered: ${totalRegistered}`);
-    console.log(`🗃️ Registry table contains: ${registryCount[0].count} entries`);
-    
+    console.log(
+      `🗃️ Registry table contains: ${registryCount[0].count} entries`,
+    );
+
     if (totalProcessed > totalRegistered) {
-      console.log(`⚠️ ${totalProcessed - totalRegistered} handles were skipped (duplicates or invalid format)`);
+      console.log(
+        `⚠️ ${totalProcessed - totalRegistered} handles were skipped (duplicates or invalid format)`,
+      );
     }
   }
 
@@ -133,14 +142,22 @@ export class CreateAndPopulateMatrixHandleRegistry1750191378000
     console.log('🔄 Rolling back Matrix handle registry...');
 
     // Drop indexes first
-    await queryRunner.query(`DROP INDEX IF EXISTS "idx_matrix_handle_registry_handle_lower";`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "idx_matrix_handle_registry_tenant";`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "idx_matrix_handle_registry_tenant_user";`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "idx_matrix_handle_registry_handle";`);
-    
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "idx_matrix_handle_registry_handle_lower";`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "idx_matrix_handle_registry_tenant";`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "idx_matrix_handle_registry_tenant_user";`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "idx_matrix_handle_registry_handle";`,
+    );
+
     // Drop table
     await queryRunner.query(`DROP TABLE IF EXISTS "matrixHandleRegistry";`);
-    
+
     console.log('✅ Matrix handle registry removed');
   }
 }

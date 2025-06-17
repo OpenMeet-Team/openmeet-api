@@ -17,6 +17,7 @@ import { MatrixClientOperationsService } from './services/matrix-client-operatio
 import { MatrixHealthIndicator } from './health/matrix.health';
 import { configureMatrixLogging } from './config/matrix-logger';
 import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
+import { MatrixHandleMigrationService } from './services/matrix-handle-migration.service';
 
 // Configure Matrix logging at module load time
 // This runs before the module is instantiated
@@ -51,6 +52,7 @@ configureMatrixLogging();
     MatrixClientOperationsService,
     MatrixHealthIndicator,
     GlobalMatrixValidationService,
+    MatrixHandleMigrationService,
 
     // Gateway for real-time events
     MatrixGateway,

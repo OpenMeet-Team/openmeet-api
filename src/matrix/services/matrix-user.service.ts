@@ -18,6 +18,8 @@ import {
   IMatrixClientProvider,
 } from '../types/matrix.interfaces';
 import { MatrixGateway } from '../matrix.gateway';
+import { GlobalMatrixValidationService } from './global-matrix-validation.service';
+import { Trace } from '../../utils/trace.decorator';
 
 @Injectable()
 export class MatrixUserService
@@ -77,7 +79,89 @@ export class MatrixUserService
   }
 
   /**
-   * Provisions a Matrix user for an OpenMeet user if they don't already have Matrix credentials
+   * Provisions a Matrix user with a chosen handle for an OpenMeet user
+   * @param user The OpenMeet user object
+   * @param tenantId Tenant ID for registry tracking
+   * @param userId User ID for registry tracking
+   * @param chosenHandle Optional user-chosen Matrix handle
+   * @returns Matrix user credentials
+   */
+  @Trace('matrix.user.provisionWithHandle')
+  async provisionMatrixUserWithHandle(
+    user: {
+      slug: string;
+      firstName?: string | null;
+      lastName?: string | null;
+      email?: string | null;
+    },
+    tenantId: string,
+    userId: number,
+    chosenHandle?: string,
+  ): Promise<MatrixUserInfo> {
+    let finalHandle: string;
+
+    if (chosenHandle) {
+      // Use the chosen handle if provided
+      const isAvailable =
+        await this.globalMatrixValidationService.isMatrixHandleUnique(
+          chosenHandle,
+        );
+      if (!isAvailable) {
+        throw new Error(`Matrix handle ${chosenHandle} is already taken`);
+      }
+      finalHandle = chosenHandle;
+    } else {
+      // Generate a handle suggestion based on user's name and ensure uniqueness
+      finalHandle = await this.generateUniqueHandle(user);
+    }
+
+    this.logger.log(`Provisioning Matrix user with handle: ${finalHandle}`);
+
+    // Generate password and display name
+    const password = MatrixUserService.generateMatrixPassword();
+    const displayName = MatrixUserService.generateDisplayName(user);
+
+    // Create the Matrix user with the chosen handle
+    const matrixUserInfo = await this.createUser({
+      username: finalHandle,
+      password,
+      displayName,
+    });
+
+    // Register the handle in the global registry
+    await this.globalMatrixValidationService.registerMatrixHandle(
+      finalHandle,
+      tenantId,
+      userId,
+    );
+
+    // Ensure display name is set properly
+    try {
+      await this.setUserDisplayName(
+        matrixUserInfo.userId,
+        matrixUserInfo.accessToken,
+        displayName,
+        matrixUserInfo.deviceId,
+      );
+      this.logger.debug(
+        `Set Matrix display name for ${matrixUserInfo.userId} to "${displayName}"`,
+      );
+    } catch (displayNameError) {
+      this.logger.warn(
+        `Failed to set Matrix display name: ${displayNameError.message}`,
+      );
+      // Non-fatal error, continue
+    }
+
+    this.logger.log(
+      `Successfully provisioned Matrix user: ${matrixUserInfo.userId}`,
+    );
+    return matrixUserInfo;
+  }
+
+  /**
+   * Legacy method - provisions a Matrix user using the old tenant-prefixed approach
+   * @deprecated Use provisionMatrixUserWithHandle for new implementations
    * @param user The OpenMeet user object
    * @param tenantId Optional tenant ID for multi-tenant support
    * @returns Matrix user credentials
@@ -123,6 +207,106 @@ export class MatrixUserService
 
     return matrixUserInfo;
   }
+
+  /**
+   * Generate a unique Matrix handle based on user information
+   * @param user The OpenMeet user object
+   * @returns A unique Matrix handle
+   */
+  @Trace('matrix.user.generateUniqueHandle')
+  private async generateUniqueHandle(user: {
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+    slug?: string;
+  }): Promise<string> {
+    // Try different handle strategies until we find a unique one
+    const strategies = [
+      // Strategy 1: firstname.lastname
+      () => {
+        if (user.firstName && user.lastName) {
+          return `${user.firstName}.${user.lastName}`
+            .toLowerCase()
+            .replace(/[^a-z0-9.\-]/g, '')
+            .slice(0, 255);
+        }
+        return null;
+      },
+
+      // Strategy 2: firstname + lastname (no dot)
+      () => {
+        if (user.firstName && user.lastName) {
+          return `${user.firstName}${user.lastName}`
+            .toLowerCase()
+            .replace(/[^a-z0-9.\-]/g, '')
+            .slice(0, 255);
+        }
+        return null;
+      },
+
+      // Strategy 3: email username
+      () => {
+        if (user.email) {
+          const emailUsername = user.email.split('@')[0];
+          return emailUsername
+            .toLowerCase()
+            .replace(/[^a-z0-9.\-]/g, '')
+            .slice(0, 255);
+        }
+        return null;
+      },
+
+      // Strategy 4: use slug
+      () => {
+        if (user.slug) {
+          return user.slug
+            .toLowerCase()
+            .replace(/[^a-z0-9.\-]/g, '')
+            .slice(0, 255);
+        }
+        return null;
+      },
+    ];
+
+    // Try each strategy
+    for (const strategy of strategies) {
+      const baseHandle = strategy();
+      if (baseHandle) {
+        // Try the base handle first
+        if (
+          await this.globalMatrixValidationService.isMatrixHandleUnique(
+            baseHandle,
+          )
+        ) {
+          return baseHandle;
+        }
+
+        // If not unique, try numbered variants
+        for (let i = 2; i <= 999; i++) {
+          const numberedHandle = `${baseHandle}${i}`;
+          if (
+            await this.globalMatrixValidationService.isMatrixHandleUnique(
+              numberedHandle,
+            )
+          ) {
+            return numberedHandle;
+          }
+        }
+      }
+    }
+
+    // Fallback: generate a random handle
+    const randomHandle = `user${Math.random().toString(36).substr(2, 9)}`;
+    if (
+      await this.globalMatrixValidationService.isMatrixHandleUnique(
+        randomHandle,
+      )
+    ) {
+      return randomHandle;
+    }
+
+    throw new Error('Unable to generate a unique Matrix handle');
+  }
   private readonly logger = new Logger(MatrixUserService.name);
 
   // Map to store user-specific Matrix clients (using slug as key)
@@ -143,6 +327,7 @@ export class MatrixUserService
     private readonly moduleRef: ModuleRef,
     @Inject(forwardRef(() => MatrixGateway))
     private readonly matrixGateway: any,
+    private readonly globalMatrixValidationService: GlobalMatrixValidationService,
   ) {
     // Set up a cleanup interval for inactive clients (30 minutes)
     this.cleanupInterval = setInterval(
