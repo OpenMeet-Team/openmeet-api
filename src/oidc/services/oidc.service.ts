@@ -51,7 +51,7 @@ export class OidcService {
     // Check if we have persistent keys in environment variables
     const privateKeyEnv = process.env.OIDC_RSA_PRIVATE_KEY;
     const publicKeyEnv = process.env.OIDC_RSA_PUBLIC_KEY;
-    
+
     if (privateKeyEnv && publicKeyEnv) {
       console.log('🔑 Using persistent RSA key pair from environment');
       return {
@@ -59,9 +59,11 @@ export class OidcService {
         publicKey: publicKeyEnv.replace(/\\n/g, '\n'),
       };
     }
-    
+
     // Generate new key pair and log it for persistence
-    console.log('🔑 Generating new RSA key pair (should be persisted in production)');
+    console.log(
+      '🔑 Generating new RSA key pair (should be persisted in production)',
+    );
     return this.generateRSAKeyPair();
   }
 
@@ -90,7 +92,10 @@ export class OidcService {
   @Trace('oidc.discovery')
   getDiscoveryDocument(baseUrl?: string) {
     // Use the provided base URL or fall back to config
-    const issuerBaseUrl = baseUrl || this.configService.get('app.oidcIssuerUrl', { infer: true }) || 'https://localdev.openmeet.net';
+    const issuerBaseUrl =
+      baseUrl ||
+      this.configService.get('app.oidcIssuerUrl', { infer: true }) ||
+      'https://localdev.openmeet.net';
     const oidcIssuerUrl = `${issuerBaseUrl}/oidc`;
     const oidcApiBaseUrl = `${issuerBaseUrl}/api/oidc`;
 
@@ -130,10 +135,13 @@ export class OidcService {
     // For RS256, we expose the public key in JWKS
     const publicKeyObject = crypto.createPublicKey(this.rsaKeyPair.publicKey);
     const jwk = publicKeyObject.export({ format: 'jwk' });
-    
+
     console.log('🔧 JWKS Debug - JWKS endpoint called');
-    console.log('🔧 JWKS Debug - Public key JWK:', JSON.stringify(jwk, null, 2));
-    
+    console.log(
+      '🔧 JWKS Debug - Public key JWK:',
+      JSON.stringify(jwk, null, 2),
+    );
+
     return {
       keys: [
         {
@@ -288,10 +296,10 @@ export class OidcService {
 
     // Decode and validate authorization code first
     const authData = this.validateAuthCode(params.code);
-    
+
     // Use client_id from auth code if not provided in params
     const clientId = params.client_id || authData.client_id;
-    
+
     // Validate client credentials
     await this.validateClient(clientId, params.client_secret);
 
@@ -306,14 +314,13 @@ export class OidcService {
 
     // Generate tokens
     const userInfo = this.mapUserToOidcClaims(user, authData.tenantId);
-    console.log('🔧 OIDC User Claims Debug:', JSON.stringify(userInfo, null, 2));
-    
-    const accessToken = this.generateAccessToken(userInfo);
-    const idToken = this.generateIdToken(
-      userInfo,
-      clientId,
-      authData.nonce,
+    console.log(
+      '🔧 OIDC User Claims Debug:',
+      JSON.stringify(userInfo, null, 2),
     );
+
+    const accessToken = this.generateAccessToken(userInfo);
+    const idToken = this.generateIdToken(userInfo, clientId, authData.nonce);
 
     console.log('🔧 OIDC Token Response Debug:', {
       access_token: accessToken.substring(0, 50) + '...',
@@ -365,9 +372,9 @@ export class OidcService {
     };
 
     console.log('🔧 DEBUG: About to sign auth code JWT with RS256');
-    return jwt.sign(payload, this.rsaKeyPair.privateKey, { 
+    return jwt.sign(payload, this.rsaKeyPair.privateKey, {
       algorithm: 'RS256' as const,
-      header: { alg: 'RS256', kid: 'openmeet-oidc-rsa-key' }
+      header: { alg: 'RS256', kid: 'openmeet-oidc-rsa-key' },
     });
   }
 
@@ -377,7 +384,7 @@ export class OidcService {
   private validateAuthCode(code: string): any {
     try {
       const payload = jwt.verify(code, this.rsaKeyPair.publicKey, {
-        algorithms: ['RS256']
+        algorithms: ['RS256'],
       }) as any;
 
       if (payload.type !== 'auth_code') {
@@ -401,7 +408,8 @@ export class OidcService {
     // TODO: Store client credentials securely (database or config)
     const validClients = {
       matrix_synapse: {
-        secret: process.env.MATRIX_OIDC_CLIENT_SECRET || 'change-me-in-production',
+        secret:
+          process.env.MATRIX_OIDC_CLIENT_SECRET || 'change-me-in-production',
         isPublic: true, // Back to public client - will implement RS256
       },
     };
@@ -416,7 +424,11 @@ export class OidcService {
       throw new UnauthorizedException('Invalid client credentials');
     }
 
-    console.log('✅ OIDC Client Debug - Client validated:', { clientId, isPublic: client.isPublic, hasSecret: !!clientSecret });
+    console.log('✅ OIDC Client Debug - Client validated:', {
+      clientId,
+      isPublic: client.isPublic,
+      hasSecret: !!clientSecret,
+    });
   }
 
   /**
@@ -428,10 +440,10 @@ export class OidcService {
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour
     };
-    
-    return jwt.sign(payload, this.rsaKeyPair.privateKey, { 
+
+    return jwt.sign(payload, this.rsaKeyPair.privateKey, {
       algorithm: 'RS256' as const,
-      header: { alg: 'RS256', kid: 'openmeet-oidc-rsa-key' }
+      header: { alg: 'RS256', kid: 'openmeet-oidc-rsa-key' },
     });
   }
 
@@ -455,9 +467,9 @@ export class OidcService {
       payload.nonce = nonce;
     }
 
-    return jwt.sign(payload, this.rsaKeyPair.privateKey, { 
+    return jwt.sign(payload, this.rsaKeyPair.privateKey, {
       algorithm: 'RS256' as const,
-      header: { alg: 'RS256', kid: 'openmeet-oidc-rsa-key' }
+      header: { alg: 'RS256', kid: 'openmeet-oidc-rsa-key' },
     });
   }
 
@@ -474,10 +486,13 @@ export class OidcService {
       }
     } else {
       // Auto-generate Matrix handle from user slug or email for OIDC provisioning
-      matrixHandle = user.slug || user.email?.split('@')[0] || `user-${user.id}`;
+      matrixHandle =
+        user.slug || user.email?.split('@')[0] || `user-${user.id}`;
       // Ensure Matrix username compliance (lowercase, no special chars except -, _, .)
       matrixHandle = matrixHandle.toLowerCase().replace(/[^a-z0-9._-]/g, '');
-      console.log(`🔧 OIDC Auto-generated Matrix handle for user ${user.id}: ${matrixHandle}`);
+      console.log(
+        `🔧 OIDC Auto-generated Matrix handle for user ${user.id}: ${matrixHandle}`,
+      );
     }
 
     const displayName =

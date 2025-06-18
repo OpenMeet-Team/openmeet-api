@@ -41,10 +41,12 @@ export class OidcController {
   @Trace('oidc.api.discovery')
   getDiscoveryDocument(@Req() request: Request) {
     // Extract base URL from request
-    const protocol = request.headers['x-forwarded-proto'] || (request.secure ? 'https' : 'http');
+    const protocol =
+      request.headers['x-forwarded-proto'] ||
+      (request.secure ? 'https' : 'http');
     const host = request.headers['x-forwarded-host'] || request.headers.host;
     const baseUrl = `${protocol}://${host}`;
-    
+
     return this.oidcService.getDiscoveryDocument(baseUrl);
   }
 
@@ -227,11 +229,22 @@ export class OidcController {
     @Body('client_id') clientId?: string,
     @Body('client_secret') clientSecret?: string,
   ) {
-    console.log('🔧 OIDC Token Debug - Request body:', JSON.stringify(body, null, 2));
-    console.log('🔧 OIDC Token Debug - Parameters:', { grantType, code: code?.substring(0, 20) + '...', redirectUri, clientId, clientSecret });
-    
+    console.log(
+      '🔧 OIDC Token Debug - Request body:',
+      JSON.stringify(body, null, 2),
+    );
+    console.log('🔧 OIDC Token Debug - Parameters:', {
+      grantType,
+      code: code?.substring(0, 20) + '...',
+      redirectUri,
+      clientId,
+      clientSecret,
+    });
+
     if (!grantType || !code || !redirectUri) {
-      throw new BadRequestException('Missing required token parameters: grant_type, code, redirect_uri');
+      throw new BadRequestException(
+        'Missing required token parameters: grant_type, code, redirect_uri',
+      );
     }
 
     return await this.oidcService.exchangeCodeForTokens({

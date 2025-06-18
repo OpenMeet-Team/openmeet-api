@@ -4,12 +4,16 @@ import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
 import { OidcService } from './oidc.service';
 import { UserService } from '../../user/user.service';
+import { TenantConnectionService } from '../../tenant/tenant.service';
+import { SessionService } from '../../session/session.service';
 
 describe('OidcService', () => {
   let service: OidcService;
   let mockConfigService: jest.Mocked<ConfigService>;
   let mockJwtService: jest.Mocked<JwtService>;
   let mockUserService: jest.Mocked<UserService>;
+  let mockTenantConnectionService: jest.Mocked<TenantConnectionService>;
+  let mockSessionService: jest.Mocked<SessionService>;
 
   const mockUser = {
     id: 123,
@@ -34,6 +38,14 @@ describe('OidcService', () => {
       findById: jest.fn(),
     } as any;
 
+    mockTenantConnectionService = {
+      getTenantConnection: jest.fn(),
+    } as any;
+
+    mockSessionService = {
+      findOne: jest.fn(),
+    } as any;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OidcService,
@@ -48,6 +60,14 @@ describe('OidcService', () => {
         {
           provide: UserService,
           useValue: mockUserService,
+        },
+        {
+          provide: TenantConnectionService,
+          useValue: mockTenantConnectionService,
+        },
+        {
+          provide: SessionService,
+          useValue: mockSessionService,
         },
       ],
     }).compile();
@@ -67,10 +87,10 @@ describe('OidcService', () => {
 
       expect(result).toMatchObject({
         issuer: 'https://api.openmeet.net/oidc',
-        authorization_endpoint: 'https://api.openmeet.net/oidc/auth',
-        token_endpoint: 'https://api.openmeet.net/oidc/token',
-        userinfo_endpoint: 'https://api.openmeet.net/oidc/userinfo',
-        jwks_uri: 'https://api.openmeet.net/oidc/jwks',
+        authorization_endpoint: 'https://api.openmeet.net/api/oidc/auth',
+        token_endpoint: 'https://api.openmeet.net/api/oidc/token',
+        userinfo_endpoint: 'https://api.openmeet.net/api/oidc/userinfo',
+        jwks_uri: 'https://api.openmeet.net/api/oidc/jwks',
         scopes_supported: ['openid', 'profile', 'email'],
         response_types_supported: ['code'],
         grant_types_supported: ['authorization_code', 'refresh_token'],
@@ -82,7 +102,7 @@ describe('OidcService', () => {
 
       const result = service.getDiscoveryDocument();
 
-      expect(result.issuer).toBe('http://localhost:3000/oidc');
+      expect(result.issuer).toBe('https://localdev.openmeet.net/oidc');
     });
   });
 
@@ -90,14 +110,14 @@ describe('OidcService', () => {
     it('should return JWKS document', () => {
       const result = service.getJwks();
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         keys: [
-          {
-            kty: 'oct',
+          expect.objectContaining({
             use: 'sig',
-            kid: 'openmeet-oidc-key',
-            alg: 'HS256',
-          },
+            kid: 'openmeet-oidc-rsa-key',
+            alg: 'RS256',
+            kty: 'RSA',
+          }),
         ],
       });
     });
@@ -114,54 +134,43 @@ describe('OidcService', () => {
       nonce: 'test-nonce',
     };
 
-    it('should generate authorization code and redirect URL', async () => {
-      mockJwtService.sign.mockReturnValue('mock-auth-code');
-
-      const result = await service.handleAuthorization(
+    it('should generate authorization code and redirect URL', () => {
+      const result = service.handleAuthorization(
         authParams,
         123,
         'tenant123',
       );
 
-      expect(result.authorization_code).toBe('mock-auth-code');
-      expect(result.redirect_url).toContain('code=mock-auth-code');
+      expect(result.authorization_code).toBeDefined();
+      expect(result.redirect_url).toContain(`code=${result.authorization_code}`);
       expect(result.redirect_url).toContain('state=test-state');
-      expect(mockJwtService.sign).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'auth_code',
-          client_id: 'matrix_synapse',
-          userId: 123,
-          tenantId: 'tenant123',
-        }),
-        { expiresIn: '10m' },
-      );
     });
 
-    it('should throw error for invalid client_id', async () => {
+    it('should throw error for invalid client_id', () => {
       const invalidParams = { ...authParams, client_id: 'invalid_client' };
 
-      await expect(
+      expect(() =>
         service.handleAuthorization(invalidParams, 123, 'tenant123'),
-      ).rejects.toThrow(UnauthorizedException);
+      ).toThrow(UnauthorizedException);
     });
 
-    it('should throw error for unsupported response_type', async () => {
+    it('should throw error for unsupported response_type', () => {
       const invalidParams = { ...authParams, response_type: 'token' };
 
-      await expect(
+      expect(() =>
         service.handleAuthorization(invalidParams, 123, 'tenant123'),
-      ).rejects.toThrow(UnauthorizedException);
+      ).toThrow(UnauthorizedException);
     });
 
-    it('should throw error for invalid redirect_uri', async () => {
+    it('should throw error for invalid redirect_uri', () => {
       const invalidParams = {
         ...authParams,
         redirect_uri: 'https://evil.com/callback',
       };
 
-      await expect(
+      expect(() =>
         service.handleAuthorization(invalidParams, 123, 'tenant123'),
-      ).rejects.toThrow(UnauthorizedException);
+      ).toThrow(UnauthorizedException);
     });
   });
 
@@ -178,29 +187,34 @@ describe('OidcService', () => {
     beforeEach(() => {
       process.env.MATRIX_OIDC_CLIENT_SECRET = 'test-secret';
       mockUserService.findById.mockResolvedValue(mockUser);
-      mockJwtService.sign.mockReturnValue('mock-token');
     });
 
     it('should exchange authorization code for tokens', async () => {
-      mockJwtService.verify.mockReturnValue({
-        type: 'auth_code',
-        client_id: 'matrix_synapse',
-        userId: 123,
-        tenantId: 'tenant123',
-        nonce: 'test-nonce',
-      });
+      // Generate a real auth code using the service
+      const authCode = service['generateAuthCode'](
+        {
+          client_id: 'matrix_synapse',
+          redirect_uri: tokenParams.redirect_uri,
+          response_type: 'code',
+          scope: 'openid profile email',
+          state: 'test-state',
+          nonce: 'test-nonce',
+        },
+        123,
+        'tenant123',
+      );
 
-      const result = await service.exchangeCodeForTokens(tokenParams);
+      const tokenParamsWithCode = { ...tokenParams, code: authCode };
+      const result = await service.exchangeCodeForTokens(tokenParamsWithCode);
 
       expect(result).toMatchObject({
-        access_token: 'mock-token',
+        access_token: expect.any(String),
         token_type: 'Bearer',
         expires_in: 3600,
-        id_token: 'mock-token',
+        id_token: expect.any(String),
       });
 
       expect(mockUserService.findById).toHaveBeenCalledWith(123, 'tenant123');
-      expect(mockJwtService.sign).toHaveBeenCalledTimes(2); // access token + id token
     });
 
     it('should throw error for invalid grant_type', async () => {
@@ -220,24 +234,30 @@ describe('OidcService', () => {
     });
 
     it('should throw error for invalid authorization code', async () => {
-      mockJwtService.verify.mockImplementation(() => {
-        throw new Error('Invalid token');
-      });
+      const invalidTokenParams = { ...tokenParams, code: 'invalid-code' };
 
-      await expect(service.exchangeCodeForTokens(tokenParams)).rejects.toThrow(
+      await expect(service.exchangeCodeForTokens(invalidTokenParams)).rejects.toThrow(
         UnauthorizedException,
       );
     });
 
     it('should throw error if user not found', async () => {
-      mockJwtService.verify.mockReturnValue({
-        type: 'auth_code',
-        userId: 999,
-        tenantId: 'tenant123',
-      });
+      // Generate a real auth code with a different user ID
+      const authCode = service['generateAuthCode'](
+        {
+          client_id: 'matrix_synapse',
+          redirect_uri: tokenParams.redirect_uri,
+          response_type: 'code',
+          scope: 'openid profile email',
+        },
+        999, // Different user ID
+        'tenant123',
+      );
+
+      const tokenParamsWithCode = { ...tokenParams, code: authCode };
       mockUserService.findById.mockResolvedValue(null);
 
-      await expect(service.exchangeCodeForTokens(tokenParams)).rejects.toThrow(
+      await expect(service.exchangeCodeForTokens(tokenParamsWithCode)).rejects.toThrow(
         UnauthorizedException,
       );
     });
@@ -245,6 +265,7 @@ describe('OidcService', () => {
 
   describe('getUserInfo', () => {
     it('should return user info from valid access token', async () => {
+      // Since getUserInfo uses the injected JwtService, we need to mock it
       const userInfo = {
         sub: 'john-smith',
         name: 'John Smith',
@@ -255,7 +276,6 @@ describe('OidcService', () => {
       };
 
       mockJwtService.verify.mockReturnValue(userInfo);
-
       const result = await service.getUserInfo('valid-token');
 
       expect(result).toEqual(userInfo);
@@ -295,8 +315,8 @@ describe('OidcService', () => {
         'tenant123',
       );
 
-      expect(userInfo.matrix_handle).toBe('unknown');
-      expect(userInfo.preferred_username).toBe('unknown');
+      expect(userInfo.matrix_handle).toBe('john-smith'); // Uses slug as fallback
+      expect(userInfo.preferred_username).toBe('john-smith');
     });
 
     it('should handle user with only email', () => {

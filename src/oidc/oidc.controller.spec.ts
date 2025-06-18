@@ -1,5 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { OidcController } from './oidc.controller';
 import { OidcService } from './services/oidc.service';
 
@@ -25,12 +27,29 @@ describe('OidcController', () => {
       getUserInfo: jest.fn(),
     } as any;
 
+    const mockConfigService = {
+      get: jest.fn().mockReturnValue('test-value'),
+    };
+
+    const mockJwtService = {
+      sign: jest.fn(),
+      verify: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [OidcController],
       providers: [
         {
           provide: OidcService,
           useValue: mockOidcService,
+        },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
+        },
+        {
+          provide: JwtService,
+          useValue: mockJwtService,
         },
       ],
     }).compile();
@@ -50,10 +69,17 @@ describe('OidcController', () => {
       };
       mockOidcService.getDiscoveryDocument.mockReturnValue(mockDiscovery);
 
-      const result = controller.getDiscoveryDocument();
+      const mockRequest = {
+        headers: {
+          host: 'api.openmeet.net',
+        },
+        secure: true,
+      } as any;
+
+      const result = controller.getDiscoveryDocument(mockRequest);
 
       expect(result).toBe(mockDiscovery);
-      expect(mockOidcService.getDiscoveryDocument).toHaveBeenCalledTimes(1);
+      expect(mockOidcService.getDiscoveryDocument).toHaveBeenCalledWith('https://api.openmeet.net');
     });
   });
 
@@ -81,17 +107,19 @@ describe('OidcController', () => {
       nonce: 'test-nonce',
     };
 
-    it('should handle authorization request for authenticated user', async () => {
-      const mockResult = {
-        redirect_url:
-          'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=abc123&state=test-state',
-        authorization_code: 'abc123',
-      };
-      mockOidcService.handleAuthorization.mockReturnValue(mockResult);
+    it('should redirect to login when user is not authenticated', async () => {
+      const mockRequest = {
+        query: {},
+        headers: {},
+      } as any;
+      
+      const mockResponse = {
+        redirect: jest.fn(),
+      } as any;
 
-      const result = await controller.authorize(
-        mockUser,
-        mockRequest as any,
+      await controller.authorize(
+        mockRequest,
+        mockResponse,
         authParams.clientId,
         authParams.redirectUri,
         authParams.responseType,
@@ -100,26 +128,25 @@ describe('OidcController', () => {
         authParams.nonce,
       );
 
-      expect(result).toEqual({ url: mockResult.redirect_url });
-      expect(mockOidcService.handleAuthorization).toHaveBeenCalledWith(
-        {
-          client_id: authParams.clientId,
-          redirect_uri: authParams.redirectUri,
-          response_type: authParams.responseType,
-          scope: authParams.scope,
-          state: authParams.state,
-          nonce: authParams.nonce,
-        },
-        mockUser.id,
-        mockRequest.tenantId,
-      );
+      expect(mockResponse.redirect).toHaveBeenCalled();
+      const redirectUrl = mockResponse.redirect.mock.calls[0][0];
+      expect(redirectUrl).toContain('/api/oidc/login');
     });
 
     it('should throw BadRequestException for missing required parameters', async () => {
+      const mockRequest = {
+        query: {},
+        headers: {},
+      } as any;
+      
+      const mockResponse = {
+        redirect: jest.fn(),
+      } as any;
+
       await expect(
         controller.authorize(
-          mockUser,
-          mockRequest as any,
+          mockRequest,
+          mockResponse,
           '', // missing client_id
           authParams.redirectUri,
           authParams.responseType,
@@ -128,29 +155,37 @@ describe('OidcController', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw BadRequestException if tenant ID is missing', async () => {
-      const requestWithoutTenant = {};
+    it('should handle missing optional parameters', async () => {
+      const mockRequest = {
+        query: {},
+        headers: {},
+      } as any;
+      
+      const mockResponse = {
+        redirect: jest.fn(),
+      } as any;
 
-      await expect(
-        controller.authorize(
-          mockUser,
-          requestWithoutTenant as any,
-          authParams.clientId,
-          authParams.redirectUri,
-          authParams.responseType,
-          authParams.scope,
-        ),
-      ).rejects.toThrow(BadRequestException);
+      await controller.authorize(
+        mockRequest,
+        mockResponse,
+        authParams.clientId,
+        authParams.redirectUri,
+        authParams.responseType,
+        authParams.scope,
+        // no state or nonce
+      );
+
+      expect(mockResponse.redirect).toHaveBeenCalled();
     });
   });
 
   describe('token', () => {
     const tokenParams = {
-      grantType: 'authorization_code',
+      grant_type: 'authorization_code',
       code: 'auth-code-123',
-      redirectUri: 'https://matrix.openmeet.net/_synapse/client/oidc/callback',
-      clientId: 'matrix_synapse',
-      clientSecret: 'secret123',
+      redirect_uri: 'https://matrix.openmeet.net/_synapse/client/oidc/callback',
+      client_id: 'matrix_synapse',
+      client_secret: 'secret123',
     };
 
     it('should exchange authorization code for tokens', async () => {
@@ -163,31 +198,39 @@ describe('OidcController', () => {
       mockOidcService.exchangeCodeForTokens.mockResolvedValue(mockTokens);
 
       const result = await controller.token(
-        tokenParams.grantType,
+        tokenParams, // pass full body
+        tokenParams.grant_type,
         tokenParams.code,
-        tokenParams.redirectUri,
-        tokenParams.clientId,
-        tokenParams.clientSecret,
+        tokenParams.redirect_uri,
+        tokenParams.client_id,
+        tokenParams.client_secret,
       );
 
       expect(result).toBe(mockTokens);
       expect(mockOidcService.exchangeCodeForTokens).toHaveBeenCalledWith({
-        grant_type: tokenParams.grantType,
+        grant_type: tokenParams.grant_type,
         code: tokenParams.code,
-        redirect_uri: tokenParams.redirectUri,
-        client_id: tokenParams.clientId,
-        client_secret: tokenParams.clientSecret,
+        redirect_uri: tokenParams.redirect_uri,
+        client_id: tokenParams.client_id,
+        client_secret: tokenParams.client_secret,
       });
     });
 
     it('should throw BadRequestException for missing parameters', async () => {
+      const incompleteParams = {
+        grant_type: '', // missing grant_type
+        code: tokenParams.code,
+        redirect_uri: tokenParams.redirect_uri,
+      };
+      
       await expect(
         controller.token(
+          incompleteParams,
           '', // missing grant_type
           tokenParams.code,
-          tokenParams.redirectUri,
-          tokenParams.clientId,
-          tokenParams.clientSecret,
+          tokenParams.redirect_uri,
+          tokenParams.client_id,
+          tokenParams.client_secret,
         ),
       ).rejects.toThrow(BadRequestException);
     });
@@ -226,7 +269,7 @@ describe('OidcController', () => {
     });
   });
 
-  describe('loginEntry', () => {
+  describe('showLoginForm', () => {
     const loginParams = {
       clientId: 'matrix_synapse',
       redirectUri: 'https://matrix.openmeet.net/_synapse/client/oidc/callback',
@@ -236,8 +279,14 @@ describe('OidcController', () => {
       nonce: 'test-nonce',
     };
 
-    it('should return login URL for OIDC entry point', async () => {
-      const result = await controller.loginEntry(
+    it('should show login form for OIDC entry point', () => {
+      const mockResponse = {
+        setHeader: jest.fn(),
+        send: jest.fn(),
+      } as any;
+
+      controller.showLoginForm(
+        mockResponse,
         loginParams.clientId,
         loginParams.redirectUri,
         loginParams.responseType,
@@ -246,25 +295,38 @@ describe('OidcController', () => {
         loginParams.nonce,
       );
 
-      expect(result.login_url).toContain('/auth/login');
-      expect(result.login_url).toContain('return_url=');
-      expect(result.login_url).toContain(encodeURIComponent('/oidc/auth'));
-      expect(result.message).toContain('Redirect to OpenMeet login');
+      expect(mockResponse.setHeader).toHaveBeenCalledWith('Content-Type', 'text/html');
+      expect(mockResponse.send).toHaveBeenCalled();
+      const htmlContent = mockResponse.send.mock.calls[0][0];
+      expect(htmlContent).toContain('Sign in to OpenMeet');
+      expect(htmlContent).toContain(loginParams.clientId);
     });
 
-    it('should throw BadRequestException for missing required parameters', async () => {
-      await expect(
-        controller.loginEntry(
+    it('should throw BadRequestException for missing required parameters', () => {
+      const mockResponse = {
+        setHeader: jest.fn(),
+        send: jest.fn(),
+      } as any;
+
+      expect(() => {
+        controller.showLoginForm(
+          mockResponse,
           '', // missing client_id
           loginParams.redirectUri,
           loginParams.responseType,
           loginParams.scope,
-        ),
-      ).rejects.toThrow(BadRequestException);
+        );
+      }).toThrow(BadRequestException);
     });
 
-    it('should handle optional state and nonce parameters', async () => {
-      const result = await controller.loginEntry(
+    it('should handle optional state and nonce parameters', () => {
+      const mockResponse = {
+        setHeader: jest.fn(),
+        send: jest.fn(),
+      } as any;
+
+      controller.showLoginForm(
+        mockResponse,
         loginParams.clientId,
         loginParams.redirectUri,
         loginParams.responseType,
@@ -272,9 +334,10 @@ describe('OidcController', () => {
         // no state or nonce
       );
 
-      expect(result.login_url).toContain('/auth/login');
-      expect(result.login_url).not.toContain('state=');
-      expect(result.login_url).not.toContain('nonce=');
+      expect(mockResponse.send).toHaveBeenCalled();
+      const htmlContent = mockResponse.send.mock.calls[0][0];
+      expect(htmlContent).not.toContain('name="state"');
+      expect(htmlContent).not.toContain('name="nonce"');
     });
   });
 });
