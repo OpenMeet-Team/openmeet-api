@@ -5,16 +5,19 @@ import { OidcController } from './oidc.controller';
 import { OidcService } from './services/oidc.service';
 import { UserModule } from '../user/user.module';
 import { TenantModule } from '../tenant/tenant.module';
+import { SessionModule } from '../session/session.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
     ConfigModule,
     UserModule,
     TenantModule,
+    SessionModule,
+    AuthModule,
     JwtModule.register({
       global: true,
       secret: process.env.JWT_SECRET || 'secret',
-      signOptions: { expiresIn: '1h' },
     }),
   ],
   controllers: [OidcController],

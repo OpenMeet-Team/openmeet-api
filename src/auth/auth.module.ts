@@ -17,6 +17,7 @@ import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 import { CategoryModule } from '../category/category.module';
 import { AuthBlueskyModule } from '../auth-bluesky/auth-bluesky.module';
 import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
+import { TempAuthCodeService } from './services/temp-auth-code.service';
 
 @Module({
   imports: [
@@ -35,7 +36,13 @@ import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
     forwardRef(() => ShadowAccountModule),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtRefreshStrategy, AnonymousStrategy],
-  exports: [AuthService],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    JwtRefreshStrategy,
+    AnonymousStrategy,
+    TempAuthCodeService,
+  ],
+  exports: [AuthService, TempAuthCodeService],
 })
 export class AuthModule {}

@@ -1,5 +1,6 @@
 ## Server name
 server_name: "${SYNAPSE_SERVER_NAME}"
+public_baseurl: "http://localhost:8448"
 pid_file: /data/homeserver.pid
 
 ## Trusted key servers
@@ -102,8 +103,28 @@ report_stats: false
 ## Spam checker - disabled for testing
 spam_checker: []
 
-## OpenID configuration for testing
-oidc_providers: []
+## OpenID Connect configuration for OpenMeet authentication
+oidc_providers:
+  - idp_id: openmeet
+    idp_name: "OpenMeet"
+    idp_brand: "org.matrix.openmeet"
+    discover: false  # Manual configuration since we need headers
+    issuer: "https://localdev.openmeet.net/oidc"
+    client_id: "matrix_synapse"
+    client_secret: "${MATRIX_OIDC_CLIENT_SECRET}"
+    scopes: ["openid", "profile", "email"]
+    authorization_endpoint: "https://localdev.openmeet.net/api/oidc/auth"
+    token_endpoint: "https://localdev.openmeet.net/api/oidc/token"
+    userinfo_endpoint: "https://localdev.openmeet.net/api/oidc/userinfo"
+    jwks_uri: "https://localdev.openmeet.net/api/oidc/jwks"
+    skip_verification: true  # Only for local testing
+    user_mapping_provider:
+      config:
+        localpart_template: "{{ user.preferred_username }}"
+        display_name_template: "{{ user.name }}"
+        email_template: "{{ user.email }}"
+    allow_existing_users: true
+    enable_registration: true
 
 ## Email configuration
 email:

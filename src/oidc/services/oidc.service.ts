@@ -3,6 +3,13 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { UserService } from '../../user/user.service';
 import { Trace } from '../../utils/trace.decorator';
+import { TenantConnectionService } from '../../tenant/tenant.service';
+import { fetchTenants } from '../../utils/tenant-config';
+import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
+import { SessionService } from '../../session/session.service';
+import { SessionEntity } from '../../session/infrastructure/persistence/relational/entities/session.entity';
+import * as crypto from 'crypto';
+import * as jwt from 'jsonwebtoken';
 
 export interface OidcUserInfo {
   sub: string; // User ID (slug)
@@ -24,38 +31,85 @@ export interface OidcTokenResponse {
 @Injectable()
 export class OidcService {
   private readonly logger = new Logger(OidcService.name);
+  private rsaKeyPair: { privateKey: string; publicKey: string };
 
   constructor(
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
     private readonly userService: UserService,
-  ) {}
+    private readonly tenantConnectionService: TenantConnectionService,
+    private readonly sessionService: SessionService,
+  ) {
+    // Use persistent RSA key pair for RS256 signing
+    this.rsaKeyPair = this.getOrGenerateRSAKeyPair();
+  }
+
+  /**
+   * Get or generate persistent RSA key pair for RS256 JWT signing
+   */
+  private getOrGenerateRSAKeyPair(): { privateKey: string; publicKey: string } {
+    // Check if we have persistent keys in environment variables
+    const privateKeyEnv = process.env.OIDC_RSA_PRIVATE_KEY;
+    const publicKeyEnv = process.env.OIDC_RSA_PUBLIC_KEY;
+    
+    if (privateKeyEnv && publicKeyEnv) {
+      console.log('🔑 Using persistent RSA key pair from environment');
+      return {
+        privateKey: privateKeyEnv.replace(/\\n/g, '\n'),
+        publicKey: publicKeyEnv.replace(/\\n/g, '\n'),
+      };
+    }
+    
+    // Generate new key pair and log it for persistence
+    console.log('🔑 Generating new RSA key pair (should be persisted in production)');
+    return this.generateRSAKeyPair();
+  }
+
+  /**
+   * Generate RSA key pair for RS256 JWT signing
+   */
+  private generateRSAKeyPair(): { privateKey: string; publicKey: string } {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      publicKeyEncoding: {
+        type: 'spki',
+        format: 'pem',
+      },
+      privateKeyEncoding: {
+        type: 'pkcs8',
+        format: 'pem',
+      },
+    });
+
+    return { privateKey, publicKey };
+  }
 
   /**
    * Get OIDC discovery document (.well-known/openid-configuration)
    */
   @Trace('oidc.discovery')
-  getDiscoveryDocument() {
-    const baseUrl =
-      this.configService.get('app.baseUrl', { infer: true }) ||
-      'http://localhost:3000';
-    const oidcBaseUrl = `${baseUrl}/oidc`;
+  getDiscoveryDocument(baseUrl?: string) {
+    // Use the provided base URL or fall back to config
+    const issuerBaseUrl = baseUrl || this.configService.get('app.oidcIssuerUrl', { infer: true }) || 'https://localdev.openmeet.net';
+    const oidcIssuerUrl = `${issuerBaseUrl}/oidc`;
+    const oidcApiBaseUrl = `${issuerBaseUrl}/api/oidc`;
 
     return {
-      issuer: oidcBaseUrl,
-      authorization_endpoint: `${oidcBaseUrl}/auth`,
-      token_endpoint: `${oidcBaseUrl}/token`,
-      userinfo_endpoint: `${oidcBaseUrl}/userinfo`,
-      jwks_uri: `${oidcBaseUrl}/jwks`,
+      issuer: oidcIssuerUrl,
+      authorization_endpoint: `${oidcApiBaseUrl}/auth`,
+      token_endpoint: `${oidcApiBaseUrl}/token`,
+      userinfo_endpoint: `${oidcApiBaseUrl}/userinfo`,
+      jwks_uri: `${oidcApiBaseUrl}/jwks`,
       scopes_supported: ['openid', 'profile', 'email'],
       response_types_supported: ['code'],
       response_modes_supported: ['query'],
       grant_types_supported: ['authorization_code', 'refresh_token'],
       subject_types_supported: ['public'],
-      id_token_signing_alg_values_supported: ['HS256'],
+      id_token_signing_alg_values_supported: ['RS256'],
       token_endpoint_auth_methods_supported: [
-        'client_secret_basic',
+        'none', // Support public clients (no authentication required)
         'client_secret_post',
+        'client_secret_basic',
       ],
       claims_supported: [
         'sub',
@@ -73,18 +127,93 @@ export class OidcService {
    */
   @Trace('oidc.jwks')
   getJwks() {
-    // For HS256, we don't expose the secret in JWKS
-    // Matrix server will use client_secret for verification
+    // For RS256, we expose the public key in JWKS
+    const publicKeyObject = crypto.createPublicKey(this.rsaKeyPair.publicKey);
+    const jwk = publicKeyObject.export({ format: 'jwk' });
+    
+    console.log('🔧 JWKS Debug - JWKS endpoint called');
+    console.log('🔧 JWKS Debug - Public key JWK:', JSON.stringify(jwk, null, 2));
+    
     return {
       keys: [
         {
-          kty: 'oct', // Octet string for symmetric keys
+          ...jwk,
           use: 'sig',
-          kid: 'openmeet-oidc-key',
-          alg: 'HS256',
+          kid: 'openmeet-oidc-rsa-key',
+          alg: 'RS256',
         },
       ],
     };
+  }
+
+  /**
+   * Get user information from session ID for OIDC authentication
+   */
+  @Trace('oidc.getUserFromSession')
+  async getUserFromSession(
+    sessionId: string | number,
+    tenantId?: string,
+  ): Promise<{ id: number; tenantId: string } | null> {
+    try {
+      // If tenant ID provided, check that specific tenant
+      if (tenantId) {
+        const dataSource =
+          await this.tenantConnectionService.getTenantConnection(tenantId);
+        const sessionRepository = dataSource.getRepository(SessionEntity);
+        const session = await sessionRepository.findOne({
+          where: { id: Number(sessionId) },
+          relations: ['user'],
+        });
+
+        if (session && session.user && !session.deletedAt) {
+          return {
+            id: session.user.id,
+            tenantId: tenantId,
+          };
+        }
+      }
+
+      // If no tenant ID provided, try to find the session across tenants
+      const tenants = await fetchTenants();
+      for (const tenant of tenants) {
+        try {
+          const dataSource =
+            await this.tenantConnectionService.getTenantConnection(tenant.id);
+          const sessionRepository = dataSource.getRepository(SessionEntity);
+          const session = await sessionRepository.findOne({
+            where: { id: Number(sessionId) },
+            relations: ['user'],
+          });
+
+          if (session && session.user && !session.deletedAt) {
+            return {
+              id: session.user.id,
+              tenantId: tenant.id,
+            };
+          }
+        } catch {
+          // Session not found in this tenant, continue to next
+          continue;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      this.logger.error('Failed to get user from session:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Check if user has valid session using JWT token from browser
+   * This is called when the frontend sends the JWT token for OIDC validation
+   */
+  validateUserTokenForOidc(
+    _token: string,
+  ): Promise<{ userId: number; tenantId: string } | null> {
+    // We'll rely on the controller to validate the JWT token
+    // This method is a placeholder for future enhancements
+    return Promise.resolve(null);
   }
 
   /**
@@ -116,6 +245,7 @@ export class OidcService {
 
     // Validate redirect_uri (should be Matrix server's callback URL)
     const allowedRedirectUris = [
+      'http://localhost:8448/_synapse/client/oidc/callback',
       'http://matrix-local.openmeet.test:8448/_synapse/client/oidc/callback',
       'https://matrix.openmeet.net/_synapse/client/oidc/callback',
     ];
@@ -156,11 +286,14 @@ export class OidcService {
       throw new UnauthorizedException('Unsupported grant_type');
     }
 
-    // Validate client credentials
-    await this.validateClient(params.client_id, params.client_secret);
-
-    // Decode and validate authorization code
+    // Decode and validate authorization code first
     const authData = this.validateAuthCode(params.code);
+    
+    // Use client_id from auth code if not provided in params
+    const clientId = params.client_id || authData.client_id;
+    
+    // Validate client credentials
+    await this.validateClient(clientId, params.client_secret);
 
     // Get user information
     const user = await this.userService.findById(
@@ -173,12 +306,21 @@ export class OidcService {
 
     // Generate tokens
     const userInfo = this.mapUserToOidcClaims(user, authData.tenantId);
+    console.log('🔧 OIDC User Claims Debug:', JSON.stringify(userInfo, null, 2));
+    
     const accessToken = this.generateAccessToken(userInfo);
     const idToken = this.generateIdToken(
       userInfo,
-      params.client_id,
+      clientId,
       authData.nonce,
     );
+
+    console.log('🔧 OIDC Token Response Debug:', {
+      access_token: accessToken.substring(0, 50) + '...',
+      id_token: idToken.substring(0, 50) + '...',
+      token_type: 'Bearer',
+      expires_in: 3600,
+    });
 
     return {
       access_token: accessToken,
@@ -222,7 +364,11 @@ export class OidcService {
       tenantId,
     };
 
-    return this.jwtService.sign(payload, { expiresIn: '10m' });
+    console.log('🔧 DEBUG: About to sign auth code JWT with RS256');
+    return jwt.sign(payload, this.rsaKeyPair.privateKey, { 
+      algorithm: 'RS256' as const,
+      header: { alg: 'RS256', kid: 'openmeet-oidc-rsa-key' }
+    });
   }
 
   /**
@@ -230,7 +376,9 @@ export class OidcService {
    */
   private validateAuthCode(code: string): any {
     try {
-      const payload = this.jwtService.verify(code);
+      const payload = jwt.verify(code, this.rsaKeyPair.publicKey, {
+        algorithms: ['RS256']
+      }) as any;
 
       if (payload.type !== 'auth_code') {
         throw new Error('Invalid code type');
@@ -252,20 +400,39 @@ export class OidcService {
   ): Promise<void> {
     // TODO: Store client credentials securely (database or config)
     const validClients = {
-      matrix_synapse:
-        process.env.MATRIX_OIDC_CLIENT_SECRET || 'change-me-in-production',
+      matrix_synapse: {
+        secret: process.env.MATRIX_OIDC_CLIENT_SECRET || 'change-me-in-production',
+        isPublic: true, // Back to public client - will implement RS256
+      },
     };
 
-    if (!validClients[clientId] || validClients[clientId] !== clientSecret) {
+    const client = validClients[clientId];
+    if (!client) {
+      throw new UnauthorizedException('Invalid client_id');
+    }
+
+    // For public clients, we don't require a client secret
+    if (!client.isPublic && client.secret !== clientSecret) {
       throw new UnauthorizedException('Invalid client credentials');
     }
+
+    console.log('✅ OIDC Client Debug - Client validated:', { clientId, isPublic: client.isPublic, hasSecret: !!clientSecret });
   }
 
   /**
    * Generate access token
    */
   private generateAccessToken(userInfo: OidcUserInfo): string {
-    return this.jwtService.sign(userInfo, { expiresIn: '1h' });
+    const payload = {
+      ...userInfo,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour
+    };
+    
+    return jwt.sign(payload, this.rsaKeyPair.privateKey, { 
+      algorithm: 'RS256' as const,
+      header: { alg: 'RS256', kid: 'openmeet-oidc-rsa-key' }
+    });
   }
 
   /**
@@ -281,14 +448,17 @@ export class OidcService {
       aud: clientId,
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + 3600,
-      iss: this.configService.get('app.baseUrl', { infer: true }) + '/oidc',
+      iss: this.getDiscoveryDocument().issuer,
     };
 
     if (nonce) {
       payload.nonce = nonce;
     }
 
-    return this.jwtService.sign(payload, { expiresIn: '1h' });
+    return jwt.sign(payload, this.rsaKeyPair.privateKey, { 
+      algorithm: 'RS256' as const,
+      header: { alg: 'RS256', kid: 'openmeet-oidc-rsa-key' }
+    });
   }
 
   /**
@@ -302,6 +472,12 @@ export class OidcService {
       if (match) {
         matrixHandle = match[1];
       }
+    } else {
+      // Auto-generate Matrix handle from user slug or email for OIDC provisioning
+      matrixHandle = user.slug || user.email?.split('@')[0] || `user-${user.id}`;
+      // Ensure Matrix username compliance (lowercase, no special chars except -, _, .)
+      matrixHandle = matrixHandle.toLowerCase().replace(/[^a-z0-9._-]/g, '');
+      console.log(`🔧 OIDC Auto-generated Matrix handle for user ${user.id}: ${matrixHandle}`);
     }
 
     const displayName =
@@ -317,5 +493,41 @@ export class OidcService {
       matrix_handle: matrixHandle,
       tenant_id: tenantId,
     };
+  }
+
+  /**
+   * Find user by email across all tenants
+   * Returns the first tenant where the email is found
+   */
+  @Trace('oidc.findUserByEmail')
+  async findUserByEmailAcrossTenants(
+    email: string,
+  ): Promise<{ user: UserEntity; tenantId: string } | null> {
+    const tenants = fetchTenants();
+
+    for (const tenant of tenants) {
+      try {
+        const connection =
+          await this.tenantConnectionService.getTenantConnection(tenant.id);
+        const userRepository = connection.getRepository(UserEntity);
+
+        const user = await userRepository.findOne({
+          where: { email: email.toLowerCase() },
+        });
+
+        if (user) {
+          this.logger.log(`Found user ${email} in tenant ${tenant.id}`);
+          return { user, tenantId: tenant.id };
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Failed to search tenant ${tenant.id} for email ${email}: ${error.message}`,
+        );
+        continue;
+      }
+    }
+
+    this.logger.log(`Email ${email} not found in any tenant`);
+    return null;
   }
 }

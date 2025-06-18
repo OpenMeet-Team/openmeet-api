@@ -40,6 +40,12 @@ export class AuthGoogleController {
     const tenantId = request.headers['x-tenant-id'] as string;
     const socialData = await this.authGoogleService.getProfileByToken(loginDto);
 
-    return this.authService.validateSocialLogin('google', socialData, tenantId);
+    const loginResult = await this.authService.validateSocialLogin(
+      'google',
+      socialData,
+      tenantId,
+    );
+
+    return loginResult;
   }
 }

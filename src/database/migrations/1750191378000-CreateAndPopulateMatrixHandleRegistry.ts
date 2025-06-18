@@ -78,7 +78,9 @@ export class CreateAndPopulateMatrixHandleRegistry1750191378000
       `);
 
       if (!tableExists[0].exists) {
-        console.log(`  ⚠️ Users table does not exist in schema ${schemaName}, skipping...`);
+        console.log(
+          `  ⚠️ Users table does not exist in schema ${schemaName}, skipping...`,
+        );
         continue;
       }
 
@@ -99,7 +101,9 @@ export class CreateAndPopulateMatrixHandleRegistry1750191378000
           AND "matrixUserId" LIKE '@%:%'
         `);
       } catch (error) {
-        console.log(`  ⚠️ Error querying users in schema ${schemaName}: ${error.message}, skipping...`);
+        console.log(
+          `  ⚠️ Error querying users in schema ${schemaName}: ${error.message}, skipping...`,
+        );
         continue;
       }
 

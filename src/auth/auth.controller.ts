@@ -54,8 +54,12 @@ export class AuthController {
     type: LoginResponseDto,
   })
   @HttpCode(HttpStatus.OK)
-  public login(@Body() loginDto: AuthEmailLoginDto): Promise<LoginResponseDto> {
-    return this.service.validateLogin(loginDto);
+  public async login(
+    @Body() loginDto: AuthEmailLoginDto,
+  ): Promise<LoginResponseDto> {
+    const loginResult = await this.service.validateLogin(loginDto);
+
+    return loginResult;
   }
 
   @SerializeOptions({
