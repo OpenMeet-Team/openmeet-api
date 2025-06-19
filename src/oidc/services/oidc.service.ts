@@ -256,6 +256,7 @@ export class OidcService {
       'http://localhost:8448/_synapse/client/oidc/callback',
       'http://matrix-local.openmeet.test:8448/_synapse/client/oidc/callback',
       'https://matrix.openmeet.net/_synapse/client/oidc/callback',
+      'https://matrix-dev.openmeet.net/_synapse/client/oidc/callback',
     ];
 
     if (!allowedRedirectUris.includes(params.redirect_uri)) {
