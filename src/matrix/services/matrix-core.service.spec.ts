@@ -113,7 +113,7 @@ describe('MatrixCoreService', () => {
   });
 
   describe('initialization', () => {
-    it('should create admin client during initialization', async () => {
+    it('should load Matrix SDK and set up event listeners during initialization', async () => {
       // Reset the mock implementation to test actual initialization
       jest.spyOn(service, 'onModuleInit').mockRestore();
 
@@ -124,7 +124,7 @@ describe('MatrixCoreService', () => {
             baseUrl: 'https://matrix.example.org',
             serverName: 'example.org',
             adminUser: 'admin',
-            adminPassword: 'admin-password', // Add this
+            adminPassword: 'admin-password',
             adminAccessToken: 'admin-token',
             defaultDeviceId: 'OPENMEET_SERVER',
             defaultInitialDeviceDisplayName: 'OpenMeet Server',
@@ -135,25 +135,13 @@ describe('MatrixCoreService', () => {
         return null;
       });
 
-      // Mock the authentication API call for token verification
-      jest.spyOn(axios, 'post').mockResolvedValue({
-        data: { access_token: 'admin-token' },
-      });
-
-      jest.spyOn(axios, 'get').mockResolvedValue({
-        data: { user_id: '@admin:example.org' },
-      });
-
-      // Create a spy for createClient
-      const createClientSpy = jest.fn().mockReturnValue(mockMatrixClient);
-
-      // Mock the dynamic import to return our mock SDK
-      jest
+      // Create a spy for loadMatrixSdk
+      const loadMatrixSdkSpy = jest
         .spyOn(service as any, 'loadMatrixSdk')
         .mockImplementation(async () => {
           // Set the matrixSdk property to our mock
           (service as any).matrixSdk = {
-            createClient: createClientSpy,
+            createClient: jest.fn().mockReturnValue(mockMatrixClient),
             Visibility: {
               Public: 'public',
               Private: 'private',
@@ -171,14 +159,23 @@ describe('MatrixCoreService', () => {
           return Promise.resolve();
         });
 
+      // Spy on the event listener setup
+      const eventEmitterOnSpy = jest.spyOn(service['eventEmitter'], 'on');
+
       // Call initialization
       await service.onModuleInit();
 
-      // Verify admin client was created - use any matcher instead of exact value matching
-      expect(createClientSpy).toHaveBeenCalled();
-      const callArgs = createClientSpy.mock.calls[0][0];
-      expect(callArgs).toHaveProperty('accessToken', 'admin-token');
-      expect(callArgs).toHaveProperty('useAuthorizationHeader', true);
+      // Verify SDK was loaded (but not that client was created immediately)
+      expect(loadMatrixSdkSpy).toHaveBeenCalled();
+      
+      // Verify event listener was set up for token updates
+      expect(eventEmitterOnSpy).toHaveBeenCalledWith(
+        'matrix.admin.token.updated',
+        expect.any(Function)
+      );
+
+      // Verify delayed initialization was scheduled (we can't easily test the timeout)
+      // The important thing is that onModuleInit completed without throwing
     });
 
     it('should handle SDK loading errors gracefully', async () => {

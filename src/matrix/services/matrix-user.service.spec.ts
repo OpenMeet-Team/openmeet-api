@@ -115,6 +115,8 @@ describe('MatrixUserService', () => {
               userId: '@admin:example.org',
             }),
             releaseClient: jest.fn().mockResolvedValue(undefined),
+            ensureMatrixReady: jest.fn().mockResolvedValue(true),
+            isMatrixReady: jest.fn().mockReturnValue(true),
           },
         },
         {
