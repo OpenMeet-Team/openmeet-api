@@ -135,14 +135,12 @@ describe('OidcService', () => {
     };
 
     it('should generate authorization code and redirect URL', () => {
-      const result = service.handleAuthorization(
-        authParams,
-        123,
-        'tenant123',
-      );
+      const result = service.handleAuthorization(authParams, 123, 'tenant123');
 
       expect(result.authorization_code).toBeDefined();
-      expect(result.redirect_url).toContain(`code=${result.authorization_code}`);
+      expect(result.redirect_url).toContain(
+        `code=${result.authorization_code}`,
+      );
       expect(result.redirect_url).toContain('state=test-state');
     });
 
@@ -236,9 +234,9 @@ describe('OidcService', () => {
     it('should throw error for invalid authorization code', async () => {
       const invalidTokenParams = { ...tokenParams, code: 'invalid-code' };
 
-      await expect(service.exchangeCodeForTokens(invalidTokenParams)).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        service.exchangeCodeForTokens(invalidTokenParams),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('should throw error if user not found', async () => {
@@ -257,9 +255,9 @@ describe('OidcService', () => {
       const tokenParamsWithCode = { ...tokenParams, code: authCode };
       mockUserService.findById.mockResolvedValue(null);
 
-      await expect(service.exchangeCodeForTokens(tokenParamsWithCode)).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        service.exchangeCodeForTokens(tokenParamsWithCode),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 

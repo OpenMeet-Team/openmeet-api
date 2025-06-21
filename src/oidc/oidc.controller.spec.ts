@@ -79,7 +79,9 @@ describe('OidcController', () => {
       const result = controller.getDiscoveryDocument(mockRequest);
 
       expect(result).toBe(mockDiscovery);
-      expect(mockOidcService.getDiscoveryDocument).toHaveBeenCalledWith('https://api.openmeet.net');
+      expect(mockOidcService.getDiscoveryDocument).toHaveBeenCalledWith(
+        'https://api.openmeet.net',
+      );
     });
   });
 
@@ -112,7 +114,7 @@ describe('OidcController', () => {
         query: {},
         headers: {},
       } as any;
-      
+
       const mockResponse = {
         redirect: jest.fn(),
       } as any;
@@ -138,7 +140,7 @@ describe('OidcController', () => {
         query: {},
         headers: {},
       } as any;
-      
+
       const mockResponse = {
         redirect: jest.fn(),
       } as any;
@@ -160,7 +162,7 @@ describe('OidcController', () => {
         query: {},
         headers: {},
       } as any;
-      
+
       const mockResponse = {
         redirect: jest.fn(),
       } as any;
@@ -222,7 +224,7 @@ describe('OidcController', () => {
         code: tokenParams.code,
         redirect_uri: tokenParams.redirect_uri,
       };
-      
+
       await expect(
         controller.token(
           incompleteParams,
@@ -295,7 +297,10 @@ describe('OidcController', () => {
         loginParams.nonce,
       );
 
-      expect(mockResponse.setHeader).toHaveBeenCalledWith('Content-Type', 'text/html');
+      expect(mockResponse.setHeader).toHaveBeenCalledWith(
+        'Content-Type',
+        'text/html',
+      );
       expect(mockResponse.send).toHaveBeenCalled();
       const htmlContent = mockResponse.send.mock.calls[0][0];
       expect(htmlContent).toContain('Sign in to OpenMeet');

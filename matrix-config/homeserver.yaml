@@ -113,10 +113,10 @@ oidc_providers:
     client_id: "matrix_synapse"
     client_secret: "${MATRIX_OIDC_CLIENT_SECRET}"
     scopes: ["openid", "profile", "email"]
-    authorization_endpoint: "https://localdev.openmeet.net/api/oidc/auth"
-    token_endpoint: "https://localdev.openmeet.net/api/oidc/token"
-    userinfo_endpoint: "https://localdev.openmeet.net/api/oidc/userinfo"
-    jwks_uri: "https://localdev.openmeet.net/api/oidc/jwks"
+    authorization_endpoint: "https://localdev.openmeet.net/api/oidc/matrix-auth"
+    token_endpoint: "http://host.docker.internal:3000/api/oidc/token"
+    userinfo_endpoint: "http://host.docker.internal:3000/api/oidc/userinfo"
+    jwks_uri: "http://host.docker.internal:3000/api/oidc/jwks"
     skip_verification: true  # Only for local testing
     user_mapping_provider:
       config:
