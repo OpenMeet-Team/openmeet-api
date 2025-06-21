@@ -26,6 +26,28 @@ services:
     expose:
       - 6379
 
+  api:
+    build:
+      context: .
+      dockerfile: relational.e2e.Dockerfile
+    expose:
+      - 3000
+    env_file:
+      - env-example-relational-ci
+    volumes:
+      - ./matrix-config:/matrix-config
+    depends_on:
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health/liveness"]
+      start_period: 60s
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
   matrix:
     build:
       context: .
@@ -46,7 +68,10 @@ services:
     volumes:
       - matrix-data:/data/media
     depends_on:
-      - postgres
+      api:
+        condition: service_healthy
+      postgres:
+        condition: service_started
     env_file:
       - env-example-relational-ci
     healthcheck:
@@ -54,24 +79,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  api:
-    build:
-      context: .
-      dockerfile: relational.e2e.Dockerfile
-    expose:
-      - 3000
-    env_file:
-      - env-example-relational-ci
-    volumes:
-      - ./matrix-config:/matrix-config
-    depends_on:
-      matrix:
-        condition: service_healthy
-      postgres:
-        condition: service_started
-      redis:
-        condition: service_started
 
 volumes:
   matrix-data:

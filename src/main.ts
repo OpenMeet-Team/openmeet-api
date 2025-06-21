@@ -17,6 +17,7 @@ import { AggregateByTenantContextIdStrategy } from './strategy/tenant.strategy';
 import { TenantGuard } from './tenant/tenant.guard';
 import { getBuildInfo } from './utils/version';
 import { IoAdapter } from '@nestjs/platform-socket.io';
+import cookieParser from 'cookie-parser';
 
 // Add direct console.log for startup debugging - these will show even before logger is configured
 const startupLog = (message: string) => {
@@ -75,6 +76,11 @@ async function bootstrap() {
     useContainer(app.select(AppModule), { fallbackOnErrors: true });
     const configService = app.get(ConfigService<AllConfigType>);
     startupLog('ContextIdFactory setup complete');
+
+    // Configure cookie parser for OIDC authentication
+    startupLog('Configuring cookie parser for OIDC');
+    app.use(cookieParser());
+    startupLog('Cookie parser configured');
 
     // Enable shutdown hooks for graceful termination
     startupLog('Enabling shutdown hooks');

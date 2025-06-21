@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Get,
   UseGuards,
   HttpStatus,
   HttpCode,
@@ -10,6 +11,7 @@ import {
   Body,
   Req,
   BadRequestException,
+  Query,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -24,6 +26,9 @@ import { MatrixRoomService } from './services/matrix-room.service';
 import { MatrixMessageService } from './services/matrix-message.service';
 import { MatrixGateway } from './matrix.gateway';
 import { MatrixPasswordDto } from './dto/matrix-password.dto';
+import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
+import { Trace } from '../utils/trace.decorator';
+import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
 
 @ApiTags('Matrix')
 @Controller({
@@ -38,11 +43,264 @@ export class MatrixController {
     private readonly matrixMessageService: MatrixMessageService,
     private readonly matrixGateway: MatrixGateway,
     private readonly userService: UserService,
+    private readonly globalMatrixValidationService: GlobalMatrixValidationService,
+    private readonly tempAuthCodeService: TempAuthCodeService,
     @Inject(REQUEST) private readonly request: any,
   ) {}
 
   @ApiOperation({
-    summary: 'Provision a Matrix user for the authenticated user',
+    summary: 'Check if a Matrix handle is available',
+    description:
+      'Validates Matrix handle availability and format for real-time validation during user registration',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Handle availability check result',
+    schema: {
+      properties: {
+        available: { type: 'boolean', example: true },
+        handle: { type: 'string', example: 'john.smith' },
+        suggestions: {
+          type: 'array',
+          items: { type: 'string' },
+          example: ['john.smith2', 'john.smith3'],
+        },
+      },
+    },
+  })
+  @UseGuards(JWTAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Get('handle/check')
+  @Trace('matrix.api.handleCheck')
+  async checkMatrixHandle(@Query('handle') handle: string): Promise<{
+    available: boolean;
+    handle: string;
+    suggestions?: string[];
+  }> {
+    if (!handle || typeof handle !== 'string') {
+      throw new BadRequestException('Handle parameter is required');
+    }
+
+    this.logger.log(`Checking Matrix handle availability: ${handle}`);
+
+    try {
+      const available =
+        await this.globalMatrixValidationService.isMatrixHandleUnique(handle);
+
+      const result: any = {
+        available,
+        handle,
+      };
+
+      // If handle is not available, provide suggestions
+      if (!available) {
+        result.suggestions =
+          await this.globalMatrixValidationService.suggestAvailableHandles(
+            handle,
+          );
+      }
+
+      this.logger.debug(
+        `Matrix handle check result: ${handle} -> ${available ? 'available' : 'taken'}`,
+      );
+
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Error checking Matrix handle availability for ${handle}: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  @ApiOperation({
+    summary: 'Get Matrix handle suggestions',
+    description:
+      'Get alternative Matrix handle suggestions based on a desired handle',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Handle suggestions returned',
+    schema: {
+      properties: {
+        suggestions: {
+          type: 'array',
+          items: { type: 'string' },
+          example: ['john.smith', 'johnsmith', 'j.smith'],
+        },
+        desiredHandle: { type: 'string', example: 'john smith' },
+      },
+    },
+  })
+  @UseGuards(JWTAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Get('handle/suggest')
+  @Trace('matrix.api.handleSuggest')
+  async suggestMatrixHandles(
+    @Query('handle') desiredHandle: string,
+    @Query('limit') limit?: string,
+  ): Promise<{
+    suggestions: string[];
+    desiredHandle: string;
+  }> {
+    if (!desiredHandle || typeof desiredHandle !== 'string') {
+      throw new BadRequestException('Handle parameter is required');
+    }
+
+    const maxSuggestions = limit ? parseInt(limit, 10) : 5;
+    if (maxSuggestions < 1 || maxSuggestions > 20) {
+      throw new BadRequestException('Limit must be between 1 and 20');
+    }
+
+    this.logger.log(
+      `Generating Matrix handle suggestions for: ${desiredHandle}`,
+    );
+
+    try {
+      const suggestions =
+        await this.globalMatrixValidationService.suggestAvailableHandles(
+          desiredHandle,
+          maxSuggestions,
+        );
+
+      return {
+        suggestions,
+        desiredHandle,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error generating Matrix handle suggestions for ${desiredHandle}: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  @ApiOperation({
+    summary: 'Provision a Matrix user with a chosen handle',
+    description:
+      'Creates a Matrix account with a user-chosen handle for clean Matrix IDs',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Matrix user provisioned successfully with chosen handle',
+    schema: {
+      properties: {
+        matrixUserId: {
+          type: 'string',
+          example: '@john.smith:matrix.openmeet.net',
+        },
+        handle: { type: 'string', example: 'john.smith' },
+        provisioned: { type: 'boolean', example: true },
+        success: { type: 'boolean', example: true },
+      },
+    },
+  })
+  @UseGuards(JWTAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('provision-user-with-handle')
+  @Trace('matrix.api.provisionWithHandle')
+  async provisionMatrixUserWithHandle(
+    @AuthUser() user: { id: number },
+    @Body() body: { handle?: string },
+  ): Promise<{
+    matrixUserId: string;
+    handle: string;
+    provisioned: boolean;
+    success: boolean;
+  }> {
+    const tenantId = this.request?.tenantId;
+    if (!tenantId) {
+      throw new BadRequestException('Tenant ID is required');
+    }
+
+    this.logger.log(
+      `Provisioning Matrix user with handle for user ID: ${user.id}, requested handle: ${body.handle || 'auto-generate'}`,
+    );
+
+    // Check if user already has Matrix credentials
+    const fullUser = await this.userService.findById(user.id);
+
+    if (
+      fullUser &&
+      fullUser.matrixUserId &&
+      fullUser.matrixAccessToken &&
+      fullUser.matrixDeviceId
+    ) {
+      // User already has Matrix account - extract existing handle
+      const existingHandle =
+        fullUser.matrixUserId.match(/@(.+):/)?.[1] || 'unknown';
+      this.logger.log(
+        `User ${user.id} already has Matrix credentials with handle: ${existingHandle}`,
+      );
+
+      return {
+        matrixUserId: fullUser.matrixUserId,
+        handle: existingHandle,
+        provisioned: false, // Already provisioned
+        success: true,
+      };
+    }
+
+    if (!fullUser) {
+      throw new Error(`User with ID ${user.id} not found`);
+    }
+
+    try {
+      // Use the new handle-based provisioning method
+      const matrixUserInfo =
+        await this.matrixUserService.provisionMatrixUserWithHandle(
+          fullUser,
+          tenantId,
+          user.id,
+          body.handle,
+        );
+
+      // Extract handle from the Matrix user ID
+      const handle = matrixUserInfo.userId.match(/@(.+):/)?.[1] || 'unknown';
+
+      // Update the user record with Matrix credentials
+      await this.userService.update(
+        user.id,
+        {
+          matrixUserId: matrixUserInfo.userId,
+          matrixAccessToken: matrixUserInfo.accessToken,
+          matrixDeviceId: matrixUserInfo.deviceId,
+          preferences: {
+            ...fullUser.preferences,
+            matrix: {
+              connected: true,
+              connectedAt: new Date(),
+            },
+          },
+        },
+        tenantId,
+      );
+
+      this.logger.log(
+        `Matrix user provisioned successfully for user ID: ${user.id} with handle: ${handle}`,
+      );
+
+      return {
+        matrixUserId: matrixUserInfo.userId,
+        handle,
+        provisioned: true,
+        success: true,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error provisioning Matrix user with handle: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  @ApiOperation({
+    summary: 'Provision a Matrix user for the authenticated user (legacy)',
+    description:
+      'Legacy endpoint using tenant-prefixed usernames. Use provision-user-with-handle instead.',
   })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -385,6 +643,111 @@ export class MatrixController {
         `Error testing broadcast: ${error.message}`,
         error.stack,
       );
+      throw error;
+    }
+  }
+
+  @ApiOperation({
+    summary: 'Generate a short-lived authentication code for Matrix SSO',
+    description:
+      'Creates a temporary authentication code that can be used for seamless Matrix OIDC authentication',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Authentication code generated successfully',
+    schema: {
+      properties: {
+        authCode: {
+          type: 'string',
+          example: 'a1b2c3d4e5f6...',
+        },
+        expiresIn: {
+          type: 'number',
+          example: 300,
+          description: 'Expiration time in seconds',
+        },
+        expiresAt: {
+          type: 'string',
+          example: '2025-06-19T20:45:00.000Z',
+          description: 'ISO timestamp when code expires',
+        },
+      },
+    },
+  })
+  @UseGuards(JWTAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('generate-auth-code')
+  @Trace('matrix.api.generateAuthCode')
+  async generateMatrixAuthCode(
+    @AuthUser() user: { id: number },
+    @Req() req: Request,
+  ): Promise<{
+    authCode: string;
+    expiresIn: number;
+    expiresAt: string;
+    fallbackUrl?: string;
+  }> {
+    this.logger.log(`Generating Matrix auth code for user ID: ${user.id}`);
+
+    try {
+      // Get tenant ID from request context
+      const tenantId = req['tenantId'];
+      if (!tenantId) {
+        this.logger.error(
+          `No tenant ID found in request context for user ${user.id}`,
+        );
+        throw new BadRequestException(
+          'Tenant ID is required - ensure you are authenticated with a valid session',
+        );
+      }
+
+      // Validate user exists in the tenant
+      try {
+        const userEntity = await this.userService.findById(user.id, tenantId);
+        if (!userEntity) {
+          this.logger.error(`User ${user.id} not found in tenant ${tenantId}`);
+          throw new BadRequestException(
+            'User not found in the specified tenant',
+          );
+        }
+      } catch (userError) {
+        this.logger.error(
+          `Error validating user ${user.id} in tenant ${tenantId}: ${userError.message}`,
+        );
+        throw new BadRequestException(
+          'Unable to validate user in tenant context',
+        );
+      }
+
+      // Generate the temporary authentication code
+      const authCode = await this.tempAuthCodeService.generateAuthCode(
+        user.id,
+        tenantId,
+      );
+
+      // Calculate expiration details (5 minutes from now)
+      const expiresIn = 5 * 60; // 5 minutes in seconds
+      const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+
+      this.logger.log(
+        `Matrix auth code generated successfully for user ${user.id}, tenant ${tenantId}, expires at ${expiresAt}`,
+      );
+
+      return {
+        authCode,
+        expiresIn,
+        expiresAt,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error generating Matrix auth code for user ${user.id}: ${error.message}`,
+        error.stack,
+      );
+
+      // Log additional debugging information
+      this.logger.debug(`Request headers: ${JSON.stringify(req.headers)}`);
+      this.logger.debug(`Request tenant context: ${req['tenantId']}`);
+
       throw error;
     }
   }

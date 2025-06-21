@@ -24,10 +24,13 @@ export class MatrixHealthIndicator extends HealthIndicator {
       try {
         // Do a quick check of Matrix server without requiring token
         const serverInfoUrl = `${baseUrl}/_matrix/client/versions`;
-        const serverInfoResponse = await axios.get(serverInfoUrl);
+        const serverInfoResponse = await axios.get(serverInfoUrl, {
+          timeout: 2000, // 2 second timeout
+        });
         serverAvailable = serverInfoResponse.status === 200;
       } catch (_serverCheckError) {
-        console.error('Matrix server check failed', _serverCheckError);
+        // Don't log as error during startup - Matrix might not be ready yet
+        console.debug('Matrix server check failed (server may not be ready yet):', _serverCheckError.message);
         serverAvailable = false;
       }
 

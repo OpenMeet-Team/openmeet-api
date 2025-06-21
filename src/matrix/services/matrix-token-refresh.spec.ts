@@ -3,6 +3,7 @@ import { MatrixUserService } from './matrix-user.service';
 import { MatrixCoreService } from './matrix-core.service';
 import { MatrixGateway } from '../matrix.gateway';
 import { MatrixMessageService } from './matrix-message.service';
+import { GlobalMatrixValidationService } from './global-matrix-validation.service';
 import { ModuleRef } from '@nestjs/core';
 import axios from 'axios';
 import { JwtService } from '@nestjs/jwt';
@@ -200,6 +201,16 @@ describe('Matrix Token Refresh Integration', () => {
         {
           provide: EventEmitter2,
           useValue: new EventEmitter2(),
+        },
+        {
+          provide: GlobalMatrixValidationService,
+          useValue: {
+            isMatrixHandleUnique: jest.fn().mockResolvedValue(true),
+            registerMatrixHandle: jest.fn().mockResolvedValue(undefined),
+            suggestAvailableHandles: jest.fn().mockResolvedValue([]),
+            unregisterMatrixHandle: jest.fn().mockResolvedValue(undefined),
+            getMatrixHandleRegistration: jest.fn().mockResolvedValue(null),
+          },
         },
       ],
     }).compile();
