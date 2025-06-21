@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { OidcController } from './oidc.controller';
 import { OidcService } from './services/oidc.service';
+import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
 
 describe('OidcController', () => {
   let controller: OidcController;
@@ -16,10 +17,16 @@ describe('OidcController', () => {
       handleAuthorization: jest.fn(),
       exchangeCodeForTokens: jest.fn(),
       getUserInfo: jest.fn(),
+      getUserFromSession: jest.fn().mockResolvedValue(null),
+      findUserByEmailAcrossTenants: jest.fn().mockResolvedValue(null),
     } as any;
 
     const mockConfigService = {
-      get: jest.fn().mockReturnValue('test-value'),
+      get: jest.fn().mockImplementation((key) => {
+        if (key === 'auth.secret') return 'test-secret';
+        if (key === 'app.oidcIssuerUrl') return 'http://localhost:3000';
+        return 'test-value';
+      }),
     };
 
     const mockJwtService = {
@@ -41,6 +48,14 @@ describe('OidcController', () => {
         {
           provide: JwtService,
           useValue: mockJwtService,
+        },
+        {
+          provide: TempAuthCodeService,
+          useValue: {
+            generateAuthCode: jest.fn().mockResolvedValue('mock-auth-code'),
+            validateAndConsumeAuthCode: jest.fn().mockResolvedValue(null),
+            getActiveCodeCount: jest.fn().mockResolvedValue(0),
+          },
         },
       ],
     }).compile();
@@ -272,13 +287,20 @@ describe('OidcController', () => {
       nonce: 'test-nonce',
     };
 
-    it('should show login form for OIDC entry point', () => {
+    it('should show login form for OIDC entry point', async () => {
+      const mockRequest = {
+        cookies: {},
+        headers: {},
+        query: {},
+      } as any;
+
       const mockResponse = {
         setHeader: jest.fn(),
         send: jest.fn(),
       } as any;
 
-      void controller.showLoginForm(
+      await controller.showLoginForm(
+        mockRequest,
         mockResponse,
         loginParams.clientId,
         loginParams.redirectUri,
@@ -298,30 +320,44 @@ describe('OidcController', () => {
       expect(htmlContent).toContain(loginParams.clientId);
     });
 
-    it('should throw BadRequestException for missing required parameters', () => {
+    it('should throw BadRequestException for missing required parameters', async () => {
+      const mockRequest = {
+        cookies: {},
+        headers: {},
+        query: {},
+      } as any;
+
       const mockResponse = {
         setHeader: jest.fn(),
         send: jest.fn(),
       } as any;
 
-      expect(() => {
-        void controller.showLoginForm(
+      await expect(
+        controller.showLoginForm(
+          mockRequest,
           mockResponse,
           '', // missing client_id
           loginParams.redirectUri,
           loginParams.responseType,
           loginParams.scope,
-        );
-      }).toThrow(BadRequestException);
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
 
-    it('should handle optional state and nonce parameters', () => {
+    it('should handle optional state and nonce parameters', async () => {
+      const mockRequest = {
+        cookies: {},
+        headers: {},
+        query: {},
+      } as any;
+
       const mockResponse = {
         setHeader: jest.fn(),
         send: jest.fn(),
       } as any;
 
-      void controller.showLoginForm(
+      await controller.showLoginForm(
+        mockRequest,
         mockResponse,
         loginParams.clientId,
         loginParams.redirectUri,

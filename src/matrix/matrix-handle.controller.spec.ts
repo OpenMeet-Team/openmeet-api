@@ -8,6 +8,7 @@ import { MatrixMessageService } from './services/matrix-message.service';
 import { MatrixGateway } from './matrix.gateway';
 import { UserService } from '../user/user.service';
 import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
+import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
 
 describe('MatrixController - Handle Endpoints', () => {
   let controller: MatrixController;
@@ -80,6 +81,14 @@ describe('MatrixController - Handle Endpoints', () => {
         {
           provide: GlobalMatrixValidationService,
           useValue: mockGlobalValidationService,
+        },
+        {
+          provide: TempAuthCodeService,
+          useValue: {
+            generateAuthCode: jest.fn().mockResolvedValue('mock-auth-code'),
+            validateAndConsumeAuthCode: jest.fn().mockResolvedValue(null),
+            getActiveCodeCount: jest.fn().mockResolvedValue(0),
+          },
         },
         {
           provide: REQUEST,

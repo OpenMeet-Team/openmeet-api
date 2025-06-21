@@ -9,6 +9,7 @@ import { GlobalMatrixValidationService } from './services/global-matrix-validati
 import { ConfigService } from '@nestjs/config';
 import { REQUEST } from '@nestjs/core';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
 
 describe('MatrixController', () => {
   let controller: MatrixController;
@@ -123,6 +124,14 @@ describe('MatrixController', () => {
             suggestAvailableHandles: jest.fn().mockResolvedValue([]),
             unregisterMatrixHandle: jest.fn().mockResolvedValue(undefined),
             getMatrixHandleRegistration: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: TempAuthCodeService,
+          useValue: {
+            generateAuthCode: jest.fn().mockResolvedValue('mock-auth-code'),
+            validateAndConsumeAuthCode: jest.fn().mockResolvedValue(null),
+            getActiveCodeCount: jest.fn().mockResolvedValue(0),
           },
         },
         {
