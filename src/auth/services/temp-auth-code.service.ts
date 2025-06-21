@@ -81,10 +81,10 @@ export class TempAuthCodeService {
    * Get current number of active codes (for debugging)
    * Note: This is less efficient with Redis, so use sparingly
    */
-  async getActiveCodeCount(): Promise<number> {
+  getActiveCodeCount(): Promise<number> {
     // This would require scanning all keys matching pattern
     // For now, return -1 to indicate it's not efficiently available
     console.log('⚠️  Active code count not available with Redis storage');
-    return -1;
+    return Promise.resolve(-1);
   }
 }

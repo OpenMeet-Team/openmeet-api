@@ -693,8 +693,12 @@ export class MatrixController {
       // Get tenant ID from request context
       const tenantId = req['tenantId'];
       if (!tenantId) {
-        this.logger.error(`No tenant ID found in request context for user ${user.id}`);
-        throw new BadRequestException('Tenant ID is required - ensure you are authenticated with a valid session');
+        this.logger.error(
+          `No tenant ID found in request context for user ${user.id}`,
+        );
+        throw new BadRequestException(
+          'Tenant ID is required - ensure you are authenticated with a valid session',
+        );
       }
 
       // Validate user exists in the tenant
@@ -702,11 +706,17 @@ export class MatrixController {
         const userEntity = await this.userService.findById(user.id, tenantId);
         if (!userEntity) {
           this.logger.error(`User ${user.id} not found in tenant ${tenantId}`);
-          throw new BadRequestException('User not found in the specified tenant');
+          throw new BadRequestException(
+            'User not found in the specified tenant',
+          );
         }
       } catch (userError) {
-        this.logger.error(`Error validating user ${user.id} in tenant ${tenantId}: ${userError.message}`);
-        throw new BadRequestException('Unable to validate user in tenant context');
+        this.logger.error(
+          `Error validating user ${user.id} in tenant ${tenantId}: ${userError.message}`,
+        );
+        throw new BadRequestException(
+          'Unable to validate user in tenant context',
+        );
       }
 
       // Generate the temporary authentication code
@@ -733,11 +743,11 @@ export class MatrixController {
         `Error generating Matrix auth code for user ${user.id}: ${error.message}`,
         error.stack,
       );
-      
+
       // Log additional debugging information
       this.logger.debug(`Request headers: ${JSON.stringify(req.headers)}`);
       this.logger.debug(`Request tenant context: ${req['tenantId']}`);
-      
+
       throw error;
     }
   }

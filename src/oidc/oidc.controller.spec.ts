@@ -9,15 +9,6 @@ describe('OidcController', () => {
   let controller: OidcController;
   let mockOidcService: jest.Mocked<OidcService>;
 
-  const mockRequest = {
-    tenantId: 'tenant123',
-  };
-
-  const mockUser = {
-    id: 123,
-    slug: 'john-smith',
-  };
-
   beforeEach(async () => {
     mockOidcService = {
       getDiscoveryDocument: jest.fn(),
@@ -287,7 +278,7 @@ describe('OidcController', () => {
         send: jest.fn(),
       } as any;
 
-      controller.showLoginForm(
+      void controller.showLoginForm(
         mockResponse,
         loginParams.clientId,
         loginParams.redirectUri,
@@ -314,7 +305,7 @@ describe('OidcController', () => {
       } as any;
 
       expect(() => {
-        controller.showLoginForm(
+        void controller.showLoginForm(
           mockResponse,
           '', // missing client_id
           loginParams.redirectUri,
@@ -330,7 +321,7 @@ describe('OidcController', () => {
         send: jest.fn(),
       } as any;
 
-      controller.showLoginForm(
+      void controller.showLoginForm(
         mockResponse,
         loginParams.clientId,
         loginParams.redirectUri,

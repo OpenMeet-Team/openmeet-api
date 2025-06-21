@@ -22,7 +22,6 @@ import { JwtService } from '@nestjs/jwt';
 import { JwtPayloadType } from '../auth/strategies/types/jwt-payload.type';
 import { getTenantConfig, fetchTenants } from '../utils/tenant-config';
 import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
-import * as crypto from 'crypto';
 
 @ApiTags('OIDC')
 @Controller('oidc')
@@ -177,12 +176,20 @@ export class OidcController {
     if (!user) {
       console.log('🔐 OIDC Auth Debug - Checking session authentication...');
       try {
-        console.log('🔐 OIDC Auth Debug - Available cookies:', Object.keys(request.cookies || {}));
+        console.log(
+          '🔐 OIDC Auth Debug - Available cookies:',
+          Object.keys(request.cookies || {}),
+        );
         const sessionCookie = request.cookies?.['oidc_session'];
-        console.log('🔐 OIDC Auth Debug - OIDC session cookie value:', sessionCookie ? 'found' : 'not found');
+        console.log(
+          '🔐 OIDC Auth Debug - OIDC session cookie value:',
+          sessionCookie ? 'found' : 'not found',
+        );
         if (sessionCookie) {
-          console.log('🔐 OIDC Auth Debug - Session cookie found, scanning all tenants for authenticated user');
-          
+          console.log(
+            '🔐 OIDC Auth Debug - Session cookie found, scanning all tenants for authenticated user',
+          );
+
           const tenants = fetchTenants();
           for (const tenant of tenants) {
             if (!tenant.id) continue;
@@ -210,21 +217,28 @@ export class OidcController {
               );
             }
           }
-          
+
           if (!user) {
-            console.log('❌ OIDC Auth Debug - No authenticated user found in any tenant');
+            console.log(
+              '❌ OIDC Auth Debug - No authenticated user found in any tenant',
+            );
           }
         } else {
           console.log('❌ OIDC Auth Debug - No session cookie found');
         }
       } catch (error) {
-        console.log('🔐 OIDC Auth Debug - Session authentication error:', error.message);
+        console.log(
+          '🔐 OIDC Auth Debug - Session authentication error:',
+          error.message,
+        );
       }
     }
 
     // If no authenticated user, redirect to login
     if (!user) {
-      console.log('🔐 OIDC Auth Debug - No authenticated user found, redirecting to login flow');
+      console.log(
+        '🔐 OIDC Auth Debug - No authenticated user found, redirecting to login flow',
+      );
       const baseUrl =
         this.configService.get('app.oidcIssuerUrl', { infer: true }) ||
         'http://localhost:3000';
@@ -337,7 +351,7 @@ export class OidcController {
     }
 
     // Check for auth code in query parameter first
-    let authCodeToValidate = authCode;
+    const authCodeToValidate = authCode;
 
     // Skip state parameter parsing - Matrix corrupts the data and we use session auth instead
 
@@ -433,7 +447,7 @@ export class OidcController {
               tenantId,
             );
           }
-        } catch (error) {
+        } catch {
           console.log(
             '❌ Matrix Direct Auth - User not found in specified tenant:',
             tenantId,
@@ -464,7 +478,7 @@ export class OidcController {
               );
               break;
             }
-          } catch (error) {
+          } catch {
             // Continue to next tenant
           }
         }
@@ -629,12 +643,12 @@ export class OidcController {
                 user = { id: userFromSession.id };
                 break;
               }
-            } catch (error) {
+            } catch {
               // Continue to next tenant
             }
           }
         }
-      } catch (error) {
+      } catch {
         console.log('🔐 OIDC Login Debug - No session authentication found');
       }
     }
@@ -665,15 +679,16 @@ export class OidcController {
 
                 // Try to generate auth code for seamless flow
                 try {
-                  const authCode = await this.tempAuthCodeService.generateAuthCode(
-                    userFromSession.id,
-                    tenant.id,
-                  );
-                  
+                  const authCode =
+                    await this.tempAuthCodeService.generateAuthCode(
+                      userFromSession.id,
+                      tenant.id,
+                    );
+
                   console.log(
                     '✅ OIDC Login Debug - Generated auth code, redirecting directly to auth endpoint',
                   );
-                  
+
                   // Redirect directly to auth endpoint with auth code
                   const baseUrl =
                     this.configService.get('app.oidcIssuerUrl', {
@@ -700,7 +715,7 @@ export class OidcController {
                     '⚠️ OIDC Login Debug - Failed to generate auth code, falling back to platform flow:',
                     authCodeError.message,
                   );
-                  
+
                   // Fallback to platform-mediated flow
                   const baseUrl =
                     this.configService.get('app.oidcIssuerUrl', {
@@ -736,7 +751,7 @@ export class OidcController {
                   return;
                 }
               }
-            } catch (error) {
+            } catch {
               // Continue to next tenant
             }
           }
