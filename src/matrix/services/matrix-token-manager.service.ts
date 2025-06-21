@@ -96,18 +96,9 @@ export class MatrixTokenManagerService
   }
 
   async onModuleInit() {
-    this.logger.log('Initializing Matrix Token Manager');
+    this.logger.log('Initializing Matrix Token Manager (deferred mode)');
 
-    // Initial token generation if needed
-    if (!this.adminAccessToken) {
-      this.logger.log('No admin token provided, generating a new one');
-      await this.triggerAdminTokenRegeneration();
-    } else {
-      // Verify existing token
-      await this.verifyAdminToken();
-    }
-
-    // Set up background refresh (every 6 hours)
+    // Set up background refresh (every 6 hours) but don't start token generation yet
     this.tokenRefreshInterval = setInterval(
       () => {
         void this.periodicTokenRefresh();
@@ -115,7 +106,36 @@ export class MatrixTokenManagerService
       6 * 60 * 60 * 1000,
     );
 
-    this.logger.log('Matrix Token Manager initialized');
+    // Defer initial token generation to avoid blocking API startup
+    // Token will be generated when first needed or after delay
+    this.scheduleDelayedTokenInitialization();
+
+    this.logger.log('Matrix Token Manager initialized in deferred mode');
+  }
+
+  private scheduleDelayedTokenInitialization() {
+    // Try to initialize tokens after a delay, giving Matrix time to start
+    setTimeout(async () => {
+      this.logger.log('Attempting delayed token initialization...');
+      await this.initializeTokensIfNeeded();
+    }, 15000); // Wait 15 seconds for Matrix to start
+  }
+
+  private async initializeTokensIfNeeded() {
+    try {
+      // Initial token generation if needed
+      if (!this.adminAccessToken) {
+        this.logger.log('No admin token available, generating a new one');
+        await this.triggerAdminTokenRegeneration();
+      } else {
+        // Verify existing token
+        await this.verifyAdminToken();
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Delayed token initialization failed: ${error.message} - will retry when needed`
+      );
+    }
   }
 
   onModuleDestroy() {

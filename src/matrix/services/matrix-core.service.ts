@@ -104,20 +104,52 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit() {
     try {
-      // Dynamically import the matrix-js-sdk
+      // Only load the Matrix SDK during startup - defer actual connection
       await this.loadMatrixSdk();
+      
+      // Set up event listener for token updates
+      this.eventEmitter.on(
+        'matrix.admin.token.updated',
+        this.handleTokenUpdate.bind(this),
+      );
 
+      this.logger.log('Matrix core service loaded SDK and event listeners');
+      
+      // Defer actual Matrix connection to avoid blocking API startup
+      // This will be retried when Matrix functionality is first needed
+      this.scheduleDelayedInitialization();
+    } catch (error) {
+      this.logger.error(
+        `Failed to load Matrix SDK: ${error.message}`,
+        error.stack,
+      );
+      this.logger.error(
+        'Matrix functionality will not be available - application may still function with limited features',
+      );
+    }
+  }
+
+  private scheduleDelayedInitialization() {
+    // Try to initialize Matrix connection after a delay
+    // This gives Matrix server time to start up
+    setTimeout(async () => {
+      this.logger.log('Attempting delayed Matrix initialization...');
+      await this.initializeMatrixConnection();
+    }, 10000); // Wait 10 seconds for Matrix to start
+  }
+
+  private async initializeMatrixConnection(): Promise<boolean> {
+    try {
       // Get the admin token from the token manager
       this.adminAccessToken = this.tokenManager.getAdminToken();
 
       if (!this.adminAccessToken) {
-        this.logger.warn(
-          'No admin token available from token manager, waiting for regeneration',
-        );
+        this.logger.log('No admin token available, attempting to generate...');
         // Force token regeneration and wait for it to complete
         const success = await this.tokenManager.forceTokenRegeneration();
         if (!success) {
-          this.logger.error('Failed to generate initial admin token');
+          this.logger.warn('Failed to generate admin token - will retry later');
+          return false;
         } else {
           // Get the newly generated token
           this.adminAccessToken = this.tokenManager.getAdminToken();
@@ -130,26 +162,36 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       // Initialize client pool
       this.initializeClientPool();
 
-      // Set up event listener for token updates
-      this.eventEmitter.on(
-        'matrix.admin.token.updated',
-        this.handleTokenUpdate.bind(this),
-      );
-
       this.logger.log(
-        `Matrix core service initialized with admin user ${this.adminUserId}`,
+        `Matrix core service successfully connected with admin user ${this.adminUserId}`,
       );
+      return true;
     } catch (error) {
-      this.logger.error(
-        `Failed to initialize Matrix core service: ${error.message}`,
-        error.stack,
+      this.logger.warn(
+        `Matrix connection attempt failed: ${error.message} - will retry when needed`,
       );
-      this.logger.error(
-        'Matrix functionality will not be available - application may still function with limited features',
-      );
-      // Continue without throwing to allow the service to start
-      // But we won't create a mock SDK - real SDK is required
+      return false;
     }
+  }
+
+  /**
+   * Check if Matrix is ready for operations
+   */
+  public isMatrixReady(): boolean {
+    return !!(this.adminClient && this.clientPool && this.adminAccessToken);
+  }
+
+  /**
+   * Ensure Matrix is initialized before performing operations
+   * Will attempt to initialize if not ready
+   */
+  public async ensureMatrixReady(): Promise<boolean> {
+    if (this.isMatrixReady()) {
+      return true;
+    }
+
+    this.logger.log('Matrix not ready, attempting initialization...');
+    return await this.initializeMatrixConnection();
   }
 
   /**
