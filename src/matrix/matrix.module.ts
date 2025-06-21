@@ -8,6 +8,7 @@ import { UserService } from '../user/user.service';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { JwtModule } from '@nestjs/jwt';
 import { TenantModule } from '../tenant/tenant.module';
+import { AuthModule } from '../auth/auth.module';
 import { MatrixCoreService } from './services/matrix-core.service';
 import { MatrixUserService } from './services/matrix-user.service';
 import { MatrixRoomService } from './services/matrix-room.service';
@@ -28,6 +29,7 @@ configureMatrixLogging();
     ConfigModule.forFeature(matrixConfig),
     forwardRef(() => UserModule),
     TenantModule,
+    forwardRef(() => AuthModule),
     EventEmitterModule.forRoot({
       // Set wildcard to true to support event namespaces
       wildcard: true,

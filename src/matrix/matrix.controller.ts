@@ -28,6 +28,7 @@ import { MatrixGateway } from './matrix.gateway';
 import { MatrixPasswordDto } from './dto/matrix-password.dto';
 import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
 import { Trace } from '../utils/trace.decorator';
+import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
 
 @ApiTags('Matrix')
 @Controller({
@@ -43,6 +44,7 @@ export class MatrixController {
     private readonly matrixGateway: MatrixGateway,
     private readonly userService: UserService,
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
+    private readonly tempAuthCodeService: TempAuthCodeService,
     @Inject(REQUEST) private readonly request: any,
   ) {}
 
@@ -641,6 +643,101 @@ export class MatrixController {
         `Error testing broadcast: ${error.message}`,
         error.stack,
       );
+      throw error;
+    }
+  }
+
+  @ApiOperation({
+    summary: 'Generate a short-lived authentication code for Matrix SSO',
+    description:
+      'Creates a temporary authentication code that can be used for seamless Matrix OIDC authentication',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Authentication code generated successfully',
+    schema: {
+      properties: {
+        authCode: {
+          type: 'string',
+          example: 'a1b2c3d4e5f6...',
+        },
+        expiresIn: {
+          type: 'number',
+          example: 300,
+          description: 'Expiration time in seconds',
+        },
+        expiresAt: {
+          type: 'string',
+          example: '2025-06-19T20:45:00.000Z',
+          description: 'ISO timestamp when code expires',
+        },
+      },
+    },
+  })
+  @UseGuards(JWTAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('generate-auth-code')
+  @Trace('matrix.api.generateAuthCode')
+  async generateMatrixAuthCode(
+    @AuthUser() user: { id: number },
+    @Req() req: Request,
+  ): Promise<{
+    authCode: string;
+    expiresIn: number;
+    expiresAt: string;
+    fallbackUrl?: string;
+  }> {
+    this.logger.log(`Generating Matrix auth code for user ID: ${user.id}`);
+
+    try {
+      // Get tenant ID from request context
+      const tenantId = req['tenantId'];
+      if (!tenantId) {
+        this.logger.error(`No tenant ID found in request context for user ${user.id}`);
+        throw new BadRequestException('Tenant ID is required - ensure you are authenticated with a valid session');
+      }
+
+      // Validate user exists in the tenant
+      try {
+        const userEntity = await this.userService.findById(user.id, tenantId);
+        if (!userEntity) {
+          this.logger.error(`User ${user.id} not found in tenant ${tenantId}`);
+          throw new BadRequestException('User not found in the specified tenant');
+        }
+      } catch (userError) {
+        this.logger.error(`Error validating user ${user.id} in tenant ${tenantId}: ${userError.message}`);
+        throw new BadRequestException('Unable to validate user in tenant context');
+      }
+
+      // Generate the temporary authentication code
+      const authCode = await this.tempAuthCodeService.generateAuthCode(
+        user.id,
+        tenantId,
+      );
+
+      // Calculate expiration details (5 minutes from now)
+      const expiresIn = 5 * 60; // 5 minutes in seconds
+      const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+
+      this.logger.log(
+        `Matrix auth code generated successfully for user ${user.id}, tenant ${tenantId}, expires at ${expiresAt}`,
+      );
+
+      return {
+        authCode,
+        expiresIn,
+        expiresAt,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error generating Matrix auth code for user ${user.id}: ${error.message}`,
+        error.stack,
+      );
+      
+      // Log additional debugging information
+      this.logger.debug(`Request headers: ${JSON.stringify(req.headers)}`);
+      this.logger.debug(`Request tenant context: ${req['tenantId']}`);
+      
       throw error;
     }
   }

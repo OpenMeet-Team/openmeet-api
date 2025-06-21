@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { randomBytes } from 'crypto';
+import { ElastiCacheService } from '../../elasticache/elasticache.service';
 
 interface TempAuthData {
   userId: number;
@@ -9,23 +10,25 @@ interface TempAuthData {
 
 @Injectable()
 export class TempAuthCodeService {
-  private readonly authCodes = new Map<string, TempAuthData>();
-  private readonly CODE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+  private readonly CODE_EXPIRY_SECONDS = 5 * 60; // 5 minutes
+
+  constructor(private readonly elastiCacheService: ElastiCacheService) {}
 
   /**
    * Generate a temporary auth code for a user
    */
-  generateAuthCode(userId: number, tenantId: string): string {
+  async generateAuthCode(userId: number, tenantId: string): Promise<string> {
     const code = randomBytes(32).toString('hex');
+    const key = this.getRedisKey(code);
 
-    this.authCodes.set(code, {
+    const authData: TempAuthData = {
       userId,
       tenantId,
       createdAt: Date.now(),
-    });
+    };
 
-    // Clean up expired codes periodically
-    this.cleanupExpiredCodes();
+    // Store in Redis with TTL
+    await this.elastiCacheService.set(key, authData, this.CODE_EXPIRY_SECONDS);
 
     console.log(
       `🎫 Generated temp auth code for user ${userId}, tenant ${tenantId}: ${code.substring(0, 8)}...`,
@@ -36,55 +39,52 @@ export class TempAuthCodeService {
   /**
    * Validate and consume a temporary auth code
    */
-  validateAndConsumeAuthCode(code: string): TempAuthData | null {
-    const authData = this.authCodes.get(code);
+  async validateAndConsumeAuthCode(code: string): Promise<TempAuthData | null> {
+    const key = this.getRedisKey(code);
 
-    if (!authData) {
-      console.log(`❌ Auth code not found: ${code.substring(0, 8)}...`);
+    try {
+      const authData = await this.elastiCacheService.get<TempAuthData>(key);
+
+      if (!authData) {
+        console.log(`❌ Auth code not found: ${code.substring(0, 8)}...`);
+        return null;
+      }
+
+      // Check if expired (redundant with Redis TTL, but good for logging)
+      if (Date.now() - authData.createdAt > this.CODE_EXPIRY_SECONDS * 1000) {
+        console.log(`⏰ Auth code expired: ${code.substring(0, 8)}...`);
+        await this.elastiCacheService.del(key);
+        return null;
+      }
+
+      // Consume the code (delete it after use)
+      await this.elastiCacheService.del(key);
+      console.log(
+        `✅ Auth code validated and consumed for user ${authData.userId}, tenant ${authData.tenantId}`,
+      );
+
+      return authData;
+    } catch (error) {
+      console.error(`🚨 Error validating auth code: ${error.message}`);
       return null;
     }
-
-    // Check if expired
-    if (Date.now() - authData.createdAt > this.CODE_EXPIRY_MS) {
-      console.log(`⏰ Auth code expired: ${code.substring(0, 8)}...`);
-      this.authCodes.delete(code);
-      return null;
-    }
-
-    // Consume the code (delete it after use)
-    this.authCodes.delete(code);
-    console.log(
-      `✅ Auth code validated and consumed for user ${authData.userId}, tenant ${authData.tenantId}`,
-    );
-
-    return authData;
   }
 
   /**
-   * Clean up expired auth codes
+   * Get Redis key for auth code
    */
-  private cleanupExpiredCodes(): void {
-    const now = Date.now();
-    const toDelete: string[] = [];
-
-    for (const [code, data] of this.authCodes.entries()) {
-      if (now - data.createdAt > this.CODE_EXPIRY_MS) {
-        toDelete.push(code);
-      }
-    }
-
-    toDelete.forEach((code) => this.authCodes.delete(code));
-
-    if (toDelete.length > 0) {
-      console.log(`🧹 Cleaned up ${toDelete.length} expired auth codes`);
-    }
+  private getRedisKey(code: string): string {
+    return `matrix_auth_code:${code}`;
   }
 
   /**
    * Get current number of active codes (for debugging)
+   * Note: This is less efficient with Redis, so use sparingly
    */
-  getActiveCodeCount(): number {
-    this.cleanupExpiredCodes();
-    return this.authCodes.size;
+  async getActiveCodeCount(): Promise<number> {
+    // This would require scanning all keys matching pattern
+    // For now, return -1 to indicate it's not efficiently available
+    console.log('⚠️  Active code count not available with Redis storage');
+    return -1;
   }
 }

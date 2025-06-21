@@ -18,6 +18,7 @@ import { CategoryModule } from '../category/category.module';
 import { AuthBlueskyModule } from '../auth-bluesky/auth-bluesky.module';
 import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
 import { TempAuthCodeService } from './services/temp-auth-code.service';
+import { ElastiCacheModule } from '../elasticache/elasticache.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { TempAuthCodeService } from './services/temp-auth-code.service';
     JwtModule.register({}),
     forwardRef(() => AuthBlueskyModule),
     forwardRef(() => ShadowAccountModule),
+    ElastiCacheModule,
   ],
   controllers: [AuthController],
   providers: [
