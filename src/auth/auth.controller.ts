@@ -10,7 +10,9 @@ import {
   Patch,
   Delete,
   SerializeOptions,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { AuthService } from './auth.service';
 import {
   ApiBearerAuth,
@@ -56,8 +58,20 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   public async login(
     @Body() loginDto: AuthEmailLoginDto,
+    @Res({ passthrough: true }) response: Response,
   ): Promise<LoginResponseDto> {
     const loginResult = await this.service.validateLogin(loginDto);
+
+    // Set oidc_session cookie for cross-domain OIDC authentication
+    if (loginResult.sessionId) {
+      response.cookie('oidc_session', loginResult.sessionId, {
+        domain: '.openmeet.net', // Cross-subdomain sharing
+        secure: true, // HTTPS only
+        sameSite: 'lax', // Allow cross-site requests
+        httpOnly: true, // Security
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      });
+    }
 
     return loginResult;
   }
@@ -70,10 +84,24 @@ export class AuthController {
     type: LoginResponseDto,
   })
   @HttpCode(HttpStatus.OK)
-  public adminLogin(
+  public async adminLogin(
     @Body() loginDto: AuthEmailLoginDto,
+    @Res({ passthrough: true }) response: Response,
   ): Promise<LoginResponseDto> {
-    return this.service.validateLogin(loginDto);
+    const loginResult = await this.service.validateLogin(loginDto);
+
+    // Set oidc_session cookie for cross-domain OIDC authentication
+    if (loginResult.sessionId) {
+      response.cookie('oidc_session', loginResult.sessionId, {
+        domain: '.openmeet.net', // Cross-subdomain sharing
+        secure: true, // HTTPS only
+        sameSite: 'lax', // Allow cross-site requests
+        httpOnly: true, // Security
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      });
+    }
+
+    return loginResult;
   }
 
   @Post('email/register')
@@ -83,10 +111,24 @@ export class AuthController {
     type: LoginResponseDto,
   })
   @HttpCode(HttpStatus.CREATED)
-  public register(
+  public async register(
     @Body() createUserDto: AuthRegisterLoginDto,
+    @Res({ passthrough: true }) response: Response,
   ): Promise<LoginResponseDto> {
-    return this.service.register(createUserDto);
+    const loginResult = await this.service.register(createUserDto);
+
+    // Set oidc_session cookie for cross-domain OIDC authentication
+    if (loginResult.sessionId) {
+      response.cookie('oidc_session', loginResult.sessionId, {
+        domain: '.openmeet.net', // Cross-subdomain sharing
+        secure: true, // HTTPS only
+        sameSite: 'lax', // Allow cross-site requests
+        httpOnly: true, // Security
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      });
+    }
+
+    return loginResult;
   }
 
   @Post('email/confirm')

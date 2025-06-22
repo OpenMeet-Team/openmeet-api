@@ -167,11 +167,11 @@ describe('MatrixCoreService', () => {
 
       // Verify SDK was loaded (but not that client was created immediately)
       expect(loadMatrixSdkSpy).toHaveBeenCalled();
-      
+
       // Verify event listener was set up for token updates
       expect(eventEmitterOnSpy).toHaveBeenCalledWith(
         'matrix.admin.token.updated',
-        expect.any(Function)
+        expect.any(Function),
       );
 
       // Verify delayed initialization was scheduled (we can't easily test the timeout)

@@ -106,7 +106,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     try {
       // Only load the Matrix SDK during startup - defer actual connection
       await this.loadMatrixSdk();
-      
+
       // Set up event listener for token updates
       this.eventEmitter.on(
         'matrix.admin.token.updated',
@@ -114,7 +114,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       );
 
       this.logger.log('Matrix core service loaded SDK and event listeners');
-      
+
       // Defer actual Matrix connection to avoid blocking API startup
       // This will be retried when Matrix functionality is first needed
       this.scheduleDelayedInitialization();

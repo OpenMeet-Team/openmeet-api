@@ -341,13 +341,15 @@ export class MatrixUserService
    */
   async createUser(options: CreateUserOptions): Promise<MatrixUserInfo> {
     const { username, password, displayName, adminUser = false } = options;
-    
+
     // Ensure Matrix is ready before attempting operations
     const isReady = await this.matrixCoreService.ensureMatrixReady();
     if (!isReady) {
-      throw new Error('Matrix server is not available. Please try again later.');
+      throw new Error(
+        'Matrix server is not available. Please try again later.',
+      );
     }
-    
+
     const config = this.matrixCoreService.getConfig();
 
     this.logger.debug('Creating Matrix user:', {

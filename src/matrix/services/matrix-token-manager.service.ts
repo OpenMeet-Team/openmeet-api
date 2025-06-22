@@ -133,7 +133,7 @@ export class MatrixTokenManagerService
       }
     } catch (error) {
       this.logger.warn(
-        `Delayed token initialization failed: ${error.message} - will retry when needed`
+        `Delayed token initialization failed: ${error.message} - will retry when needed`,
       );
     }
   }
