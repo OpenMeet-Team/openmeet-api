@@ -131,7 +131,7 @@ export class AuthService {
       token,
       tokenExpires,
       user,
-      sessionId: session.id.toString(),
+      sessionId: hash, // Use session hash for cookie, not session ID
     };
   }
 
@@ -215,7 +215,7 @@ export class AuthService {
       token,
       tokenExpires,
       user,
-      sessionId: session.id.toString(),
+      sessionId: hash, // Use session hash for cookie, not session ID
     };
   }
 
@@ -262,7 +262,7 @@ export class AuthService {
       role: user.role,
       slug: user.slug,
       sessionId: session.id,
-      hash,
+      hash: sessionHash,
     });
 
     const createdUser = await this.userService.findById(user.id);
@@ -283,7 +283,7 @@ export class AuthService {
       token,
       tokenExpires,
       user: createdUser,
-      sessionId: session.id.toString(),
+      sessionId: sessionHash, // Use session hash for cookie, not session ID
     };
   }
 

@@ -159,7 +159,7 @@ export class OidcService {
    */
   @Trace('oidc.getUserFromSession')
   async getUserFromSession(
-    sessionId: string | number,
+    sessionHash: string,
     tenantId?: string,
   ): Promise<{ id: number; tenantId: string } | null> {
     try {
@@ -169,7 +169,7 @@ export class OidcService {
           await this.tenantConnectionService.getTenantConnection(tenantId);
         const sessionRepository = dataSource.getRepository(SessionEntity);
         const session = await sessionRepository.findOne({
-          where: { id: Number(sessionId) },
+          where: { hash: sessionHash },
           relations: ['user'],
         });
 
@@ -189,7 +189,7 @@ export class OidcService {
             await this.tenantConnectionService.getTenantConnection(tenant.id);
           const sessionRepository = dataSource.getRepository(SessionEntity);
           const session = await sessionRepository.findOne({
-            where: { id: Number(sessionId) },
+            where: { hash: sessionHash },
             relations: ['user'],
           });
 
