@@ -81,6 +81,7 @@ export class OidcController {
     @Query('scope') scope: string,
     @Query('state') state?: string,
     @Query('nonce') nonce?: string,
+    @Query('auth_code') authCode?: string,
   ) {
     console.log('🔐 OIDC Auth Debug - Authorization endpoint called');
     console.log('  - Client ID:', clientId);
@@ -108,6 +109,30 @@ export class OidcController {
       null;
 
     console.log('🔐 OIDC Auth Debug - Checking for user authentication...');
+
+    // Check for auth code (highest priority for seamless authentication)
+    if (!user && authCode) {
+      console.log(
+        '🔐 OIDC Auth Debug - Found auth_code in query parameters, validating...',
+      );
+      try {
+        const validatedUser =
+          await this.tempAuthCodeService.validateAndConsumeAuthCode(authCode);
+        if (validatedUser) {
+          console.log(
+            '✅ OIDC Auth Debug - Valid auth code, user ID:',
+            validatedUser.userId,
+          );
+          user = { id: validatedUser.userId };
+          tenantId = validatedUser.tenantId;
+        }
+      } catch (error) {
+        console.error(
+          '❌ OIDC Auth Debug - Auth code validation failed:',
+          error.message,
+        );
+      }
+    }
 
     // Check for user token in query parameters (sent by frontend after login)
     if (!user) {
