@@ -367,7 +367,10 @@ export class OidcService {
   // eslint-disable-next-line @typescript-eslint/require-await
   async getUserInfo(accessToken: string): Promise<OidcUserInfo> {
     try {
-      const payload = this.jwtService.verify(accessToken);
+      // Verify using the same RSA public key that was used to sign the token
+      const payload = jwt.verify(accessToken, this.rsaKeyPair.publicKey, {
+        algorithms: ['RS256'],
+      }) as OidcUserInfo;
       return payload;
     } catch {
       throw new UnauthorizedException('Invalid access token');
