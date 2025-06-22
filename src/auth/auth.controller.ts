@@ -64,13 +64,34 @@ export class AuthController {
 
     // Set oidc_session cookie for cross-domain OIDC authentication
     if (loginResult.sessionId) {
-      response.cookie('oidc_session', loginResult.sessionId, {
-        domain: '.openmeet.net', // Cross-subdomain sharing
-        secure: true, // HTTPS only
-        sameSite: 'lax', // Allow cross-site requests
+      // Configure cookie domain based on environment
+      const isLocalhost = process.env.BACKEND_DOMAIN?.includes('localhost');
+      const isLocalDevWithSubdomain = process.env.BACKEND_DOMAIN?.includes(
+        'localdev.openmeet.net',
+      );
+      const cookieOptions = {
+        sameSite: 'lax' as const, // Allow cross-site requests
         httpOnly: true, // Security
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      });
+        ...(isLocalhost
+          ? {
+              // Pure localhost development - no domain restriction
+              secure: false, // HTTP for localhost
+            }
+          : isLocalDevWithSubdomain
+            ? {
+                // Local development with openmeet.net subdomain - use openmeet.net domain for cross-subdomain sharing
+                domain: '.openmeet.net',
+                secure: true, // HTTPS for localdev.openmeet.net
+              }
+            : {
+                // Production - cross-subdomain sharing
+                domain: '.openmeet.net',
+                secure: true, // HTTPS only
+              }),
+      };
+
+      response.cookie('oidc_session', loginResult.sessionId, cookieOptions);
     }
 
     return loginResult;
@@ -92,13 +113,34 @@ export class AuthController {
 
     // Set oidc_session cookie for cross-domain OIDC authentication
     if (loginResult.sessionId) {
-      response.cookie('oidc_session', loginResult.sessionId, {
-        domain: '.openmeet.net', // Cross-subdomain sharing
-        secure: true, // HTTPS only
-        sameSite: 'lax', // Allow cross-site requests
+      // Configure cookie domain based on environment
+      const isLocalhost = process.env.BACKEND_DOMAIN?.includes('localhost');
+      const isLocalDevWithSubdomain = process.env.BACKEND_DOMAIN?.includes(
+        'localdev.openmeet.net',
+      );
+      const cookieOptions = {
+        sameSite: 'lax' as const, // Allow cross-site requests
         httpOnly: true, // Security
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      });
+        ...(isLocalhost
+          ? {
+              // Pure localhost development - no domain restriction
+              secure: false, // HTTP for localhost
+            }
+          : isLocalDevWithSubdomain
+            ? {
+                // Local development with openmeet.net subdomain - use openmeet.net domain for cross-subdomain sharing
+                domain: '.openmeet.net',
+                secure: true, // HTTPS for localdev.openmeet.net
+              }
+            : {
+                // Production - cross-subdomain sharing
+                domain: '.openmeet.net',
+                secure: true, // HTTPS only
+              }),
+      };
+
+      response.cookie('oidc_session', loginResult.sessionId, cookieOptions);
     }
 
     return loginResult;
@@ -119,13 +161,34 @@ export class AuthController {
 
     // Set oidc_session cookie for cross-domain OIDC authentication
     if (loginResult.sessionId) {
-      response.cookie('oidc_session', loginResult.sessionId, {
-        domain: '.openmeet.net', // Cross-subdomain sharing
-        secure: true, // HTTPS only
-        sameSite: 'lax', // Allow cross-site requests
+      // Configure cookie domain based on environment
+      const isLocalhost = process.env.BACKEND_DOMAIN?.includes('localhost');
+      const isLocalDevWithSubdomain = process.env.BACKEND_DOMAIN?.includes(
+        'localdev.openmeet.net',
+      );
+      const cookieOptions = {
+        sameSite: 'lax' as const, // Allow cross-site requests
         httpOnly: true, // Security
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      });
+        ...(isLocalhost
+          ? {
+              // Pure localhost development - no domain restriction
+              secure: false, // HTTP for localhost
+            }
+          : isLocalDevWithSubdomain
+            ? {
+                // Local development with openmeet.net subdomain - use openmeet.net domain for cross-subdomain sharing
+                domain: '.openmeet.net',
+                secure: true, // HTTPS for localdev.openmeet.net
+              }
+            : {
+                // Production - cross-subdomain sharing
+                domain: '.openmeet.net',
+                secure: true, // HTTPS only
+              }),
+      };
+
+      response.cookie('oidc_session', loginResult.sessionId, cookieOptions);
     }
 
     return loginResult;
