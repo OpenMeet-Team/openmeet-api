@@ -6,6 +6,7 @@ import { OidcService } from './oidc.service';
 import { UserService } from '../../user/user.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { SessionService } from '../../session/session.service';
+import * as jwt from 'jsonwebtoken';
 
 describe('OidcService', () => {
   let service: OidcService;
@@ -263,7 +264,6 @@ describe('OidcService', () => {
 
   describe('getUserInfo', () => {
     it('should return user info from valid access token', async () => {
-      // Since getUserInfo uses the injected JwtService, we need to mock it
       const userInfo = {
         sub: 'john-smith',
         name: 'John Smith',
@@ -273,11 +273,15 @@ describe('OidcService', () => {
         tenant_id: 'tenant123',
       };
 
-      mockJwtService.verify.mockReturnValue(userInfo);
-      const result = await service.getUserInfo('valid-token');
+      // Create a real JWT token using the RSA key pair
+      const validToken = jwt.sign(userInfo, service['rsaKeyPair'].privateKey, {
+        algorithm: 'RS256',
+        expiresIn: '1h',
+      });
 
-      expect(result).toEqual(userInfo);
-      expect(mockJwtService.verify).toHaveBeenCalledWith('valid-token');
+      const result = await service.getUserInfo(validToken);
+
+      expect(result).toEqual(expect.objectContaining(userInfo));
     });
 
     it('should throw error for invalid access token', async () => {
