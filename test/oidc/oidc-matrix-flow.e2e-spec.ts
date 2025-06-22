@@ -16,7 +16,7 @@ describe('OIDC Matrix Authentication Flow', () => {
 
   beforeAll(async () => {
     jest.setTimeout(120000);
-    
+
     try {
       // Login as the main test user
       token = await loginAsTester();
@@ -128,7 +128,7 @@ describe('OIDC Matrix Authentication Flow', () => {
           state: 'test_state_123',
           nonce: 'test_nonce_456',
           auth_code: testAuthCode,
-          tenantId: TESTING_TENANT_ID
+          tenantId: TESTING_TENANT_ID,
         })
         .set('x-tenant-id', TESTING_TENANT_ID);
 
@@ -137,7 +137,9 @@ describe('OIDC Matrix Authentication Flow', () => {
 
       if (response.status >= 300) {
         // Check redirect location contains authorization code
-        expect(response.headers.location).toContain('_synapse/client/oidc/callback');
+        expect(response.headers.location).toContain(
+          '_synapse/client/oidc/callback',
+        );
         expect(response.headers.location).toContain('code=');
         expect(response.headers.location).toContain('state=test_state_123');
 
@@ -159,7 +161,7 @@ describe('OIDC Matrix Authentication Flow', () => {
           scope: 'openid profile email',
           state: 'test_state_123',
           auth_code: 'invalid_auth_code_12345',
-          tenantId: TESTING_TENANT_ID
+          tenantId: TESTING_TENANT_ID,
         })
         .set('x-tenant-id', TESTING_TENANT_ID);
 
@@ -167,7 +169,9 @@ describe('OIDC Matrix Authentication Flow', () => {
       if (response.status >= 300) {
         // If redirecting, should not be to Matrix callback (should be to login)
         if (response.headers.location) {
-          expect(response.headers.location).not.toContain('_synapse/client/oidc/callback');
+          expect(response.headers.location).not.toContain(
+            '_synapse/client/oidc/callback',
+          );
         }
       }
 
@@ -181,7 +185,7 @@ describe('OIDC Matrix Authentication Flow', () => {
         .query({
           redirect_uri: 'http://localhost:8448/_synapse/client/oidc/callback',
           response_type: 'code',
-          scope: 'openid'
+          scope: 'openid',
         })
         .set('x-tenant-id', TESTING_TENANT_ID)
         .expect(400);
@@ -192,7 +196,7 @@ describe('OIDC Matrix Authentication Flow', () => {
         .query({
           client_id: 'matrix_synapse',
           response_type: 'code',
-          scope: 'openid'
+          scope: 'openid',
         })
         .set('x-tenant-id', TESTING_TENANT_ID)
         .expect(400);
@@ -221,7 +225,7 @@ describe('OIDC Matrix Authentication Flow', () => {
             scope: 'openid profile email',
             state: 'test_state',
             auth_code: authCodeResponse.body.authCode,
-            tenantId: TESTING_TENANT_ID
+            tenantId: TESTING_TENANT_ID,
           })
           .set('x-tenant-id', TESTING_TENANT_ID);
 
@@ -235,7 +239,9 @@ describe('OIDC Matrix Authentication Flow', () => {
 
     it('should exchange authorization code for tokens: /api/oidc/token (POST)', async () => {
       if (!authorizationCode) {
-        console.log('⚠️ Skipping token exchange test - no authorization code available');
+        console.log(
+          '⚠️ Skipping token exchange test - no authorization code available',
+        );
         return;
       }
 
@@ -247,7 +253,7 @@ describe('OIDC Matrix Authentication Flow', () => {
           grant_type: 'authorization_code',
           code: authorizationCode,
           redirect_uri: 'http://localhost:8448/_synapse/client/oidc/callback',
-          client_id: 'matrix_synapse'
+          client_id: 'matrix_synapse',
         })
         .expect(200);
 
@@ -266,7 +272,9 @@ describe('OIDC Matrix Authentication Flow', () => {
 
     it('should provide valid userinfo with access token: /api/oidc/userinfo (GET)', async () => {
       if (!authorizationCode) {
-        console.log('⚠️ Skipping userinfo test - no authorization code available');
+        console.log(
+          '⚠️ Skipping userinfo test - no authorization code available',
+        );
         return;
       }
 
@@ -279,7 +287,7 @@ describe('OIDC Matrix Authentication Flow', () => {
           grant_type: 'authorization_code',
           code: authorizationCode,
           redirect_uri: 'http://localhost:8448/_synapse/client/oidc/callback',
-          client_id: 'matrix_synapse'
+          client_id: 'matrix_synapse',
         });
 
       if (tokenResponse.status !== 200) {
@@ -316,7 +324,7 @@ describe('OIDC Matrix Authentication Flow', () => {
         .expect(200);
 
       const duration = Date.now() - startTime;
-      
+
       // Should complete in under 1 second (no more 10s silent auth delay)
       expect(duration).toBeLessThan(1000);
 
@@ -342,7 +350,7 @@ describe('OIDC Matrix Authentication Flow', () => {
           scope: 'openid profile email',
           state: 'perf_test_state',
           auth_code: authCodeResponse.body.authCode,
-          tenantId: TESTING_TENANT_ID
+          tenantId: TESTING_TENANT_ID,
         })
         .set('x-tenant-id', TESTING_TENANT_ID);
 
