@@ -174,6 +174,17 @@ export class OidcService {
         });
 
         if (session && session.user && !session.deletedAt) {
+          // Validate session freshness (max 24 hours for OIDC sessions)
+          const sessionAge = Date.now() - session.createdAt.getTime();
+          const maxSessionAge = 24 * 60 * 60 * 1000; // 24 hours
+
+          if (sessionAge > maxSessionAge) {
+            this.logger.warn(
+              `OIDC session ${sessionId} expired (age: ${Math.round(sessionAge / 1000 / 60)} minutes)`,
+            );
+            return null;
+          }
+
           return {
             id: session.user.id,
             tenantId: tenantId,
@@ -194,6 +205,17 @@ export class OidcService {
           });
 
           if (session && session.user && !session.deletedAt) {
+            // Validate session freshness (max 24 hours for OIDC sessions)
+            const sessionAge = Date.now() - session.createdAt.getTime();
+            const maxSessionAge = 24 * 60 * 60 * 1000; // 24 hours
+
+            if (sessionAge > maxSessionAge) {
+              this.logger.warn(
+                `OIDC session ${sessionId} expired (age: ${Math.round(sessionAge / 1000 / 60)} minutes)`,
+              );
+              continue;
+            }
+
             return {
               id: session.user.id,
               tenantId: tenant.id,

@@ -5,6 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 import { OidcController } from './oidc.controller';
 import { OidcService } from './services/oidc.service';
 import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
+import { UserService } from '../user/user.service';
 
 describe('OidcController', () => {
   let controller: OidcController;
@@ -55,6 +56,17 @@ describe('OidcController', () => {
             generateAuthCode: jest.fn().mockResolvedValue('mock-auth-code'),
             validateAndConsumeAuthCode: jest.fn().mockResolvedValue(null),
             getActiveCodeCount: jest.fn().mockResolvedValue(0),
+          },
+        },
+        {
+          provide: UserService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              id: 1,
+              email: 'test@example.com',
+              firstName: 'Test',
+              lastName: 'User',
+            }),
           },
         },
       ],

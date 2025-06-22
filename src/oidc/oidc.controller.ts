@@ -22,6 +22,7 @@ import { JwtService } from '@nestjs/jwt';
 import { JwtPayloadType } from '../auth/strategies/types/jwt-payload.type';
 import { getTenantConfig, fetchTenants } from '../utils/tenant-config';
 import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
+import { UserService } from '../user/user.service';
 
 @ApiTags('OIDC')
 @Controller('oidc')
@@ -31,6 +32,7 @@ export class OidcController {
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
     private readonly tempAuthCodeService: TempAuthCodeService,
+    private readonly userService: UserService,
   ) {}
 
   @ApiOperation({
@@ -220,8 +222,17 @@ export class OidcController {
 
           if (!user) {
             console.log(
-              '❌ OIDC Auth Debug - No authenticated user found in any tenant',
+              '❌ OIDC Auth Debug - No authenticated user found in any tenant - clearing invalid session cookie',
             );
+            // Clear invalid oidc_session cookie
+            response.clearCookie('oidc_session', {
+              path: '/_synapse/client/oidc',
+              httpOnly: true,
+            });
+            response.clearCookie('oidc_session_no_samesite', {
+              path: '/_synapse/client/oidc',
+              httpOnly: true,
+            });
           }
         } else {
           console.log('❌ OIDC Auth Debug - No session cookie found');
@@ -262,6 +273,51 @@ export class OidcController {
       throw new UnauthorizedException(
         'User and tenant ID are required for authenticated users',
       );
+    }
+
+    // Validate user identity against login_hint if provided (security check)
+    const loginHint = request.query.login_hint as string;
+    if (loginHint) {
+      try {
+        const userEntity = await this.userService.findById(user.id, tenantId);
+
+        if (userEntity && userEntity.email !== loginHint) {
+          console.log(
+            `🚨 SECURITY WARNING: Session user email (${userEntity.email}) does not match login_hint (${loginHint}) - clearing session`,
+          );
+          // Clear invalid session cookies and redirect to login
+          response.clearCookie('oidc_session', {
+            path: '/_synapse/client/oidc',
+            httpOnly: true,
+          });
+          response.clearCookie('oidc_session_no_samesite', {
+            path: '/_synapse/client/oidc',
+            httpOnly: true,
+          });
+
+          const baseUrl =
+            this.configService.get('app.oidcIssuerUrl', { infer: true }) ||
+            'http://localhost:3000';
+          const oidcLoginUrl =
+            `${baseUrl}/api/oidc/login?` +
+            new URLSearchParams({
+              client_id: clientId,
+              redirect_uri: redirectUri,
+              response_type: responseType,
+              scope,
+              ...(state && { state }),
+              ...(nonce && { nonce }),
+            }).toString();
+
+          response.redirect(oidcLoginUrl);
+          return;
+        }
+      } catch (error) {
+        console.error(
+          'Error validating user identity against login_hint:',
+          error.message,
+        );
+      }
     }
 
     const result = this.oidcService.handleAuthorization(
