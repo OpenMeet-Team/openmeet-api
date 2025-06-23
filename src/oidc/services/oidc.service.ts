@@ -8,6 +8,7 @@ import { fetchTenants } from '../../utils/tenant-config';
 import { UserEntity } from '../../user/infrastructure/persistence/relational/entities/user.entity';
 import { SessionService } from '../../session/session.service';
 import { SessionEntity } from '../../session/infrastructure/persistence/relational/entities/session.entity';
+import { GlobalMatrixValidationService } from '../../matrix/services/global-matrix-validation.service';
 import * as crypto from 'crypto';
 import * as jwt from 'jsonwebtoken';
 
@@ -39,6 +40,7 @@ export class OidcService {
     private readonly userService: UserService,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly sessionService: SessionService,
+    private readonly globalMatrixValidationService: GlobalMatrixValidationService,
   ) {
     // Use persistent RSA key pair for RS256 signing
     this.rsaKeyPair = this.getOrGenerateRSAKeyPair();
@@ -336,7 +338,7 @@ export class OidcService {
     }
 
     // Generate tokens
-    const userInfo = this.mapUserToOidcClaims(user, authData.tenantId);
+    const userInfo = await this.mapUserToOidcClaims(user, authData.tenantId);
     console.log(
       '🔧 OIDC User Claims Debug:',
       JSON.stringify(userInfo, null, 2),
@@ -502,23 +504,42 @@ export class OidcService {
   /**
    * Map OpenMeet user to OIDC claims
    */
-  private mapUserToOidcClaims(user: any, tenantId: string): OidcUserInfo {
-    // Extract Matrix handle from matrixUserId if available
+  private async mapUserToOidcClaims(
+    user: any,
+    tenantId: string,
+  ): Promise<OidcUserInfo> {
+    // Get Matrix handle from global registry
     let matrixHandle = 'unknown';
-    if (user.matrixUserId) {
-      const match = user.matrixUserId.match(/@(.+):/);
-      if (match) {
-        matrixHandle = match[1];
+    try {
+      const registryEntry =
+        await this.globalMatrixValidationService.getMatrixHandleForUser(
+          user.id,
+          tenantId,
+        );
+
+      if (registryEntry) {
+        matrixHandle = registryEntry.handle;
+        console.log(
+          `🔧 OIDC Found Matrix handle for user ${user.id}: ${matrixHandle}`,
+        );
+      } else {
+        // No Matrix handle registered yet - will be created on first chat access
+        matrixHandle =
+          user.slug || user.email?.split('@')[0] || `user-${user.id}`;
+        // Ensure Matrix username compliance (lowercase, no special chars except -, _, .)
+        matrixHandle = matrixHandle.toLowerCase().replace(/[^a-z0-9._-]/g, '');
+        console.log(
+          `🔧 OIDC No Matrix handle found for user ${user.id}, suggesting: ${matrixHandle}`,
+        );
       }
-    } else {
-      // Auto-generate Matrix handle from user slug or email for OIDC provisioning
+    } catch (error) {
+      console.warn(
+        `🔧 OIDC Error getting Matrix handle for user ${user.id}: ${error.message}`,
+      );
+      // Fallback to generating from user data
       matrixHandle =
         user.slug || user.email?.split('@')[0] || `user-${user.id}`;
-      // Ensure Matrix username compliance (lowercase, no special chars except -, _, .)
       matrixHandle = matrixHandle.toLowerCase().replace(/[^a-z0-9._-]/g, '');
-      console.log(
-        `🔧 OIDC Auto-generated Matrix handle for user ${user.id}: ${matrixHandle}`,
-      );
     }
 
     const displayName =
