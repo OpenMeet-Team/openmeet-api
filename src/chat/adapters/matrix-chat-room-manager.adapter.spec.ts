@@ -10,6 +10,7 @@ import { GroupMemberService } from '../../group-member/group-member.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupService } from '../../group/group.service';
+import { GlobalMatrixValidationService } from '../../matrix/services/global-matrix-validation.service';
 import {
   ChatRoomEntity,
   ChatRoomType,
@@ -178,6 +179,16 @@ describe('MatrixChatRoomManagerAdapter', () => {
           provide: GroupService,
           useValue: {
             getGroupBySlug: jest.fn(),
+          },
+        },
+        {
+          provide: GlobalMatrixValidationService,
+          useValue: {
+            getMatrixHandleForUser: jest.fn().mockResolvedValue(null), // No registry entry, will fallback to legacy
+            getUserByMatrixHandle: jest.fn().mockResolvedValue(null),
+            isMatrixHandleUnique: jest.fn().mockResolvedValue(true),
+            registerMatrixHandle: jest.fn().mockResolvedValue(undefined),
+            suggestAvailableHandles: jest.fn().mockResolvedValue([]),
           },
         },
       ],

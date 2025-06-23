@@ -213,6 +213,8 @@ describe('MatrixGateway', () => {
             suggestAvailableHandles: jest.fn().mockResolvedValue([]),
             unregisterMatrixHandle: jest.fn().mockResolvedValue(undefined),
             getMatrixHandleRegistration: jest.fn().mockResolvedValue(null),
+            getMatrixHandleForUser: jest.fn().mockResolvedValue(null), // No registry entry, will fallback to legacy
+            getUserByMatrixHandle: jest.fn().mockResolvedValue(null),
           },
         },
       ],

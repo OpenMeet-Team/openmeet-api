@@ -236,9 +236,6 @@ describe('MatrixController - Handle Endpoints', () => {
       expect(mockUserService.update).toHaveBeenCalledWith(
         123,
         {
-          matrixUserId: '@john.smith:matrix.openmeet.net',
-          matrixAccessToken: 'access-token-123',
-          matrixDeviceId: 'device-123',
           preferences: {
             matrix: {
               connected: true,
@@ -342,9 +339,6 @@ describe('MatrixController - Handle Endpoints', () => {
       expect(mockUserService.update).toHaveBeenCalledWith(
         123,
         {
-          matrixUserId: '@john.smith:matrix.openmeet.net',
-          matrixAccessToken: 'access-token-123',
-          matrixDeviceId: 'device-123',
           preferences: {
             notifications: { email: true },
             theme: 'dark',

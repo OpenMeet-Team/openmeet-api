@@ -6,6 +6,7 @@ import { OidcService } from './oidc.service';
 import { UserService } from '../../user/user.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { SessionService } from '../../session/session.service';
+import { GlobalMatrixValidationService } from '../../matrix/services/global-matrix-validation.service';
 import * as jwt from 'jsonwebtoken';
 
 describe('OidcService', () => {
@@ -15,6 +16,7 @@ describe('OidcService', () => {
   let mockUserService: jest.Mocked<UserService>;
   let mockTenantConnectionService: jest.Mocked<TenantConnectionService>;
   let mockSessionService: jest.Mocked<SessionService>;
+  let mockGlobalMatrixValidationService: jest.Mocked<GlobalMatrixValidationService>;
 
   const mockUser = {
     id: 123,
@@ -47,6 +49,13 @@ describe('OidcService', () => {
       findOne: jest.fn(),
     } as any;
 
+    mockGlobalMatrixValidationService = {
+      getMatrixHandleForUser: jest.fn(),
+      isMatrixHandleUnique: jest.fn(),
+      registerMatrixHandle: jest.fn(),
+      suggestAvailableHandles: jest.fn(),
+    } as any;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OidcService,
@@ -69,6 +78,10 @@ describe('OidcService', () => {
         {
           provide: SessionService,
           useValue: mockSessionService,
+        },
+        {
+          provide: GlobalMatrixValidationService,
+          useValue: mockGlobalMatrixValidationService,
         },
       ],
     }).compile();
@@ -296,8 +309,23 @@ describe('OidcService', () => {
   });
 
   describe('user claim mapping', () => {
-    it('should map user with Matrix ID to OIDC claims', () => {
-      const userInfo = service['mapUserToOidcClaims'](mockUser, 'tenant123');
+    it('should map user with Matrix ID to OIDC claims', async () => {
+      // Mock registry to return handle for existing Matrix user
+      mockGlobalMatrixValidationService.getMatrixHandleForUser.mockResolvedValue(
+        {
+          id: 1,
+          handle: 'john.smith',
+          tenantId: 'tenant123',
+          userId: 123,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      );
+
+      const userInfo = await service['mapUserToOidcClaims'](
+        mockUser,
+        'tenant123',
+      );
 
       expect(userInfo).toEqual({
         sub: 'john-smith',
@@ -309,10 +337,15 @@ describe('OidcService', () => {
       });
     });
 
-    it('should handle user without Matrix ID', () => {
+    it('should handle user without Matrix ID', async () => {
       const userWithoutMatrix = { ...mockUser, matrixUserId: null };
 
-      const userInfo = service['mapUserToOidcClaims'](
+      // Mock registry to return null (no Matrix handle found)
+      mockGlobalMatrixValidationService.getMatrixHandleForUser.mockResolvedValue(
+        null,
+      );
+
+      const userInfo = await service['mapUserToOidcClaims'](
         userWithoutMatrix,
         'tenant123',
       );
@@ -321,8 +354,9 @@ describe('OidcService', () => {
       expect(userInfo.preferred_username).toBe('john-smith');
     });
 
-    it('should handle user with only email', () => {
+    it('should handle user with only email', async () => {
       const userWithOnlyEmail = {
+        id: 456,
         slug: 'user123',
         firstName: null,
         lastName: null,
@@ -330,7 +364,12 @@ describe('OidcService', () => {
         matrixUserId: null,
       };
 
-      const userInfo = service['mapUserToOidcClaims'](
+      // Mock registry to return null (no Matrix handle found)
+      mockGlobalMatrixValidationService.getMatrixHandleForUser.mockResolvedValue(
+        null,
+      );
+
+      const userInfo = await service['mapUserToOidcClaims'](
         userWithOnlyEmail,
         'tenant123',
       );
@@ -339,8 +378,9 @@ describe('OidcService', () => {
       expect(userInfo.sub).toBe('user123');
     });
 
-    it('should use slug as fallback name', () => {
+    it('should use slug as fallback name', async () => {
       const userWithSlugOnly = {
+        id: 789,
         slug: 'fallback-user',
         firstName: null,
         lastName: null,
@@ -348,7 +388,12 @@ describe('OidcService', () => {
         matrixUserId: null,
       };
 
-      const userInfo = service['mapUserToOidcClaims'](
+      // Mock registry to return null (no Matrix handle found)
+      mockGlobalMatrixValidationService.getMatrixHandleForUser.mockResolvedValue(
+        null,
+      );
+
+      const userInfo = await service['mapUserToOidcClaims'](
         userWithSlugOnly,
         'tenant123',
       );

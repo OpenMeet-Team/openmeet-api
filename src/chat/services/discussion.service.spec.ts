@@ -8,6 +8,7 @@ import { ChatRoomService } from '../rooms/chat-room.service';
 import { UserService } from '../../user/user.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { GroupVisibility } from '../../core/constants/constant';
+import { GlobalMatrixValidationService } from '../../matrix/services/global-matrix-validation.service';
 
 // Mock services
 const mockGroupService = {
@@ -94,6 +95,16 @@ describe('DiscussionService', () => {
         {
           provide: REQUEST,
           useValue: mockRequest,
+        },
+        {
+          provide: GlobalMatrixValidationService,
+          useValue: {
+            getMatrixHandleForUser: jest.fn(),
+            getUserByMatrixHandle: jest.fn(),
+            isMatrixHandleUnique: jest.fn(),
+            registerMatrixHandle: jest.fn(),
+            suggestAvailableHandles: jest.fn(),
+          },
         },
       ],
     }).compile();

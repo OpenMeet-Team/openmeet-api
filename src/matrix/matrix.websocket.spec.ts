@@ -8,6 +8,7 @@ import { MatrixMessageService } from './services/matrix-message.service';
 import { MatrixGateway } from './matrix.gateway';
 import { JwtService } from '@nestjs/jwt';
 import { ModuleRef } from '@nestjs/core';
+import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
 
 // Mock the socket.io Socket
 class MockSocket {
@@ -113,6 +114,16 @@ describe('MatrixGateway WebSocket Integration', () => {
           provide: ModuleRef,
           useValue: {
             resolve: jest.fn(),
+          },
+        },
+        {
+          provide: GlobalMatrixValidationService,
+          useValue: {
+            getMatrixHandleForUser: jest.fn().mockResolvedValue(null), // No registry entry, will fallback to legacy
+            getUserByMatrixHandle: jest.fn().mockResolvedValue(null),
+            isMatrixHandleUnique: jest.fn().mockResolvedValue(true),
+            registerMatrixHandle: jest.fn().mockResolvedValue(undefined),
+            suggestAvailableHandles: jest.fn().mockResolvedValue([]),
           },
         },
       ],

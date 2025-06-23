@@ -15,6 +15,7 @@ describe('MatrixController', () => {
   let controller: MatrixController;
   let matrixUserService: MatrixUserService;
   let userService: UserService;
+  let globalMatrixValidationService: GlobalMatrixValidationService;
 
   // Mock data
   const mockUser = {
@@ -146,6 +147,9 @@ describe('MatrixController', () => {
     controller = module.get<MatrixController>(MatrixController);
     matrixUserService = module.get<MatrixUserService>(MatrixUserService);
     userService = module.get<UserService>(UserService);
+    globalMatrixValidationService = module.get<GlobalMatrixValidationService>(
+      GlobalMatrixValidationService,
+    );
   });
 
   it('should be defined', () => {
@@ -186,12 +190,17 @@ describe('MatrixController', () => {
         'test-tenant',
       );
 
+      expect(
+        globalMatrixValidationService.registerMatrixHandle,
+      ).toHaveBeenCalledWith(
+        'om_test123', // handle extracted from Matrix user ID
+        'test-tenant',
+        mockUser.id,
+      );
+
       expect(userService.update).toHaveBeenCalledWith(
         mockUser.id,
         {
-          matrixUserId: mockMatrixUserInfo.userId,
-          matrixAccessToken: mockMatrixUserInfo.accessToken,
-          matrixDeviceId: mockMatrixUserInfo.deviceId,
           preferences: {
             matrix: {
               connected: true,
