@@ -39,6 +39,7 @@ database:
 
 ## Media store configuration
 media_store_path: /data/media
+max_upload_size: 300M
 
 ## Data directory
 data_dir: /data
