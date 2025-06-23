@@ -21,6 +21,7 @@ import { TenantConnectionService } from '../../tenant/tenant.service';
 import { Trace } from '../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
 import { DiscussionMessagesResponseDto } from '../dto/discussion-message.dto';
+import { GlobalMatrixValidationService } from '../../matrix/services/global-matrix-validation.service';
 
 /**
  * Service for handling discussions across different entities (events, groups, direct messages)
@@ -42,6 +43,7 @@ export class DiscussionService implements DiscussionServiceInterface {
     private readonly chatProvider: ChatProviderInterface,
     @Inject('ChatRoomManagerInterface')
     private readonly chatRoomManager: ChatRoomManagerInterface,
+    private readonly globalMatrixValidationService: GlobalMatrixValidationService,
   ) {}
 
   /**
@@ -537,8 +539,46 @@ export class DiscussionService implements DiscussionServiceInterface {
       throw new Error(`User with id ${userId} not found`);
     }
 
+    // Check if user has Matrix credentials via registry first
+    let hasMatrixCredentials = false;
+    let matrixUserId: string | null = null;
+
+    try {
+      const registryEntry =
+        await this.globalMatrixValidationService.getMatrixHandleForUser(
+          userId,
+          tenantId,
+        );
+      if (registryEntry) {
+        const serverName = process.env.MATRIX_SERVER_NAME;
+        if (!serverName) {
+          throw new Error(
+            'MATRIX_SERVER_NAME environment variable is required',
+          );
+        }
+        matrixUserId = `@${registryEntry.handle}:${serverName}`;
+        hasMatrixCredentials = true;
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Error checking Matrix registry for user ${userId}: ${error.message}`,
+      );
+    }
+
+    // Fallback to legacy field check if registry lookup failed
+    if (!hasMatrixCredentials) {
+      hasMatrixCredentials = !!(
+        user.matrixUserId &&
+        user.matrixAccessToken &&
+        user.matrixDeviceId
+      );
+      if (hasMatrixCredentials) {
+        matrixUserId = user.matrixUserId || null;
+      }
+    }
+
     // If user already has Matrix credentials, return the user
-    if (user.matrixUserId && user.matrixAccessToken && user.matrixDeviceId) {
+    if (hasMatrixCredentials) {
       return user;
     }
 
@@ -567,7 +607,24 @@ export class DiscussionService implements DiscussionServiceInterface {
         displayName: displayName || username,
       });
 
-      // Update user with Matrix credentials
+      // Extract handle from Matrix user ID and register in global registry
+      const handleMatch = matrixUserInfo.userId.match(/^@([^:]+):/);
+      if (handleMatch) {
+        const handle = handleMatch[1];
+        try {
+          await this.globalMatrixValidationService.registerMatrixHandle(
+            handle,
+            tenantId,
+            userId,
+          );
+        } catch (registryError) {
+          this.logger.warn(
+            `Failed to register Matrix handle in registry: ${registryError.message}`,
+          );
+        }
+      }
+
+      // Update user with Matrix credentials (legacy fields for backward compatibility)
       await this.userService.update(userId, {
         matrixUserId: matrixUserInfo.userId,
         matrixAccessToken: matrixUserInfo.accessToken,
@@ -581,7 +638,7 @@ export class DiscussionService implements DiscussionServiceInterface {
       }
 
       this.logger.log(
-        `Successfully provisioned Matrix user for ${userId}: ${user.matrixUserId}`,
+        `Successfully provisioned Matrix user for ${userId}: ${matrixUserInfo.userId}`,
       );
     } catch (error) {
       this.logger.error(
@@ -595,13 +652,25 @@ export class DiscussionService implements DiscussionServiceInterface {
 
     // Start a Matrix client for the user
     try {
-      if (!user.matrixUserId || !user.matrixAccessToken) {
-        throw new Error('Matrix credentials missing after provisioning');
+      // Get the updated Matrix user ID (either from registry or legacy field)
+      let finalMatrixUserId: string | null = matrixUserId;
+      if (!finalMatrixUserId) {
+        // Re-fetch to get the updated user
+        const updatedUser = await this.userService.findById(userId, tenantId);
+        if (!updatedUser?.matrixUserId || !updatedUser?.matrixAccessToken) {
+          throw new Error('Matrix credentials missing after provisioning');
+        }
+        finalMatrixUserId = updatedUser.matrixUserId;
+        user = updatedUser;
+      }
+
+      if (!finalMatrixUserId) {
+        throw new Error('Matrix user ID is required but not available');
       }
 
       await this.chatProvider.startClient({
-        userId: user.matrixUserId,
-        accessToken: user.matrixAccessToken,
+        userId: finalMatrixUserId,
+        accessToken: user.matrixAccessToken || '',
         deviceId: user.matrixDeviceId,
         tenantId, // Explicitly pass tenant ID to the Matrix client
       });
