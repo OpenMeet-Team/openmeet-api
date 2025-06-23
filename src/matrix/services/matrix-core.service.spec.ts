@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { MatrixCoreService } from './matrix-core.service';
-import axios from 'axios';
 import { Logger } from '@nestjs/common';
 import { MatrixTokenManagerService } from './matrix-token-manager.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';

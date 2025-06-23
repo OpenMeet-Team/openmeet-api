@@ -12,7 +12,6 @@ jest.setTimeout(60000);
 
 describe('OIDC Matrix Authentication Flow', () => {
   let token: string;
-  let authCode: string;
 
   beforeAll(async () => {
     jest.setTimeout(120000);
@@ -89,9 +88,6 @@ describe('OIDC Matrix Authentication Flow', () => {
       expect(response.body).toHaveProperty('expiresAt');
       expect(typeof response.body.authCode).toBe('string');
       expect(response.body.authCode.length).toBeGreaterThan(10);
-
-      // Store auth code for use in subsequent tests
-      authCode = response.body.authCode;
 
       console.log('✅ Matrix auth code generated successfully');
     });

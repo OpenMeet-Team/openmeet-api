@@ -95,7 +95,7 @@ export class MatrixTokenManagerService
     });
   }
 
-  async onModuleInit() {
+  onModuleInit() {
     this.logger.log('Initializing Matrix Token Manager (deferred mode)');
 
     // Set up background refresh (every 6 hours) but don't start token generation yet
