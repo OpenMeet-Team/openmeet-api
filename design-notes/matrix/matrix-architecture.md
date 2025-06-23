@@ -460,24 +460,383 @@ POST /internal/matrix/permissions
 - Third-party client support (Element, FluffyChat, etc.)
 **Status**: Approved - Implementation in progress
 
-### ADR-004: User-Chosen Matrix Handles
+### ADR-004: User-Chosen Matrix Handles - Multi-Phase Implementation
 **Decision**: Allow users to choose their own Matrix handles globally unique across all tenants
 **Rationale**: Provides clean, professional Matrix IDs that users can easily share and remember
+
 **Alternatives Considered**:
-- Tenant-prefixed usernames: `@user-slug_tenant123:matrix.openmeet.net` (clunky)
-- Email-based handles: `@john.doe.acme:matrix.openmeet.net` (exposes company info)
-- Tenant-specific domains: `@john.doe:acme.matrix.openmeet.net` (complex infrastructure)
+1. **Tenant-prefixed usernames**: `@user-slug_tenant123:matrix.openmeet.net` (clunky)
+2. **Email-based handles**: `@john.doe.acme:matrix.openmeet.net` (exposes company info)  
+3. **Virtual domains per tenant**: `@john.doe:tenant-abc.matrix.openmeet.net` (complex infrastructure)
+4. **Matrix application services**: `@_tenant_abc_john.doe:matrix.openmeet.net` (protocol-level support)
+5. **Separate Matrix servers**: Complete tenant isolation (high infrastructure cost)
+
+**Phased Implementation Strategy**:
+
+#### **Phase 1: Global Handle Registry (Current - Option 4)**
 **Implementation**:
-- Global uniqueness enforced via database constraints
-- User selection during account creation with real-time validation
+- Global uniqueness enforced via `matrixHandleRegistry` table
+- User selection during account creation with real-time validation  
 - Tenant isolation via room membership rather than username prefixes
 - Clean Matrix IDs: `@john.doe:matrix.openmeet.net`
+- Migration service to move from tenant-suffixed IDs to clean handles
+
+**Current Architecture**:
+```sql
+-- Global registry tracks handle ownership across tenants
+CREATE TABLE matrixHandleRegistry (
+  id SERIAL PRIMARY KEY,
+  handle VARCHAR(255) UNIQUE NOT NULL,
+  tenantId VARCHAR(255) NOT NULL,
+  userId INTEGER NOT NULL,
+  createdAt TIMESTAMP DEFAULT NOW()
+);
+```
+
+**OIDC Integration**:
+```typescript
+// Maps clean handles to Matrix authentication
+preferred_username: extractedMatrixHandle, // e.g., "john.doe"
+matrix_handle: extractedMatrixHandle,
+tenant_id: tenantId // For room access control
+```
+
 **Benefits**:
-- Professional, shareable Matrix identities
-- No exposure of internal tenant structure
-- Cross-tenant communication capability if needed
-- Better user experience in third-party Matrix clients
-**Status**: Approved - Implementation in progress
+- ✅ **Immediate clean handles** for users
+- ✅ **Works with existing infrastructure** (Docker, K8s)
+- ✅ **Simple local development** setup
+- ✅ **No DNS complexity** required
+- ✅ **Investment protection** of current OIDC work
+
+**Trade-offs**:
+- ❌ **Global handle conflicts** require resolution
+- ❌ **Complex migration logic** from old tenant-suffixed accounts
+- ❌ **Cross-tenant collision management** needed
+- ❌ **Additional database layer** for handle mapping
+
+#### **Phase 2: Virtual Domains (Future - Option 1)**
+**Future Implementation** (when infrastructure matures):
+```
+Tenant A: @john.doe:tenant-abc.matrix.openmeet.net
+Tenant B: @john.doe:tenant-xyz.matrix.openmeet.net
+```
+
+**Infrastructure Requirements**:
+- DNS: `*.matrix.openmeet.net` → Matrix server
+- Matrix virtual host configuration per tenant
+- OIDC issuer per tenant domain
+- Load balancer path-based routing
+
+**Migration Path Phase 1 → Phase 2**:
+1. **Add tenant domain fields** to user records
+2. **Implement domain-aware OIDC** mapping
+3. **Create virtual domain infrastructure** 
+4. **Migrate users gradually** to tenant domains
+5. **Deprecate global registry** when complete
+
+**Benefits of Virtual Domains**:
+- ✅ **Natural tenant isolation** - no registry needed
+- ✅ **Zero handle conflicts** - each tenant has own namespace  
+- ✅ **Standard Matrix behavior** - works with any client
+- ✅ **Better tenant privacy** - domains don't expose other tenants
+- ✅ **Simplified architecture** - eliminates global handle logic
+
+**Current Decision**: **Continue with Phase 1 (Global Registry), Plan for Phase 2 (Virtual Domains)**
+- **Short term**: Fix migration bugs and ship clean handles via global registry
+- **Medium term**: Optimize global registry performance and UX
+- **Long term**: Evaluate virtual domains when infrastructure team is ready
+
+**Status**: Phase 1 approved and in progress - Phase 2 planned for future evaluation
+
+### ADR-005: User-Selectable OpenMeet Slugs + Matrix Handle Synchronization
+**Decision**: Plan migration from auto-generated OpenMeet slugs to user-selectable slugs with optional Matrix handle sync
+
+**Current State Analysis**:
+- **OpenMeet Slugs**: Auto-generated (e.g., `david-jones-null-knhtj6`) - used in URLs, user mentions, unique identification
+- **Matrix Handles**: User-selectable via global registry (e.g., `david.jones`) - for Matrix chat identity
+- **No Synchronization**: OpenMeet slugs and Matrix handles are independent
+
+**User-Selectable Slugs Implementation Plan**:
+
+#### **Phase 1: Just-in-Time Matrix User Creation**
+**Current Implementation**: Matrix users created only when needed for chat functionality
+```typescript
+// Flow: User joins event with chat → Handle selection UI → Matrix account creation
+1. User registers OpenMeet account (auto-generated slug: "david-jones-null-knhtj6")
+2. User joins event with chat features
+3. Matrix handle selection UI: "Choose your Matrix handle: @______:matrix.openmeet.net"
+4. Global uniqueness validation via matrixHandleRegistry
+5. Matrix user created with chosen handle (e.g., "@david.jones:matrix.openmeet.net")
+```
+
+**Benefits**:
+- ✅ **Lower friction** - No Matrix concerns during OpenMeet registration
+- ✅ **Resource efficiency** - Matrix users only for chat participants
+- ✅ **Better UX** - Handle selection when contextually relevant
+- ✅ **Flexibility** - Users see real-time availability during selection
+
+#### **Phase 2: User-Selectable OpenMeet Slugs** 
+**Future Enhancement**: Allow users to choose their OpenMeet slug during registration
+```typescript
+// Enhanced registration flow
+1. User registration form includes optional "Choose your username: @______"
+2. Real-time validation against existing OpenMeet slugs
+3. Fallback to auto-generation if no choice made
+4. OpenMeet URLs use clean slugs: "/users/david.jones" vs "/users/david-jones-null-knhtj6"
+```
+
+**Registry Requirements Analysis**:
+
+**Option A: No OpenMeet Slug Registry (Recommended)**
+```sql
+-- Use existing unique constraint on users.slug 
+ALTER TABLE users ADD CONSTRAINT unique_slug_per_tenant UNIQUE(slug, tenantId);
+```
+**Rationale**: 
+- ✅ **Simpler architecture** - reuse existing database constraints
+- ✅ **Tenant isolation built-in** - slugs only unique within tenant
+- ✅ **Standard SQL performance** - indexed unique constraints
+- ✅ **No additional complexity** - no registry service needed
+
+**Option B: Separate OpenMeet Slug Registry**
+```sql
+-- Mirror Matrix handle registry pattern
+CREATE TABLE openMeetSlugRegistry (
+  id SERIAL PRIMARY KEY,
+  slug VARCHAR(255) UNIQUE NOT NULL,
+  tenantId VARCHAR(255) NOT NULL,
+  userId INTEGER NOT NULL
+);
+```
+**Trade-offs**:
+- ❌ **Added complexity** - duplicate tracking system
+- ❌ **Sync requirements** - keep registry + users table aligned
+- ⚠️ **Only needed for cross-tenant slug uniqueness** (questionable benefit)
+
+**Recommendation**: **Option A** - Use database constraints, not registry for OpenMeet slugs
+
+#### **Phase 3: OpenMeet Slug + Matrix Handle Sync Strategy**
+
+**Sync Options**:
+
+**Option 3A: Optional Sync (Recommended)**
+```typescript
+// User choice during Matrix handle selection
+if (matrixHandle === openMeetSlug) {
+  // User chose same handle for both systems
+  displayMessage: "Your Matrix handle matches your OpenMeet username!"
+} else {
+  // Different handles - show both clearly in UI
+  displayMessage: "OpenMeet: @david-jones | Matrix: @david.jones"
+}
+```
+
+**Option 3B: Automatic Sync**
+```typescript
+// Force Matrix handle to match OpenMeet slug
+const matrixHandle = user.slug; // No user choice
+await registerMatrixHandle(matrixHandle, tenantId, userId);
+```
+
+**Option 3C: Independent Systems**
+```typescript
+// Completely separate - no sync expectations
+// Users understand they have different identities in each system
+```
+
+**Recommendation**: **Option 3A (Optional Sync)** 
+- **Flexibility**: Users can choose same handle for consistency or different handles for privacy
+- **Clear UX**: Show both identities clearly when they differ
+- **Future-proof**: Allows for user preference changes
+
+#### **Implementation Timeline**:
+1. **Current**: Just-in-Time Matrix creation (✅ in progress)
+2. **Q2 2025**: User-selectable OpenMeet slugs during registration
+3. **Q3 2025**: Optional sync UI during Matrix handle selection
+4. **Future**: Advanced handle management (bulk changes, history, aliases)
+
+#### **Migration Considerations**:
+- **Existing Users**: Keep current auto-generated slugs, offer one-time change opportunity
+- **URL Stability**: Support both old and new slug formats during transition
+- **API Compatibility**: Maintain slug-based API endpoints with proper redirects
+
+**Status**: Planning phase - awaiting Phase 1 Matrix handle registry completion
+
+### ADR-006: Matrix Handle Migration for Existing Users
+**Decision**: Provide optional, user-driven migration from tenant-suffixed Matrix IDs to clean handles
+
+**Problem**: Existing Matrix users have tenant-suffixed handles (e.g., `@user-slug_tenant:matrix.openmeet.net`) but new users will get clean handles (e.g., `@user.chosen:matrix.openmeet.net`)
+
+**Matrix Technical Constraints**:
+- Matrix usernames are **immutable** after account creation
+- No built-in username change capability in Matrix specification
+- All data (messages, rooms, devices) tied to original User ID
+- Federation protocols assume stable User IDs
+
+**Migration Options Analysis**:
+
+#### **Option 1: Account Recreation (SELECTED)**
+```typescript
+// User-initiated migration process
+1. User requests clean handle in profile settings
+2. Clear warning about data loss implications  
+3. Create new Matrix account with chosen clean handle
+4. Update matrixHandleRegistry mapping
+5. Delete old Matrix account
+6. User must re-join rooms and loses history
+```
+
+**Trade-offs**:
+- ✅ **Clean handles available** for existing users
+- ✅ **User choice** and informed consent
+- ✅ **Registry consistency** maintained
+- ❌ **Message history lost** (Matrix limitation)
+- ❌ **Device verification reset** (Matrix limitation)
+- ❌ **Must re-join rooms** (Matrix limitation)
+
+#### **Option 2: Grandfathered Coexistence (Considered)**
+Keep existing tenant-suffixed IDs indefinitely while new users get clean handles.
+**Rejected**: Creates permanent inconsistent user experience and technical debt.
+
+#### **Option 3: Forced Migration (Rejected)**
+Automatically migrate all existing users to clean handles.
+**Rejected**: Data loss without user consent is unacceptable.
+
+**Implementation Plan**:
+
+#### **Phase 1: New Users Get Clean Handles (Current)**
+```typescript
+// Just-in-Time Matrix creation
+async function provisionMatrixUser(user, tenantId, userId) {
+  if (!hasExistingMatrixAccount(userId)) {
+    // New users: clean handle selection UI
+    const chosenHandle = await showHandleSelectionUI(user);
+    return await createMatrixUserWithHandle(chosenHandle);
+  } else {
+    // Existing users: continue using current Matrix credentials
+    return await getExistingMatrixCredentials(userId);
+  }
+}
+```
+
+#### **Phase 2: Migration UI for Existing Users (Q2 2025)**
+```typescript
+// User profile settings component
+<MatrixHandleMigrationCard>
+  <CurrentHandle>
+    @david-jones-null-knhtj6_lsdfaopkljdfs:matrix.openmeet.net
+  </CurrentHandle>
+  
+  <ProposedHandle>
+    @david.jones:matrix.openmeet.net
+  </ProposedHandle>
+  
+  <MigrationWarning>
+    ⚠️ Important: Migrating to a clean handle will:
+    • Permanently delete your Matrix chat history
+    • Remove you from all current chat rooms (you can re-join)
+    • Reset device verification and encryption keys
+    • Cannot be undone
+    
+    ✅ Benefits:
+    • Clean, professional Matrix handle
+    • Better compatibility with Matrix clients
+    • Easier to share and remember
+  </MigrationWarning>
+  
+  <HandleSelection>
+    <Input placeholder="Choose your new handle" onChange={validateHandle} />
+    <ValidationMessage>{handleValidation}</ValidationMessage>
+  </HandleSelection>
+  
+  <Actions>
+    <Button onClick={confirmMigration} disabled={!isValidHandle}>
+      I understand - Migrate to Clean Handle
+    </Button>
+    <Button onClick={dismissMigration}>
+      Keep Current Handle
+    </Button>
+  </Actions>
+</MatrixHandleMigrationCard>
+```
+
+#### **Phase 3: User-Driven Migration Service (Q3 2025)**
+```typescript
+// Backend migration service - ONLY triggered by explicit user request
+async function migrateUserMatrixHandle(
+  userId: number, 
+  tenantId: string, 
+  newHandle: string,
+  userConfirmation: boolean // Explicit user consent required
+) {
+  if (!userConfirmation) {
+    throw new Error('User confirmation required for Matrix handle migration');
+  }
+
+  // 1. Validate new handle availability
+  const isAvailable = await globalMatrixValidationService.isMatrixHandleUnique(newHandle);
+  if (!isAvailable) {
+    throw new Error(`Handle ${newHandle} is already taken`);
+  }
+
+  // 2. Create new Matrix account with clean handle
+  const newMatrixUser = await matrixUserService.createUser({
+    username: newHandle,
+    password: MatrixUserService.generateMatrixPassword(),
+    displayName: MatrixUserService.generateDisplayName(user)
+  });
+
+  // 3. Update handle registry (atomic operation)
+  await globalMatrixValidationService.registerMatrixHandle(newHandle, tenantId, userId);
+
+  // 4. Delete old Matrix account
+  const oldMatrixUserId = await getOldMatrixUserId(userId, tenantId);
+  await matrixUserService.deleteUser(oldMatrixUserId);
+
+  // 5. Clear cached Matrix credentials
+  await clearStoredMatrixCredentials(userId);
+
+  return {
+    newMatrixUserId: newMatrixUser.userId,
+    migrationComplete: true,
+    userMustRejoinRooms: true
+  };
+}
+```
+
+**Migration Safety Measures**:
+1. **Multiple Confirmation Steps**: User must confirm understanding of data loss
+2. **Handle Validation**: Real-time check for availability before migration
+3. **Atomic Operations**: Registry updates and account creation in transaction
+4. **Clear Communication**: Explicit warnings about limitations and data loss
+5. **User-Initiated Only**: No automated or scheduled migrations
+6. **Rollback Plan**: Unable to rollback due to Matrix limitations (communicated clearly)
+
+**User Communication Strategy**:
+- **Optional Migration**: Clearly communicate that migration is entirely optional
+- **Data Loss Warning**: Prominent, clear warnings about chat history loss
+- **Benefits Education**: Explain advantages of clean handles for user adoption
+- **Support Documentation**: Step-by-step migration guide with screenshots
+- **Success Metrics**: Track migration adoption and user satisfaction
+
+**Migration Timeline**:
+1. **Q1 2025**: New users get clean handles automatically (✅ current)
+2. **Q2 2025**: Add migration UI to user profile settings
+3. **Q3 2025**: Launch user-driven migration service with safety measures
+4. **Q4 2025**: Evaluate migration adoption and user feedback
+5. **2026**: Consider deprecation timeline for tenant-suffixed handles (if high adoption)
+
+**Success Criteria**:
+- Migration process completes successfully without data corruption
+- Users clearly understand data loss implications before migrating
+- Migration adoption rate indicates user value perception
+- No user complaints about unexpected data loss
+- Clean handle users report improved Matrix client experience
+
+**Rollback Strategy**:
+Due to Matrix technical limitations, there is **no rollback capability** once migration is complete. This must be clearly communicated to users as an irreversible decision.
+
+**Status**: Planned for implementation after Phase 1 Matrix handle registry completion
 
 ### ADR-005: Silent OIDC Authentication for Frontend Matrix Client
 **Decision**: Implement transparent OIDC authentication for Matrix JS SDK integration in the frontend
