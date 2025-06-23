@@ -7,6 +7,7 @@ import { UserModule } from '../user/user.module';
 import { TenantModule } from '../tenant/tenant.module';
 import { SessionModule } from '../session/session.module';
 import { AuthModule } from '../auth/auth.module';
+import { MatrixModule } from '../matrix/matrix.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { AuthModule } from '../auth/auth.module';
     TenantModule,
     SessionModule,
     AuthModule,
+    MatrixModule,
     JwtModule.register({
       global: true,
       secret: process.env.JWT_SECRET || 'secret',

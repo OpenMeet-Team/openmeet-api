@@ -20,9 +20,9 @@ import { ElastiCacheModule } from '../elasticache/elasticache.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([ChatRoomEntity]),
-    UserModule,
+    forwardRef(() => UserModule),
     TenantModule,
-    MatrixModule,
+    forwardRef(() => MatrixModule),
     ElastiCacheModule,
     forwardRef(() => EventModule),
     forwardRef(() => GroupModule),

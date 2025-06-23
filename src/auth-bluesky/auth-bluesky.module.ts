@@ -16,7 +16,7 @@ import { EventSeriesModule } from '../event-series/event-series.module';
     forwardRef(() => AuthModule),
     ElastiCacheModule,
     forwardRef(() => BlueskyModule),
-    UserModule,
+    forwardRef(() => UserModule),
     EventSeriesModule,
   ],
   controllers: [AuthBlueskyController],

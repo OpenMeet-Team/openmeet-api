@@ -15,7 +15,7 @@ import { UserModule } from '../user/user.module';
     TypeOrmModule.forFeature([EventSeriesEntity, EventEntity]),
     forwardRef(() => EventModule),
     TenantModule,
-    UserModule,
+    forwardRef(() => UserModule),
   ],
   controllers: [EventSeriesController],
   providers: [

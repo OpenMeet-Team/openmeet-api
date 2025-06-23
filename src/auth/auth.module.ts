@@ -22,7 +22,7 @@ import { ElastiCacheModule } from '../elasticache/elasticache.module';
 
 @Module({
   imports: [
-    UserModule,
+    forwardRef(() => UserModule),
     forwardRef(() => GroupModule),
     forwardRef(() => GroupMemberModule),
     forwardRef(() => EventModule),
