@@ -6,6 +6,7 @@ import { Socket } from 'socket.io';
 import { UserService } from '../../user/user.service';
 import { RoomMembershipManager } from './room-membership.helper';
 import { ModuleRef, ContextIdFactory } from '@nestjs/core';
+import { GlobalMatrixValidationService } from '../services/global-matrix-validation.service';
 
 /**
  * Handles WebSocket authentication for Matrix gateway
@@ -16,6 +17,7 @@ export class SocketAuthHandler {
   private configService: ConfigService;
   private moduleRef: ModuleRef;
   private roomMembershipManager: RoomMembershipManager;
+  private globalMatrixValidationService: GlobalMatrixValidationService;
 
   constructor(
     logger: Logger,
@@ -23,12 +25,14 @@ export class SocketAuthHandler {
     configService: ConfigService,
     moduleRef: ModuleRef,
     roomMembershipManager: RoomMembershipManager,
+    globalMatrixValidationService: GlobalMatrixValidationService,
   ) {
     this.logger = logger;
     this.jwtService = jwtService;
     this.configService = configService;
     this.moduleRef = moduleRef;
     this.roomMembershipManager = roomMembershipManager;
+    this.globalMatrixValidationService = globalMatrixValidationService;
   }
 
   /**
@@ -122,29 +126,60 @@ export class SocketAuthHandler {
 
           this.logger.debug(`Found user ${userId} in database`);
 
-          // Check if user has Matrix credentials (with proper whitespace handling)
-          const hasMatrixCredentials = !!(
-            user.matrixUserId?.trim() &&
-            user.matrixAccessToken?.trim() &&
-            user.matrixDeviceId?.trim()
-          );
+          // Check if user has Matrix credentials via registry or legacy fields
+          let hasMatrixCredentials = false;
+          let matrixUserId: string | null = null;
+
+          try {
+            const registryEntry =
+              await this.globalMatrixValidationService.getMatrixHandleForUser(
+                user.id,
+                tenantId,
+              );
+            if (registryEntry) {
+              const serverName = process.env.MATRIX_SERVER_NAME;
+              if (!serverName) {
+                throw new Error(
+                  'MATRIX_SERVER_NAME environment variable is required',
+                );
+              }
+              matrixUserId = `@${registryEntry.handle}:${serverName}`;
+              hasMatrixCredentials = true;
+            }
+          } catch (error) {
+            this.logger.warn(
+              `Error checking Matrix registry for user ${user.id}: ${error.message}`,
+            );
+          }
+
+          // Fallback to legacy fields if registry check failed
+          if (!hasMatrixCredentials) {
+            hasMatrixCredentials = !!(
+              user.matrixUserId?.trim() &&
+              user.matrixAccessToken?.trim() &&
+              user.matrixDeviceId?.trim()
+            );
+            if (hasMatrixCredentials) {
+              matrixUserId = user.matrixUserId || null;
+            }
+          }
 
           // Store minimal information in socket data
           socket.data.hasMatrixCredentials = hasMatrixCredentials;
 
           // We only store the Matrix user ID in the socket data, not sensitive credentials
-          if (hasMatrixCredentials) {
-            socket.data.matrixUserId = user.matrixUserId;
+          if (hasMatrixCredentials && matrixUserId) {
+            socket.data.matrixUserId = matrixUserId;
 
             // Store in our tracking maps for room subscriptions
             this.roomMembershipManager.registerSocket(
               socket.id,
               user.id,
-              user.matrixUserId,
+              matrixUserId,
             );
 
             this.logger.debug(
-              `User ${userId} has Matrix credentials (${user.matrixUserId})`,
+              `User ${userId} has Matrix credentials (${matrixUserId})`,
             );
           } else {
             this.logger.warn(

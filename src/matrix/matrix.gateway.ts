@@ -33,6 +33,7 @@ import {
   SocketAuthHandler,
   TypingManager,
 } from './helpers';
+import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
 
 @WebSocketGateway({
   namespace: '/matrix',
@@ -82,6 +83,7 @@ export class MatrixGateway
     private readonly moduleRef: ModuleRef,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly globalMatrixValidationService: GlobalMatrixValidationService,
   ) {
     // No logging here - logger will be initialized in afterInit
 
@@ -141,6 +143,7 @@ export class MatrixGateway
         this.configService,
         this.moduleRef,
         this.roomMembershipManager,
+        this.globalMatrixValidationService,
       );
 
       // Set up authentication middleware
@@ -196,14 +199,51 @@ export class MatrixGateway
         this.logger,
       );
 
-      // Set Matrix credentials in socket data if user has them
-      if (user.matrixUserId && user.matrixAccessToken) {
+      // Check Matrix credentials via registry first, then fallback to legacy fields
+      let matrixUserId: string | null = null;
+      let hasMatrixCredentials = false;
+
+      // Registry-first approach
+      try {
+        const registryEntry =
+          await this.globalMatrixValidationService.getMatrixHandleForUser(
+            user.id,
+            client.data.tenantId,
+          );
+        if (registryEntry) {
+          const serverName = process.env.MATRIX_SERVER_NAME;
+          if (!serverName) {
+            throw new Error(
+              'MATRIX_SERVER_NAME environment variable is required',
+            );
+          }
+          matrixUserId = `@${registryEntry.handle}:${serverName}`;
+          hasMatrixCredentials = true;
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Error checking Matrix registry for user ${user.id}: ${error.message}`,
+        );
+      }
+
+      // Fallback to legacy fields if registry lookup failed
+      if (
+        !hasMatrixCredentials &&
+        user.matrixUserId &&
+        user.matrixAccessToken
+      ) {
+        matrixUserId = user.matrixUserId;
+        hasMatrixCredentials = true;
+      }
+
+      // Set Matrix credentials in socket data
+      if (hasMatrixCredentials && matrixUserId) {
         client.data.hasMatrixCredentials = true;
-        client.data.matrixUserId = user.matrixUserId;
+        client.data.matrixUserId = matrixUserId;
         client.data.matrixAccessToken = user.matrixAccessToken;
         client.data.matrixDeviceId = user.matrixDeviceId;
         this.logger.debug(
-          `User ${client.data.userId} has Matrix credentials (${user.matrixUserId})`,
+          `User ${client.data.userId} has Matrix credentials (${matrixUserId})`,
         );
       } else {
         client.data.hasMatrixCredentials = false;
@@ -923,8 +963,40 @@ export class MatrixGateway
       this.logger,
     );
 
-    // Get user Matrix credentials
-    if (!user.matrixUserId || !user.matrixAccessToken) {
+    // Get user Matrix credentials via registry first
+    let matrixUserId: string | null = null;
+
+    // Registry-first approach
+    try {
+      if (!tenantId) {
+        throw new Error('Tenant ID is required for Matrix registry lookup');
+      }
+      const registryEntry =
+        await this.globalMatrixValidationService.getMatrixHandleForUser(
+          user.id,
+          tenantId,
+        );
+      if (registryEntry) {
+        const serverName = process.env.MATRIX_SERVER_NAME;
+        if (!serverName) {
+          throw new Error(
+            'MATRIX_SERVER_NAME environment variable is required',
+          );
+        }
+        matrixUserId = `@${registryEntry.handle}:${serverName}`;
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Error checking Matrix registry for user ${user.id}: ${error.message}`,
+      );
+    }
+
+    // Fallback to legacy field
+    if (!matrixUserId && user.matrixUserId) {
+      matrixUserId = user.matrixUserId;
+    }
+
+    if (!matrixUserId || !user.matrixAccessToken) {
       this.logger.error(
         `User ${user.id} missing Matrix credentials required to send messages`,
       );
@@ -935,7 +1007,7 @@ export class MatrixGateway
     let isTokenValid = false;
     try {
       isTokenValid = await this.matrixUserService.verifyAccessToken(
-        user.matrixUserId,
+        matrixUserId,
         user.matrixAccessToken,
       );
     } catch (error) {
@@ -950,9 +1022,8 @@ export class MatrixGateway
       );
 
       try {
-        const newToken = await this.matrixUserService.generateNewAccessToken(
-          user.matrixUserId,
-        );
+        const newToken =
+          await this.matrixUserService.generateNewAccessToken(matrixUserId);
         if (newToken) {
           this.logger.log(`Successfully regenerated token for user ${user.id}`);
 
@@ -1019,7 +1090,7 @@ export class MatrixGateway
     // Use the MatrixMessageService to send the message
     const eventId = await this.matrixMessageService.sendMessage({
       roomId: data.roomId,
-      userId: user.matrixUserId,
+      userId: matrixUserId,
       accessToken: user.matrixAccessToken,
       deviceId: user.matrixDeviceId,
       content: data.message,

@@ -219,20 +219,52 @@ export class MatrixController {
       `Provisioning Matrix user with handle for user ID: ${user.id}, requested handle: ${body.handle || 'auto-generate'}`,
     );
 
-    // Check if user already has Matrix credentials
-    const fullUser = await this.userService.findById(user.id);
+    // Check if user already has Matrix credentials via registry
+    let registryEntry: any = null;
+    try {
+      registryEntry =
+        await this.globalMatrixValidationService.getMatrixHandleForUser(
+          user.id,
+          tenantId,
+        );
+    } catch (error) {
+      this.logger.warn(
+        `Error checking Matrix registry for user ${user.id}: ${error.message}`,
+      );
+    }
 
+    if (registryEntry) {
+      // User already has Matrix handle registered
+      const serverName = process.env.MATRIX_SERVER_NAME;
+      if (!serverName) {
+        throw new Error('MATRIX_SERVER_NAME environment variable is required');
+      }
+      const matrixUserId = `@${registryEntry.handle}:${serverName}`;
+      this.logger.log(
+        `User ${user.id} already has Matrix handle: ${registryEntry.handle}`,
+      );
+
+      return {
+        matrixUserId,
+        handle: registryEntry.handle,
+        provisioned: false, // Already provisioned
+        success: true,
+      };
+    }
+
+    // Fallback: Check legacy matrixUserId field
+    const fullUser = await this.userService.findById(user.id);
     if (
       fullUser &&
       fullUser.matrixUserId &&
       fullUser.matrixAccessToken &&
       fullUser.matrixDeviceId
     ) {
-      // User already has Matrix account - extract existing handle
+      // User has legacy Matrix account - extract existing handle
       const existingHandle =
         fullUser.matrixUserId.match(/@(.+):/)?.[1] || 'unknown';
       this.logger.log(
-        `User ${user.id} already has Matrix credentials with handle: ${existingHandle}`,
+        `User ${user.id} has legacy Matrix credentials with handle: ${existingHandle}`,
       );
 
       return {
@@ -260,13 +292,12 @@ export class MatrixController {
       // Extract handle from the Matrix user ID
       const handle = matrixUserInfo.userId.match(/@(.+):/)?.[1] || 'unknown';
 
-      // Update the user record with Matrix credentials
+      // Register the Matrix handle in the global registry (already done in provisionMatrixUserWithHandle)
+
+      // Update only the user preferences (no longer storing Matrix credentials in user table)
       await this.userService.update(
         user.id,
         {
-          matrixUserId: matrixUserInfo.userId,
-          matrixAccessToken: matrixUserInfo.accessToken,
-          matrixDeviceId: matrixUserInfo.deviceId,
           preferences: {
             ...fullUser.preferences,
             matrix: {
@@ -327,16 +358,44 @@ export class MatrixController {
     }
     this.logger.log(`Provisioning Matrix user for user ID: ${user.id}`);
 
-    // Check if user already has Matrix credentials
-    const fullUser = await this.userService.findById(user.id);
+    // Check if user already has Matrix credentials via registry
+    let registryEntry: any = null;
+    try {
+      registryEntry =
+        await this.globalMatrixValidationService.getMatrixHandleForUser(
+          user.id,
+          tenantId,
+        );
+    } catch (error) {
+      this.logger.warn(
+        `Error checking Matrix registry for user ${user.id}: ${error.message}`,
+      );
+    }
 
+    if (registryEntry) {
+      // User already has Matrix handle registered
+      const serverName = process.env.MATRIX_SERVER_NAME;
+      if (!serverName) {
+        throw new Error('MATRIX_SERVER_NAME environment variable is required');
+      }
+      const matrixUserId = `@${registryEntry.handle}:${serverName}`;
+      this.logger.log(`User ${user.id} already has Matrix credentials`);
+      return {
+        matrixUserId,
+        provisioned: false, // Already provisioned
+        success: true,
+      };
+    }
+
+    // Fallback: Check legacy matrixUserId field
+    const fullUser = await this.userService.findById(user.id);
     if (
       fullUser &&
       fullUser.matrixUserId &&
       fullUser.matrixAccessToken &&
       fullUser.matrixDeviceId
     ) {
-      this.logger.log(`User ${user.id} already has Matrix credentials`);
+      this.logger.log(`User ${user.id} has legacy Matrix credentials`);
       return {
         matrixUserId: fullUser.matrixUserId,
         provisioned: false, // Already provisioned
@@ -355,13 +414,23 @@ export class MatrixController {
 
       // Display name is now set in the provisionMatrixUser method
 
-      // Update the user record with Matrix credentials
+      // Extract handle from Matrix user ID and register in the global registry
+      const handle = matrixUserInfo.userId.match(/@(.+):/)?.[1];
+      if (!handle) {
+        throw new Error(
+          `Could not extract handle from Matrix user ID: ${matrixUserInfo.userId}`,
+        );
+      }
+      await this.globalMatrixValidationService.registerMatrixHandle(
+        handle,
+        tenantId,
+        user.id,
+      );
+
+      // Update only the user preferences (no longer storing Matrix credentials in user table)
       await this.userService.update(
         user.id,
         {
-          matrixUserId: matrixUserInfo.userId,
-          matrixAccessToken: matrixUserInfo.accessToken,
-          matrixDeviceId: matrixUserInfo.deviceId,
           preferences: {
             ...fullUser.preferences,
             matrix: {
@@ -436,10 +505,40 @@ export class MatrixController {
         ? process.env.MATRIX_WEBSOCKET_ENDPOINT
         : apiBaseUrl;
 
-      // Check if the user has valid Matrix credentials
-      const hasCredentials = !!(
-        fullUser?.matrixUserId && fullUser?.matrixAccessToken
-      );
+      // Check if the user has valid Matrix credentials via registry or legacy fields
+      let hasCredentials = false;
+      let matrixUserId: string | null = null;
+      try {
+        const registryEntry =
+          await this.globalMatrixValidationService.getMatrixHandleForUser(
+            user.id,
+            this.request?.tenantId,
+          );
+        if (registryEntry) {
+          const serverName = process.env.MATRIX_SERVER_NAME;
+          if (!serverName) {
+            throw new Error(
+              'MATRIX_SERVER_NAME environment variable is required',
+            );
+          }
+          matrixUserId = `@${registryEntry.handle}:${serverName}`;
+          hasCredentials = true;
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Error checking Matrix registry for user ${user.id}: ${error.message}`,
+        );
+      }
+
+      // Fallback to legacy fields if registry check failed
+      if (!hasCredentials && fullUser) {
+        hasCredentials = !!(
+          fullUser.matrixUserId && fullUser.matrixAccessToken
+        );
+        if (hasCredentials) {
+          matrixUserId = fullUser.matrixUserId || null;
+        }
+      }
 
       // Log detailed information for debugging
       this.logger.debug('WebSocket endpoint info:', {
@@ -454,7 +553,7 @@ export class MatrixController {
       return {
         endpoint: webSocketEndpoint,
         authenticated: hasCredentials,
-        matrixUserId: fullUser?.matrixUserId || null,
+        matrixUserId: matrixUserId,
       };
     } catch (error) {
       this.logger.error(
@@ -605,9 +704,38 @@ export class MatrixController {
         `Testing broadcast to room ${roomId} from user ${user.id}`,
       );
 
-      // Get user for Matrix user ID
-      const fullUser = await this.userService.findById(user.id);
-      if (!fullUser || !fullUser.matrixUserId) {
+      // Get Matrix user ID for the user
+      let matrixUserId: string | null = null;
+      try {
+        const registryEntry =
+          await this.globalMatrixValidationService.getMatrixHandleForUser(
+            user.id,
+            this.request?.tenantId,
+          );
+        if (registryEntry) {
+          const serverName = process.env.MATRIX_SERVER_NAME;
+          if (!serverName) {
+            throw new Error(
+              'MATRIX_SERVER_NAME environment variable is required',
+            );
+          }
+          matrixUserId = `@${registryEntry.handle}:${serverName}`;
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Error checking Matrix registry for user ${user.id}: ${error.message}`,
+        );
+      }
+
+      // Fallback: Check legacy matrixUserId field
+      if (!matrixUserId) {
+        const fullUser = await this.userService.findById(user.id);
+        if (fullUser?.matrixUserId) {
+          matrixUserId = fullUser.matrixUserId || null;
+        }
+      }
+
+      if (!matrixUserId) {
         throw new Error('User has no Matrix credentials');
       }
 
@@ -616,7 +744,7 @@ export class MatrixController {
         type: 'm.room.message',
         room_id: roomId,
         event_id: `test-${Date.now()}`,
-        sender: fullUser.matrixUserId,
+        sender: matrixUserId,
         content: {
           msgtype: 'm.text',
           body: message || 'Test broadcast message',
