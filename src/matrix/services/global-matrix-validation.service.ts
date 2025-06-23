@@ -109,6 +109,19 @@ export class GlobalMatrixValidationService {
   }
 
   /**
+   * Get the Matrix handle for a user (alias for getMatrixHandleRegistration)
+   * @param userId The user ID within the tenant
+   * @param tenantId The tenant ID
+   * @returns The handle registration or null if not found
+   */
+  async getMatrixHandleForUser(
+    userId: number,
+    tenantId: string,
+  ): Promise<MatrixHandleRegistration | null> {
+    return this.getMatrixHandleRegistration(tenantId, userId);
+  }
+
+  /**
    * Get the Matrix handle registration for a user
    * @param tenantId The tenant ID
    * @param userId The user ID within the tenant
@@ -127,6 +140,31 @@ export class GlobalMatrixValidationService {
     } catch (error) {
       this.logger.error(
         `Error getting Matrix handle registration for user ${userId} in tenant ${tenantId}: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Find user by Matrix handle
+   * @param handle The Matrix handle (without @ or domain)
+   * @param tenantId The tenant ID to search within
+   * @returns The handle registration or null if not found
+   */
+  async getUserByMatrixHandle(
+    handle: string,
+    tenantId: string,
+  ): Promise<MatrixHandleRegistration | null> {
+    try {
+      const registration = await this.registry.findOne({
+        where: { handle: handle.toLowerCase(), tenantId },
+      });
+
+      return registration || null;
+    } catch (error) {
+      this.logger.error(
+        `Error finding user by Matrix handle ${handle} in tenant ${tenantId}: ${error.message}`,
         error.stack,
       );
       throw error;

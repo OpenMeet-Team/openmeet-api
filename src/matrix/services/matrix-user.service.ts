@@ -963,8 +963,44 @@ export class MatrixUserService
       throw new Error(`Failed to get user data: ${error.message}`);
     }
 
-    if (!user || !user.matrixUserId) {
-      this.logger.warn(`User ${userSlug} has no Matrix user ID`);
+    if (!user) {
+      this.logger.warn(`User ${userSlug} not found`);
+      throw new Error('User not found');
+    }
+
+    // Check if user has Matrix credentials via registry
+    let matrixUserId: string | null = null;
+    try {
+      if (!tenantId) {
+        throw new Error('Tenant ID is required for Matrix registry lookup');
+      }
+      const registryEntry =
+        await this.globalMatrixValidationService.getMatrixHandleForUser(
+          user.id,
+          tenantId,
+        );
+      if (registryEntry) {
+        const serverName = process.env.MATRIX_SERVER_NAME;
+        if (!serverName) {
+          throw new Error(
+            'MATRIX_SERVER_NAME environment variable is required',
+          );
+        }
+        matrixUserId = `@${registryEntry.handle}:${serverName}`;
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Error checking Matrix registry for user ${user.id}: ${error.message}`,
+      );
+    }
+
+    // Fallback: Check legacy matrixUserId field
+    if (!matrixUserId && user.matrixUserId) {
+      matrixUserId = user.matrixUserId;
+    }
+
+    if (!matrixUserId) {
+      this.logger.warn(`User ${userSlug} has no Matrix credentials`);
       throw new Error('User has no Matrix credentials');
     }
 
@@ -973,7 +1009,7 @@ export class MatrixUserService
     let deviceId = user.matrixDeviceId;
 
     const isTokenValid = accessToken
-      ? await this.verifyAccessToken(user.matrixUserId, accessToken)
+      ? await this.verifyAccessToken(matrixUserId, accessToken)
       : false;
 
     if (!isTokenValid) {
@@ -982,7 +1018,7 @@ export class MatrixUserService
       );
 
       // Generate a new token using admin API
-      const newToken = await this.generateNewAccessToken(user.matrixUserId);
+      const newToken = await this.generateNewAccessToken(matrixUserId);
 
       if (newToken) {
         // Update the user record with the new token
@@ -1056,7 +1092,7 @@ export class MatrixUserService
       // Create a Matrix client with the user's credentials
       const client = sdk.createClient({
         baseUrl: config.baseUrl,
-        userId: user.matrixUserId,
+        userId: matrixUserId,
         accessToken: accessToken,
         deviceId: deviceId || undefined,
         useAuthorizationHeader: true,
@@ -1143,12 +1179,12 @@ export class MatrixUserService
       // Store the client using slug
       this.userMatrixClients.set(userSlug, {
         client,
-        matrixUserId: user.matrixUserId,
+        matrixUserId: matrixUserId,
         lastActivity: new Date(),
       });
 
       this.logger.log(
-        `Created Matrix client for user ${userSlug} (${user.matrixUserId})`,
+        `Created Matrix client for user ${userSlug} (${matrixUserId})`,
       );
 
       return client;
@@ -1327,7 +1363,38 @@ export class MatrixUserService
       throw new Error('User not found');
     }
 
-    if (!user.matrixUserId) {
+    // Check if user has Matrix credentials via registry
+    let matrixUserId: string | null = null;
+    try {
+      if (!tenantId) {
+        throw new Error('Tenant ID is required for Matrix registry lookup');
+      }
+      const registryEntry =
+        await this.globalMatrixValidationService.getMatrixHandleForUser(
+          userId,
+          tenantId,
+        );
+      if (registryEntry) {
+        const serverName = process.env.MATRIX_SERVER_NAME;
+        if (!serverName) {
+          throw new Error(
+            'MATRIX_SERVER_NAME environment variable is required',
+          );
+        }
+        matrixUserId = `@${registryEntry.handle}:${serverName}`;
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Error checking Matrix registry for user ${userId}: ${error.message}`,
+      );
+    }
+
+    // Fallback: Check legacy matrixUserId field
+    if (!matrixUserId && user.matrixUserId) {
+      matrixUserId = user.matrixUserId;
+    }
+
+    if (!matrixUserId) {
       this.logger.warn(`User ${userId} has no Matrix account`);
       throw new Error(
         'User has no Matrix account. Please provision a Matrix account first.',
@@ -1336,7 +1403,7 @@ export class MatrixUserService
 
     // Update the Matrix password using admin API
     await this.updatePassword({
-      matrixUserId: user.matrixUserId,
+      matrixUserId: matrixUserId,
       password,
       tenantId,
     });
