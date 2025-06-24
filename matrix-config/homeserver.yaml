@@ -119,6 +119,7 @@ oidc_providers:
     userinfo_endpoint: "${MATRIX_OIDC_USERINFO_ENDPOINT}"
     jwks_uri: "${MATRIX_OIDC_JWKS_URI}"
     skip_verification: true  # Only for local testing
+    passthrough_authorization_parameters: ["auth_code", "tenant_id", "login_hint"]
     user_mapping_provider:
       config:
         localpart_template: "{{ user.preferred_username }}"
