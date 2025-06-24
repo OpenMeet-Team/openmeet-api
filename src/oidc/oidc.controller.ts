@@ -111,19 +111,21 @@ export class OidcController {
       (request.headers['x-tenant-id'] as string) ||
       null;
 
-    console.log('🔐 OIDC Auth Debug - Checking for user authentication...');
+    console.log(
+      '🔐 OIDC Auth Debug - Unified endpoint - checking for user authentication...',
+    );
 
-    // Check for auth code (highest priority for seamless authentication)
+    // Method 1: Check for auth code in query parameters (highest priority for seamless authentication)
     if (!user && authCode) {
       console.log(
-        '🔐 OIDC Auth Debug - Found auth_code in query parameters, validating...',
+        '🔐 OIDC Auth Debug - Method 1: Found auth_code in query parameters, validating...',
       );
       try {
         const validatedUser =
           await this.tempAuthCodeService.validateAndConsumeAuthCode(authCode);
         if (validatedUser) {
           console.log(
-            '✅ OIDC Auth Debug - Valid auth code, user ID:',
+            '✅ OIDC Auth Debug - Method 1 SUCCESS: Valid auth code, user ID:',
             validatedUser.userId,
           );
           user = { id: validatedUser.userId };
@@ -131,18 +133,56 @@ export class OidcController {
         }
       } catch (error) {
         console.error(
-          '❌ OIDC Auth Debug - Auth code validation failed:',
+          '❌ OIDC Auth Debug - Method 1 FAILED: Auth code validation failed:',
           error.message,
         );
       }
     }
 
-    // Check for user token in query parameters (sent by frontend after login)
+    // Method 2: Try to extract auth code from state parameter (for frontend integration)
+    if (!user && state) {
+      console.log(
+        '🔐 OIDC Auth Debug - Method 2: Trying to extract auth code from state parameter...',
+      );
+      try {
+        const decodedState = JSON.parse(
+          Buffer.from(state, 'base64').toString(),
+        );
+        if (decodedState.authCode) {
+          console.log(
+            '🔐 OIDC Auth Debug - Method 2: Found auth code in state, validating...',
+          );
+          const validatedUser =
+            await this.tempAuthCodeService.validateAndConsumeAuthCode(
+              decodedState.authCode,
+            );
+          if (validatedUser) {
+            console.log(
+              '✅ OIDC Auth Debug - Method 2 SUCCESS: Valid auth code from state, user ID:',
+              validatedUser.userId,
+            );
+            user = { id: validatedUser.userId };
+            tenantId = validatedUser.tenantId || decodedState.tenantId;
+          }
+        } else {
+          console.log(
+            '🔍 OIDC Auth Debug - Method 2: State parameter does not contain auth code (likely Matrix session state)',
+          );
+        }
+      } catch (error) {
+        console.log(
+          '⚠️ OIDC Auth Debug - Method 2: Failed to parse state parameter (likely Matrix session state):',
+          error.message,
+        );
+      }
+    }
+
+    // Method 3: Check for user token in query parameters (sent by frontend after login)
     if (!user) {
       const userToken = request.query.user_token as string;
       if (userToken) {
         console.log(
-          '🔐 OIDC Auth Debug - Found user_token in query parameters, validating...',
+          '🔐 OIDC Auth Debug - Method 3: Found user_token in query parameters, validating...',
         );
         try {
           const payload: JwtPayloadType = await this.jwtService.verifyAsync(
@@ -154,21 +194,21 @@ export class OidcController {
 
           if (payload && payload.id) {
             console.log(
-              '✅ OIDC Auth Debug - Valid user token, user ID:',
+              '✅ OIDC Auth Debug - Method 3 SUCCESS: Valid user token, user ID:',
               payload.id,
             );
             user = { id: payload.id };
           }
         } catch (error) {
           console.error(
-            '❌ OIDC Auth Debug - User token validation failed:',
+            '❌ OIDC Auth Debug - Method 3 FAILED: User token validation failed:',
             error.message,
           );
         }
       }
     }
 
-    // Fallback to JWT token in Authorization header
+    // Method 4: Fallback to JWT token in Authorization header
     if (
       !user &&
       authHeader &&
@@ -176,7 +216,7 @@ export class OidcController {
       authHeader.startsWith('Bearer ')
     ) {
       console.log(
-        '🔐 OIDC Auth Debug - No session/token found, trying Authorization header...',
+        '🔐 OIDC Auth Debug - Method 4: Trying Authorization header...',
       );
       try {
         const token = authHeader.substring(7); // Remove 'Bearer ' prefix
@@ -189,22 +229,24 @@ export class OidcController {
 
         if (payload && payload.id) {
           console.log(
-            '✅ OIDC Auth Debug - Valid JWT token from header, user ID:',
+            '✅ OIDC Auth Debug - Method 4 SUCCESS: Valid JWT token from header, user ID:',
             payload.id,
           );
           user = { id: payload.id };
         }
       } catch (error) {
         console.error(
-          '❌ OIDC Auth Debug - Authorization header JWT validation failed:',
+          '❌ OIDC Auth Debug - Method 4 FAILED: Authorization header JWT validation failed:',
           error.message,
         );
       }
     }
 
-    // Check for authenticated user via session cookie
+    // Method 5: Check for authenticated user via session cookie (Matrix SSO)
     if (!user) {
-      console.log('🔐 OIDC Auth Debug - Checking session authentication...');
+      console.log(
+        '🔐 OIDC Auth Debug - Method 5: Checking session authentication...',
+      );
       try {
         console.log(
           '🔐 OIDC Auth Debug - Available cookies:',
@@ -217,7 +259,7 @@ export class OidcController {
         );
         if (sessionCookie) {
           console.log(
-            '🔐 OIDC Auth Debug - Session cookie found, scanning all tenants for authenticated user',
+            '🔐 OIDC Auth Debug - Method 5: Session cookie found, scanning all tenants for authenticated user',
           );
 
           const tenants = fetchTenants();
@@ -230,7 +272,7 @@ export class OidcController {
               );
               if (userFromSession) {
                 console.log(
-                  '✅ OIDC Auth Debug - Found authenticated user via session in tenant:',
+                  '✅ OIDC Auth Debug - Method 5 SUCCESS: Found authenticated user via session in tenant:',
                   tenant.id,
                   'user ID:',
                   userFromSession.id,
@@ -250,7 +292,7 @@ export class OidcController {
 
           if (!user) {
             console.log(
-              '❌ OIDC Auth Debug - No authenticated user found in any tenant - clearing invalid session cookie',
+              '❌ OIDC Auth Debug - Method 5: No authenticated user found in any tenant - clearing invalid session cookie',
             );
             // Clear invalid oidc_session cookie
             response.clearCookie('oidc_session', {
@@ -263,20 +305,20 @@ export class OidcController {
             });
           }
         } else {
-          console.log('❌ OIDC Auth Debug - No session cookie found');
+          console.log('❌ OIDC Auth Debug - Method 5: No session cookie found');
         }
       } catch (error) {
         console.log(
-          '🔐 OIDC Auth Debug - Session authentication error:',
+          '🔐 OIDC Auth Debug - Method 5 FAILED: Session authentication error:',
           error.message,
         );
       }
     }
 
-    // If no authenticated user, redirect to login
+    // Method 6 (Last Resort): If no authenticated user found, redirect to login/email form
     if (!user) {
       console.log(
-        '🔐 OIDC Auth Debug - No authenticated user found, redirecting to login flow',
+        '🔐 OIDC Auth Debug - Method 6 (LAST RESORT): No authenticated user found via any method, redirecting to login flow',
       );
       const baseUrl =
         this.configService.get('app.oidcIssuerUrl', { infer: true }) ||
@@ -405,223 +447,6 @@ export class OidcController {
       client_id: clientId || '', // client_id is optional in the request, it's in the code
       client_secret: clientSecret || '',
     });
-  }
-
-  @ApiOperation({
-    summary: 'Matrix SSO Direct Authentication',
-    description:
-      'Direct OIDC authentication for Matrix SSO - bypasses email form',
-  })
-  @Get('matrix-auth')
-  @TenantPublic()
-  async matrixDirectAuth(
-    @Req() request: Request,
-    @Res({ passthrough: false }) response: Response,
-    @Query('client_id') clientId: string,
-    @Query('redirect_uri') redirectUri: string,
-    @Query('response_type') responseType: string,
-    @Query('scope') scope: string,
-    @Query('state') state?: string,
-    @Query('nonce') nonce?: string,
-    @Query('auth_code') authCode?: string,
-    @Query('tenant_id') tenantId?: string,
-  ) {
-    console.log(
-      '🔥 Matrix Direct Auth - Starting direct authentication for Matrix SSO',
-    );
-
-    if (!clientId || !redirectUri || !responseType || !scope) {
-      throw new BadRequestException('Missing required OIDC parameters');
-    }
-
-    // Check for auth code in query parameter first, then try to extract from state parameter
-    let authCodeToValidate = authCode;
-    let extractedTenantId = tenantId;
-
-    // Try to extract auth code from state parameter if not provided directly
-    if (!authCodeToValidate && state) {
-      console.log(
-        '🔍 Matrix Direct Auth - Trying to extract auth code from state parameter...',
-      );
-      try {
-        const decodedState = JSON.parse(
-          Buffer.from(state, 'base64').toString(),
-        );
-        if (decodedState.authCode) {
-          authCodeToValidate = decodedState.authCode;
-          extractedTenantId = decodedState.tenantId || extractedTenantId;
-          console.log(
-            '✅ Matrix Direct Auth - Successfully extracted auth code from state parameter',
-          );
-        }
-      } catch (error) {
-        console.log(
-          '⚠️ Matrix Direct Auth - Failed to parse state parameter:',
-          error.message,
-        );
-      }
-    }
-
-    // Check for auth code (highest priority for seamless authentication)
-    if (authCodeToValidate) {
-      console.log('🔐 Matrix Direct Auth - Auth code provided, validating...');
-      try {
-        const authData =
-          await this.tempAuthCodeService.validateAndConsumeAuthCode(
-            authCodeToValidate,
-          );
-        if (authData) {
-          console.log(
-            `✅ Matrix Direct Auth - Auth code validated for user ${authData.userId}, tenant ${authData.tenantId}`,
-          );
-
-          // Generate authorization code using OIDC service
-          const result = this.oidcService.handleAuthorization(
-            {
-              client_id: clientId,
-              redirect_uri: redirectUri,
-              response_type: responseType,
-              scope,
-              state,
-              nonce,
-            },
-            authData.userId,
-            authData.tenantId,
-          );
-
-          console.log(
-            '🔄 Matrix Direct Auth - Redirecting back to Matrix with auth code (seamless flow)',
-          );
-          response.redirect(result.redirect_url);
-          return;
-        } else {
-          console.log(
-            '❌ Matrix Direct Auth - Auth code validation failed, falling back to session check',
-          );
-        }
-      } catch (error) {
-        console.error(
-          '❌ Matrix Direct Auth - Auth code validation error:',
-          error.message,
-        );
-      }
-    }
-
-    // Check for session cookie to find authenticated user
-    try {
-      const sessionCookie = request.cookies?.['oidc_session'];
-      if (!sessionCookie) {
-        console.log(
-          '❌ Matrix Direct Auth - No session cookie found, redirecting to regular OIDC flow',
-        );
-        // No session found, redirect to the regular OIDC auth flow (which will show email form)
-        const oidcAuthUrl =
-          `/api/oidc/auth?` +
-          new URLSearchParams({
-            client_id: clientId,
-            redirect_uri: redirectUri,
-            response_type: responseType,
-            scope,
-            ...(state && { state }),
-            ...(nonce && { nonce }),
-            ...(extractedTenantId && { tenantId: extractedTenantId }), // Pass tenant ID if provided
-          }).toString();
-
-        response.redirect(oidcAuthUrl);
-        return;
-      }
-
-      // Find user from session - prioritize specific tenant if provided
-      let authenticatedUser: { id: number; tenantId: string } | null = null;
-      let userTenantId: string | null = null;
-
-      if (extractedTenantId) {
-        // Check specific tenant first if provided
-        console.log(
-          '🏢 Matrix Direct Auth - Checking specific tenant:',
-          extractedTenantId,
-        );
-        try {
-          const userFromSession = await this.oidcService.getUserFromSession(
-            sessionCookie,
-            extractedTenantId,
-          );
-          if (userFromSession) {
-            authenticatedUser = userFromSession;
-            userTenantId = extractedTenantId;
-            console.log(
-              '✅ Matrix Direct Auth - Found authenticated user in specified tenant:',
-              extractedTenantId,
-            );
-          }
-        } catch {
-          console.log(
-            '❌ Matrix Direct Auth - User not found in specified tenant:',
-            extractedTenantId,
-          );
-        }
-      }
-
-      // If not found in specific tenant or no tenant specified, scan all tenants
-      if (!authenticatedUser) {
-        console.log(
-          '🔍 Matrix Direct Auth - Scanning all tenants for authenticated user',
-        );
-        const tenants = fetchTenants();
-        for (const tenant of tenants) {
-          if (!tenant.id) continue; // Skip public tenant
-
-          try {
-            const userFromSession = await this.oidcService.getUserFromSession(
-              sessionCookie,
-              tenant.id,
-            );
-            if (userFromSession) {
-              authenticatedUser = userFromSession;
-              userTenantId = tenant.id;
-              console.log(
-                '✅ Matrix Direct Auth - Found authenticated user in tenant:',
-                tenant.id,
-              );
-              break;
-            }
-          } catch {
-            // Continue to next tenant
-          }
-        }
-      }
-
-      if (!authenticatedUser || !userTenantId) {
-        console.log(
-          '❌ Matrix Direct Auth - No authenticated user found in any tenant',
-        );
-        throw new UnauthorizedException('User must be authenticated');
-      }
-
-      // Generate authorization code using OIDC service
-      const result = this.oidcService.handleAuthorization(
-        {
-          client_id: clientId,
-          redirect_uri: redirectUri,
-          response_type: responseType,
-          scope,
-          state,
-          nonce,
-        },
-        authenticatedUser.id,
-        userTenantId,
-      );
-
-      console.log(
-        '🔄 Matrix Direct Auth - Redirecting back to Matrix with auth code',
-      );
-      response.redirect(result.redirect_url);
-    } catch (error) {
-      console.error('❌ Matrix Direct Auth - Error:', error.message);
-      throw new UnauthorizedException(
-        'Authentication failed: ' + error.message,
-      );
-    }
   }
 
   @ApiOperation({

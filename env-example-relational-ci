@@ -101,7 +101,7 @@ MATRIX_REGISTRATION_SECRET=ci_test_registration_secret
 
 # Matrix OIDC endpoints for CI environment
 MATRIX_OIDC_CLIENT_SECRET=ci-matrix-client-secret-for-testing
-MATRIX_OIDC_AUTHORIZATION_ENDPOINT=http://api:3000/api/oidc/matrix-auth
+MATRIX_OIDC_AUTHORIZATION_ENDPOINT=http://api:3000/api/oidc/auth
 MATRIX_OIDC_TOKEN_ENDPOINT=http://api:3000/api/oidc/token
 MATRIX_OIDC_USERINFO_ENDPOINT=http://api:3000/api/oidc/userinfo
 MATRIX_OIDC_JWKS_URI=http://api:3000/api/oidc/jwks
