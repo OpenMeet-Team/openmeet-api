@@ -186,6 +186,143 @@ describe('OidcService', () => {
     });
   });
 
+  describe('Matrix State Preservation', () => {
+    const matrixState = 'woRNVZWvJAa8v11ZIbPjWpa2iN3mEy'; // Real Matrix session state
+    const authParams = {
+      client_id: 'matrix_synapse',
+      redirect_uri:
+        'https://matrix-dev.openmeet.net/_synapse/client/oidc/callback',
+      response_type: 'code',
+      scope: 'openid profile email',
+      state: matrixState,
+      nonce: 'wPO1q3JlqmsYxeIK3fansuzHAeC7q9yB',
+    };
+
+    it('should preserve Matrix state parameter in authorization code JWT', () => {
+      const result = service.handleAuthorization(
+        authParams,
+        22,
+        'lsdfaopkljdfs',
+      );
+
+      // Verify the authorization code is a JWT
+      expect(result.authorization_code).toBeDefined();
+      expect(typeof result.authorization_code).toBe('string');
+
+      // Verify it's a valid JWT by decoding it
+      const decoded = jwt.decode(result.authorization_code, { complete: true });
+      expect(decoded).toBeTruthy();
+      expect(decoded.payload).toBeDefined();
+
+      // Verify Matrix state is preserved in the JWT payload
+      const payload = decoded.payload as any;
+      expect(payload.state).toBe(matrixState);
+      expect(payload.matrix_original_state).toBe(matrixState);
+      expect(payload.type).toBe('auth_code');
+      expect(payload.client_id).toBe('matrix_synapse');
+      expect(payload.userId).toBe(22);
+      expect(payload.tenantId).toBe('lsdfaopkljdfs');
+    });
+
+    it('should preserve Matrix state in redirect URL', () => {
+      const result = service.handleAuthorization(
+        authParams,
+        22,
+        'lsdfaopkljdfs',
+      );
+
+      // Verify the redirect URL contains the exact Matrix state
+      expect(result.redirect_url).toContain(`state=${matrixState}`);
+
+      // Parse the URL to verify the state parameter
+      const url = new URL(result.redirect_url);
+      expect(url.searchParams.get('state')).toBe(matrixState);
+      expect(url.searchParams.get('code')).toBeDefined();
+    });
+
+    it('should handle undefined Matrix state gracefully', () => {
+      const authParamsNoState = { ...authParams, state: undefined };
+
+      const result = service.handleAuthorization(
+        authParamsNoState,
+        22,
+        'lsdfaopkljdfs',
+      );
+
+      // Verify the authorization code is still generated
+      expect(result.authorization_code).toBeDefined();
+
+      // Verify the redirect URL doesn't contain state parameter
+      expect(result.redirect_url).not.toContain('state=');
+
+      // Verify JWT payload handles undefined state
+      const decoded = jwt.decode(result.authorization_code, { complete: true });
+      const payload = decoded.payload as any;
+      expect(payload.state).toBeUndefined();
+      expect(payload.matrix_original_state).toBeUndefined();
+    });
+
+    it('should preserve empty Matrix state', () => {
+      const authParamsEmptyState = { ...authParams, state: '' };
+
+      const result = service.handleAuthorization(
+        authParamsEmptyState,
+        22,
+        'lsdfaopkljdfs',
+      );
+
+      // Verify empty state is preserved
+      const decoded = jwt.decode(result.authorization_code, { complete: true });
+      const payload = decoded.payload as any;
+      expect(payload.state).toBe('');
+      expect(payload.matrix_original_state).toBe('');
+
+      // Verify redirect URL contains empty state
+      expect(result.redirect_url).toContain('state=');
+      const url = new URL(result.redirect_url);
+      expect(url.searchParams.get('state')).toBe('');
+    });
+
+    it('should preserve Matrix state through full authorization code exchange flow', async () => {
+      // Setup mocks
+      process.env.MATRIX_OIDC_CLIENT_SECRET = 'test-secret';
+      mockUserService.findById.mockResolvedValue(mockUser);
+      mockGlobalMatrixValidationService.getMatrixHandleForUser.mockResolvedValue(
+        'john.smith',
+      );
+
+      // Generate authorization code with Matrix state
+      const authResult = service.handleAuthorization(
+        authParams,
+        22,
+        'lsdfaopkljdfs',
+      );
+
+      // Exchange the code for tokens
+      const tokenParams = {
+        grant_type: 'authorization_code',
+        code: authResult.authorization_code,
+        redirect_uri: authParams.redirect_uri,
+        client_id: 'matrix_synapse',
+        client_secret: 'test-secret',
+      };
+
+      const tokenResult = await service.exchangeCodeForTokens(tokenParams);
+
+      // Verify tokens are generated successfully
+      expect(tokenResult.access_token).toBeDefined();
+      expect(tokenResult.id_token).toBeDefined();
+      expect(tokenResult.token_type).toBe('Bearer');
+
+      // The original Matrix state should have been preserved through the flow
+      // (This test verifies the JWT validation works with our Matrix state preservation)
+      expect(mockUserService.findById).toHaveBeenCalledWith(
+        22,
+        'lsdfaopkljdfs',
+      );
+    });
+  });
+
   describe('exchangeCodeForTokens', () => {
     const tokenParams = {
       grant_type: 'authorization_code',

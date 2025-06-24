@@ -293,7 +293,7 @@ export class OidcService {
     // Return authorization URL for redirect
     const redirectUrl = new URL(params.redirect_uri);
     redirectUrl.searchParams.set('code', authCode);
-    if (params.state) {
+    if (params.state !== undefined) {
       redirectUrl.searchParams.set('state', params.state);
     }
 
@@ -321,6 +321,11 @@ export class OidcService {
 
     // Decode and validate authorization code first
     const authData = this.validateAuthCode(params.code);
+
+    console.log(
+      '🔧 OIDC Token Exchange Debug - Validated auth code with Matrix state:',
+      authData.matrix_original_state?.substring(0, 20) + '...',
+    );
 
     // Use client_id from auth code if not provided in params
     const clientId = params.client_id || authData.client_id;
@@ -381,6 +386,7 @@ export class OidcService {
 
   /**
    * Generate authorization code (temporary, short-lived)
+   * IMPORTANT: Preserves Matrix session state to prevent "Invalid session for OIDC callback" errors
    */
   private generateAuthCode(
     params: any,
@@ -392,14 +398,21 @@ export class OidcService {
       client_id: params.client_id,
       redirect_uri: params.redirect_uri,
       scope: params.scope,
+      // CRITICAL: Preserve Matrix's state parameter exactly as received
+      // This contains Matrix's session macaroon that must be returned unchanged
       state: params.state,
       nonce: params.nonce,
       exp: Math.floor(Date.now() / 1000) + 600, // 10 minutes
       userId,
       tenantId,
+      // Store original Matrix state for session validation
+      matrix_original_state: params.state,
     };
 
-    console.log('🔧 DEBUG: About to sign auth code JWT with RS256');
+    console.log(
+      '🔧 DEBUG: About to sign auth code JWT with RS256, preserving Matrix state:',
+      params.state?.substring(0, 20) + '...',
+    );
     return jwt.sign(payload, this.rsaKeyPair.privateKey, {
       algorithm: 'RS256' as const,
       header: { alg: 'RS256', kid: 'openmeet-oidc-rsa-key' },

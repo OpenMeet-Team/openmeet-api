@@ -85,8 +85,11 @@ export class OidcController {
   ) {
     console.log('🔐 OIDC Auth Debug - Authorization endpoint called');
     console.log('  - Client ID:', clientId);
-    console.log('  - State:', state?.substring(0, 10) + '...');
+    console.log('  - State (Matrix session):', state?.substring(0, 20) + '...');
     console.log('  - Tenant ID from query:', request.query.tenantId);
+    console.log(
+      '  - Matrix State Preservation: Will preserve state parameter for session validation',
+    );
     console.log('  - Headers:', {
       authorization: !!request.headers.authorization,
       cookie: !!request.headers.cookie,
