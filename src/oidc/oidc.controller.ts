@@ -139,50 +139,15 @@ export class OidcController {
       }
     }
 
-    // Method 2: Try to extract auth code from state parameter (for frontend integration)
-    if (!user && state) {
-      console.log(
-        '🔐 OIDC Auth Debug - Method 2: Trying to extract auth code from state parameter...',
-      );
-      try {
-        const decodedState = JSON.parse(
-          Buffer.from(state, 'base64').toString(),
-        );
-        if (decodedState.authCode) {
-          console.log(
-            '🔐 OIDC Auth Debug - Method 2: Found auth code in state, validating...',
-          );
-          const validatedUser =
-            await this.tempAuthCodeService.validateAndConsumeAuthCode(
-              decodedState.authCode,
-            );
-          if (validatedUser) {
-            console.log(
-              '✅ OIDC Auth Debug - Method 2 SUCCESS: Valid auth code from state, user ID:',
-              validatedUser.userId,
-            );
-            user = { id: validatedUser.userId };
-            tenantId = validatedUser.tenantId || decodedState.tenantId;
-          }
-        } else {
-          console.log(
-            '🔍 OIDC Auth Debug - Method 2: State parameter does not contain auth code (likely Matrix session state)',
-          );
-        }
-      } catch (error) {
-        console.log(
-          '⚠️ OIDC Auth Debug - Method 2: Failed to parse state parameter (likely Matrix session state):',
-          error.message,
-        );
-      }
-    }
+    // Method 2: REMOVED - Do not decode state parameter as it's meant to be opaque per OIDC spec
+    // Matrix uses state for session macaroons, frontend uses other auth methods
 
-    // Method 3: Check for user token in query parameters (sent by frontend after login)
+    // Method 2: Check for user token in query parameters (sent by frontend after login)
     if (!user) {
       const userToken = request.query.user_token as string;
       if (userToken) {
         console.log(
-          '🔐 OIDC Auth Debug - Method 3: Found user_token in query parameters, validating...',
+          '🔐 OIDC Auth Debug - Method 2: Found user_token in query parameters, validating...',
         );
         try {
           const payload: JwtPayloadType = await this.jwtService.verifyAsync(
@@ -194,21 +159,21 @@ export class OidcController {
 
           if (payload && payload.id) {
             console.log(
-              '✅ OIDC Auth Debug - Method 3 SUCCESS: Valid user token, user ID:',
+              '✅ OIDC Auth Debug - Method 2 SUCCESS: Valid user token, user ID:',
               payload.id,
             );
             user = { id: payload.id };
           }
         } catch (error) {
           console.error(
-            '❌ OIDC Auth Debug - Method 3 FAILED: User token validation failed:',
+            '❌ OIDC Auth Debug - Method 2 FAILED: User token validation failed:',
             error.message,
           );
         }
       }
     }
 
-    // Method 4: Fallback to JWT token in Authorization header
+    // Method 3: Fallback to JWT token in Authorization header
     if (
       !user &&
       authHeader &&
@@ -216,7 +181,7 @@ export class OidcController {
       authHeader.startsWith('Bearer ')
     ) {
       console.log(
-        '🔐 OIDC Auth Debug - Method 4: Trying Authorization header...',
+        '🔐 OIDC Auth Debug - Method 3: Trying Authorization header...',
       );
       try {
         const token = authHeader.substring(7); // Remove 'Bearer ' prefix
@@ -229,23 +194,23 @@ export class OidcController {
 
         if (payload && payload.id) {
           console.log(
-            '✅ OIDC Auth Debug - Method 4 SUCCESS: Valid JWT token from header, user ID:',
+            '✅ OIDC Auth Debug - Method 3 SUCCESS: Valid JWT token from header, user ID:',
             payload.id,
           );
           user = { id: payload.id };
         }
       } catch (error) {
         console.error(
-          '❌ OIDC Auth Debug - Method 4 FAILED: Authorization header JWT validation failed:',
+          '❌ OIDC Auth Debug - Method 3 FAILED: Authorization header JWT validation failed:',
           error.message,
         );
       }
     }
 
-    // Method 5: Check for authenticated user via session cookie (Matrix SSO)
+    // Method 4: Check for authenticated user via session cookie (Matrix SSO)
     if (!user) {
       console.log(
-        '🔐 OIDC Auth Debug - Method 5: Checking session authentication...',
+        '🔐 OIDC Auth Debug - Method 4: Checking session authentication...',
       );
       try {
         console.log(
@@ -259,7 +224,7 @@ export class OidcController {
         );
         if (sessionCookie) {
           console.log(
-            '🔐 OIDC Auth Debug - Method 5: Session cookie found, scanning all tenants for authenticated user',
+            '🔐 OIDC Auth Debug - Method 4: Session cookie found, scanning all tenants for authenticated user',
           );
 
           const tenants = fetchTenants();
@@ -272,7 +237,7 @@ export class OidcController {
               );
               if (userFromSession) {
                 console.log(
-                  '✅ OIDC Auth Debug - Method 5 SUCCESS: Found authenticated user via session in tenant:',
+                  '✅ OIDC Auth Debug - Method 4 SUCCESS: Found authenticated user via session in tenant:',
                   tenant.id,
                   'user ID:',
                   userFromSession.id,
@@ -292,7 +257,7 @@ export class OidcController {
 
           if (!user) {
             console.log(
-              '❌ OIDC Auth Debug - Method 5: No authenticated user found in any tenant - clearing invalid session cookie',
+              '❌ OIDC Auth Debug - Method 4: No authenticated user found in any tenant - clearing invalid session cookie',
             );
             // Clear invalid oidc_session cookie
             response.clearCookie('oidc_session', {
@@ -305,21 +270,21 @@ export class OidcController {
             });
           }
         } else {
-          console.log('❌ OIDC Auth Debug - Method 5: No session cookie found');
+          console.log('❌ OIDC Auth Debug - Method 4: No session cookie found');
         }
       } catch (error) {
         console.log(
-          '🔐 OIDC Auth Debug - Method 5 FAILED: Session authentication error:',
+          '🔐 OIDC Auth Debug - Method 4 FAILED: Session authentication error:',
           error.message,
         );
       }
     }
 
-    // Method 6: Try login_hint if provided (for seamless Matrix authentication)
+    // Method 5: Try login_hint if provided (for seamless Matrix authentication)
     if (!user && request.query.login_hint) {
       const loginHint = request.query.login_hint as string;
       console.log(
-        '🔐 OIDC Auth Debug - Method 6: Trying login_hint to find user:',
+        '🔐 OIDC Auth Debug - Method 5: Trying login_hint to find user:',
         loginHint,
       );
 
@@ -330,7 +295,7 @@ export class OidcController {
 
         if (userResult) {
           console.log(
-            '✅ OIDC Auth Debug - Method 6 SUCCESS: Found user via login_hint in tenant:',
+            '✅ OIDC Auth Debug - Method 5 SUCCESS: Found user via login_hint in tenant:',
             userResult.tenantId,
             'user ID:',
             userResult.user.id,
@@ -354,19 +319,19 @@ export class OidcController {
           authUrl.searchParams.set('tenantId', tenantId);
 
           console.log(
-            '🔄 OIDC Auth Debug - Method 6: Redirecting with generated auth code',
+            '🔄 OIDC Auth Debug - Method 5: Redirecting with generated auth code',
           );
           response.redirect(authUrl.toString());
           return;
         } else {
           console.log(
-            '❌ OIDC Auth Debug - Method 6 FAILED: User not found with login_hint:',
+            '❌ OIDC Auth Debug - Method 5 FAILED: User not found with login_hint:',
             loginHint,
           );
         }
       } catch (error) {
         console.error(
-          '❌ OIDC Auth Debug - Method 6 ERROR: Failed to process login_hint:',
+          '❌ OIDC Auth Debug - Method 5 ERROR: Failed to process login_hint:',
           error.message,
         );
       }
