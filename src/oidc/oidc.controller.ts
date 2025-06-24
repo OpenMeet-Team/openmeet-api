@@ -315,10 +315,67 @@ export class OidcController {
       }
     }
 
-    // Method 6 (Last Resort): If no authenticated user found, redirect to login/email form
+    // Method 6: Try login_hint if provided (for seamless Matrix authentication)
+    if (!user && request.query.login_hint) {
+      const loginHint = request.query.login_hint as string;
+      console.log(
+        '🔐 OIDC Auth Debug - Method 6: Trying login_hint to find user:',
+        loginHint,
+      );
+
+      try {
+        // Find user by email across all tenants
+        const userResult =
+          await this.oidcService.findUserByEmailAcrossTenants(loginHint);
+
+        if (userResult) {
+          console.log(
+            '✅ OIDC Auth Debug - Method 6 SUCCESS: Found user via login_hint in tenant:',
+            userResult.tenantId,
+            'user ID:',
+            userResult.user.id,
+          );
+
+          // Generate a temporary auth code for this user
+          const authCode = await this.tempAuthCodeService.generateAuthCode(
+            userResult.user.id,
+            userResult.tenantId,
+          );
+
+          // Store tenant ID for later use
+          tenantId = userResult.tenantId;
+
+          // Redirect to auth endpoint with the auth code
+          const authUrl = new URL(
+            request.url,
+            `${request.protocol}://${request.get('host')}`,
+          );
+          authUrl.searchParams.set('auth_code', authCode);
+          authUrl.searchParams.set('tenantId', tenantId);
+
+          console.log(
+            '🔄 OIDC Auth Debug - Method 6: Redirecting with generated auth code',
+          );
+          response.redirect(authUrl.toString());
+          return;
+        } else {
+          console.log(
+            '❌ OIDC Auth Debug - Method 6 FAILED: User not found with login_hint:',
+            loginHint,
+          );
+        }
+      } catch (error) {
+        console.error(
+          '❌ OIDC Auth Debug - Method 6 ERROR: Failed to process login_hint:',
+          error.message,
+        );
+      }
+    }
+
+    // Method 7 (Last Resort): If no authenticated user found, redirect to login/email form
     if (!user) {
       console.log(
-        '🔐 OIDC Auth Debug - Method 6 (LAST RESORT): No authenticated user found via any method, redirecting to login flow',
+        '🔐 OIDC Auth Debug - Method 7 (LAST RESORT): No authenticated user found via any method, redirecting to login flow',
       );
       const baseUrl =
         this.configService.get('app.oidcIssuerUrl', { infer: true }) ||
