@@ -3,7 +3,6 @@ import { MatrixController } from './matrix.controller';
 import { MatrixUserService } from './services/matrix-user.service';
 import { MatrixRoomService } from './services/matrix-room.service';
 import { MatrixMessageService } from './services/matrix-message.service';
-import { MatrixGateway } from './matrix.gateway';
 import { UserService } from '../user/user.service';
 import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
 import { ConfigService } from '@nestjs/config';
@@ -76,12 +75,6 @@ describe('MatrixController', () => {
             sendMessage: jest.fn(),
             getRoomMessages: jest.fn(),
             sendTypingNotification: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: MatrixGateway,
-          useValue: {
-            broadcastRoomEvent: jest.fn(),
           },
         },
         {

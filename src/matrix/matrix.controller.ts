@@ -7,7 +7,6 @@ import {
   HttpCode,
   Logger,
   Inject,
-  Param,
   Body,
   Req,
   BadRequestException,
@@ -24,7 +23,6 @@ import { Request } from 'express';
 import { MatrixUserService } from './services/matrix-user.service';
 import { MatrixRoomService } from './services/matrix-room.service';
 import { MatrixMessageService } from './services/matrix-message.service';
-import { MatrixGateway } from './matrix.gateway';
 import { MatrixPasswordDto } from './dto/matrix-password.dto';
 import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
 import { Trace } from '../utils/trace.decorator';
@@ -41,7 +39,6 @@ export class MatrixController {
     private readonly matrixUserService: MatrixUserService,
     private readonly matrixRoomService: MatrixRoomService,
     private readonly matrixMessageService: MatrixMessageService,
-    private readonly matrixGateway: MatrixGateway,
     private readonly userService: UserService,
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
     private readonly tempAuthCodeService: TempAuthCodeService,
@@ -462,164 +459,6 @@ export class MatrixController {
   }
 
   /**
-   * Get information about Matrix WebSocket connection
-   */
-  @ApiOperation({
-    summary: 'Get WebSocket connection information',
-    description:
-      'Returns information about the Matrix WebSocket endpoint and authentication status.',
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'WebSocket information returned.',
-    schema: {
-      properties: {
-        endpoint: { type: 'string', example: 'wss://api.example.com/matrix' },
-        authenticated: { type: 'boolean', example: true },
-        matrixUserId: { type: 'string', example: '@john:matrix.example.org' },
-      },
-    },
-  })
-  @UseGuards(JWTAuthGuard)
-  @HttpCode(HttpStatus.OK)
-  @Post('websocket-info')
-  async getWebSocketInfo(
-    @AuthUser() user: { id: number },
-    @Req() req: Request,
-  ): Promise<{
-    endpoint: string;
-    authenticated: boolean;
-    matrixUserId: string | null;
-  }> {
-    this.logger.log(`WebSocket info requested for user ID: ${user.id}`);
-
-    try {
-      // Get full user information
-      const fullUser = await this.userService.findById(user.id);
-
-      // Determine WebSocket endpoint based on configuration
-      // Get the WebSocket endpoint from environment or service
-      const apiBaseUrl =
-        process.env.API_BASE_URL || req.protocol + '://' + req.get('host');
-      const webSocketEndpoint = process.env.MATRIX_WEBSOCKET_ENDPOINT
-        ? process.env.MATRIX_WEBSOCKET_ENDPOINT
-        : apiBaseUrl;
-
-      // Check if the user has valid Matrix credentials via registry or legacy fields
-      let hasCredentials = false;
-      let matrixUserId: string | null = null;
-      try {
-        const registryEntry =
-          await this.globalMatrixValidationService.getMatrixHandleForUser(
-            user.id,
-            this.request?.tenantId,
-          );
-        if (registryEntry) {
-          const serverName = process.env.MATRIX_SERVER_NAME;
-          if (!serverName) {
-            throw new Error(
-              'MATRIX_SERVER_NAME environment variable is required',
-            );
-          }
-          matrixUserId = `@${registryEntry.handle}:${serverName}`;
-          hasCredentials = true;
-        }
-      } catch (error) {
-        this.logger.warn(
-          `Error checking Matrix registry for user ${user.id}: ${error.message}`,
-        );
-      }
-
-      // Fallback to legacy fields if registry check failed
-      if (!hasCredentials && fullUser) {
-        hasCredentials = !!(
-          fullUser.matrixUserId && fullUser.matrixAccessToken
-        );
-        if (hasCredentials) {
-          matrixUserId = fullUser.matrixUserId || null;
-        }
-      }
-
-      // Log detailed information for debugging
-      this.logger.debug('WebSocket endpoint info:', {
-        endpoint: webSocketEndpoint,
-        authenticated: hasCredentials,
-        userId: user.id,
-        matrixUserId: fullUser?.matrixUserId,
-        hasMatrixCredentials: hasCredentials,
-      });
-
-      // Return info to client (no sensitive credentials)
-      return {
-        endpoint: webSocketEndpoint,
-        authenticated: hasCredentials,
-        matrixUserId: matrixUserId,
-      };
-    } catch (error) {
-      this.logger.error(
-        `Error getting WebSocket info for user ${user.id}: ${error.message}`,
-        error.stack,
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * Send typing notification to a Matrix room
-   */
-  @ApiOperation({
-    summary: 'Send typing notification to a Matrix room',
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'Typing notification sent successfully',
-  })
-  @UseGuards(JWTAuthGuard)
-  @HttpCode(HttpStatus.OK)
-  @Post(':roomId/typing')
-  async sendTypingNotification(
-    @AuthUser() user: { id: number },
-    @Req() req: Request,
-    @Param('roomId') roomId: string,
-    @Body() body: { isTyping: boolean },
-  ): Promise<{ success: boolean }> {
-    try {
-      // Get the tenant ID from the request
-      const tenantId = this.request.tenantId;
-
-      // Get user slug for the authenticated user
-      const fullUser = await this.userService.findById(user.id, tenantId);
-      if (!fullUser) {
-        throw new Error(`User with ID ${user.id} not found`);
-      }
-
-      this.logger.log(
-        `Sending typing notification for user ${fullUser.slug} in room ${roomId}, typing: ${body.isTyping}`,
-      );
-
-      // Use the new slug-based method that correctly handles tenant context
-      await this.matrixMessageService.sendTypingNotificationBySlug(
-        roomId,
-        fullUser.slug,
-        body.isTyping,
-        tenantId,
-      );
-
-      this.logger.debug(
-        `Typing notification sent for user ${fullUser.slug} in room ${roomId}`,
-      );
-
-      return { success: true };
-    } catch (error) {
-      this.logger.error(
-        `Error sending typing notification: ${error.message}`,
-        error.stack,
-      );
-      throw error;
-    }
-  }
-
-  /**
    * Set a Matrix password for direct client access
    */
   @ApiOperation({
@@ -666,109 +505,6 @@ export class MatrixController {
     } catch (error) {
       this.logger.error(
         `Error setting Matrix password for user ${user.id}: ${error.message}`,
-        error.stack,
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * Test endpoint to broadcast a message to a Matrix room via WebSocket
-   * This helps debug WebSocket event propagation without requiring an actual
-   * Matrix message to be sent
-   */
-  @ApiOperation({
-    summary: 'Test broadcast to Matrix room via WebSocket',
-    description:
-      'Broadcasts a test message to a room via WebSocket without sending an actual Matrix message',
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'Test broadcast sent successfully',
-  })
-  @UseGuards(JWTAuthGuard)
-  @HttpCode(HttpStatus.OK)
-  @Post('test-broadcast')
-  async testBroadcast(
-    @AuthUser() user: { id: number },
-    @Body() body: { roomId: string; message?: string },
-  ): Promise<any> {
-    try {
-      const { roomId, message } = body;
-
-      if (!roomId) {
-        throw new Error('Room ID is required');
-      }
-
-      this.logger.log(
-        `Testing broadcast to room ${roomId} from user ${user.id}`,
-      );
-
-      // Get Matrix user ID for the user
-      let matrixUserId: string | null = null;
-      try {
-        const registryEntry =
-          await this.globalMatrixValidationService.getMatrixHandleForUser(
-            user.id,
-            this.request?.tenantId,
-          );
-        if (registryEntry) {
-          const serverName = process.env.MATRIX_SERVER_NAME;
-          if (!serverName) {
-            throw new Error(
-              'MATRIX_SERVER_NAME environment variable is required',
-            );
-          }
-          matrixUserId = `@${registryEntry.handle}:${serverName}`;
-        }
-      } catch (error) {
-        this.logger.warn(
-          `Error checking Matrix registry for user ${user.id}: ${error.message}`,
-        );
-      }
-
-      // Fallback: Check legacy matrixUserId field
-      if (!matrixUserId) {
-        const fullUser = await this.userService.findById(user.id);
-        if (fullUser?.matrixUserId) {
-          matrixUserId = fullUser.matrixUserId || null;
-        }
-      }
-
-      if (!matrixUserId) {
-        throw new Error('User has no Matrix credentials');
-      }
-
-      // Create a test event object
-      const testEvent = {
-        type: 'm.room.message',
-        room_id: roomId,
-        event_id: `test-${Date.now()}`,
-        sender: matrixUserId,
-        content: {
-          msgtype: 'm.text',
-          body: message || 'Test broadcast message',
-        },
-        origin_server_ts: Date.now(),
-        timestamp: Date.now(),
-      };
-
-      // Use the Matrix gateway directly
-      if (!this.matrixGateway) {
-        throw new Error('Matrix gateway not available for broadcasting');
-      }
-
-      // Broadcast the event directly
-      this.matrixGateway.broadcastRoomEvent(roomId, testEvent);
-
-      return {
-        success: true,
-        event: testEvent,
-        message: 'Test broadcast sent successfully',
-      };
-    } catch (error) {
-      this.logger.error(
-        `Error testing broadcast: ${error.message}`,
         error.stack,
       );
       throw error;

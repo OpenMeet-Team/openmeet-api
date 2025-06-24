@@ -1,7 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MatrixController } from './matrix.controller';
-import { MatrixGateway } from './matrix.gateway';
 import { matrixConfig } from './config/matrix.config';
 import { UserModule } from '../user/user.module';
 import { UserService } from '../user/user.service';
@@ -14,7 +13,6 @@ import { MatrixUserService } from './services/matrix-user.service';
 import { MatrixRoomService } from './services/matrix-room.service';
 import { MatrixMessageService } from './services/matrix-message.service';
 import { MatrixTokenManagerService } from './services/matrix-token-manager.service';
-import { MatrixClientOperationsService } from './services/matrix-client-operations.service';
 import { MatrixHealthIndicator } from './health/matrix.health';
 import { configureMatrixLogging } from './config/matrix-logger';
 import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
@@ -51,13 +49,9 @@ configureMatrixLogging();
     MatrixUserService,
     MatrixRoomService,
     MatrixMessageService,
-    MatrixClientOperationsService,
     MatrixHealthIndicator,
     GlobalMatrixValidationService,
     MatrixHandleMigrationService,
-
-    // Gateway for real-time events
-    MatrixGateway,
 
     // User service provider
     {
@@ -72,7 +66,6 @@ configureMatrixLogging();
     MatrixRoomService,
     MatrixMessageService,
     MatrixTokenManagerService,
-    MatrixClientOperationsService,
     MatrixHealthIndicator,
     GlobalMatrixValidationService,
   ],

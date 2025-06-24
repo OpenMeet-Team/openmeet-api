@@ -5,7 +5,6 @@ import { MatrixController } from './matrix.controller';
 import { MatrixUserService } from './services/matrix-user.service';
 import { MatrixRoomService } from './services/matrix-room.service';
 import { MatrixMessageService } from './services/matrix-message.service';
-import { MatrixGateway } from './matrix.gateway';
 import { UserService } from '../user/user.service';
 import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
 import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
@@ -68,10 +67,6 @@ describe('MatrixController - Handle Endpoints', () => {
         },
         {
           provide: MatrixMessageService,
-          useValue: {},
-        },
-        {
-          provide: MatrixGateway,
           useValue: {},
         },
         {
