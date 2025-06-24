@@ -45,40 +45,12 @@ describe('Matrix Core API Tests', () => {
       expect(response.body.matrixUserId).toMatch(/^@.+:.+$/);
     });
 
-    it('should return WebSocket connection information', async () => {
-      const response = await request(TESTING_APP_URL)
-        .post('/api/matrix/websocket-info')
-        .set('Authorization', `Bearer ${token}`)
-        .set('x-tenant-id', TESTING_TENANT_ID);
-
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('endpoint');
-      expect(response.body).toHaveProperty('authenticated');
-      expect(response.body).toHaveProperty('matrixUserId');
-
-      // The endpoint should be a valid URL
-      expect(response.body.endpoint).toMatch(/^(http|https):\/\//);
-    });
-
     it('should enforce authentication for Matrix API endpoints', async () => {
       const response = await request(TESTING_APP_URL)
         .post('/api/matrix/provision-user')
         .set('x-tenant-id', TESTING_TENANT_ID);
 
       expect(response.status).toBe(401);
-    });
-  });
-
-  describe('WebSocket API Configuration', () => {
-    it('should have a socket.io endpoint available', async () => {
-      const response = await request(TESTING_APP_URL)
-        .get('/socket.io/matrix')
-        .set('Authorization', `Bearer ${token}`)
-        .set('x-tenant-id', TESTING_TENANT_ID);
-
-      // Socket.io endpoints typically return 400 Bad Request
-      // when accessed directly via HTTP (they expect a WebSocket upgrade)
-      expect([400, 404]).toContain(response.status);
     });
   });
 });

@@ -55,7 +55,7 @@ export class DiscussionService implements DiscussionServiceInterface {
     entityType: 'event' | 'group',
     slug: string,
     userId: number | null,
-    limit = 50,
+    _limit = 50,
     from?: string,
     explicitTenantId?: string,
   ): Promise<DiscussionMessagesResponseDto> {
@@ -401,11 +401,9 @@ export class DiscussionService implements DiscussionServiceInterface {
       // For unauthenticated users, we need to handle the null userId case
       let messageData;
       if (userId !== null) {
-        messageData = await this.chatRoomService.getMessages(
-          chatRooms[0].id,
-          userId,
-          limit,
-          from,
+        // ARCHITECTURAL CHANGE: Message retrieval now handled by frontend Matrix client
+        throw new Error(
+          'Message retrieval has been moved to frontend Matrix client. Use Matrix SDK directly for real-time messaging.',
         );
       } else {
         // For unauthenticated users, try to get messages without user context
@@ -1455,14 +1453,10 @@ export class DiscussionService implements DiscussionServiceInterface {
       }
     }
 
-    // Send the message to the chat room
-    const messageId = await this.chatRoomService.sendMessage(
-      chatRoom.id,
-      userId,
-      body.message,
+    // ARCHITECTURAL CHANGE: Message sending now handled by frontend Matrix client
+    throw new Error(
+      'Message sending has been moved to frontend Matrix client. Use Matrix SDK directly for real-time messaging.',
     );
-
-    return { id: messageId };
   }
 
   @Trace('discussion.sendGroupDiscussionMessage')

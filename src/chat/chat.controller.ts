@@ -42,38 +42,46 @@ export class ChatController {
    * Event discussion endpoints
    */
   @Post('event/:slug/message')
-  @ApiOperation({ summary: 'Send a message to an event discussion' })
-  async sendEventMessage(
-    @Param('slug') slug: string,
-    @Body() body: { message: string },
-    @AuthUser() user: User,
-  ): Promise<{ id: string }> {
-    return await this.discussionService.sendEventDiscussionMessage(
-      slug,
-      user.id,
-      body,
-    );
+  @ApiOperation({
+    summary: 'Send a message to an event discussion',
+    deprecated: true,
+    description:
+      'This endpoint has been deprecated. Use Matrix SDK directly for messaging.',
+  })
+  sendEventMessage(
+    @Param('slug') _slug: string,
+    @Body() _body: { message: string },
+    @AuthUser() _user: User,
+  ): { error: string; message: string } {
+    return {
+      error: 'DEPRECATED_ENDPOINT',
+      message:
+        'Message sending has been moved to frontend Matrix client. Use Matrix SDK directly for real-time messaging.',
+    };
   }
 
   @Get('event/:slug/messages')
-  @ApiOperation({ summary: 'Get messages from an event discussion' })
+  @ApiOperation({
+    summary: 'Get messages from an event discussion',
+    deprecated: true,
+    description:
+      'This endpoint has been deprecated. Use Matrix SDK directly for messaging.',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Messages from the event discussion',
-    type: DiscussionMessagesResponseDto,
+    description: 'Deprecated endpoint - use Matrix SDK for messaging',
   })
-  async getEventMessages(
-    @Param('slug') slug: string,
-    @AuthUser() user: User,
-    @Query('limit') limit?: number,
-    @Query('from') from?: string,
-  ): Promise<DiscussionMessagesResponseDto> {
-    return await this.discussionService.getEventDiscussionMessages(
-      slug,
-      user.id,
-      limit,
-      from,
-    );
+  getEventMessages(
+    @Param('slug') _slug: string,
+    @AuthUser() _user: User,
+    @Query('limit') _limit?: number,
+    @Query('from') _from?: string,
+  ): { error: string; message: string } {
+    return {
+      error: 'DEPRECATED_ENDPOINT',
+      message:
+        'Message retrieval has been moved to frontend Matrix client. Use Matrix SDK directly for real-time messaging.',
+    };
   }
 
   @Post('event/:slug/join')
@@ -172,26 +180,23 @@ export class ChatController {
    * Group discussion endpoints (placeholders for future implementation)
    */
   @Post('group/:slug/message')
-  @ApiOperation({ summary: 'Send a message to a group discussion' })
-  async sendGroupMessage(
-    @Param('slug') slug: string,
-    @Body() body: { message: string },
-    @AuthUser() user: User,
-    @Req() request: any,
-  ): Promise<{ id: string }> {
-    // Pass the tenant ID explicitly from the request
-    const tenantId = request.tenantId;
-    if (!tenantId) {
-      throw new Error('Tenant ID is required');
-    }
-
-    // Use the discussion service with explicit tenant ID
-    return await this.discussionService.sendGroupDiscussionMessage(
-      slug,
-      user.id,
-      body,
-      tenantId, // Pass tenant ID explicitly
-    );
+  @ApiOperation({
+    summary: 'Send a message to a group discussion',
+    deprecated: true,
+    description:
+      'This endpoint has been deprecated. Use Matrix SDK directly for messaging.',
+  })
+  sendGroupMessage(
+    @Param('slug') _slug: string,
+    @Body() _body: { message: string },
+    @AuthUser() _user: User,
+    @Req() _request: any,
+  ): { error: string; message: string } {
+    return {
+      error: 'DEPRECATED_ENDPOINT',
+      message:
+        'Message sending has been moved to frontend Matrix client. Use Matrix SDK directly for real-time messaging.',
+    };
   }
 
   @Public()
@@ -199,40 +204,26 @@ export class ChatController {
   @Get('group/:slug/messages')
   @ApiOperation({
     summary: 'Get messages from a group discussion',
+    deprecated: true,
     description:
-      'Public groups can be viewed by unauthenticated users. Private groups require authentication and membership.',
+      'This endpoint has been deprecated. Use Matrix SDK directly for messaging.',
   })
   @ApiResponse({
     status: 200,
-    description: 'Messages from the group discussion',
-    type: DiscussionMessagesResponseDto,
+    description: 'Deprecated endpoint - use Matrix SDK for messaging',
   })
-  async getGroupMessages(
-    @Param('slug') slug: string,
-    @Req() request: any,
-    @Query('limit') limit?: number,
-    @Query('from') from?: string,
-    @Optional() @AuthUser() user?: User,
-  ): Promise<DiscussionMessagesResponseDto> {
-    // Set the group slug header for VisibilityGuard
-    request.headers['x-group-slug'] = slug;
-
-    // Pass the tenant ID explicitly from the request
-    const tenantId = request.tenantId;
-    if (!tenantId) {
-      throw new Error('Tenant ID is required');
-    }
-
-    // Use the discussion service with optional userId for unauthenticated users
-    const userId = user?.id || null;
-
-    return await this.discussionService.getGroupDiscussionMessages(
-      slug,
-      userId,
-      limit,
-      from,
-      tenantId, // Pass tenant ID explicitly
-    );
+  getGroupMessages(
+    @Param('slug') _slug: string,
+    @Req() _request: any,
+    @Query('limit') _limit?: number,
+    @Query('from') _from?: string,
+    @Optional() @AuthUser() _user?: User,
+  ): { error: string; message: string } {
+    return {
+      error: 'DEPRECATED_ENDPOINT',
+      message:
+        'Message retrieval has been moved to frontend Matrix client. Use Matrix SDK directly for real-time messaging.',
+    };
   }
 
   @Post('group/:slug/join')

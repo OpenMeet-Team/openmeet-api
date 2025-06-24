@@ -2,13 +2,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ModuleRef } from '@nestjs/core';
 import { MatrixUserService } from './matrix-user.service';
 import { MatrixCoreService } from './matrix-core.service';
-import { MatrixGateway } from '../matrix.gateway';
 import { GlobalMatrixValidationService } from './global-matrix-validation.service';
 
 describe('MatrixUserService - Handle-based Provisioning', () => {
   let service: MatrixUserService;
   let mockMatrixCoreService: jest.Mocked<MatrixCoreService>;
-  let mockMatrixGateway: any;
   let mockGlobalValidationService: jest.Mocked<GlobalMatrixValidationService>;
   let mockModuleRef: jest.Mocked<ModuleRef>;
 
@@ -43,7 +41,6 @@ describe('MatrixUserService - Handle-based Provisioning', () => {
       suggestAvailableHandles: jest.fn(),
     } as any;
 
-    mockMatrixGateway = {};
     mockModuleRef = {} as any;
 
     const module: TestingModule = await Test.createTestingModule({
@@ -56,10 +53,6 @@ describe('MatrixUserService - Handle-based Provisioning', () => {
         {
           provide: ModuleRef,
           useValue: mockModuleRef,
-        },
-        {
-          provide: MatrixGateway,
-          useValue: mockMatrixGateway,
         },
         {
           provide: GlobalMatrixValidationService,

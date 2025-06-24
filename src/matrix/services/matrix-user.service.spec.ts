@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { MatrixUserService } from './matrix-user.service';
 import { MatrixCoreService } from './matrix-core.service';
 import { ModuleRef } from '@nestjs/core';
-import { MatrixGateway } from '../matrix.gateway';
 import { GlobalMatrixValidationService } from './global-matrix-validation.service';
 import axios from 'axios';
 
@@ -132,12 +131,6 @@ describe('MatrixUserService', () => {
                 }),
               };
             }),
-          },
-        },
-        {
-          provide: MatrixGateway,
-          useValue: {
-            broadcastRoomEvent: jest.fn(),
           },
         },
         {
