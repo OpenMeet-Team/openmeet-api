@@ -434,10 +434,33 @@ export class OidcController {
       throw new BadRequestException('Missing required OIDC parameters');
     }
 
-    // Check for auth code in query parameter first
-    const authCodeToValidate = authCode;
+    // Check for auth code in query parameter first, then try to extract from state parameter
+    let authCodeToValidate = authCode;
+    let extractedTenantId = tenantId;
 
-    // Skip state parameter parsing - Matrix corrupts the data and we use session auth instead
+    // Try to extract auth code from state parameter if not provided directly
+    if (!authCodeToValidate && state) {
+      console.log(
+        '🔍 Matrix Direct Auth - Trying to extract auth code from state parameter...',
+      );
+      try {
+        const decodedState = JSON.parse(
+          Buffer.from(state, 'base64').toString(),
+        );
+        if (decodedState.authCode) {
+          authCodeToValidate = decodedState.authCode;
+          extractedTenantId = decodedState.tenantId || extractedTenantId;
+          console.log(
+            '✅ Matrix Direct Auth - Successfully extracted auth code from state parameter',
+          );
+        }
+      } catch (error) {
+        console.log(
+          '⚠️ Matrix Direct Auth - Failed to parse state parameter:',
+          error.message,
+        );
+      }
+    }
 
     // Check for auth code (highest priority for seamless authentication)
     if (authCodeToValidate) {
@@ -501,7 +524,7 @@ export class OidcController {
             scope,
             ...(state && { state }),
             ...(nonce && { nonce }),
-            ...(tenantId && { tenantId }), // Pass tenant ID if provided
+            ...(extractedTenantId && { tenantId: extractedTenantId }), // Pass tenant ID if provided
           }).toString();
 
         response.redirect(oidcAuthUrl);
@@ -512,29 +535,29 @@ export class OidcController {
       let authenticatedUser: { id: number; tenantId: string } | null = null;
       let userTenantId: string | null = null;
 
-      if (tenantId) {
+      if (extractedTenantId) {
         // Check specific tenant first if provided
         console.log(
           '🏢 Matrix Direct Auth - Checking specific tenant:',
-          tenantId,
+          extractedTenantId,
         );
         try {
           const userFromSession = await this.oidcService.getUserFromSession(
             sessionCookie,
-            tenantId,
+            extractedTenantId,
           );
           if (userFromSession) {
             authenticatedUser = userFromSession;
-            userTenantId = tenantId;
+            userTenantId = extractedTenantId;
             console.log(
               '✅ Matrix Direct Auth - Found authenticated user in specified tenant:',
-              tenantId,
+              extractedTenantId,
             );
           }
         } catch {
           console.log(
             '❌ Matrix Direct Auth - User not found in specified tenant:',
-            tenantId,
+            extractedTenantId,
           );
         }
       }
