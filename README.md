@@ -24,11 +24,17 @@ OpenMeet is built with extensibility in mind, making it easy for developers to c
 # Copy example config
 cp env-example-relational .env
 
-# Start dependencies
+# Start dependencies with Docker Compose V1
 docker-compose -f docker-compose-dev.yml up --build
+
+# Start dependencies with Docker Compose V2
+docker compose -f docker-compose-dev.yml up --build
 
 # Load environment variables
 export $( grep -v "#" ".env" | xargs)
+
+# Install Node.js dependencies
+npm install
 
 # Start development server
 npm run start:dev
