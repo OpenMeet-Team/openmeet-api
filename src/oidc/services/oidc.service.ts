@@ -27,7 +27,7 @@ export interface OidcTokenResponse {
   expires_in: number;
   refresh_token?: string;
   id_token: string;
-  state?: string; // Matrix session state for macaroon deserialization
+  // NOTE: state parameter removed - not part of OIDC token response spec
 }
 
 @Injectable()
@@ -368,7 +368,8 @@ export class OidcService {
       token_type: 'Bearer',
       expires_in: 3600, // 1 hour
       id_token: idToken,
-      state: authData.matrix_original_state, // Return Matrix session state for macaroon deserialization
+      // NOTE: state parameter should NOT be returned in token response per OIDC spec
+      // Matrix handles state validation during authorization flow, not token exchange
     };
   }
 
