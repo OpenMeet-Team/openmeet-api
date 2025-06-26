@@ -105,7 +105,7 @@ export class OidcController {
     }
 
     // Use the state parameter from URL - Matrix passes this correctly
-    let actualState = state;
+    const actualState = state;
 
     // Check if user is authenticated via active session or JWT token
     const authHeader = request.headers.authorization;
@@ -151,7 +151,8 @@ export class OidcController {
 
     // Method 2: Check for user token in query parameters (sent by platform after OIDC login)
     // Re-enabled for third-party Matrix app authentication when no auth_code available
-    if (!user) { // Re-enabled: needed for third-party Matrix OIDC flow
+    if (!user) {
+      // Re-enabled: needed for third-party Matrix OIDC flow
       const userToken = request.query.user_token as string;
       if (userToken) {
         console.log(
@@ -230,6 +231,41 @@ export class OidcController {
           '🔐 OIDC Auth Debug - OIDC session cookie value:',
           sessionCookie ? 'found' : 'not found',
         );
+
+        // DEBUG: Print raw oidc_session cookie for analysis
+        if (sessionCookie) {
+          console.log('🔍 OIDC Session Cookie DEBUG - Raw cookie value:');
+          console.log('Length:', sessionCookie.length);
+          console.log('First 100 chars:', sessionCookie.substring(0, 100));
+          console.log(
+            'Last 100 chars:',
+            sessionCookie.substring(Math.max(0, sessionCookie.length - 100)),
+          );
+
+          // Try to decode as base64 and show the macaroon structure
+          try {
+            const decoded = Buffer.from(sessionCookie, 'base64').toString(
+              'utf8',
+            );
+            console.log(
+              '🔍 Base64 decoded (first 200 chars):',
+              decoded.substring(0, 200),
+            );
+          } catch (error) {
+            console.log('🔍 Failed to decode as base64:', error.message);
+          }
+
+          // Show hex representation of first 50 bytes
+          try {
+            const buffer = Buffer.from(sessionCookie, 'base64');
+            console.log(
+              '🔍 Hex representation (first 50 bytes):',
+              buffer.subarray(0, 50).toString('hex'),
+            );
+          } catch (error) {
+            console.log('🔍 Failed to convert to hex:', error.message);
+          }
+        }
         if (sessionCookie) {
           console.log(
             '🔐 OIDC Auth Debug - Method 4: Session cookie found, scanning all tenants for authenticated user',
@@ -276,7 +312,7 @@ export class OidcController {
             response.clearCookie('oidc_session', {
               path: '/',
               httpOnly: true,
-              domain: '.openmeet.net', 
+              domain: '.openmeet.net',
             });
             response.clearCookie('oidc_session', {
               path: '/_synapse/client/oidc',
@@ -294,7 +330,7 @@ export class OidcController {
               path: '/',
               httpOnly: true,
             });
-            
+
             // Also set an expired cookie to force browser to clear it
             response.cookie('oidc_session', '', {
               expires: new Date(0),
@@ -378,16 +414,29 @@ export class OidcController {
       const baseUrl =
         this.configService.get('app.oidcIssuerUrl', { infer: true }) ||
         'http://localhost:3000';
+
+      // Extract login_hint for email pre-fill
+      const loginHint = request.query.login_hint as string;
+
+      const oidcLoginParams = {
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        response_type: responseType,
+        scope,
+        ...(state && { state }),
+        ...(nonce && { nonce }),
+        // Include login_hint for email pre-fill in login form
+        ...(loginHint && { login_hint: loginHint }),
+      };
+
       const oidcLoginUrl =
         `${baseUrl}/api/oidc/login?` +
-        new URLSearchParams({
-          client_id: clientId,
-          redirect_uri: redirectUri,
-          response_type: responseType,
-          scope,
-          ...(state && { state }),
-          ...(nonce && { nonce }),
-        }).toString();
+        new URLSearchParams(oidcLoginParams).toString();
+
+      console.log(
+        '📧 OIDC Auth Debug - Method 7: Redirecting to login with email pre-fill:',
+        loginHint || 'none',
+      );
 
       response.redirect(oidcLoginUrl);
       return;
@@ -534,6 +583,7 @@ export class OidcController {
     @Query('scope') scope: string,
     @Query('state') state?: string,
     @Query('nonce') nonce?: string,
+    @Query('login_hint') loginHint?: string,
   ) {
     if (!clientId || !redirectUri || !responseType || !scope) {
       throw new BadRequestException('Missing required OIDC parameters');
@@ -550,7 +600,8 @@ export class OidcController {
     // Check for user token in query parameters (sent by platform after OIDC login)
     // Re-enabled for third-party Matrix app authentication flow
     const userToken = request.query.user_token as string;
-    if (userToken) { // Re-enabled: needed for third-party Matrix OIDC flow
+    if (userToken) {
+      // Re-enabled: needed for third-party Matrix OIDC flow
       console.log(
         '🔐 OIDC Login Debug - Found user_token in query parameters, validating...',
       );
@@ -651,7 +702,7 @@ export class OidcController {
           response.clearCookie('oidc_session', {
             path: '/',
             httpOnly: true,
-            domain: '.openmeet.net', 
+            domain: '.openmeet.net',
           });
           response.clearCookie('oidc_session', {
             path: '/_synapse/client/oidc',
@@ -661,7 +712,7 @@ export class OidcController {
             path: '/',
             httpOnly: true,
           });
-          
+
           // Also set an expired cookie to force browser to clear it
           response.cookie('oidc_session', '', {
             expires: new Date(0),
@@ -815,7 +866,7 @@ export class OidcController {
         
         <div class="form-group">
           <label for="email">Email address</label>
-          <input type="email" id="email" name="email" required>
+          <input type="email" id="email" name="email" value="${loginHint || ''}" required>
         </div>
         
         <button type="submit">Continue</button>
