@@ -183,8 +183,11 @@ export class OidcService {
 
           if (sessionAge > maxSessionAge) {
             this.logger.warn(
-              `OIDC session ${sessionId} expired (age: ${Math.round(sessionAge / 1000 / 60)} minutes)`,
+              `OIDC session ${sessionId} expired (age: ${Math.round(sessionAge / 1000 / 60)} minutes) - marking as deleted`,
             );
+            // Mark the expired session as deleted to prevent future lookups
+            session.deletedAt = new Date();
+            await sessionRepository.save(session);
             return null;
           }
 
@@ -214,8 +217,11 @@ export class OidcService {
 
             if (sessionAge > maxSessionAge) {
               this.logger.warn(
-                `OIDC session ${sessionId} expired (age: ${Math.round(sessionAge / 1000 / 60)} minutes)`,
+                `OIDC session ${sessionId} expired (age: ${Math.round(sessionAge / 1000 / 60)} minutes) - marking as deleted`,
               );
+              // Mark the expired session as deleted to prevent future lookups
+              session.deletedAt = new Date();
+              await sessionRepository.save(session);
               continue;
             }
 

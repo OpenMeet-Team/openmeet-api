@@ -23,6 +23,7 @@ import { JwtPayloadType } from '../auth/strategies/types/jwt-payload.type';
 import { getTenantConfig, fetchTenants } from '../utils/tenant-config';
 import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
 import { UserService } from '../user/user.service';
+// Removed MacaroonsVerifier - simplified to use URL state parameter
 
 @ApiTags('OIDC')
 @Controller('oidc')
@@ -34,6 +35,9 @@ export class OidcController {
     private readonly tempAuthCodeService: TempAuthCodeService,
     private readonly userService: UserService,
   ) {}
+
+  // Removed extractStateFromMatrixSessionCookie - simplified to use URL state parameter
+  // The macaroon parsing was incorrectly trying to decode binary data as UTF-8 text
 
   @ApiOperation({
     summary: 'OIDC Discovery Document',
@@ -100,6 +104,9 @@ export class OidcController {
       throw new BadRequestException('Missing required OIDC parameters');
     }
 
+    // Use the state parameter from URL - Matrix passes this correctly
+    let actualState = state;
+
     // Check if user is authenticated via active session or JWT token
     const authHeader = request.headers.authorization;
     let user: { id: number } | null = null;
@@ -142,8 +149,9 @@ export class OidcController {
     // Method 2: REMOVED - Do not decode state parameter as it's meant to be opaque per OIDC spec
     // Matrix uses state for session macaroons, frontend uses other auth methods
 
-    // Method 2: Check for user token in query parameters (sent by frontend after login)
-    if (!user) {
+    // Method 2: Check for user token in query parameters (sent by platform after OIDC login)
+    // Re-enabled for third-party Matrix app authentication when no auth_code available
+    if (!user) { // Re-enabled: needed for third-party Matrix OIDC flow
       const userToken = request.query.user_token as string;
       if (userToken) {
         console.log(
@@ -259,13 +267,38 @@ export class OidcController {
             console.log(
               '❌ OIDC Auth Debug - Method 4: No authenticated user found in any tenant - clearing invalid session cookie',
             );
-            // Clear invalid oidc_session cookie
+            // Clear invalid oidc_session cookie with multiple path variations
+            response.clearCookie('oidc_session', {
+              path: '/_synapse/client/oidc',
+              httpOnly: true,
+              domain: '.openmeet.net',
+            });
+            response.clearCookie('oidc_session', {
+              path: '/',
+              httpOnly: true,
+              domain: '.openmeet.net', 
+            });
             response.clearCookie('oidc_session', {
               path: '/_synapse/client/oidc',
               httpOnly: true,
             });
+            response.clearCookie('oidc_session', {
+              path: '/',
+              httpOnly: true,
+            });
             response.clearCookie('oidc_session_no_samesite', {
               path: '/_synapse/client/oidc',
+              httpOnly: true,
+            });
+            response.clearCookie('oidc_session_no_samesite', {
+              path: '/',
+              httpOnly: true,
+            });
+            
+            // Also set an expired cookie to force browser to clear it
+            response.cookie('oidc_session', '', {
+              expires: new Date(0),
+              path: '/',
               httpOnly: true,
             });
           }
@@ -418,7 +451,7 @@ export class OidcController {
         redirect_uri: redirectUri,
         response_type: responseType,
         scope,
-        state,
+        state: actualState, // Use extracted session state instead of URL state
         nonce,
       },
       user.id,
@@ -514,9 +547,10 @@ export class OidcController {
     const authHeader = request.headers.authorization;
     let user: { id: number } | null = null;
 
-    // Check for user token in query parameters (sent by frontend after login)
+    // Check for user token in query parameters (sent by platform after OIDC login)
+    // Re-enabled for third-party Matrix app authentication flow
     const userToken = request.query.user_token as string;
-    if (userToken) {
+    if (userToken) { // Re-enabled: needed for third-party Matrix OIDC flow
       console.log(
         '🔐 OIDC Login Debug - Found user_token in query parameters, validating...',
       );
@@ -604,6 +638,37 @@ export class OidcController {
         }
       } catch {
         console.log('🔐 OIDC Login Debug - No session authentication found');
+        // If we found a session cookie but no valid user, clear the invalid cookie
+        const sessionCookie = request.cookies?.['oidc_session'];
+        if (sessionCookie) {
+          console.log('🔐 OIDC Login Debug - Clearing invalid session cookie');
+          // Clear invalid oidc_session cookie with multiple path variations
+          response.clearCookie('oidc_session', {
+            path: '/_synapse/client/oidc',
+            httpOnly: true,
+            domain: '.openmeet.net',
+          });
+          response.clearCookie('oidc_session', {
+            path: '/',
+            httpOnly: true,
+            domain: '.openmeet.net', 
+          });
+          response.clearCookie('oidc_session', {
+            path: '/_synapse/client/oidc',
+            httpOnly: true,
+          });
+          response.clearCookie('oidc_session', {
+            path: '/',
+            httpOnly: true,
+          });
+          
+          // Also set an expired cookie to force browser to clear it
+          response.cookie('oidc_session', '', {
+            expires: new Date(0),
+            path: '/',
+            httpOnly: true,
+          });
+        }
       }
     }
 
