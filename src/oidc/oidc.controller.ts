@@ -216,10 +216,10 @@ export class OidcController {
       }
     }
 
-    // Method 4: Check for authenticated user via session cookie (Matrix SSO)
+    // Method 4: Check for Matrix session cookie (OIDC flow)
     if (!user) {
       console.log(
-        '🔐 OIDC Auth Debug - Method 4: Checking session authentication...',
+        '🔐 OIDC Auth Debug - Method 4: Checking Matrix session authentication...',
       );
       try {
         console.log(
@@ -228,118 +228,34 @@ export class OidcController {
         );
         const sessionCookie = request.cookies?.['oidc_session'];
         console.log(
-          '🔐 OIDC Auth Debug - OIDC session cookie value:',
+          '🔐 OIDC Auth Debug - Matrix session cookie value:',
           sessionCookie ? 'found' : 'not found',
         );
 
-        // DEBUG: Print raw oidc_session cookie for analysis
         if (sessionCookie) {
-          console.log('🔍 OIDC Session Cookie DEBUG - Raw cookie value:');
+          console.log('🔍 Matrix Session Cookie DEBUG - Raw cookie analysis:');
           console.log('Length:', sessionCookie.length);
-          console.log('First 100 chars:', sessionCookie.substring(0, 100));
+          console.log('First 50 chars:', sessionCookie.substring(0, 50));
+          
+          // IMPORTANT: Matrix session cookies are macaroons, not OpenMeet session IDs
+          // We should NOT try to validate them as OpenMeet sessions
+          // Instead, treat them as opaque session identifiers from Matrix
+          
           console.log(
-            'Last 100 chars:',
-            sessionCookie.substring(Math.max(0, sessionCookie.length - 100)),
+            '🔐 OIDC Auth Debug - Method 4: Matrix session cookie detected - this indicates Matrix SSO flow',
           );
-
-          // Try to decode as base64 and show the macaroon structure
-          try {
-            const decoded = Buffer.from(sessionCookie, 'base64').toString(
-              'utf8',
-            );
-            console.log(
-              '🔍 Base64 decoded (first 200 chars):',
-              decoded.substring(0, 200),
-            );
-          } catch (error) {
-            console.log('🔍 Failed to decode as base64:', error.message);
-          }
-
-          // Show hex representation of first 50 bytes
-          try {
-            const buffer = Buffer.from(sessionCookie, 'base64');
-            console.log(
-              '🔍 Hex representation (first 50 bytes):',
-              buffer.subarray(0, 50).toString('hex'),
-            );
-          } catch (error) {
-            console.log('🔍 Failed to convert to hex:', error.message);
-          }
-        }
-        if (sessionCookie) {
           console.log(
-            '🔐 OIDC Auth Debug - Method 4: Session cookie found, scanning all tenants for authenticated user',
+            '🔐 OIDC Auth Debug - Method 4: Matrix macaroon cookies are opaque to us - skipping validation',
           );
-
-          const tenants = fetchTenants();
-          for (const tenant of tenants) {
-            if (!tenant.id) continue;
-            try {
-              const userFromSession = await this.oidcService.getUserFromSession(
-                sessionCookie,
-                tenant.id,
-              );
-              if (userFromSession) {
-                console.log(
-                  '✅ OIDC Auth Debug - Method 4 SUCCESS: Found authenticated user via session in tenant:',
-                  tenant.id,
-                  'user ID:',
-                  userFromSession.id,
-                );
-                user = { id: userFromSession.id };
-                tenantId = tenant.id;
-                break;
-              }
-            } catch (error) {
-              console.log(
-                '🔍 OIDC Auth Debug - No user found in tenant:',
-                tenant.id,
-                error.message,
-              );
-            }
-          }
-
-          if (!user) {
-            console.log(
-              '❌ OIDC Auth Debug - Method 4: No authenticated user found in any tenant - clearing invalid session cookie',
-            );
-            // Clear invalid oidc_session cookie with multiple path variations
-            response.clearCookie('oidc_session', {
-              path: '/_synapse/client/oidc',
-              httpOnly: true,
-              domain: '.openmeet.net',
-            });
-            response.clearCookie('oidc_session', {
-              path: '/',
-              httpOnly: true,
-              domain: '.openmeet.net',
-            });
-            response.clearCookie('oidc_session', {
-              path: '/_synapse/client/oidc',
-              httpOnly: true,
-            });
-            response.clearCookie('oidc_session', {
-              path: '/',
-              httpOnly: true,
-            });
-            response.clearCookie('oidc_session_no_samesite', {
-              path: '/_synapse/client/oidc',
-              httpOnly: true,
-            });
-            response.clearCookie('oidc_session_no_samesite', {
-              path: '/',
-              httpOnly: true,
-            });
-
-            // Also set an expired cookie to force browser to clear it
-            response.cookie('oidc_session', '', {
-              expires: new Date(0),
-              path: '/',
-              httpOnly: true,
-            });
-          }
+          console.log(
+            '🔐 OIDC Auth Debug - Method 4: User must authenticate through other methods for OIDC',
+          );
+          
+          // Do NOT clear Matrix session cookies - they belong to Matrix, not us
+          // Do NOT try to validate them as OpenMeet sessions
+          // Matrix will validate them when we redirect back with auth code
         } else {
-          console.log('❌ OIDC Auth Debug - Method 4: No session cookie found');
+          console.log('❌ OIDC Auth Debug - Method 4: No Matrix session cookie found');
         }
       } catch (error) {
         console.log(
@@ -457,17 +373,10 @@ export class OidcController {
 
         if (userEntity && userEntity.email !== loginHint) {
           console.log(
-            `🚨 SECURITY WARNING: Session user email (${userEntity.email}) does not match login_hint (${loginHint}) - clearing session`,
+            `🚨 SECURITY WARNING: Session user email (${userEntity.email}) does not match login_hint (${loginHint}) - redirecting to login`,
           );
-          // Clear invalid session cookies and redirect to login
-          response.clearCookie('oidc_session', {
-            path: '/_synapse/client/oidc',
-            httpOnly: true,
-          });
-          response.clearCookie('oidc_session_no_samesite', {
-            path: '/_synapse/client/oidc',
-            httpOnly: true,
-          });
+          // Do NOT clear Matrix session cookies - they belong to Matrix server
+          // Matrix will validate its own session cookies when we redirect back
 
           const baseUrl =
             this.configService.get('app.oidcIssuerUrl', { infer: true }) ||
@@ -660,66 +569,25 @@ export class OidcController {
       }
     }
 
-    // Check for authenticated user via session cookie
+    // Check for Matrix session cookie (but don't validate as OpenMeet session)
     if (!user) {
-      console.log('🔐 OIDC Login Debug - Checking session authentication...');
+      console.log('🔐 OIDC Login Debug - Checking for Matrix session...');
       try {
         const sessionCookie = request.cookies?.['oidc_session'];
         if (sessionCookie) {
-          const tenants = fetchTenants();
-          for (const tenant of tenants) {
-            if (!tenant.id) continue;
-            try {
-              const userFromSession = await this.oidcService.getUserFromSession(
-                sessionCookie,
-                tenant.id,
-              );
-              if (userFromSession) {
-                console.log(
-                  '✅ OIDC Login Debug - Found authenticated user via session:',
-                  tenant.id,
-                );
-                user = { id: userFromSession.id };
-                break;
-              }
-            } catch {
-              // Continue to next tenant
-            }
-          }
+          console.log(
+            '🔐 OIDC Login Debug - Matrix session cookie detected - user may have active Matrix session',
+          );
+          console.log(
+            '🔐 OIDC Login Debug - Matrix macaroon cookies are opaque to us - cannot validate as OpenMeet sessions',
+          );
+          // Do NOT try to validate Matrix cookies as OpenMeet sessions
+          // Do NOT clear Matrix cookies - they belong to Matrix
+        } else {
+          console.log('🔐 OIDC Login Debug - No Matrix session cookie found');
         }
-      } catch {
-        console.log('🔐 OIDC Login Debug - No session authentication found');
-        // If we found a session cookie but no valid user, clear the invalid cookie
-        const sessionCookie = request.cookies?.['oidc_session'];
-        if (sessionCookie) {
-          console.log('🔐 OIDC Login Debug - Clearing invalid session cookie');
-          // Clear invalid oidc_session cookie with multiple path variations
-          response.clearCookie('oidc_session', {
-            path: '/_synapse/client/oidc',
-            httpOnly: true,
-            domain: '.openmeet.net',
-          });
-          response.clearCookie('oidc_session', {
-            path: '/',
-            httpOnly: true,
-            domain: '.openmeet.net',
-          });
-          response.clearCookie('oidc_session', {
-            path: '/_synapse/client/oidc',
-            httpOnly: true,
-          });
-          response.clearCookie('oidc_session', {
-            path: '/',
-            httpOnly: true,
-          });
-
-          // Also set an expired cookie to force browser to clear it
-          response.cookie('oidc_session', '', {
-            expires: new Date(0),
-            path: '/',
-            httpOnly: true,
-          });
-        }
+      } catch (error) {
+        console.log('🔐 OIDC Login Debug - Error checking Matrix session:', error.message);
       }
     }
 
@@ -729,109 +597,18 @@ export class OidcController {
         '🔄 OIDC Login Debug - User is authenticated, attempting seamless OIDC flow...',
       );
 
-      // Get the user's tenant from session
-      try {
-        const sessionCookie = request.cookies?.['oidc_session'];
-        if (sessionCookie) {
-          const tenants = fetchTenants();
-          for (const tenant of tenants) {
-            if (!tenant.id) continue;
-            try {
-              const userFromSession = await this.oidcService.getUserFromSession(
-                sessionCookie,
-                tenant.id,
-              );
-              if (userFromSession) {
-                console.log(
-                  '✅ OIDC Login Debug - Found user session in tenant:',
-                  tenant.id,
-                );
-
-                // Try to generate auth code for seamless flow
-                try {
-                  const authCode =
-                    await this.tempAuthCodeService.generateAuthCode(
-                      userFromSession.id,
-                      tenant.id,
-                    );
-
-                  console.log(
-                    '✅ OIDC Login Debug - Generated auth code, redirecting directly to auth endpoint',
-                  );
-
-                  // Redirect directly to auth endpoint with auth code
-                  const baseUrl =
-                    this.configService.get('app.oidcIssuerUrl', {
-                      infer: true,
-                    }) || 'http://localhost:3000';
-                  const authUrl =
-                    `${baseUrl}/api/oidc/auth?` +
-                    new URLSearchParams({
-                      client_id: clientId,
-                      redirect_uri: redirectUri,
-                      response_type: responseType,
-                      scope,
-                      auth_code: authCode,
-                      tenantId: tenant.id,
-                      ...(state && { state }),
-                      ...(nonce && { nonce }),
-                    }).toString();
-
-                  response.setHeader('X-Tenant-ID', tenant.id);
-                  response.redirect(authUrl);
-                  return;
-                } catch (authCodeError) {
-                  console.warn(
-                    '⚠️ OIDC Login Debug - Failed to generate auth code, falling back to platform flow:',
-                    authCodeError.message,
-                  );
-
-                  // Fallback to platform-mediated flow
-                  const baseUrl =
-                    this.configService.get('app.oidcIssuerUrl', {
-                      infer: true,
-                    }) || 'http://localhost:3000';
-                  const returnUrl =
-                    `${baseUrl}/api/oidc/auth?` +
-                    new URLSearchParams({
-                      client_id: clientId,
-                      redirect_uri: redirectUri,
-                      response_type: responseType,
-                      scope,
-                      tenantId: tenant.id,
-                      ...(state && { state }),
-                      ...(nonce && { nonce }),
-                    }).toString();
-
-                  const tenantConfig = getTenantConfig(tenant.id);
-                  const tenantLoginUrl =
-                    `${tenantConfig.frontendDomain}/auth/login?` +
-                    new URLSearchParams({
-                      oidc_flow: 'true',
-                      oidc_return_url: returnUrl,
-                      oidc_tenant_id: tenant.id,
-                    }).toString();
-
-                  console.log(
-                    '🔄 OIDC Login Debug - Redirecting to platform flow:',
-                    tenantLoginUrl,
-                  );
-                  response.setHeader('X-Tenant-ID', tenant.id);
-                  response.redirect(tenantLoginUrl);
-                  return;
-                }
-              }
-            } catch {
-              // Continue to next tenant
-            }
-          }
-        }
-      } catch (error) {
-        console.error(
-          '🔄 OIDC Login Debug - Error processing authenticated user:',
-          error.message,
-        );
-      }
+      // For authenticated users, we need tenant information to proceed
+      // Since Matrix cookies can't be validated as OpenMeet sessions,
+      // we'll need the user to have been authenticated through other methods
+      console.log(
+        '✅ OIDC Login Debug - User authenticated, but need tenant info for seamless flow',
+      );
+      console.log(
+        '⚠️ OIDC Login Debug - Cannot determine tenant from Matrix session cookies',
+      );
+      console.log(
+        '🔄 OIDC Login Debug - Falling back to email form for tenant detection',
+      );
     }
 
     console.log(
