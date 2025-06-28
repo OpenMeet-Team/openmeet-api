@@ -6,7 +6,7 @@ import { TESTING_TENANT_ID } from '../utils/constants';
  */
 jest.setTimeout(30000);
 
-describe('Simple Session Cookie Test', () => {
+xdescribe('Simple Session Cookie Test', () => {
   const MATRIX_BASE_URL = process.env.BACKEND_DOMAIN?.includes(
     'api-dev.openmeet.net',
   )

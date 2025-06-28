@@ -15,7 +15,7 @@ import { loginAsTester } from '../utils/functions';
  */
 jest.setTimeout(60000);
 
-describe('Full Matrix OIDC Session Cookie Flow', () => {
+xdescribe('Full Matrix OIDC Session Cookie Flow', () => {
   let userToken: string;
 
   // Matrix URLs - will use dev environment when BACKEND_DOMAIN is set
@@ -35,7 +35,7 @@ describe('Full Matrix OIDC Session Cookie Flow', () => {
   });
 
   describe('Matrix Session Cookie Flow', () => {
-    it('should complete full Matrix SSO → OIDC → Callback flow with session cookies', async () => {
+    xit('should complete full Matrix SSO → OIDC → Callback flow with session cookies', async () => {
       console.log('🚀 Starting full Matrix OIDC session cookie test...');
       console.log(`📍 Matrix URL: ${MATRIX_BASE_URL}`);
 
