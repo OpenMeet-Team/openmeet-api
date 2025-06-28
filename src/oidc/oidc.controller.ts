@@ -20,7 +20,7 @@ import { TenantPublic } from '../tenant/tenant-public.decorator';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { JwtPayloadType } from '../auth/strategies/types/jwt-payload.type';
-import { getTenantConfig, fetchTenants } from '../utils/tenant-config';
+import { getTenantConfig } from '../utils/tenant-config';
 import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
 import { UserService } from '../user/user.service';
 // Removed MacaroonsVerifier - simplified to use URL state parameter
@@ -236,11 +236,11 @@ export class OidcController {
           console.log('🔍 Matrix Session Cookie DEBUG - Raw cookie analysis:');
           console.log('Length:', sessionCookie.length);
           console.log('First 50 chars:', sessionCookie.substring(0, 50));
-          
+
           // IMPORTANT: Matrix session cookies are macaroons, not OpenMeet session IDs
           // We should NOT try to validate them as OpenMeet sessions
           // Instead, treat them as opaque session identifiers from Matrix
-          
+
           console.log(
             '🔐 OIDC Auth Debug - Method 4: Matrix session cookie detected - this indicates Matrix SSO flow',
           );
@@ -250,12 +250,14 @@ export class OidcController {
           console.log(
             '🔐 OIDC Auth Debug - Method 4: User must authenticate through other methods for OIDC',
           );
-          
+
           // Do NOT clear Matrix session cookies - they belong to Matrix, not us
           // Do NOT try to validate them as OpenMeet sessions
           // Matrix will validate them when we redirect back with auth code
         } else {
-          console.log('❌ OIDC Auth Debug - Method 4: No Matrix session cookie found');
+          console.log(
+            '❌ OIDC Auth Debug - Method 4: No Matrix session cookie found',
+          );
         }
       } catch (error) {
         console.log(
@@ -587,7 +589,10 @@ export class OidcController {
           console.log('🔐 OIDC Login Debug - No Matrix session cookie found');
         }
       } catch (error) {
-        console.log('🔐 OIDC Login Debug - Error checking Matrix session:', error.message);
+        console.log(
+          '🔐 OIDC Login Debug - Error checking Matrix session:',
+          error.message,
+        );
       }
     }
 

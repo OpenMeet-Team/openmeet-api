@@ -37,6 +37,9 @@ lerna-debug.log*
 
 .data
 /files
-.env
+.env*
 /ormconfig.json
 src/.jest-cache/
+backups/
+working.md
+*.backup
