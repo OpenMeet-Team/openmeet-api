@@ -175,6 +175,7 @@ async function bootstrap() {
           '/metrics',
           '/',
           '/sitemap.xml',
+          '/oidc/.well-known/openid-configuration',
         ],
       },
     );

@@ -1404,3 +1404,174 @@ MATRIX_OIDC_TOKEN_ENDPOINT=https://api-dev.openmeet.net/api/oidc/token
 - Same OIDC flow works for mobile Matrix clients
 - Third-party clients (Element, FluffyChat) supported
 - Single sign-on across all Matrix client types
+
+---
+
+### ADR-007: Migration to Matrix Authentication Service (MAS)
+**Decision**: Adopt Matrix Authentication Service (MAS) to replace legacy Matrix OIDC implementation and resolve macaroon compatibility issues
+**Status**: Planned - Research Phase
+
+#### Problem Statement
+
+Current Matrix Synapse OIDC implementation suffers from fundamental compatibility issues:
+- **MacaroonDeserializationException**: Matrix v1.132.0 cannot deserialize its own session cookies
+- **pymacaroons Library Issues**: Binary format incompatibility in containerized environments  
+- **Legacy Architecture**: Matrix uses hybrid OIDC+macaroons instead of pure OIDC tokens
+- **Browser Security Conflicts**: Cross-origin cookie restrictions in modern browsers
+- **Maintenance Burden**: Complex session cookie management and debugging
+
+#### Proposed Solution: Matrix Authentication Service Integration
+
+**Matrix Authentication Service (MAS)** is Matrix.org's official next-generation authentication system that provides pure OIDC/OAuth2 compliance without legacy macaroon dependencies.
+
+#### Architecture Comparison
+
+**Current (Problematic)**:
+```
+Element Client → Matrix Synapse (OIDC+macaroons) → OpenMeet OIDC → User Auth
+```
+
+**With MAS (Target)**:
+```
+Element Client → Matrix Auth Service (pure OIDC) → OpenMeet OIDC → User Auth
+```
+
+#### Implementation Plan
+
+**Phase 1: Research & Architecture Design** (Q1 2025)
+- Study MAS documentation and deployment requirements
+- Design MAS integration with existing OpenMeet OIDC infrastructure
+- Plan database schema changes for MAS session management
+- Evaluate MAS compatibility with current Matrix client integrations
+
+**Phase 2: Parallel MAS Deployment** (Q2 2025)
+- Deploy MAS alongside existing Matrix Synapse server
+- Configure MAS to use OpenMeet as upstream OIDC provider
+- Implement MAS client registration and session management
+- Create MAS-aware authentication endpoints in OpenMeet API
+
+**Phase 3: Frontend Integration** (Q3 2025)
+- Update Matrix JS SDK integration to use MAS authentication
+- Implement MAS token handling and refresh logic
+- Add user-facing migration UI for existing Matrix users
+- Test MAS compatibility with third-party Matrix clients
+
+**Phase 4: Full Migration** (Q4 2025)
+- Migrate existing Matrix users to MAS authentication
+- Deprecate legacy Matrix OIDC configuration
+- Remove macaroon-related code and dependencies
+- Monitor performance and reliability improvements
+
+#### Expected Benefits
+
+**Technical Improvements**:
+- ✅ **Eliminates macaroon issues** - Pure OIDC token-based authentication
+- ✅ **Browser compatibility** - Standard OAuth2 flows work reliably
+- ✅ **Future-proof architecture** - Aligns with Matrix.org roadmap
+- ✅ **Simplified debugging** - Standard OIDC error handling
+- ✅ **Better scalability** - Dedicated authentication service
+
+**Security Enhancements**:
+- ✅ **Standards compliance** - Full OAuth2/OIDC specification adherence
+- ✅ **Token revocation** - Centralized session management
+- ✅ **Audit capabilities** - Comprehensive authentication logging
+- ✅ **Role-based access** - Fine-grained permission controls
+
+**User Experience Gains**:
+- ✅ **Reliable authentication** - No more macaroon deserialization failures
+- ✅ **Faster connections** - Streamlined token exchange process
+- ✅ **Multi-client support** - Better third-party Matrix client integration
+- ✅ **Cross-device sync** - Improved session management across devices
+
+#### Research Questions
+
+**Deployment Complexity**:
+- MAS infrastructure requirements and Docker integration
+- Database migration needs and data persistence
+- Kubernetes deployment and scaling considerations
+- Development environment setup and testing strategies
+
+**Integration Architecture**:
+- MAS ↔ OpenMeet OIDC provider configuration
+- Matrix Synapse ↔ MAS integration requirements  
+- Frontend Matrix client authentication flow changes
+- Backward compatibility with existing Matrix accounts
+
+**Migration Strategy**:
+- User data preservation during MAS migration
+- Timeline for deprecating legacy Matrix OIDC
+- Rollback plan if MAS integration encounters issues
+- Communication plan for user-facing authentication changes
+
+#### Success Criteria
+
+**Technical Metrics**:
+- Zero `MacaroonDeserializationException` errors in production
+- Matrix authentication success rate >99.5%
+- Authentication latency <2 seconds for existing sessions
+- Third-party Matrix client compatibility maintained
+
+**User Experience Metrics**:
+- User-reported authentication issues reduced by >90%
+- Chat connection reliability improved measurably
+- Support tickets related to Matrix login reduced significantly
+- User adoption of third-party Matrix clients increases
+
+#### Risk Assessment
+
+**Implementation Risks**:
+- ⚠️ **MAS maturity** - Relatively new service with limited production deployments
+- ⚠️ **Migration complexity** - Potential data loss or service interruption
+- ⚠️ **Learning curve** - Team needs to understand MAS architecture and operations
+- ⚠️ **Timeline pressure** - Current Matrix issues need resolution quickly
+
+**Mitigation Strategies**:
+- **Parallel deployment** - Run MAS alongside existing system for gradual migration
+- **Comprehensive testing** - Extensive integration testing before production rollout
+- **Staged rollout** - Migrate users in small batches with monitoring
+- **Rollback planning** - Clear rollback procedures if issues arise
+- **Documentation** - Thorough operational runbooks for MAS management
+
+#### Alternative Solutions Considered
+
+**Option 1: Matrix Version Downgrade**
+- **Description**: Downgrade to Matrix Synapse version with working macaroons
+- **Rejected**: Security vulnerabilities and missing features in older versions
+
+**Option 2: Custom Macaroon Library**
+- **Description**: Fork pymacaroons library and fix binary compatibility issues
+- **Rejected**: Significant maintenance burden and expertise required
+
+**Option 3: Hybrid Token System**
+- **Description**: Continue Matrix OIDC but bypass macaroon validation
+- **Rejected**: Compromises security and doesn't address root architectural issues
+
+**Option 4: Alternative Matrix Server**
+- **Description**: Switch to Dendrite or Conduit Matrix implementations
+- **Rejected**: Feature gaps and migration complexity too high
+
+#### Next Steps
+
+1. **Research Phase** (2-3 weeks)
+   - Deep dive into MAS documentation and architecture
+   - Evaluate MAS deployment requirements and constraints
+   - Design high-level integration architecture with OpenMeet
+
+2. **Proof of Concept** (3-4 weeks)  
+   - Deploy MAS in isolated development environment
+   - Test basic OIDC integration with OpenMeet API
+   - Validate Matrix client compatibility with MAS
+
+3. **Implementation Planning** (1-2 weeks)
+   - Detailed implementation timeline and resource requirements
+   - Database schema changes and migration procedures
+   - Risk assessment and mitigation strategies finalized
+
+4. **Stakeholder Review**
+   - Present research findings and implementation plan
+   - Get approval for MAS migration project
+   - Allocate development resources and timeline
+
+**Current Status**: Initial research phase - gathering MAS documentation and deployment requirements
+
+**Rationale**: MAS migration represents the most sustainable long-term solution for Matrix authentication issues while providing significant technical and user experience improvements. The investment in migration will eliminate ongoing maintenance burden of legacy macaroon systems and align OpenMeet with Matrix.org's strategic direction.

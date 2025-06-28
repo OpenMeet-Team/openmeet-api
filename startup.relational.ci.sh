@@ -47,13 +47,14 @@ echo "Starting Matrix setup task in background..."
 echo "Waiting for Maildev to be ready..."
 /opt/wait-for-it.sh maildev:1080
 
-sleep 30
-
-netstat -tulpen | grep LISTEN || true
-ps -ef || true
-
 echo "Waiting for API to be ready..."
 /opt/wait-for-it.sh api:3000 -t 30
+
+echo "Waiting for MAS service to be ready..."
+/opt/wait-for-it.sh matrix-auth-service:8080 -t 60
+
+echo "Waiting for Matrix service to be ready..."
+/opt/wait-for-it.sh matrix:8448 -t 60
 
 # Run the E2E tests
 echo "Running E2E tests..."

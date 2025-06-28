@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { OidcController } from './oidc.controller';
+import { OidcIssuerController } from './oidc-issuer.controller';
 import { OidcService } from './services/oidc.service';
 import { UserModule } from '../user/user.module';
 import { TenantModule } from '../tenant/tenant.module';
@@ -22,7 +23,7 @@ import { MatrixModule } from '../matrix/matrix.module';
       secret: process.env.JWT_SECRET || 'secret',
     }),
   ],
-  controllers: [OidcController],
+  controllers: [OidcController, OidcIssuerController],
   providers: [OidcService],
   exports: [OidcService],
 })

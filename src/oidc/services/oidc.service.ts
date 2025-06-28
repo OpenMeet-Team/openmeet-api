@@ -27,6 +27,7 @@ export interface OidcTokenResponse {
   expires_in: number;
   refresh_token?: string;
   id_token: string;
+  scope: string;
   // NOTE: state parameter removed - not part of OIDC token response spec
 }
 
@@ -272,7 +273,7 @@ export class OidcService {
     tenantId: string,
   ) {
     // Validate client_id
-    const validClientIds = ['matrix_synapse']; // Add more clients as needed
+    const validClientIds = ['matrix_synapse', 'mas_client']; // Add more clients as needed
     if (!validClientIds.includes(params.client_id)) {
       throw new UnauthorizedException('Invalid client_id');
     }
@@ -282,15 +283,23 @@ export class OidcService {
       throw new UnauthorizedException('Unsupported response_type');
     }
 
-    // Validate redirect_uri (should be Matrix server's callback URL)
-    const allowedRedirectUris = [
-      'http://localhost:8448/_synapse/client/oidc/callback',
-      'http://matrix-local.openmeet.test:8448/_synapse/client/oidc/callback',
-      'https://matrix.openmeet.net/_synapse/client/oidc/callback',
-      'https://matrix-dev.openmeet.net/_synapse/client/oidc/callback',
+    // Validate redirect_uri with pattern matching for flexibility
+    const allowedRedirectUriPatterns = [
+      // Matrix Synapse callback URLs
+      /^https?:\/\/localhost:8448\/_synapse\/client\/oidc\/callback$/,
+      /^https?:\/\/matrix-local\.openmeet\.test:8448\/_synapse\/client\/oidc\/callback$/,
+      /^https?:\/\/matrix.*\.openmeet\.net\/_synapse\/client\/oidc\/callback$/,
+      // MAS callback URLs (restricted to known provider ID for security)
+      /^https?:\/\/localhost:8081\/upstream\/callback\/01JAYS74TCG3BTWKADN5Q4518C$/,
+      /^https?:\/\/matrix-auth-service:8080\/upstream\/callback\/01JAYS74TCG3BTWKADN5Q4518C$/,
+      /^https?:\/\/mas.*\.openmeet\.net\/upstream\/callback\/01JAYS74TCG3BTWKADN5Q4518C$/,
     ];
 
-    if (!allowedRedirectUris.includes(params.redirect_uri)) {
+    const isValidRedirectUri = allowedRedirectUriPatterns.some((pattern) =>
+      pattern.test(params.redirect_uri),
+    );
+
+    if (!isValidRedirectUri) {
       throw new UnauthorizedException('Invalid redirect_uri');
     }
 
@@ -374,6 +383,7 @@ export class OidcService {
       token_type: 'Bearer',
       expires_in: 3600, // 1 hour
       id_token: idToken,
+      scope: authData.scope || 'openid profile email',
       // NOTE: state parameter should NOT be returned in token response per OIDC spec
       // Matrix handles state validation during authorization flow, not token exchange
     };
@@ -464,6 +474,10 @@ export class OidcService {
         secret:
           process.env.MATRIX_OIDC_CLIENT_SECRET || 'change-me-in-production',
         isPublic: true, // Back to public client - will implement RS256
+      },
+      mas_client: {
+        secret: process.env.MAS_CLIENT_SECRET || 'mas-local-client-secret',
+        isPublic: false, // MAS requires client secret
       },
     };
 

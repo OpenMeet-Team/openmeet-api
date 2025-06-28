@@ -48,6 +48,22 @@ services:
       timeout: 5s
       retries: 5
 
+  # Matrix Authentication Service (MAS) for CI testing
+  matrix-auth-service:
+    image: ghcr.io/element-hq/matrix-authentication-service:latest
+    expose:
+      - 8080
+    environment:
+      MAS_CONFIG: /data/config.yaml
+    volumes:
+      - ./matrix-config/mas-config-ci.yaml:/data/config.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_started
+    env_file:
+      - env-example-relational-ci
+    # No health check - distroless image has no shell tools
+
   matrix:
     build:
       context: .
@@ -65,12 +81,20 @@ services:
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_DB: "synapse"
       MATRIX_REGISTRATION_SECRET: ${MATRIX_REGISTRATION_SECRET:-ci_test_registration_secret}
+      # MAS integration for CI
+      MAS_ISSUER: "${MAS_ISSUER}"
+      MAS_CLIENT_SECRET: "${MAS_CLIENT_SECRET}"
+      MAS_ADMIN_TOKEN: "${MAS_ADMIN_TOKEN}"
     volumes:
+      - ./matrix-config/homeserver-mas-ci.yaml:/data/homeserver.yaml
+      - ./matrix-config/log.config:/data/log.config
+      - ./matrix-config/init.sh:/data/init.sh
+      - ./matrix-config/start-matrix.sh:/data/start-matrix.sh
       - matrix-data:/data/media
     depends_on:
-      api:
-        condition: service_healthy
       postgres:
+        condition: service_started
+      matrix-auth-service:
         condition: service_started
     env_file:
       - env-example-relational-ci

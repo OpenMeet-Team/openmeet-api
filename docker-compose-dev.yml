@@ -19,6 +19,11 @@ services:
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_DB: ${DATABASE_NAME}
     entrypoint: ["docker-entrypoint.sh", "-c", "max_connections=${DATABASE_MAX_CONNECTIONS}"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USERNAME} -d ${DATABASE_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - api-network
 
@@ -54,7 +59,23 @@ services:
     restart: always
     networks:
       - api-network
-      
+
+  # Matrix Authentication Service
+  matrix-auth-service:
+    image: ghcr.io/element-hq/matrix-authentication-service:latest
+    container_name: openmeet_mas
+    ports:
+      - "8081:8080"
+    environment:
+      MAS_CONFIG: /data/config.yaml
+    volumes:
+      - ./matrix-config/mas-config-local.yaml:/data/config.yaml:ro
+      - mas-data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - api-network
   matrix:
     image: matrixdotorg/synapse:v1.132.0
     container_name: openmeet_matrix
@@ -70,14 +91,20 @@ services:
       # Standard Synapse settings
       SYNAPSE_REPORT_STATS: "no"
       SYNAPSE_LOG_LEVEL: "INFO"
+      # MAS integration
+      MAS_ISSUER: "http://matrix-auth-service:8080/"
+      MAS_CLIENT_SECRET: "${MAS_CLIENT_SECRET}"
     volumes:
-      - ./matrix-config/homeserver.yaml:/data/homeserver.yaml
+      - ./matrix-config/homeserver-mas-local.yaml:/data/homeserver.yaml
       - ./matrix-config/log.config:/data/log.config
       - ./matrix-config/init.sh:/data/init.sh
       - ./matrix-config/start-matrix.sh:/data/start-matrix.sh
       - matrix-data:/data/media
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      matrix-auth-service:
+        condition: service_started
     env_file:
       - .env
     healthcheck:
@@ -152,6 +179,8 @@ services:
 volumes:
   dbdata:
   matrix-data:
+  mas-data:
+    driver: local
 
 networks:
   api-network:

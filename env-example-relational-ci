@@ -105,3 +105,13 @@ MATRIX_OIDC_AUTHORIZATION_ENDPOINT=http://api:3000/api/oidc/auth
 MATRIX_OIDC_TOKEN_ENDPOINT=http://api:3000/api/oidc/token
 MATRIX_OIDC_USERINFO_ENDPOINT=http://api:3000/api/oidc/userinfo
 MATRIX_OIDC_JWKS_URI=http://api:3000/api/oidc/jwks
+
+# Matrix Authentication Service (MAS) configuration for CI
+MAS_DATABASE_NAME=mas_ci
+MAS_ENCRYPTION_SECRET=1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
+MAS_ADMIN_TOKEN=ci-mas-admin-token
+MAS_CLIENT_SECRET=ci-mas-client-secret-for-testing
+MAS_ISSUER=http://matrix-auth-service:8080/
+MAS_SERVICE_URL=http://matrix-auth-service:8080
+MATRIX_HOST=matrix
+MATRIX_PORT=8448

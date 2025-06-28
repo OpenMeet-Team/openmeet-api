@@ -1,0 +1,72 @@
+http:
+  listeners:
+    - name: web
+      binds:
+        - address: "[::]:8080"
+      resources:
+        - name: discovery
+        - name: human
+        - name: oauth
+        - name: compat
+        - name: graphql
+        - name: assets
+  public_base: "http://matrix-auth-service:8080"
+  trusted_proxies: []
+
+database:
+  uri: "postgresql://root:secret@postgres:5432/mas_ci"
+  max_connections: 5  # Reduced for CI memory constraints
+  min_connections: 0
+
+secrets:
+  encryption: "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+
+matrix:
+  homeserver: "http://matrix:8448"
+  secret: "ci-mas-admin-token"
+  endpoint: "http://matrix-auth-service:8080"
+
+upstream_oauth2:
+  providers:
+    - id: "01JAYS74TCG3BTWKADN5Q4518C"
+      human_name: "OpenMeet CI"
+      brand_name: "openmeet"
+      issuer: "http://api:3000/api/oidc"
+      client_id: "mas_client"
+      client_secret: "ci-mas-client-secret-for-testing"
+      token_endpoint_auth_method: "client_secret_post"
+      scope: "openid profile email"
+      claims_imports:
+        localpart:
+          action: require
+          template: "{{ user.preferred_username }}"
+        displayname:
+          action: suggest
+          template: "{{ user.name }}"
+        email:
+          action: suggest
+          template: "{{ user.email }}"
+
+policy:
+  wasm_module: "/usr/local/share/mas-cli/policy.wasm"
+  data:
+    admin_users: []
+
+branding:
+  service_name: "OpenMeet CI Authentication"
+  policy_uri: "https://openmeet.net/privacy"
+  tos_uri: "https://openmeet.net/terms"
+
+email:
+  from: "noreply@openmeet.net"
+  reply_to: "noreply@openmeet.net"
+  transport: "smtp"
+  hostname: "maildev"
+  port: 1025
+  mode: "plain"
+
+# Minimal telemetry for CI
+telemetry:
+  metrics:
+    prometheus:
+      enabled: false  # Disabled for memory savings
