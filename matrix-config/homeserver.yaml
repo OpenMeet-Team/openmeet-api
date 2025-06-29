@@ -110,7 +110,7 @@ oidc_providers:
     idp_name: "OpenMeet"
     idp_brand: "org.matrix.openmeet"
     discover: true  # Use OIDC discovery for proper endpoint resolution
-    issuer: "https://localdev.openmeet.net/api/oidc"
+    issuer: "https://localdev.openmeet.net/oidc"
     client_id: "matrix_synapse"
     client_secret: "${MATRIX_OIDC_CLIENT_SECRET}"
     scopes: ["openid", "profile", "email"]

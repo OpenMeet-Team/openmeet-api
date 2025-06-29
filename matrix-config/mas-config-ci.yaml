@@ -31,7 +31,7 @@ upstream_oauth2:
     - id: "01JAYS74TCG3BTWKADN5Q4518C"
       human_name: "OpenMeet CI"
       brand_name: "openmeet"
-      issuer: "http://api:3000/api/oidc"
+      issuer: "http://api:3000/oidc"
       client_id: "mas_client"
       client_secret: "ci-mas-client-secret-for-testing"
       token_endpoint_auth_method: "client_secret_post"
