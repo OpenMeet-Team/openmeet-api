@@ -26,6 +26,11 @@ if [ -n "${MATRIX_REGISTRATION_SECRET}" ] && [ -z "${SYNAPSE_REGISTRATION_SHARED
   export SYNAPSE_REGISTRATION_SHARED_SECRET="${MATRIX_REGISTRATION_SECRET}"
 fi
 
+# Export MAS environment variables for MSC3861 configuration
+export MAS_ISSUER=${MAS_ISSUER:-}
+export MAS_CLIENT_SECRET=${MAS_CLIENT_SECRET:-}
+export MAS_ADMIN_TOKEN=${MAS_ADMIN_TOKEN:-}
+
 # Copy log config
 cp /data/log.config /processed-config/
 
