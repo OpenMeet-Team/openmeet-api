@@ -30,9 +30,9 @@ describe('OIDC Matrix Authentication Flow', () => {
   });
 
   describe('OIDC Discovery', () => {
-    it('should return valid OIDC discovery document: /api/oidc/.well-known/openid-configuration (GET)', async () => {
+    it('should return valid OIDC discovery document: /oidc/.well-known/openid-configuration (GET)', async () => {
       const response = await request(TESTING_APP_URL)
-        .get('/api/oidc/.well-known/openid-configuration')
+        .get('/oidc/.well-known/openid-configuration')
         .set('x-tenant-id', TESTING_TENANT_ID)
         .expect(200);
 
