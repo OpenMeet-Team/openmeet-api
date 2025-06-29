@@ -1,5 +1,9 @@
 import request from 'supertest';
-import { TESTING_APP_URL, TESTING_TENANT_ID, TESTING_MAS_URL } from '../utils/constants';
+import {
+  TESTING_APP_URL,
+  TESTING_TENANT_ID,
+  TESTING_MAS_URL,
+} from '../utils/constants';
 import { loginAsTester } from '../utils/functions';
 
 /**
@@ -100,9 +104,7 @@ describe('OIDC MAS Authentication Flow', () => {
 
     it('should have MAS human interface available: / (GET)', async () => {
       // Test MAS web interface
-      const response = await request(TESTING_MAS_URL)
-        .get('/')
-        .expect(200);
+      const response = await request(TESTING_MAS_URL).get('/').expect(200);
 
       // Should return HTML content for MAS login interface
       expect(response.headers['content-type']).toMatch(/text\/html/);
@@ -133,7 +135,7 @@ describe('OIDC MAS Authentication Flow', () => {
         // Check redirect is to login form (not callback yet)
         const location = response.headers.location;
         expect(location).toBeDefined();
-        
+
         console.log('✅ MAS OIDC auth redirected to login form');
       } else {
         // Direct response should contain authorization form
@@ -171,7 +173,9 @@ describe('OIDC MAS Authentication Flow', () => {
 
       if (response.status >= 300) {
         // Check redirect to MAS callback
-        expect(response.headers.location).toContain(TESTING_MAS_URL.replace('http://', ''));
+        expect(response.headers.location).toContain(
+          TESTING_MAS_URL.replace('http://', ''),
+        );
         expect(response.headers.location).toContain('code=');
         expect(response.headers.location).toContain('state=mas_auth_code_test');
 
@@ -199,7 +203,9 @@ describe('OIDC MAS Authentication Flow', () => {
         console.log('✅ Matrix user provisioning working with MAS');
       } else {
         // Expected during MAS transition - Matrix admin API might need updates
-        console.log('⚠️ Matrix user provisioning needs MAS integration updates');
+        console.log(
+          '⚠️ Matrix user provisioning needs MAS integration updates',
+        );
       }
     });
   });
@@ -238,7 +244,9 @@ describe('OIDC MAS Authentication Flow', () => {
 
     it('should exchange authorization code for access token: /api/oidc/token (POST)', async () => {
       if (!authorizationCode) {
-        console.log('⚠️ Skipping token exchange test - no authorization code available');
+        console.log(
+          '⚠️ Skipping token exchange test - no authorization code available',
+        );
         return;
       }
 
@@ -271,7 +279,9 @@ describe('OIDC MAS Authentication Flow', () => {
 
     it('should provide valid userinfo with access token: /api/oidc/userinfo (GET)', async () => {
       if (!authorizationCode) {
-        console.log('⚠️ Skipping userinfo test - no authorization code available');
+        console.log(
+          '⚠️ Skipping userinfo test - no authorization code available',
+        );
         return;
       }
 
@@ -451,14 +461,18 @@ describe('OIDC MAS Authentication Flow', () => {
 
       // Step 4: Should redirect back to MAS with authorization code
       expect([302, 303]).toContain(authenticatedAuthResponse.status);
-      expect(authenticatedAuthResponse.headers.location).toContain(TESTING_MAS_URL.replace('http://', ''));
+      expect(authenticatedAuthResponse.headers.location).toContain(
+        TESTING_MAS_URL.replace('http://', ''),
+      );
       expect(authenticatedAuthResponse.headers.location).toContain('code=');
-      expect(authenticatedAuthResponse.headers.location).toContain('state=full_flow_test');
+      expect(authenticatedAuthResponse.headers.location).toContain(
+        'state=full_flow_test',
+      );
 
       // Step 5: Verify the authorization code can be exchanged for tokens
       const url = new URL(authenticatedAuthResponse.headers.location);
       const authCode = url.searchParams.get('code');
-      
+
       if (authCode) {
         const tokenResponse = await request(TESTING_APP_URL)
           .post('/api/oidc/token')
@@ -477,7 +491,9 @@ describe('OIDC MAS Authentication Flow', () => {
         expect(tokenResponse.body).toHaveProperty('id_token');
       }
 
-      console.log('✅ Complete Matrix -> MAS -> OpenMeet authentication flow working');
+      console.log(
+        '✅ Complete Matrix -> MAS -> OpenMeet authentication flow working',
+      );
     });
   });
 
@@ -485,9 +501,7 @@ describe('OIDC MAS Authentication Flow', () => {
     it('should have MAS service responding quickly', async () => {
       const startTime = Date.now();
 
-      await request(TESTING_MAS_URL)
-        .get('/')
-        .expect(200);
+      await request(TESTING_MAS_URL).get('/').expect(200);
 
       const duration = Date.now() - startTime;
 

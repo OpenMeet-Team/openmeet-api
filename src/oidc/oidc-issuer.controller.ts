@@ -21,7 +21,7 @@ export class OidcIssuerController {
     const protocol = request.get('x-forwarded-proto') || request.protocol;
     const host = request.get('x-forwarded-host') || request.get('host');
     const baseUrl = `${protocol}://${host}`;
-    
+
     return this.oidcService.getDiscoveryDocument(baseUrl);
   }
 }
