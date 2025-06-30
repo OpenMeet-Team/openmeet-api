@@ -299,6 +299,11 @@ export class OidcService {
       pattern.test(params.redirect_uri),
     );
 
+    console.log('🔧 OIDC Debug - Redirect URI validation:');
+    console.log('  - Provided redirect_uri:', params.redirect_uri);
+    console.log('  - Is valid:', isValidRedirectUri);
+    console.log('  - Patterns tested:', allowedRedirectUriPatterns.map(p => p.toString()));
+
     if (!isValidRedirectUri) {
       throw new UnauthorizedException('Invalid redirect_uri');
     }
