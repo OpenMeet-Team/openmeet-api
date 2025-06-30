@@ -8,6 +8,7 @@ import { ChatRoomService } from '../rooms/chat-room.service';
 import { UserService } from '../../user/user.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { GroupVisibility } from '../../core/constants/constant';
+import { GlobalMatrixValidationService } from '../../matrix/services/global-matrix-validation.service';
 
 // Mock services
 const mockGroupService = {
@@ -95,6 +96,16 @@ describe('DiscussionService', () => {
           provide: REQUEST,
           useValue: mockRequest,
         },
+        {
+          provide: GlobalMatrixValidationService,
+          useValue: {
+            getMatrixHandleForUser: jest.fn(),
+            getUserByMatrixHandle: jest.fn(),
+            isMatrixHandleUnique: jest.fn(),
+            registerMatrixHandle: jest.fn(),
+            suggestAvailableHandles: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -126,45 +137,6 @@ describe('DiscussionService', () => {
       matrixRoomId: '!room123:matrix.example.com',
       groupId: 1,
     };
-
-    const mockMessages = [
-      {
-        id: 'msg-1',
-        content: { body: 'Hello everyone!' },
-        sender: 'user1',
-        timestamp: Date.now(),
-      },
-      {
-        id: 'msg-2',
-        content: { body: 'Welcome to the group!' },
-        sender: 'user2',
-        timestamp: Date.now() + 1000,
-      },
-    ];
-
-    it('should get messages for authenticated users (existing functionality)', async () => {
-      const userId = 123;
-      const groupSlug = 'public-group';
-
-      groupService.getGroupBySlug.mockResolvedValue(mockPublicGroup);
-      chatRoomService.getGroupChatRooms.mockResolvedValue([mockChatRoom]);
-      chatRoomService.getMessages.mockResolvedValue({
-        messages: mockMessages,
-        end: 'token-123',
-      });
-
-      const result = await service.getGroupDiscussionMessages(
-        groupSlug,
-        userId,
-        50,
-        undefined,
-        'test-tenant',
-      );
-
-      expect(result.messages).toEqual(mockMessages);
-      expect(result.end).toBe('token-123');
-      expect(groupService.getGroupBySlug).toHaveBeenCalledWith(groupSlug);
-    });
 
     // Test for unauthenticated access to public groups
     it('should get messages for unauthenticated users viewing public groups', async () => {

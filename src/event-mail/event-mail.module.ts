@@ -19,7 +19,7 @@ import { GroupMemberEntity } from '../group-member/infrastructure/persistence/re
     ConfigModule,
     TypeOrmModule.forFeature([EventEntity, GroupMemberEntity]),
     MailModule,
-    UserModule,
+    forwardRef(() => UserModule),
     forwardRef(() => EventAttendeeModule),
     MailerModule,
     TenantModule,

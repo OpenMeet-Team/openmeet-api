@@ -3,16 +3,18 @@ import { MatrixController } from './matrix.controller';
 import { MatrixUserService } from './services/matrix-user.service';
 import { MatrixRoomService } from './services/matrix-room.service';
 import { MatrixMessageService } from './services/matrix-message.service';
-import { MatrixGateway } from './matrix.gateway';
 import { UserService } from '../user/user.service';
+import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
 import { ConfigService } from '@nestjs/config';
 import { REQUEST } from '@nestjs/core';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
 
 describe('MatrixController', () => {
   let controller: MatrixController;
   let matrixUserService: MatrixUserService;
   let userService: UserService;
+  let globalMatrixValidationService: GlobalMatrixValidationService;
 
   // Mock data
   const mockUser = {
@@ -76,12 +78,6 @@ describe('MatrixController', () => {
           },
         },
         {
-          provide: MatrixGateway,
-          useValue: {
-            broadcastRoomEvent: jest.fn(),
-          },
-        },
-        {
           provide: UserService,
           useValue: {
             findById: jest.fn().mockResolvedValue(mockFullUser),
@@ -115,6 +111,24 @@ describe('MatrixController', () => {
           },
         },
         {
+          provide: GlobalMatrixValidationService,
+          useValue: {
+            isMatrixHandleUnique: jest.fn().mockResolvedValue(true),
+            registerMatrixHandle: jest.fn().mockResolvedValue(undefined),
+            suggestAvailableHandles: jest.fn().mockResolvedValue([]),
+            unregisterMatrixHandle: jest.fn().mockResolvedValue(undefined),
+            getMatrixHandleRegistration: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: TempAuthCodeService,
+          useValue: {
+            generateAuthCode: jest.fn().mockResolvedValue('mock-auth-code'),
+            validateAndConsumeAuthCode: jest.fn().mockResolvedValue(null),
+            getActiveCodeCount: jest.fn().mockResolvedValue(0),
+          },
+        },
+        {
           provide: REQUEST,
           useValue: {
             tenantId: 'test-tenant',
@@ -126,6 +140,9 @@ describe('MatrixController', () => {
     controller = module.get<MatrixController>(MatrixController);
     matrixUserService = module.get<MatrixUserService>(MatrixUserService);
     userService = module.get<UserService>(UserService);
+    globalMatrixValidationService = module.get<GlobalMatrixValidationService>(
+      GlobalMatrixValidationService,
+    );
   });
 
   it('should be defined', () => {
@@ -166,12 +183,17 @@ describe('MatrixController', () => {
         'test-tenant',
       );
 
+      expect(
+        globalMatrixValidationService.registerMatrixHandle,
+      ).toHaveBeenCalledWith(
+        'om_test123', // handle extracted from Matrix user ID
+        'test-tenant',
+        mockUser.id,
+      );
+
       expect(userService.update).toHaveBeenCalledWith(
         mockUser.id,
         {
-          matrixUserId: mockMatrixUserInfo.userId,
-          matrixAccessToken: mockMatrixUserInfo.accessToken,
-          matrixDeviceId: mockMatrixUserInfo.deviceId,
           preferences: {
             matrix: {
               connected: true,

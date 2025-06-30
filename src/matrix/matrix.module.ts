@@ -1,21 +1,22 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MatrixController } from './matrix.controller';
-import { MatrixGateway } from './matrix.gateway';
 import { matrixConfig } from './config/matrix.config';
 import { UserModule } from '../user/user.module';
 import { UserService } from '../user/user.service';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { JwtModule } from '@nestjs/jwt';
 import { TenantModule } from '../tenant/tenant.module';
+import { AuthModule } from '../auth/auth.module';
 import { MatrixCoreService } from './services/matrix-core.service';
 import { MatrixUserService } from './services/matrix-user.service';
 import { MatrixRoomService } from './services/matrix-room.service';
 import { MatrixMessageService } from './services/matrix-message.service';
 import { MatrixTokenManagerService } from './services/matrix-token-manager.service';
-import { MatrixClientOperationsService } from './services/matrix-client-operations.service';
 import { MatrixHealthIndicator } from './health/matrix.health';
 import { configureMatrixLogging } from './config/matrix-logger';
+import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
+import { MatrixHandleMigrationService } from './services/matrix-handle-migration.service';
 
 // Configure Matrix logging at module load time
 // This runs before the module is instantiated
@@ -26,6 +27,7 @@ configureMatrixLogging();
     ConfigModule.forFeature(matrixConfig),
     forwardRef(() => UserModule),
     TenantModule,
+    forwardRef(() => AuthModule),
     EventEmitterModule.forRoot({
       // Set wildcard to true to support event namespaces
       wildcard: true,
@@ -47,11 +49,9 @@ configureMatrixLogging();
     MatrixUserService,
     MatrixRoomService,
     MatrixMessageService,
-    MatrixClientOperationsService,
     MatrixHealthIndicator,
-
-    // Gateway for real-time events
-    MatrixGateway,
+    GlobalMatrixValidationService,
+    MatrixHandleMigrationService,
 
     // User service provider
     {
@@ -66,8 +66,8 @@ configureMatrixLogging();
     MatrixRoomService,
     MatrixMessageService,
     MatrixTokenManagerService,
-    MatrixClientOperationsService,
     MatrixHealthIndicator,
+    GlobalMatrixValidationService,
   ],
 })
 export class MatrixModule {}

@@ -34,7 +34,7 @@ import { ConfigModule } from '@nestjs/config';
       GroupUserPermissionEntity,
       FileEntity,
     ]),
-    UserModule,
+    forwardRef(() => UserModule),
     MailModule,
     GroupMemberModule,
     EventAttendeeModule,

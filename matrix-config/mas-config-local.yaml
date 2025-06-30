@@ -1,0 +1,78 @@
+http:
+  listeners:
+    - name: web
+      binds:
+        - address: "[::]:8080"
+      resources:
+        - name: discovery
+        - name: human
+        - name: oauth
+        - name: compat
+        - name: graphql
+        - name: assets
+  public_base: "http://localhost:8081"
+  trusted_proxies: []
+
+database:
+  uri: "postgresql://root:secret@postgres:5432/mas"
+  max_connections: 10
+  min_connections: 0
+
+secrets:
+  encryption: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+
+matrix:
+  homeserver: "http://matrix:8448"
+  secret: "local-mas-admin-token"
+  endpoint: "http://localhost:8081"
+
+upstream_oauth2:
+  providers:
+    - id: "01JAYS74TCG3BTWKADN5Q4518C"
+      human_name: "OpenMeet Local"
+      brand_name: "openmeet"
+      issuer: "https://localdev.openmeet.net/oidc"
+      client_id: "mas_client"
+      client_secret: "local-dev-shared-secret-with-synapse"
+      token_endpoint_auth_method: "client_secret_post"
+      scope: "openid profile email"
+      claims_imports:
+        localpart:
+          action: require
+          template: "{{ user.preferred_username }}"
+        displayname:
+          action: suggest
+          template: "{{ user.name }}"
+        email:
+          action: suggest
+          template: "{{ user.email }}"
+        tenant_id:
+          action: suggest
+          template: "{{ user.tenant_id or 'default' }}"
+
+policy:
+  wasm_module: "/usr/local/share/mas-cli/policy.wasm"
+  data:
+    admin_users: []
+
+branding:
+  service_name: "OpenMeet Authentication"
+  policy_uri: "https://openmeet.net/privacy"
+  tos_uri: "https://openmeet.net/terms"
+
+email:
+  from: "noreply@openmeet.net"
+  reply_to: "noreply@openmeet.net"
+  transport: "smtp"
+  hostname: "maildev"
+  port: 1025
+  mode: "plain"
+
+telemetry:
+  tracing:
+    jaeger:
+      endpoint: "http://jaeger:14268/api/traces"
+  metrics:
+    prometheus:
+      enabled: true
+      bind: "[::]:9090"

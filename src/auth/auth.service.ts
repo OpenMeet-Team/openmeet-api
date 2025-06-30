@@ -131,6 +131,7 @@ export class AuthService {
       token,
       tokenExpires,
       user,
+      sessionId: session.id.toString(),
     };
   }
 
@@ -214,6 +215,7 @@ export class AuthService {
       token,
       tokenExpires,
       user,
+      sessionId: session.id.toString(),
     };
   }
 
@@ -281,6 +283,7 @@ export class AuthService {
       token,
       tokenExpires,
       user: createdUser,
+      sessionId: session.id.toString(),
     };
   }
 

@@ -23,7 +23,10 @@ export class RoleEntity extends EntityRelationalHelper {
     type: String,
     example: RoleEnum.Admin,
   })
-  @Column()
+  @Column({
+    type: 'enum',
+    enum: RoleEnum,
+  })
   name?: RoleEnum;
 
   @OneToMany(() => UserEntity, (user) => user.role)

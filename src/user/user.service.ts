@@ -28,6 +28,7 @@ import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-pres
 import { AuditLoggerService } from '../logger/audit-logger.provider';
 import { SocialInterface } from '../social/interfaces/social.interface';
 import { StatusDto } from '../status/dto/status.dto';
+import { GlobalMatrixValidationService } from '../matrix/services/global-matrix-validation.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UserService {
@@ -44,6 +45,7 @@ export class UserService {
     private readonly roleService: RoleService,
     private eventEmitter: EventEmitter2,
     private readonly fileService: FilesS3PresignedService,
+    private readonly globalMatrixValidationService: GlobalMatrixValidationService,
   ) {}
 
   async getTenantSpecificRepository(tenantId?: string) {
@@ -114,8 +116,9 @@ export class UserService {
     }
 
     if (clonedPayload.email) {
-      const userObject = await this.usersRepository.findOneBy({
-        email: clonedPayload.email,
+      const userObject = await this.usersRepository.findOne({
+        where: { email: clonedPayload.email },
+        select: ['id', 'email'],
       });
       if (userObject) {
         throw new UnprocessableEntityException({
@@ -293,6 +296,23 @@ export class UserService {
     return this.usersRepository.findOne({
       where: { email },
       relations: ['role', 'role.permissions'],
+      select: [
+        'id',
+        'slug',
+        'ulid',
+        'email',
+        'password',
+        'provider',
+        'socialId',
+        'firstName',
+        'lastName',
+        'createdAt',
+        'updatedAt',
+        'deletedAt',
+        'bio',
+        'isShadowAccount',
+        'preferences',
+      ],
     });
   }
 
@@ -684,7 +704,49 @@ export class UserService {
   }
 
   /**
-   * Find a user by their Matrix user ID
+   * Find a user by their Matrix handle (registry-first approach)
+   */
+  async findByMatrixHandle(
+    handle: string,
+    tenantId?: string,
+  ): Promise<NullableType<UserEntity>> {
+    if (!handle) return null;
+
+    const effectiveTenantId = tenantId || this.request?.tenantId;
+    if (!effectiveTenantId) {
+      this.logger.warn('No tenant ID available for Matrix handle lookup');
+      return null;
+    }
+
+    try {
+      // Use the new registry method to find user by handle
+      const registryEntry =
+        await this.globalMatrixValidationService.getUserByMatrixHandle(
+          handle,
+          effectiveTenantId,
+        );
+
+      if (!registryEntry) {
+        return null;
+      }
+
+      // Get the user from the database using the userId from registry
+      await this.getTenantSpecificRepository(tenantId);
+      return this.usersRepository.findOne({
+        where: { id: registryEntry.userId },
+        select: ['id', 'firstName', 'lastName', 'email', 'slug'],
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Error finding user by Matrix handle ${handle}: ${error.message}`,
+        error.stack,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Find a user by their Matrix user ID (legacy method with registry fallback)
    */
   async findByMatrixUserId(
     matrixUserId: string,
@@ -692,19 +754,66 @@ export class UserService {
   ): Promise<NullableType<UserEntity>> {
     if (!matrixUserId) return null;
 
+    // Extract handle from Matrix user ID (format: @handle:server)
+    const handleMatch = matrixUserId.match(/^@([^:]+):/);
+    if (handleMatch) {
+      const handle = handleMatch[1];
+
+      // Try the new registry-based approach first
+      const userFromRegistry = await this.findByMatrixHandle(handle, tenantId);
+      if (userFromRegistry) {
+        return userFromRegistry;
+      }
+    }
+
+    // Fallback to legacy database lookup (only works if migration hasn't run yet)
     await this.getTenantSpecificRepository(tenantId);
 
     try {
-      return this.usersRepository.findOne({
-        where: { matrixUserId },
-        select: ['id', 'firstName', 'lastName', 'email', 'matrixUserId'],
-      });
+      // Check if matrixUserId column still exists (before cleanup migration)
+      const hasLegacyColumn = await this.checkIfMatrixUserIdColumnExists();
+      if (hasLegacyColumn) {
+        return this.usersRepository.findOne({
+          where: { matrixUserId },
+          select: ['id', 'firstName', 'lastName', 'email', 'slug'],
+        });
+      }
     } catch (error) {
       this.logger.warn(
         `Error finding user by Matrix ID ${matrixUserId}: ${error.message}`,
         error.stack,
       );
-      return null;
+    }
+
+    return null;
+  }
+
+  /**
+   * Check if the legacy matrixUserId column still exists
+   */
+  private async checkIfMatrixUserIdColumnExists(): Promise<boolean> {
+    try {
+      const schema = this.request?.tenantId
+        ? `tenant_${this.request.tenantId}`
+        : 'public';
+      const result = await this.usersRepository.query(
+        `
+        SELECT EXISTS (
+          SELECT FROM information_schema.columns 
+          WHERE table_schema = $1 
+          AND table_name = 'users' 
+          AND column_name = 'matrixUserId'
+        );
+      `,
+        [schema],
+      );
+
+      return result[0]?.exists || false;
+    } catch (error) {
+      this.logger.warn(
+        `Error checking for matrixUserId column: ${error.message}`,
+      );
+      return false;
     }
   }
 

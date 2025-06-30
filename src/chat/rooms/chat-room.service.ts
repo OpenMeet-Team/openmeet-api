@@ -27,6 +27,7 @@ import { trace } from '@opentelemetry/api';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupService } from '../../group/group.service';
 import { ElastiCacheService } from '../../elasticache/elasticache.service';
+import { GlobalMatrixValidationService } from '../../matrix/services/global-matrix-validation.service';
 
 @Injectable({ scope: Scope.REQUEST })
 export class ChatRoomService {
@@ -80,9 +81,53 @@ export class ChatRoomService {
   ): Promise<UserEntity> {
     // Get the user
     let user = await this.userService.getUserById(userId);
+    const tenantId = this.request.tenantId;
+
+    if (!tenantId) {
+      throw new Error('Tenant ID is required');
+    }
+
+    // Check if user has Matrix credentials via registry first
+    let hasMatrixCredentials = false;
+    let matrixUserId: string | null = null;
+
+    if (this.globalMatrixValidationService) {
+      try {
+        const registryEntry =
+          await this.globalMatrixValidationService.getMatrixHandleForUser(
+            user.id,
+            tenantId,
+          );
+        if (registryEntry) {
+          const serverName = process.env.MATRIX_SERVER_NAME;
+          if (!serverName) {
+            throw new Error(
+              'MATRIX_SERVER_NAME environment variable is required',
+            );
+          }
+          matrixUserId = `@${registryEntry.handle}:${serverName}`;
+          hasMatrixCredentials = true;
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Error checking Matrix registry for user ${user.id}: ${error.message}`,
+        );
+      }
+    }
+
+    // Fallback: Check legacy matrixUserId field
+    if (
+      !hasMatrixCredentials &&
+      user.matrixUserId &&
+      user.matrixAccessToken &&
+      user.matrixDeviceId
+    ) {
+      hasMatrixCredentials = true;
+      matrixUserId = user.matrixUserId;
+    }
 
     // If user doesn't have Matrix credentials, try to provision them
-    if (!user.matrixUserId || !user.matrixAccessToken || !user.matrixDeviceId) {
+    if (!hasMatrixCredentials) {
       this.logger.log(
         `User ${userId} is missing Matrix credentials, attempting to provision...`,
       );
@@ -90,21 +135,44 @@ export class ChatRoomService {
         // Use the centralized provisioning method
         const matrixUserInfo = await this.matrixUserService.provisionMatrixUser(
           user,
-          this.request.tenantId,
+          tenantId,
         );
 
-        // Update user with Matrix credentials
-        await this.userService.update(userId, {
-          matrixUserId: matrixUserInfo.userId,
-          matrixAccessToken: matrixUserInfo.accessToken,
-          matrixDeviceId: matrixUserInfo.deviceId,
-        });
+        // Register the handle in the global registry
+        const handle = matrixUserInfo.userId.match(/@([^:]+):/)?.[1];
+        if (handle && this.globalMatrixValidationService) {
+          try {
+            await this.globalMatrixValidationService.registerMatrixHandle(
+              handle,
+              tenantId,
+              user.id,
+            );
+          } catch (registryError) {
+            this.logger.warn(
+              `Failed to register Matrix handle in registry: ${registryError.message}`,
+            );
+            // Continue without registry registration for backward compatibility
+          }
+        }
+
+        // Update user with Matrix credentials (legacy fields for compatibility)
+        await this.userService.update(
+          userId,
+          {
+            matrixUserId: matrixUserInfo.userId,
+            matrixAccessToken: matrixUserInfo.accessToken,
+            matrixDeviceId: matrixUserInfo.deviceId,
+          },
+          tenantId,
+        );
 
         // Get the updated user record
-        user = await this.userService.getUserById(userId);
+        user = await this.userService.getUserById(userId, tenantId);
         this.logger.log(
-          `Successfully provisioned Matrix user for ${userId}: ${user.matrixUserId}`,
+          `Successfully provisioned Matrix user for ${userId}: ${matrixUserInfo.userId}`,
         );
+        hasMatrixCredentials = true;
+        matrixUserId = matrixUserInfo.userId;
       } catch (provisionError) {
         this.logger.error(
           `Failed to provision Matrix user for ${userId}: ${provisionError.message}`,
@@ -115,8 +183,8 @@ export class ChatRoomService {
       }
     }
 
-    // Check again after provisioning attempt
-    if (!user.matrixUserId || !user.matrixAccessToken) {
+    // Final verification - check if we have a Matrix user ID
+    if (!matrixUserId) {
       throw new Error(
         `User with id ${userId} could not be provisioned with Matrix credentials.`,
       );
@@ -161,6 +229,7 @@ export class ChatRoomService {
     private readonly groupService: GroupService,
     // We already have EventQueryService injected above, so we'll use that instead of EventService
     private readonly elastiCacheService: ElastiCacheService,
+    private readonly globalMatrixValidationService: GlobalMatrixValidationService,
   ) {
     void this.initializeRepositories();
   }
@@ -2130,203 +2199,6 @@ export class ChatRoomService {
   @Trace('chat-room.deleteEventChatRooms')
   async deleteEventChatRooms(eventId: number): Promise<void> {
     return this.deleteEntityChatRooms('event', eventId);
-  }
-
-  /**
-   * Send a message to a chat room
-   */
-  @Trace('chat-room.sendMessage')
-  async sendMessage(
-    roomId: number,
-    userId: number,
-    message: string,
-    formattedMessage?: string,
-  ): Promise<string> {
-    await this.initializeRepositories();
-
-    // Get the chat room with expanded relations to include slugs
-    const chatRoom = await this.chatRoomRepository.findOne({
-      where: { id: roomId },
-      select: ['id', 'matrixRoomId'],
-      relations: ['event', 'group'],
-    });
-
-    if (!chatRoom) {
-      throw new Error(`Chat room with ID ${roomId} not found`);
-    }
-
-    if (!chatRoom.matrixRoomId) {
-      throw new Error(`Chat room ${roomId} does not have a Matrix room ID`);
-    }
-
-    // Ensure user has Matrix credentials (will provision them if needed)
-    const user = await this.ensureUserHasMatrixCredentials(userId);
-
-    // Verify if the user's Matrix token is valid and refresh if needed
-    if (user.matrixUserId && user.matrixAccessToken) {
-      const isTokenValid = await this.matrixUserService.verifyAccessToken(
-        user.matrixUserId,
-        user.matrixAccessToken,
-      );
-
-      if (!isTokenValid) {
-        this.logger.warn(
-          `Matrix token for user ${userId} is invalid, regenerating...`,
-        );
-
-        try {
-          // Generate a new token using admin API
-          const newToken = await this.matrixUserService.generateNewAccessToken(
-            user.matrixUserId,
-          );
-
-          if (newToken) {
-            // Update user with the new token
-            await this.userService.update(userId, {
-              matrixAccessToken: newToken,
-            });
-
-            // Update our local user object
-            user.matrixAccessToken = newToken;
-
-            this.logger.log(
-              `Successfully refreshed Matrix token for user ${userId}`,
-            );
-
-            // CRITICAL: Clear the cached Matrix client to force recreation with new token
-            try {
-              await this.matrixUserService.clearUserClients(
-                user.slug,
-                this.request.tenantId,
-              );
-              this.logger.debug(
-                `Cleared cached Matrix client for user ${user.slug} after token refresh`,
-              );
-            } catch (clearError) {
-              this.logger.warn(
-                `Error clearing cached Matrix client: ${clearError.message}`,
-              );
-              // Continue anyway - the new token should still work
-            }
-          } else {
-            this.logger.error(
-              `Failed to generate new token for user ${userId}`,
-            );
-            throw new Error('Failed to refresh Matrix credentials');
-          }
-        } catch (error) {
-          this.logger.error(
-            `Error refreshing Matrix token: ${error.message}`,
-            error.stack,
-          );
-          throw new Error(
-            `Failed to refresh Matrix credentials: ${error.message}`,
-          );
-        }
-      }
-    }
-
-    // Ensure the user is in the room - use slug-based methods when available
-    try {
-      // This method handles adding the user to the room if needed
-      if (chatRoom.event && chatRoom.event.slug) {
-        await this.addUserToEventChatRoom(chatRoom.event.slug, user.slug);
-      } else if (chatRoom.group && chatRoom.group.slug) {
-        await this.addUserToGroupChatRoom(chatRoom.group.slug, user.slug);
-      }
-    } catch (error) {
-      this.logger.warn(
-        `Error ensuring user ${user.slug} is in room ${chatRoom.id}: ${error.message}`,
-      );
-      // Continue anyway - the message send will confirm if they're really in the room
-    }
-
-    // Rest of the method remains unchanged
-    // Create a proper display name using the centralized method
-    const displayName = MatrixUserService.generateDisplayName(user);
-
-    // Set the display name if needed
-    try {
-      this.logger.log(
-        `Setting Matrix display name for user ${userId} to "${displayName}"`,
-      );
-
-      await this.matrixUserService.setUserDisplayName(
-        user.matrixUserId!, // Non-null assertion
-        user.matrixAccessToken!, // Non-null assertion
-        displayName,
-        user.matrixDeviceId,
-      );
-
-      // Verify display name was set
-      const displayNameCheck = await this.matrixUserService.getUserDisplayName(
-        user.matrixUserId!, // Non-null assertion
-      );
-      this.logger.log(
-        `Current Matrix display name for user ${userId}: "${displayNameCheck || 'Not set'}"`,
-      );
-
-      // If display name wasn't set properly, try again with a direct API call
-      if (!displayNameCheck || displayNameCheck !== displayName) {
-        this.logger.warn(
-          `Display name not set correctly, trying direct API method`,
-        );
-        // Note: The direct API call functionality has been consolidated
-        // into the MatrixUserService.setUserDisplayName method
-        await this.matrixUserService.setUserDisplayName(
-          user.matrixUserId!, // Non-null assertion
-          user.matrixAccessToken!, // Non-null assertion
-          displayName,
-        );
-      }
-    } catch (err) {
-      this.logger.warn(`Failed to set user display name: ${err.message}`);
-      // Continue anyway - display name is not critical
-    }
-
-    // Send the message using the user's Matrix credentials
-    return this.matrixMessageService.sendMessage({
-      roomId: chatRoom.matrixRoomId,
-      content: message,
-      userId: user.matrixUserId!, // Non-null assertion
-      accessToken: user.matrixAccessToken!, // Non-null assertion
-      deviceId: user.matrixDeviceId,
-      // Legacy/alternate field support
-      body: message,
-      formatted_body: formattedMessage,
-      format: formattedMessage ? 'org.matrix.custom.html' : undefined,
-      senderUserId: user.matrixUserId!, // Non-null assertion
-      senderAccessToken: user.matrixAccessToken!, // Non-null assertion
-      senderDeviceId: user.matrixDeviceId,
-    });
-  }
-
-  /**
-   * Get messages from a chat room
-   */
-  @Trace('chat-room.getMessages')
-  async getMessages(roomId: number, userId: number, limit = 50, from?: string) {
-    await this.initializeRepositories();
-
-    // Get the chat room
-    const chatRoom = await this.chatRoomRepository.findOne({
-      where: { id: roomId },
-    });
-
-    if (!chatRoom) {
-      throw new Error(`Chat room with id ${roomId} not found`);
-    }
-
-    // Ensure user has Matrix credentials (will provision them if needed)
-    const user = await this.ensureUserHasMatrixCredentials(userId);
-
-    // Get the messages
-    return this.matrixMessageService.getRoomMessages(
-      chatRoom.matrixRoomId,
-      limit,
-      from,
-      user.matrixUserId!, // Non-null assertion
-    );
   }
 
   /**

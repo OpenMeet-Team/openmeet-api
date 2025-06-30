@@ -9,6 +9,8 @@ import { RoleModule } from '../role/role.module';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { UserListener } from './user.listener';
 import { ConfigModule } from '@nestjs/config';
+import { MatrixModule } from '../matrix/matrix.module';
+import { forwardRef } from '@nestjs/common';
 
 const infrastructurePersistenceModule = RelationalUserPersistenceModule;
 
@@ -19,6 +21,7 @@ const infrastructurePersistenceModule = RelationalUserPersistenceModule;
     FileModule,
     TenantModule,
     RoleModule,
+    forwardRef(() => MatrixModule),
   ],
   controllers: [UserController],
   providers: [

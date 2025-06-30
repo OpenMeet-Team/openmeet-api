@@ -219,15 +219,15 @@ export class UserEntity extends EntityRelationalHelper {
     }
   }
 
-  @Column({ type: String, nullable: true })
+  // Legacy Matrix fields - kept for TypeScript compatibility during migration
+  // These are NO LONGER database columns and exist only for backward compatibility
+  // Data is now stored in the global Matrix handle registry
   @Expose({ groups: ['me', 'admin'] })
   matrixUserId?: string;
 
-  @Column({ type: String, nullable: true })
   @Exclude({ toPlainOnly: true })
   matrixAccessToken?: string;
 
-  @Column({ type: String, nullable: true })
   @Exclude({ toPlainOnly: true })
   matrixDeviceId?: string;
 

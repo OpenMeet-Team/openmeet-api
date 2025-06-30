@@ -15,6 +15,7 @@ import { EventAttendeeService } from '../../event-attendee/event-attendee.servic
 import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupService } from '../../group/group.service';
 import { Trace } from '../../utils/trace.decorator';
+import { GlobalMatrixValidationService } from '../../matrix/services/global-matrix-validation.service';
 import { trace } from '@opentelemetry/api';
 import {
   ChatRoomType,
@@ -47,6 +48,7 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly eventQueryService: EventQueryService,
     private readonly groupService: GroupService,
+    private readonly globalMatrixValidationService: GlobalMatrixValidationService,
   ) {}
 
   /**
@@ -74,8 +76,47 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
       throw new Error(`User with id ${userId} not found`);
     }
 
+    // Check if user has Matrix credentials via registry first
+    let hasMatrixCredentials = false;
+    let matrixUserId: string | null = null;
+
+    if (this.globalMatrixValidationService) {
+      try {
+        const registryEntry =
+          await this.globalMatrixValidationService.getMatrixHandleForUser(
+            user.id,
+            tenantId,
+          );
+        if (registryEntry) {
+          const serverName = process.env.MATRIX_SERVER_NAME;
+          if (!serverName) {
+            throw new Error(
+              'MATRIX_SERVER_NAME environment variable is required',
+            );
+          }
+          matrixUserId = `@${registryEntry.handle}:${serverName}`;
+          hasMatrixCredentials = true;
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Error checking Matrix registry for user ${user.id}: ${error.message}`,
+        );
+      }
+    }
+
+    // Fallback: Check legacy matrixUserId field
+    if (
+      !hasMatrixCredentials &&
+      user.matrixUserId &&
+      user.matrixAccessToken &&
+      user.matrixDeviceId
+    ) {
+      hasMatrixCredentials = true;
+      matrixUserId = user.matrixUserId;
+    }
+
     // If user doesn't have Matrix credentials, try to provision them
-    if (!user.matrixUserId || !user.matrixAccessToken || !user.matrixDeviceId) {
+    if (!hasMatrixCredentials) {
       this.logger.log(
         `User ${userId} is missing Matrix credentials, attempting to provision...`,
       );
@@ -86,12 +127,33 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
           tenantId,
         );
 
-        // Update user with Matrix credentials
-        await this.userService.update(userId, {
-          matrixUserId: matrixUserInfo.userId,
-          matrixAccessToken: matrixUserInfo.accessToken,
-          matrixDeviceId: matrixUserInfo.deviceId,
-        });
+        // Register the handle in the global registry
+        const handle = matrixUserInfo.userId.match(/@([^:]+):/)?.[1];
+        if (handle && this.globalMatrixValidationService) {
+          try {
+            await this.globalMatrixValidationService.registerMatrixHandle(
+              handle,
+              tenantId,
+              user.id,
+            );
+          } catch (registryError) {
+            this.logger.warn(
+              `Failed to register Matrix handle in registry: ${registryError.message}`,
+            );
+            // Continue without registry registration for backward compatibility
+          }
+        }
+
+        // Update user with Matrix credentials (legacy fields for compatibility)
+        await this.userService.update(
+          userId,
+          {
+            matrixUserId: matrixUserInfo.userId,
+            matrixAccessToken: matrixUserInfo.accessToken,
+            matrixDeviceId: matrixUserInfo.deviceId,
+          },
+          tenantId,
+        );
 
         // Get the updated user record
         user = await this.userService.findById(userId, tenantId);
@@ -102,8 +164,10 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
         }
 
         this.logger.log(
-          `Successfully provisioned Matrix user for ${userId}: ${user.matrixUserId}`,
+          `Successfully provisioned Matrix user for ${userId}: ${matrixUserInfo.userId}`,
         );
+        hasMatrixCredentials = true;
+        matrixUserId = matrixUserInfo.userId;
       } catch (provisionError) {
         this.logger.error(
           `Failed to provision Matrix user for ${userId}: ${provisionError.message}`,
@@ -114,8 +178,8 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
       }
     }
 
-    // Check again after provisioning attempt
-    if (!user.matrixUserId || !user.matrixAccessToken) {
+    // Final verification - check if we have a Matrix user ID
+    if (!matrixUserId) {
       throw new Error(
         `User with id ${userId} could not be provisioned with Matrix credentials.`,
       );
@@ -872,167 +936,8 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
     }
   }
 
-  /**
-   * Send a message to a chat room
-   */
-  @Trace('matrix-chat-room-manager.sendMessage')
-  async sendMessage(
-    roomId: number,
-    userId: number,
-    message: string,
-    tenantId: string,
-  ): Promise<string> {
-    // Get database connection for the tenant
-    const dataSource =
-      await this.tenantConnectionService.getTenantConnection(tenantId);
-    const chatRoomRepository = dataSource.getRepository(ChatRoomEntity);
-
-    // Get the chat room
-    const chatRoom = await chatRoomRepository.findOne({
-      where: { id: roomId },
-    });
-
-    if (!chatRoom) {
-      throw new Error(`Chat room with id ${roomId} not found`);
-    }
-
-    // Ensure user has Matrix credentials (will provision them if needed)
-    const user = await this.ensureUserHasMatrixCredentials(userId, tenantId);
-
-    // Make sure user is in the room
-    try {
-      // Check if user is already a member of the room in the database
-      const roomWithMembers = await chatRoomRepository.findOne({
-        where: { id: chatRoom.id },
-        relations: ['members'],
-      });
-
-      const isMember = roomWithMembers?.members?.some(
-        (member) => member.id === userId,
-      );
-
-      // If not a member, invite and join the room
-      if (!isMember) {
-        this.logger.log(
-          `User ${userId} not yet a member of room ${chatRoom.id}, adding them now`,
-        );
-
-        // First, invite the user via admin
-        await this.matrixRoomService.inviteUser(
-          chatRoom.matrixRoomId,
-          user.matrixUserId!, // Non-null assertion
-        );
-
-        // Then have the user join the room
-        await this.matrixRoomService.joinRoom(
-          chatRoom.matrixRoomId,
-          user.matrixUserId!, // Non-null assertion
-          user.matrixAccessToken!, // Non-null assertion
-          user.matrixDeviceId,
-        );
-
-        // Add user to the room's members in the database
-        if (roomWithMembers) {
-          roomWithMembers.members.push(user);
-          await chatRoomRepository.save(roomWithMembers);
-        }
-      }
-    } catch (error) {
-      this.logger.warn(
-        `Error ensuring user ${userId} is in room ${chatRoom.id}: ${error.message}`,
-      );
-      // Continue anyway - the message send will confirm if they're really in the room
-    }
-
-    // Create a proper display name using the centralized method
-    const displayName = MatrixUserService.generateDisplayName(user);
-
-    // Set the display name if needed
-    try {
-      this.logger.log(
-        `Setting Matrix display name for user ${userId} to "${displayName}"`,
-      );
-
-      await this.matrixUserService.setUserDisplayName(
-        user.matrixUserId!, // Non-null assertion
-        user.matrixAccessToken!, // Non-null assertion
-        displayName,
-        user.matrixDeviceId,
-      );
-    } catch (err) {
-      this.logger.warn(`Failed to set user display name: ${err.message}`);
-      // Continue anyway - display name is not critical
-    }
-
-    // We've already verified matrixUserId and matrixAccessToken exist in ensureUserHasMatrixCredentials
-    // but TypeScript still needs non-null assertions since it doesn't track that logic
-    return this.matrixMessageService.sendMessage({
-      roomId: chatRoom.matrixRoomId,
-      content: message,
-      userId: user.matrixUserId!,
-      accessToken: user.matrixAccessToken!,
-      deviceId: user.matrixDeviceId,
-      // Legacy/alternate field support
-      body: message,
-      senderUserId: user.matrixUserId,
-      senderAccessToken: user.matrixAccessToken,
-      senderDeviceId: user.matrixDeviceId,
-    });
-  }
-
-  /**
-   * Get messages from a chat room
-   */
-  @Trace('matrix-chat-room-manager.getMessages')
-  async getMessages(
-    roomId: number,
-    userId: number,
-    limit: number,
-    from: string | undefined,
-    tenantId: string,
-  ): Promise<{
-    messages: any[];
-    end: string;
-  }> {
-    // Get database connection for the tenant
-    const dataSource =
-      await this.tenantConnectionService.getTenantConnection(tenantId);
-    const chatRoomRepository = dataSource.getRepository(ChatRoomEntity);
-
-    // Get the chat room
-    const chatRoom = await chatRoomRepository.findOne({
-      where: { id: roomId },
-    });
-
-    if (!chatRoom) {
-      throw new Error(`Chat room with id ${roomId} not found`);
-    }
-
-    // Ensure user has Matrix credentials (will provision them if needed)
-    const user = await this.ensureUserHasMatrixCredentials(userId, tenantId);
-
-    // We need non-null assertion for TypeScript, even though we've already verified it exists
-    const messageData = await this.matrixMessageService.getRoomMessages(
-      chatRoom.matrixRoomId,
-      limit,
-      from,
-      user.matrixUserId!,
-    );
-
-    // Get all the messages
-    const messages = messageData.messages;
-
-    // Enhance messages with user display names
-    const enhancedMessages = await this.enhanceMessagesWithUserInfo(
-      messages,
-      tenantId,
-    );
-
-    return {
-      messages: enhancedMessages,
-      end: messageData.end,
-    };
-  }
+  // NOTE: Message sending and retrieval methods removed in Matrix architecture refactor
+  // Frontend Matrix clients now handle all user-facing messaging operations directly
 
   /**
    * Enhance messages with user display names

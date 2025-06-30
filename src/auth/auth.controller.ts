@@ -10,7 +10,9 @@ import {
   Patch,
   Delete,
   SerializeOptions,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { AuthService } from './auth.service';
 import {
   ApiBearerAuth,
@@ -54,22 +56,47 @@ export class AuthController {
     type: LoginResponseDto,
   })
   @HttpCode(HttpStatus.OK)
-  public login(@Body() loginDto: AuthEmailLoginDto): Promise<LoginResponseDto> {
-    return this.service.validateLogin(loginDto);
-  }
-
-  @SerializeOptions({
-    groups: ['me'],
-  })
-  @Post('admin/email/login')
-  @ApiOkResponse({
-    type: LoginResponseDto,
-  })
-  @HttpCode(HttpStatus.OK)
-  public adminLogin(
+  public async login(
     @Body() loginDto: AuthEmailLoginDto,
+    @Res({ passthrough: true }) response: Response,
   ): Promise<LoginResponseDto> {
-    return this.service.validateLogin(loginDto);
+    const loginResult = await this.service.validateLogin(loginDto);
+
+    // Set oidc_session cookie for cross-domain OIDC authentication
+    if (loginResult.sessionId) {
+      // Configure cookie domain based on environment
+      const backendDomain = process.env.BACKEND_DOMAIN || '';
+      const isLocalhost = backendDomain.includes('localhost');
+      // Only real openmeet.net subdomains (api-dev, platform-dev, matrix-dev, etc.) - NOT localdev
+      const isActualOpenMeetSubdomain = backendDomain.match(
+        /^https?:\/\/(api|platform|matrix)-[a-zA-Z0-9-]+\.openmeet\.net/,
+      );
+
+      const cookieOptions = {
+        sameSite: 'lax' as const, // Allow cross-site requests
+        httpOnly: true, // Security
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        ...(isLocalhost
+          ? {
+              // Pure localhost development - no domain restriction
+              secure: false, // HTTP for localhost
+            }
+          : isActualOpenMeetSubdomain
+            ? {
+                // Real openmeet.net subdomains (api-dev.openmeet.net, platform-dev.openmeet.net)
+                domain: '.openmeet.net',
+                secure: true, // HTTPS for openmeet.net subdomains
+              }
+            : {
+                // localdev.openmeet.net or other domains - no domain restriction (same-origin only)
+                secure: true, // HTTPS only
+              }),
+      };
+
+      response.cookie('oidc_session', loginResult.sessionId, cookieOptions);
+    }
+
+    return loginResult;
   }
 
   @Post('email/register')
@@ -79,10 +106,47 @@ export class AuthController {
     type: LoginResponseDto,
   })
   @HttpCode(HttpStatus.CREATED)
-  public register(
+  public async register(
     @Body() createUserDto: AuthRegisterLoginDto,
+    @Res({ passthrough: true }) response: Response,
   ): Promise<LoginResponseDto> {
-    return this.service.register(createUserDto);
+    const loginResult = await this.service.register(createUserDto);
+
+    // Set oidc_session cookie for cross-domain OIDC authentication
+    if (loginResult.sessionId) {
+      // Configure cookie domain based on environment
+      const backendDomain = process.env.BACKEND_DOMAIN || '';
+      const isLocalhost = backendDomain.includes('localhost');
+      // Only real openmeet.net subdomains (api-dev, platform-dev, matrix-dev, etc.) - NOT localdev
+      const isActualOpenMeetSubdomain = backendDomain.match(
+        /^https?:\/\/(api|platform|matrix)-[a-zA-Z0-9-]+\.openmeet\.net/,
+      );
+
+      const cookieOptions = {
+        sameSite: 'lax' as const, // Allow cross-site requests
+        httpOnly: true, // Security
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        ...(isLocalhost
+          ? {
+              // Pure localhost development - no domain restriction
+              secure: false, // HTTP for localhost
+            }
+          : isActualOpenMeetSubdomain
+            ? {
+                // Real openmeet.net subdomains (api-dev.openmeet.net, platform-dev.openmeet.net)
+                domain: '.openmeet.net',
+                secure: true, // HTTPS for openmeet.net subdomains
+              }
+            : {
+                // localdev.openmeet.net or other domains - no domain restriction (same-origin only)
+                secure: true, // HTTPS only
+              }),
+      };
+
+      response.cookie('oidc_session', loginResult.sessionId, cookieOptions);
+    }
+
+    return loginResult;
   }
 
   @Post('email/confirm')

@@ -26,6 +26,7 @@ import {
 } from '../../core/constants/constant';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupService } from '../../group/group.service';
+import { GlobalMatrixValidationService } from '../../matrix/services/global-matrix-validation.service';
 
 describe('ChatRoomService', () => {
   let service: ChatRoomService;
@@ -524,6 +525,18 @@ describe('ChatRoomService', () => {
             }),
           },
         },
+        {
+          provide: GlobalMatrixValidationService,
+          useValue: {
+            getMatrixHandleForUser: jest.fn().mockResolvedValue(null), // No existing registry entry
+            getUserByMatrixHandle: jest.fn().mockResolvedValue(null),
+            isMatrixHandleUnique: jest.fn().mockResolvedValue(true),
+            registerMatrixHandle: jest.fn().mockResolvedValue(undefined), // Successfully register
+            suggestAvailableHandles: jest
+              .fn()
+              .mockResolvedValue(['testuser1', 'testuser2']),
+          },
+        },
       ],
     }).compile();
 
@@ -596,6 +609,7 @@ describe('ChatRoomService', () => {
           matrixAccessToken: mockMatrixUserInfo.accessToken,
           matrixDeviceId: mockMatrixUserInfo.deviceId,
         }),
+        'default', // tenantId parameter
       );
 
       // Should return user with Matrix credentials

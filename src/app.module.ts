@@ -58,6 +58,7 @@ import { CalendarSourceModule } from './calendar-source/calendar-source.module';
 import { CalendarFeedModule } from './calendar-feed/calendar-feed.module';
 import { ExternalCalendarModule } from './external-calendar/external-calendar.module';
 import { SitemapModule } from './sitemap/sitemap.module';
+import { OidcModule } from './oidc/oidc.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -145,6 +146,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     CalendarFeedModule,
     ExternalCalendarModule,
     SitemapModule,
+    OidcModule,
   ],
   providers: [
     TenantConnectionService,

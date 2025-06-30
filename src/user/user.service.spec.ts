@@ -21,6 +21,7 @@ import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-pres
 import { REQUEST } from '@nestjs/core';
 import { Repository } from 'typeorm';
 import { TESTING_TENANT_ID } from '../../test/utils/constants';
+import { GlobalMatrixValidationService } from '../matrix/services/global-matrix-validation.service';
 
 describe('UserService', () => {
   let userService: UserService;
@@ -62,6 +63,16 @@ describe('UserService', () => {
         {
           provide: FilesS3PresignedService,
           useValue: mockFilesS3PresignedService,
+        },
+        {
+          provide: GlobalMatrixValidationService,
+          useValue: {
+            getMatrixHandleForUser: jest.fn(),
+            getUserByMatrixHandle: jest.fn(),
+            isMatrixHandleUnique: jest.fn(),
+            registerMatrixHandle: jest.fn(),
+            suggestAvailableHandles: jest.fn(),
+          },
         },
       ],
     }).compile();

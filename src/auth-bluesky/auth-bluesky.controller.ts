@@ -57,10 +57,22 @@ export class AuthBlueskyController {
       code: query.code,
     });
 
-    const redirectUrl = await this.authBlueskyService.handleAuthCallback(
-      query,
-      effectiveTenantId,
-    );
+    const { redirectUrl, sessionId } =
+      await this.authBlueskyService.handleAuthCallback(
+        query,
+        effectiveTenantId,
+      );
+
+    // Set oidc_session cookie for cross-domain OIDC authentication
+    if (sessionId) {
+      res.cookie('oidc_session', sessionId, {
+        domain: '.openmeet.net', // Cross-subdomain sharing
+        secure: true, // HTTPS only
+        sameSite: 'lax', // Allow cross-site requests
+        httpOnly: true, // Security
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      });
+    }
 
     res.redirect(redirectUrl);
   }

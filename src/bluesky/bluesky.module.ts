@@ -14,7 +14,7 @@ import { MetricsModule } from '../metrics/metrics.module';
 @Module({
   imports: [
     ConfigModule,
-    UserModule,
+    forwardRef(() => UserModule),
     ElastiCacheModule,
     ShadowAccountModule,
     TenantModule,
