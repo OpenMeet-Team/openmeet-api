@@ -274,8 +274,13 @@ export class OidcService {
   ) {
     // Validate client_id
     const validClientIds = ['matrix_synapse', 'mas_client']; // Add more clients as needed
+    console.log('🔧 OIDC Debug - Client validation:', {
+      provided: params.client_id,
+      valid: validClientIds,
+      isValid: validClientIds.includes(params.client_id)
+    });
     if (!validClientIds.includes(params.client_id)) {
-      throw new UnauthorizedException('Invalid client_id');
+      throw new UnauthorizedException(`Invalid client_id: ${params.client_id}`);
     }
 
     // Validate response_type
