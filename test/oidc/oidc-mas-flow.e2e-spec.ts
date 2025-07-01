@@ -3,6 +3,7 @@ import {
   TESTING_APP_URL,
   TESTING_TENANT_ID,
   TESTING_MAS_URL,
+  TESTING_MAS_CLIENT_SECRET,
 } from '../utils/constants';
 import { loginAsTester } from '../utils/functions';
 
@@ -259,7 +260,7 @@ describe('OIDC MAS Authentication Flow', () => {
           code: authorizationCode,
           redirect_uri: `${TESTING_MAS_URL}/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C`,
           client_id: 'mas_client',
-          client_secret: 'ci-mas-client-secret-for-testing',
+          client_secret: TESTING_MAS_CLIENT_SECRET,
         })
         .expect(200);
 
@@ -295,7 +296,7 @@ describe('OIDC MAS Authentication Flow', () => {
           code: authorizationCode,
           redirect_uri: `${TESTING_MAS_URL}/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C`,
           client_id: 'mas_client',
-          client_secret: 'ci-mas-client-secret-for-testing',
+          client_secret: TESTING_MAS_CLIENT_SECRET,
         });
 
       if (tokenResponse.status !== 200) {
@@ -483,7 +484,7 @@ describe('OIDC MAS Authentication Flow', () => {
             code: authCode,
             redirect_uri: `${TESTING_MAS_URL}/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C`,
             client_id: 'mas_client',
-            client_secret: 'ci-mas-client-secret-for-testing',
+            client_secret: TESTING_MAS_CLIENT_SECRET,
           })
           .expect(200);
 

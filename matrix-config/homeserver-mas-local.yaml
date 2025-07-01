@@ -34,6 +34,8 @@ experimental_features:
     client_auth_method: "client_secret_basic"
     client_secret: "${MAS_CLIENT_SECRET}"
     admin_token: "local-mas-admin-token"
+    # Override introspection endpoint to use internal Docker network
+    introspection_endpoint: "http://matrix-auth-service:8080/oauth2/introspect"
 
 # Disable built-in authentication since MAS handles it
 password_providers: []

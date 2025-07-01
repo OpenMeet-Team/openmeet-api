@@ -298,6 +298,10 @@ export class OidcService {
       /^https?:\/\/localhost:8081\/upstream\/callback\/01JAYS74TCG3BTWKADN5Q4518C$/,
       /^https?:\/\/matrix-auth-service:8080\/upstream\/callback\/01JAYS74TCG3BTWKADN5Q4518C$/,
       /^https?:\/\/mas.*\.openmeet\.net\/upstream\/callback\/01JAYS74TCG3BTWKADN5Q4518C$/,
+      // Frontend callback URLs (for direct Matrix authentication)
+      /^https?:\/\/localhost:9005\/.*$/,
+      /^https?:\/\/platform.*\.openmeet\.net\/.*$/,
+      /^https?:\/\/localdev\.openmeet\.net\/.*$/,
     ];
 
     const isValidRedirectUri = allowedRedirectUriPatterns.some((pattern) =>
@@ -456,16 +460,22 @@ export class OidcService {
    */
   private validateAuthCode(code: string): any {
     try {
+      console.log('🔧 OIDC Auth Code Debug - Validating code...');
       const payload = jwt.verify(code, this.rsaKeyPair.publicKey, {
         algorithms: ['RS256'],
       }) as any;
 
+      console.log('🔧 OIDC Auth Code Debug - Decoded payload:', JSON.stringify(payload, null, 2));
+
       if (payload.type !== 'auth_code') {
+        console.log('❌ OIDC Auth Code Debug - Invalid code type:', payload.type);
         throw new Error('Invalid code type');
       }
 
+      console.log('✅ OIDC Auth Code Debug - Validation successful');
       return payload;
-    } catch {
+    } catch (error) {
+      console.log('❌ OIDC Auth Code Debug - Validation failed:', error.message);
       throw new UnauthorizedException('Invalid or expired authorization code');
     }
   }
@@ -486,8 +496,8 @@ export class OidcService {
         isPublic: true, // Back to public client - will implement RS256
       },
       mas_client: {
-        secret: process.env.MAS_CLIENT_SECRET || 'mas-local-client-secret',
-        isPublic: false, // MAS requires client secret
+        secret: process.env.MAS_CLIENT_SECRET, // Required via environment, no default
+        isPublic: true, // Frontend public client - no secret required for token exchange
       },
     };
 
