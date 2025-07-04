@@ -846,9 +846,17 @@ export class MatrixUserService
   async generateNewAccessToken(matrixUserId: string): Promise<string | null> {
     try {
       const config = this.matrixCoreService.getConfig();
-      const adminToken = this.matrixCoreService
-        .getAdminClient()
-        .getAccessToken();
+
+      // Check if admin client is available
+      const adminClient = this.matrixCoreService.getAdminClient();
+      if (!adminClient) {
+        this.logger.warn(
+          'Matrix admin client not available - cannot generate token via admin API',
+        );
+        return null;
+      }
+
+      const adminToken = adminClient.getAccessToken();
 
       // Use admin API to create a new access token
       const url = `${config.baseUrl}/_synapse/admin/v1/users/${encodeURIComponent(matrixUserId)}/login`;
@@ -1069,10 +1077,13 @@ export class MatrixUserService
           // Continue anyway with the new token, even if DB update failed
         }
       } else {
-        this.logger.error(
-          `Failed to generate new token for ${userSlug}, can't connect to Matrix`,
+        this.logger.warn(
+          `Cannot generate admin token for ${userSlug} - Matrix admin API unavailable. User should authenticate via MAS OIDC flow.`,
         );
-        throw new Error('Failed to refresh Matrix credentials');
+        // Instead of throwing, return a more informative error that suggests using the proper authentication flow
+        throw new Error(
+          'Matrix authentication unavailable. Please log out and log back in to refresh your Matrix credentials.',
+        );
       }
     }
 

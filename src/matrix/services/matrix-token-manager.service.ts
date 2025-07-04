@@ -24,7 +24,7 @@ export class MatrixTokenManagerService
 {
   private readonly logger = new Logger(MatrixTokenManagerService.name);
 
-  // Admin token
+  // Admin token (DISABLED - using bot users instead)
   private adminTokenState: TokenState = 'invalid';
   private adminAccessToken: string = '';
   private lastAdminTokenRefresh = 0;
@@ -299,86 +299,16 @@ export class MatrixTokenManagerService
   }
 
   /**
-   * Actual admin token regeneration logic
+   * Actual admin token regeneration logic (DISABLED - using bot users instead)
    */
-  private async regenerateAdminToken(): Promise<string | null> {
-    const matrixConfig = this.configService.get<MatrixConfig>('matrix', {
-      infer: true,
-    });
+  private regenerateAdminToken(): Promise<string | null> {
+    this.logger.warn(
+      'Admin token regeneration disabled - system now uses tenant-scoped bot users',
+    );
 
-    // Password is now required in the config
-    const adminPassword =
-      process.env.MATRIX_ADMIN_PASSWORD || matrixConfig?.adminPassword;
-    if (!adminPassword) {
-      this.logger.error(
-        'Cannot regenerate admin token: admin password not configured',
-      );
-      throw new Error('MATRIX_ADMIN_PASSWORD is required for token generation');
-    }
-
-    try {
-      // Extract username without domain part for login
-      const usernameOnly = this.adminUserId.startsWith('@')
-        ? this.adminUserId.split(':')[0].substring(1)
-        : this.adminUserId;
-
-      this.logger.log(`Generating admin token for user: ${usernameOnly}`);
-
-      // Use Matrix login API to get a new token
-      const loginUrl = `${this.baseUrl}/_matrix/client/v3/login`;
-
-      // Build request data
-      const requestData = {
-        type: 'm.login.password',
-        identifier: {
-          type: 'm.id.user',
-          user: usernameOnly,
-        },
-        password: adminPassword,
-        device_id: this.defaultDeviceId,
-        initial_device_display_name: this.defaultInitialDeviceDisplayName,
-      };
-
-      this.logger.debug(`Matrix login request URL: ${loginUrl}`);
-      this.logger.debug(
-        `Matrix login request data: ${JSON.stringify({
-          ...requestData,
-          password: '******', // Don't log the actual password
-        })}`,
-      );
-
-      const response = await axios.post(loginUrl, requestData);
-
-      if (response.data && response.data.access_token) {
-        const newToken = response.data.access_token;
-        this.logger.log(
-          `Successfully generated admin token for ${usernameOnly}`,
-        );
-        return newToken;
-      } else {
-        this.logger.error(
-          'Failed to generate admin token: unexpected response format',
-        );
-        return null;
-      }
-    } catch (error) {
-      // Log the full error details
-      const errorDetails = {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        errorMessage: error.message,
-        errorType: error.constructor?.name,
-        headers: error.response?.headers,
-        stack: error.stack,
-      };
-
-      this.logger.error(
-        `Failed to generate admin token: ${error.message}`,
-        errorDetails,
-      );
-      return null;
-    }
+    // Return null to indicate admin tokens are not available
+    // This will cause dependent services to fall back to bot user authentication
+    return Promise.resolve(null);
   }
 
   // USER TOKEN METHODS

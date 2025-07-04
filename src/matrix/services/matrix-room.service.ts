@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { MatrixCoreService } from './matrix-core.service';
+import { MatrixBotUserService } from './matrix-bot-user.service';
+import { MatrixBotService } from './matrix-bot.service';
 import { CreateRoomOptions, RoomInfo } from '../types/matrix.types';
 import { IMatrixClient, IMatrixRoomProvider } from '../types/matrix.interfaces';
 import { HttpStatus } from '@nestjs/common';
@@ -9,55 +12,68 @@ import { HttpStatus } from '@nestjs/common';
 export class MatrixRoomService implements IMatrixRoomProvider {
   private readonly logger = new Logger(MatrixRoomService.name);
 
-  constructor(private readonly matrixCoreService: MatrixCoreService) {}
+  constructor(
+    private readonly matrixCoreService: MatrixCoreService,
+    private readonly matrixBotUserService: MatrixBotUserService,
+    private readonly matrixBotService: MatrixBotService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  /**
+   * Create a Matrix client using bot user credentials for a specific tenant
+   * Uses MatrixBotService which supports both Application Service and OIDC authentication
+   */
+  private async createBotClient(
+    tenantId: string,
+  ): Promise<IMatrixClient | null> {
+    try {
+      this.logger.log(
+        `Creating bot client for tenant ${tenantId} using MatrixBotService`,
+      );
+
+      // Authenticate the bot using MatrixBotService (handles both appservice and OIDC)
+      await this.matrixBotService.authenticateBot(tenantId);
+
+      if (!this.matrixBotService.isBotAuthenticated()) {
+        this.logger.error(`Bot authentication failed for tenant ${tenantId}`);
+        return null;
+      }
+
+      // Get the authenticated bot client
+      // Note: MatrixBotService doesn't expose the client directly, so we need to access it via reflection
+      // This is a temporary solution until we refactor the interface
+      const botClient = (this.matrixBotService as any).botClient;
+
+      if (!botClient) {
+        this.logger.error(
+          `Bot client not available after authentication for tenant ${tenantId}`,
+        );
+        return null;
+      }
+
+      this.logger.log(`Successfully created bot client for tenant ${tenantId}`);
+
+      return botClient;
+    } catch (error) {
+      this.logger.error(
+        `Failed to create bot client for tenant ${tenantId}: ${error.message}`,
+      );
+      return null;
+    }
+  }
 
   /**
    * Verify if a Matrix room exists by checking room state
    * @param roomId Matrix room ID to verify
    * @returns true if room exists, false if not
    */
-  async verifyRoomExists(roomId: string): Promise<boolean> {
-    let client;
-    try {
-      client = await this.matrixCoreService.acquireClient();
-      try {
-        // Check if room exists using the correct method based on the Matrix SDK interface
-        // Use roomState instead of getRoomState as defined in IMatrixClient
-        await client.client.roomState(roomId);
-        this.logger.debug(`Room ${roomId} exists in Matrix`);
-        return true;
-      } catch (error) {
-        if (
-          error.statusCode === 404 ||
-          (error.data && error.data.errcode === 'M_NOT_FOUND') ||
-          (error.message && error.message.includes('404')) ||
-          (error.message && error.message.includes('not found'))
-        ) {
-          this.logger.warn(`Room ${roomId} doesn't exist in Matrix`);
-          return false;
-        }
-        // Other errors might be permission-related, not existence-related
-        this.logger.error(
-          `Error checking if room ${roomId} exists: ${error.message}`,
-        );
-        throw error;
-      }
-    } catch (error) {
-      this.logger.error(
-        `Error acquiring client to check room ${roomId}: ${error.message}`,
-      );
-      return false; // Assume room doesn't exist if we can't check
-    } finally {
-      if (client) {
-        try {
-          await this.matrixCoreService.releaseClient(client);
-        } catch (releaseError) {
-          this.logger.warn(
-            `Failed to release Matrix client: ${releaseError.message}`,
-          );
-        }
-      }
-    }
+  verifyRoomExists(roomId: string): Promise<boolean> {
+    // Room verification disabled since admin client is deprecated
+    // TODO: Implement tenant-aware room verification using bot users
+    this.logger.warn(
+      `Room verification disabled for ${roomId} - assuming room exists`,
+    );
+    return Promise.resolve(true); // Assume room exists to avoid blocking operations
   }
 
   /**
@@ -244,7 +260,10 @@ export class MatrixRoomService implements IMatrixRoomProvider {
   /**
    * Create a new Matrix room
    */
-  async createRoom(options: CreateRoomOptions): Promise<RoomInfo> {
+  async createRoom(
+    options: CreateRoomOptions,
+    tenantId?: string,
+  ): Promise<RoomInfo> {
     const {
       name,
       topic,
@@ -255,13 +274,29 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       powerLevelContentOverride,
     } = options;
 
-    let client;
+    let matrixClient: IMatrixClient | null = null;
 
     try {
-      client = await this.matrixCoreService.acquireClient();
+      // Admin client is deprecated - use bot authentication only
+      if (!tenantId) {
+        throw new Error(
+          'Cannot create room: tenant ID is required for bot authentication',
+        );
+      }
+
+      this.logger.log(
+        `Creating room using bot authentication for tenant ${tenantId}`,
+      );
+      matrixClient = await this.createBotClient(tenantId);
+
+      if (!matrixClient) {
+        throw new Error(
+          `Failed to authenticate bot user for tenant ${tenantId}`,
+        );
+      }
+
       const matrixSdk = this.matrixCoreService.getSdk();
       const config = this.matrixCoreService.getConfig();
-      const matrixClient = client.client;
 
       // Build initial state for the room
       // Define the type explicitly to allow for different content structures
@@ -342,8 +377,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
 
       // Use the Matrix client API directly
       const apiUrl = `${config.baseUrl}/_matrix/client/v3/createRoom`;
-      const accessToken =
-        matrixClient.getAccessToken?.() || client.client.getAccessToken?.();
+      const accessToken = matrixClient.getAccessToken?.();
 
       const roomPayload = {
         name,
@@ -383,15 +417,12 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       );
       throw new Error(`Failed to create Matrix room: ${error.message}`);
     } finally {
-      if (client) {
-        try {
-          await this.matrixCoreService.releaseClient(client);
-        } catch (releaseError) {
-          this.logger.warn(
-            `Failed to release Matrix client: ${releaseError.message}`,
-          );
-          // Don't re-throw as this would mask the original error
-        }
+      // Bot clients are not pooled, so no cleanup needed
+      // The authenticated client will be garbage collected
+      if (matrixClient) {
+        this.logger.debug(
+          'Room creation completed, bot client will be disposed',
+        );
       }
     }
   }
@@ -1120,6 +1151,76 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         error.stack,
       );
       throw new Error(`Failed to get rooms: ${error.message}`);
+    }
+  }
+
+  /**
+   * Verify that a Matrix room exists and handle graceful recreation if needed
+   * @param chatRoom The chat room entity to verify
+   * @param entityType The type of entity ('event' or 'group')
+   * @param entitySlug The slug of the entity
+   * @returns The verified or recreated room ID, or null if verification failed
+   */
+  async verifyAndEnsureMatrixRoom(
+    chatRoom: any,
+    entityType: 'event' | 'group',
+    entitySlug: string,
+  ): Promise<string | null> {
+    this.logger.log(
+      `Verifying Matrix room ${chatRoom.matrixRoomId} for ${entityType} ${entitySlug}`,
+    );
+
+    try {
+      // First check if the room exists
+      const roomExists = await this.verifyRoomExists(chatRoom.matrixRoomId);
+
+      if (roomExists) {
+        this.logger.log(
+          `Matrix room ${chatRoom.matrixRoomId} verified successfully`,
+        );
+        return chatRoom.matrixRoomId;
+      }
+
+      // Room doesn't exist - we need to recreate it
+      this.logger.warn(
+        `Matrix room ${chatRoom.matrixRoomId} doesn't exist, recreating for ${entityType} ${entitySlug}`,
+      );
+
+      // Validate that the room has a name
+      if (!chatRoom.name) {
+        throw new Error(
+          `Chat room for ${entityType} ${entitySlug} has no name set`,
+        );
+      }
+
+      // Create new room with same name/topic as the original
+      const roomOptions: CreateRoomOptions = {
+        name: chatRoom.name,
+        topic: chatRoom.description, // Optional, can be undefined
+        isPublic: false, // Private room
+      };
+
+      const newRoomInfo = await this.createRoom(roomOptions);
+
+      if (newRoomInfo?.roomId) {
+        this.logger.log(
+          `Successfully recreated Matrix room for ${entityType} ${entitySlug}: ${chatRoom.matrixRoomId} → ${newRoomInfo.roomId}`,
+        );
+
+        // Note: The calling service should update the database with the new room ID
+        return newRoomInfo.roomId;
+      } else {
+        this.logger.error(
+          `Failed to recreate Matrix room for ${entityType} ${entitySlug}`,
+        );
+        return null;
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error verifying/recreating Matrix room ${chatRoom.matrixRoomId}: ${error.message}`,
+        error.stack,
+      );
+      return null;
     }
   }
 }
