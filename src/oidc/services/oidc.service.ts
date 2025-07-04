@@ -277,7 +277,7 @@ export class OidcService {
     console.log('🔧 OIDC Debug - Client validation:', {
       provided: params.client_id,
       valid: validClientIds,
-      isValid: validClientIds.includes(params.client_id)
+      isValid: validClientIds.includes(params.client_id),
     });
     if (!validClientIds.includes(params.client_id)) {
       throw new UnauthorizedException(`Invalid client_id: ${params.client_id}`);
@@ -311,7 +311,10 @@ export class OidcService {
     console.log('🔧 OIDC Debug - Redirect URI validation:');
     console.log('  - Provided redirect_uri:', params.redirect_uri);
     console.log('  - Is valid:', isValidRedirectUri);
-    console.log('  - Patterns tested:', allowedRedirectUriPatterns.map(p => p.toString()));
+    console.log(
+      '  - Patterns tested:',
+      allowedRedirectUriPatterns.map((p) => p.toString()),
+    );
 
     if (!isValidRedirectUri) {
       throw new UnauthorizedException('Invalid redirect_uri');
@@ -465,17 +468,26 @@ export class OidcService {
         algorithms: ['RS256'],
       }) as any;
 
-      console.log('🔧 OIDC Auth Code Debug - Decoded payload:', JSON.stringify(payload, null, 2));
+      console.log(
+        '🔧 OIDC Auth Code Debug - Decoded payload:',
+        JSON.stringify(payload, null, 2),
+      );
 
       if (payload.type !== 'auth_code') {
-        console.log('❌ OIDC Auth Code Debug - Invalid code type:', payload.type);
+        console.log(
+          '❌ OIDC Auth Code Debug - Invalid code type:',
+          payload.type,
+        );
         throw new Error('Invalid code type');
       }
 
       console.log('✅ OIDC Auth Code Debug - Validation successful');
       return payload;
     } catch (error) {
-      console.log('❌ OIDC Auth Code Debug - Validation failed:', error.message);
+      console.log(
+        '❌ OIDC Auth Code Debug - Validation failed:',
+        error.message,
+      );
       throw new UnauthorizedException('Invalid or expired authorization code');
     }
   }
