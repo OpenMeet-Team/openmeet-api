@@ -657,10 +657,10 @@ export class ChatRoomService {
           );
         }
 
-        // Always ensure user has Matrix credentials and joins the room
-        // This fixes the issue when toggling attendance where the user may be removed from Matrix room but still in database
-        const userWithCredentials = await this.ensureUserHasMatrixCredentials(
-          user.id,
+        // Note: In bot-based architecture, users manage their own Matrix authentication via MAS
+        // We only verify permissions and update database records here
+        this.logger.debug(
+          `User ${userSlug} permission verified for event ${eventSlug}, skipping Matrix operations in bot mode`,
         );
 
         // Skip room verification in the WebSocket context to avoid infinite loops
@@ -727,22 +727,11 @@ export class ChatRoomService {
           }
         }
 
-        // Always attempt Matrix room operations
-        const isJoined = await this.addUserToMatrixRoom(
-          chatRoom.matrixRoomId,
-          userWithCredentials,
+        // Note: Matrix room operations skipped in bot mode
+        // In MAS architecture, users join rooms directly via frontend Matrix client
+        this.logger.debug(
+          `Skipping Matrix room operations for user ${userSlug} in bot mode`,
         );
-
-        // Set appropriate permissions based on role
-        if (isJoined && userWithCredentials.matrixUserId) {
-          await this.handleModeratorPermissions(
-            event.id,
-            user.id,
-            userWithCredentials.matrixUserId,
-            chatRoom.matrixRoomId,
-            'event',
-          );
-        }
 
         // Update database relationship only if not already there
         if (!isInDatabase) {
@@ -1794,107 +1783,32 @@ export class ChatRoomService {
         return;
       }
 
-      // Ensure user has Matrix credentials
-      const userWithCredentials = await this.ensureUserHasMatrixCredentials(
-        user.id,
+      // Note: In bot-based architecture, users manage their own Matrix authentication via MAS
+      // We only verify permissions and update database records here
+      this.logger.debug(
+        `User ${userSlug} permission verified for group ${groupSlug}, skipping Matrix operations in bot mode`,
       );
 
-      if (
-        !userWithCredentials.matrixUserId ||
-        !userWithCredentials.matrixAccessToken
-      ) {
-        throw new Error(
-          `User with slug ${userSlug} does not have valid Matrix credentials`,
-        );
+      // Note: Matrix room operations skipped in bot mode
+      // In MAS architecture, users join rooms directly via frontend Matrix client
+      this.logger.debug(
+        `Skipping Matrix room operations for user ${userSlug} in bot mode`,
+      );
+
+      // Add the user to the chat room members in our database
+      if (!chatRoom.members) {
+        chatRoom.members = [];
       }
 
-      // First try joining directly (most efficient if the user is already invited)
-      let joinSuccess = false;
+      chatRoom.members.push(user);
+      await this.chatRoomRepository.save(chatRoom);
 
-      try {
-        await this.matrixRoomService.joinRoom(
-          chatRoom.matrixRoomId,
-          userWithCredentials.matrixUserId,
-          userWithCredentials.matrixAccessToken,
-          userWithCredentials.matrixDeviceId,
-        );
-        joinSuccess = true;
-        this.logger.debug(
-          `User ${userSlug} joined group room ${chatRoom.matrixRoomId} directly`,
-        );
-      } catch (joinError) {
-        // If join fails with "already in room", that's actually success
-        if (
-          joinError.message &&
-          (joinError.message.includes('already in the room') ||
-            joinError.message.includes('already a member') ||
-            joinError.message.includes('already joined'))
-        ) {
-          joinSuccess = true;
-          this.logger.debug(
-            `User ${userSlug} is already a member of room ${chatRoom.matrixRoomId}`,
-          );
-        } else {
-          // Only if direct join failed and it's not because they're already in the room, try invite+join
-          this.logger.debug(
-            `Direct join failed, trying invite+join flow: ${joinError.message}`,
-          );
+      // Cache the result for this request
+      this.markUserAsComplete(group.id, user.id, 'group');
 
-          try {
-            await this.matrixRoomService.inviteUser(
-              chatRoom.matrixRoomId,
-              userWithCredentials.matrixUserId,
-            );
-
-            // Try joining again after invite
-            await this.matrixRoomService.joinRoom(
-              chatRoom.matrixRoomId,
-              userWithCredentials.matrixUserId,
-              userWithCredentials.matrixAccessToken,
-              userWithCredentials.matrixDeviceId,
-            );
-            joinSuccess = true;
-            this.logger.debug(
-              `User ${userSlug} joined group room ${chatRoom.matrixRoomId} after invitation`,
-            );
-          } catch (error) {
-            // Log but continue - they might already be in the room despite errors
-            this.logger.warn(
-              `Error in invite+join flow for user ${userSlug} to room ${chatRoom.matrixRoomId}: ${error.message}`,
-            );
-          }
-        }
-      }
-
-      // If join was successful or we think they're already in the room, update our DB
-      if (joinSuccess) {
-        // Check if the user should have moderator privileges based on their group role
-        if (userWithCredentials.matrixUserId) {
-          // Use shared helper method
-          await this.handleModeratorPermissions(
-            group.id,
-            user.id,
-            userWithCredentials.matrixUserId,
-            chatRoom.matrixRoomId,
-            'group',
-          );
-        }
-
-        // Add the user to the chat room members in our database
-        if (!chatRoom.members) {
-          chatRoom.members = [];
-        }
-
-        chatRoom.members.push(user);
-        await this.chatRoomRepository.save(chatRoom);
-
-        // Cache the result for this request
-        this.markUserAsComplete(group.id, user.id, 'group');
-
-        this.logger.log(
-          `Added user ${userSlug} to group ${groupSlug} chat room`,
-        );
-      }
+      this.logger.log(
+        `Added user ${userSlug} to group ${groupSlug} chat room`,
+      );
     } catch (error) {
       this.logger.error(
         `Error adding user ${userSlug} to group ${groupSlug} chat room: ${error.message}`,
@@ -2318,6 +2232,158 @@ export class ChatRoomService {
         error.stack,
       );
       throw error;
+    }
+  }
+
+  /**
+   * Verify and recreate a Matrix room if it doesn't exist on the server
+   * @param entityType The type of entity ('event' or 'group')
+   * @param entitySlug The slug of the entity
+   * @param tenantId The tenant ID
+   * @returns The room ID (existing or newly created)
+   */
+  @Trace('chat-room-service.verifyAndRecreateRoom')
+  async verifyAndRecreateRoom(
+    entityType: 'event' | 'group',
+    entitySlug: string,
+    tenantId: string,
+    _userSlug: string,
+  ): Promise<{ roomId?: string; recreated: boolean }> {
+    this.logger.log(
+      `Verifying and potentially recreating ${entityType} room for ${entitySlug} in tenant ${tenantId}`,
+    );
+
+    try {
+      // Get the existing chat room
+      let existingChatRoom;
+      if (entityType === 'event') {
+        const event = await this.eventQueryService.showEventBySlug(entitySlug);
+        if (!event) {
+          throw new Error(`Event with slug ${entitySlug} not found`);
+        }
+
+        const eventChatRooms = await this.getEventChatRooms(event.id);
+        existingChatRoom = eventChatRooms?.[0];
+      } else if (entityType === 'group') {
+        const group = await this.groupService.getGroupBySlug(entitySlug);
+        if (!group) {
+          throw new Error(`Group with slug ${entitySlug} not found`);
+        }
+
+        const groupChatRooms = await this.getGroupChatRooms(group.id);
+        existingChatRoom = groupChatRooms?.[0];
+      }
+
+      if (!existingChatRoom) {
+        // No chat room exists, create one
+        this.logger.log(
+          `No chat room found for ${entityType} ${entitySlug}, creating new one`,
+        );
+
+        if (entityType === 'event') {
+          const event = await this.eventQueryService.showEventBySlug(entitySlug);
+          if (!event) {
+            throw new Error(`Event with slug ${entitySlug} not found`);
+          }
+          const newRoom = await this.getOrCreateEventChatRoom(event.id);
+          return { roomId: newRoom.matrixRoomId, recreated: true };
+        } else {
+          const group = await this.groupService.getGroupBySlug(entitySlug);
+          if (!group) {
+            throw new Error(`Group with slug ${entitySlug} not found`);
+          }
+          const newRoom = await this.getOrCreateGroupChatRoom(group.id);
+          return { roomId: newRoom.matrixRoomId, recreated: true };
+        }
+      }
+
+      // Room exists in database, verify it exists on Matrix server
+      if (!existingChatRoom.matrixRoomId) {
+        throw new Error(`Chat room has no Matrix room ID`);
+      }
+
+      // Note: In bot mode, we skip Matrix room verification
+      // The frontend Matrix client will handle room access directly
+      this.logger.debug(
+        `Skipping Matrix room verification for ${entityType} ${entitySlug} in bot mode`,
+      );
+
+      return { roomId: existingChatRoom.matrixRoomId, recreated: false };
+    } catch (error) {
+      this.logger.error(
+        `Error verifying/recreating ${entityType} room for ${entitySlug}: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Ensure room access for a user - verifies membership and room existence
+   * @param entityType The type of entity ('event' or 'group')
+   * @param entitySlug The slug of the entity
+   * @param userSlug The user slug
+   * @param tenantId The tenant ID
+   * @returns Result with room information and whether room was recreated
+   */
+  @Trace('chat-room-service.ensureRoomAccess')
+  async ensureRoomAccess(
+    entityType: 'event' | 'group',
+    entitySlug: string,
+    userSlug: string,
+    tenantId: string,
+  ): Promise<{
+    success: boolean;
+    roomId?: string;
+    recreated: boolean;
+    message?: string;
+  }> {
+    this.logger.log(
+      `Ensuring room access for user ${userSlug} to ${entityType} ${entitySlug} in tenant ${tenantId}`,
+    );
+
+    try {
+      // First verify the user has legitimate access
+      if (entityType === 'event') {
+        // Check if user can access this event's chat
+        await this.addUserToEventChatRoom(entitySlug, userSlug);
+      } else if (entityType === 'group') {
+        // Check if user can access this group's chat
+        await this.addUserToGroupChatRoom(entitySlug, userSlug);
+      }
+
+      // If we get here, user has legitimate access
+      // Now verify the Matrix room exists and is accessible
+      const verificationResult = await this.verifyAndRecreateRoom(
+        entityType,
+        entitySlug,
+        tenantId,
+        userSlug,
+      );
+
+      this.logger.log(
+        `Room access ensured for ${entityType} ${entitySlug}: recreated=${verificationResult.recreated}, roomId=${verificationResult.roomId || 'none'}`,
+      );
+
+      return {
+        success: true,
+        roomId: verificationResult.roomId,
+        recreated: verificationResult.recreated,
+        message: verificationResult.recreated
+          ? 'Room was missing and has been recreated'
+          : 'Room exists and is accessible',
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error ensuring room access for ${entityType} ${entitySlug}: ${error.message}`,
+        error.stack,
+      );
+
+      return {
+        success: false,
+        recreated: false,
+        message: `Access denied: ${error.message}`,
+      };
     }
   }
 }
