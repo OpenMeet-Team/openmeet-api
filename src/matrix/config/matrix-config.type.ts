@@ -1,9 +1,24 @@
 export type MatrixConfig = {
   baseUrl: string;
-  adminUser: string;
-  adminPassword: string; // Mandatory for token generation
-  adminAccessToken?: string; // Optional now, will be generated dynamically
   serverName: string;
+  // Bot configuration (current implementation)
+  bot: {
+    username: string;
+    password?: string;
+    displayName: string;
+  };
+  // Application Service configuration
+  appservice: {
+    token: string;
+    hsToken: string;
+    id: string;
+    url: string;
+  };
+  // Legacy admin configuration (deprecated)
+  adminUser: string;
+  adminPassword?: string;
+  adminAccessToken?: string;
+  // Connection settings
   defaultDeviceId: string;
   defaultInitialDeviceDisplayName: string;
   connectionPoolSize: number;

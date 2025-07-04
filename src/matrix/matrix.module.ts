@@ -1,6 +1,8 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { MatrixController } from './matrix.controller';
+import { MatrixAppServiceController } from './controllers/matrix-appservice.controller';
 import { matrixConfig } from './config/matrix.config';
 import { UserModule } from '../user/user.module';
 import { UserService } from '../user/user.service';
@@ -17,6 +19,10 @@ import { MatrixHealthIndicator } from './health/matrix.health';
 import { configureMatrixLogging } from './config/matrix-logger';
 import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
 import { MatrixHandleMigrationService } from './services/matrix-handle-migration.service';
+import { MatrixBotService } from './services/matrix-bot.service';
+import { MatrixBotUserService } from './services/matrix-bot-user.service';
+import { MatrixBotRotationService } from './services/matrix-bot-rotation.service';
+import { TenantBotSetupService } from './services/tenant-bot-setup.service';
 
 // Configure Matrix logging at module load time
 // This runs before the module is instantiated
@@ -25,6 +31,7 @@ configureMatrixLogging();
 @Module({
   imports: [
     ConfigModule.forFeature(matrixConfig),
+    ScheduleModule.forRoot(),
     forwardRef(() => UserModule),
     TenantModule,
     forwardRef(() => AuthModule),
@@ -41,11 +48,15 @@ configureMatrixLogging();
       signOptions: { expiresIn: '8h' },
     }),
   ],
-  controllers: [MatrixController],
+  controllers: [MatrixController, MatrixAppServiceController],
   providers: [
     // Matrix services
     MatrixTokenManagerService, // Token manager must be initialized before core service
     MatrixCoreService,
+    MatrixBotService,
+    MatrixBotUserService,
+    MatrixBotRotationService,
+    TenantBotSetupService,
     MatrixUserService,
     MatrixRoomService,
     MatrixMessageService,
@@ -62,6 +73,10 @@ configureMatrixLogging();
   exports: [
     // Export services
     MatrixCoreService,
+    MatrixBotService,
+    MatrixBotUserService,
+    MatrixBotRotationService,
+    TenantBotSetupService,
     MatrixUserService,
     MatrixRoomService,
     MatrixMessageService,

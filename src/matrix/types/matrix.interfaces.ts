@@ -69,6 +69,10 @@ export interface IMatrixClient {
   roomState: (roomId: string) => Promise<any[]>;
 
   // Authentication
+  login: (
+    type: string,
+    data: any,
+  ) => Promise<{ user_id: string; access_token: string; device_id: string }>;
   getAccessToken: () => string | null;
   getUserId: () => string | null;
 
