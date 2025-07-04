@@ -1806,9 +1806,7 @@ export class ChatRoomService {
       // Cache the result for this request
       this.markUserAsComplete(group.id, user.id, 'group');
 
-      this.logger.log(
-        `Added user ${userSlug} to group ${groupSlug} chat room`,
-      );
+      this.logger.log(`Added user ${userSlug} to group ${groupSlug} chat room`);
     } catch (error) {
       this.logger.error(
         `Error adding user ${userSlug} to group ${groupSlug} chat room: ${error.message}`,
@@ -2281,7 +2279,8 @@ export class ChatRoomService {
         );
 
         if (entityType === 'event') {
-          const event = await this.eventQueryService.showEventBySlug(entitySlug);
+          const event =
+            await this.eventQueryService.showEventBySlug(entitySlug);
           if (!event) {
             throw new Error(`Event with slug ${entitySlug} not found`);
           }
