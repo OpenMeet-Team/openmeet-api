@@ -9,6 +9,7 @@ import { MatrixRoomService } from '../../matrix/services/matrix-room.service';
 import { MatrixUserService } from '../../matrix/services/matrix-user.service';
 import { MatrixMessageService } from '../../matrix/services/matrix-message.service';
 import { MatrixCoreService } from '../../matrix/services/matrix-core.service';
+import { MatrixBotService } from '../../matrix/services/matrix-bot.service';
 import { UserService } from '../../user/user.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
@@ -43,6 +44,7 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
     private readonly matrixRoomService: MatrixRoomService,
     private readonly matrixMessageService: MatrixMessageService,
     private readonly matrixCoreService: MatrixCoreService,
+    private readonly matrixBotService: MatrixBotService,
     private readonly userService: UserService,
     private readonly groupMemberService: GroupMemberService,
     private readonly eventAttendeeService: EventAttendeeService,
@@ -212,6 +214,7 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
   private async addUserToMatrixRoom(
     matrixRoomId: string,
     user: UserEntity,
+    tenantId: string,
     options: {
       skipInvite?: boolean;
       forceInvite?: boolean;
@@ -229,12 +232,18 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
 
     let isAlreadyJoined = false;
 
-    // Step 1: Invite user to the room if needed
+    // Step 1: Invite user to the room if needed using bot
     if (!skipInvite && user.matrixUserId) {
       try {
-        await this.matrixRoomService.inviteUser(
+        // Ensure bot is authenticated before inviting user
+        if (!this.matrixBotService.isBotAuthenticated()) {
+          await this.matrixBotService.authenticateBot(tenantId);
+        }
+
+        await this.matrixBotService.inviteUser(
           matrixRoomId,
           user.matrixUserId,
+          tenantId,
         );
         this.logger.debug(
           `Successfully invited user ${user.id} to room ${matrixRoomId}`,
@@ -362,10 +371,16 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
           `User ${userId} has ${entityType} role ${roleName} with management permissions, setting as moderator in room ${matrixRoomId}`,
         );
 
-        // Set user as moderator in Matrix room
-        await this.matrixRoomService.setRoomPowerLevels(
+        // Set user as moderator in Matrix room using bot
+        // Ensure bot is authenticated before setting permissions
+        if (!this.matrixBotService.isBotAuthenticated()) {
+          await this.matrixBotService.authenticateBot(_tenantId);
+        }
+
+        await this.matrixBotService.syncPermissions(
           matrixRoomId,
           { [matrixUserId]: 50 }, // 50 is moderator level
+          _tenantId,
         );
 
         this.logger.log(
@@ -504,25 +519,33 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
       return existingRoom;
     }
 
-    // Create a chat room in Matrix
+    // Ensure bot is authenticated before creating room
+    if (!this.matrixBotService.isBotAuthenticated()) {
+      await this.matrixBotService.authenticateBot(tenantId);
+    }
+
+    // Create a chat room in Matrix using bot
     const roomName = this.generateRoomName('event', eventSlug, tenantId);
-    const roomInfo = await this.matrixRoomService.createRoom({
-      name: roomName,
-      topic: `Discussion for ${event.name}`,
-      isPublic: event.visibility === 'public',
-      isDirect: false,
-      encrypted: false, // Disable encryption for event chat rooms
-      // Add the event creator as the first member
-      inviteUserIds: creator.matrixUserId ? [creator.matrixUserId] : [],
-      // Set creator as moderator - MatrixRoomService will handle admin user
-      powerLevelContentOverride: creator.matrixUserId
-        ? {
-            users: {
-              [creator.matrixUserId]: 50, // Moderator level
-            },
-          }
-        : undefined,
-    });
+    const roomInfo = await this.matrixBotService.createRoom(
+      {
+        name: roomName,
+        topic: `Discussion for ${event.name}`,
+        isPublic: event.visibility === 'public',
+        isDirect: false,
+        encrypted: false, // Disable encryption for event chat rooms
+        // Add the event creator as the first member
+        inviteUserIds: creator.matrixUserId ? [creator.matrixUserId] : [],
+        // Set creator as moderator
+        powerLevelContentOverride: creator.matrixUserId
+          ? {
+              users: {
+                [creator.matrixUserId]: 50, // Moderator level
+              },
+            }
+          : undefined,
+      },
+      tenantId,
+    );
 
     // Create a chat room entity
     const chatRoom = chatRoomRepository.create({
@@ -644,6 +667,7 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
       const isJoined = await this.addUserToMatrixRoom(
         chatRoom.matrixRoomId,
         userWithCredentials,
+        tenantId,
       );
 
       // Set appropriate permissions based on role
@@ -716,10 +740,16 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
         );
       }
 
-      // Remove the user from the room
-      await this.matrixRoomService.removeUserFromRoom(
+      // Remove the user from the room using bot
+      // Ensure bot is authenticated before removing user
+      if (!this.matrixBotService.isBotAuthenticated()) {
+        await this.matrixBotService.authenticateBot(tenantId);
+      }
+
+      await this.matrixBotService.removeUser(
         chatRoom.matrixRoomId,
         user.matrixUserId,
+        tenantId,
       );
 
       // Remove the user from the chat room members
@@ -878,20 +908,19 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
           // First, attempt to delete the Matrix room
           if (room.matrixRoomId) {
             try {
-              // Use the Matrix room service's dedicated room deletion method
-              const deleted = await this.matrixRoomService.deleteRoom(
-                room.matrixRoomId,
-              );
-
-              if (deleted) {
-                this.logger.log(
-                  `Successfully deleted Matrix room ${room.matrixRoomId} using the Matrix admin API`,
-                );
-              } else {
-                this.logger.warn(
-                  `Failed to delete Matrix room ${room.matrixRoomId}, continuing with database cleanup`,
-                );
+              // Use the Matrix bot service's room deletion method
+              // Ensure bot is authenticated before deleting room
+              if (!this.matrixBotService.isBotAuthenticated()) {
+                await this.matrixBotService.authenticateBot(tenantId);
               }
+
+              await this.matrixBotService.deleteRoom(
+                room.matrixRoomId,
+                tenantId,
+              );
+              this.logger.log(
+                `Successfully deleted Matrix room ${room.matrixRoomId} using bot service`,
+              );
             } catch (matrixError) {
               this.logger.error(
                 `Error deleting Matrix room ${room.matrixRoomId}: ${matrixError.message}`,
@@ -1112,25 +1141,33 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
         return existingRoom;
       }
 
-      // Create a chat room in Matrix
+      // Ensure bot is authenticated before creating room
+      if (!this.matrixBotService.isBotAuthenticated()) {
+        await this.matrixBotService.authenticateBot(tenantId);
+      }
+
+      // Create a chat room in Matrix using bot
       const roomName = this.generateRoomName('group', groupSlug, tenantId);
-      const roomInfo = await this.matrixRoomService.createRoom({
-        name: roomName,
-        topic: `Discussion for ${group.name}`,
-        isPublic: group.visibility === 'public',
-        isDirect: false,
-        encrypted: false, // Disable encryption for group chat rooms
-        // Add the group creator as the first member
-        inviteUserIds: creator.matrixUserId ? [creator.matrixUserId] : [],
-        // Set creator as moderator - MatrixRoomService will handle admin user
-        powerLevelContentOverride: creator.matrixUserId
-          ? {
-              users: {
-                [creator.matrixUserId]: 50, // Moderator level
-              },
-            }
-          : undefined,
-      });
+      const roomInfo = await this.matrixBotService.createRoom(
+        {
+          name: roomName,
+          topic: `Discussion for ${group.name}`,
+          isPublic: group.visibility === 'public',
+          isDirect: false,
+          encrypted: false, // Disable encryption for group chat rooms
+          // Add the group creator as the first member
+          inviteUserIds: creator.matrixUserId ? [creator.matrixUserId] : [],
+          // Set creator as moderator
+          powerLevelContentOverride: creator.matrixUserId
+            ? {
+                users: {
+                  [creator.matrixUserId]: 50, // Moderator level
+                },
+              }
+            : undefined,
+        },
+        tenantId,
+      );
 
       // Create a chat room entity
       const chatRoom = chatRoomRepository.create({
@@ -1265,6 +1302,7 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
       const isJoined = await this.addUserToMatrixRoom(
         chatRoom.matrixRoomId,
         userWithCredentials,
+        tenantId,
       );
 
       // Set appropriate permissions based on role
@@ -1348,10 +1386,16 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
         );
       }
 
-      // Remove the user from the room
-      await this.matrixRoomService.removeUserFromRoom(
+      // Remove the user from the room using bot
+      // Ensure bot is authenticated before removing user
+      if (!this.matrixBotService.isBotAuthenticated()) {
+        await this.matrixBotService.authenticateBot(tenantId);
+      }
+
+      await this.matrixBotService.removeUser(
         chatRoom.matrixRoomId,
         user.matrixUserId,
+        tenantId,
       );
 
       // Remove the user from the chat room members
@@ -1517,20 +1561,19 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
           // First, attempt to delete the Matrix room
           if (room.matrixRoomId) {
             try {
-              // Use the Matrix room service's dedicated room deletion method
-              const deleted = await this.matrixRoomService.deleteRoom(
-                room.matrixRoomId,
-              );
-
-              if (deleted) {
-                this.logger.log(
-                  `Successfully deleted Matrix room ${room.matrixRoomId} using the Matrix admin API`,
-                );
-              } else {
-                this.logger.warn(
-                  `Failed to delete Matrix room ${room.matrixRoomId}, continuing with database cleanup`,
-                );
+              // Use the Matrix bot service's room deletion method
+              // Ensure bot is authenticated before deleting room
+              if (!this.matrixBotService.isBotAuthenticated()) {
+                await this.matrixBotService.authenticateBot(tenantId);
               }
+
+              await this.matrixBotService.deleteRoom(
+                room.matrixRoomId,
+                tenantId,
+              );
+              this.logger.log(
+                `Successfully deleted Matrix room ${room.matrixRoomId} using bot service`,
+              );
             } catch (matrixError) {
               this.logger.error(
                 `Error deleting Matrix room ${room.matrixRoomId}: ${matrixError.message}`,
@@ -1595,6 +1638,143 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
         error.stack,
       );
       return false;
+    }
+  }
+
+  /**
+   * Verify that a Matrix room exists and handle graceful recreation if needed
+   * @param chatRoom The chat room entity to verify
+   * @param entityType The type of entity ('event' or 'group')
+   * @param entitySlug The slug of the entity
+   * @param creatorSlug The slug of the user to use for recreation (if needed)
+   * @param tenantId The tenant ID
+   * @returns The verified or recreated room ID, or null if verification failed
+   */
+  @Trace('matrix-chat-room-manager.verifyAndEnsureMatrixRoom')
+  async verifyAndEnsureMatrixRoom(
+    chatRoom: ChatRoomEntity,
+    entityType: 'event' | 'group',
+    entitySlug: string,
+    creatorSlug: string,
+    tenantId: string,
+  ): Promise<string | null> {
+    try {
+      const matrixRoomId = chatRoom.matrixRoomId;
+
+      if (!matrixRoomId) {
+        this.logger.warn(
+          `No Matrix room ID found for ${entityType} ${entitySlug}, recreation needed`,
+        );
+        return await this.recreateRoomAndUpdateEntity(
+          chatRoom,
+          entityType,
+          entitySlug,
+          creatorSlug,
+          tenantId,
+        );
+      }
+
+      // Verify the Matrix room actually exists
+      // Ensure bot is authenticated before verifying room
+      if (!this.matrixBotService.isBotAuthenticated()) {
+        await this.matrixBotService.authenticateBot(tenantId);
+      }
+      const roomExists = await this.matrixBotService.verifyRoomExists(
+        matrixRoomId,
+        tenantId,
+      );
+
+      if (roomExists) {
+        this.logger.debug(
+          `Matrix room ${matrixRoomId} verified for ${entityType} ${entitySlug}`,
+        );
+        return matrixRoomId;
+      }
+
+      this.logger.warn(
+        `Matrix room ${matrixRoomId} does not exist for ${entityType} ${entitySlug}, recreation needed`,
+      );
+
+      return await this.recreateRoomAndUpdateEntity(
+        chatRoom,
+        entityType,
+        entitySlug,
+        creatorSlug,
+        tenantId,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error verifying Matrix room for ${entityType} ${entitySlug}: ${error.message}`,
+        error.stack,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Recreate a Matrix room and update the entity with the new room ID
+   */
+  private async recreateRoomAndUpdateEntity(
+    chatRoom: ChatRoomEntity,
+    entityType: 'event' | 'group',
+    entitySlug: string,
+    creatorSlug: string,
+    tenantId: string,
+  ): Promise<string | null> {
+    try {
+      this.logger.log(`Recreating Matrix room for ${entityType} ${entitySlug}`);
+
+      // Get database connection
+      const dataSource =
+        await this.tenantConnectionService.getTenantConnection(tenantId);
+
+      // Clear the old Matrix room ID from the entity first
+      if (entityType === 'event') {
+        const eventRepository = dataSource.getRepository('EventEntity');
+        const event = await this.eventQueryService.showEventBySlug(entitySlug);
+        if (event) {
+          await eventRepository.update({ id: event.id }, { matrixRoomId: '' });
+          this.logger.debug(`Cleared Matrix room ID for event ${entitySlug}`);
+        }
+      } else if (entityType === 'group') {
+        await this.groupService.update(entitySlug, { matrixRoomId: '' });
+        this.logger.debug(`Cleared Matrix room ID for group ${entitySlug}`);
+      }
+
+      // Delete the old chat room record to force recreation
+      const chatRoomRepository = dataSource.getRepository(ChatRoomEntity);
+      await chatRoomRepository.delete({ id: chatRoom.id });
+      this.logger.debug(
+        `Deleted old chat room record for ${entityType} ${entitySlug}`,
+      );
+
+      // Recreate the chat room using the existing ensure methods
+      let newChatRoom: ChatRoomEntity;
+      if (entityType === 'event') {
+        newChatRoom = await this.ensureEventChatRoom(
+          entitySlug,
+          creatorSlug,
+          tenantId,
+        );
+      } else {
+        newChatRoom = await this.ensureGroupChatRoom(
+          entitySlug,
+          creatorSlug,
+          tenantId,
+        );
+      }
+
+      this.logger.log(
+        `Successfully recreated Matrix room for ${entityType} ${entitySlug}: ${newChatRoom.matrixRoomId}`,
+      );
+
+      return newChatRoom.matrixRoomId;
+    } catch (error) {
+      this.logger.error(
+        `Failed to recreate Matrix room for ${entityType} ${entitySlug}: ${error.message}`,
+        error.stack,
+      );
+      return null;
     }
   }
 }

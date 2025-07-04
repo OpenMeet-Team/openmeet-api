@@ -24,6 +24,7 @@ import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
 import { Optional } from '@nestjs/common';
 import { DiscussionService } from './services/discussion.service';
+import { ChatRoomService } from './rooms/chat-room.service';
 import { DiscussionMessagesResponseDto } from './dto/discussion-message.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RoleEnum } from '../role/role.enum';
@@ -36,7 +37,10 @@ import { RolesGuard } from '../role/role.guard';
 export class ChatController {
   private readonly logger = new Logger(ChatController.name);
 
-  constructor(private readonly discussionService: DiscussionService) {}
+  constructor(
+    private readonly discussionService: DiscussionService,
+    private readonly chatRoomService: ChatRoomService,
+  ) {}
 
   /**
    * Event discussion endpoints
@@ -99,21 +103,25 @@ export class ChatController {
     );
 
     try {
-      // Use the enhanced version that returns the room ID
-      const result =
-        await this.discussionService.addMemberToEventDiscussionBySlugAndGetRoomId(
-          eventSlug,
-          user.slug,
-          tenantId,
-        );
+      // Use ChatRoomService which supports bot authentication
+      await this.chatRoomService.addUserToEventChatRoom(eventSlug, user.slug);
+
+      // Get the room ID from the event
+      const result = await this.chatRoomService.ensureRoomAccess(
+        'event',
+        eventSlug,
+        user.slug,
+        tenantId,
+      );
 
       this.logger.log(
         `Successfully joined event chat room for ${eventSlug}, with Matrix room ID: ${result.roomId || 'unknown'}`,
       );
 
       return {
-        success: true,
+        success: result.success,
         roomId: result.roomId,
+        message: result.message,
       };
     } catch (error) {
       this.logger.error(
@@ -246,49 +254,22 @@ export class ChatController {
     }
 
     try {
-      // Ensure the group exists
-      const group = await this.discussionService.groupExists(groupSlug);
-      if (!group) {
-        return {
-          success: false,
-          message: `Group with slug ${groupSlug} not found`,
-        };
-      }
+      // Use ChatRoomService which supports bot authentication
+      await this.chatRoomService.addUserToGroupChatRoom(groupSlug, user.slug);
 
-      // Add the user to the group chat room
-      await this.discussionService.addMemberToGroupDiscussionBySlug(
+      // Get the room ID from the group
+      const result = await this.chatRoomService.ensureRoomAccess(
+        'group',
         groupSlug,
         user.slug,
         tenantId,
       );
 
-      // Get the matrix room ID for the chat room
-      try {
-        const chatRooms = await this.discussionService.getGroupChatRooms(
-          groupSlug,
-          tenantId,
-        );
-
-        const roomId =
-          chatRooms.length > 0 ? chatRooms[0].matrixRoomId : undefined;
-
-        return {
-          success: true,
-          roomId: roomId,
-          message: 'Successfully joined group chat room',
-        };
-      } catch (roomError) {
-        this.logger.error(
-          `Error getting chat rooms for group ${groupSlug}: ${roomError.message}`,
-          roomError.stack,
-        );
-
-        // Return success but without a room ID
-        return {
-          success: true,
-          message: 'Joined group chat room, but could not get room ID',
-        };
-      }
+      return {
+        success: result.success,
+        roomId: result.roomId,
+        message: result.message,
+      };
     } catch (error) {
       this.logger.error(
         `Error joining group chat room for ${groupSlug}: ${error.message}`,
@@ -539,6 +520,82 @@ export class ChatController {
       return {
         success: false,
         message: `Could not create chat room: ${error.message}`,
+      };
+    }
+  }
+
+  @Post('event/:slug/ensure-room')
+  @ApiOperation({
+    summary: 'Ensure event Matrix room exists and is accessible',
+    description:
+      'Verifies user access and ensures Matrix room exists, creating if missing',
+  })
+  async ensureEventRoom(
+    @Param('slug') eventSlug: string,
+    @AuthUser() user: User,
+    @Req() request: any,
+  ): Promise<{
+    success: boolean;
+    roomId?: string;
+    recreated: boolean;
+    message?: string;
+  }> {
+    try {
+      // Use ChatRoomService which tracks room recreation
+      const result = await this.chatRoomService.ensureRoomAccess(
+        'event',
+        eventSlug,
+        user.slug,
+        request.tenantId,
+      );
+
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Error ensuring event room for ${eventSlug}: ${error.message}`,
+      );
+      return {
+        success: false,
+        recreated: false,
+        message: `Could not ensure room: ${error.message}`,
+      };
+    }
+  }
+
+  @Post('group/:slug/ensure-room')
+  @ApiOperation({
+    summary: 'Ensure group Matrix room exists and is accessible',
+    description:
+      'Verifies user access and ensures Matrix room exists, creating if missing',
+  })
+  async ensureGroupRoom(
+    @Param('slug') groupSlug: string,
+    @AuthUser() user: User,
+    @Req() request: any,
+  ): Promise<{
+    success: boolean;
+    roomId?: string;
+    recreated: boolean;
+    message?: string;
+  }> {
+    try {
+      // Use ChatRoomService which tracks room recreation
+      const result = await this.chatRoomService.ensureRoomAccess(
+        'group',
+        groupSlug,
+        user.slug,
+        request.tenantId,
+      );
+
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Error ensuring group room for ${groupSlug}: ${error.message}`,
+      );
+      return {
+        success: false,
+        recreated: false,
+        message: `Could not ensure room: ${error.message}`,
       };
     }
   }
