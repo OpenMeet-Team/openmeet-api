@@ -99,6 +99,7 @@ services:
       - ./matrix-config/log.config:/data/log.config
       - ./matrix-config/init.sh:/data/init.sh
       - ./matrix-config/start-matrix.sh:/data/start-matrix.sh
+      - ./matrix-config/openmeet-appservice-local.yaml:/data/appservices/openmeet-appservice-local.yaml
       - matrix-data:/data/media
     depends_on:
       postgres:

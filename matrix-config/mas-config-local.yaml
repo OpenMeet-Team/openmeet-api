@@ -81,6 +81,16 @@ clients:
       - "http://localhost:9005/auth/matrix/callback"
       - "http://localhost:9005/events/*"
 
+  # OpenMeet Bot Client for Client Credentials Grant
+  - client_id: "01JAYS74TCG3BTWKADN5Q4518E"
+    client_auth_method: "client_secret_basic"
+    client_secret: "openmeet-bot-client-secret-local"
+    redirect_uris: []  # No redirects needed for client credentials
+    grant_types:
+      - "client_credentials"
+    scopes:
+      - "urn:matrix:org.matrix.msc2967.client:api:*"
+
 upstream_oauth2:
   providers:
     - id: "01JAYS74TCG3BTWKADN5Q4518C"
@@ -114,6 +124,9 @@ policy:
       - "tom-scanlan-dvasc6_lsdfaopkljdfs"
       - "tom-scanlan-dvasc6"
       - "@tom-scanlan-dvasc6:matrix.openmeet.net"
+    # Bot clients that can use client credentials grant for admin operations
+    admin_clients:
+      - "01JAYS74TCG3BTWKADN5Q4518E"
 
 branding:
   service_name: "OpenMeet Authentication"

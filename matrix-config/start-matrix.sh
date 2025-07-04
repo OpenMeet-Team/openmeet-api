@@ -7,6 +7,9 @@ echo "Starting Matrix Synapse server..."
 # Create processed configuration directory if it doesn't exist
 mkdir -p /processed-config
 
+# Create appservices directory if it doesn't exist
+mkdir -p /data/appservices
+
 # Process the homeserver.yaml template with environment variables
 echo "Processing homeserver.yaml template..."
 
