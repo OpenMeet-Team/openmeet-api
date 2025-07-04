@@ -1575,3 +1575,929 @@ Element Client → Matrix Auth Service (pure OIDC) → OpenMeet OIDC → User Au
 **Current Status**: Initial research phase - gathering MAS documentation and deployment requirements
 
 **Rationale**: MAS migration represents the most sustainable long-term solution for Matrix authentication issues while providing significant technical and user experience improvements. The investment in migration will eliminate ongoing maintenance burden of legacy macaroon systems and align OpenMeet with Matrix.org's strategic direction.
+
+### ADR-008: Matrix Bot Authentication Architecture
+**Decision**: Replace Matrix admin token authentication with dedicated Matrix bot service account
+**Status**: Approved - Implementation in progress (January 2025)
+
+#### Problem Statement
+
+Current Matrix admin token authentication system is fundamentally broken:
+- **MacaroonDeserializationException**: Matrix v1.132.0 cannot deserialize session cookies
+- **Admin Token Instability**: Frequent token expiration and regeneration failures
+- **Room Recreation Failures**: Cannot create replacement rooms due to authentication issues
+- **Maintenance Burden**: Complex token management and debugging required
+- **Unreliable Operations**: Room creation, user invitations, and permission management failing
+
+#### Proposed Solution: Matrix Bot Service Account
+
+**Implementation**: Replace admin token system with dedicated Matrix bot that authenticates using standard username/password credentials.
+
+**Bot Architecture**:
+```
+OpenMeet Backend Services → Matrix Bot (@openmeet-bot:matrix.openmeet.net) → Matrix Room Operations
+```
+
+**Bot Responsibilities**:
+- ✅ **Room Management**: Create, configure, and manage Matrix rooms for events/groups
+- ✅ **User Invitations**: Invite users to rooms based on OpenMeet permissions  
+- ✅ **Permission Sync**: Map OpenMeet roles to Matrix power levels
+- ✅ **Room Recreation**: Handle room replacement when needed
+- ✅ **System Messages**: Send announcements and automated notifications
+
+#### Implementation Approach
+
+**TDD Development Strategy**:
+1. **Write Tests First**: Comprehensive test suite for all bot operations
+2. **Incremental Implementation**: Build bot functionality in small, testable units
+3. **Integration Testing**: Ensure bot works with existing Matrix infrastructure
+4. **Progressive Migration**: Replace admin token operations incrementally
+
+**Service Architecture**:
+```typescript
+// New service structure
+MatrixBotService           // Core bot operations
+├── authenticateBot()      // Standard Matrix login
+├── createRoom()          // Room creation via bot
+├── inviteUser()          // User invitation management  
+├── syncPermissions()     // Role → power level mapping
+└── sendMessage()         // System announcements
+
+MatrixChatRoomManagerAdapter  // Updated to use bot
+├── uses MatrixBotService instead of admin tokens
+├── all room operations via bot authentication
+└── simplified error handling (no token regeneration)
+```
+
+#### Benefits
+
+**Technical Improvements**:
+- ✅ **Eliminates Admin Token Issues**: No more token expiration or regeneration failures
+- ✅ **Standard Authentication**: Uses reliable username/password Matrix login
+- ✅ **Simplified Architecture**: Removes complex token management logic
+- ✅ **Better Error Handling**: Clear authentication failure modes
+- ✅ **Future Compatible**: Works with planned MAS migration
+
+**Operational Benefits**:
+- ✅ **Reliable Room Operations**: Consistent room creation and management
+- ✅ **Restored Functionality**: Room recreation feature works again
+- ✅ **Easier Debugging**: Standard Matrix client logs and errors
+- ✅ **Reduced Maintenance**: No token lifecycle management needed
+
+**User Experience**:
+- ✅ **Stable Chat Features**: Room creation and joining works reliably
+- ✅ **Proper Permissions**: Role-based access control functions correctly
+- ✅ **System Integration**: Seamless with existing frontend Matrix SDK
+
+#### Alternatives Considered
+
+**Option 1: Fix Admin Token System**
+- **Description**: Debug and repair existing admin token authentication
+- **Rejected**: Fundamental incompatibility with Matrix v1.132.0 macaroon system
+
+**Option 2: Matrix Application Service**
+- **Description**: Implement Matrix Application Service (AS) bridge for OpenMeet
+- **Rejected**: Significant complexity and infrastructure changes required
+
+**Option 3: Downgrade Matrix Server**
+- **Description**: Use older Matrix version with working admin tokens
+- **Rejected**: Security vulnerabilities and missing features in older versions
+
+**Option 4: Custom Authentication Bridge**
+- **Description**: Build custom authentication layer bypassing Matrix standard flows
+- **Rejected**: High maintenance burden and non-standard implementation
+
+#### Implementation Timeline
+
+**Phase 1: Core Bot Development** (Days 1-3)
+- Create MatrixBotService with comprehensive test coverage
+- Implement bot authentication and basic room operations
+- Integration testing with existing Matrix infrastructure
+
+**Phase 2: Service Integration** (Days 4-6)  
+- Update MatrixChatRoomManagerAdapter to use bot operations
+- Fix room recreation feature using bot authentication
+- Remove admin token dependencies from MatrixCoreService
+
+**Phase 3: Deployment & Cleanup** (Days 7-8)
+- Deploy bot credentials and updated services
+- Remove admin token configuration and code
+- End-to-end testing with frontend Matrix SDK integration
+
+#### Success Criteria
+
+**Functional Requirements**:
+- All Matrix room operations work via bot authentication
+- Room recreation feature restored and functional
+- User invitations and permissions work correctly
+- Frontend Matrix SDK integration unaffected
+
+**Technical Metrics**:
+- Zero admin token authentication errors in logs
+- Room creation success rate >99%
+- User invitation success rate >99%
+- No MacaroonDeserializationException errors
+
+**Operational Metrics**:
+- Chat support tickets reduced by elimination of authentication issues
+- Deployment complexity reduced (no token management)
+- Development velocity increased (reliable local testing)
+
+#### Risk Assessment
+
+**Implementation Risks**:
+- ⚠️ **Bot Credential Management**: Ensure secure storage and rotation of bot credentials
+- ⚠️ **Migration Complexity**: Ensure no disruption during transition from admin tokens
+- ⚠️ **Permission Mapping**: Verify OpenMeet roles correctly map to Matrix power levels
+
+**Mitigation Strategies**:
+- **Comprehensive Testing**: TDD approach ensures thorough validation of all operations
+- **Parallel Implementation**: Keep admin token system until bot is proven functional
+- **Staged Rollout**: Deploy bot incrementally across different environments
+- **Monitoring**: Enhanced logging and alerting for bot operations
+- **Rollback Plan**: Ability to revert to admin token system if critical issues arise
+
+#### Integration with Existing Architecture
+
+**Preserved Components**:
+- ✅ Frontend Matrix JS SDK integration (no changes needed)
+- ✅ OIDC authentication for users (continues working)
+- ✅ Hybrid architecture (frontend clients + backend admin operations)
+- ✅ Existing Matrix service layer (MatrixCoreService, MatrixRoomService, etc.)
+
+**Updated Components**:
+- 🔄 MatrixCoreService: Remove admin token logic, add bot client management
+- 🔄 MatrixChatRoomManagerAdapter: Use bot operations instead of admin tokens
+- 🔄 Environment Configuration: Replace admin token vars with bot credentials
+
+**Future Compatibility**:
+- Bot approach is compatible with planned Matrix Authentication Service (MAS) migration
+- Standard Matrix bot patterns work with any Matrix server implementation
+- Bot credentials can be managed by MAS when migration occurs
+
+#### Deployment Configuration
+
+**Environment Variables**:
+```bash
+# Replace these admin token variables:
+MATRIX_ADMIN_ACCESS_TOKEN=<removed>
+MATRIX_ADMIN_PASSWORD=<removed>
+
+# With bot credentials:
+MATRIX_BOT_USERNAME=openmeet-bot
+MATRIX_BOT_PASSWORD=<secure-bot-password>
+MATRIX_BOT_DISPLAY_NAME="OpenMeet Bot"
+```
+
+**Bot Registration**:
+```bash
+# Create bot user on Matrix server
+curl -X POST "http://matrix-local.openmeet.test:8448/_matrix/client/v3/register" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "openmeet-bot",
+    "password": "secure-bot-password",
+    "display_name": "OpenMeet Bot"
+  }'
+```
+
+**Status**: ✅ **COMPLETED** (July 2, 2025) - Matrix bot authentication successfully implemented with comprehensive test coverage.
+
+#### **Bot Authentication Implementation Details**:
+
+**Decision**: Matrix bot uses existing admin user credentials instead of dedicated bot user.
+
+**Rationale**:
+- ✅ **Simplified Setup**: No migration or separate user creation required
+- ✅ **Existing Admin Permissions**: Admin user already has necessary system privileges 
+- ✅ **MAS Compatibility**: Bot authenticates via standard MAS → OpenMeet OIDC flow using admin credentials
+- ✅ **Clear Operation Context**: Matrix logs identify bot operations regardless of OpenMeet user identity
+- ✅ **Immediate Deployment**: Works with existing environment configuration
+
+**Authentication Flow**:
+```typescript
+// Bot uses admin credentials for Matrix authentication
+const adminEmail = process.env.ADMIN_EMAIL;        // e.g., admin@openmeet.net
+const adminPassword = process.env.ADMIN_PASSWORD;  // existing admin password
+
+// Bot authenticates to Matrix via MAS → OpenMeet OIDC flow
+// Matrix sees bot operations as coming from admin user
+// OpenMeet Matrix operations clearly identified as bot actions in service logs
+```
+
+**Configuration**:
+```bash
+# Required environment variables (already exist)
+ADMIN_EMAIL=admin@openmeet.net
+ADMIN_PASSWORD=secret
+
+# Optional bot display name
+MATRIX_BOT_DISPLAY_NAME="OpenMeet Admin Bot"
+```
+
+**Future Migration Path**: If dedicated bot user needed later, can create separate Matrix bot user without changing bot service architecture.
+
+### ADR-009: Matrix Room Cleanup Strategy for Bot Operations
+**Decision**: Use bot-based room cleanup (kick all users + bot leaves) instead of admin API room deletion
+
+**Problem**: Matrix bot cannot use admin API `/_synapse/admin/v2/rooms/{roomId}/delete` for complete room deletion, only standard Matrix client operations.
+
+**Analysis**: Comparison of room cleanup approaches:
+
+#### **Admin API Room Deletion** (Not Available to Bot):
+- ✅ Completely removes room from Matrix server
+- ✅ Purges all room history and metadata  
+- ✅ Frees all server resources immediately
+- ❌ Requires admin token authentication (unreliable in production)
+- ❌ Not available through standard Matrix client API
+
+#### **Bot Room Cleanup** (Selected Approach):
+- ✅ Bot kicks all users from room via standard Matrix client API
+- ✅ Bot leaves room, making it empty and inaccessible
+- ✅ Users cannot rejoin empty rooms (no members to invite them)
+- ✅ Room becomes functionally "deleted" from user perspective
+- ✅ OpenMeet database gets updated to clear `matrixRoomId` references
+- ✅ Future room recreation creates new rooms with fresh IDs
+- ⚠️ Empty room remains on Matrix server (minimal resource usage)
+- ⚠️ Room metadata preserved (may be useful for audit/compliance)
+
+**Technical Implementation**:
+```typescript
+async deleteRoom(roomId: string): Promise<void> {
+  // 1. Bot kicks all users except itself
+  const roomMembers = await this.getRoomMembers(roomId);
+  for (const memberId of Object.keys(roomMembers.joined)) {
+    if (memberId !== this.getBotUserId()) {
+      await this.botClient.kick(roomId, memberId, 'Room being deleted');
+    }
+  }
+  
+  // 2. Bot leaves room (makes it empty and inaccessible)
+  await this.botClient.leave(roomId);
+  
+  // 3. OpenMeet database clears matrixRoomId reference
+  // (handled by calling service)
+}
+```
+
+**Security Analysis**:
+- ✅ **User Access**: Users cannot rejoin empty rooms through any Matrix client
+- ✅ **Data Isolation**: Room history inaccessible to users after cleanup
+- ✅ **Functional Deletion**: Room is effectively deleted from user perspective
+- ⚠️ **Server Cleanup**: Room tombstones remain on Matrix server indefinitely
+
+**Resource Impact**:
+- **Minimal**: Empty rooms consume negligible server resources
+- **Database**: Small metadata entries remain (room name, creation time, etc.)
+- **Storage**: No message content as room is empty
+- **Performance**: No impact on Matrix server performance
+
+**Benefits of This Approach**:
+- ✅ **Reliable**: Uses stable Matrix client API instead of admin tokens
+- ✅ **Consistent**: Same authentication method as other bot operations
+- ✅ **Functional**: Achieves desired outcome (users cannot access room)
+- ✅ **Maintainable**: Simpler architecture without admin token complexity
+- ✅ **Future-proof**: Compatible with MAS migration and Matrix updates
+
+**Operational Considerations**:
+- **Room Tombstones**: Matrix server accumulates empty rooms over time
+- **Audit Trail**: Room metadata preserved for compliance if needed  
+- **Server Maintenance**: Admin can manually purge empty rooms during maintenance windows
+- **Monitoring**: Empty room count can be monitored via Matrix admin API
+
+**Status**: ✅ **IMPLEMENTED** (July 2, 2025) - Bot room cleanup successfully deployed with 21 passing tests covering all room management scenarios.
+
+### ADR-010: Tenant-Scoped Matrix Bot Architecture with Multi-Server Support
+**Decision**: Transition from global Matrix admin client to dedicated bot users per tenant, architected to support future multi-server deployments
+**Status**: Approved - Implementation in progress (July 2025)
+
+#### Problem Statement
+
+Current Matrix architecture uses a global admin client for all tenant operations, which creates several issues:
+- **Single Point of Failure**: One admin client handles all tenants' Matrix operations
+- **Tenant Isolation**: All operations appear to come from the same admin user
+- **Scalability Concerns**: Global admin client becomes bottleneck as tenants grow
+- **Future Multi-Server Incompatible**: Cannot support per-tenant Matrix servers with global admin
+- **Authentication Dependencies**: Global admin token issues affect all tenants
+
+#### Proposed Solution: Tenant-Scoped Bot Users
+
+**Architecture**: Each tenant gets its own dedicated Matrix bot user that handles all Matrix operations for that specific tenant.
+
+#### Current State: Single Matrix Server
+```
+Tenant A Operations → Tenant A Bot (@openmeet-bot-tenanta:matrix.openmeet.net) → Matrix Server
+Tenant B Operations → Tenant B Bot (@openmeet-bot-tenantb:matrix.openmeet.net) → Matrix Server  
+Tenant C Operations → Tenant C Bot (@openmeet-bot-tenantc:matrix.openmeet.net) → Matrix Server
+```
+
+#### Future State: Matrix Server Per Tenant
+```
+Tenant A Operations → Tenant A Bot (@openmeet-bot-tenanta:matrix-tenanta.openmeet.net) → Matrix Server A
+Tenant B Operations → Tenant B Bot (@openmeet-bot-tenantb:matrix-tenantb.openmeet.net) → Matrix Server B
+Tenant C Operations → Tenant C Bot (@openmeet-bot-tenantc:matrix-tenantc.openmeet.net) → Matrix Server C
+```
+
+#### Implementation Architecture
+
+**1. Tenant-Aware Bot Management**
+```typescript
+// MatrixBotService becomes a factory for tenant-specific bot clients
+class MatrixBotService {
+  private tenantBotClients: Map<string, IMatrixClient> = new Map();
+  
+  async getBotClientForTenant(tenantId: string): Promise<IMatrixClient> {
+    if (!this.tenantBotClients.has(tenantId)) {
+      const botClient = await this.createTenantBotClient(tenantId);
+      this.tenantBotClients.set(tenantId, botClient);
+    }
+    return this.tenantBotClients.get(tenantId);
+  }
+  
+  async createTenantBotClient(tenantId: string): Promise<IMatrixClient> {
+    const botUser = await this.matrixBotUserService.getOrCreateBotUser(tenantId);
+    const matrixServerConfig = await this.getMatrixServerConfig(tenantId);
+    return await this.authenticateBotUser(botUser, matrixServerConfig);
+  }
+}
+```
+
+**2. Tenant-Scoped Configuration**
+```typescript
+// Bot users per tenant with configurable Matrix server endpoints
+interface TenantMatrixConfig {
+  tenantId: string;
+  matrixServerUrl: string;      // Currently: "http://localhost:8448" for all
+  matrixServerName: string;     // Currently: "matrix.openmeet.net" for all
+  botUser: {
+    email: string;              // "bot-{tenantId}@openmeet.net"
+    slug: string;               // "openmeet-bot-{tenantId}"
+    password: string;           // Tenant-specific password from config
+  };
+}
+```
+
+**3. Tenant-Aware Matrix Operations**
+```typescript
+// All Matrix operations require tenantId parameter
+async createRoom(options: CreateRoomOptions, tenantId: string): Promise<Room> {
+  const botClient = await this.getBotClientForTenant(tenantId);
+  return await botClient.createRoom(options);
+}
+
+async inviteUserToRoom(roomId: string, userId: string, tenantId: string): Promise<void> {
+  const botClient = await this.getBotClientForTenant(tenantId);
+  return await botClient.invite(roomId, userId);
+}
+```
+
+#### Benefits of Tenant-Scoped Architecture
+
+**Current Benefits (Single Matrix Server)**:
+- ✅ **Tenant Isolation**: Each tenant's operations performed by dedicated bot user
+- ✅ **Independent Authentication**: Bot authentication failure only affects one tenant
+- ✅ **Clear Audit Trail**: Matrix logs show which tenant performed each operation
+- ✅ **Scalable Architecture**: No global bottlenecks as tenant count grows
+- ✅ **Permission Isolation**: Each bot only has access to its tenant's resources
+
+**Future Benefits (Multi-Server Support)**:
+- ✅ **True Tenant Isolation**: Each tenant can have completely separate Matrix server
+- ✅ **Geographic Distribution**: Tenant Matrix servers can be deployed regionally
+- ✅ **Independent Scaling**: Each tenant's Matrix server scales independently
+- ✅ **Compliance Isolation**: Tenant data can be isolated for regulatory requirements
+- ✅ **Service Reliability**: Matrix server issues only affect specific tenants
+
+#### Database Schema Changes
+
+**New Tables**:
+```sql
+-- Dedicated bot users per tenant
+-- Bot users created via migration and stored in tenant-specific schemas
+SELECT * FROM "tenant_lsdfaopkljdfs"."users" WHERE email LIKE 'bot-%';
+-- Result: openmeet-bot-lsdfaopkljdfs | bot-lsdfaopkljdfs@openmeet.net
+
+-- Tenant configuration includes bot credentials
+-- Stored in TENANTS_B64 environment variable as JSON
+{
+  "id": "lsdfaopkljdfs",
+  "botUser": {
+    "email": "bot-lsdfaopkljdfs@openmeet.net",
+    "slug": "openmeet-bot-lsdfaopkljdfs", 
+    "password": "bot-secure-password-lsdfaopkljdfs-2025"
+  },
+  "matrixServer": {
+    "url": "http://localhost:8448",        // Future: per-tenant URLs
+    "serverName": "matrix.openmeet.net"    // Future: per-tenant domains
+  }
+}
+```
+
+#### Implementation Phases
+
+**Phase 1: Tenant Bot Creation (Current)**
+- ✅ Create dedicated bot users per tenant via database migration
+- ✅ Store bot credentials in tenant configuration (TENANTS_B64)
+- ✅ Update MatrixBotUserService to manage per-tenant bot users
+- ✅ Maintain single Matrix server for all tenants
+
+**Phase 2: Tenant-Scoped Operations (In Progress)**
+- 🔄 Update MatrixBotService to be tenant-aware factory pattern
+- 🔄 Remove global admin client dependencies from MatrixCoreService
+- 🔄 Ensure all Matrix operations accept tenantId parameter
+- 🔄 Update MatrixChatRoomManagerAdapter to use tenant-specific bots
+
+**Phase 3: Multi-Server Configuration (Future)**
+- 📋 Add per-tenant Matrix server configuration to tenant config
+- 📋 Update bot authentication to support different Matrix server endpoints
+- 📋 Implement tenant-aware Matrix server discovery and routing
+- 📋 Add Matrix server health monitoring per tenant
+
+**Phase 4: Multi-Server Deployment (Future)**
+- 📋 Deploy separate Matrix server instances per tenant
+- 📋 Update DNS and routing for per-tenant Matrix domains
+- 📋 Migrate existing rooms and users to tenant-specific servers
+- 📋 Implement cross-tenant communication policies if needed
+
+#### Migration Strategy from Global Admin
+
+**Current State Cleanup**:
+```typescript
+// Remove global admin client initialization
+// From: MatrixCoreService.initializeMatrixConnection()
+// To: Individual tenant bot authentication on-demand
+
+// Replace admin token operations
+// From: adminClient.createRoom()
+// To: await this.getBotClientForTenant(tenantId).createRoom()
+```
+
+**Backward Compatibility**:
+- Existing user Matrix accounts continue working (no changes to user authentication)
+- Frontend Matrix SDK integration unchanged (still uses OIDC)
+- Room IDs and message history preserved during migration
+- Admin operations seamlessly transition to tenant bot operations
+
+#### Future Multi-Server Architecture
+
+**DNS and Routing Configuration**:
+```yaml
+# Single server (current)
+matrix.openmeet.net → Single Matrix Server
+
+# Multi-server (future)  
+matrix-tenant-a.openmeet.net → Matrix Server A
+matrix-tenant-b.openmeet.net → Matrix Server B
+matrix-tenant-c.openmeet.net → Matrix Server C
+
+# Load balancer routing
+openmeet.net/matrix/{tenantId}/* → matrix-{tenantId}.openmeet.net/*
+```
+
+**Tenant Matrix Server Configuration**:
+```yaml
+# Matrix homeserver.yaml per tenant
+server_name: "matrix-tenant-a.openmeet.net"
+database:
+  name: "psycopg2"
+  args:
+    database: "matrix_tenant_a"
+    
+# OIDC per tenant
+oidc_providers:
+  - idp_id: "openmeet"
+    issuer: "https://api.openmeet.net/oidc/tenant-a"
+    client_id: "matrix_synapse_tenant_a"
+```
+
+#### Security Considerations
+
+**Tenant Isolation**:
+- ✅ Each tenant bot can only access its own tenant's Matrix resources
+- ✅ Bot credentials are tenant-specific and not shared
+- ✅ Matrix operations logged with clear tenant context
+- ✅ Cross-tenant access requires explicit permission (future feature)
+
+**Credential Management**:
+- ✅ Bot passwords stored securely in tenant configuration
+- ✅ Bot authentication uses standard MAS OIDC flow
+- ✅ Bot credentials can be rotated per tenant independently
+- ✅ Failed bot authentication only affects single tenant
+
+**Multi-Server Security (Future)**:
+- ✅ Complete tenant data isolation on separate Matrix servers
+- ✅ Independent security policies per tenant Matrix server
+- ✅ Tenant-specific encryption keys and device verification
+- ✅ Compliance requirements satisfied through physical data separation
+
+#### Operational Considerations
+
+**Current Operations**:
+- **Bot Management**: Create and manage bot users via MatrixBotUserService
+- **Authentication**: Bot users authenticate via MAS OIDC with tenant credentials
+- **Room Operations**: All room creation/management via tenant-specific bots
+- **Monitoring**: Bot authentication and operations logged per tenant
+
+**Future Multi-Server Operations**:
+- **Server Provisioning**: Automated Matrix server deployment per tenant
+- **Health Monitoring**: Per-tenant Matrix server monitoring and alerting
+- **Backup Strategy**: Independent backup schedules per tenant Matrix server
+- **Update Management**: Rolling updates across tenant Matrix servers
+- **Resource Scaling**: Per-tenant Matrix server resource allocation
+
+#### Success Criteria
+
+**Phase 1 & 2 Success Metrics**:
+- All Matrix operations work via tenant-specific bot authentication
+- Zero dependency on global admin client or admin tokens
+- Clear tenant context in all Matrix operation logs
+- Room creation/management success rate >99% per tenant
+
+**Future Multi-Server Success Metrics**:
+- Independent Matrix server operation per tenant
+- Cross-tenant isolation verified through security testing
+- Matrix server scaling and resource allocation per tenant needs
+- Compliance requirements satisfied through tenant data separation
+
+#### Risks and Mitigation
+
+**Implementation Risks**:
+- ⚠️ **Bot Authentication Failures**: Tenant bot credentials must be properly configured
+- ⚠️ **Migration Complexity**: Transition from global admin to tenant bots requires careful testing
+- ⚠️ **Resource Usage**: Multiple bot clients may increase memory usage
+
+**Multi-Server Risks (Future)**:
+- ⚠️ **Infrastructure Complexity**: Managing multiple Matrix servers increases operational burden
+- ⚠️ **Data Migration**: Moving existing rooms/users to tenant-specific servers
+- ⚠️ **Network Routing**: DNS and load balancer complexity for per-tenant domains
+
+**Mitigation Strategies**:
+- **Comprehensive Testing**: TDD approach with extensive integration testing
+- **Gradual Migration**: Phase-based implementation with rollback capabilities
+- **Resource Monitoring**: Track bot client resource usage and optimize
+- **Documentation**: Detailed operational runbooks for multi-server management
+- **Automation**: Infrastructure-as-Code for Matrix server provisioning
+
+#### Alternative Architectures Considered
+
+**Option 1: Enhanced Global Admin**
+- Fix global admin token issues and continue single client approach
+- **Rejected**: Doesn't solve tenant isolation or future multi-server requirements
+
+**Option 2: Matrix Application Service Bridge**
+- Implement Matrix AS bridge for all tenant operations
+- **Rejected**: Significant complexity and doesn't provide tenant isolation benefits
+
+**Option 3: Hybrid Admin + Bot Approach**
+- Keep global admin for system operations, add tenant bots for room operations
+- **Rejected**: Increases complexity and maintains global admin dependencies
+
+#### Integration with Existing Systems
+
+**Preserved Components**:
+- ✅ Frontend Matrix SDK integration (no changes)
+- ✅ User OIDC authentication flow (no changes)
+- ✅ Matrix room management UI (no changes)
+- ✅ Existing Matrix service layer structure
+
+**Updated Components**:
+- 🔄 MatrixCoreService: Remove global admin client initialization
+- 🔄 MatrixBotService: Add tenant-aware bot client factory
+- 🔄 All Matrix operations: Add tenantId parameter requirement
+- 🔄 Configuration: Add bot credentials to tenant config
+
+**Future Components**:
+- 📋 Matrix server routing service for multi-server support
+- 📋 Tenant Matrix server provisioning automation
+- 📋 Cross-tenant communication policies and management
+- 📋 Matrix server monitoring and alerting per tenant
+
+**Status**: ✅ **Phase 1 COMPLETED** - Tenant bot users created and configured
+**Current**: 🔄 **Phase 2 IN PROGRESS** - Implementing tenant-aware Matrix operations
+**Timeline**: Phase 2 completion by July 2025, Phase 3-4 planned for 2026
+
+**Rationale**: Tenant-scoped bot architecture provides immediate benefits for tenant isolation and reliability while positioning OpenMeet for future multi-server deployments. This architectural decision eliminates global admin dependencies, improves system resilience, and enables true tenant isolation as the platform scales.
+
+### ADR-011: Matrix Application Service Authentication for Bot Operations
+**Decision**: Replace complex OIDC bot authentication with Matrix Application Service (appservice) registration for bot operations
+**Status**: Approved - Implementation in progress (July 2025)
+
+#### Problem Statement
+
+Current bot authentication implementation uses complex OIDC flows that introduce unnecessary complexity and potential failure points:
+- **Complex OIDC Flow**: Bot must authenticate through MAS → OpenMeet OIDC chain
+- **Consent Screen Issues**: Bot authentication fails at MAS consent approval step (422 errors)
+- **Cross-Origin Complications**: OIDC flow involves multiple redirects and cookie management
+- **Authentication Overhead**: Full OIDC authentication for automated bot operations
+- **Error-Prone Implementation**: Complex form submission, CSRF token handling, and consent automation
+- **Maintenance Burden**: Debugging OIDC flows, session management, and authentication edge cases
+
+#### Root Cause Analysis
+
+**From research on Matrix Authentication Service best practices**:
+> "Setting up bots in a Matrix Synapse server with MAS requires using OIDC/OAuth2 flows for user bots and updated appservice APIs for application service bots."
+
+**Key insight**: Bots should use **Application Service registration**, not user authentication flows.
+
+**Current Implementation Problems**:
+```typescript
+// Complex OIDC bot authentication (current approach)
+async createBotClient(tenantId: string): Promise<IMatrixClient> {
+  // 1. Start OIDC authorization flow
+  // 2. Handle MAS login page with CSRF tokens
+  // 3. Submit bot credentials to MAS
+  // 4. Handle consent page approval (fails with 422)
+  // 5. Extract authorization code from callback
+  // 6. Exchange code for Matrix access token
+  // 7. Create Matrix client with token
+}
+```
+
+#### Proposed Solution: Matrix Application Service Registration
+
+**Matrix Application Services** are the standard way for bots and bridges to integrate with Matrix servers. They provide:
+- ✅ **Direct token-based authentication** - No OIDC complexity
+- ✅ **Persistent access tokens** - No token rotation or expiration issues  
+- ✅ **Designed for automated operations** - Perfect for bot use cases
+- ✅ **Full Matrix C-S API access** - Can create rooms, invite users, manage permissions
+- ✅ **MAS compatibility** - Application Services work with Matrix Authentication Service
+- ✅ **Standard bot pattern** - Industry best practice for Matrix bot integration
+
+#### Architecture Comparison
+
+**Current (Complex OIDC)**:
+```
+OpenMeet Bot → MAS OIDC Flow → OpenMeet Auth → Matrix Tokens → Matrix Operations
+```
+
+**Proposed (Application Service)**:
+```
+OpenMeet Bot → Application Service Token → Matrix Operations
+```
+
+#### Implementation Plan
+
+**Application Service Registration**:
+```yaml
+# openmeet-appservice.yaml
+id: "openmeet"
+url: "http://api:3000"  # OpenMeet API endpoint for AS events
+as_token: "openmeet_as_token_secret_123"
+hs_token: "openmeet_hs_token_secret_456"
+sender_localpart: "openmeet-bot"
+namespaces:
+  users:
+    - exclusive: true
+      regex: "@openmeet-bot.*:matrix.openmeet.net"
+  aliases:
+    - exclusive: true  
+      regex: "#openmeet_.*:matrix.openmeet.net"
+  rooms: []
+```
+
+**Matrix Homeserver Configuration**:
+```yaml
+# homeserver.yaml
+app_service_config_files:
+  - "/data/openmeet-appservice.yaml"
+```
+
+**Simplified Bot Authentication**:
+```typescript
+// Simple application service authentication (new approach)
+async createBotClient(tenantId: string): Promise<IMatrixClient> {
+  const config = this.getAppServiceConfig();
+  
+  return this.matrixSdk.createClient({
+    baseUrl: config.homeserverUrl,
+    accessToken: config.asToken,  // Direct token access
+    userId: `@openmeet-bot-${tenantId}:matrix.openmeet.net`,
+    useAuthorizationHeader: true
+  });
+}
+```
+
+#### Benefits Analysis
+
+**Technical Improvements**:
+- ✅ **Eliminates OIDC complexity** - Direct token-based authentication
+- ✅ **Removes consent screen issues** - No user interaction required
+- ✅ **Stable authentication** - Tokens don't expire or require rotation
+- ✅ **Faster operations** - No authentication overhead per operation
+- ✅ **Simpler debugging** - Standard Matrix client logs, no OIDC flow debugging
+- ✅ **Reduced dependencies** - No MAS, cookie management, or CSRF handling
+
+**Operational Benefits**:
+- ✅ **Reliable bot operations** - Consistent room creation and management
+- ✅ **Easier deployment** - Simple token configuration vs complex OIDC setup
+- ✅ **Better monitoring** - Standard Matrix application service metrics
+- ✅ **Reduced maintenance** - No OIDC flow debugging or session management
+
+**Development Benefits**:
+- ✅ **Simpler implementation** - ~100 lines vs ~300 lines of complex OIDC code
+- ✅ **Standard patterns** - Following Matrix bot best practices
+- ✅ **Better testing** - Direct token testing vs complex OIDC flow testing
+- ✅ **Future-proof** - Application services are the standard Matrix bot approach
+
+#### Implementation Steps
+
+**Phase 1: Application Service Registration**
+```bash
+# 1. Generate application service tokens
+AS_TOKEN=$(openssl rand -hex 32)
+HS_TOKEN=$(openssl rand -hex 32)
+
+# 2. Create appservice registration file
+cat > matrix-config/openmeet-appservice.yaml << EOF
+id: "openmeet"
+url: "http://api:3000"
+as_token: "${AS_TOKEN}"
+hs_token: "${HS_TOKEN}"
+sender_localpart: "openmeet-bot"
+namespaces:
+  users:
+    - exclusive: true
+      regex: "@openmeet-bot.*:matrix.openmeet.net"
+EOF
+
+# 3. Update Matrix homeserver configuration
+echo "app_service_config_files: ['/data/openmeet-appservice.yaml']" >> homeserver.yaml
+```
+
+**Phase 2: Environment Configuration**
+```bash
+# Add application service configuration
+MATRIX_AS_TOKEN=${AS_TOKEN}
+MATRIX_HS_TOKEN=${HS_TOKEN}
+MATRIX_AS_USER_PREFIX="openmeet-bot"
+```
+
+**Phase 3: Bot Service Refactoring**
+```typescript
+// Update MatrixBotService to use application service authentication
+class MatrixBotService {
+  async authenticateBot(tenantId: string): Promise<void> {
+    const asToken = this.configService.get<string>('MATRIX_AS_TOKEN');
+    const botUserId = `@openmeet-bot-${tenantId}:matrix.openmeet.net`;
+    
+    this.botClient = this.matrixSdk.createClient({
+      baseUrl: this.homeserverUrl,
+      accessToken: asToken,
+      userId: botUserId,
+      useAuthorizationHeader: true
+    });
+    
+    this.isAuthenticated = true;
+  }
+}
+```
+
+**Phase 4: Docker Configuration Update**
+```yaml
+# docker-compose-dev.yml
+services:
+  matrix:
+    volumes:
+      - ./matrix-config/openmeet-appservice.yaml:/data/openmeet-appservice.yaml:ro
+```
+
+#### Alternative Solutions Considered
+
+**Option 1: Fix OIDC Consent Flow**
+- **Description**: Debug and fix the 422 consent screen approval automation
+- **Rejected**: Still maintains complex OIDC architecture, doesn't address root complexity
+
+**Option 2: Client Credentials Grant**
+- **Description**: Use MAS client credentials for bot authentication
+- **Tested**: Works for MAS admin operations but **cannot access Matrix C-S API**
+- **Rejected**: Confirmed that client credentials don't grant Matrix user rights
+
+**Option 3: Pre-Generated User Tokens**
+- **Description**: Manually generate Matrix user tokens and store in configuration
+- **Rejected**: Tokens expire, complex token lifecycle management required
+
+**Option 4: Direct Matrix Admin API**
+- **Description**: Use Matrix admin API for all bot operations
+- **Rejected**: Limited functionality, doesn't support all required operations
+
+#### Security Considerations
+
+**Application Service Security Model**:
+- ✅ **Token-based Authentication**: Application service tokens are cryptographically secure
+- ✅ **Namespace Isolation**: Bot users constrained to specific namespace patterns
+- ✅ **Homeserver Trust**: Matrix server validates all application service operations
+- ✅ **Audit Trail**: All bot operations logged in Matrix server logs
+- ✅ **Revocation**: Tokens can be revoked by removing/updating appservice registration
+
+**Access Control**:
+```yaml
+# Namespace restrictions limit bot access
+namespaces:
+  users:
+    - exclusive: true
+      regex: "@openmeet-bot.*:matrix.openmeet.net"  # Only openmeet-bot users
+  aliases:
+    - exclusive: true
+      regex: "#openmeet_.*:matrix.openmeet.net"     # Only openmeet_ room aliases
+```
+
+#### Migration Strategy
+
+**Backward Compatibility**:
+- ✅ **Frontend unchanged** - Matrix JS SDK integration continues working
+- ✅ **User authentication unchanged** - OIDC flow for users remains the same
+- ✅ **Room operations unchanged** - Same bot operations, different authentication
+- ✅ **Tenant isolation preserved** - Application service respects tenant boundaries
+
+**Migration Process**:
+1. **Deploy application service configuration** alongside existing bot system
+2. **Test application service authentication** with bot operations
+3. **Switch MatrixBotService** to use application service tokens
+4. **Remove OIDC bot authentication code** after verification
+5. **Clean up MAS bot configuration** that's no longer needed
+
+**Rollback Plan**:
+- Keep OIDC bot authentication code until application service proven stable
+- Application service can be disabled by removing homeserver configuration
+- Immediate rollback to OIDC authentication if critical issues arise
+
+#### Performance Comparison
+
+**OIDC Bot Authentication (Current)**:
+- Authentication time: ~2-5 seconds (including consent screen handling)
+- Failure rate: ~15-20% (consent screen 422 errors)
+- Code complexity: ~300 lines of OIDC flow management
+- Dependencies: MAS, OpenMeet OIDC, cookie management, CSRF handling
+
+**Application Service Authentication (Proposed)**:
+- Authentication time: ~50-100ms (direct token usage)
+- Failure rate: <1% (stable token-based authentication)
+- Code complexity: ~50 lines of direct Matrix client creation
+- Dependencies: Matrix homeserver application service support only
+
+#### Success Criteria
+
+**Technical Metrics**:
+- Bot authentication success rate >99%
+- Bot operation latency reduced by >90%
+- Zero OIDC-related authentication errors
+- Matrix room operations work reliably
+
+**Operational Metrics**:
+- Deployment complexity reduced (simple token config vs OIDC setup)
+- Bot debugging time reduced (standard Matrix logs vs OIDC flow debugging)
+- Support tickets for bot authentication eliminated
+
+**Development Metrics**:
+- Code complexity reduced by ~75% (50 lines vs 300 lines)
+- Test complexity reduced (direct token testing vs OIDC flow mocking)
+- Development velocity increased (simpler bot operations)
+
+#### Future Compatibility
+
+**Matrix Authentication Service (MAS)**:
+- ✅ **MAS supports application services** - Standard Matrix pattern works with MAS
+- ✅ **Migration path exists** - Can transition to MAS without changing appservice approach
+- ✅ **Industry standard** - Application services are the recommended Matrix bot integration
+
+**Multi-Tenant Architecture**:
+- ✅ **Tenant-specific bots** - Each tenant can have dedicated application service users
+- ✅ **Namespace isolation** - Application service namespaces provide tenant separation
+- ✅ **Scalable pattern** - Application services scale better than complex OIDC flows
+
+#### Risk Assessment
+
+**Implementation Risks**:
+- ⚠️ **Configuration complexity** - Application service registration must be correct
+- ⚠️ **Token management** - Application service tokens must be securely stored
+- ⚠️ **Matrix server dependency** - Requires Matrix server application service support
+
+**Mitigation Strategies**:
+- **Comprehensive testing** - Test application service configuration in development
+- **Secure configuration** - Use proper secrets management for application service tokens
+- **Documentation** - Clear setup instructions for application service registration
+- **Monitoring** - Application service health monitoring and alerting
+
+#### Documentation Requirements
+
+**Deployment Documentation**:
+- Application service registration setup guide
+- Environment variable configuration reference
+- Docker compose configuration updates
+- Kubernetes deployment configuration
+
+**Operational Documentation**:
+- Application service token rotation procedures
+- Bot operation monitoring and debugging
+- Troubleshooting guide for application service issues
+- Matrix server application service administration
+
+#### Timeline
+
+**Week 1**: Application service registration and configuration
+**Week 2**: MatrixBotService refactoring and testing
+**Week 3**: Integration testing and deployment
+**Week 4**: Production deployment and OIDC code cleanup
+
+**Status**: ✅ **APPROVED** - Implementation starting with application service registration
+
+**Rationale**: Matrix Application Service authentication eliminates the complex OIDC bot authentication flow that was failing at the consent screen stage. This approach follows Matrix best practices for bot integration, provides more reliable authentication, and significantly reduces implementation complexity while maintaining all required functionality for Matrix bot operations.
