@@ -417,7 +417,8 @@ export class ChatController {
     );
 
     try {
-      const result = await this.discussionService.createEventChatRoom(
+      const result = await this.chatRoomService.ensureRoomAccess(
+        'event',
         eventSlug,
         user.slug,
         tenantId,
@@ -428,9 +429,9 @@ export class ChatController {
       );
 
       return {
-        success: true,
+        success: result.success,
         roomId: result.roomId,
-        message: 'Chat room created successfully',
+        message: result.message || 'Chat room created successfully',
       };
     } catch (error) {
       this.logger.error(
@@ -496,7 +497,8 @@ export class ChatController {
     );
 
     try {
-      const result = await this.discussionService.createGroupChatRoom(
+      const result = await this.chatRoomService.ensureRoomAccess(
+        'group',
         groupSlug,
         user.slug,
         tenantId,
@@ -507,9 +509,9 @@ export class ChatController {
       );
 
       return {
-        success: true,
+        success: result.success,
         roomId: result.roomId,
-        message: 'Chat room created successfully',
+        message: result.message || 'Chat room created successfully',
       };
     } catch (error) {
       this.logger.error(

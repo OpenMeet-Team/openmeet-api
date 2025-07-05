@@ -26,6 +26,32 @@ matrix:
   secret: "ci-mas-admin-token"
   endpoint: "http://matrix-auth-service:8080"
 
+clients:
+  # Matrix Synapse Homeserver Client for MSC3861
+  - client_id: "0000000000000000000SYNAPSE"
+    client_auth_method: "client_secret_basic"
+    client_secret: "ci-shared-secret-with-synapse"
+    redirect_uris: []  # Synapse doesn't need redirect URIs for introspection
+
+  # OpenMeet Platform Frontend Client (SPA) - CI Environment
+  - client_id: "01JAYS74TCG3BTWKADN5Q4518D"
+    client_auth_method: "none"  # Public client, no secrets
+    redirect_uris:
+      - "http://localhost:8087/auth/matrix/callback"
+      - "http://localhost:8087/events/*"
+      - "http://127.0.0.1:8087/auth/matrix/callback"
+      - "http://127.0.0.1:8087/events/*"
+
+  # OpenMeet Bot Client for Client Credentials Grant
+  - client_id: "01JAYS74TCG3BTWKADN5Q4518E"
+    client_auth_method: "client_secret_basic"
+    client_secret: "openmeet-bot-client-secret-ci"
+    redirect_uris: []  # No redirects needed for client credentials
+    grant_types:
+      - "client_credentials"
+    scopes:
+      - "urn:matrix:org.matrix.msc2967.client:api:*"
+
 upstream_oauth2:
   providers:
     - id: "01JAYS74TCG3BTWKADN5Q4518C"

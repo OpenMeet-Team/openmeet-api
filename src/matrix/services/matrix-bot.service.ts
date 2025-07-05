@@ -3,7 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import { IMatrixBot } from '../interfaces/matrix-bot.interface';
 import { IMatrixClient } from '../types/matrix.interfaces';
 import { MatrixCoreService } from './matrix-core.service';
-import { MatrixUserService } from './matrix-user.service';
 import { MatrixBotUserService } from './matrix-bot-user.service';
 import { AllConfigType } from '../../config/config.type';
 
@@ -25,7 +24,6 @@ export class MatrixBotService implements IMatrixBot {
   constructor(
     private readonly matrixCoreService: MatrixCoreService,
     private readonly configService: ConfigService<AllConfigType>,
-    private readonly matrixUserService: MatrixUserService,
     private readonly matrixBotUserService: MatrixBotUserService,
     @Inject('USER_SERVICE_FOR_MATRIX') private readonly userService: any,
   ) {
@@ -146,13 +144,15 @@ export class MatrixBotService implements IMatrixBot {
     this.logger.log(`Authenticating Matrix bot for tenant: ${tenantId}`);
 
     try {
-      if (this.useAppServiceAuth) {
-        // Use Application Service authentication (preferred)
-        await this.authenticateBotWithAppService(tenantId);
-      } else {
-        // Fallback to OIDC authentication
-        await this.authenticateBotWithOIDC(tenantId);
+      if (!this.useAppServiceAuth) {
+        throw new Error(
+          'Matrix AppService authentication is required for bot operations. ' +
+          'Please configure MATRIX_APPSERVICE_TOKEN environment variable.'
+        );
       }
+
+      // Use Application Service authentication (required)
+      await this.authenticateBotWithAppService(tenantId);
     } catch (error) {
       this.isAuthenticated = false;
       this.logger.error(
@@ -162,55 +162,6 @@ export class MatrixBotService implements IMatrixBot {
     }
   }
 
-  private async authenticateBotWithOIDC(tenantId: string): Promise<void> {
-    this.logger.log(`Using OIDC authentication for tenant: ${tenantId}`);
-
-    // Get or create dedicated bot user for this tenant
-    const botUser =
-      await this.matrixBotUserService.getOrCreateBotUser(tenantId);
-    this.logger.log(`Using bot user: ${botUser.slug} for tenant ${tenantId}`);
-
-    // Check if bot password needs rotation
-    if (await this.matrixBotUserService.needsPasswordRotation(tenantId)) {
-      this.logger.log(`Bot password rotation needed for tenant ${tenantId}`);
-      try {
-        await this.matrixBotUserService.rotateBotPassword(tenantId);
-        this.logger.log(`Bot password rotated for tenant ${tenantId}`);
-      } catch (rotationError) {
-        this.logger.warn(
-          `Failed to rotate bot password for tenant ${tenantId}: ${rotationError.message}`,
-        );
-        // Continue with authentication using existing password
-      }
-    }
-
-    // Use MatrixUserService to get an authenticated client for the bot user
-    // This handles the MAS OIDC flow automatically
-    this.botClient = await this.matrixUserService.getClientForUser(
-      botUser.slug,
-      undefined, // userService parameter is deprecated
-      tenantId,
-    );
-
-    // Set display name if configured
-    if (
-      this.botDisplayName &&
-      this.botDisplayName !== 'OpenMeet Admin Bot' &&
-      this.botClient
-    ) {
-      try {
-        await this.botClient.setDisplayName(this.botDisplayName);
-        this.logger.log(`Bot display name set to: ${this.botDisplayName}`);
-      } catch (error) {
-        this.logger.warn(`Failed to set bot display name: ${error.message}`);
-      }
-    }
-
-    this.isAuthenticated = true;
-    this.logger.log(
-      `Matrix bot authenticated successfully with OIDC for tenant: ${tenantId}`,
-    );
-  }
 
   isBotAuthenticated(): boolean {
     return this.isAuthenticated && this.botClient !== null;

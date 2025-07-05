@@ -5,6 +5,7 @@ import { MatrixRoomService } from '../../matrix/services/matrix-room.service';
 import { MatrixUserService } from '../../matrix/services/matrix-user.service';
 import { MatrixMessageService } from '../../matrix/services/matrix-message.service';
 import { MatrixCoreService } from '../../matrix/services/matrix-core.service';
+import { MatrixBotService } from '../../matrix/services/matrix-bot.service';
 import { UserService } from '../../user/user.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
@@ -143,6 +144,16 @@ describe('MatrixChatRoomManagerAdapter', () => {
           provide: MatrixCoreService,
           useValue: {
             // Add methods as needed
+          },
+        },
+        {
+          provide: MatrixBotService,
+          useValue: {
+            isBotAuthenticated: jest.fn().mockReturnValue(true),
+            authenticateBot: jest.fn().mockResolvedValue(undefined),
+            createRoom: jest.fn().mockResolvedValue({ roomId: 'new-room-id' }),
+            inviteUser: jest.fn().mockResolvedValue(undefined),
+            joinRoom: jest.fn().mockResolvedValue(undefined),
           },
         },
         {
@@ -385,7 +396,7 @@ describe('MatrixChatRoomManagerAdapter', () => {
         'test-event',
       );
       expect(userService.getUserBySlug).toHaveBeenCalledWith('test-user');
-      expect(matrixRoomService.createRoom).toHaveBeenCalled();
+      expect(service['matrixBotService'].createRoom).toHaveBeenCalled();
       expect(mockChatRoomRepository.create).toHaveBeenCalled();
       expect(mockChatRoomRepository.save).toHaveBeenCalledWith(mockChatRoom);
       expect(mockEventRepository.update).toHaveBeenCalledWith(
@@ -481,9 +492,10 @@ describe('MatrixChatRoomManagerAdapter', () => {
       );
       expect(mockChatRoomRepository.findOne).toHaveBeenCalled(); // Don't check call count as it may vary
       expect(userService.getUserBySlug).toHaveBeenCalledWith('test-user');
-      expect(matrixRoomService.inviteUser).toHaveBeenCalledWith(
+      expect(service['matrixBotService'].inviteUser).toHaveBeenCalledWith(
         'abc123',
         '@user:matrix.org',
+        'tenant1',
       );
       expect(matrixRoomService.joinRoom).toHaveBeenCalledWith(
         'abc123',
@@ -561,9 +573,10 @@ describe('MatrixChatRoomManagerAdapter', () => {
       );
       expect(mockChatRoomRepository.findOne).toHaveBeenCalledTimes(2);
       expect(userService.getUserBySlug).toHaveBeenCalledWith('test-user');
-      expect(matrixRoomService.inviteUser).toHaveBeenCalledWith(
+      expect(service['matrixBotService'].inviteUser).toHaveBeenCalledWith(
         'abc123',
         '@user:matrix.org',
+        'tenant1',
       );
       // Should not save the chat room since user is already a member
       expect(mockChatRoomRepository.save).not.toHaveBeenCalled();

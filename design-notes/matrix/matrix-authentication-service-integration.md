@@ -46,6 +46,109 @@ Element Client → Matrix Synapse → MAS → OpenMeet OIDC Provider
 - Future-proof alignment with Matrix specification
 - Eliminates custom session handling complexity
 
+## ✅ IMPLEMENTATION COMPLETE (July 2025)
+
+### **Final Architecture Implemented**
+```
+Element Client → Matrix Synapse → MAS → OpenMeet OIDC Provider
+Frontend App  ↗     ↓ (MSC3861)      ↓ (upstream OIDC)
+             OAuth2 Tokens    Standard OIDC Flow
+             
+Bot Operations ← Application Service ← Matrix Synapse
+```
+
+**Key Components Deployed:**
+- **Matrix Synapse 1.132.0** with MSC3861 experimental features enabled
+- **Matrix Authentication Service (MAS) v0.17.1** as OIDC provider
+- **OpenMeet OIDC** configured as upstream provider for MAS
+- **Matrix Application Service** bot for room management operations
+- **Frontend Matrix SDK** with direct MAS OAuth2 authentication
+
+### **User Experience Changes**
+
+**Authentication Flow:**
+1. User clicks "Connect to Matrix" in OpenMeet chat interface
+2. Frontend redirects to MAS OAuth2 authorization endpoint
+3. User authenticates through MAS web interface using OpenMeet credentials
+4. MAS redirects back with authorization code
+5. Frontend exchanges code for Matrix credentials
+6. Matrix client initializes and user can send/receive messages
+
+**Behavior Changes:**
+- Users now authenticate via MAS web interface instead of Matrix SSO redirect
+- Matrix user IDs format: `@username_tenantid:matrix.openmeet.net` 
+- Room creation/management handled transparently by backend bot
+- Message sending/receiving through frontend Matrix client
+
+### **Configuration Requirements**
+
+**Matrix Homeserver (`homeserver-mas-local.yaml`):**
+```yaml
+experimental_features:
+  msc3861:
+    enabled: true
+    issuer: "${MAS_ISSUER}"
+    client_id: "0000000000000000000SYNAPSE"
+    client_auth_method: "client_secret_basic"
+    client_secret: "${MAS_CLIENT_SECRET}"
+    admin_token: "local-mas-admin-token"
+    introspection_endpoint: "http://matrix-auth-service:8080/oauth2/introspect"
+  msc3970_enabled: true  # Transaction ID scoping to devices
+```
+
+**MAS Configuration (`mas-config-local.yaml`):**
+```yaml
+clients:
+  # Matrix Synapse Client for MSC3861
+  - client_id: "0000000000000000000SYNAPSE"
+    client_auth_method: "client_secret_basic"
+    client_secret: "local-dev-shared-secret-with-synapse"
+    
+  # OpenMeet Frontend Client  
+  - client_id: "01JAYS74TCG3BTWKADN5Q4518D"
+    client_auth_method: "none"
+    redirect_uris:
+      - "http://localhost:9005/auth/matrix/callback"
+
+upstream_oauth2:
+  providers:
+    - id: "01JAYS74TCG3BTWKADN5Q4518C"
+      human_name: "OpenMeet Local"
+      issuer: "https://localdev.openmeet.net/oidc"
+      client_id: "mas_client"
+      client_secret: "local-dev-shared-secret-with-synapse"
+      scope: "openid email"
+```
+
+**Matrix Application Service (`openmeet-appservice-local.yaml`):**
+```yaml
+id: openmeet-bot
+url: http://host.docker.internal:3000/api/matrix/appservice
+as_token: your-app-service-token
+hs_token: your-homeserver-token
+sender_localpart: openmeet-bot
+namespaces:
+  users:
+    - exclusive: true
+      regex: "@openmeet-bot-.*:.*"
+    - exclusive: true  
+      regex: "@openmeet-.*:.*"
+```
+
+### **⚠️ Known Issues**
+
+**MSC3861/MSC3970 Transaction ID Problem:**
+- **Issue**: Frontend Matrix SDK `client.sendEvent()` fails with `AssertionError: Requester must have an access_token_id`
+- **Root Cause**: OAuth2 tokens from MAS lack `access_token_id` field required by Synapse transaction system
+- **Workaround**: Element clients work (different auth path), custom clients need compatibility tokens
+- **Status**: Blocks custom Matrix client integration, under investigation with Matrix community
+
+**Impact:**
+- ✅ Element Desktop/Web clients work perfectly
+- ❌ OpenMeet frontend Matrix integration fails on message sending
+- ✅ Backend bot operations work for room management
+- ❌ Any custom Matrix SDK client with transaction IDs fails
+
 ## Integration Options
 
 ### Option 1: MAS with Upstream OIDC Integration (Recommended)

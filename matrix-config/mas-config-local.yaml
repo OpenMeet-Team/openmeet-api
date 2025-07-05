@@ -80,6 +80,10 @@ clients:
     redirect_uris:
       - "http://localhost:9005/auth/matrix/callback"
       - "http://localhost:9005/events/*"
+      - "http://localhost:8087/auth/matrix/callback"
+      - "http://localhost:8087/events/*"
+      - "http://127.0.0.1:8087/auth/matrix/callback"
+      - "http://127.0.0.1:8087/events/*"
 
   # OpenMeet Bot Client for Client Credentials Grant
   - client_id: "01JAYS74TCG3BTWKADN5Q4518E"

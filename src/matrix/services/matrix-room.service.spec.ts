@@ -1,6 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { MatrixRoomService } from './matrix-room.service';
 import { MatrixCoreService } from './matrix-core.service';
+import { MatrixBotUserService } from './matrix-bot-user.service';
+import { MatrixBotService } from './matrix-bot.service';
 
 describe('MatrixRoomService', () => {
   let service: MatrixRoomService;
@@ -65,6 +68,28 @@ describe('MatrixRoomService', () => {
             releaseClient: jest.fn().mockResolvedValue(undefined),
           },
         },
+        {
+          provide: MatrixBotUserService,
+          useValue: {
+            createBotUser: jest.fn().mockResolvedValue(undefined),
+            getBotUser: jest.fn().mockResolvedValue(null),
+            deleteBotUser: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: MatrixBotService,
+          useValue: {
+            authenticateBot: jest.fn().mockResolvedValue(undefined),
+            isBotAuthenticated: jest.fn().mockReturnValue(true),
+            botClient: mockMatrixClient,
+          },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue('mock-config-value'),
+          },
+        },
       ],
     }).compile();
 
@@ -85,11 +110,11 @@ describe('MatrixRoomService', () => {
         inviteUserIds: ['@user1:example.org', '@user2:example.org'],
       };
 
-      const result = await service.createRoom(options);
+      const result = await service.createRoom(options, 'test-tenant');
 
-      // Verify client acquire/release
-      expect(matrixCoreService.acquireClient).toHaveBeenCalled();
-      expect(matrixCoreService.releaseClient).toHaveBeenCalled();
+      // Verify bot authentication
+      expect(service['matrixBotService'].authenticateBot).toHaveBeenCalledWith('test-tenant');
+      expect(service['matrixBotService'].isBotAuthenticated).toHaveBeenCalled();
 
       // Verify createRoom was called with correct parameters
       expect(mockMatrixClient.createRoom).toHaveBeenCalledWith(
@@ -118,7 +143,7 @@ describe('MatrixRoomService', () => {
         isPublic: true,
       };
 
-      await service.createRoom(options);
+      await service.createRoom(options, 'test-tenant');
 
       // Verify createRoom was called with public visibility
       expect(mockMatrixClient.createRoom).toHaveBeenCalledWith(
@@ -141,12 +166,12 @@ describe('MatrixRoomService', () => {
         isPublic: false,
       };
 
-      await expect(service.createRoom(options)).rejects.toThrow(
+      await expect(service.createRoom(options, 'test-tenant')).rejects.toThrow(
         'Failed to create Matrix room: Failed to create room',
       );
 
-      // Should still release client even after error
-      expect(matrixCoreService.releaseClient).toHaveBeenCalled();
+      // Should still attempt bot authentication even after error
+      expect(service['matrixBotService'].authenticateBot).toHaveBeenCalledWith('test-tenant');
     });
   });
 

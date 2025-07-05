@@ -90,9 +90,10 @@ export class MatrixAppServiceController {
   @Put('_matrix/app/v1/transactions/:txnId')
   handleTransaction(
     @Param('txnId') txnId: string,
-    @Body() events: any[],
+    @Body() body: { events: any[] },
     @Headers('authorization') authHeader: string,
   ) {
+    const events = body.events || [];
     this.logger.debug(`Transaction ${txnId} with ${events.length} events`);
 
     // Validate authorization token

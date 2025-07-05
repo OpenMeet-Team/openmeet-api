@@ -6,6 +6,7 @@ import { MatrixRoomService } from '../../matrix/services/matrix-room.service';
 import { MatrixUserService } from '../../matrix/services/matrix-user.service';
 import { MatrixMessageService } from '../../matrix/services/matrix-message.service';
 import { MatrixCoreService } from '../../matrix/services/matrix-core.service';
+import { MatrixBotService } from '../../matrix/services/matrix-bot.service';
 import { UserService } from '../../user/user.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
@@ -218,6 +219,7 @@ export class ChatRoomService {
     private readonly matrixRoomService: MatrixRoomService,
     private readonly matrixMessageService: MatrixMessageService,
     private readonly matrixCoreService: MatrixCoreService,
+    private readonly matrixBotService: MatrixBotService,
     private readonly userService: UserService,
     @Inject(forwardRef(() => GroupMemberService))
     private readonly groupMemberService: GroupMemberService,
@@ -392,7 +394,7 @@ export class ChatRoomService {
                   },
                 }
               : undefined,
-          });
+          }, tenantId);
 
           // Create a chat room entity
           const chatRoom = this.chatRoomRepository.create({
@@ -551,7 +553,7 @@ export class ChatRoomService {
             },
           }
         : undefined,
-    });
+    }, effectiveTenantId);
 
     // Create a chat room entity
     const chatRoom = chatRoomRepo.create({
@@ -636,8 +638,8 @@ export class ChatRoomService {
       this.markUserAsInProgress(event.id, user.id);
 
       try {
-        // Get chat room
-        const chatRoom = await this.getChatRoomForEvent(event.id);
+        // Get or create chat room
+        const chatRoom = await this.getOrCreateEventChatRoom(event.id);
 
         // First check if the user is already a member in the database
         // This helps avoid redundant Matrix API calls across requests
@@ -688,11 +690,12 @@ export class ChatRoomService {
               const roomName = `${event.name} - Discussion`;
 
               // Create a new Matrix room with options object
+              const tenantId = this.request.tenantId;
               const newRoomInfo = await this.matrixRoomService.createRoom({
                 name: roomName,
                 isPublic: false,
                 encrypted: true,
-              });
+              }, tenantId);
 
               this.logger.log(
                 `Created new Matrix room ${newRoomInfo.roomId} to replace missing room ${originalRoomId}`,
@@ -1452,7 +1455,7 @@ export class ChatRoomService {
                 },
               }
             : undefined,
-        });
+        }, tenantId);
 
         // Create a chat room entity
         const chatRoom = this.chatRoomRepository.create({
@@ -1649,7 +1652,7 @@ export class ChatRoomService {
       encrypted: false, // Disable encryption for direct messages
       // Remove preset - we'll handle that through settings
       inviteUserIds: user2.matrixUserId ? [user2.matrixUserId] : [],
-    });
+    }, tenantId);
 
     // Create a chat room entity
     const chatRoom = this.chatRoomRepository.create({
@@ -1759,18 +1762,21 @@ export class ChatRoomService {
       // Mark as in-progress
       this.markUserAsInProgress(group.id, user.id, 'group');
 
-      // Get the chat room and group in one query, avoiding multiple DB lookups
-      const chatRoom = await this.chatRoomRepository.findOne({
-        where: { group: { id: group.id } },
+      // Get or create the chat room for this group
+      const chatRoom = await this.getOrCreateGroupChatRoom(group.id);
+      
+      // Reload with members relation for further processing
+      const chatRoomWithMembers = await this.chatRoomRepository.findOne({
+        where: { id: chatRoom.id },
         relations: ['group', 'members'],
       });
 
-      if (!chatRoom) {
-        throw new Error(`Chat room for group with slug ${groupSlug} not found`);
+      if (!chatRoomWithMembers) {
+        throw new Error(`Chat room for group with slug ${groupSlug} could not be loaded`);
       }
 
       // Check if user is already a chat room member in our database
-      const isAlreadyMember = chatRoom.members?.some(
+      const isAlreadyMember = chatRoomWithMembers.members?.some(
         (member) => member.id === user.id,
       );
 
@@ -1796,12 +1802,12 @@ export class ChatRoomService {
       );
 
       // Add the user to the chat room members in our database
-      if (!chatRoom.members) {
-        chatRoom.members = [];
+      if (!chatRoomWithMembers.members) {
+        chatRoomWithMembers.members = [];
       }
 
-      chatRoom.members.push(user);
-      await this.chatRoomRepository.save(chatRoom);
+      chatRoomWithMembers.members.push(user);
+      await this.chatRoomRepository.save(chatRoomWithMembers);
 
       // Cache the result for this request
       this.markUserAsComplete(group.id, user.id, 'group');
@@ -1985,14 +1991,22 @@ export class ChatRoomService {
       // First, attempt to delete the Matrix room
       if (chatRoom.matrixRoomId) {
         try {
-          // Use the Matrix room service's dedicated room deletion method
-          const deleted = await this.matrixRoomService.deleteRoom(
+          // Use the bot service for tenant-aware room deletion
+          const tenantId = this.request.tenantId;
+          if (!tenantId) {
+            throw new Error('Tenant ID is required for Matrix room deletion');
+          }
+          
+          await this.matrixBotService.deleteRoom(
             chatRoom.matrixRoomId,
+            tenantId,
           );
+          
+          const deleted = true; // Bot service deleteRoom doesn't return boolean
 
           if (deleted) {
             this.logger.log(
-              `Successfully deleted Matrix room ${chatRoom.matrixRoomId} using the Matrix admin API`,
+              `Successfully deleted Matrix room ${chatRoom.matrixRoomId} using the Matrix bot service`,
             );
           } else {
             this.logger.warn(

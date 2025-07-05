@@ -1,37 +1,44 @@
-# Matrix Architecture for OpenMeet - Hybrid Client Architecture
+# Matrix Architecture for OpenMeet - MAS + Bot Architecture  
 
-This document outlines the hybrid Matrix chat integration architecture for OpenMeet, combining frontend Matrix clients with backend admin bot services.
+This document outlines the Matrix chat integration architecture for OpenMeet, combining Matrix Authentication Service (MAS) with Application Service bot operations.
 
-## System Architecture Overview
+## ✅ IMPLEMENTED ARCHITECTURE (July 2025)
 
-### Hybrid Client + Admin Bot Model
+### MAS + Application Service Bot Model
 
-The new architecture separates concerns between real-time messaging and administrative operations:
+The implemented architecture separates authentication from operations:
 
-- **Frontend Matrix Clients**: Handle real-time messaging, sync, and user interactions
-- **Backend Admin Bot**: Manages room creation, permissions, and server-side operations
-- **Secure Credential API**: Provides Matrix credentials to authenticated frontend clients
+- **Matrix Authentication Service (MAS)**: Handles user authentication via OIDC delegation to OpenMeet
+- **Frontend Matrix SDK**: Direct Matrix client authentication via MAS OAuth2 flow  
+- **Application Service Bot**: Manages room creation, permissions, and administrative operations
+- **MSC3861 Standard**: Matrix authentication delegated to external OIDC provider (MAS)
 
 ## Key Components
 
 ### 1. **Frontend (Vue/Quasar + Matrix JS SDK)**
-   - **Matrix JS SDK Integration**: Direct Matrix client in browser
-   - **Real-time Sync**: Native Matrix sync for instant messaging
-   - **Secure Credential Management**: Session-based Matrix token storage
-   - **Connection Management**: Auto-reconnection and offline handling
-   - **Chat UI Components**: Enhanced real-time features (typing, read receipts, presence)
+   - **MAS OAuth2 Authentication**: Direct authentication with MAS instead of OpenMeet API
+   - **Matrix JS SDK Integration**: Native Matrix client with MAS tokens
+   - **Real-time Messaging**: All messaging handled by frontend Matrix client
+   - **Auto-reconnection**: Handles network failures and token refresh
+   - **Matrix User ID Format**: `@username_tenantid:matrix.openmeet.net`
 
-### 2. **Backend Admin Bot (NestJS)**
-   - **MatrixAdminService**: Bot-like service for administrative operations
-   - **Room Lifecycle Management**: Creates/destroys rooms for events and groups
-   - **Permission Synchronization**: Maps OpenMeet roles to Matrix power levels
-   - **User Provisioning**: Creates Matrix accounts via admin API
-   - **Credential API**: Secure endpoint to provide Matrix tokens to authenticated users
+### 2. **Matrix Authentication Service (MAS)**
+   - **OIDC Provider**: Delegates authentication to OpenMeet API  
+   - **Token Management**: Issues OAuth2 tokens for Matrix access
+   - **User Provisioning**: Auto-creates Matrix users during authentication
+   - **MSC3861 Implementation**: Official Matrix authentication delegation standard
 
-### 3. **Matrix Server (Synapse)**
-   - **User Account Storage**: Matrix users provisioned via admin API
-   - **Room Management**: Rooms created and managed by admin bot
-   - **Real-time Messaging**: Direct client-to-server communication
+### 3. **Application Service Bot (NestJS)**
+   - **Matrix Application Service**: Dedicated bot user with special privileges
+   - **Room Management**: Creates/destroys rooms for events and groups
+   - **User Invitations**: Invites users to appropriate rooms
+   - **Permission Management**: Sets Matrix power levels based on OpenMeet roles
+   - **Webhook Handling**: Processes Matrix server callbacks for user/room queries
+
+### 4. **Matrix Server (Synapse with MSC3861)**
+   - **Authentication Delegation**: All auth handled by MAS (no local users)
+   - **Application Service Integration**: Bot operations via appservice protocol  
+   - **Room Storage**: Matrix rooms and message history
    - **Federation Disabled**: Single-tenant Matrix deployment
 
 ## Architecture Diagrams

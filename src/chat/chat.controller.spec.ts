@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ChatController } from './chat.controller';
 import { DiscussionService } from './services/discussion.service';
+import { ChatRoomService } from './rooms/chat-room.service';
 import { VisibilityGuard } from '../shared/guard/visibility.guard';
 import { EventQueryService } from '../event/services/event-query.service';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
@@ -33,6 +34,12 @@ const mockGroupService = {
 
 const mockGroupMemberService = {
   findGroupMemberByUserId: jest.fn(),
+};
+
+const mockChatRoomService = {
+  addUserToEventChatRoom: jest.fn(),
+  ensureRoomAccess: jest.fn(),
+  addUserToGroupChatRoom: jest.fn(),
 };
 
 describe('ChatController', () => {
@@ -68,6 +75,10 @@ describe('ChatController', () => {
         {
           provide: GroupMemberService,
           useValue: mockGroupMemberService,
+        },
+        {
+          provide: ChatRoomService,
+          useValue: mockChatRoomService,
         },
       ],
     }).compile();
