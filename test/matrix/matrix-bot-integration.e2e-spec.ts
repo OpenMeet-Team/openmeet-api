@@ -82,11 +82,15 @@ describe('Matrix Bot Integration (E2E)', () => {
         .post(`/api/groups/${groupSlug}/join`)
         .set('Authorization', `Bearer ${adminToken}`) // Admin joins group themselves
         .set('x-tenant-id', TESTING_TENANT_ID);
-      
+
       if (memberResponse.status === 201) {
-        console.log(`Successfully added admin user ${adminUser.slug} to group ${groupSlug}`);
+        console.log(
+          `Successfully added admin user ${adminUser.slug} to group ${groupSlug}`,
+        );
       } else {
-        console.warn(`Group member addition returned status ${memberResponse.status}: ${JSON.stringify(memberResponse.body)}`);
+        console.warn(
+          `Group member addition returned status ${memberResponse.status}: ${JSON.stringify(memberResponse.body)}`,
+        );
       }
     } catch (error) {
       console.warn(`Failed to add admin to group: ${error.message}`);
@@ -98,11 +102,15 @@ describe('Matrix Bot Integration (E2E)', () => {
         .post(`/api/events/${eventSlug}/attend`)
         .set('Authorization', `Bearer ${adminToken}`) // Admin attends event themselves
         .set('x-tenant-id', TESTING_TENANT_ID);
-      
+
       if (attendeeResponse.status === 201 || attendeeResponse.status === 200) {
-        console.log(`Successfully added admin user ${adminUser.slug} to event ${eventSlug}`);
+        console.log(
+          `Successfully added admin user ${adminUser.slug} to event ${eventSlug}`,
+        );
       } else {
-        console.warn(`Event attendee addition returned status ${attendeeResponse.status}: ${JSON.stringify(attendeeResponse.body)}`);
+        console.warn(
+          `Event attendee addition returned status ${attendeeResponse.status}: ${JSON.stringify(attendeeResponse.body)}`,
+        );
       }
     } catch (error) {
       console.warn(`Failed to add admin to event: ${error.message}`);
@@ -297,7 +305,7 @@ describe('Matrix Bot Integration (E2E)', () => {
         .post(`/api/chat/event/${eventSlug}/ensure-room`)
         .set('Authorization', `Bearer ${userToken}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
-      
+
       console.log(`Pre-deletion room check:`, preDeletionCheck.body);
 
       // Delete the event room to simulate missing room
@@ -310,7 +318,7 @@ describe('Matrix Bot Integration (E2E)', () => {
       expect(deleteResponse.status).toBe(200);
 
       // Add a small delay to ensure deletion completes
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Now ensure the room exists - should recreate via bot
       const ensureResponse = await request(TESTING_APP_URL)
@@ -327,7 +335,9 @@ describe('Matrix Bot Integration (E2E)', () => {
       expect(typeof ensureResponse.body.recreated).toBe('boolean');
       expect(ensureResponse.body).toHaveProperty('roomId');
 
-      console.log(`Bot ensured room availability (recreated=${ensureResponse.body.recreated}): ${ensureResponse.body.roomId}`);
+      console.log(
+        `Bot ensured room availability (recreated=${ensureResponse.body.recreated}): ${ensureResponse.body.roomId}`,
+      );
     }, 45000);
   });
 

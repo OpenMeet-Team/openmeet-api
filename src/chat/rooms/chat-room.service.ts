@@ -382,19 +382,22 @@ export class ChatRoomService {
 
           // Create the Matrix room
           this.logger.debug(`Creating Matrix room for group ${group.slug}`);
-          const roomInfo = await this.matrixRoomService.createRoom({
-            name: roomName,
-            topic: `Discussion for group: ${group.slug}`,
-            isPublic: group.visibility === 'public',
-            encrypted: false,
-            powerLevelContentOverride: creator.matrixUserId
-              ? {
-                  users: {
-                    [creator.matrixUserId]: 50, // Moderator level
-                  },
-                }
-              : undefined,
-          }, tenantId);
+          const roomInfo = await this.matrixRoomService.createRoom(
+            {
+              name: roomName,
+              topic: `Discussion for group: ${group.slug}`,
+              isPublic: group.visibility === 'public',
+              encrypted: false,
+              powerLevelContentOverride: creator.matrixUserId
+                ? {
+                    users: {
+                      [creator.matrixUserId]: 50, // Moderator level
+                    },
+                  }
+                : undefined,
+            },
+            tenantId,
+          );
 
           // Create a chat room entity
           const chatRoom = this.chatRoomRepository.create({
@@ -537,23 +540,26 @@ export class ChatRoomService {
       event.slug,
       effectiveTenantId,
     );
-    const roomInfo = await this.matrixRoomService.createRoom({
-      name: roomName,
-      topic: `Discussion for ${event.name}`,
-      isPublic: event.visibility === 'public',
-      isDirect: false,
-      encrypted: false, // Disable encryption for event chat rooms
-      // Add the event creator as the first member
-      inviteUserIds: [creator.matrixUserId].filter((id) => !!id) as string[],
-      // Set creator as moderator - MatrixRoomService will handle admin user
-      powerLevelContentOverride: creator.matrixUserId
-        ? {
-            users: {
-              [creator.matrixUserId]: 50, // Moderator level
-            },
-          }
-        : undefined,
-    }, effectiveTenantId);
+    const roomInfo = await this.matrixRoomService.createRoom(
+      {
+        name: roomName,
+        topic: `Discussion for ${event.name}`,
+        isPublic: event.visibility === 'public',
+        isDirect: false,
+        encrypted: false, // Disable encryption for event chat rooms
+        // Add the event creator as the first member
+        inviteUserIds: [creator.matrixUserId].filter((id) => !!id) as string[],
+        // Set creator as moderator - MatrixRoomService will handle admin user
+        powerLevelContentOverride: creator.matrixUserId
+          ? {
+              users: {
+                [creator.matrixUserId]: 50, // Moderator level
+              },
+            }
+          : undefined,
+      },
+      effectiveTenantId,
+    );
 
     // Create a chat room entity
     const chatRoom = chatRoomRepo.create({
@@ -691,11 +697,14 @@ export class ChatRoomService {
 
               // Create a new Matrix room with options object
               const tenantId = this.request.tenantId;
-              const newRoomInfo = await this.matrixRoomService.createRoom({
-                name: roomName,
-                isPublic: false,
-                encrypted: true,
-              }, tenantId);
+              const newRoomInfo = await this.matrixRoomService.createRoom(
+                {
+                  name: roomName,
+                  isPublic: false,
+                  encrypted: true,
+                },
+                tenantId,
+              );
 
               this.logger.log(
                 `Created new Matrix room ${newRoomInfo.roomId} to replace missing room ${originalRoomId}`,
@@ -1437,25 +1446,28 @@ export class ChatRoomService {
         // Create a chat room in Matrix
         // Using the group slug with tenant ID for a unique, stable identifier
         const roomName = this.generateRoomName('group', group.slug, tenantId);
-        const roomInfo = await this.matrixRoomService.createRoom({
-          name: roomName,
-          topic: `Discussion for group: ${group.slug}`,
-          isPublic: group.visibility === 'public',
-          isDirect: false,
-          encrypted: false, // Disable encryption for group chat rooms
-          // Add the group creator as the first member
-          inviteUserIds: [creator.matrixUserId].filter(
-            (id) => !!id,
-          ) as string[],
-          // Set creator as moderator - MatrixRoomService will handle admin user
-          powerLevelContentOverride: creator.matrixUserId
-            ? {
-                users: {
-                  [creator.matrixUserId]: 50, // Moderator level
-                },
-              }
-            : undefined,
-        }, tenantId);
+        const roomInfo = await this.matrixRoomService.createRoom(
+          {
+            name: roomName,
+            topic: `Discussion for group: ${group.slug}`,
+            isPublic: group.visibility === 'public',
+            isDirect: false,
+            encrypted: false, // Disable encryption for group chat rooms
+            // Add the group creator as the first member
+            inviteUserIds: [creator.matrixUserId].filter(
+              (id) => !!id,
+            ) as string[],
+            // Set creator as moderator - MatrixRoomService will handle admin user
+            powerLevelContentOverride: creator.matrixUserId
+              ? {
+                  users: {
+                    [creator.matrixUserId]: 50, // Moderator level
+                  },
+                }
+              : undefined,
+          },
+          tenantId,
+        );
 
         // Create a chat room entity
         const chatRoom = this.chatRoomRepository.create({
@@ -1644,15 +1656,18 @@ export class ChatRoomService {
       tenantId,
     );
 
-    const roomInfo = await this.matrixRoomService.createRoom({
-      name: roomName,
-      topic: 'Direct message conversation',
-      isPublic: false,
-      isDirect: true,
-      encrypted: false, // Disable encryption for direct messages
-      // Remove preset - we'll handle that through settings
-      inviteUserIds: user2.matrixUserId ? [user2.matrixUserId] : [],
-    }, tenantId);
+    const roomInfo = await this.matrixRoomService.createRoom(
+      {
+        name: roomName,
+        topic: 'Direct message conversation',
+        isPublic: false,
+        isDirect: true,
+        encrypted: false, // Disable encryption for direct messages
+        // Remove preset - we'll handle that through settings
+        inviteUserIds: user2.matrixUserId ? [user2.matrixUserId] : [],
+      },
+      tenantId,
+    );
 
     // Create a chat room entity
     const chatRoom = this.chatRoomRepository.create({
@@ -1764,7 +1779,7 @@ export class ChatRoomService {
 
       // Get or create the chat room for this group
       const chatRoom = await this.getOrCreateGroupChatRoom(group.id);
-      
+
       // Reload with members relation for further processing
       const chatRoomWithMembers = await this.chatRoomRepository.findOne({
         where: { id: chatRoom.id },
@@ -1772,7 +1787,9 @@ export class ChatRoomService {
       });
 
       if (!chatRoomWithMembers) {
-        throw new Error(`Chat room for group with slug ${groupSlug} could not be loaded`);
+        throw new Error(
+          `Chat room for group with slug ${groupSlug} could not be loaded`,
+        );
       }
 
       // Check if user is already a chat room member in our database
@@ -1996,12 +2013,12 @@ export class ChatRoomService {
           if (!tenantId) {
             throw new Error('Tenant ID is required for Matrix room deletion');
           }
-          
+
           await this.matrixBotService.deleteRoom(
             chatRoom.matrixRoomId,
             tenantId,
           );
-          
+
           const deleted = true; // Bot service deleteRoom doesn't return boolean
 
           if (deleted) {

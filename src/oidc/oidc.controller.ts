@@ -424,7 +424,8 @@ export class OidcController {
 
   @ApiOperation({
     summary: 'Token Endpoint',
-    description: 'Exchange authorization code or refresh token for access and ID tokens',
+    description:
+      'Exchange authorization code or refresh token for access and ID tokens',
   })
   @Post('token')
   @TenantPublic()

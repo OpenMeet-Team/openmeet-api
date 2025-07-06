@@ -238,7 +238,7 @@ describe('MatrixBotService - Authentication Integration Tests', () => {
 
       // Should throw error requiring AppService authentication
       await expect(service.authenticateBot(testTenantId)).rejects.toThrow(
-        'Matrix AppService authentication is required for bot operations'
+        'Matrix AppService authentication is required for bot operations',
       );
 
       expect(service.isBotAuthenticated()).toBe(false);

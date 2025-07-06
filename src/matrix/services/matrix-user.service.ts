@@ -914,11 +914,11 @@ export class MatrixUserService
   /**
    * Get or create a Matrix client for a specific user
    * This method fetches user credentials from the database
-   * 
+   *
    * @param userSlug The user's slug
    * @param userService DEPRECATED: parameter will be removed in future version
    * @param tenantId The tenant ID for the user
-   * 
+   *
    * Note: This method should primarily be used for bot authentication fallback.
    * Regular user Matrix clients should be created in the frontend via MAS OIDC.
    */
@@ -927,7 +927,6 @@ export class MatrixUserService
     userService?: any /* DEPRECATED: parameter will be removed in future version */,
     tenantId?: string,
   ): Promise<IMatrixClient> {
-
     // Check if we already have an active client for this user
     const existingClient = this.userMatrixClients.get(userSlug);
     if (existingClient) {

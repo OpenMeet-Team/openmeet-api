@@ -113,7 +113,9 @@ describe('MatrixRoomService', () => {
       const result = await service.createRoom(options, 'test-tenant');
 
       // Verify bot authentication
-      expect(service['matrixBotService'].authenticateBot).toHaveBeenCalledWith('test-tenant');
+      expect(service['matrixBotService'].authenticateBot).toHaveBeenCalledWith(
+        'test-tenant',
+      );
       expect(service['matrixBotService'].isBotAuthenticated).toHaveBeenCalled();
 
       // Verify createRoom was called with correct parameters
@@ -171,7 +173,9 @@ describe('MatrixRoomService', () => {
       );
 
       // Should still attempt bot authentication even after error
-      expect(service['matrixBotService'].authenticateBot).toHaveBeenCalledWith('test-tenant');
+      expect(service['matrixBotService'].authenticateBot).toHaveBeenCalledWith(
+        'test-tenant',
+      );
     });
   });
 

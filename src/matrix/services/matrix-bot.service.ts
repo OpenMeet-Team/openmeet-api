@@ -147,7 +147,7 @@ export class MatrixBotService implements IMatrixBot {
       if (!this.useAppServiceAuth) {
         throw new Error(
           'Matrix AppService authentication is required for bot operations. ' +
-          'Please configure MATRIX_APPSERVICE_TOKEN environment variable.'
+            'Please configure MATRIX_APPSERVICE_TOKEN environment variable.',
         );
       }
 
@@ -161,7 +161,6 @@ export class MatrixBotService implements IMatrixBot {
       throw error;
     }
   }
-
 
   isBotAuthenticated(): boolean {
     return this.isAuthenticated && this.botClient !== null;

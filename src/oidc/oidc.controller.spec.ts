@@ -223,7 +223,7 @@ describe('OidcController', () => {
         tokenParams.code,
         tokenParams.redirect_uri,
         undefined, // refresh_token
-        undefined, // scope  
+        undefined, // scope
         tokenParams.client_id,
         tokenParams.client_secret,
       );

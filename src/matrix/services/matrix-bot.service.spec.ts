@@ -76,11 +76,11 @@ describe('MatrixBotService', () => {
           'matrix.bot.displayName': mockBotConfig.displayName,
           'matrix.serverName': mockBotConfig.serverName,
           'matrix.homeServer': mockBotConfig.homeServerUrl,
-          'matrix': {
+          matrix: {
             appservice: {
-              token: 'test-appservice-token'
-            }
-          }
+              token: 'test-appservice-token',
+            },
+          },
         };
         return config[key];
       }),
@@ -156,11 +156,11 @@ describe('MatrixBotService', () => {
             'matrix.bot.displayName': mockBotConfig.displayName,
             'matrix.serverName': mockBotConfig.serverName,
             'matrix.homeServer': mockBotConfig.homeServerUrl,
-            'matrix': {
+            matrix: {
               appservice: {
-                token: '' // No token - should fall back to OIDC which will fail
-              }
-            }
+                token: '', // No token - should fall back to OIDC which will fail
+              },
+            },
           };
           return config[key];
         }),
@@ -216,7 +216,9 @@ describe('MatrixBotService', () => {
       // Act & Assert
       await expect(
         failingService.authenticateBot(testTenantId),
-      ).rejects.toThrow('Matrix AppService authentication is required for bot operations');
+      ).rejects.toThrow(
+        'Matrix AppService authentication is required for bot operations',
+      );
       expect(failingService.isBotAuthenticated()).toBe(false);
     });
 
@@ -323,10 +325,6 @@ describe('MatrixBotService', () => {
 
     it('should automatically authenticate when creating room if not authenticated', async () => {
       // Arrange
-      const mockMatrixUserServiceForTest = {
-        getClientForUser: jest.fn().mockResolvedValue(mockMatrixClient),
-      };
-      
       const mockMatrixBotUserServiceForTest = {
         getOrCreateBotUser: jest.fn().mockResolvedValue({
           id: 1,
@@ -336,7 +334,7 @@ describe('MatrixBotService', () => {
         needsPasswordRotation: jest.fn().mockResolvedValue(false),
         rotateBotPassword: jest.fn().mockResolvedValue(undefined),
       };
-      
+
       const mockUserServiceForTest = {
         findByEmail: jest.fn().mockResolvedValue({
           id: 1,

@@ -58,12 +58,13 @@ export class OidcService {
   ) {
     // Use persistent RSA key pair for RS256 signing
     this.rsaKeyPair = this.getOrGenerateRSAKeyPair();
-    
+
     // Configure key ID from environment or use default
-    this.keyId = this.configService.get('oidc.keyId', { infer: true }) || 
-                 process.env.OIDC_KEY_ID || 
-                 'openmeet-oidc-rsa-key';
-                 
+    this.keyId =
+      this.configService.get('oidc.keyId', { infer: true }) ||
+      process.env.OIDC_KEY_ID ||
+      'openmeet-oidc-rsa-key';
+
     this.logger.log(`🔑 OIDC using key ID: ${this.keyId}`);
   }
 
@@ -403,14 +404,14 @@ export class OidcService {
 
     const accessToken = this.generateAccessToken(userInfo);
     const idToken = this.generateIdToken(userInfo, clientId, authData.nonce);
-    
+
     // Generate refresh token (like MAS: long-lived, tied to access token)
     const refreshToken = this.generateRefreshToken(
       authData.userId,
       authData.tenantId,
       clientId,
       authData.scope || 'openid profile email',
-      accessToken
+      accessToken,
     );
 
     console.log('🔧 OIDC Token Response Debug:', {
@@ -455,9 +456,13 @@ export class OidcService {
     // Validate and decode refresh token
     let refreshPayload: RefreshTokenPayload;
     try {
-      refreshPayload = jwt.verify(params.refresh_token, this.rsaKeyPair.publicKey, {
-        algorithms: ['RS256'],
-      }) as RefreshTokenPayload;
+      refreshPayload = jwt.verify(
+        params.refresh_token,
+        this.rsaKeyPair.publicKey,
+        {
+          algorithms: ['RS256'],
+        },
+      ) as RefreshTokenPayload;
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
@@ -468,7 +473,7 @@ export class OidcService {
 
     // Use client_id from refresh token if not provided
     const clientId = params.client_id || refreshPayload.client_id;
-    
+
     // Validate client credentials
     await this.validateClient(clientId, params.client_secret);
 
@@ -482,10 +487,13 @@ export class OidcService {
     }
 
     // Generate new tokens
-    const userInfo = await this.mapUserToOidcClaims(user, refreshPayload.tenant_id);
+    const userInfo = await this.mapUserToOidcClaims(
+      user,
+      refreshPayload.tenant_id,
+    );
     const accessToken = this.generateAccessToken(userInfo);
     const idToken = this.generateIdToken(userInfo, clientId);
-    
+
     // Generate new refresh token (following OAuth2 best practice: refresh token rotation)
     const newRefreshToken = this.generateRefreshToken(
       refreshPayload.user_id,
