@@ -424,7 +424,7 @@ export class OidcController {
 
   @ApiOperation({
     summary: 'Token Endpoint',
-    description: 'Exchange authorization code for access and ID tokens',
+    description: 'Exchange authorization code or refresh token for access and ID tokens',
   })
   @Post('token')
   @TenantPublic()
@@ -432,8 +432,10 @@ export class OidcController {
   async token(
     @Body() body: any,
     @Body('grant_type') grantType: string,
-    @Body('code') code: string,
-    @Body('redirect_uri') redirectUri: string,
+    @Body('code') code?: string,
+    @Body('redirect_uri') redirectUri?: string,
+    @Body('refresh_token') refreshToken?: string,
+    @Body('scope') scope?: string,
     @Body('client_id') clientId?: string,
     @Body('client_secret') clientSecret?: string,
   ) {
@@ -444,24 +446,51 @@ export class OidcController {
     console.log('🔧 OIDC Token Debug - Parameters:', {
       grantType,
       code: code?.substring(0, 20) + '...',
+      refreshToken: refreshToken?.substring(0, 20) + '...',
       redirectUri,
       clientId,
       clientSecret,
     });
 
-    if (!grantType || !code || !redirectUri) {
-      throw new BadRequestException(
-        'Missing required token parameters: grant_type, code, redirect_uri',
-      );
+    if (!grantType) {
+      throw new BadRequestException('Missing required parameter: grant_type');
     }
 
-    return await this.oidcService.exchangeCodeForTokens({
-      grant_type: grantType,
-      code,
-      redirect_uri: redirectUri,
-      client_id: clientId || '', // client_id is optional in the request, it's in the code
-      client_secret: clientSecret || '',
-    });
+    // Handle authorization_code grant
+    if (grantType === 'authorization_code') {
+      if (!code || !redirectUri) {
+        throw new BadRequestException(
+          'Missing required parameters for authorization_code: code, redirect_uri',
+        );
+      }
+
+      return await this.oidcService.exchangeCodeForTokens({
+        grant_type: grantType,
+        code,
+        redirect_uri: redirectUri,
+        client_id: clientId || '',
+        client_secret: clientSecret || '',
+      });
+    }
+
+    // Handle refresh_token grant
+    if (grantType === 'refresh_token') {
+      if (!refreshToken) {
+        throw new BadRequestException(
+          'Missing required parameter for refresh_token: refresh_token',
+        );
+      }
+
+      return await this.oidcService.refreshAccessToken({
+        grant_type: grantType,
+        refresh_token: refreshToken,
+        client_id: clientId,
+        client_secret: clientSecret,
+        scope,
+      });
+    }
+
+    throw new BadRequestException(`Unsupported grant_type: ${grantType}`);
   }
 
   @ApiOperation({

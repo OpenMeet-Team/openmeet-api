@@ -31,10 +31,22 @@ export interface OidcTokenResponse {
   // NOTE: state parameter removed - not part of OIDC token response spec
 }
 
+export interface RefreshTokenPayload {
+  type: 'refresh_token';
+  user_id: number;
+  tenant_id: string;
+  client_id: string;
+  scope: string;
+  access_token_id: string; // ID of the access token this refresh token is tied to
+  iat: number;
+  exp: number;
+}
+
 @Injectable()
 export class OidcService {
   private readonly logger = new Logger(OidcService.name);
   private rsaKeyPair: { privateKey: string; publicKey: string };
+  private readonly keyId: string;
 
   constructor(
     private readonly configService: ConfigService,
@@ -46,6 +58,13 @@ export class OidcService {
   ) {
     // Use persistent RSA key pair for RS256 signing
     this.rsaKeyPair = this.getOrGenerateRSAKeyPair();
+    
+    // Configure key ID from environment or use default
+    this.keyId = this.configService.get('oidc.keyId', { infer: true }) || 
+                 process.env.OIDC_KEY_ID || 
+                 'openmeet-oidc-rsa-key';
+                 
+    this.logger.log(`🔑 OIDC using key ID: ${this.keyId}`);
   }
 
   /**
@@ -151,7 +170,7 @@ export class OidcService {
         {
           ...jwk,
           use: 'sig',
-          kid: 'openmeet-oidc-rsa-key',
+          kid: this.keyId, // Use configurable key ID
           alg: 'RS256',
         },
       ],
@@ -384,9 +403,19 @@ export class OidcService {
 
     const accessToken = this.generateAccessToken(userInfo);
     const idToken = this.generateIdToken(userInfo, clientId, authData.nonce);
+    
+    // Generate refresh token (like MAS: long-lived, tied to access token)
+    const refreshToken = this.generateRefreshToken(
+      authData.userId,
+      authData.tenantId,
+      clientId,
+      authData.scope || 'openid profile email',
+      accessToken
+    );
 
     console.log('🔧 OIDC Token Response Debug:', {
       access_token: accessToken.substring(0, 50) + '...',
+      refresh_token: refreshToken.substring(0, 50) + '...',
       id_token: idToken.substring(0, 50) + '...',
       token_type: 'Bearer',
       expires_in: 3600,
@@ -398,11 +427,87 @@ export class OidcService {
     return {
       access_token: accessToken,
       token_type: 'Bearer',
-      expires_in: 3600, // 1 hour
+      expires_in: 3600, // 1 hour (like MAS: short-lived access tokens)
+      refresh_token: refreshToken, // Add refresh token to response
       id_token: idToken,
       scope: authData.scope || 'openid profile email',
       // NOTE: state parameter should NOT be returned in token response per OIDC spec
       // Matrix handles state validation during authorization flow, not token exchange
+    };
+  }
+
+  /**
+   * Exchange refresh token for new access token (OAuth2 refresh_token grant)
+   */
+  @Trace('oidc.refresh_token')
+  async refreshAccessToken(params: {
+    grant_type: string;
+    refresh_token: string;
+    client_id?: string;
+    client_secret?: string;
+    scope?: string;
+  }): Promise<OidcTokenResponse> {
+    // Validate grant_type
+    if (params.grant_type !== 'refresh_token') {
+      throw new UnauthorizedException('Unsupported grant_type');
+    }
+
+    // Validate and decode refresh token
+    let refreshPayload: RefreshTokenPayload;
+    try {
+      refreshPayload = jwt.verify(params.refresh_token, this.rsaKeyPair.publicKey, {
+        algorithms: ['RS256'],
+      }) as RefreshTokenPayload;
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    if (refreshPayload.type !== 'refresh_token') {
+      throw new UnauthorizedException('Invalid token type');
+    }
+
+    // Use client_id from refresh token if not provided
+    const clientId = params.client_id || refreshPayload.client_id;
+    
+    // Validate client credentials
+    await this.validateClient(clientId, params.client_secret);
+
+    // Get user information
+    const user = await this.userService.findById(
+      refreshPayload.user_id,
+      refreshPayload.tenant_id,
+    );
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    // Generate new tokens
+    const userInfo = await this.mapUserToOidcClaims(user, refreshPayload.tenant_id);
+    const accessToken = this.generateAccessToken(userInfo);
+    const idToken = this.generateIdToken(userInfo, clientId);
+    
+    // Generate new refresh token (following OAuth2 best practice: refresh token rotation)
+    const newRefreshToken = this.generateRefreshToken(
+      refreshPayload.user_id,
+      refreshPayload.tenant_id,
+      clientId,
+      params.scope || refreshPayload.scope,
+      accessToken,
+    );
+
+    console.log('🔧 OIDC Refresh Token Debug:', {
+      access_token: accessToken.substring(0, 50) + '...',
+      refresh_token: newRefreshToken.substring(0, 50) + '...',
+      id_token: idToken.substring(0, 50) + '...',
+    });
+
+    return {
+      access_token: accessToken,
+      token_type: 'Bearer',
+      expires_in: 3600, // 1 hour
+      refresh_token: newRefreshToken, // New refresh token (rotation)
+      id_token: idToken,
+      scope: params.scope || refreshPayload.scope,
     };
   }
 
@@ -454,7 +559,7 @@ export class OidcService {
     );
     return jwt.sign(payload, this.rsaKeyPair.privateKey, {
       algorithm: 'RS256' as const,
-      header: { alg: 'RS256', kid: 'openmeet-oidc-rsa-key' },
+      header: { alg: 'RS256', kid: this.keyId },
     });
   }
 
@@ -498,7 +603,7 @@ export class OidcService {
   // eslint-disable-next-line @typescript-eslint/require-await
   private async validateClient(
     clientId: string,
-    clientSecret: string,
+    clientSecret?: string,
   ): Promise<void> {
     // TODO: Store client credentials securely (database or config)
     const validClients = {
@@ -542,7 +647,7 @@ export class OidcService {
 
     return jwt.sign(payload, this.rsaKeyPair.privateKey, {
       algorithm: 'RS256' as const,
-      header: { alg: 'RS256', kid: 'openmeet-oidc-rsa-key' },
+      header: { alg: 'RS256', kid: this.keyId },
     });
   }
 
@@ -568,7 +673,42 @@ export class OidcService {
 
     return jwt.sign(payload, this.rsaKeyPair.privateKey, {
       algorithm: 'RS256' as const,
-      header: { alg: 'RS256', kid: 'openmeet-oidc-rsa-key' },
+      header: { alg: 'RS256', kid: this.keyId },
+    });
+  }
+
+  /**
+   * Generate refresh token (long-lived, tied to access token)
+   * Following MAS pattern: refresh tokens are JWT signed with RSA256
+   */
+  private generateRefreshToken(
+    userId: number,
+    tenantId: string,
+    clientId: string,
+    scope: string,
+    accessToken: string,
+  ): string {
+    // Create a unique ID for the access token (hash of the token)
+    const accessTokenId = crypto
+      .createHash('sha256')
+      .update(accessToken)
+      .digest('hex')
+      .substring(0, 16);
+
+    const payload: RefreshTokenPayload = {
+      type: 'refresh_token',
+      user_id: userId,
+      tenant_id: tenantId,
+      client_id: clientId,
+      scope,
+      access_token_id: accessTokenId,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60, // 30 days (long-lived like MAS)
+    };
+
+    return jwt.sign(payload, this.rsaKeyPair.privateKey, {
+      algorithm: 'RS256' as const,
+      header: { alg: 'RS256', kid: this.keyId },
     });
   }
 

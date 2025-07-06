@@ -913,15 +913,14 @@ export class MatrixUserService
 
   /**
    * Get or create a Matrix client for a specific user
-   * 
-   * @deprecated This method is deprecated and will be removed in v2.0.0.
-   * - Bots should use AppService authentication via MatrixBotService
-   * - Frontend clients should authenticate directly via MAS OIDC
-   * - Backend should not create Matrix clients for users
+   * This method fetches user credentials from the database
    * 
    * @param userSlug The user's slug
    * @param userService DEPRECATED: parameter will be removed in future version
    * @param tenantId The tenant ID for the user
+   * 
+   * Note: This method should primarily be used for bot authentication fallback.
+   * Regular user Matrix clients should be created in the frontend via MAS OIDC.
    */
   async getClientForUser(
     userSlug: string,
