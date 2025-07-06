@@ -77,6 +77,7 @@ clients:
   # OpenMeet Platform Frontend Client (SPA)
   - client_id: "01JAYS74TCG3BTWKADN5Q4518D"
     client_auth_method: "none"  # Public client, no secrets
+    client_uri: "https://00d23135e123.ngrok.app"  # Primary client URI for ngrok testing
     redirect_uris:
       - "http://localhost:9005/auth/matrix/callback"
       - "http://localhost:9005/events/*"
@@ -84,6 +85,8 @@ clients:
       - "http://localhost:8087/events/*"
       - "http://127.0.0.1:8087/auth/matrix/callback"
       - "http://127.0.0.1:8087/events/*"
+      - "https://00d23135e123.ngrok.app/auth/matrix/callback"
+      - "https://00d23135e123.ngrok.app/events/*"
 
   # OpenMeet Bot Client for Client Credentials Grant
   - client_id: "01JAYS74TCG3BTWKADN5Q4518E"
