@@ -10,7 +10,7 @@ describe('Matrix Bot Simple Test (E2E)', () => {
   beforeAll(async () => {
     jest.setTimeout(60000);
 
-    // Login as admin 
+    // Login as admin
     adminToken = await loginAsAdmin();
     console.log('✅ Admin login successful');
 
@@ -52,15 +52,15 @@ describe('Matrix Bot Simple Test (E2E)', () => {
   });
 
   describe('Bot Authentication & Room Creation', () => {
-    it('should successfully create event (which tests bot room creation)', async () => {
+    it('should successfully create event (which tests bot room creation)', () => {
       // The event creation above should have triggered bot authentication and room creation
       // If bot auth failed, the event creation would have failed
       expect(eventSlug).toBeDefined();
       console.log('✅ Event creation succeeded - bot authentication working');
     });
 
-    it('should successfully create group (which tests bot room creation)', async () => {
-      // The group creation above should have triggered bot authentication and room creation  
+    it('should successfully create group (which tests bot room creation)', () => {
+      // The group creation above should have triggered bot authentication and room creation
       // If bot auth failed, the group creation would have failed
       expect(groupSlug).toBeDefined();
       console.log('✅ Group creation succeeded - bot authentication working');
@@ -76,7 +76,9 @@ describe('Matrix Bot Simple Test (E2E)', () => {
 
       console.log('Matrix AppService Config:');
       console.log(`- Token: ${hasAppServiceToken ? '✅ Set' : '❌ Missing'}`);
-      console.log(`- HS Token: ${hasAppServiceHsToken ? '✅ Set' : '❌ Missing'}`);
+      console.log(
+        `- HS Token: ${hasAppServiceHsToken ? '✅ Set' : '❌ Missing'}`,
+      );
       console.log(`- ID: ${hasAppServiceId ? '✅ Set' : '❌ Missing'}`);
       console.log(`- URL: ${hasAppServiceUrl ? '✅ Set' : '❌ Missing'}`);
 
@@ -92,8 +94,12 @@ describe('Matrix Bot Simple Test (E2E)', () => {
       console.log('✅ Bot can create groups (implies room creation works)');
       console.log('✅ AppService configuration verified');
       console.log('\n🎉 Basic Matrix bot functionality confirmed!');
-      console.log('\nNote: This test verifies bot works through existing OpenMeet operations.');
-      console.log('For more detailed bot testing, run the matrix-bot-integration.e2e-spec.ts test.');
+      console.log(
+        '\nNote: This test verifies bot works through existing OpenMeet operations.',
+      );
+      console.log(
+        'For more detailed bot testing, run the matrix-bot-integration.e2e-spec.ts test.',
+      );
     });
   });
 });
