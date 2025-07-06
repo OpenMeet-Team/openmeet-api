@@ -842,6 +842,7 @@ describe('ChatRoomService', () => {
           isDirect: true,
           isPublic: false,
         }),
+        'default' // tenant ID parameter
       );
 
       // Should have created and saved a new ChatRoomEntity with user1Id and user2Id
