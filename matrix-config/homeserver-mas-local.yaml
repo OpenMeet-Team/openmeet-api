@@ -1,7 +1,7 @@
 server_name: "${SYNAPSE_SERVER_NAME}"
 public_baseurl: "http://localhost:8448"
 pid_file: /data/homeserver.pid
-web_client_location: "http://localhost:9005"
+web_client_location: "https://00d23135e123.ngrok.app"
 
 listeners:
   - port: 8448
@@ -57,6 +57,7 @@ sso:
     - "http://localhost:8087"
     - "http://127.0.0.1:9005"
     - "http://127.0.0.1:8087"
+    - "https://00d23135e123.ngrok.app"
 
 # Disable built-in authentication since MAS handles it
 password_providers: []
