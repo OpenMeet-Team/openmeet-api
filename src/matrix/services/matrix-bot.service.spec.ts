@@ -76,6 +76,11 @@ describe('MatrixBotService', () => {
           'matrix.bot.displayName': mockBotConfig.displayName,
           'matrix.serverName': mockBotConfig.serverName,
           'matrix.homeServer': mockBotConfig.homeServerUrl,
+          'matrix': {
+            appservice: {
+              token: 'test-appservice-token'
+            }
+          }
         };
         return config[key];
       }),
@@ -141,7 +146,26 @@ describe('MatrixBotService', () => {
     });
 
     it('should handle authentication failure gracefully', async () => {
-      // Arrange
+      // Arrange - Create module with no AppService token to force OIDC auth failure
+      const failingConfigService = {
+        get: jest.fn().mockImplementation((key: string) => {
+          const config = {
+            ADMIN_EMAIL: 'admin@openmeet.net',
+            ADMIN_PASSWORD: 'test-admin-password',
+            'matrix.bot.username': mockBotConfig.username,
+            'matrix.bot.displayName': mockBotConfig.displayName,
+            'matrix.serverName': mockBotConfig.serverName,
+            'matrix.homeServer': mockBotConfig.homeServerUrl,
+            'matrix': {
+              appservice: {
+                token: '' // No token - should fall back to OIDC which will fail
+              }
+            }
+          };
+          return config[key];
+        }),
+      } as any;
+
       const failingModule: TestingModule = await Test.createTestingModule({
         providers: [
           MatrixBotService,
@@ -151,7 +175,7 @@ describe('MatrixBotService', () => {
           },
           {
             provide: ConfigService,
-            useValue: mockConfigService,
+            useValue: failingConfigService,
           },
           {
             provide: MatrixUserService,
@@ -192,7 +216,7 @@ describe('MatrixBotService', () => {
       // Act & Assert
       await expect(
         failingService.authenticateBot(testTenantId),
-      ).rejects.toThrow('Invalid credentials');
+      ).rejects.toThrow('Matrix AppService authentication is required for bot operations');
       expect(failingService.isBotAuthenticated()).toBe(false);
     });
 
@@ -299,28 +323,33 @@ describe('MatrixBotService', () => {
 
     it('should automatically authenticate when creating room if not authenticated', async () => {
       // Arrange
+      const mockMatrixUserServiceForTest = {
+        getClientForUser: jest.fn().mockResolvedValue(mockMatrixClient),
+      };
+      
+      const mockMatrixBotUserServiceForTest = {
+        getOrCreateBotUser: jest.fn().mockResolvedValue({
+          id: 1,
+          slug: 'openmeet-bot-test-tenant-123',
+          email: 'bot-test-tenant-123@system.openmeet.net',
+        }),
+        needsPasswordRotation: jest.fn().mockResolvedValue(false),
+        rotateBotPassword: jest.fn().mockResolvedValue(undefined),
+      };
+      
+      const mockUserServiceForTest = {
+        findByEmail: jest.fn().mockResolvedValue({
+          id: 1,
+          slug: 'admin-user',
+          email: 'admin@openmeet.net',
+        }),
+      };
+
       const unauthenticatedService = new MatrixBotService(
         mockMatrixCoreService,
         mockConfigService,
-        {
-          getClientForUser: jest.fn().mockResolvedValue(mockMatrixClient),
-        } as any,
-        {
-          getOrCreateBotUser: jest.fn().mockResolvedValue({
-            id: 1,
-            slug: 'openmeet-bot-test-tenant-123',
-            email: 'bot-test-tenant-123@system.openmeet.net',
-          }),
-          needsPasswordRotation: jest.fn().mockResolvedValue(false),
-          rotateBotPassword: jest.fn().mockResolvedValue(undefined),
-        } as any,
-        {
-          findByEmail: jest.fn().mockResolvedValue({
-            id: 1,
-            slug: 'admin-user',
-            email: 'admin@openmeet.net',
-          }),
-        } as any,
+        mockMatrixBotUserServiceForTest as any,
+        mockUserServiceForTest as any,
       );
 
       // Act

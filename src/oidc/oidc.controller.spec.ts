@@ -222,6 +222,8 @@ describe('OidcController', () => {
         tokenParams.grant_type,
         tokenParams.code,
         tokenParams.redirect_uri,
+        undefined, // refresh_token
+        undefined, // scope  
         tokenParams.client_id,
         tokenParams.client_secret,
       );

@@ -4,6 +4,7 @@ import { MatrixUserService } from '../../matrix/services/matrix-user.service';
 import { MatrixRoomService } from '../../matrix/services/matrix-room.service';
 import { MatrixMessageService } from '../../matrix/services/matrix-message.service';
 import { MatrixCoreService } from '../../matrix/services/matrix-core.service';
+import { MatrixBotService } from '../../matrix/services/matrix-bot.service';
 import { UserService } from '../../user/user.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
@@ -243,12 +244,14 @@ describe('ChatRoomService', () => {
         matrixRoomService,
         matrixMessageService,
         matrixCoreService,
+        matrixBotService,
         userService,
         groupMemberService,
         eventAttendeeService,
         eventQueryService,
         groupService,
         elastiCacheService,
+        globalMatrixValidationService,
       ) => {
         return new ChatRoomService(
           request,
@@ -257,12 +260,14 @@ describe('ChatRoomService', () => {
           matrixRoomService,
           matrixMessageService,
           matrixCoreService,
+          matrixBotService,
           userService,
           groupMemberService,
           eventAttendeeService,
           eventQueryService,
           groupService,
           elastiCacheService,
+          globalMatrixValidationService,
         );
       },
       inject: [
@@ -272,12 +277,14 @@ describe('ChatRoomService', () => {
         MatrixRoomService,
         MatrixMessageService,
         MatrixCoreService,
+        MatrixBotService,
         UserService,
         GroupMemberService,
         EventAttendeeService,
         EventQueryService,
         GroupService,
         ElastiCacheService,
+        GlobalMatrixValidationService,
       ],
     };
 
@@ -333,6 +340,20 @@ describe('ChatRoomService', () => {
               serverName: 'matrix.openmeet.net',
               adminUserId: '@admin:matrix.openmeet.net',
             }),
+          },
+        },
+        {
+          provide: MatrixBotService,
+          useValue: {
+            createRoom: jest.fn().mockResolvedValue({
+              roomId: '!room123:matrix.openmeet.net',
+              name: 'Test Room',
+              topic: 'Test Topic',
+              invitedMembers: [],
+            }),
+            inviteUser: jest.fn().mockResolvedValue(true),
+            authenticateBot: jest.fn().mockResolvedValue(undefined),
+            isBotAuthenticated: jest.fn().mockReturnValue(true),
           },
         },
         {
