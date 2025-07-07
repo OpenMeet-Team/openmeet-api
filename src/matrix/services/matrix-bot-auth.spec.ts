@@ -33,10 +33,18 @@ describe('MatrixBotService - Authentication Integration Tests', () => {
                   'matrix.baseUrl': 'http://localhost:8448',
                   matrix: {
                     appservice: {
-                      token: process.env.MATRIX_APPSERVICE_TOKEN,
-                      hsToken: process.env.MATRIX_APPSERVICE_HS_TOKEN,
-                      id: process.env.MATRIX_APPSERVICE_ID,
-                      url: process.env.MATRIX_APPSERVICE_URL,
+                      token:
+                        process.env.MATRIX_APPSERVICE_TOKEN ||
+                        'test-appservice-token',
+                      hsToken:
+                        process.env.MATRIX_APPSERVICE_HS_TOKEN ||
+                        'test-hs-token',
+                      id:
+                        process.env.MATRIX_APPSERVICE_ID ||
+                        'test-appservice-id',
+                      url:
+                        process.env.MATRIX_APPSERVICE_URL ||
+                        'http://localhost:3000/api/matrix/appservice',
                     },
                   },
                 };
