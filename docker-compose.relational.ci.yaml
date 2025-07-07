@@ -1,4 +1,41 @@
 services:
+  # Config renderer - generates Matrix configs from templates
+  config-renderer:
+    image: alpine:3.19
+    volumes:
+      - ./matrix-config:/templates:ro
+      - matrix-configs:/rendered-config
+    env_file:
+      - env-example-relational-ci
+    restart: "no"
+    command: >
+      sh -c "
+        echo 'Installing gomplate and openssl...' &&
+        apk add --no-cache openssl curl &&
+        curl -o /usr/local/bin/gomplate -sSL https://github.com/hairyhenderson/gomplate/releases/latest/download/gomplate_linux-amd64 &&
+        chmod +x /usr/local/bin/gomplate &&
+        echo 'Generating signing keys for CI...' &&
+        mkdir -p /tmp/keys &&
+        openssl genrsa -out /tmp/keys/rsa-key.pem 2048 &&
+        openssl ecparam -genkey -name prime256v1 -noout -out /tmp/keys/ec-key.pem &&
+        export MAS_RSA_PRIVATE_KEY=\"\$(cat /tmp/keys/rsa-key.pem)\" &&
+        export MAS_EC_PRIVATE_KEY=\"\$(cat /tmp/keys/ec-key.pem)\" &&
+        echo 'Rendering Matrix configurations for CI...' &&
+        gomplate -f /templates/mas-config.gomplate.yaml -o /rendered-config/mas-config.yaml &&
+        gomplate -f /templates/homeserver-mas.gomplate.yaml -o /rendered-config/homeserver.yaml &&
+        mkdir -p /rendered-config/appservices &&
+        gomplate -f /templates/openmeet-appservice.gomplate.yaml -o /rendered-config/appservices/openmeet-appservice.yaml &&
+        echo 'Configuration rendering completed successfully' &&
+        ls -la /rendered-config/ &&
+        echo 'Config renderer staying alive for CI...' &&
+        sleep infinity
+      "
+    healthcheck:
+      test: ["CMD", "test", "-f", "/rendered-config/mas-config.yaml"]
+      interval: 5s
+      timeout: 10s
+      retries: 3
+
   postgres:
     ## use the db with postGIS extentions
     image: postgis/postgis:16-3.4-alpine
@@ -54,10 +91,12 @@ services:
     expose:
       - 8080
     environment:
-      MAS_CONFIG: /data/config.yaml
+      MAS_CONFIG: /data/mas-config.yaml
     volumes:
-      - ./matrix-config/mas-config-ci.yaml:/data/config.yaml:ro
+      - matrix-configs:/data:ro
     depends_on:
+      config-renderer:
+        condition: service_healthy
       postgres:
         condition: service_started
     env_file:
@@ -86,12 +125,14 @@ services:
       MAS_CLIENT_SECRET: "${MAS_CLIENT_SECRET}"
       MAS_ADMIN_TOKEN: "${MAS_ADMIN_TOKEN}"
     volumes:
-      - ./matrix-config/homeserver-mas-ci.yaml:/data/homeserver.yaml
+      - matrix-configs:/config:ro
       - ./matrix-config/log.config:/data/log.config
       - ./matrix-config/init.sh:/data/init.sh
       - ./matrix-config/start-matrix.sh:/data/start-matrix.sh
       - matrix-data:/data/media
     depends_on:
+      config-renderer:
+        condition: service_healthy
       postgres:
         condition: service_started
       matrix-auth-service:
@@ -106,3 +147,4 @@ services:
 
 volumes:
   matrix-data:
+  matrix-configs:
