@@ -30,11 +30,11 @@ describe('MatrixBotService - Authentication Integration Tests', () => {
                   'matrix.bot.username': 'openmeet-admin-bot',
                   'matrix.bot.displayName': 'OpenMeet Admin Bot',
                   'matrix.serverName': 'matrix.openmeet.net',
-                  'matrix.homeServer': 'http://localhost:8448',
+                  'matrix.baseUrl': 'http://localhost:8448',
                   matrix: {
                     appservice: {
                       token: process.env.MATRIX_APPSERVICE_TOKEN,
-                      hs_token: process.env.MATRIX_APPSERVICE_HS_TOKEN,
+                      hsToken: process.env.MATRIX_APPSERVICE_HS_TOKEN,
                       id: process.env.MATRIX_APPSERVICE_ID,
                       url: process.env.MATRIX_APPSERVICE_URL,
                     },
