@@ -54,10 +54,9 @@ export class MatrixBotService implements IMatrixBot {
       'matrix.openmeet.net',
       { infer: true },
     );
-    const homeServerUrl = this.configService.get<string>(
-      'matrix.baseUrl',
-      { infer: true },
-    );
+    const homeServerUrl = this.configService.get<string>('matrix.baseUrl', {
+      infer: true,
+    });
 
     if (!homeServerUrl) {
       throw new Error(

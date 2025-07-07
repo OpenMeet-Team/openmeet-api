@@ -8,9 +8,11 @@ describe('Matrix Application Service Webhooks (e2e)', () => {
 
   // Use the actual tokens from our configuration
   const HOMESERVER_TOKEN = process.env.MATRIX_APPSERVICE_HS_TOKEN;
-  
+
   if (!HOMESERVER_TOKEN) {
-    throw new Error('MATRIX_APPSERVICE_HS_TOKEN environment variable is required for appservice tests');
+    throw new Error(
+      'MATRIX_APPSERVICE_HS_TOKEN environment variable is required for appservice tests',
+    );
   }
 
   describe('User Registration Queries', () => {

@@ -122,7 +122,9 @@ export class UserSeedService {
     });
 
     if (!userRole) {
-      console.log(`  ⚠️ User role not found for tenant ${tenantId}, skipping bot creation`);
+      console.log(
+        `  ⚠️ User role not found for tenant ${tenantId}, skipping bot creation`,
+      );
       return;
     }
 

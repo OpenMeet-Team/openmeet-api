@@ -90,7 +90,9 @@ describe('Matrix Bot OIDC Authentication Debug (E2E)', () => {
           throw new Error('MATRIX_HOMESERVER_URL environment variable not set');
         }
         console.log('🔍 Testing Matrix server connectivity...');
-        const matrixResponse = await request(matrixUrl).get('/_matrix/client/versions');
+        const matrixResponse = await request(matrixUrl).get(
+          '/_matrix/client/versions',
+        );
         console.log('✅ Matrix Server Status:', matrixResponse.status);
 
         if (masResponse.status === 200) {

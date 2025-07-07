@@ -275,5 +275,4 @@ describe('Matrix Bot Operations (E2E)', () => {
       console.log('✅ Bot handled room leave successfully');
     });
   });
-
 });
