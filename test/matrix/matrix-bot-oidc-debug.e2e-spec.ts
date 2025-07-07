@@ -60,36 +60,38 @@ describe('Matrix Bot OIDC Authentication Debug (E2E)', () => {
       console.log('📊 Response Status:', response.status);
       console.log('📊 Response Body:', JSON.stringify(response.body, null, 2));
 
-      if (response.body.success) {
-        console.log('✅ Bot OIDC authentication successful!');
-        console.log('✅ Room created:', response.body.roomId);
-        expect(response.status).toBe(201);
-        expect(response.body).toHaveProperty('success', true);
-        expect(response.body).toHaveProperty('roomId');
-        expect(response.body.roomId).toMatch(/^!.+:.+$/);
-      } else {
-        console.log('❌ Bot OIDC authentication failed');
-        console.log(
-          '❌ Error message:',
-          response.body.message || response.body.error,
-        );
-
-        // Still run assertions to see exact failure details
-        expect(response.status).toBe(201);
-        expect(response.body).toHaveProperty('success', true);
-      }
+      console.log('✅ Bot OIDC authentication successful!');
+      console.log('✅ Room created:', response.body.roomId);
+      expect(response.status).toBe(201);
+      expect(response.body).toHaveProperty('success', true);
+      expect(response.body).toHaveProperty('roomId');
+      expect(response.body.roomId).toMatch(/^!.+:.+$/);
     }, 45000);
 
     it('should show current MAS configuration', async () => {
       // Test if we can reach MAS directly
-      console.log('🔍 Testing MAS connectivity...');
+      console.log('🔍 Testing connectivity...');
 
       try {
-        const masResponse = await request('http://localhost:8081').get(
+        // Test MAS connectivity
+        const masUrl = process.env.MAS_SERVICE_URL;
+        if (!masUrl) {
+          throw new Error('MAS_SERVICE_URL environment variable not set');
+        }
+        const masResponse = await request(masUrl).get(
           '/.well-known/openid-configuration',
         );
 
         console.log('✅ MAS OIDC Discovery Status:', masResponse.status);
+
+        // Test Matrix server connectivity
+        const matrixUrl = process.env.MATRIX_HOMESERVER_URL;
+        if (!matrixUrl) {
+          throw new Error('MATRIX_HOMESERVER_URL environment variable not set');
+        }
+        console.log('🔍 Testing Matrix server connectivity...');
+        const matrixResponse = await request(matrixUrl).get('/_matrix/client/versions');
+        console.log('✅ Matrix Server Status:', matrixResponse.status);
 
         if (masResponse.status === 200) {
           console.log('✅ MAS OIDC configuration loaded');

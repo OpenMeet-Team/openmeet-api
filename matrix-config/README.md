@@ -4,15 +4,24 @@ This directory contains configuration files for the Matrix chat server used in O
 
 ## Configuration Approach
 
-We use a template-based approach with environment variables:
+We use a **gomplate template-based approach** for consistent configuration across environments:
 
-1. `homeserver.yaml` serves as a template with `${VARIABLE}` placeholders
-2. The `start-matrix.sh` script processes this template using `envsubst`
-3. The processed config file is written to a separate directory
+1. **Template files** (`.gomplate.yaml`) contain `{{ .Env.VARIABLE }}` placeholders for all dynamic values
+2. **Config renderer service** processes templates using gomplate and generates signing keys
+3. **Rendered configs** are stored in shared volumes and mounted as read-only by Matrix and MAS services
 
-This approach works for both:
-- Local development with Docker Compose
+This unified approach works for both:
+- Local development with Docker Compose (using config-renderer service)
+- CI testing with Docker Compose (using config-renderer service)  
 - Kubernetes deployment with init containers
+
+**Template files:**
+- `homeserver-mas.gomplate.yaml` - Matrix Synapse configuration template
+- `mas-config.gomplate.yaml` - Matrix Authentication Service configuration template
+- `openmeet-appservice.gomplate.yaml` - OpenMeet Application Service configuration template
+
+**Legacy files** (archived in `archive/` directory):
+- Environment-specific files like `*-local.yaml`, `*-ci.yaml` are no longer used
 
 ## Environment Variables
 
@@ -31,23 +40,33 @@ Key variables used in both environments:
 
 ## Local Development Setup
 
-1. Start the Matrix server using Docker Compose:
-   ```
-   docker-compose -f docker-compose-dev.yml up -d matrix
+1. **Config Generation**: The `config-renderer` service automatically:
+   - Downloads and installs gomplate
+   - Generates RSA and EC signing keys for MAS
+   - Processes all `.gomplate.yaml` templates with environment variables
+   - Stores rendered configs in the `matrix-configs` volume
+
+2. **Start services**: Start the Matrix stack using Docker Compose:
+   ```bash
+   docker-compose -f docker-compose-dev.yml up -d config-renderer matrix-auth-service matrix
    ```
 
-2. After startup, check the logs to find the admin access token:
-   ```
-   docker-compose -f docker-compose-dev.yml logs matrix | grep -A 10 "Success! Matrix server initialized"
-   ```
-
-3. Add the access token to your `.env` file:
-   ```
-   MATRIX_ADMIN_ACCESS_TOKEN=your_token_from_logs
-   MATRIX_ADMIN_USER=@admin:matrix-local.openmeet.test
+3. **Check config generation**:
+   ```bash
+   docker-compose -f docker-compose-dev.yml logs config-renderer
    ```
 
-4. Start your API server and it will connect to the local Matrix server.
+4. **Monitor Matrix startup**:
+   ```bash
+   docker-compose -f docker-compose-dev.yml logs matrix
+   ```
+
+5. **Verify services are healthy**:
+   ```bash
+   docker-compose -f docker-compose-dev.yml ps
+   ```
+
+The config-renderer service will stay running to keep the rendered configs available for Matrix and MAS services.
 
 ## Kubernetes Deployment
 

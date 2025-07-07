@@ -2508,3 +2508,160 @@ namespaces:
 **Status**: ✅ **APPROVED** - Implementation starting with application service registration
 
 **Rationale**: Matrix Application Service authentication eliminates the complex OIDC bot authentication flow that was failing at the consent screen stage. This approach follows Matrix best practices for bot integration, provides more reliable authentication, and significantly reduces implementation complexity while maintaining all required functionality for Matrix bot operations.
+
+---
+
+## ADR-007: Matrix Configuration Templating Strategy
+
+**Date**: 2025-01-06  
+**Status**: PROPOSED  
+**Context**: Need to manage Matrix Authentication Service (MAS) and Synapse configurations across multiple environments (local, CI, dev, prod) without storing secrets in repository.
+
+### Problem
+
+Matrix services require complex configurations with:
+- **Environment-specific values** (URLs, database connections, client URIs)
+- **Secret key material** (JWT signing keys, encryption secrets) 
+- **Multi-environment deployment** (local docker-compose, CI, K8s dev/prod)
+- **Security requirements** (no secrets in git repository)
+
+Current approach has hardcoded keys in config files committed to repository, creating security risk and maintenance overhead.
+
+### Decision
+
+**Adopt runtime configuration templating using init containers across all environments.**
+
+### Implementation Strategy
+
+#### Template Structure
+```yaml
+# mas-config.template.yaml
+secrets:
+  encryption: "${MAS_ENCRYPTION_SECRET}"
+  keys:
+    ${MAS_SIGNING_KEYS}  # Generated at runtime
+
+database:
+  uri: "postgresql://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@${DATABASE_HOST}:${DATABASE_PORT}/${MAS_DATABASE_NAME}"
+
+clients:
+  - client_id: "01JAYS74TCG3BTWKADN5Q4518D"
+    redirect_uris:
+      ${FRONTEND_REDIRECT_URIS}  # Environment-specific URIs
+```
+
+#### Environment-Specific Implementation
+
+**Local Development** (`.env-local` + docker-compose):
+```bash
+# Add template variables to existing .env-local
+MAS_ENCRYPTION_SECRET=generated_at_startup
+FRONTEND_REDIRECT_URIS=http://localhost:9005/auth/matrix/callback
+```
+
+**CI Environment** (`env-example-relational-ci` + docker-compose):
+```bash
+# Add template variables to existing CI env file  
+MAS_ENCRYPTION_SECRET=generated_at_startup
+FRONTEND_REDIRECT_URIS=http://api:3000/auth/matrix/callback
+```
+
+**K8s Environments** (dev/prod):
+```yaml
+# Init container in deployment
+initContainers:
+- name: config-templater
+  image: envsubst-image
+  env: # Environment variables from ConfigMap/Secret
+  volumeMounts:
+  - name: template-volume
+  - name: config-volume
+  command: ["/scripts/render-config.sh"]
+```
+
+#### Key Generation Strategy
+
+**Startup Script** (`generate-config.sh`):
+```bash
+#!/bin/bash
+# Generate keys if they don't exist
+if [ ! -f "/tmp/keys/rsa-key.pem" ]; then
+  openssl genrsa -out "/tmp/keys/rsa-key.pem" 2048
+  openssl ecparam -genkey -name prime256v1 -out "/tmp/keys/ec-key.pem"
+fi
+
+# Render template with environment variables + generated keys
+envsubst < /templates/mas-config.template.yaml > /config/mas-config.yaml
+```
+
+### Alternatives Considered
+
+#### ❌ Kustomize Variable Substitution
+**Rejected**: Complex patches, limited templating syntax, hard to debug
+```yaml
+# Example of verbose Kustomize patch required
+- op: replace
+  path: /spec/template/spec/containers/0/env/15/value  
+  value: $(MAS_ENCRYPTION_SECRET)
+```
+
+#### ❌ Build-Time Template Processing  
+**Rejected**: Would require different Docker images per environment
+
+#### ❌ External Config Management (Helm)
+**Rejected**: Adds another tool dependency, doesn't solve local/CI consistency
+
+### Benefits
+
+1. **Security**: No secrets committed to repository
+2. **Consistency**: Same templating approach across all environments  
+3. **Maintainability**: Single template file, environment-specific variable files
+4. **Simplicity**: Uses existing environment file structure
+5. **K8s Compatibility**: Init container pattern works well in Kubernetes
+
+### Implementation Plan
+
+**Phase 1**: Create Template Infrastructure
+- [ ] Create `mas-config.template.yaml` 
+- [ ] Create `render-config.sh` script
+- [ ] Add template variables to existing `.env-local`
+- [ ] Add template variables to existing `env-example-relational-ci`
+
+**Phase 2**: Update Docker Compose
+- [ ] Add init container to local docker-compose
+- [ ] Add init container to CI docker-compose  
+- [ ] Update volume mounts for template processing
+
+**Phase 3**: Update K8s Deployments
+- [ ] Create init container image with templating tools
+- [ ] Update dev/prod deployments to use init containers
+- [ ] Create ConfigMaps for template files
+
+**Phase 4**: Remove Legacy Configs
+- [ ] Remove hardcoded config files (`mas-config-local.yaml`, `mas-config-ci.yaml`)
+- [ ] Update `.gitignore` to exclude generated configs
+- [ ] Update documentation
+
+### Risks and Mitigations
+
+**Risk**: Init container complexity  
+**Mitigation**: Simple shell scripts, comprehensive testing in all environments
+
+**Risk**: Template rendering failures**  
+**Mitigation**: Validation step in render script, clear error messages
+
+**Risk**: Key generation in production**  
+**Mitigation**: Production keys managed via K8s Secrets, not generated
+
+### Success Criteria
+
+- [ ] No secrets in git repository
+- [ ] Single source of truth for MAS configuration
+- [ ] All environments (local, CI, dev, prod) use same templating approach
+- [ ] Configuration works consistently across environment changes
+- [ ] Easy to add new environment-specific variables
+
+**Status**: 🔄 **IN PROGRESS** - Template infrastructure being created
+
+**Decision Maker**: Development Team  
+**Next Review**: 2025-01-10

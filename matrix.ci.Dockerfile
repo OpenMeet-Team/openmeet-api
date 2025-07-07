@@ -1,4 +1,4 @@
-FROM matrixdotorg/synapse:v1.126.0rc3
+FROM matrixdotorg/synapse:v1.132.0
 
 # Install required packages
 RUN apt-get update && \

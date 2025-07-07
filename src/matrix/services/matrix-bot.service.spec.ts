@@ -75,7 +75,7 @@ describe('MatrixBotService', () => {
           'matrix.bot.username': mockBotConfig.username,
           'matrix.bot.displayName': mockBotConfig.displayName,
           'matrix.serverName': mockBotConfig.serverName,
-          'matrix.homeServer': mockBotConfig.homeServerUrl,
+          'matrix.baseUrl': mockBotConfig.homeServerUrl,
           matrix: {
             appservice: {
               token: 'test-appservice-token',
@@ -155,7 +155,7 @@ describe('MatrixBotService', () => {
             'matrix.bot.username': mockBotConfig.username,
             'matrix.bot.displayName': mockBotConfig.displayName,
             'matrix.serverName': mockBotConfig.serverName,
-            'matrix.homeServer': mockBotConfig.homeServerUrl,
+            'matrix.baseUrl': mockBotConfig.homeServerUrl,
             matrix: {
               appservice: {
                 token: '', // No token - should fall back to OIDC which will fail
@@ -598,7 +598,7 @@ describe('MatrixBotService', () => {
             'matrix.bot.username': 'openmeet-bot',
             'matrix.bot.displayName': 'OpenMeet Bot',
             'matrix.serverName': 'matrix.openmeet.net',
-            'matrix.homeServer': 'http://localhost:8448',
+            'matrix.baseUrl': 'http://localhost:8448',
           };
           return config[key];
         }),

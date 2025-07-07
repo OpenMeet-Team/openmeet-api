@@ -1,0 +1,105 @@
+http:
+  listeners:
+    - name: web
+      binds:
+        - address: "[::]:8080"
+      resources:
+        - name: discovery
+        - name: human
+        - name: oauth
+        - name: compat
+        - name: graphql
+        - name: assets
+  public_base: "${MAS_PUBLIC_BASE}"
+  trusted_proxies: []
+
+database:
+  uri: "postgresql://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@${DATABASE_HOST}:${DATABASE_PORT}/${MAS_DATABASE_NAME}"
+  max_connections: ${MAS_DB_MAX_CONNECTIONS:-10}
+  min_connections: 0
+
+secrets:
+  encryption: "${MAS_ENCRYPTION_SECRET}"
+  keys:
+${MAS_SIGNING_KEYS}
+
+matrix:
+  homeserver: "${MATRIX_SERVER_NAME}"
+  endpoint: "${MATRIX_ENDPOINT}"
+  secret: "${MAS_ADMIN_TOKEN}"
+
+clients:
+  # Matrix Synapse Homeserver Client for MSC3861
+  - client_id: "0000000000000000000SYNAPSE"
+    client_auth_method: "client_secret_basic"
+    client_secret: "${MAS_CLIENT_SECRET}"
+    redirect_uris: []  # Synapse doesn't need redirect URIs for introspection
+
+  # OpenMeet Platform Frontend Client (SPA)
+  - client_id: "01JAYS74TCG3BTWKADN5Q4518D"
+    client_auth_method: "none"  # Public client, no secrets
+    redirect_uris:
+${FRONTEND_REDIRECT_URIS}
+
+  # OpenMeet Bot Client for Client Credentials Grant
+  - client_id: "01JAYS74TCG3BTWKADN5Q4518E"
+    client_auth_method: "client_secret_basic"
+    client_secret: "${BOT_CLIENT_SECRET}"
+    redirect_uris: []  # No redirects needed for client credentials
+    grant_types:
+      - "client_credentials"
+    scopes:
+      - "urn:matrix:org.matrix.msc2967.client:api:*"
+
+upstream_oauth2:
+  providers:
+    - id: "01JAYS74TCG3BTWKADN5Q4518C"
+      human_name: "${OAUTH_PROVIDER_NAME}"
+      brand_name: "openmeet"
+      issuer: "${OAUTH_ISSUER}"
+      client_id: "${OAUTH_CLIENT_ID}"
+      client_secret: "${OAUTH_CLIENT_SECRET}"
+      token_endpoint_auth_method: "client_secret_post"
+      scope: "openid email"
+      claims_imports:
+        localpart:
+          action: require
+          template: "{{ user.preferred_username }}"
+        displayname:
+          action: suggest
+          template: "{{ user.name }}"
+        email:
+          action: suggest
+          template: "{{ user.email }}"
+        tenant_id:
+          action: suggest
+          template: "{{ user.tenant_id or 'default' }}"
+
+policy:
+  wasm_module: "/usr/local/share/mas-cli/policy.wasm"
+  data:
+    # Allow all users for testing
+    allow_all: ${POLICY_ALLOW_ALL:-true}
+    admin_users:
+${POLICY_ADMIN_USERS}
+    # Bot clients that can use client credentials grant for admin operations
+    admin_clients:
+      - "01JAYS74TCG3BTWKADN5Q4518E"
+
+branding:
+  service_name: "${MAS_SERVICE_NAME}"
+  policy_uri: "https://openmeet.net/privacy"
+  tos_uri: "https://openmeet.net/terms"
+
+email:
+  from: "${MAIL_DEFAULT_EMAIL}"
+  reply_to: "${MAIL_DEFAULT_EMAIL}"
+  transport: "smtp"
+  hostname: "${MAIL_HOST}"
+  port: ${MAIL_PORT}
+  mode: "${MAIL_MODE:-plain}"
+
+telemetry:
+  metrics:
+    prometheus:
+      enabled: ${PROMETHEUS_ENABLED:-false}

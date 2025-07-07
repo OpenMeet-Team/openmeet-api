@@ -54,11 +54,18 @@ export class MatrixBotService implements IMatrixBot {
       'matrix.openmeet.net',
       { infer: true },
     );
-    this.homeServerUrl = this.configService.get<string>(
-      'matrix.homeServer',
-      'http://localhost:8448',
+    const homeServerUrl = this.configService.get<string>(
+      'matrix.baseUrl',
       { infer: true },
     );
+
+    if (!homeServerUrl) {
+      throw new Error(
+        'Matrix homeserver URL not configured. Set MATRIX_HOMESERVER_URL environment variable.',
+      );
+    }
+
+    this.homeServerUrl = homeServerUrl;
 
     if (!this.adminEmail) {
       throw new Error(

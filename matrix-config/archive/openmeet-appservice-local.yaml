@@ -1,0 +1,24 @@
+id: openmeet-bot
+url: http://host.docker.internal:3000/api/matrix/appservice
+as_token: 971a507cac6945e1259b7d7377b7c497f733376c638336d6bfe3d813ce01f21e
+hs_token: df51b086825667040f89888d920641c44d449b8741cfee1e02ce6f0845a6a0fb
+sender_localpart: openmeet-bot
+rate_limited: false
+push_ephemeral: true
+
+# Application service configuration for OpenMeet bot (LOCAL DEVELOPMENT)
+# This allows the OpenMeet API to act as an application service
+# and manage bot users directly without OIDC authentication
+
+namespaces:
+  users:
+    - exclusive: true
+      regex: "@openmeet-bot-.*:.*"
+    - exclusive: true
+      regex: "@openmeet-.*:.*"
+  rooms:
+    - exclusive: false
+      regex: "#openmeet-.*:.*"
+  aliases:
+    - exclusive: false
+      regex: "#openmeet-.*:.*"

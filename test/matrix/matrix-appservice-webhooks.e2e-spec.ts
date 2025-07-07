@@ -7,8 +7,11 @@ describe('Matrix Application Service Webhooks (e2e)', () => {
     .set('x-tenant-id', TESTING_TENANT_ID);
 
   // Use the actual tokens from our configuration
-  const HOMESERVER_TOKEN =
-    'df51b086825667040f89888d920641c44d449b8741cfee1e02ce6f0845a6a0fb';
+  const HOMESERVER_TOKEN = process.env.MATRIX_APPSERVICE_HS_TOKEN;
+  
+  if (!HOMESERVER_TOKEN) {
+    throw new Error('MATRIX_APPSERVICE_HS_TOKEN environment variable is required for appservice tests');
+  }
 
   describe('User Registration Queries', () => {
     it('should accept users in openmeet-bot namespace', async () => {

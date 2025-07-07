@@ -167,6 +167,9 @@ describe('Matrix Bot Integration (E2E)', () => {
         .set('Authorization', `Bearer ${userToken}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
 
+      console.log(`User join event room response:`, response.body);
+      console.log(`Response status: ${response.status}`);
+
       expect(response.status).toBe(201);
       expect(response.body).toHaveProperty('success', true);
       expect(response.body).toHaveProperty('roomId');
@@ -199,6 +202,9 @@ describe('Matrix Bot Integration (E2E)', () => {
         .post(`/api/chat/event/${eventSlug}/members/${currentUser.slug}`)
         .set('Authorization', `Bearer ${userToken}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
+
+      console.log(`Add member to event room response:`, response.body);
+      console.log(`Response status: ${response.status}`);
 
       expect(response.status).toBe(201);
       expect(response.body).toHaveProperty('success', true);

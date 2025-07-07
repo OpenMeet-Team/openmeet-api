@@ -78,6 +78,8 @@ describe('Matrix Bot Operations (E2E)', () => {
         .set('x-tenant-id', TESTING_TENANT_ID)
         .send({});
 
+      console.log(`Joining event chat room: ${testEvent.slug}`);
+      console.log(`Response: ${JSON.stringify(joinResponse.body, null, 2)}`);
       expect(joinResponse.status).toBe(201);
       expect(joinResponse.body).toHaveProperty('success');
       expect(joinResponse.body.success).toBe(true);

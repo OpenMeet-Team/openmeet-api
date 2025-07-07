@@ -6,10 +6,10 @@ echo "Waiting for PostgreSQL to be ready..."
 echo "Waiting for Redis to be ready..."
 /opt/wait-for-it.sh redis:6379
 
-# Run database migrations and seed before starting API
+# Run database migrations first, then seeds
 echo "Running database migrations..."
 npm run migration:run:tenants
-echo "Running database seeds..."
+echo "Running database seeds (including bot users)..."
 npm run seed:run:prod
 
 # Note: Matrix setup is now deferred and will happen after Matrix starts
@@ -56,8 +56,8 @@ echo "Waiting for MAS service to be ready..."
 echo "Waiting for Matrix service to be ready..."
 /opt/wait-for-it.sh matrix:8448 -t 60
 
-# Run the E2E tests
-echo "Running E2E tests..."
-npm run test:e2e
+# Run all E2E tests
+echo "Running all E2E tests..."
+npm run test:e2e -- --runInBand --forceExit
 
 

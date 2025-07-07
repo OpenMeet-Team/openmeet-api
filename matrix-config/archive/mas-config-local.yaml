@@ -1,0 +1,158 @@
+http:
+  listeners:
+    - name: web
+      binds:
+        - address: "[::]:8080"
+      resources:
+        - name: discovery
+        - name: human
+        - name: oauth
+        - name: compat
+        - name: graphql
+        - name: assets
+  public_base: "http://localhost:8081"
+  trusted_proxies: []
+
+database:
+  uri: "postgresql://root:secret@postgres:5432/mas"
+  max_connections: 10
+  min_connections: 0
+
+secrets:
+  encryption: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+  keys:
+    # RSA key for RS256 algorithm (local development)
+    - kid: "rsa-key-local-001"
+      key: |
+        -----BEGIN PRIVATE KEY-----
+        MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC0xlNVaWkj1KqW
+        GscsA6+DzerATUd0d3u2pD3F6nt1R9jsBak/39rMCNkSRNUlYFa8kT5qXLQV7Kx/
+        IuhOxINSmUmGu1dbw42kg72sxWBaLEbCRjandp6nBe56eXtvOTRkmwvmgRLG8ScJ
+        26+/IKJXSpgd9YKTeRJvtInYhGWVqBGBn9gRYfFG1cYh8q5o1WzeThz0zjNAV4Ol
+        q3PsCeQl0luEJFS2tmZP3UCJNdZmSuRuF/BPBqRPaE+Ovkk5vAhpLPb3FDbvTzYp
+        mL5dD8Q3joAg2Jz1f7FdWNd0edANHYdnyyahRtMQGlELtod4mv8PyID1p4b6I/e6
+        hx/FhfMvAgMBAAECggEAVYUtj06a6tSFDxYD+5KSyev0jp0AnNyZrkHs52CSn10q
+        Bh53fzxLqhLVfosJuvDkl7iuqmrI10ZsJIlDFWBqL/1Mh2zBWywcKiQY609E0eP4
+        ZZgJ6xd23tUziMVH28pYOvAOpTGSzILxUPyZG/Y4Vst3Q1UOPO4eBrKGM+QOmsln
+        7+iFYLAwykRUStlrGexgvT5wl6Vc66TNjUAjuFFtHOLAA/6MJKOyuXvYmW5DZaYd
+        U48W1Xh8m3gDynL1PZuaVcR7MEVdnYvt4ZIJv3tTpvUt9aDMgceiF5kAAlfv0Rgs
+        YPZ3QhQgf/X9ENKw7v2Uelu57UvsacJ5gOt7G/HPoQKBgQDk23Z6jK6ZL4DZZKfI
+        kzbJJECDOR775NJ3KXnlfhFg9ryfFgfto0utLzXtXtbvwWPfHcMkwG+WHcAeHmBx
+        h0mtbmachBiupZ1QjremxDlPjfNzhuqCfDVopQU2BzWTlRyoVfjxGnVBZGDQs0AO
+        AKyNab/MsTCjdHtekj9a03aG3QKBgQDKNvxN88LBh3xOWAwxzeU7Pu55FZIMP2YP
+        Auabmp15uAUmB+8nNNewEXCDo9to38/X89ly57z8yeC+P/2q6AtO+qcI7gpQNx7T
+        9KZoNLAeC1QhazSqpxlN+lL5J5PyrPr675SkoNmKXvJu4jEI/ohkTkbkvnzR1pYb
+        0jOF3efTewKBgQDIIb8/Ng1temQkN+id91b+mMwttOMKhrUibcviS9eowrx6Jkry
+        nk2Mem+fT8OIUMckkyNW3U33qbaa4BeY0CU3HAdxsfbfq4ahrtydYpV3o3wVOBOV
+        3kbaZwzijXVlxQ0VjHExbuDBOaWMfGR0mlRLKgIHX6BYIIHOVvg+VhQdpQKBgGtK
+        CUwCzY6JKDcZGD9Ekx+AIF82Rqsg6DGGxHxC6NKwBGtNQmJ28wmD90KhKcTXGxvl
+        UbZZpjgplIjcwuZu/7ED5KQkSGyPElg7Mh+P9PG76QNiMitpRU/ORT/U8/aKOQ/z
+        FdbTURjNj6utb37qLcuqjIrJVsivJi3UtWmNd3cJAoGBAMquMlkFpJww0ECEsJ1d
+        vQW32+G2qz/ytXToSH6VhzC0DVshnaYvUzhYMH2tPP1VQZglXLX+UQOg2bK7tWna
+        mI4NRYZH4EWZqVrKHQwlcK/uqa1cbsKpRPwCFWWneOd45QxLgnzowQp1hrBaO8Ef
+        ZFxLHxqnB+ui9W1J0pNHV2qx
+        -----END PRIVATE KEY-----
+
+    # EC P-256 key for ES256 algorithm (local development)
+    - kid: "ec-key-local-001"
+      key: |
+        -----BEGIN EC PRIVATE KEY-----
+        MHcCAQEEIEZcaOCdVIdh3fTvbKYVrHrOskwf1+Aln54UKeHgeNPpoAoGCCqGSM49
+        AwEHoUQDQgAElcdW658lyh2CCSV+pn4wJ6NQKMQpMp20nW0emxSuSg3osuc8VvDU
+        9ebkw7yxxkNznAW8tF23wiFMHBUQetId8Q==
+        -----END EC PRIVATE KEY-----
+
+matrix:
+  homeserver: "matrix.openmeet.net"
+  endpoint: "http://matrix:8448"
+  secret: "local-mas-admin-token"
+
+clients:
+  # Matrix Synapse Homeserver Client for MSC3861
+  - client_id: "0000000000000000000SYNAPSE"
+    client_auth_method: "client_secret_basic"
+    client_secret: "local-dev-shared-secret-with-synapse"
+    redirect_uris: []  # Synapse doesn't need redirect URIs for introspection
+
+  # OpenMeet Platform Frontend Client (SPA)
+  - client_id: "01JAYS74TCG3BTWKADN5Q4518D"
+    client_auth_method: "none"  # Public client, no secrets
+    client_uri: "https://00d23135e123.ngrok.app"  # Primary client URI for ngrok testing
+    redirect_uris:
+      - "http://localhost:9005/auth/matrix/callback"
+      - "http://localhost:9005/events/*"
+      - "http://localhost:8087/auth/matrix/callback"
+      - "http://localhost:8087/events/*"
+      - "http://127.0.0.1:8087/auth/matrix/callback"
+      - "http://127.0.0.1:8087/events/*"
+      - "https://00d23135e123.ngrok.app/auth/matrix/callback"
+      - "https://00d23135e123.ngrok.app/events/*"
+
+  # OpenMeet Bot Client for Client Credentials Grant
+  - client_id: "01JAYS74TCG3BTWKADN5Q4518E"
+    client_auth_method: "client_secret_basic"
+    client_secret: "openmeet-bot-client-secret-local"
+    redirect_uris: []  # No redirects needed for client credentials
+    grant_types:
+      - "client_credentials"
+    scopes:
+      - "urn:matrix:org.matrix.msc2967.client:api:*"
+
+upstream_oauth2:
+  providers:
+    - id: "01JAYS74TCG3BTWKADN5Q4518C"
+      human_name: "OpenMeet Local"
+      brand_name: "openmeet"
+      issuer: "https://localdev.openmeet.net/oidc"
+      client_id: "mas_client"
+      client_secret: "local-dev-shared-secret-with-synapse"
+      token_endpoint_auth_method: "client_secret_post"
+      scope: "openid email"
+      claims_imports:
+        localpart:
+          action: require
+          template: "{{ user.preferred_username }}"
+        displayname:
+          action: suggest
+          template: "{{ user.name }}"
+        email:
+          action: suggest
+          template: "{{ user.email }}"
+        tenant_id:
+          action: suggest
+          template: "{{ user.tenant_id or 'default' }}"
+
+policy:
+  wasm_module: "/usr/local/share/mas-cli/policy.wasm"
+  data:
+    # Allow all users for testing
+    allow_all: true
+    admin_users: 
+      - "tom-scanlan-dvasc6_lsdfaopkljdfs"
+      - "tom-scanlan-dvasc6"
+      - "@tom-scanlan-dvasc6:matrix.openmeet.net"
+    # Bot clients that can use client credentials grant for admin operations
+    admin_clients:
+      - "01JAYS74TCG3BTWKADN5Q4518E"
+
+branding:
+  service_name: "OpenMeet Authentication"
+  policy_uri: "https://openmeet.net/privacy"
+  tos_uri: "https://openmeet.net/terms"
+
+email:
+  from: "noreply@openmeet.net"
+  reply_to: "noreply@openmeet.net"
+  transport: "smtp"
+  hostname: "maildev"
+  port: 1025
+  mode: "plain"
+
+telemetry:
+  tracing:
+    jaeger:
+      endpoint: "http://jaeger:14268/api/traces"
+  metrics:
+    prometheus:
+      enabled: true
+      bind: "[::]:9090"

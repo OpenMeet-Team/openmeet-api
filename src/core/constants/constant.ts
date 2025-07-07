@@ -161,6 +161,11 @@ export interface TenantConfig {
   githubClientId: string; // github client id, ex: 1234567890
   githubClientSecret: string; // github client secret, ex: 0987654321
   blueskyConfig?: BlueskyConfig;
+  botUser?: {
+    email: string; // bot user email, ex: bot-tenant@openmeet.net
+    slug: string; // bot user slug, ex: openmeet-bot-tenant
+    password: string; // bot user password
+  };
 }
 
 export enum ExternalEventSourceType {

@@ -37,10 +37,16 @@ export MAS_ADMIN_TOKEN=${MAS_ADMIN_TOKEN:-}
 # Copy log config
 cp /data/log.config /processed-config/
 
-# Use envsubst to replace environment variables in the template
-# This matches how the Kubernetes init container processes the template
-echo "Running envsubst on homeserver.yaml template..."
-envsubst < /data/homeserver.yaml > /processed-config/homeserver.yaml
+# Check if we have a rendered config from init container (CI environment)
+if [ -f "/config/homeserver.yaml" ]; then
+    echo "Using pre-rendered config from init container..."
+    cp /config/homeserver.yaml /processed-config/homeserver.yaml
+else
+    # Use envsubst to replace environment variables in the template (local environment)
+    # This matches how the Kubernetes init container processes the template
+    echo "Running envsubst on homeserver.yaml template..."
+    envsubst < /data/homeserver.yaml > /processed-config/homeserver.yaml
+fi
 
 echo "Configuration file contents:"
 cat /processed-config/homeserver.yaml | grep -v password | head -30
