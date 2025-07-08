@@ -292,8 +292,13 @@ export class OidcService {
     userId: number,
     tenantId: string,
   ) {
-    // Validate client_id
-    const validClientIds = ['matrix_synapse', 'mas_client']; // Add more clients as needed
+    // Validate client_id - get from environment for each deployment
+    const validClientIds = [
+      'matrix_synapse', // Legacy client ID
+      '0000000000000000000SYNAPSE', // Synapse ULID client ID
+      process.env.OAUTH_CLIENT_ID, // Environment-specific frontend client ID
+      process.env.BOT_CLIENT_ID, // Environment-specific bot client ID
+    ].filter(Boolean); // Remove undefined values
     console.log('🔧 OIDC Debug - Client validation:', {
       provided: params.client_id,
       valid: validClientIds,
@@ -614,17 +619,39 @@ export class OidcService {
     clientSecret?: string,
   ): Promise<void> {
     // TODO: Store client credentials securely (database or config)
+    // Build valid clients from environment configuration
     const validClients = {
+      // Legacy Matrix Synapse client
       matrix_synapse: {
         secret:
           process.env.MATRIX_OIDC_CLIENT_SECRET || 'change-me-in-production',
-        isPublic: true, // Back to public client - will implement RS256
+        isPublic: true,
       },
+      // Legacy MAS client (CI environment)
       mas_client: {
-        secret: process.env.MAS_CLIENT_SECRET, // Required via environment, no default
-        isPublic: true, // Frontend public client - no secret required for token exchange
+        secret: process.env.MAS_CLIENT_SECRET,
+        isPublic: true,
+      },
+      // ULID-based Synapse client
+      '0000000000000000000SYNAPSE': {
+        secret: process.env.MATRIX_OIDC_CLIENT_SECRET || 'local-dev-shared-secret-with-synapse',
+        isPublic: true,
       },
     };
+
+    // Add environment-specific clients
+    if (process.env.OAUTH_CLIENT_ID) {
+      validClients[process.env.OAUTH_CLIENT_ID] = {
+        secret: process.env.OAUTH_CLIENT_SECRET,
+        isPublic: true, // Frontend public client
+      };
+    }
+    if (process.env.BOT_CLIENT_ID) {
+      validClients[process.env.BOT_CLIENT_ID] = {
+        secret: process.env.BOT_CLIENT_SECRET,
+        isPublic: false, // Bot client requires secret
+      };
+    }
 
     const client = validClients[clientId];
     if (!client) {

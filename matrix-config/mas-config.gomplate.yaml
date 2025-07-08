@@ -45,7 +45,7 @@ secrets:
 
 matrix:
   homeserver: "{{ .Env.MATRIX_SERVER_NAME }}"
-  endpoint: "{{ .Env.MATRIX_ENDPOINT }}"
+  endpoint: "{{ .Env.MAS_MATRIX_HOMESERVER_URL }}"
   secret: "{{ .Env.MAS_ADMIN_TOKEN }}"
 
 clients:
@@ -119,8 +119,8 @@ email:
   from: "{{ .Env.MAIL_DEFAULT_EMAIL }}"
   reply_to: "{{ .Env.MAIL_DEFAULT_EMAIL }}"
   transport: "smtp"
-  hostname: "{{ .Env.MAIL_HOST }}"
-  port: {{ .Env.MAIL_PORT }}
+  hostname: "{{ .Env.MAS_MAIL_HOST | default .Env.MAIL_HOST }}"
+  port: {{ .Env.MAS_MAIL_PORT | default .Env.MAIL_PORT }}
   mode: "{{ .Env.MAIL_MODE }}"
 
 # Minimal telemetry for {{ .Env.ENVIRONMENT }}
