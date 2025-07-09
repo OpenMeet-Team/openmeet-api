@@ -525,6 +525,7 @@ export class OidcController {
     @Query('state') state?: string,
     @Query('nonce') nonce?: string,
     @Query('login_hint') loginHint?: string,
+    @Query('tenant_id') tenantId?: string,
   ) {
     if (!clientId || !redirectUri || !responseType || !scope) {
       throw new BadRequestException('Missing required OIDC parameters');
@@ -647,7 +648,54 @@ export class OidcController {
     }
 
     console.log(
-      '🔐 OIDC Login Debug - No authentication found, showing email form',
+      '🔐 OIDC Login Debug - No authentication found, checking for tenant_id parameter',
+    );
+
+    // If tenant_id is provided from the frontend, skip email prompt and redirect directly
+    if (tenantId) {
+      console.log(
+        `🏢 OIDC Login Debug - Tenant ID provided (${tenantId}), skipping email prompt for tenant discovery`,
+      );
+
+      // Validate that the tenant exists
+      try {
+        getTenantConfig(tenantId);
+        console.log(
+          `✅ OIDC Login Debug - Tenant ${tenantId} validated, redirecting to tenant-specific auth`,
+        );
+
+        const baseUrl =
+          this.configService.get('app.oidcIssuerUrl', { infer: true }) ||
+          'http://localhost:3000';
+
+        const returnUrl =
+          `${baseUrl}/api/oidc/auth?` +
+          new URLSearchParams({
+            client_id: clientId,
+            redirect_uri: redirectUri,
+            response_type: responseType,
+            scope: scope,
+            ...(state && { state }),
+            ...(nonce && { nonce }),
+            tenant_id: tenantId,
+          }).toString();
+
+        console.log(
+          `🔄 OIDC Login Debug - Redirecting to tenant-specific login: ${returnUrl}`,
+        );
+
+        response.redirect(returnUrl);
+        return;
+      } catch (error) {
+        console.error(
+          `❌ OIDC Login Debug - Invalid tenant ID ${tenantId}: ${error.message}`,
+        );
+        // Fall through to email form if tenant is invalid
+      }
+    }
+
+    console.log(
+      '🔐 OIDC Login Debug - No valid tenant_id provided, showing email form for tenant discovery',
     );
 
     // Create simple HTML form for email input

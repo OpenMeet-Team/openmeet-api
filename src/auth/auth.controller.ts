@@ -59,8 +59,12 @@ export class AuthController {
   public async login(
     @Body() loginDto: AuthEmailLoginDto,
     @Res({ passthrough: true }) response: Response,
+    @Request() request,
   ): Promise<LoginResponseDto> {
-    const loginResult = await this.service.validateLogin(loginDto);
+    const loginResult = await this.service.validateLogin(
+      loginDto,
+      request.tenantId,
+    );
 
     // Set oidc_session cookie for cross-domain OIDC authentication
     if (loginResult.sessionId) {
@@ -109,8 +113,12 @@ export class AuthController {
   public async register(
     @Body() createUserDto: AuthRegisterLoginDto,
     @Res({ passthrough: true }) response: Response,
+    @Request() request,
   ): Promise<LoginResponseDto> {
-    const loginResult = await this.service.register(createUserDto);
+    const loginResult = await this.service.register(
+      createUserDto,
+      request.tenantId,
+    );
 
     // Set oidc_session cookie for cross-domain OIDC authentication
     if (loginResult.sessionId) {
@@ -236,10 +244,13 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt-refresh'))
   @HttpCode(HttpStatus.OK)
   public refresh(@Request() request): Promise<RefreshResponseDto> {
-    return this.service.refreshToken({
-      sessionId: request.user.sessionId,
-      hash: request.user.hash,
-    });
+    return this.service.refreshToken(
+      {
+        sessionId: request.user.sessionId,
+        hash: request.user.hash,
+      },
+      request.tenantId,
+    );
   }
 
   @ApiBearerAuth()

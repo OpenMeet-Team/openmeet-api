@@ -56,7 +56,10 @@ export class AuthService {
     @Inject(REQUEST) private readonly request?: any,
   ) {}
 
-  async validateLogin(loginDto: AuthEmailLoginDto): Promise<LoginResponseDto> {
+  async validateLogin(
+    loginDto: AuthEmailLoginDto,
+    tenantId: string,
+  ): Promise<LoginResponseDto> {
     const user = await this.userService.findByEmail(loginDto.email);
 
     if (!user) {
@@ -124,6 +127,7 @@ export class AuthService {
       slug: user.slug,
       sessionId: session.id,
       hash,
+      tenantId,
     });
 
     return {
@@ -208,6 +212,7 @@ export class AuthService {
       slug: user.slug,
       sessionId: session.id,
       hash,
+      tenantId,
     });
 
     return {
@@ -219,7 +224,7 @@ export class AuthService {
     };
   }
 
-  async register(dto: AuthRegisterLoginDto): Promise<any> {
+  async register(dto: AuthRegisterLoginDto, tenantId: string): Promise<any> {
     const role = await this.roleService.findByName(RoleEnum.User);
     if (!role) {
       throw new Error(`Role not found: ${RoleEnum.User}`);
@@ -263,6 +268,7 @@ export class AuthService {
       slug: user.slug,
       sessionId: session.id,
       hash,
+      tenantId,
     });
 
     const createdUser = await this.userService.findById(user.id);
@@ -573,6 +579,7 @@ export class AuthService {
 
   async refreshToken(
     data: Pick<JwtRefreshPayloadType, 'sessionId' | 'hash'>,
+    tenantId: string,
   ): Promise<Omit<LoginResponseDto, 'user'>> {
     console.log(
       '🔄 RefreshToken Debug - Starting refresh for sessionId:',
@@ -640,6 +647,7 @@ export class AuthService {
       slug: user.slug,
       sessionId: session.id,
       hash,
+      tenantId,
     });
 
     return {
@@ -663,6 +671,7 @@ export class AuthService {
     slug: User['slug'];
     sessionId: Session['id'];
     hash: Session['hash'];
+    tenantId: string;
   }) {
     const tokenExpiresIn = this.configService.getOrThrow('auth.expires', {
       infer: true,
@@ -682,6 +691,7 @@ export class AuthService {
           role: data.role,
           slug: data.slug,
           sessionId: data.sessionId,
+          tenantId: data.tenantId,
         },
         {
           secret: this.configService.getOrThrow('auth.secret', { infer: true }),
