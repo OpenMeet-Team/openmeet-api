@@ -627,11 +627,6 @@ export class OidcService {
           process.env.MATRIX_OIDC_CLIENT_SECRET || 'change-me-in-production',
         isPublic: true,
       },
-      // Legacy MAS client (CI environment)
-      mas_client: {
-        secret: process.env.MAS_CLIENT_SECRET,
-        isPublic: true,
-      },
       // ULID-based Synapse client
       '0000000000000000000SYNAPSE': {
         secret:

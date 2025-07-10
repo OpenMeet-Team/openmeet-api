@@ -7,6 +7,12 @@ import {
 } from '../utils/constants';
 import { loginAsTester } from '../utils/functions';
 
+// Environment-specific client configuration - fail if not set
+const TEST_CLIENT_ID = process.env.OAUTH_CLIENT_ID;
+if (!TEST_CLIENT_ID) {
+  throw new Error('OAUTH_CLIENT_ID environment variable is required for E2E tests');
+}
+
 /**
  * OIDC MAS (Matrix Authentication Service) Integration E2E Tests
  *
@@ -120,7 +126,7 @@ describe('OIDC MAS Authentication Flow', () => {
       const response = await request(TESTING_APP_URL)
         .get('/api/oidc/auth')
         .query({
-          client_id: 'mas_client',
+          client_id: TEST_CLIENT_ID,
           redirect_uri: `${TESTING_MAS_URL}/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C`,
           response_type: 'code',
           scope: 'openid profile email',
@@ -159,7 +165,7 @@ describe('OIDC MAS Authentication Flow', () => {
       const response = await request(TESTING_APP_URL)
         .get('/api/oidc/auth')
         .query({
-          client_id: 'mas_client',
+          client_id: TEST_CLIENT_ID,
           redirect_uri: `${TESTING_MAS_URL}/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C`,
           response_type: 'code',
           scope: 'openid profile email',
@@ -225,7 +231,7 @@ describe('OIDC MAS Authentication Flow', () => {
         const authResponse = await request(TESTING_APP_URL)
           .get('/api/oidc/auth')
           .query({
-            client_id: 'mas_client',
+            client_id: TEST_CLIENT_ID,
             redirect_uri: `${TESTING_MAS_URL}/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C`,
             response_type: 'code',
             scope: 'openid profile email',
@@ -259,7 +265,7 @@ describe('OIDC MAS Authentication Flow', () => {
           grant_type: 'authorization_code',
           code: authorizationCode,
           redirect_uri: `${TESTING_MAS_URL}/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C`,
-          client_id: 'mas_client',
+          client_id: TEST_CLIENT_ID,
           client_secret: TESTING_MAS_CLIENT_SECRET,
         })
         .expect(200);
@@ -295,7 +301,7 @@ describe('OIDC MAS Authentication Flow', () => {
           grant_type: 'authorization_code',
           code: authorizationCode,
           redirect_uri: `${TESTING_MAS_URL}/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C`,
-          client_id: 'mas_client',
+          client_id: TEST_CLIENT_ID,
           client_secret: TESTING_MAS_CLIENT_SECRET,
         });
 
@@ -345,7 +351,7 @@ describe('OIDC MAS Authentication Flow', () => {
       const response = await request(TESTING_APP_URL)
         .get('/api/oidc/auth')
         .query({
-          client_id: 'mas_client',
+          client_id: TEST_CLIENT_ID,
           redirect_uri: 'https://malicious.com/callback',
           response_type: 'code',
           scope: 'openid',
@@ -367,7 +373,7 @@ describe('OIDC MAS Authentication Flow', () => {
           grant_type: 'authorization_code',
           code: 'invalid_code_12345',
           redirect_uri: `${TESTING_MAS_URL}/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C`,
-          client_id: 'mas_client',
+          client_id: TEST_CLIENT_ID,
           client_secret: 'wrong_secret',
         })
         .expect(401);
@@ -391,7 +397,7 @@ describe('OIDC MAS Authentication Flow', () => {
       await request(TESTING_APP_URL)
         .get('/api/oidc/auth')
         .query({
-          client_id: 'mas_client',
+          client_id: TEST_CLIENT_ID,
           response_type: 'code',
           scope: 'openid',
         })
@@ -402,7 +408,7 @@ describe('OIDC MAS Authentication Flow', () => {
       const response3 = await request(TESTING_APP_URL)
         .get('/api/oidc/auth')
         .query({
-          client_id: 'mas_client',
+          client_id: TEST_CLIENT_ID,
           redirect_uri: `${TESTING_MAS_URL}/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C`,
           response_type: 'token',
           scope: 'openid',
@@ -429,7 +435,7 @@ describe('OIDC MAS Authentication Flow', () => {
       const oidcAuthResponse = await request(TESTING_APP_URL)
         .get('/api/oidc/auth')
         .query({
-          client_id: 'mas_client',
+          client_id: TEST_CLIENT_ID,
           redirect_uri: `${TESTING_MAS_URL}/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C`,
           response_type: 'code',
           scope: 'openid profile email',
@@ -450,7 +456,7 @@ describe('OIDC MAS Authentication Flow', () => {
       const authenticatedAuthResponse = await request(TESTING_APP_URL)
         .get('/api/oidc/auth')
         .query({
-          client_id: 'mas_client',
+          client_id: TEST_CLIENT_ID,
           redirect_uri: `${TESTING_MAS_URL}/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C`,
           response_type: 'code',
           scope: 'openid profile email',
@@ -483,7 +489,7 @@ describe('OIDC MAS Authentication Flow', () => {
             grant_type: 'authorization_code',
             code: authCode,
             redirect_uri: `${TESTING_MAS_URL}/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C`,
-            client_id: 'mas_client',
+            client_id: TEST_CLIENT_ID,
             client_secret: TESTING_MAS_CLIENT_SECRET,
           })
           .expect(200);
