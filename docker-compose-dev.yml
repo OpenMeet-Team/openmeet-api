@@ -102,7 +102,7 @@ services:
 
   # Matrix Authentication Service
   matrix-auth-service:
-    image: ghcr.io/element-hq/matrix-authentication-service:latest
+    image: ghcr.io/element-hq/matrix-authentication-service:0.18.0
     container_name: openmeet_mas
     ports:
       - "8081:8080"
