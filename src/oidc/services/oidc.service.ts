@@ -634,7 +634,9 @@ export class OidcService {
       },
       // ULID-based Synapse client
       '0000000000000000000SYNAPSE': {
-        secret: process.env.MATRIX_OIDC_CLIENT_SECRET || 'local-dev-shared-secret-with-synapse',
+        secret:
+          process.env.MATRIX_OIDC_CLIENT_SECRET ||
+          'local-dev-shared-secret-with-synapse',
         isPublic: true,
       },
     };
@@ -836,6 +838,45 @@ export class OidcService {
     }
 
     this.logger.log(`Email ${email} not found in any tenant`);
+    return null;
+  }
+
+  /**
+   * Find user by session ID across all tenants
+   * Returns the first tenant where the session ID is found
+   */
+  @Trace('oidc.findUserBySessionId')
+  async findUserBySessionIdAcrossTenants(
+    sessionId: number,
+  ): Promise<{ user: UserEntity; tenantId: string } | null> {
+    const tenants = fetchTenants();
+
+    for (const tenant of tenants) {
+      try {
+        const connection =
+          await this.tenantConnectionService.getTenantConnection(tenant.id);
+        const sessionRepository = connection.getRepository('sessions');
+
+        const session = await sessionRepository.findOne({
+          where: { id: sessionId },
+          relations: ['user'],
+        });
+
+        if (session && session.user) {
+          this.logger.log(
+            `Found session ${sessionId} in tenant ${tenant.id} for user ${session.user.id}`,
+          );
+          return { user: session.user, tenantId: tenant.id };
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Failed to search tenant ${tenant.id} for session ${sessionId}: ${error.message}`,
+        );
+        continue;
+      }
+    }
+
+    this.logger.log(`Session ${sessionId} not found in any tenant`);
     return null;
   }
 }
