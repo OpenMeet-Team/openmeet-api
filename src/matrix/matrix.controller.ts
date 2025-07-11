@@ -615,4 +615,70 @@ export class MatrixController {
       throw error;
     }
   }
+
+  @ApiOperation({
+    summary: 'Sync Matrix user identity after MAS authentication',
+    description: 'Register Matrix user ID with backend after successful MAS authentication',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Matrix user identity synced successfully',
+  })
+  @UseGuards(JWTAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('sync-user-identity')
+  @Trace('matrix.api.syncUserIdentity')
+  async syncMatrixUserIdentity(
+    @AuthUser() user: { id: number },
+    @Body() body: { matrixUserId: string },
+    @Req() req: Request,
+  ): Promise<{
+    success: boolean;
+    matrixUserId: string;
+    handle: string;
+  }> {
+    this.logger.log(`Syncing Matrix user identity for user ID: ${user.id}, Matrix ID: ${body.matrixUserId}`);
+
+    try {
+      // Get tenant ID from request context
+      const tenantId = req['tenantId'];
+      if (!tenantId) {
+        throw new BadRequestException('Tenant ID is required');
+      }
+
+      // Validate Matrix user ID format
+      if (!body.matrixUserId || !body.matrixUserId.startsWith('@')) {
+        throw new BadRequestException('Invalid Matrix user ID format');
+      }
+
+      // Extract handle from Matrix user ID
+      const handle = body.matrixUserId.match(/@(.+):/)?.[1];
+      if (!handle) {
+        throw new BadRequestException(`Could not extract handle from Matrix user ID: ${body.matrixUserId}`);
+      }
+
+      // Register the Matrix handle in the global registry
+      await this.globalMatrixValidationService.registerMatrixHandle(
+        handle,
+        tenantId,
+        user.id,
+      );
+
+      this.logger.log(
+        `Matrix user identity synced successfully for user ${user.id}, Matrix ID: ${body.matrixUserId}, handle: ${handle}`,
+      );
+
+      return {
+        success: true,
+        matrixUserId: body.matrixUserId,
+        handle,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error syncing Matrix user identity for user ${user.id}: ${error.message}`,
+        error.stack,
+      );
+      throw new BadRequestException(error.message);
+    }
+  }
 }
