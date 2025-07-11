@@ -156,7 +156,8 @@ export class EventListener {
   async handleEventAttendeeUpdatedEvent(params: {
     eventId: number;
     userId: number;
-    newStatus: string;
+    newStatus?: string;
+    status?: string;
     previousStatus?: string;
     eventSlug?: string;
     userSlug?: string;
@@ -184,20 +185,23 @@ export class EventListener {
         }
       }
 
+      // Get tenantId from params or request context
+      const tenantId = params.tenantId || this.request?.tenantId;
+      
+      if (!tenantId) {
+        this.logger.error('No tenantId available in event parameters or request context');
+        return;
+      }
+
+      // Handle status parameter (for backward compatibility)
+      const currentStatus = params.newStatus || params.status;
+
       // If status changed to confirmed, add user to chat
       if (
-        params.newStatus === EventAttendeeStatus.Confirmed &&
+        currentStatus === EventAttendeeStatus.Confirmed &&
         eventSlug &&
         userSlug
       ) {
-        // Get tenantId from params or request context
-        const tenantId = params.tenantId || this.request?.tenantId;
-        
-        if (!tenantId) {
-          this.logger.error('No tenantId available in event parameters or request context for chat.event.member.add');
-          return;
-        }
-
         // Emit an event for the chat module to handle
         this.eventEmitter.emit('chat.event.member.add', {
           eventSlug,
@@ -211,18 +215,10 @@ export class EventListener {
       // If status changed from confirmed to something else, remove from chat
       else if (
         params.previousStatus === EventAttendeeStatus.Confirmed &&
-        params.newStatus !== EventAttendeeStatus.Confirmed &&
+        currentStatus !== EventAttendeeStatus.Confirmed &&
         eventSlug &&
         userSlug
       ) {
-        // Get tenantId from params or request context
-        const tenantId = params.tenantId || this.request?.tenantId;
-        
-        if (!tenantId) {
-          this.logger.error('No tenantId available in event parameters or request context for chat.event.member.remove');
-          return;
-        }
-
         // Emit an event for the chat module to handle
         this.eventEmitter.emit('chat.event.member.remove', {
           eventSlug,

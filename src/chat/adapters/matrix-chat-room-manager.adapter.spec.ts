@@ -38,6 +38,9 @@ describe('MatrixChatRoomManagerAdapter', () => {
   };
 
   beforeEach(async () => {
+    // Set up environment variables for Matrix server
+    process.env.MATRIX_SERVER_NAME = 'matrix.org';
+    
     // Create mock repository objects with Jest mock functions
     mockChatRoomRepository = {
       findOne: jest.fn(),
@@ -195,7 +198,7 @@ describe('MatrixChatRoomManagerAdapter', () => {
         {
           provide: GlobalMatrixValidationService,
           useValue: {
-            getMatrixHandleForUser: jest.fn().mockResolvedValue(null), // No registry entry, will fallback to legacy
+            getMatrixHandleForUser: jest.fn().mockResolvedValue({ handle: 'user' }), // Return valid handle
             getUserByMatrixHandle: jest.fn().mockResolvedValue(null),
             isMatrixHandleUnique: jest.fn().mockResolvedValue(true),
             registerMatrixHandle: jest.fn().mockResolvedValue(undefined),
