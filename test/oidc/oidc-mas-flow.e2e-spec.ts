@@ -10,7 +10,9 @@ import { loginAsTester } from '../utils/functions';
 // Environment-specific client configuration - fail if not set
 const TEST_CLIENT_ID = process.env.OAUTH_CLIENT_ID;
 if (!TEST_CLIENT_ID) {
-  throw new Error('OAUTH_CLIENT_ID environment variable is required for E2E tests');
+  throw new Error(
+    'OAUTH_CLIENT_ID environment variable is required for E2E tests',
+  );
 }
 
 /**
