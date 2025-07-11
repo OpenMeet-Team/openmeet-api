@@ -82,9 +82,20 @@ export class GlobalMatrixValidationService {
         throw new Error(`Invalid Matrix handle format: ${handle}`);
       }
 
-      // Double-check uniqueness before registering
-      const isUnique = await this.isMatrixHandleUnique(handle);
-      if (!isUnique) {
+      // Check if handle is already registered for this user
+      const existing = await this.registry.findOne({
+        where: { handle: handle.toLowerCase() },
+      });
+      
+      if (existing) {
+        // If same user and tenant, allow re-registration (idempotent)
+        if (existing.userId === userId && existing.tenantId === tenantId) {
+          this.logger.log(
+            `Matrix handle ${handle} already registered for user ${userId} in tenant ${tenantId} - skipping duplicate registration`,
+          );
+          return;
+        }
+        // If different user, it's already taken
         throw new Error(`Matrix handle ${handle} is already taken`);
       }
 

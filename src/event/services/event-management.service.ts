@@ -1575,6 +1575,8 @@ export class EventManagementService {
         `[attendEvent] Updating existing attendance record from ${eventAttendee.status} to ${attendeeStatus}`,
       );
 
+      // Store the previous status before updating for event emission
+      const previousStatus = eventAttendee.status;
       eventAttendee.status = attendeeStatus;
 
       // Update source fields if provided
@@ -1599,11 +1601,16 @@ export class EventManagementService {
       );
 
       // Emit event for status change
+      this.logger.debug(
+        `[attendEvent] Emitting event.attendee.status.changed: ${previousStatus} → ${attendeeStatus} for user ${user.id} in event ${event.id}`,
+      );
       this.eventEmitter.emit('event.attendee.status.changed', {
         eventId: event.id,
         userId: user.id,
-        previousStatus: eventAttendee.status,
+        previousStatus: previousStatus,
         newStatus: attendeeStatus,
+        eventSlug: event.slug,
+        userSlug: user.slug,
         tenantId: this.request.tenantId,
       });
 
@@ -1634,6 +1641,20 @@ export class EventManagementService {
             attendeeStatus,
             participantRole.id,
           );
+
+        // Emit event for status change from cancelled to confirmed
+        this.logger.debug(
+          `[attendEvent] Emitting event.attendee.status.changed for reactivation: cancelled → ${attendeeStatus} for user ${user.id} in event ${event.id}`,
+        );
+        this.eventEmitter.emit('event.attendee.status.changed', {
+          eventId: event.id,
+          userId: user.id,
+          previousStatus: EventAttendeeStatus.Cancelled,
+          newStatus: attendeeStatus,
+          eventSlug: event.slug,
+          userSlug: user.slug,
+          tenantId: this.request.tenantId,
+        });
 
         // Update source fields if needed
         if (

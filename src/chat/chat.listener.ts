@@ -75,13 +75,31 @@ export class ChatListener {
         `Added user ${params.userSlug} to event ${params.eventSlug} chat room in tenant ${params.tenantId}`,
       );
     } catch (error) {
-      // Log the error but don't throw it - this allows the event processing to continue
+      // ❌ CRITICAL ERROR: Matrix bot auto-invitation failed
+      // This means the user WON'T be able to access historical messages!
       this.logger.error(
-        `Failed to add user ${params.userSlug} to event ${params.eventSlug} chat room: ${error.message}`,
-        error.stack,
+        `🚨 MATRIX BOT AUTO-INVITATION FAILED for user ${params.userSlug} in event ${params.eventSlug}`,
+        {
+          error: error.message,
+          stack: error.stack,
+          eventSlug: params.eventSlug,
+          userSlug: params.userSlug,
+          tenantId: params.tenantId,
+          impact:
+            'User will NOT have access to Matrix room and historical messages',
+          action: 'Manual Matrix room invitation may be required',
+        },
       );
-      // Don't rethrow the error - this allows the event processing to continue
-      // The chat room will be created when the event is fully persisted
+
+      // Still don't rethrow to avoid breaking attendance flow,
+      // but make the failure highly visible and actionable
+      console.error(
+        `❌ MATRIX AUTO-INVITATION FAILURE: User ${params.userSlug} not invited to Matrix room for event ${params.eventSlug}`,
+      );
+      console.error(
+        `❌ IMPACT: Historical messages will NOT be accessible to this user`,
+      );
+      console.error(`❌ ERROR: ${error.message}`);
     }
   }
 
@@ -136,10 +154,24 @@ export class ChatListener {
         `Removed user ${params.userSlug} from event ${params.eventSlug} chat room in tenant ${params.tenantId}`,
       );
     } catch (error) {
+      // ❌ CRITICAL ERROR: Matrix bot user removal failed
       this.logger.error(
-        `Failed to remove user ${params.userSlug} from event ${params.eventSlug} chat room: ${error.message}`,
-        error.stack,
+        `🚨 MATRIX BOT USER REMOVAL FAILED for user ${params.userSlug} in event ${params.eventSlug}`,
+        {
+          error: error.message,
+          stack: error.stack,
+          eventSlug: params.eventSlug,
+          userSlug: params.userSlug,
+          tenantId: params.tenantId,
+          impact: 'User may retain Matrix room access when they should not',
+        },
       );
+
+      // Make Matrix bot failures visible in console
+      console.error(
+        `❌ MATRIX USER REMOVAL FAILURE: User ${params.userSlug} not removed from Matrix room for event ${params.eventSlug}`,
+      );
+      console.error(`❌ ERROR: ${error.message}`);
     }
   }
 

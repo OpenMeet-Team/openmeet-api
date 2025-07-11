@@ -152,16 +152,17 @@ export class EventListener {
     }
   }
 
-  @OnEvent('event.attendee.updated')
+  @OnEvent('event.attendee.status.changed')
   async handleEventAttendeeUpdatedEvent(params: {
     eventId: number;
     userId: number;
-    status: string;
+    newStatus: string;
+    previousStatus?: string;
     eventSlug?: string;
     userSlug?: string;
     tenantId?: string;
   }) {
-    this.logger.log('event.attendee.updated', params);
+    this.logger.log('event.attendee.status.changed received', params);
 
     try {
       // Get the attendee to fetch slugs if they weren't provided
@@ -185,12 +186,17 @@ export class EventListener {
 
       // If status changed to confirmed, add user to chat
       if (
-        params.status === EventAttendeeStatus.Confirmed &&
+        params.newStatus === EventAttendeeStatus.Confirmed &&
         eventSlug &&
         userSlug
       ) {
         // Get tenantId from params or request context
         const tenantId = params.tenantId || this.request?.tenantId;
+        
+        if (!tenantId) {
+          this.logger.error('No tenantId available in event parameters or request context for chat.event.member.add');
+          return;
+        }
 
         // Emit an event for the chat module to handle
         this.eventEmitter.emit('chat.event.member.add', {
@@ -204,12 +210,18 @@ export class EventListener {
       }
       // If status changed from confirmed to something else, remove from chat
       else if (
-        params.status !== EventAttendeeStatus.Confirmed &&
+        params.previousStatus === EventAttendeeStatus.Confirmed &&
+        params.newStatus !== EventAttendeeStatus.Confirmed &&
         eventSlug &&
         userSlug
       ) {
         // Get tenantId from params or request context
         const tenantId = params.tenantId || this.request?.tenantId;
+        
+        if (!tenantId) {
+          this.logger.error('No tenantId available in event parameters or request context for chat.event.member.remove');
+          return;
+        }
 
         // Emit an event for the chat module to handle
         this.eventEmitter.emit('chat.event.member.remove', {

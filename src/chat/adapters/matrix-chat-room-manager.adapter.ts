@@ -65,21 +65,24 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
   }
 
   /**
-   * Ensures a user has Matrix credentials, provisioning them if needed
+   * Generates Matrix user ID for a given user (MAS-compatible)
    */
-  private async ensureUserHasMatrixCredentials(
+  private async generateMatrixUserIdForUser(
     userId: number,
     tenantId: string,
-  ): Promise<UserEntity> {
-    // Get the user
-    let user = await this.userService.findById(userId, tenantId);
+  ): Promise<{ user: UserEntity; matrixUserId: string }> {
+    const user = await this.userService.findById(userId, tenantId);
 
     if (!user) {
       throw new Error(`User with id ${userId} not found`);
     }
 
+    const serverName = process.env.MATRIX_SERVER_NAME;
+    if (!serverName) {
+      throw new Error('MATRIX_SERVER_NAME environment variable is required');
+    }
+
     // Check if user has Matrix credentials via registry first
-    let hasMatrixCredentials = false;
     let matrixUserId: string | null = null;
 
     if (this.globalMatrixValidationService) {
@@ -90,14 +93,7 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
             tenantId,
           );
         if (registryEntry) {
-          const serverName = process.env.MATRIX_SERVER_NAME;
-          if (!serverName) {
-            throw new Error(
-              'MATRIX_SERVER_NAME environment variable is required',
-            );
-          }
           matrixUserId = `@${registryEntry.handle}:${serverName}`;
-          hasMatrixCredentials = true;
         }
       } catch (error) {
         this.logger.warn(
@@ -106,105 +102,14 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
       }
     }
 
-    // Fallback: Check legacy matrixUserId field
-    if (
-      !hasMatrixCredentials &&
-      user.matrixUserId &&
-      user.matrixAccessToken &&
-      user.matrixDeviceId
-    ) {
-      hasMatrixCredentials = true;
-      matrixUserId = user.matrixUserId;
-    }
-
-    // If user doesn't have Matrix credentials, try to provision them
-    if (!hasMatrixCredentials) {
-      this.logger.log(
-        `User ${userId} is missing Matrix credentials, attempting to provision...`,
-      );
-      try {
-        // Use the centralized provisioning method
-        const matrixUserInfo = await this.matrixUserService.provisionMatrixUser(
-          user,
-          tenantId,
-        );
-
-        // Register the handle in the global registry
-        const handle = matrixUserInfo.userId.match(/@([^:]+):/)?.[1];
-        if (handle && this.globalMatrixValidationService) {
-          try {
-            await this.globalMatrixValidationService.registerMatrixHandle(
-              handle,
-              tenantId,
-              user.id,
-            );
-          } catch (registryError) {
-            this.logger.warn(
-              `Failed to register Matrix handle in registry: ${registryError.message}`,
-            );
-            // Continue without registry registration for backward compatibility
-          }
-        }
-
-        // Update user with Matrix credentials (legacy fields for compatibility)
-        await this.userService.update(
-          userId,
-          {
-            matrixUserId: matrixUserInfo.userId,
-            matrixAccessToken: matrixUserInfo.accessToken,
-            matrixDeviceId: matrixUserInfo.deviceId,
-          },
-          tenantId,
-        );
-
-        // Get the updated user record
-        user = await this.userService.findById(userId, tenantId);
-        if (!user) {
-          throw new Error(
-            `User with id ${userId} not found after provisioning`,
-          );
-        }
-
-        this.logger.log(
-          `Successfully provisioned Matrix user for ${userId}: ${matrixUserInfo.userId}`,
-        );
-        hasMatrixCredentials = true;
-        matrixUserId = matrixUserInfo.userId;
-      } catch (provisionError) {
-        this.logger.error(
-          `Failed to provision Matrix user for ${userId}: ${provisionError.message}`,
-        );
-        throw new Error(
-          `Matrix credentials could not be provisioned. Please try again.`,
-        );
-      }
-    }
-
-    // Final verification - check if we have a Matrix user ID
+    // If no Matrix user ID found, the user doesn't exist in Matrix
     if (!matrixUserId) {
       throw new Error(
-        `User with id ${userId} could not be provisioned with Matrix credentials.`,
+        `User ${user.slug} (ID: ${user.id}) does not have a Matrix user ID. User may not exist in Matrix or needs to authenticate via MAS first.`,
       );
     }
 
-    // Get a client for this user
-    try {
-      // Add non-null assertions since we've checked these values above
-      await this.matrixUserService.getClientForUser(
-        user.slug,
-        this.userService,
-        tenantId, // Pass the tenant ID
-      );
-    } catch (startError) {
-      this.logger.error(
-        `Failed to get Matrix client for user ${userId}: ${startError.message}`,
-      );
-      throw new Error(
-        `Could not connect to Matrix chat service. Please try again later.`,
-      );
-    }
-
-    return user;
+    return { user, matrixUserId };
   }
 
   /**
@@ -214,6 +119,7 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
   private async addUserToMatrixRoom(
     matrixRoomId: string,
     user: UserEntity,
+    matrixUserId: string,
     tenantId: string,
     options: {
       skipInvite?: boolean;
@@ -222,10 +128,10 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
   ): Promise<boolean> {
     const { skipInvite = false, forceInvite = false } = options;
 
-    // First check if user has necessary credentials
-    if (!user || !user.matrixUserId) {
+    // First check if user and matrixUserId are provided
+    if (!user || !matrixUserId) {
       this.logger.warn(
-        `User ${user?.id || 'unknown'} does not have a Matrix user ID, cannot join room`,
+        `User ${user?.id || 'unknown'} or Matrix user ID not provided, cannot join room`,
       );
       return false;
     }
@@ -233,7 +139,7 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
     let isAlreadyJoined = false;
 
     // Step 1: Invite user to the room if needed using bot
-    if (!skipInvite && user.matrixUserId) {
+    if (!skipInvite && matrixUserId) {
       try {
         // Ensure bot is authenticated before inviting user
         if (!this.matrixBotService.isBotAuthenticated()) {
@@ -242,7 +148,7 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
 
         await this.matrixBotService.inviteUser(
           matrixRoomId,
-          user.matrixUserId,
+          matrixUserId,
           tenantId,
         );
         this.logger.debug(
@@ -267,40 +173,16 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
       }
     }
 
-    // Step 2: Have the user join the room if they have credentials and either need to join or we're forcing a join
+    // Step 2: With MAS, users don't need to join manually - they authenticate via OIDC
+    // The bot invitation is sufficient, users will access the room when they authenticate
     let isJoined = isAlreadyJoined;
-    if (
-      (user.matrixAccessToken && user.matrixUserId && !isAlreadyJoined) ||
-      forceInvite
-    ) {
-      try {
-        await this.matrixRoomService.joinRoom(
-          matrixRoomId,
-          user.matrixUserId,
-          user.matrixAccessToken!, // Add non-null assertion since we've already checked that it exists
-          user.matrixDeviceId,
-        );
-        isJoined = true;
-        this.logger.log(`User ${user.id} joined room ${matrixRoomId}`);
-      } catch (joinError) {
-        // If join fails with "already in room", that's actually success
-        if (
-          joinError.message &&
-          (joinError.message.includes('already in the room') ||
-            joinError.message.includes('already a member') ||
-            joinError.message.includes('already joined'))
-        ) {
-          isJoined = true;
-          this.logger.debug(
-            `User ${user.id} is already a member of room ${matrixRoomId}`,
-          );
-        } else {
-          this.logger.warn(
-            `User ${user.id} failed to join room: ${joinError.message}`,
-          );
-          // Continue anyway - they can join later
-        }
-      }
+    
+    // For MAS, the invitation is sufficient - users authenticate via OIDC when accessing Matrix
+    if (!isAlreadyJoined) {
+      this.logger.debug(
+        `User ${user.id} invited to room ${matrixRoomId}. With MAS, they will authenticate via OIDC when accessing Matrix.`,
+      );
+      isJoined = true; // Consider invitation successful
     }
 
     return isJoined;
@@ -657,8 +539,8 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
         );
       }
 
-      // Always ensure user has Matrix credentials and joins the room
-      const userWithCredentials = await this.ensureUserHasMatrixCredentials(
+      // Generate Matrix user ID for bot invitation
+      const { user: userEntity, matrixUserId } = await this.generateMatrixUserIdForUser(
         user.id,
         tenantId,
       );
@@ -666,16 +548,17 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
       // Always attempt Matrix room operations
       const isJoined = await this.addUserToMatrixRoom(
         chatRoom.matrixRoomId,
-        userWithCredentials,
+        userEntity,
+        matrixUserId,
         tenantId,
       );
 
       // Set appropriate permissions based on role
-      if (isJoined && userWithCredentials.matrixUserId) {
+      if (isJoined && matrixUserId) {
         await this.handleModeratorPermissions(
           event.id,
           user.id,
-          userWithCredentials.matrixUserId,
+          matrixUserId,
           chatRoom.matrixRoomId,
           'event',
           tenantId,
@@ -734,11 +617,11 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
         throw new Error(`Chat room for event with slug ${eventSlug} not found`);
       }
 
-      if (!user.matrixUserId) {
-        throw new Error(
-          `User with slug ${userSlug} does not have a Matrix user ID`,
-        );
-      }
+      // Get Matrix user ID from registry (no fallback generation)
+      const { matrixUserId } = await this.generateMatrixUserIdForUser(
+        user.id,
+        tenantId,
+      );
 
       // Remove the user from the room using bot
       // Ensure bot is authenticated before removing user
@@ -748,7 +631,7 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
 
       await this.matrixBotService.removeUser(
         chatRoom.matrixRoomId,
-        user.matrixUserId,
+        matrixUserId,
         tenantId,
       );
 
@@ -1292,8 +1175,8 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
         );
       }
 
-      // Always ensure user has Matrix credentials and joins the room
-      const userWithCredentials = await this.ensureUserHasMatrixCredentials(
+      // Generate Matrix user ID for bot invitation
+      const { user: userEntity, matrixUserId } = await this.generateMatrixUserIdForUser(
         user.id,
         tenantId,
       );
@@ -1301,16 +1184,17 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
       // Always attempt Matrix room operations
       const isJoined = await this.addUserToMatrixRoom(
         chatRoom.matrixRoomId,
-        userWithCredentials,
+        userEntity,
+        matrixUserId,
         tenantId,
       );
 
       // Set appropriate permissions based on role
-      if (isJoined && userWithCredentials.matrixUserId) {
+      if (isJoined && matrixUserId) {
         await this.handleModeratorPermissions(
           group.id,
           user.id,
-          userWithCredentials.matrixUserId,
+          matrixUserId,
           chatRoom.matrixRoomId,
           'group',
           tenantId,
@@ -1380,11 +1264,11 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
         throw new Error(`Chat room for group with slug ${groupSlug} not found`);
       }
 
-      if (!user.matrixUserId) {
-        throw new Error(
-          `User with slug ${userSlug} does not have a Matrix user ID`,
-        );
-      }
+      // Get Matrix user ID from registry (no fallback generation)
+      const { matrixUserId } = await this.generateMatrixUserIdForUser(
+        user.id,
+        tenantId,
+      );
 
       // Remove the user from the room using bot
       // Ensure bot is authenticated before removing user
@@ -1394,7 +1278,7 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
 
       await this.matrixBotService.removeUser(
         chatRoom.matrixRoomId,
-        user.matrixUserId,
+        matrixUserId,
         tenantId,
       );
 
