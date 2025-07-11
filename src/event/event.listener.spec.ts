@@ -133,6 +133,7 @@ describe('EventListener - Event-Driven Matrix Invitation Flow', () => {
         eventId: 1,
         userId: 1,
         status: EventAttendeeStatus.Cancelled,
+        previousStatus: EventAttendeeStatus.Confirmed,
         eventSlug: 'test-event-slug',
         userSlug: 'test-user-slug',
         tenantId: 'test-tenant',

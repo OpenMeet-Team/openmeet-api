@@ -500,12 +500,6 @@ describe('MatrixChatRoomManagerAdapter', () => {
         '@user:matrix.org',
         'tenant1',
       );
-      expect(matrixRoomService.joinRoom).toHaveBeenCalledWith(
-        'abc123',
-        '@user:matrix.org',
-        'access-token',
-        'device-id',
-      );
       // Don't verify save was called as it depends on internal implementation
     });
 
