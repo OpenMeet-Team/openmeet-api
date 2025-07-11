@@ -153,3 +153,10 @@ POLICY_ADMIN_USERS=ci-test-admin,@ci-test-admin:matrix-ci.openmeet.test
 
 # Missing Synapse template variables
 SYNAPSE_SERVER_NAME=matrix-ci.openmeet.test
+
+# MAS Matrix Homeserver URL for CI environment
+MAS_MATRIX_HOMESERVER_URL=http://matrix:8448
+
+# MAS Mail configuration for CI environment
+MAS_MAIL_HOST=maildev
+MAS_MAIL_PORT=1025
