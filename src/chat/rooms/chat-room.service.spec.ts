@@ -354,6 +354,7 @@ describe('ChatRoomService', () => {
             inviteUser: jest.fn().mockResolvedValue(true),
             authenticateBot: jest.fn().mockResolvedValue(undefined),
             isBotAuthenticated: jest.fn().mockReturnValue(true),
+            verifyRoomExists: jest.fn().mockResolvedValue(true),
           },
         },
         {
@@ -1017,8 +1018,7 @@ describe('ChatRoomService', () => {
         members: [],
       });
 
-      // Mock matrixRoomService methods
-      matrixRoomService.verifyRoomExists = jest.fn().mockResolvedValue(true);
+      // Mock matrix room operations
       jest.spyOn(service as any, 'addUserToMatrixRoom').mockResolvedValue(true);
 
       // Run the test

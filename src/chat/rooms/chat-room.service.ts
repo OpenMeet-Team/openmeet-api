@@ -683,8 +683,9 @@ export class ChatRoomService {
           !this.request?._wsContext &&
           !(this.userService as any)?._wsContext
         ) {
-          const roomExists = await this.matrixRoomService.verifyRoomExists(
+          const roomExists = await this.matrixBotService.verifyRoomExists(
             chatRoom.matrixRoomId,
+            this.request.tenantId,
           );
 
           if (!roomExists) {

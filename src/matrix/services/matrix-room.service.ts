@@ -63,20 +63,6 @@ export class MatrixRoomService implements IMatrixRoomProvider {
   }
 
   /**
-   * Verify if a Matrix room exists by checking room state
-   * @param roomId Matrix room ID to verify
-   * @returns true if room exists, false if not
-   */
-  verifyRoomExists(roomId: string): Promise<boolean> {
-    // Room verification disabled since admin client is deprecated
-    // TODO: Implement tenant-aware room verification using bot users
-    this.logger.warn(
-      `Room verification disabled for ${roomId} - assuming room exists`,
-    );
-    return Promise.resolve(true); // Assume room exists to avoid blocking operations
-  }
-
-  /**
    * Get the admin client for Matrix operations that require admin privileges
    * @returns The Matrix admin client
    */
@@ -1151,76 +1137,6 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         error.stack,
       );
       throw new Error(`Failed to get rooms: ${error.message}`);
-    }
-  }
-
-  /**
-   * Verify that a Matrix room exists and handle graceful recreation if needed
-   * @param chatRoom The chat room entity to verify
-   * @param entityType The type of entity ('event' or 'group')
-   * @param entitySlug The slug of the entity
-   * @returns The verified or recreated room ID, or null if verification failed
-   */
-  async verifyAndEnsureMatrixRoom(
-    chatRoom: any,
-    entityType: 'event' | 'group',
-    entitySlug: string,
-  ): Promise<string | null> {
-    this.logger.log(
-      `Verifying Matrix room ${chatRoom.matrixRoomId} for ${entityType} ${entitySlug}`,
-    );
-
-    try {
-      // First check if the room exists
-      const roomExists = await this.verifyRoomExists(chatRoom.matrixRoomId);
-
-      if (roomExists) {
-        this.logger.log(
-          `Matrix room ${chatRoom.matrixRoomId} verified successfully`,
-        );
-        return chatRoom.matrixRoomId;
-      }
-
-      // Room doesn't exist - we need to recreate it
-      this.logger.warn(
-        `Matrix room ${chatRoom.matrixRoomId} doesn't exist, recreating for ${entityType} ${entitySlug}`,
-      );
-
-      // Validate that the room has a name
-      if (!chatRoom.name) {
-        throw new Error(
-          `Chat room for ${entityType} ${entitySlug} has no name set`,
-        );
-      }
-
-      // Create new room with same name/topic as the original
-      const roomOptions: CreateRoomOptions = {
-        name: chatRoom.name,
-        topic: chatRoom.description, // Optional, can be undefined
-        isPublic: false, // Private room
-      };
-
-      const newRoomInfo = await this.createRoom(roomOptions);
-
-      if (newRoomInfo?.roomId) {
-        this.logger.log(
-          `Successfully recreated Matrix room for ${entityType} ${entitySlug}: ${chatRoom.matrixRoomId} → ${newRoomInfo.roomId}`,
-        );
-
-        // Note: The calling service should update the database with the new room ID
-        return newRoomInfo.roomId;
-      } else {
-        this.logger.error(
-          `Failed to recreate Matrix room for ${entityType} ${entitySlug}`,
-        );
-        return null;
-      }
-    } catch (error) {
-      this.logger.error(
-        `Error verifying/recreating Matrix room ${chatRoom.matrixRoomId}: ${error.message}`,
-        error.stack,
-      );
-      return null;
     }
   }
 }
