@@ -162,7 +162,7 @@ describe('Matrix User Identity Isolation', () => {
       expect(userinfoResponse.body).toHaveProperty('email', testUser1Email);
       expect(userinfoResponse.body).toHaveProperty(
         'preferred_username',
-        testUser1Data.slug,
+        `${testUser1Data.slug}_${TESTING_TENANT_ID}`,
       );
 
       // CRITICAL: Should NOT return admin user or any other user
@@ -232,7 +232,7 @@ describe('Matrix User Identity Isolation', () => {
       expect(userinfoResponse.body).toHaveProperty('email', testUser2Email);
       expect(userinfoResponse.body).toHaveProperty(
         'preferred_username',
-        testUser2Data.slug,
+        `${testUser2Data.slug}_${TESTING_TENANT_ID}`,
       );
 
       // CRITICAL: Should NOT return admin user, user 1, or any other user

@@ -2057,4 +2057,30 @@ export class EventManagementService {
     // Delete the series instead of the recurring event
     await this.eventSeriesService.delete(event.series.slug, userId);
   }
+
+  /**
+   * Update the Matrix room ID for an event
+   * This method should be called when Matrix rooms are created or recreated
+   * to keep the event cache in sync with the chat system
+   */
+  @Trace('event-management.updateMatrixRoomId')
+  async updateMatrixRoomId(
+    eventId: number,
+    matrixRoomId: string,
+  ): Promise<void> {
+    await this.initializeRepository();
+
+    this.logger.log(
+      `Updating Matrix room ID for event ${eventId} to ${matrixRoomId}`,
+    );
+
+    await this.eventRepository.update(
+      { id: eventId },
+      { matrixRoomId: matrixRoomId },
+    );
+
+    this.logger.log(
+      `Successfully updated Matrix room ID for event ${eventId}`,
+    );
+  }
 }

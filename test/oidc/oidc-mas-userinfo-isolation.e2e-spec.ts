@@ -174,7 +174,7 @@ describe('MAS Userinfo Endpoint User Isolation', () => {
       expect(userinfoResponse.body).toHaveProperty('email', testUserAEmail);
       expect(userinfoResponse.body).toHaveProperty(
         'preferred_username',
-        testUserA.slug,
+        `${testUserA.slug}_${TESTING_TENANT_ID}`,
       );
       expect(userinfoResponse.body).toHaveProperty('name', 'Alpha UserA');
 
@@ -250,7 +250,7 @@ describe('MAS Userinfo Endpoint User Isolation', () => {
       expect(userinfoResponse.body).toHaveProperty('email', testUserBEmail);
       expect(userinfoResponse.body).toHaveProperty(
         'preferred_username',
-        testUserB.slug,
+        `${testUserB.slug}_${TESTING_TENANT_ID}`,
       );
       expect(userinfoResponse.body).toHaveProperty('name', 'Beta UserB');
 
@@ -357,7 +357,7 @@ describe('MAS Userinfo Endpoint User Isolation', () => {
         });
 
         // Verify correct user data
-        expect(userinfoResponse.body.preferred_username).toBe(step.user.slug);
+        expect(userinfoResponse.body.preferred_username).toBe(`${step.user.slug}_${TESTING_TENANT_ID}`);
         expect(userinfoResponse.body.email).toBe(step.email);
 
         console.log(
@@ -370,12 +370,12 @@ describe('MAS Userinfo Endpoint User Isolation', () => {
       const userBSteps = results.filter((r) => r.label.startsWith('B'));
 
       userASteps.forEach((step) => {
-        expect(step.actual).toBe(testUserA.slug);
+        expect(step.actual).toBe(`${testUserA.slug}_${TESTING_TENANT_ID}`);
         expect(step.email).toBe(testUserAEmail);
       });
 
       userBSteps.forEach((step) => {
-        expect(step.actual).toBe(testUserB.slug);
+        expect(step.actual).toBe(`${testUserB.slug}_${TESTING_TENANT_ID}`);
         expect(step.email).toBe(testUserBEmail);
       });
 

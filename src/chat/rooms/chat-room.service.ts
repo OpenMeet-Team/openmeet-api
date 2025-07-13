@@ -26,6 +26,7 @@ import { UserEntity } from '../../user/infrastructure/persistence/relational/ent
 import { Trace } from '../../utils/trace.decorator';
 import { trace } from '@opentelemetry/api';
 import { EventQueryService } from '../../event/services/event-query.service';
+import { EventManagementService } from '../../event/services/event-management.service';
 import { GroupService } from '../../group/group.service';
 import { ElastiCacheService } from '../../elasticache/elasticache.service';
 import { GlobalMatrixValidationService } from '../../matrix/services/global-matrix-validation.service';
@@ -227,6 +228,8 @@ export class ChatRoomService {
     private readonly eventAttendeeService: EventAttendeeService,
     @Inject(forwardRef(() => EventQueryService))
     private readonly eventQueryService: EventQueryService,
+    @Inject(forwardRef(() => EventManagementService))
+    private readonly eventManagementService: EventManagementService,
     @Inject(forwardRef(() => GroupService))
     private readonly groupService: GroupService,
     // We already have EventQueryService injected above, so we'll use that instead of EventService
@@ -724,6 +727,23 @@ export class ChatRoomService {
 
                   // Update our reference too
                   chatRoom.matrixRoomId = newRoomInfo.roomId;
+
+                  // CRITICAL: Also update the event table's matrixRoomId to fix cache invalidation
+                  // This ensures frontend event store gets the updated room ID via proper service layer
+                  try {
+                    await this.eventManagementService.updateMatrixRoomId(
+                      event.id,
+                      newRoomInfo.roomId,
+                    );
+                    this.logger.log(
+                      `Updated event ${event.slug} matrixRoomId from ${originalRoomId} to ${newRoomInfo.roomId} via EventManagementService`,
+                    );
+                  } catch (eventUpdateError) {
+                    this.logger.error(
+                      `Failed to update event matrixRoomId for event ${event.id}: ${eventUpdateError.message}`,
+                    );
+                    // Don't throw - chat room recreation succeeded, event update is a cache sync issue
+                  }
                 } else {
                   this.logger.warn(
                     `Room ID changed during recreation from ${originalRoomId} to ${freshChatRoom.matrixRoomId}, keeping new value`,
@@ -737,6 +757,25 @@ export class ChatRoomService {
               );
               // Continue with the process even if room recreation fails
             }
+          }
+        }
+
+        // CACHE SYNC: Always ensure event table has current room ID from chat_room table
+        // This fixes cases where event.matrixRoomId is stale/outdated
+        if (chatRoom.matrixRoomId) {
+          try {
+            await this.eventManagementService.updateMatrixRoomId(
+              event.id,
+              chatRoom.matrixRoomId,
+            );
+            this.logger.debug(
+              `Synchronized event ${event.slug} matrixRoomId to ${chatRoom.matrixRoomId}`,
+            );
+          } catch (syncError) {
+            this.logger.warn(
+              `Failed to sync event matrixRoomId for event ${event.id}: ${syncError.message}`,
+            );
+            // Don't throw - this is a cache sync issue, not a functional failure
           }
         }
 
