@@ -123,7 +123,6 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
     tenantId: string,
     options: {
       skipInvite?: boolean;
-      forceInvite?: boolean;
     } = {},
   ): Promise<boolean> {
     const { skipInvite = false, forceInvite = false } = options;
@@ -176,7 +175,7 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
     // Step 2: With MAS, users don't need to join manually - they authenticate via OIDC
     // The bot invitation is sufficient, users will access the room when they authenticate
     let isJoined = isAlreadyJoined;
-    
+
     // For MAS, the invitation is sufficient - users authenticate via OIDC when accessing Matrix
     if (!isAlreadyJoined) {
       this.logger.debug(
@@ -540,10 +539,8 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
       }
 
       // Generate Matrix user ID for bot invitation
-      const { user: userEntity, matrixUserId } = await this.generateMatrixUserIdForUser(
-        user.id,
-        tenantId,
-      );
+      const { user: userEntity, matrixUserId } =
+        await this.generateMatrixUserIdForUser(user.id, tenantId);
 
       // Always attempt Matrix room operations
       const isJoined = await this.addUserToMatrixRoom(
@@ -1176,10 +1173,8 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
       }
 
       // Generate Matrix user ID for bot invitation
-      const { user: userEntity, matrixUserId } = await this.generateMatrixUserIdForUser(
-        user.id,
-        tenantId,
-      );
+      const { user: userEntity, matrixUserId } =
+        await this.generateMatrixUserIdForUser(user.id, tenantId);
 
       // Always attempt Matrix room operations
       const isJoined = await this.addUserToMatrixRoom(

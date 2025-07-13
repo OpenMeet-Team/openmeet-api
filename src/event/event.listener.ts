@@ -187,9 +187,11 @@ export class EventListener {
 
       // Get tenantId from params or request context
       const tenantId = params.tenantId || this.request?.tenantId;
-      
+
       if (!tenantId) {
-        this.logger.error('No tenantId available in event parameters or request context');
+        this.logger.error(
+          'No tenantId available in event parameters or request context',
+        );
         return;
       }
 

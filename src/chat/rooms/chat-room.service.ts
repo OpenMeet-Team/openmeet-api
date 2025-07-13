@@ -596,7 +596,8 @@ export class ChatRoomService {
   /**
    * Add a user to an event chat room using event and user slugs
    *
-   * This is the primary implementation that should be used instead of ID-based methods
+   * @deprecated Use ChatRoomManagerInterface.addUserToEventChatRoom() instead
+   * This method skips Matrix bot operations. Use the ChatRoomManager for proper Matrix bot invitations.
    *
    * @param eventSlug The slug of the event
    * @param userSlug The slug of the user
@@ -1732,7 +1733,9 @@ export class ChatRoomService {
 
   /**
    * Add a user to a group chat room
-   * Primary implementation using slugs
+   *
+   * @deprecated Use ChatRoomManagerInterface.addUserToGroupChatRoom() instead
+   * This method skips Matrix bot operations. Use the ChatRoomManager for proper Matrix bot invitations.
    *
    * @param groupSlug The slug of the group
    * @param userSlug The slug of the user to add

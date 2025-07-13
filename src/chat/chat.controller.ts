@@ -9,6 +9,7 @@ import {
   UseGuards,
   Logger,
   Req,
+  Inject,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -25,6 +26,7 @@ import { User } from '../user/domain/user';
 import { Optional } from '@nestjs/common';
 import { DiscussionService } from './services/discussion.service';
 import { ChatRoomService } from './rooms/chat-room.service';
+import { ChatRoomManagerInterface } from './interfaces/chat-room-manager.interface';
 import { DiscussionMessagesResponseDto } from './dto/discussion-message.dto';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RoleEnum } from '../role/role.enum';
@@ -40,6 +42,8 @@ export class ChatController {
   constructor(
     private readonly discussionService: DiscussionService,
     private readonly chatRoomService: ChatRoomService,
+    @Inject('ChatRoomManagerInterface')
+    private readonly chatRoomManager: ChatRoomManagerInterface,
   ) {}
 
   /**
@@ -103,8 +107,12 @@ export class ChatController {
     );
 
     try {
-      // Use ChatRoomService which supports bot authentication
-      await this.chatRoomService.addUserToEventChatRoom(eventSlug, user.slug);
+      // Use ChatRoomManager which supports Matrix bot authentication
+      await this.chatRoomManager.addUserToEventChatRoom(
+        eventSlug,
+        user.slug,
+        tenantId,
+      );
 
       // Get the room ID from the event
       const result = await this.chatRoomService.ensureRoomAccess(
@@ -254,8 +262,12 @@ export class ChatController {
     }
 
     try {
-      // Use ChatRoomService which supports bot authentication
-      await this.chatRoomService.addUserToGroupChatRoom(groupSlug, user.slug);
+      // Use ChatRoomManager which supports Matrix bot authentication
+      await this.chatRoomManager.addUserToGroupChatRoom(
+        groupSlug,
+        user.slug,
+        tenantId,
+      );
 
       // Get the room ID from the group
       const result = await this.chatRoomService.ensureRoomAccess(

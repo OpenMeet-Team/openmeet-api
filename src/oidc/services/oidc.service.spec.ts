@@ -451,7 +451,7 @@ describe('OidcService', () => {
       mockGlobalMatrixValidationService.getMatrixHandleForUser.mockResolvedValue(
         {
           id: 1,
-          handle: 'john.smith',
+          handle: 'john.smith_tenant123',
           tenantId: 'tenant123',
           userId: 123,
           createdAt: new Date(),
@@ -468,8 +468,8 @@ describe('OidcService', () => {
         sub: 'john-smith',
         name: 'John Smith',
         email: 'john@example.com',
-        preferred_username: 'john.smith',
-        matrix_handle: 'john.smith',
+        preferred_username: 'john.smith_tenant123',
+        matrix_handle: 'john.smith_tenant123',
         tenant_id: 'tenant123',
       });
     });
@@ -487,8 +487,8 @@ describe('OidcService', () => {
         'tenant123',
       );
 
-      expect(userInfo.matrix_handle).toBe('john-smith'); // Uses slug as fallback
-      expect(userInfo.preferred_username).toBe('john-smith');
+      expect(userInfo.matrix_handle).toBe('john-smith_tenant123'); // Uses slug as fallback with tenant suffix
+      expect(userInfo.preferred_username).toBe('john-smith_tenant123');
     });
 
     it('should handle user with only email', async () => {

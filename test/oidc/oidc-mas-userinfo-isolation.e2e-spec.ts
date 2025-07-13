@@ -109,7 +109,7 @@ describe('MAS Userinfo Endpoint User Isolation', () => {
   describe('MAS Userinfo Endpoint Session Isolation', () => {
     it('should return correct userinfo for User A after full MAS authentication flow', async () => {
       // Simulate exact MAS authentication flow as it happens in practice
-      
+
       // Step 1: Generate auth code for User A
       const authCodeResponse = await request(TESTING_APP_URL)
         .post('/api/matrix/generate-auth-code')
@@ -172,16 +172,23 @@ describe('MAS Userinfo Endpoint User Isolation', () => {
       // VERIFY: Must return User A's data, not admin or any other user
       expect(userinfoResponse.body).toHaveProperty('sub');
       expect(userinfoResponse.body).toHaveProperty('email', testUserAEmail);
-      expect(userinfoResponse.body).toHaveProperty('preferred_username', testUserA.slug);
+      expect(userinfoResponse.body).toHaveProperty(
+        'preferred_username',
+        testUserA.slug,
+      );
       expect(userinfoResponse.body).toHaveProperty('name', 'Alpha UserA');
 
       // CRITICAL ASSERTIONS: Should NOT return data for other users
-      expect(userinfoResponse.body.preferred_username).not.toBe('the-admin-vothhz');
+      expect(userinfoResponse.body.preferred_username).not.toBe(
+        'the-admin-vothhz',
+      );
       expect(userinfoResponse.body.email).not.toBe('admin@openmeet.net');
       expect(userinfoResponse.body.preferred_username).not.toBe(testUserB.slug);
       expect(userinfoResponse.body.email).not.toBe(testUserBEmail);
 
-      console.log(`✅ MAS userinfo correctly returned User A data: ${userinfoResponse.body.preferred_username}`);
+      console.log(
+        `✅ MAS userinfo correctly returned User A data: ${userinfoResponse.body.preferred_username}`,
+      );
     });
 
     it('should return different userinfo for User B after separate authentication flow', async () => {
@@ -241,16 +248,23 @@ describe('MAS Userinfo Endpoint User Isolation', () => {
       // VERIFY: Must return User B's data, not User A or admin
       expect(userinfoResponse.body).toHaveProperty('sub');
       expect(userinfoResponse.body).toHaveProperty('email', testUserBEmail);
-      expect(userinfoResponse.body).toHaveProperty('preferred_username', testUserB.slug);
+      expect(userinfoResponse.body).toHaveProperty(
+        'preferred_username',
+        testUserB.slug,
+      );
       expect(userinfoResponse.body).toHaveProperty('name', 'Beta UserB');
 
       // CRITICAL ASSERTIONS: Should NOT return data for other users
-      expect(userinfoResponse.body.preferred_username).not.toBe('the-admin-vothhz');
+      expect(userinfoResponse.body.preferred_username).not.toBe(
+        'the-admin-vothhz',
+      );
       expect(userinfoResponse.body.email).not.toBe('admin@openmeet.net');
       expect(userinfoResponse.body.preferred_username).not.toBe(testUserA.slug);
       expect(userinfoResponse.body.email).not.toBe(testUserAEmail);
 
-      console.log(`✅ MAS userinfo correctly returned User B data: ${userinfoResponse.body.preferred_username}`);
+      console.log(
+        `✅ MAS userinfo correctly returned User B data: ${userinfoResponse.body.preferred_username}`,
+      );
     });
 
     it('should maintain session isolation under rapid user switching scenarios', async () => {
@@ -260,12 +274,32 @@ describe('MAS Userinfo Endpoint User Isolation', () => {
 
       const results = [];
 
-      // Rapid sequence: A -> B -> A -> B 
+      // Rapid sequence: A -> B -> A -> B
       const sequence = [
-        { user: testUserA, token: testUserAToken, email: testUserAEmail, label: 'A1' },
-        { user: testUserB, token: testUserBToken, email: testUserBEmail, label: 'B1' },
-        { user: testUserA, token: testUserAToken, email: testUserAEmail, label: 'A2' },
-        { user: testUserB, token: testUserBToken, email: testUserBEmail, label: 'B2' },
+        {
+          user: testUserA,
+          token: testUserAToken,
+          email: testUserAEmail,
+          label: 'A1',
+        },
+        {
+          user: testUserB,
+          token: testUserBToken,
+          email: testUserBEmail,
+          label: 'B1',
+        },
+        {
+          user: testUserA,
+          token: testUserAToken,
+          email: testUserAEmail,
+          label: 'A2',
+        },
+        {
+          user: testUserB,
+          token: testUserBToken,
+          email: testUserBEmail,
+          label: 'B2',
+        },
       ];
 
       for (const step of sequence) {
@@ -326,24 +360,28 @@ describe('MAS Userinfo Endpoint User Isolation', () => {
         expect(userinfoResponse.body.preferred_username).toBe(step.user.slug);
         expect(userinfoResponse.body.email).toBe(step.email);
 
-        console.log(`✅ Step ${step.label}: Expected ${step.user.slug}, got ${userinfoResponse.body.preferred_username}`);
+        console.log(
+          `✅ Step ${step.label}: Expected ${step.user.slug}, got ${userinfoResponse.body.preferred_username}`,
+        );
       }
 
       // Verify no crossover occurred
-      const userASteps = results.filter(r => r.label.startsWith('A'));
-      const userBSteps = results.filter(r => r.label.startsWith('B'));
+      const userASteps = results.filter((r) => r.label.startsWith('A'));
+      const userBSteps = results.filter((r) => r.label.startsWith('B'));
 
-      userASteps.forEach(step => {
+      userASteps.forEach((step) => {
         expect(step.actual).toBe(testUserA.slug);
         expect(step.email).toBe(testUserAEmail);
       });
 
-      userBSteps.forEach(step => {
+      userBSteps.forEach((step) => {
         expect(step.actual).toBe(testUserB.slug);
         expect(step.email).toBe(testUserBEmail);
       });
 
-      console.log('✅ Rapid user switching maintained correct session isolation');
+      console.log(
+        '✅ Rapid user switching maintained correct session isolation',
+      );
       console.table(results);
     });
   });
@@ -397,8 +435,12 @@ describe('MAS Userinfo Endpoint User Isolation', () => {
       ]);
 
       // Should get different authorization codes from MAS
-      const userAMasCode = new URL(userAAuth.headers.location).searchParams.get('code');
-      const userBMasCode = new URL(userBAuth.headers.location).searchParams.get('code');
+      const userAMasCode = new URL(userAAuth.headers.location).searchParams.get(
+        'code',
+      );
+      const userBMasCode = new URL(userBAuth.headers.location).searchParams.get(
+        'code',
+      );
 
       expect(userAMasCode).not.toBe(userBMasCode);
       expect(userAMasCode).toBeTruthy();

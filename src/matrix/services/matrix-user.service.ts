@@ -114,16 +114,17 @@ export class MatrixUserService
     const password = MatrixUserService.generateMatrixPassword();
     const displayName = MatrixUserService.generateDisplayName(user);
 
-    // Create the Matrix user with the chosen handle
+    // Create the Matrix user with the chosen handle and tenant suffix
+    const matrixUsername = `${finalHandle}_${tenantId}`;
     const matrixUserInfo = await this.createUser({
-      username: finalHandle,
+      username: matrixUsername,
       password,
       displayName,
     });
 
     // Register the handle in the global registry
     await this.globalMatrixValidationService.registerMatrixHandle(
-      finalHandle,
+      matrixUsername,
       tenantId,
       userId,
     );

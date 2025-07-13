@@ -521,7 +521,7 @@ describe('ChatListener - Matrix Invitation Event Handling', () => {
       // Arrange
       const params = {
         eventSlug: 'test-event',
-        userSlug: 'new-user', 
+        userSlug: 'new-user',
         tenantId: 'test-tenant',
       };
 
@@ -536,7 +536,7 @@ describe('ChatListener - Matrix Invitation Event Handling', () => {
       // Assert: Matrix bot should be called
       expect(chatRoomManager.addUserToEventChatRoom).toHaveBeenCalledWith(
         'test-event',
-        'new-user', 
+        'new-user',
         'test-tenant',
       );
     });
@@ -546,7 +546,7 @@ describe('ChatListener - Matrix Invitation Event Handling', () => {
       const params = {
         eventSlug: 'test-event',
         userSlug: 'test-user',
-        tenantId: 'test-tenant', 
+        tenantId: 'test-tenant',
       };
 
       mockDiscussionService.getIdsFromSlugsWithTenant.mockResolvedValue({
@@ -555,12 +555,12 @@ describe('ChatListener - Matrix Invitation Event Handling', () => {
       });
 
       chatRoomManager.addUserToEventChatRoom.mockRejectedValue(
-        new Error('Bot failed')
+        new Error('Bot failed'),
       );
 
       // Act & Assert: Should not throw
       await expect(
-        listener.handleChatEventMemberAdd(params)
+        listener.handleChatEventMemberAdd(params),
       ).resolves.not.toThrow();
     });
 
@@ -588,12 +588,12 @@ describe('ChatListener - Matrix Invitation Event Handling', () => {
       };
 
       mockDiscussionService.getIdsFromSlugsWithTenant.mockRejectedValue(
-        new Error('Not found')
+        new Error('Not found'),
       );
 
       // Act & Assert: Should not throw
       await expect(
-        listener.handleChatEventMemberAdd(params)
+        listener.handleChatEventMemberAdd(params),
       ).resolves.not.toThrow();
 
       expect(chatRoomManager.addUserToEventChatRoom).not.toHaveBeenCalled();

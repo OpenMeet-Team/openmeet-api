@@ -618,7 +618,8 @@ export class MatrixController {
 
   @ApiOperation({
     summary: 'Sync Matrix user identity after MAS authentication',
-    description: 'Register Matrix user ID with backend after successful MAS authentication',
+    description:
+      'Register Matrix user ID with backend after successful MAS authentication',
   })
   @ApiResponse({
     status: 200,
@@ -637,7 +638,9 @@ export class MatrixController {
     matrixUserId: string;
     handle: string;
   }> {
-    this.logger.log(`Syncing Matrix user identity for user ID: ${user.id}, Matrix ID: ${body.matrixUserId}`);
+    this.logger.log(
+      `Syncing Matrix user identity for user ID: ${user.id}, Matrix ID: ${body.matrixUserId}`,
+    );
 
     try {
       // Get tenant ID from request context
@@ -654,7 +657,9 @@ export class MatrixController {
       // Extract handle from Matrix user ID
       const handle = body.matrixUserId.match(/@(.+):/)?.[1];
       if (!handle) {
-        throw new BadRequestException(`Could not extract handle from Matrix user ID: ${body.matrixUserId}`);
+        throw new BadRequestException(
+          `Could not extract handle from Matrix user ID: ${body.matrixUserId}`,
+        );
       }
 
       // Register the Matrix handle in the global registry

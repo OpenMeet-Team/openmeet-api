@@ -767,10 +767,14 @@ export class OidcService {
         );
       } else {
         // No Matrix handle registered yet - will be created on first chat access
-        matrixHandle =
+        const baseHandle =
           user.slug || user.email?.split('@')[0] || `user-${user.id}`;
         // Ensure Matrix username compliance (lowercase, no special chars except -, _, .)
-        matrixHandle = matrixHandle.toLowerCase().replace(/[^a-z0-9._-]/g, '');
+        const cleanHandle = baseHandle
+          .toLowerCase()
+          .replace(/[^a-z0-9._-]/g, '');
+        // Append tenant suffix for consistency with legacy users
+        matrixHandle = `${cleanHandle}_${tenantId}`;
         console.log(
           `🔧 OIDC No Matrix handle found for user ${user.id}, suggesting: ${matrixHandle}`,
         );
@@ -780,9 +784,11 @@ export class OidcService {
         `🔧 OIDC Error getting Matrix handle for user ${user.id}: ${error.message}`,
       );
       // Fallback to generating from user data
-      matrixHandle =
+      const baseHandle =
         user.slug || user.email?.split('@')[0] || `user-${user.id}`;
-      matrixHandle = matrixHandle.toLowerCase().replace(/[^a-z0-9._-]/g, '');
+      const cleanHandle = baseHandle.toLowerCase().replace(/[^a-z0-9._-]/g, '');
+      // Append tenant suffix for consistency with legacy users
+      matrixHandle = `${cleanHandle}_${tenantId}`;
     }
 
     const displayName =

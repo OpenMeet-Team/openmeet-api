@@ -86,7 +86,7 @@ export class GlobalMatrixValidationService {
       const existing = await this.registry.findOne({
         where: { handle: handle.toLowerCase() },
       });
-      
+
       if (existing) {
         // If same user and tenant, allow re-registration (idempotent)
         if (existing.userId === userId && existing.tenantId === tenantId) {

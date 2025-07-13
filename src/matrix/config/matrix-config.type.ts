@@ -1,12 +1,7 @@
 export type MatrixConfig = {
   baseUrl: string;
   serverName: string;
-  // Bot configuration (current implementation)
-  bot: {
-    username: string;
-    password?: string;
-    displayName: string;
-  };
+  // Bot configuration moved to tenant-based config (see MatrixBotUserService)
   // Application Service configuration
   appservice: {
     token: string;

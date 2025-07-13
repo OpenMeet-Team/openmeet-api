@@ -89,13 +89,13 @@ describe('MatrixUserService - Handle-based Provisioning', () => {
         mockGlobalValidationService.isMatrixHandleUnique,
       ).toHaveBeenCalledWith(chosenHandle);
       expect(service.createUser).toHaveBeenCalledWith({
-        username: chosenHandle,
+        username: `${chosenHandle}_tenant123`,
         password: expect.any(String),
         displayName: 'John Smith',
       });
       expect(
         mockGlobalValidationService.registerMatrixHandle,
-      ).toHaveBeenCalledWith(chosenHandle, 'tenant123', 456);
+      ).toHaveBeenCalledWith(`${chosenHandle}_tenant123`, 'tenant123', 456);
     });
 
     it('should throw error if chosen handle is not available', async () => {

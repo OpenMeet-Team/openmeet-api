@@ -12,10 +12,8 @@ export const matrixConfig = registerAs<MatrixConfig>('matrix', () => {
   // For Matrix IDs we need the main domain, not necessarily the server hostname
   const serverName = process.env.MATRIX_SERVER_NAME || 'openmeet.net';
 
-  // Bot configuration (current implementation)
-  const botUsername = process.env.MATRIX_BOT_USERNAME || 'openmeet-bot';
-  const botPassword = process.env.MATRIX_BOT_PASSWORD;
-  const botDisplayName = process.env.MATRIX_BOT_DISPLAY_NAME || 'OpenMeet Bot';
+  // Bot configuration moved to tenant-based config in TENANTS_B64
+  // MATRIX_BOT_USERNAME, MATRIX_BOT_PASSWORD, and MATRIX_BOT_DISPLAY_NAME are deprecated
 
   // Application Service configuration - required, no defaults
   const appserviceToken =
@@ -50,12 +48,10 @@ export const matrixConfig = registerAs<MatrixConfig>('matrix', () => {
     MATRIX_HOMESERVER_URL: process.env.MATRIX_HOMESERVER_URL,
     MATRIX_BASE_URL: process.env.MATRIX_BASE_URL,
     MATRIX_SERVER_URL: process.env.MATRIX_SERVER_URL,
-    MATRIX_BOT_USERNAME: process.env.MATRIX_BOT_USERNAME,
-    MATRIX_BOT_PASSWORD: botPassword ? '***exists***' : 'undefined',
-    MATRIX_BOT_DISPLAY_NAME: process.env.MATRIX_BOT_DISPLAY_NAME,
     MATRIX_ADMIN_USERNAME: process.env.MATRIX_ADMIN_USERNAME,
     MATRIX_ADMIN_PASSWORD: adminPassword ? '***exists***' : 'undefined',
     MATRIX_SERVER_NAME: process.env.MATRIX_SERVER_NAME,
+    TENANT_BASED_BOTS: 'enabled (check TENANTS_B64)',
   });
 
   // Log the server name extraction and the final resolved URL
@@ -69,12 +65,7 @@ export const matrixConfig = registerAs<MatrixConfig>('matrix', () => {
   return {
     baseUrl,
     serverName,
-    // Bot configuration (current implementation)
-    bot: {
-      username: botUsername,
-      password: botPassword,
-      displayName: botDisplayName,
-    },
+    // Bot configuration moved to tenant-based config (see MatrixBotUserService)
     // Application Service configuration
     appservice: {
       token: appserviceToken,

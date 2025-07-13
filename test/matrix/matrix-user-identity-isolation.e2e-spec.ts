@@ -60,7 +60,7 @@ describe('Matrix User Identity Isolation', () => {
         'password123',
       );
 
-      // Create second test user  
+      // Create second test user
       testUser2Data = await createTestUser(
         TESTING_APP_URL,
         TESTING_TENANT_ID,
@@ -160,13 +160,20 @@ describe('Matrix User Identity Isolation', () => {
       // Verify userinfo contains correct user 1 identity
       expect(userinfoResponse.body).toHaveProperty('sub');
       expect(userinfoResponse.body).toHaveProperty('email', testUser1Email);
-      expect(userinfoResponse.body).toHaveProperty('preferred_username', testUser1Data.slug);
+      expect(userinfoResponse.body).toHaveProperty(
+        'preferred_username',
+        testUser1Data.slug,
+      );
 
       // CRITICAL: Should NOT return admin user or any other user
-      expect(userinfoResponse.body.preferred_username).not.toBe('the-admin-vothhz');
+      expect(userinfoResponse.body.preferred_username).not.toBe(
+        'the-admin-vothhz',
+      );
       expect(userinfoResponse.body.email).not.toBe('admin@openmeet.net');
 
-      console.log(`✅ User 1 OIDC identity verified: ${userinfoResponse.body.preferred_username}`);
+      console.log(
+        `✅ User 1 OIDC identity verified: ${userinfoResponse.body.preferred_username}`,
+      );
     });
 
     it('should return different user identity for second test user via OIDC userinfo', async () => {
@@ -177,7 +184,7 @@ describe('Matrix User Identity Isolation', () => {
         .set('x-tenant-id', TESTING_TENANT_ID)
         .expect(200);
 
-      // Complete OIDC auth flow for user 2  
+      // Complete OIDC auth flow for user 2
       const authResponse = await request(TESTING_APP_URL)
         .get('/api/oidc/auth')
         .query({
@@ -223,15 +230,24 @@ describe('Matrix User Identity Isolation', () => {
       // Verify userinfo contains correct user 2 identity
       expect(userinfoResponse.body).toHaveProperty('sub');
       expect(userinfoResponse.body).toHaveProperty('email', testUser2Email);
-      expect(userinfoResponse.body).toHaveProperty('preferred_username', testUser2Data.slug);
+      expect(userinfoResponse.body).toHaveProperty(
+        'preferred_username',
+        testUser2Data.slug,
+      );
 
       // CRITICAL: Should NOT return admin user, user 1, or any other user
-      expect(userinfoResponse.body.preferred_username).not.toBe('the-admin-vothhz');
-      expect(userinfoResponse.body.preferred_username).not.toBe(testUser1Data.slug);
+      expect(userinfoResponse.body.preferred_username).not.toBe(
+        'the-admin-vothhz',
+      );
+      expect(userinfoResponse.body.preferred_username).not.toBe(
+        testUser1Data.slug,
+      );
       expect(userinfoResponse.body.email).not.toBe('admin@openmeet.net');
       expect(userinfoResponse.body.email).not.toBe(testUser1Email);
 
-      console.log(`✅ User 2 OIDC identity verified: ${userinfoResponse.body.preferred_username}`);
+      console.log(
+        `✅ User 2 OIDC identity verified: ${userinfoResponse.body.preferred_username}`,
+      );
     });
   });
 
@@ -249,10 +265,15 @@ describe('Matrix User Identity Isolation', () => {
         .expect(200);
 
       expect(syncResponse.body).toHaveProperty('success', true);
-      expect(syncResponse.body).toHaveProperty('matrixUserId', expectedMatrixUserId);
+      expect(syncResponse.body).toHaveProperty(
+        'matrixUserId',
+        expectedMatrixUserId,
+      );
       expect(syncResponse.body).toHaveProperty('handle', testUser1Data.slug);
 
-      console.log(`✅ Matrix identity synced for user 1: ${expectedMatrixUserId}`);
+      console.log(
+        `✅ Matrix identity synced for user 1: ${expectedMatrixUserId}`,
+      );
     });
 
     it('should sync different Matrix identity for second test user', async () => {
@@ -268,14 +289,21 @@ describe('Matrix User Identity Isolation', () => {
         .expect(200);
 
       expect(syncResponse.body).toHaveProperty('success', true);
-      expect(syncResponse.body).toHaveProperty('matrixUserId', expectedMatrixUserId);
+      expect(syncResponse.body).toHaveProperty(
+        'matrixUserId',
+        expectedMatrixUserId,
+      );
       expect(syncResponse.body).toHaveProperty('handle', testUser2Data.slug);
 
       // Verify it's different from user 1
       expect(syncResponse.body.handle).not.toBe(testUser1Data.slug);
-      expect(syncResponse.body.matrixUserId).not.toBe(`@${testUser1Data.slug}:matrix.openmeet.net`);
+      expect(syncResponse.body.matrixUserId).not.toBe(
+        `@${testUser1Data.slug}:matrix.openmeet.net`,
+      );
 
-      console.log(`✅ Matrix identity synced for user 2: ${expectedMatrixUserId}`);
+      console.log(
+        `✅ Matrix identity synced for user 2: ${expectedMatrixUserId}`,
+      );
     });
   });
 
@@ -320,7 +348,9 @@ describe('Matrix User Identity Isolation', () => {
         .expect(200);
 
       // Auth codes should be different
-      expect(user1AuthCodeResponse.body.authCode).not.toBe(user2AuthCodeResponse.body.authCode);
+      expect(user1AuthCodeResponse.body.authCode).not.toBe(
+        user2AuthCodeResponse.body.authCode,
+      );
 
       // Complete auth flow for user 1
       const user1AuthResponse = await request(TESTING_APP_URL)
@@ -363,7 +393,9 @@ describe('Matrix User Identity Isolation', () => {
       expect(user1Url.searchParams.get('state')).toBe('isolation_test_user1');
       expect(user2Url.searchParams.get('state')).toBe('isolation_test_user2');
 
-      console.log('✅ No session bleeding detected between user authentications');
+      console.log(
+        '✅ No session bleeding detected between user authentications',
+      );
     });
   });
 
@@ -449,7 +481,9 @@ describe('Matrix User Identity Isolation', () => {
         console.log(`✅ ${step.label} context maintained: ${step.user.slug}`);
       }
 
-      console.log('✅ Rapid authentication sequence maintained correct user context');
+      console.log(
+        '✅ Rapid authentication sequence maintained correct user context',
+      );
     });
   });
 });
