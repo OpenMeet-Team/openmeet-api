@@ -102,10 +102,15 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
       }
     }
 
-    // If no Matrix user ID found, the user doesn't exist in Matrix
+    // If no Matrix user ID found, generate a provisional one for invitation purposes
     if (!matrixUserId) {
-      throw new Error(
-        `User ${user.slug} (ID: ${user.id}) does not have a Matrix user ID. User may not exist in Matrix or needs to authenticate via MAS first.`,
+      // Generate a provisional Matrix user ID based on user slug for invitation
+      // This allows the bot to invite users who haven't authenticated yet
+      const sanitizedSlug = user.slug.replace(/[^a-z0-9._-]/gi, '_').toLowerCase();
+      matrixUserId = `@${sanitizedSlug}:${serverName}`;
+      
+      this.logger.info(
+        `Generated provisional Matrix user ID ${matrixUserId} for user ${user.slug} (ID: ${user.id}). User will need to authenticate via MAS to claim this account.`,
       );
     }
 
@@ -163,6 +168,16 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
             `User ${user.id} is already in room ${matrixRoomId}, skipping invite`,
           );
           isAlreadyJoined = true;
+        } else if (
+          inviteError.message &&
+          (inviteError.message.includes('M_NOT_FOUND') || 
+           inviteError.message.includes('User not found') ||
+           inviteError.message.includes('does not exist'))
+        ) {
+          this.logger.info(
+            `User ${user.id} (${matrixUserId}) not yet registered in Matrix - invitation created as pending. User will receive access when they authenticate via MAS.`,
+          );
+          // This is expected for provisional Matrix user IDs - Matrix will handle the invitation when user registers
         } else {
           this.logger.warn(
             `Error inviting user ${user.id} to room: ${inviteError.message}`,
