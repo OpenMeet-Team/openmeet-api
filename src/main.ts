@@ -16,7 +16,6 @@ import { ResolvePromisesInterceptor } from './utils/serializer.interceptor';
 import { AggregateByTenantContextIdStrategy } from './strategy/tenant.strategy';
 import { TenantGuard } from './tenant/tenant.guard';
 import { getBuildInfo } from './utils/version';
-import { IoAdapter } from '@nestjs/platform-socket.io';
 import cookieParser from 'cookie-parser';
 
 // Add direct console.log for startup debugging - these will show even before logger is configured
@@ -192,10 +191,8 @@ async function bootstrap() {
       'Using globally registered interceptors from InterceptorsModule',
     );
 
-    // Use the Socket.io adapter for WebSockets
-    startupLog('Setting up WebSocket adapter');
-    app.useWebSocketAdapter(new IoAdapter(app));
-    startupLog('WebSocket adapter configured');
+    // WebSocket adapter removed for performance optimization
+    startupLog('WebSocket adapter removed - using Matrix client for real-time events');
 
     // Add proper signal handlers for clean shutdown
     startupLog('Starting HTTP server');
@@ -241,7 +238,7 @@ async function bootstrap() {
       });
 
       logger.log(`Application is running on: ${await app.getUrl()}`);
-      logger.log(`WebSocket server is running on Matrix namespace`);
+      logger.log(`WebSocket server removed - using Matrix client for real-time events`);
 
       return server;
     } catch (error) {
