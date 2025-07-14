@@ -51,7 +51,9 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
     private readonly eventQueryService: EventQueryService,
     private readonly groupService: GroupService,
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
-  ) {}
+  ) {
+    this.logger.log('MatrixChatRoomManagerAdapter constructor: All dependencies injected successfully');
+  }
 
   /**
    * Generates a standardized room name based on entity type and tenant
@@ -71,11 +73,19 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
     userId: number,
     tenantId: string,
   ): Promise<{ user: UserEntity; matrixUserId: string }> {
+    this.logger.log(
+      `generateMatrixUserIdForUser: Looking up user ${userId} in tenant ${tenantId}`,
+    );
+    
     const user = await this.userService.findById(userId, tenantId);
 
     if (!user) {
       throw new Error(`User with id ${userId} not found`);
     }
+
+    this.logger.log(
+      `generateMatrixUserIdForUser: Found user ${user.slug} (ID: ${user.id})`,
+    );
 
     const serverName = process.env.MATRIX_SERVER_NAME;
     if (!serverName) {
@@ -87,6 +97,9 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
 
     if (this.globalMatrixValidationService) {
       try {
+        this.logger.log(
+          `generateMatrixUserIdForUser: Checking Matrix registry for user ${user.id}`,
+        );
         const registryEntry =
           await this.globalMatrixValidationService.getMatrixHandleForUser(
             user.id,
@@ -94,21 +107,32 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
           );
         if (registryEntry) {
           matrixUserId = `@${registryEntry.handle}:${serverName}`;
+          this.logger.log(
+            `generateMatrixUserIdForUser: Found Matrix user ID ${matrixUserId} for user ${user.id}`,
+          );
+        } else {
+          this.logger.warn(
+            `generateMatrixUserIdForUser: No registry entry found for user ${user.id}`,
+          );
         }
       } catch (error) {
-        this.logger.warn(
-          `Error checking Matrix registry for user ${user.id}: ${error.message}`,
+        this.logger.error(
+          `generateMatrixUserIdForUser: Error checking Matrix registry for user ${user.id}: ${error.message}`,
+          error.stack,
         );
       }
     }
 
     // If no Matrix user ID found, the user hasn't authenticated with Matrix yet
     if (!matrixUserId) {
-      throw new Error(
-        `User ${user.slug} (ID: ${user.id}) has not authenticated with Matrix yet. User must complete Matrix authentication before accessing chat rooms.`,
-      );
+      const errorMsg = `User ${user.slug} (ID: ${user.id}) has not authenticated with Matrix yet. User must complete Matrix authentication before accessing chat rooms.`;
+      this.logger.error(`generateMatrixUserIdForUser: ${errorMsg}`);
+      throw new Error(errorMsg);
     }
 
+    this.logger.log(
+      `generateMatrixUserIdForUser: Successfully generated Matrix user ID ${matrixUserId} for user ${user.slug}`,
+    );
     return { user, matrixUserId };
   }
 
@@ -416,14 +440,22 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
         encrypted: false, // Disable encryption for event chat rooms
         // Add the event creator as the first member
         inviteUserIds: creator.matrixUserId ? [creator.matrixUserId] : [],
-        // Set creator as moderator
-        powerLevelContentOverride: creator.matrixUserId
-          ? {
-              users: {
-                [creator.matrixUserId]: 50, // Moderator level
-              },
-            }
-          : undefined,
+        // Set bot as admin and creator as moderator
+        powerLevelContentOverride: (() => {
+          const botUserId = this.matrixBotService.getBotUserId();
+          const powerLevels = {
+            users: {
+              // Bot needs admin permissions to manage room (kick, ban, etc.)
+              [botUserId]: 100, // Admin level
+              // Set creator as moderator if they have Matrix ID
+              ...(creator.matrixUserId ? { [creator.matrixUserId]: 50 } : {}),
+            },
+          };
+          this.logger.log(
+            `Setting room power levels - Bot: ${botUserId}=100, Creator: ${creator.matrixUserId || 'none'}=${creator.matrixUserId ? 50 : 'none'}`,
+          );
+          return powerLevels;
+        })(),
       },
       tenantId,
     );
@@ -1037,14 +1069,22 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
           encrypted: false, // Disable encryption for group chat rooms
           // Add the group creator as the first member
           inviteUserIds: creator.matrixUserId ? [creator.matrixUserId] : [],
-          // Set creator as moderator
-          powerLevelContentOverride: creator.matrixUserId
-            ? {
-                users: {
-                  [creator.matrixUserId]: 50, // Moderator level
-                },
-              }
-            : undefined,
+          // Set bot as admin and creator as moderator
+          powerLevelContentOverride: (() => {
+            const botUserId = this.matrixBotService.getBotUserId();
+            const powerLevels = {
+              users: {
+                // Bot needs admin permissions to manage room (kick, ban, etc.)
+                [botUserId]: 100, // Admin level
+                // Set creator as moderator if they have Matrix ID
+                ...(creator.matrixUserId ? { [creator.matrixUserId]: 50 } : {}),
+              },
+            };
+            this.logger.log(
+              `Setting GROUP room power levels - Bot: ${botUserId}=100, Creator: ${creator.matrixUserId || 'none'}=${creator.matrixUserId ? 50 : 'none'}`,
+            );
+            return powerLevels;
+          })(),
         },
         tenantId,
       );
@@ -1226,8 +1266,15 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
     userSlug: string,
     tenantId: string,
   ): Promise<void> {
+    this.logger.log(
+      `removeUserFromGroupChatRoom: START - Removing user ${userSlug} from group ${groupSlug} in tenant ${tenantId}`,
+    );
+    
     try {
       // Get group by slug
+      this.logger.log(
+        `removeUserFromGroupChatRoom: Getting group by slug ${groupSlug}`,
+      );
       const group = await this.groupService.getGroupBySlug(groupSlug);
       if (!group) {
         throw new NotFoundException(`Group with slug ${groupSlug} not found`);
@@ -1271,11 +1318,29 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
         await this.matrixBotService.authenticateBot(tenantId);
       }
 
-      await this.matrixBotService.removeUser(
-        chatRoom.matrixRoomId,
-        matrixUserId,
-        tenantId,
+      this.logger.log(
+        `About to call matrixBotService.removeUser for room ${chatRoom.matrixRoomId}, user ${matrixUserId}`,
       );
+      this.logger.log(
+        `Bot user ID during removal: ${this.matrixBotService.getBotUserId()}`,
+      );
+      
+      try {
+        await this.matrixBotService.removeUser(
+          chatRoom.matrixRoomId,
+          matrixUserId,
+          tenantId,
+        );
+        this.logger.log(
+          `Successfully called matrixBotService.removeUser for room ${chatRoom.matrixRoomId}, user ${matrixUserId}`,
+        );
+      } catch (botError) {
+        this.logger.error(
+          `Matrix bot removeUser failed: ${botError.message}`,
+          botError.stack,
+        );
+        throw botError;
+      }
 
       // Remove the user from the chat room members
       chatRoom.members = chatRoom.members.filter(

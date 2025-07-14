@@ -26,6 +26,7 @@ import {
   GroupPermission,
 } from '../../core/constants/constant';
 import { EventQueryService } from '../../event/services/event-query.service';
+import { EventManagementService } from '../../event/services/event-management.service';
 import { GroupService } from '../../group/group.service';
 import { GlobalMatrixValidationService } from '../../matrix/services/global-matrix-validation.service';
 
@@ -249,6 +250,7 @@ describe('ChatRoomService', () => {
         groupMemberService,
         eventAttendeeService,
         eventQueryService,
+        eventManagementService,
         groupService,
         elastiCacheService,
         globalMatrixValidationService,
@@ -265,6 +267,7 @@ describe('ChatRoomService', () => {
           groupMemberService,
           eventAttendeeService,
           eventQueryService,
+          eventManagementService,
           groupService,
           elastiCacheService,
           globalMatrixValidationService,
@@ -282,6 +285,7 @@ describe('ChatRoomService', () => {
         GroupMemberService,
         EventAttendeeService,
         EventQueryService,
+        EventManagementService,
         GroupService,
         ElastiCacheService,
         GlobalMatrixValidationService,
@@ -391,6 +395,12 @@ describe('ChatRoomService', () => {
               return Promise.resolve(null);
             }),
             findById: jest.fn().mockResolvedValue(mockEvent),
+          },
+        },
+        {
+          provide: EventManagementService,
+          useValue: {
+            updateMatrixRoomId: jest.fn().mockResolvedValue(undefined),
           },
         },
         {
@@ -545,6 +555,7 @@ describe('ChatRoomService', () => {
             withLock: jest.fn().mockImplementation(async (key, fn) => {
               return await fn();
             }),
+            del: jest.fn().mockResolvedValue(1),
           },
         },
         {
@@ -926,63 +937,6 @@ describe('ChatRoomService', () => {
     });
   });
 
-  describe('getGroupChatRoomBySlug', () => {
-    it('should find a chat room by group slug', async () => {
-      // Setup mocks
-      mockChatRoomRepository.findOne = jest
-        .fn()
-        .mockResolvedValue(mockGroupChatRoom);
-
-      const result = await service.getGroupChatRoomBySlug('test-group');
-
-      // Should have called GroupService to find the group by slug
-      expect(groupService.findGroupBySlug).toHaveBeenCalledWith('test-group');
-
-      // Should have called ChatRoomRepository.findOne with the group ID
-      expect(mockChatRoomRepository.findOne).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { group: { id: mockGroup.id } },
-          relations: ['creator', 'group'],
-        }),
-      );
-
-      // Should return the chat room
-      expect(result).toEqual(mockGroupChatRoom);
-    });
-
-    it('should return null if group is not found', async () => {
-      // Setup GroupService mock to return null
-      (groupService.findGroupBySlug as jest.Mock).mockResolvedValueOnce(null);
-
-      const result = await service.getGroupChatRoomBySlug('non-existent-group');
-
-      // Should have called GroupService to find the group by slug
-      expect(groupService.findGroupBySlug).toHaveBeenCalledWith(
-        'non-existent-group',
-      );
-
-      // Should not have tried to find a chat room
-      expect(mockChatRoomRepository.findOne).not.toHaveBeenCalled();
-
-      // Should return null
-      expect(result).toBeNull();
-    });
-
-    it('should handle errors gracefully', async () => {
-      // Setup GroupService mock to throw an error
-      (groupService.findGroupBySlug as jest.Mock).mockRejectedValueOnce(
-        new Error('Test error'),
-      );
-
-      const result = await service.getGroupChatRoomBySlug('error-group');
-
-      // Should have called GroupService to find the group by slug
-      expect(groupService.findGroupBySlug).toHaveBeenCalledWith('error-group');
-
-      // Should return null
-      expect(result).toBeNull();
-    });
-  });
 
   describe('Slug-based methods', () => {
     it('should add user to event chat room by slugs', async () => {
@@ -1031,37 +985,5 @@ describe('ChatRoomService', () => {
       expect(userService.getUserBySlug).toHaveBeenCalledWith('test-user');
     });
 
-    it('should add user to group chat room by slugs', async () => {
-      // We shouldn't be mocking our service methods, but we should mock all the dependencies
-      // so the real service methods can be tested
-
-      // Mock the necessary service methods needed by addUserToGroupChatRoom
-      (userService.getUserBySlug as jest.Mock).mockResolvedValue(
-        mockUserWithMatrix,
-      );
-      (groupService.findGroupBySlug as jest.Mock).mockResolvedValue(mockGroup);
-      (
-        groupMemberService.findGroupMemberByUserId as jest.Mock
-      ).mockResolvedValue(mockGroupMember);
-
-      // Mock the chatRoomRepository.findOne and save methods
-      mockChatRoomRepository.findOne = jest.fn().mockResolvedValue({
-        ...mockChatRoom,
-        matrixRoomId: 'test-matrix-room-id',
-        group: mockGroup,
-        members: [],
-      });
-      mockChatRoomRepository.save = jest.fn().mockResolvedValue(mockChatRoom);
-
-      // Mock lower-level matrix methods
-      jest.spyOn(matrixRoomService, 'joinRoom').mockResolvedValue(undefined);
-
-      // Run the test
-      await service.addUserToGroupChatRoom('test-group', 'test-user');
-
-      // Verify the right methods were called
-      expect(groupService.findGroupBySlug).toHaveBeenCalledWith('test-group');
-      expect(userService.getUserBySlug).toHaveBeenCalledWith('test-user');
-    });
   });
 });

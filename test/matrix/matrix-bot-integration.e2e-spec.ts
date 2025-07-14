@@ -5,6 +5,7 @@ import {
   loginAsAdmin,
   createEvent,
   createGroup,
+  registerMatrixUserIdentity,
 } from '../utils/functions';
 
 /**
@@ -41,6 +42,19 @@ describe('Matrix Bot Integration (E2E)', () => {
 
     currentUser = userResponse.body;
 
+    // Register Matrix user identities (simulating MAS authentication)
+    try {
+      await registerMatrixUserIdentity(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        userToken,
+        currentUser.slug,
+      );
+      console.log(`Registered Matrix identity for user ${currentUser.slug}`);
+    } catch (error) {
+      console.warn(`Failed to register Matrix identity for user: ${error.message}`);
+    }
+
     // Create test event and group for bot operations
     const eventData = {
       name: 'Matrix Bot Test Event',
@@ -75,6 +89,19 @@ describe('Matrix Bot Integration (E2E)', () => {
       .set('x-tenant-id', TESTING_TENANT_ID);
 
     const adminUser = adminResponse.body;
+
+    // Register Matrix identity for admin user too
+    try {
+      await registerMatrixUserIdentity(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        adminToken,
+        adminUser.slug,
+      );
+      console.log(`Registered Matrix identity for admin user ${adminUser.slug}`);
+    } catch (error) {
+      console.warn(`Failed to register Matrix identity for admin: ${error.message}`);
+    }
 
     // Add admin user to the group so they can create chat rooms
     try {
@@ -299,6 +326,13 @@ describe('Matrix Bot Integration (E2E)', () => {
         .set('Authorization', `Bearer ${userToken}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
 
+      if (removeResponse.status !== 200) {
+        console.log('Remove member failed:', {
+          status: removeResponse.status,
+          body: removeResponse.body,
+        });
+      }
+      
       expect(removeResponse.status).toBe(200);
       console.log('Bot managed group member add/remove successfully');
     }, 30000);

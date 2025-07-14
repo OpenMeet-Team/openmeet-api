@@ -363,6 +363,25 @@ async function getCurrentUser(app, tenantId, userToken) {
   return userResponse.body;
 }
 
+async function registerMatrixUserIdentity(app, tenantId, userToken, userSlug) {
+  // Generate a Matrix user ID based on the user slug (simulating MAS authentication)
+  const serverName = process.env.MATRIX_SERVER_NAME || 'matrix.openmeet.net';
+  const matrixUserId = `@${userSlug}:${serverName}`;
+  
+  const response = await request(app)
+    .post('/api/matrix/sync-user-identity')
+    .set('Authorization', `Bearer ${userToken}`)
+    .set('x-tenant-id', tenantId)
+    .send({ matrixUserId });
+
+  if (response.status !== 200) {
+    console.error('Failed to register Matrix user identity:', response.body);
+    throw new Error(`Failed to register Matrix user identity: ${response.status}`);
+  }
+
+  return response.body;
+}
+
 export {
   getAuthToken,
   createGroup,
@@ -383,4 +402,5 @@ export {
   updateGroupMemberRole,
   getGroupMembers,
   getCurrentUser,
+  registerMatrixUserIdentity,
 };

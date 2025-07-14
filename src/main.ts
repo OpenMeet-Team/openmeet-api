@@ -192,7 +192,9 @@ async function bootstrap() {
     );
 
     // WebSocket adapter removed for performance optimization
-    startupLog('WebSocket adapter removed - using Matrix client for real-time events');
+    startupLog(
+      'WebSocket adapter removed - using Matrix client for real-time events',
+    );
 
     // Add proper signal handlers for clean shutdown
     startupLog('Starting HTTP server');
@@ -238,7 +240,9 @@ async function bootstrap() {
       });
 
       logger.log(`Application is running on: ${await app.getUrl()}`);
-      logger.log(`WebSocket server removed - using Matrix client for real-time events`);
+      logger.log(
+        `WebSocket server removed - using Matrix client for real-time events`,
+      );
 
       return server;
     } catch (error) {

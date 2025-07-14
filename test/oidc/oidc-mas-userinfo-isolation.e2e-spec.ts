@@ -357,7 +357,9 @@ describe('MAS Userinfo Endpoint User Isolation', () => {
         });
 
         // Verify correct user data
-        expect(userinfoResponse.body.preferred_username).toBe(`${step.user.slug}_${TESTING_TENANT_ID}`);
+        expect(userinfoResponse.body.preferred_username).toBe(
+          `${step.user.slug}_${TESTING_TENANT_ID}`,
+        );
         expect(userinfoResponse.body.email).toBe(step.email);
 
         console.log(

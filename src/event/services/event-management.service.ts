@@ -2079,8 +2079,6 @@ export class EventManagementService {
       { matrixRoomId: matrixRoomId },
     );
 
-    this.logger.log(
-      `Successfully updated Matrix room ID for event ${eventId}`,
-    );
+    this.logger.log(`Successfully updated Matrix room ID for event ${eventId}`);
   }
 }
