@@ -1,5 +1,6 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import axios from 'axios';
 import { IMatrixBot } from '../interfaces/matrix-bot.interface';
 import { IMatrixClient } from '../types/matrix.interfaces';
 import { MatrixCoreService } from './matrix-core.service';
@@ -11,11 +12,9 @@ export class MatrixBotService implements IMatrixBot {
   private readonly logger = new Logger(MatrixBotService.name);
   private botClient: IMatrixClient | null = null;
   private isAuthenticated = false;
-  private readonly adminEmail: string;
-  private readonly tenantId: string;
-  private readonly botUsername: string;
-  private readonly botPassword: string;
-  private readonly botDisplayName: string;
+  private currentTenantId: string | null = null;
+  private currentBotUserId: string | null = null;
+
   private readonly serverName: string;
   private readonly homeServerUrl: string;
   private readonly appServiceToken: string;
@@ -25,35 +24,14 @@ export class MatrixBotService implements IMatrixBot {
     private readonly matrixCoreService: MatrixCoreService,
     private readonly configService: ConfigService<AllConfigType>,
     private readonly matrixBotUserService: MatrixBotUserService,
-    @Inject('USER_SERVICE_FOR_MATRIX') private readonly userService: any,
   ) {
-    // Use existing admin credentials for Matrix bot operations
-    // The bot authenticates to Matrix via MAS → OpenMeet OIDC flow using admin user
-    const adminEmail = this.configService.get<string>('ADMIN_EMAIL', {
-      infer: true,
-    });
-    const adminPassword = this.configService.get<string>('ADMIN_PASSWORD', {
-      infer: true,
-    });
-
-    this.adminEmail = adminEmail!;
-
-    this.botUsername = this.configService.get<string>(
-      'matrix.bot.username',
-      'openmeet-admin-bot',
-      { infer: true },
-    );
-    this.botPassword = adminPassword!;
-    this.botDisplayName = this.configService.get<string>(
-      'matrix.bot.displayName',
-      'OpenMeet Admin Bot',
-      { infer: true },
-    );
+    // Get Matrix server configuration
     this.serverName = this.configService.get<string>(
       'matrix.serverName',
       'matrix.openmeet.net',
       { infer: true },
     );
+
     const homeServerUrl = this.configService.get<string>('matrix.baseUrl', {
       infer: true,
     });
@@ -66,18 +44,6 @@ export class MatrixBotService implements IMatrixBot {
 
     this.homeServerUrl = homeServerUrl;
 
-    if (!this.adminEmail) {
-      throw new Error(
-        'Admin email not configured. Set ADMIN_EMAIL environment variable.',
-      );
-    }
-
-    if (!this.botPassword) {
-      throw new Error(
-        'Admin password not configured. Set ADMIN_PASSWORD environment variable.',
-      );
-    }
-
     // Load Matrix Application Service configuration
     const matrixConfig = this.configService.get('matrix', { infer: true });
     this.appServiceToken = matrixConfig?.appservice?.token || '';
@@ -86,7 +52,10 @@ export class MatrixBotService implements IMatrixBot {
     if (this.useAppServiceAuth) {
       this.logger.log('Matrix bot will use Application Service authentication');
     } else {
-      this.logger.log('Matrix bot will use OIDC authentication (fallback)');
+      throw new Error(
+        'Matrix Application Service authentication is required. ' +
+          'Please configure MATRIX_APPSERVICE_TOKEN environment variable.',
+      );
     }
   }
 
@@ -111,27 +80,34 @@ export class MatrixBotService implements IMatrixBot {
       }
 
       // Create bot client using application service token
-      const botUserId = `@${botUser.slug}:${this.serverName}`;
+      // For Application Services, authenticate as the AS sender, not tenant-specific bots
+      const appServiceId = this.configService.get<string>('matrix.appservice.id', 'openmeet-bot', { infer: true });
+      const appServiceSender = `@${appServiceId}:${this.serverName}`;
+      
+      this.currentBotUserId = appServiceSender; // Use AS sender as the bot user ID
+      this.currentTenantId = tenantId;
+
       this.botClient = sdk.createClient({
         baseUrl: this.homeServerUrl,
         accessToken: this.appServiceToken,
-        userId: botUserId,
+        userId: appServiceSender, // Authenticate as Application Service sender
         localTimeoutMs: 30000,
         useAuthorizationHeader: true,
       });
 
-      // Set display name if configured
-      if (
-        this.botDisplayName &&
-        this.botDisplayName !== 'OpenMeet Admin Bot' &&
-        this.botClient
-      ) {
-        try {
-          await this.botClient.setDisplayName(this.botDisplayName);
-          this.logger.log(`Bot display name set to: ${this.botDisplayName}`);
-        } catch (error) {
-          this.logger.warn(`Failed to set bot display name: ${error.message}`);
-        }
+      // Set display name for bot user
+      try {
+        const firstName = botUser.firstName?.trim();
+        const lastName = botUser.lastName?.trim();
+        const displayName =
+          firstName && lastName
+            ? `${firstName} ${lastName}`
+            : firstName || lastName || 'OpenMeet Bot';
+
+        await this.botClient.setDisplayName(displayName);
+        this.logger.log(`Bot display name set to: ${displayName}`);
+      } catch (error) {
+        this.logger.warn(`Failed to set bot display name: ${error.message}`);
       }
 
       this.isAuthenticated = true;
@@ -157,10 +133,20 @@ export class MatrixBotService implements IMatrixBot {
         );
       }
 
+      // Only disconnect if switching to a different tenant
+      if (this.currentTenantId && this.currentTenantId !== tenantId) {
+        this.logger.log(
+          `Switching from tenant ${this.currentTenantId} to ${tenantId}, disconnecting current bot`,
+        );
+        this.disconnectCurrentBot();
+      }
+
       // Use Application Service authentication (required)
       await this.authenticateBotWithAppService(tenantId);
     } catch (error) {
       this.isAuthenticated = false;
+      this.currentTenantId = null;
+      this.currentBotUserId = null;
       this.logger.error(
         `Failed to authenticate Matrix bot for tenant ${tenantId}: ${error.message}`,
       );
@@ -168,19 +154,57 @@ export class MatrixBotService implements IMatrixBot {
     }
   }
 
+  /**
+   * Disconnect current bot client
+   * Preparation for future per-tenant persistent connections
+   */
+  private disconnectCurrentBot(): void {
+    if (this.botClient) {
+      try {
+        // Stop the current client if it has a stop method
+        if (typeof this.botClient.stopClient === 'function') {
+          this.botClient.stopClient();
+        }
+      } catch (error) {
+        this.logger.warn(`Error stopping bot client: ${error.message}`);
+      }
+    }
+
+    this.botClient = null;
+    this.isAuthenticated = false;
+    this.currentTenantId = null;
+    this.currentBotUserId = null;
+  }
+
   isBotAuthenticated(): boolean {
     return this.isAuthenticated && this.botClient !== null;
   }
 
-  getBotUserId(): string {
-    return `@${this.botUsername}:${this.serverName}`;
+  getBotUserId(tenantId?: string): string {
+    if (this.currentBotUserId) {
+      return this.currentBotUserId;
+    }
+
+    // If no authenticated bot, return the expected format
+    if (tenantId) {
+      return `@openmeet-bot-${tenantId}:${this.serverName}`;
+    }
+
+    throw new Error('No bot authenticated and no tenantId provided');
   }
 
   private async ensureBotAuthenticated(tenantId: string): Promise<void> {
-    if (!this.isBotAuthenticated()) {
-      this.logger.log(
-        `Bot not authenticated yet, authenticating now for tenant: ${tenantId}`,
-      );
+    // Check if we need to authenticate for a different tenant
+    if (!this.isBotAuthenticated() || this.currentTenantId !== tenantId) {
+      if (this.currentTenantId && this.currentTenantId !== tenantId) {
+        this.logger.log(
+          `Switching bot context from tenant ${this.currentTenantId} to ${tenantId}`,
+        );
+      } else {
+        this.logger.log(
+          `Bot not authenticated for tenant ${tenantId}, authenticating now...`,
+        );
+      }
       await this.authenticateBot(tenantId);
     }
   }
@@ -282,8 +306,72 @@ export class MatrixBotService implements IMatrixBot {
         `Successfully removed user ${userId} from room ${roomId}`,
       );
     } catch (error) {
+      // Check if the error indicates the user is not in the room
+      const errorMessage = error.message || error.toString();
+      const isUserNotInRoom =
+        errorMessage.includes('not in room') ||
+        errorMessage.includes('not found') ||
+        errorMessage.includes('M_NOT_FOUND') ||
+        errorMessage.includes('M_FORBIDDEN');
+
+      if (isUserNotInRoom) {
+        this.logger.warn(
+          `User ${userId} is not in room ${roomId} or already removed: ${errorMessage}`,
+        );
+        return; // User not in room or already removed, consider it successful
+      }
+
       this.logger.error(
         `Failed to remove user ${userId} from room ${roomId}: ${error.message}`,
+      );
+      throw error;
+    }
+  }
+
+  async ensureBotHasAdminRights(
+    roomId: string,
+    tenantId: string,
+  ): Promise<void> {
+    await this.ensureBotAuthenticated(tenantId);
+
+    const botUserId = this.getBotUserId(tenantId);
+    this.logger.log(`Ensuring bot ${botUserId} has admin rights in room ${roomId}`);
+
+    try {
+      // Get existing power levels
+      const existingPowerLevels = await this.botClient!.getStateEvent(
+        roomId,
+        'm.room.power_levels',
+        '',
+      );
+
+      // Check if bot already has admin rights
+      const currentBotPowerLevel = existingPowerLevels?.users?.[botUserId] || 0;
+      if (currentBotPowerLevel >= 100) {
+        this.logger.log(`Bot ${botUserId} already has admin rights (${currentBotPowerLevel}) in room ${roomId}`);
+        return;
+      }
+
+      // Add bot to admin power levels
+      const updatedPowerLevels = {
+        ...existingPowerLevels,
+        users: {
+          ...existingPowerLevels.users,
+          [botUserId]: 100, // Admin level
+        },
+      };
+
+      await this.botClient!.sendStateEvent(
+        roomId,
+        'm.room.power_levels',
+        updatedPowerLevels,
+        '',
+      );
+
+      this.logger.log(`Successfully granted admin rights to bot ${botUserId} in room ${roomId}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to grant admin rights to bot in room ${roomId}: ${error.message}`,
       );
       throw error;
     }
@@ -299,6 +387,9 @@ export class MatrixBotService implements IMatrixBot {
     this.logger.log(`Syncing permissions for room ${roomId}`);
 
     try {
+      // First ensure bot has admin rights to modify power levels
+      await this.ensureBotHasAdminRights(roomId, tenantId);
+
       // Get existing power levels to preserve non-user settings
       let existingPowerLevels: any = {};
       try {
@@ -436,6 +527,145 @@ export class MatrixBotService implements IMatrixBot {
     } catch (error) {
       this.logger.debug(`Room ${roomId} verification failed: ${error.message}`);
       return false;
+    }
+  }
+
+  async getBotPowerLevel(roomId: string, tenantId: string): Promise<number> {
+    await this.ensureBotAuthenticated(tenantId);
+
+    try {
+      const botUserId = this.getBotUserId(tenantId);
+      const powerLevels = await this.botClient!.getStateEvent(
+        roomId,
+        'm.room.power_levels',
+        '',
+      );
+
+      return powerLevels?.users?.[botUserId] || 0;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to get bot power level for room ${roomId}: ${error.message}`,
+      );
+      return 0;
+    }
+  }
+
+  /**
+   * Force join the bot to a room using admin API (bypasses normal Matrix permissions)
+   */
+  async adminJoinRoom(roomId: string, tenantId: string): Promise<void> {
+    try {
+      this.logger.log(
+        `Force-joining bot to room ${roomId} using admin API for tenant ${tenantId}`,
+      );
+
+      // Get admin token for the tenant
+      const adminClient =
+        await this.matrixCoreService.getAdminClientForTenant(tenantId);
+      const adminToken = adminClient.getAccessToken();
+      const botUserId = this.getBotUserId(tenantId);
+
+      // Get tenant configuration for homeserver URL
+      const { fetchTenants } = require('../../utils/tenant-config');
+      const tenants = fetchTenants();
+      const tenant = tenants.find((t) => t.id === tenantId);
+      const homeserverUrl =
+        tenant?.matrixConfig?.homeserverUrl || this.homeServerUrl;
+
+      // Use Synapse admin API to force-join bot to room
+      // POST /_synapse/admin/v1/join/{roomId}
+      const joinUrl = `${homeserverUrl}/_synapse/admin/v1/join/${encodeURIComponent(roomId)}`;
+
+      await axios.post(
+        joinUrl,
+        {
+          user_id: botUserId,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      this.logger.log(
+        `Successfully force-joined bot ${botUserId} to room ${roomId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to force-join bot to room ${roomId}: ${error.message}`,
+      );
+      throw new Error(`Admin join failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Set power levels in a room using admin API (bypasses normal Matrix permissions)
+   */
+  async adminSetPowerLevels(
+    roomId: string,
+    powerLevels: Record<string, number>,
+    tenantId: string,
+  ): Promise<void> {
+    try {
+      this.logger.log(
+        `Setting power levels in room ${roomId} using admin API for tenant ${tenantId}`,
+      );
+
+      // Get admin client for the tenant
+      const adminClient =
+        await this.matrixCoreService.getAdminClientForTenant(tenantId);
+
+      // Get current power levels to merge with new ones
+      let currentPowerLevels: any = {};
+      try {
+        currentPowerLevels = await adminClient.getStateEvent(
+          roomId,
+          'm.room.power_levels',
+          '',
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Could not get current power levels, using defaults: ${error.message}`,
+        );
+        currentPowerLevels = {
+          users_default: 0,
+          events_default: 0,
+          state_default: 50,
+          ban: 50,
+          kick: 50,
+          redact: 50,
+          invite: 0,
+          users: {},
+        };
+      }
+
+      // Merge new power levels with existing ones
+      const updatedPowerLevels = {
+        ...currentPowerLevels,
+        users: {
+          ...currentPowerLevels.users,
+          ...powerLevels,
+        },
+      };
+
+      // Use Matrix client API to set power levels
+      await adminClient.sendStateEvent(
+        roomId,
+        'm.room.power_levels',
+        updatedPowerLevels,
+        '',
+      );
+
+      this.logger.log(
+        `Successfully set power levels in room ${roomId}: ${JSON.stringify(powerLevels)}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to set power levels in room ${roomId}: ${error.message}`,
+      );
+      throw new Error(`Admin set power levels failed: ${error.message}`);
     }
   }
 }

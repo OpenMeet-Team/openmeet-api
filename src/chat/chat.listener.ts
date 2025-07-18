@@ -22,7 +22,9 @@ export class ChatListener {
     private readonly chatRoomManager: ChatRoomManagerInterface,
     private readonly userService: UserService,
     private readonly groupService: GroupService,
-  ) {}
+  ) {
+    this.logger.log('ChatListener constructed and ready to handle events');
+  }
 
   @OnEvent('chat.event.member.add')
   async handleChatEventMemberAdd(params: {
@@ -514,6 +516,153 @@ export class ChatListener {
       );
       // We don't rethrow the error here to prevent blocking the group deletion
       // The group deletion should proceed even if chat room cleanup fails
+    }
+  }
+
+  @OnEvent('chat.group.created')
+  async handleChatGroupCreated(params: {
+    groupSlug: string;
+    userSlug?: string; // Make userSlug optional for tests
+    userId?: number; // Allow userId as an alternative to userSlug
+    groupName: string;
+    groupVisibility: string;
+    tenantId?: string;
+  }) {
+    this.logger.log('chat.group.created event received');
+    this.logger.log('Full params received:', JSON.stringify(params, null, 2));
+
+    try {
+      // First check the tenantId
+      this.logger.log(
+        `TenantID check: ${params.tenantId ? 'PRESENT' : 'MISSING'}`,
+      );
+      this.logger.log(`TenantID value: "${params.tenantId}"`);
+
+      // Tenant ID is required in all environments
+      if (!params.tenantId) {
+        this.logger.error('Tenant ID is required in the event payload');
+        throw new Error('Tenant ID is required');
+      }
+
+      const tenantId = params.tenantId;
+      this.logger.log(`Using tenant ID: ${tenantId}`);
+
+      // Double check all required parameters
+      if (!params.groupSlug) {
+        this.logger.error('Group slug is required');
+        throw new Error('Group slug is required');
+      }
+
+      if (!params.userSlug && !params.userId) {
+        // Just log a warning instead of throwing an error, and return early
+        this.logger.warn(
+          'Missing both userSlug and userId for group creation, skipping chat room creation',
+        );
+        return;
+      }
+
+      let groupId: number | null = null;
+      let userId: number | null = null;
+
+      // Handle looking up by userId if userSlug is not provided
+      if (!params.userSlug && params.userId) {
+        this.logger.log(`Using userId ${params.userId} instead of userSlug`);
+        userId = params.userId;
+
+        // Find the group by slug
+        const group = await this.groupService.findGroupBySlug(params.groupSlug);
+        if (group) {
+          groupId = group.id;
+        } else {
+          this.logger.error(`Group with slug ${params.groupSlug} not found`);
+          throw new Error(`Group not found: ${params.groupSlug}`);
+        }
+      } else if (params.userSlug) {
+        // Use direct service calls instead of deprecated DiscussionService
+        const group = await this.groupService.findGroupBySlug(params.groupSlug);
+        const user = await this.userService.findBySlug(
+          params.userSlug,
+          tenantId,
+        );
+
+        if (!group) {
+          throw new Error(`Group not found: ${params.groupSlug}`);
+        }
+        if (!user) {
+          throw new Error(`User not found: ${params.userSlug}`);
+        }
+
+        groupId = group.id;
+        userId = user.id;
+      } else if (params.userId) {
+        // We have userId but no userSlug
+        userId = params.userId;
+      } else {
+        // Instead of throwing an error, just log a warning and exit
+        this.logger.warn(
+          'Either userSlug or userId is required for chat room creation, skipping',
+        );
+        return;
+      }
+
+      if (groupId && userId) {
+        try {
+          // Verify the group still exists using our service-layer method with slug
+          const groupExists = await this.chatRoomManager.checkGroupExists(
+            params.groupSlug,
+            tenantId,
+          );
+
+          if (!groupExists) {
+            this.logger.warn(
+              `Group with slug ${params.groupSlug} no longer exists based on service check. Skipping chat room creation.`,
+            );
+            return;
+          }
+
+          // If we have the user's slug, use it directly
+          if (params.userSlug) {
+            // Create the chat room using our tenant-aware chat room manager with slugs
+            await this.chatRoomManager.ensureGroupChatRoom(
+              params.groupSlug,
+              params.userSlug,
+              tenantId,
+            );
+          } else {
+            // We need to find the user's slug
+            const user = await this.userService.findById(userId, tenantId);
+            if (!user) {
+              throw new Error(`Could not find user with ID ${userId}`);
+            }
+
+            // Create the chat room using our tenant-aware chat room manager with slugs
+            await this.chatRoomManager.ensureGroupChatRoom(
+              params.groupSlug,
+              user.slug,
+              tenantId,
+            );
+          }
+
+          this.logger.log(
+            `Created chat room for group ${params.groupSlug} by user ID ${userId} in tenant ${tenantId}`,
+          );
+        } catch (error) {
+          this.logger.error(
+            `Error verifying group existence (id: ${groupId}): ${error.message}`,
+          );
+          // Don't attempt to create a chat room if we can't verify the group exists
+          return;
+        }
+      } else {
+        this.logger.warn(
+          `Could not get valid groupId and userId for group ${params.groupSlug}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to create chat room for group ${params.groupSlug}: ${error.message}`,
+        error.stack,
+      );
     }
   }
 

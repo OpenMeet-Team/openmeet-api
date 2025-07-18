@@ -52,7 +52,25 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
     private readonly groupService: GroupService,
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
   ) {
-    this.logger.log('MatrixChatRoomManagerAdapter constructor: All dependencies injected successfully');
+    this.logger.log(
+      'MatrixChatRoomManagerAdapter constructor: All dependencies injected successfully',
+    );
+  }
+
+  /**
+   * Helper method to get a group by slug using tenant database connection
+   * Bypasses REQUEST-scoped GroupService to avoid context issues
+   */
+  private async getGroupBySlugWithTenant(
+    groupSlug: string,
+    tenantId: string,
+  ): Promise<GroupEntity | null> {
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    const groupRepository = dataSource.getRepository(GroupEntity);
+    return await groupRepository.findOne({
+      where: { slug: groupSlug },
+    });
   }
 
   /**
@@ -76,7 +94,7 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
     this.logger.log(
       `generateMatrixUserIdForUser: Looking up user ${userId} in tenant ${tenantId}`,
     );
-    
+
     const user = await this.userService.findById(userId, tenantId);
 
     if (!user) {
@@ -105,14 +123,14 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
             user.id,
             tenantId,
           );
-        if (registryEntry) {
+        if (registryEntry && registryEntry.handle && registryEntry.handle !== 'undefined') {
           matrixUserId = `@${registryEntry.handle}:${serverName}`;
           this.logger.log(
             `generateMatrixUserIdForUser: Found Matrix user ID ${matrixUserId} for user ${user.id}`,
           );
         } else {
           this.logger.warn(
-            `generateMatrixUserIdForUser: No registry entry found for user ${user.id}`,
+            `generateMatrixUserIdForUser: No valid registry entry found for user ${user.id} (entry: ${registryEntry ? `exists but handle is ${registryEntry.handle}` : 'does not exist'})`,
           );
         }
       } catch (error) {
@@ -169,6 +187,16 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
           await this.matrixBotService.authenticateBot(tenantId);
         }
 
+        // Ensure bot has admin rights in the room (fixes legacy rooms)
+        try {
+          await this.matrixBotService.ensureBotHasAdminRights(matrixRoomId, tenantId);
+        } catch (adminError) {
+          this.logger.warn(
+            `Could not ensure bot admin rights in room ${matrixRoomId}: ${adminError.message}`,
+          );
+          // Continue anyway - try the invitation
+        }
+
         await this.matrixBotService.inviteUser(
           matrixRoomId,
           matrixUserId,
@@ -187,11 +215,23 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
             `User ${user.id} is already in room ${matrixRoomId}, skipping invite`,
           );
           isAlreadyJoined = true;
-        } else {
-          this.logger.warn(
-            `Error inviting user ${user.id} to room: ${inviteError.message}`,
+        } else if (
+          inviteError.message &&
+          inviteError.message.includes('Unknown room')
+        ) {
+          // Room doesn't exist - this is a critical error that requires room recreation
+          this.logger.error(
+            `Room ${matrixRoomId} does not exist on Matrix server. Room recreation required.`,
           );
-          // Continue anyway - they may still be able to join
+          throw new Error(
+            `Room ${matrixRoomId} does not exist on Matrix server. The room needs to be recreated before users can be invited.`,
+          );
+        } else {
+          this.logger.error(
+            `Failed to invite user ${user.id} to room ${matrixRoomId}: ${inviteError.message}`,
+          );
+          // Re-throw the error since invitation is critical for room access
+          throw new Error(`Matrix invitation failed: ${inviteError.message}`);
         }
       }
     }
@@ -421,7 +461,26 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
     });
 
     if (existingRoom) {
-      return existingRoom;
+      // Verify the Matrix room actually exists and recreate if needed
+      const verifiedRoomId = await this.verifyAndEnsureMatrixRoom(
+        existingRoom,
+        'event',
+        eventSlug,
+        creatorSlug,
+        tenantId,
+      );
+
+      if (verifiedRoomId) {
+        // Update the existing room with the verified/recreated room ID
+        existingRoom.matrixRoomId = verifiedRoomId;
+        await chatRoomRepository.save(existingRoom);
+        return existingRoom;
+      } else {
+        // If verification failed, fall through to create a new room
+        this.logger.warn(
+          `Matrix room verification failed for event ${eventSlug}, creating new room`,
+        );
+      }
     }
 
     // Ensure bot is authenticated before creating room
@@ -442,17 +501,18 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
         inviteUserIds: creator.matrixUserId ? [creator.matrixUserId] : [],
         // Set bot as admin and creator as moderator
         powerLevelContentOverride: (() => {
-          const botUserId = this.matrixBotService.getBotUserId();
+          const botUserId = this.matrixBotService.getBotUserId(tenantId);
+          // The bot user ID is now the Application Service sender, so only set it once
           const powerLevels = {
             users: {
-              // Bot needs admin permissions to manage room (kick, ban, etc.)
+              // Application Service sender (authenticated bot) needs admin permissions
               [botUserId]: 100, // Admin level
               // Set creator as moderator if they have Matrix ID
               ...(creator.matrixUserId ? { [creator.matrixUserId]: 50 } : {}),
             },
           };
           this.logger.log(
-            `Setting room power levels - Bot: ${botUserId}=100, Creator: ${creator.matrixUserId || 'none'}=${creator.matrixUserId ? 50 : 'none'}`,
+            `Setting EVENT room power levels - Bot: ${botUserId}=100, Creator: ${creator.matrixUserId || 'none'}=${creator.matrixUserId ? 50 : 'none'}`,
           );
           return powerLevels;
         })(),
@@ -574,13 +634,55 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
       const { user: userEntity, matrixUserId } =
         await this.generateMatrixUserIdForUser(user.id, tenantId);
 
-      // Always attempt Matrix room operations
-      const isJoined = await this.addUserToMatrixRoom(
-        chatRoom.matrixRoomId,
-        userEntity,
-        matrixUserId,
-        tenantId,
-      );
+      // Always attempt Matrix room operations with room verification
+      let currentRoomId = chatRoom.matrixRoomId;
+      let isJoined = false;
+      
+      try {
+        isJoined = await this.addUserToMatrixRoom(
+          currentRoomId,
+          userEntity,
+          matrixUserId,
+          tenantId,
+        );
+      } catch (error) {
+        // If the room doesn't exist, try to recreate it
+        if (error.message && error.message.includes('does not exist on Matrix server')) {
+          this.logger.warn(
+            `Room ${currentRoomId} doesn't exist, attempting to recreate for event ${eventSlug}`,
+          );
+          
+          // Verify and recreate the room
+          const verifiedRoomId = await this.verifyAndEnsureMatrixRoom(
+            chatRoom,
+            'event',
+            eventSlug,
+            user.slug,
+            tenantId,
+          );
+          
+          if (verifiedRoomId) {
+            // Update the chat room record with the new room ID
+            const dataSource = await this.tenantConnectionService.getTenantConnection(tenantId);
+            const chatRoomRepository = dataSource.getRepository(ChatRoomEntity);
+            chatRoom.matrixRoomId = verifiedRoomId;
+            await chatRoomRepository.save(chatRoom);
+            
+            // Retry the invitation with the new room
+            isJoined = await this.addUserToMatrixRoom(
+              verifiedRoomId,
+              userEntity,
+              matrixUserId,
+              tenantId,
+            );
+            currentRoomId = verifiedRoomId;
+          } else {
+            throw new Error(`Failed to recreate room for event ${eventSlug}`);
+          }
+        } else {
+          throw error;
+        }
+      }
 
       // Set appropriate permissions based on role
       if (isJoined && matrixUserId) {
@@ -588,7 +690,7 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
           event.id,
           user.id,
           matrixUserId,
-          chatRoom.matrixRoomId,
+          currentRoomId,
           'event',
           tenantId,
         );
@@ -1021,8 +1123,8 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
     tenantId: string,
   ): Promise<ChatRoomEntity> {
     try {
-      // Get the group by slug
-      const group = await this.groupService.getGroupBySlug(groupSlug);
+      // Get the group by slug using tenant connection
+      const group = await this.getGroupBySlugWithTenant(groupSlug, tenantId);
       if (!group) {
         throw new NotFoundException(`Group with slug ${groupSlug} not found`);
       }
@@ -1050,7 +1152,26 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
       });
 
       if (existingRoom) {
-        return existingRoom;
+        // Verify the Matrix room actually exists and recreate if needed
+        const verifiedRoomId = await this.verifyAndEnsureMatrixRoom(
+          existingRoom,
+          'group',
+          groupSlug,
+          creatorSlug,
+          tenantId,
+        );
+
+        if (verifiedRoomId) {
+          // Update the existing room with the verified/recreated room ID
+          existingRoom.matrixRoomId = verifiedRoomId;
+          await chatRoomRepository.save(existingRoom);
+          return existingRoom;
+        } else {
+          // If verification failed, fall through to create a new room
+          this.logger.warn(
+            `Matrix room verification failed for group ${groupSlug}, creating new room`,
+          );
+        }
       }
 
       // Ensure bot is authenticated before creating room
@@ -1071,17 +1192,23 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
           inviteUserIds: creator.matrixUserId ? [creator.matrixUserId] : [],
           // Set bot as admin and creator as moderator
           powerLevelContentOverride: (() => {
-            const botUserId = this.matrixBotService.getBotUserId();
+            const botUserId = this.matrixBotService.getBotUserId(tenantId);
+            const serverName =
+              process.env.MATRIX_SERVER_NAME || 'matrix.openmeet.net';
+            const appServiceSender = `@openmeet-bot:${serverName}`;
+
             const powerLevels = {
               users: {
-                // Bot needs admin permissions to manage room (kick, ban, etc.)
+                // AppService sender bot needs admin permissions (required by Matrix)
+                [appServiceSender]: 100,
+                // Tenant bot needs admin permissions to manage room (kick, ban, etc.)
                 [botUserId]: 100, // Admin level
                 // Set creator as moderator if they have Matrix ID
                 ...(creator.matrixUserId ? { [creator.matrixUserId]: 50 } : {}),
               },
             };
             this.logger.log(
-              `Setting GROUP room power levels - Bot: ${botUserId}=100, Creator: ${creator.matrixUserId || 'none'}=${creator.matrixUserId ? 50 : 'none'}`,
+              `Setting GROUP room power levels - AppService: ${appServiceSender}=100, Bot: ${botUserId}=100, Creator: ${creator.matrixUserId || 'none'}=${creator.matrixUserId ? 50 : 'none'}`,
             );
             return powerLevels;
           })(),
@@ -1145,8 +1272,8 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
     tenantId: string,
   ): Promise<void> {
     try {
-      // Get group by slug
-      const group = await this.groupService.getGroupBySlug(groupSlug);
+      // Get group by slug using tenant connection
+      const group = await this.getGroupBySlugWithTenant(groupSlug, tenantId);
       if (!group) {
         throw new NotFoundException(`Group with slug ${groupSlug} not found`);
       }
@@ -1216,13 +1343,55 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
       const { user: userEntity, matrixUserId } =
         await this.generateMatrixUserIdForUser(user.id, tenantId);
 
-      // Always attempt Matrix room operations
-      const isJoined = await this.addUserToMatrixRoom(
-        chatRoom.matrixRoomId,
-        userEntity,
-        matrixUserId,
-        tenantId,
-      );
+      // Always attempt Matrix room operations with room verification
+      let currentRoomId = chatRoom.matrixRoomId;
+      let isJoined = false;
+      
+      try {
+        isJoined = await this.addUserToMatrixRoom(
+          currentRoomId,
+          userEntity,
+          matrixUserId,
+          tenantId,
+        );
+      } catch (error) {
+        // If the room doesn't exist, try to recreate it
+        if (error.message && error.message.includes('does not exist on Matrix server')) {
+          this.logger.warn(
+            `Room ${currentRoomId} doesn't exist, attempting to recreate for group ${groupSlug}`,
+          );
+          
+          // Verify and recreate the room
+          const verifiedRoomId = await this.verifyAndEnsureMatrixRoom(
+            chatRoom,
+            'group',
+            groupSlug,
+            user.slug,
+            tenantId,
+          );
+          
+          if (verifiedRoomId) {
+            // Update the chat room record with the new room ID
+            const dataSource = await this.tenantConnectionService.getTenantConnection(tenantId);
+            const chatRoomRepository = dataSource.getRepository(ChatRoomEntity);
+            chatRoom.matrixRoomId = verifiedRoomId;
+            await chatRoomRepository.save(chatRoom);
+            
+            // Retry the invitation with the new room
+            isJoined = await this.addUserToMatrixRoom(
+              verifiedRoomId,
+              userEntity,
+              matrixUserId,
+              tenantId,
+            );
+            currentRoomId = verifiedRoomId;
+          } else {
+            throw new Error(`Failed to recreate room for group ${groupSlug}`);
+          }
+        } else {
+          throw error;
+        }
+      }
 
       // Set appropriate permissions based on role
       if (isJoined && matrixUserId) {
@@ -1230,7 +1399,7 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
           group.id,
           user.id,
           matrixUserId,
-          chatRoom.matrixRoomId,
+          currentRoomId,
           'group',
           tenantId,
         );
@@ -1269,13 +1438,14 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
     this.logger.log(
       `removeUserFromGroupChatRoom: START - Removing user ${userSlug} from group ${groupSlug} in tenant ${tenantId}`,
     );
-    
+
     try {
-      // Get group by slug
+      // Get group by slug using tenant database connection directly
+      // (bypassing REQUEST-scoped GroupService to avoid context issues)
       this.logger.log(
         `removeUserFromGroupChatRoom: Getting group by slug ${groupSlug}`,
       );
-      const group = await this.groupService.getGroupBySlug(groupSlug);
+      const group = await this.getGroupBySlugWithTenant(groupSlug, tenantId);
       if (!group) {
         throw new NotFoundException(`Group with slug ${groupSlug} not found`);
       }
@@ -1307,10 +1477,29 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
       }
 
       // Get Matrix user ID from registry (no fallback generation)
-      const { matrixUserId } = await this.generateMatrixUserIdForUser(
-        user.id,
-        tenantId,
-      );
+      // If user doesn't have Matrix ID, they're not in the Matrix room anyway
+      let matrixUserId: string;
+      try {
+        const result = await this.generateMatrixUserIdForUser(user.id, tenantId);
+        matrixUserId = result.matrixUserId;
+      } catch (error) {
+        this.logger.warn(
+          `User ${userSlug} doesn't have Matrix user ID, skipping Matrix room removal: ${error.message}`,
+        );
+        // User isn't in Matrix room, so we can just remove them from the database
+        // and consider the removal successful
+        
+        // Remove the user from the chat room members
+        chatRoom.members = chatRoom.members.filter(
+          (member) => member.id !== user.id,
+        );
+        await chatRoomRepository.save(chatRoom);
+        
+        this.logger.log(
+          `Removed user ${userSlug} from group ${groupSlug} chat room (database only, no Matrix removal needed)`,
+        );
+        return;
+      }
 
       // Remove the user from the room using bot
       // Ensure bot is authenticated before removing user
@@ -1322,9 +1511,9 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
         `About to call matrixBotService.removeUser for room ${chatRoom.matrixRoomId}, user ${matrixUserId}`,
       );
       this.logger.log(
-        `Bot user ID during removal: ${this.matrixBotService.getBotUserId()}`,
+        `Bot user ID during removal: ${this.matrixBotService.getBotUserId(tenantId)}`,
       );
-      
+
       try {
         await this.matrixBotService.removeUser(
           chatRoom.matrixRoomId,
@@ -1374,8 +1563,8 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
     tenantId: string,
   ): Promise<boolean> {
     try {
-      // Get group by slug
-      const group = await this.groupService.getGroupBySlug(groupSlug);
+      // Get group by slug using tenant connection
+      const group = await this.getGroupBySlugWithTenant(groupSlug, tenantId);
       if (!group) {
         this.logger.warn(`Group with slug ${groupSlug} not found`);
         return false;
@@ -1431,8 +1620,8 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
     tenantId: string,
   ): Promise<ChatRoomEntity[]> {
     try {
-      // Get group by slug
-      const group = await this.groupService.getGroupBySlug(groupSlug);
+      // Get group by slug using tenant connection
+      const group = await this.getGroupBySlugWithTenant(groupSlug, tenantId);
       if (!group) {
         throw new NotFoundException(`Group with slug ${groupSlug} not found`);
       }
@@ -1467,8 +1656,8 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
     tenantId: string,
   ): Promise<void> {
     try {
-      // Get group by slug
-      const group = await this.groupService.getGroupBySlug(groupSlug);
+      // Get group by slug using tenant connection
+      const group = await this.getGroupBySlugWithTenant(groupSlug, tenantId);
       if (!group) {
         this.logger.warn(
           `Group with slug ${groupSlug} not found, skipping chat room deletion`,
@@ -1571,10 +1760,10 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
   @Trace('matrix-chat-room-manager.checkGroupExists')
   async checkGroupExists(
     groupSlug: string,
-    _tenantId: string,
+    tenantId: string,
   ): Promise<boolean> {
     try {
-      const group = await this.groupService.getGroupBySlug(groupSlug);
+      const group = await this.getGroupBySlugWithTenant(groupSlug, tenantId);
       return !!group;
     } catch (error) {
       this.logger.error(
@@ -1681,8 +1870,12 @@ export class MatrixChatRoomManagerAdapter implements ChatRoomManagerInterface {
           this.logger.debug(`Cleared Matrix room ID for event ${entitySlug}`);
         }
       } else if (entityType === 'group') {
-        await this.groupService.update(entitySlug, { matrixRoomId: '' });
-        this.logger.debug(`Cleared Matrix room ID for group ${entitySlug}`);
+        const groupRepository = dataSource.getRepository(GroupEntity);
+        const group = await groupRepository.findOne({ where: { slug: entitySlug } });
+        if (group) {
+          await groupRepository.update({ id: group.id }, { matrixRoomId: '' });
+          this.logger.debug(`Cleared Matrix room ID for group ${entitySlug}`);
+        }
       }
 
       // Delete the old chat room record to force recreation

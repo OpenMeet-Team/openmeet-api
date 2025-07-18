@@ -11,6 +11,10 @@ import { ConfigService } from '@nestjs/config';
 import { ApiTags } from '@nestjs/swagger';
 import { AllConfigType } from '../../config/config.type';
 import { TenantPublic } from '../../tenant/tenant-public.decorator';
+import { UserRoomSyncService } from '../../chat/services/user-room-sync.service';
+import { ChatRoomService } from '../../chat/rooms/chat-room.service';
+import { EventQueryService } from '../../event/services/event-query.service';
+import { GroupService } from '../../group/group.service';
 
 @ApiTags('Matrix Application Service')
 @TenantPublic()
@@ -21,7 +25,13 @@ export class MatrixAppServiceController {
   private readonly appServiceToken: string;
   private readonly homeserverToken: string;
 
-  constructor(private readonly configService: ConfigService<AllConfigType>) {
+  constructor(
+    private readonly configService: ConfigService<AllConfigType>,
+    private readonly userRoomSyncService: UserRoomSyncService,
+    private readonly chatRoomService: ChatRoomService,
+    private readonly eventQueryService: EventQueryService,
+    private readonly groupService: GroupService,
+  ) {
     const matrixConfig = this.configService.get('matrix', { infer: true })!;
 
     this.appServiceToken = matrixConfig.appservice.token;
@@ -62,7 +72,7 @@ export class MatrixAppServiceController {
   }
 
   @Get('rooms/:roomAlias')
-  queryRoom(
+  async queryRoom(
     @Param('roomAlias') roomAlias: string,
     @Headers('authorization') authHeader: string,
   ) {
@@ -82,9 +92,8 @@ export class MatrixAppServiceController {
       return { error: 'Invalid token' };
     }
 
-    // For now, reject all room queries as we don't auto-create rooms
-    this.logger.warn(`Rejecting room query: ${roomAlias}`);
-    return { error: 'Room not found' };
+    // Handle Matrix-native room creation based on room alias pattern
+    return await this.handleRoomQuery(roomAlias);
   }
 
   @Put('_matrix/app/v1/transactions/:txnId')
@@ -121,6 +130,13 @@ export class MatrixAppServiceController {
           break;
         case 'm.room.member':
           this.logger.debug(`Member event: ${event.content?.membership}`);
+          // Trigger room sync for user login events (non-blocking)
+          this.userRoomSyncService.handleMemberEvent(event).catch((error) => {
+            this.logger.error(
+              `Failed to handle member event: ${error.message}`,
+              error.stack,
+            );
+          });
           break;
         default:
           this.logger.debug(`Unknown event type: ${event.type}`);
@@ -146,5 +162,132 @@ export class MatrixAppServiceController {
   getThirdPartyUser(@Param('userid') userid: string) {
     this.logger.debug(`Third-party user query for: ${userid}`);
     return []; // No third-party users supported
+  }
+
+  /**
+   * Handle Matrix-native room queries and create rooms on-demand
+   * This implements the Application Service room provisioning pattern
+   */
+  private async handleRoomQuery(roomAlias: string): Promise<any> {
+    this.logger.log(`Processing Matrix-native room query: ${roomAlias}`);
+
+    try {
+      // Parse room alias to determine entity type and identifier
+      // Expected formats: 
+      // - #event-{slug}-{tenantId}:matrix.openmeet.net
+      // - #group-{slug}-{tenantId}:matrix.openmeet.net
+      const aliasWithoutHash = roomAlias.startsWith('#') ? roomAlias.substring(1) : roomAlias;
+      const [localpart] = aliasWithoutHash.split(':');
+      
+      this.logger.debug(`Parsing room alias localpart: ${localpart}`);
+      
+      // Parse the localpart to extract entity information
+      if (localpart.startsWith('event-')) {
+        return await this.handleEventRoomQuery(localpart);
+      } else if (localpart.startsWith('group-')) {
+        return await this.handleGroupRoomQuery(localpart);
+      } else {
+        this.logger.warn(`Unknown room alias pattern: ${roomAlias}`);
+        return { error: 'Room not found' };
+      }
+    } catch (error) {
+      this.logger.error(`Error handling room query for ${roomAlias}: ${error.message}`);
+      return { error: 'Room not found' };
+    }
+  }
+
+  /**
+   * Handle event room queries and create room if event exists
+   */
+  private async handleEventRoomQuery(localpart: string): Promise<any> {
+    try {
+      // Parse: event-{slug}-{tenantId}
+      const parts = localpart.split('-');
+      if (parts.length < 3 || parts[0] !== 'event') {
+        this.logger.warn(`Invalid event room alias format: ${localpart}`);
+        return { error: 'Room not found' };
+      }
+
+      // Extract tenant ID (last part) and event slug (everything between event- and -{tenantId})
+      const tenantId = parts[parts.length - 1];
+      const eventSlug = parts.slice(1, -1).join('-');
+      
+      this.logger.log(`Checking if event exists: ${eventSlug} in tenant ${tenantId}`);
+
+      // Check if event exists in the business logic
+      const event = await this.eventQueryService.findEventBySlug(eventSlug);
+      if (!event) {
+        this.logger.log(`Event not found: ${eventSlug}`);
+        return { error: 'Room not found' };
+      }
+
+      this.logger.log(`Event exists: ${eventSlug} (ID: ${event.id}), creating Matrix room`);
+
+      // Create the room using the chat room service
+      const chatRoom = await this.chatRoomService.createEventChatRoomWithTenant(
+        event.id,
+        event.user.id, // Use event creator as room creator
+        tenantId
+      );
+
+      this.logger.log(`Matrix room created for event ${eventSlug}: ${chatRoom.matrixRoomId}`);
+
+      // Return success response with room ID
+      return {
+        room_id: chatRoom.matrixRoomId,
+        room_alias: `#${localpart}:${this.configService.get('matrix', { infer: true })?.serverName || 'matrix.openmeet.net'}`
+      };
+
+    } catch (error) {
+      this.logger.error(`Error creating event room: ${error.message}`);
+      return { error: 'Room not found' };
+    }
+  }
+
+  /**
+   * Handle group room queries and create room if group exists
+   */
+  private async handleGroupRoomQuery(localpart: string): Promise<any> {
+    try {
+      // Parse: group-{slug}-{tenantId}
+      const parts = localpart.split('-');
+      if (parts.length < 3 || parts[0] !== 'group') {
+        this.logger.warn(`Invalid group room alias format: ${localpart}`);
+        return { error: 'Room not found' };
+      }
+
+      // Extract tenant ID (last part) and group slug (everything between group- and -{tenantId})
+      const tenantId = parts[parts.length - 1];
+      const groupSlug = parts.slice(1, -1).join('-');
+      
+      this.logger.log(`Checking if group exists: ${groupSlug} in tenant ${tenantId}`);
+
+      // Check if group exists in the business logic
+      const group = await this.groupService.getGroupBySlug(groupSlug);
+      if (!group) {
+        this.logger.log(`Group not found: ${groupSlug}`);
+        return { error: 'Room not found' };
+      }
+
+      this.logger.log(`Group exists: ${groupSlug} (ID: ${group.id}), creating Matrix room`);
+
+      // Create the room using the chat room service
+      const chatRoom = await this.chatRoomService.createGroupChatRoom(
+        group.id,
+        group.createdBy.id // Use group creator as room creator
+      );
+
+      this.logger.log(`Matrix room created for group ${groupSlug}: ${chatRoom.matrixRoomId}`);
+
+      // Return success response with room ID
+      return {
+        room_id: chatRoom.matrixRoomId,
+        room_alias: `#${localpart}:${this.configService.get('matrix', { infer: true })?.serverName || 'matrix.openmeet.net'}`
+      };
+
+    } catch (error) {
+      this.logger.error(`Error creating group room: ${error.message}`);
+      return { error: 'Room not found' };
+    }
   }
 }

@@ -20,7 +20,7 @@ export class EventListener {
     eventId: number;
     slug: string;
     userId: number;
-    tenantId?: string;
+    tenantId: string;
   }) {
     this.logger.log('event.created', {
       id: params.eventId,
@@ -28,8 +28,8 @@ export class EventListener {
       tenantId: params.tenantId,
     });
 
-    // Get the tenant ID from the request context if not provided in the event
-    const tenantId = params.tenantId || this.request?.tenantId;
+    // Use the tenant ID from the event payload (provided by event service)
+    const tenantId = params.tenantId;
 
     // Emit an event for the chat module to handle chat room creation
     // instead of directly calling the chat room service

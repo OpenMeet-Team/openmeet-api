@@ -33,6 +33,21 @@ import { RoleEnum } from '../role/role.enum';
 import { RolesGuard } from '../role/role.guard';
 import { MatrixBotService } from '../matrix/services/matrix-bot.service';
 
+/**
+ * Chat Controller - Matrix Integration
+ *
+ * MIGRATION NOTE: Several endpoints in this controller are deprecated due to
+ * the migration to Matrix Application Service (MAS). With MAS:
+ * - Room creation/joining happens automatically via Application Service
+ * - Users authenticate directly with Matrix via MAS
+ * - No explicit API calls needed for room operations
+ *
+ * Deprecated endpoints:
+ * - POST /event/:slug/join - Room joining handled by MAS
+ * - POST /group/:slug/join - Room joining handled by MAS
+ * - POST /event/:slug/ensure-room - Room creation handled by MAS
+ * - POST /group/:slug/ensure-room - Room creation handled by MAS
+ */
 @ApiTags('Chat')
 @Controller('chat')
 @ApiBearerAuth()
@@ -47,7 +62,9 @@ export class ChatController {
     private readonly chatRoomManager: ChatRoomManagerInterface,
     private readonly matrixBotService: MatrixBotService,
   ) {
-    this.logger.log('ChatController constructor called - dependencies injected successfully');
+    this.logger.log(
+      'ChatController constructor called - dependencies injected successfully',
+    );
   }
 
   /**
@@ -99,6 +116,9 @@ export class ChatController {
   @Post('event/:slug/join')
   @ApiOperation({
     summary: 'Join an event chat room with appropriate permissions',
+    deprecated: true,
+    description:
+      'DEPRECATED: Room joining will be handled automatically by Matrix Application Service (MAS). This endpoint will be removed in a future version.',
   })
   async joinEventChatRoom(
     @Param('slug') eventSlug: string,
@@ -106,8 +126,8 @@ export class ChatController {
     @Req() request: any,
   ): Promise<{ success: boolean; roomId?: string; message?: string }> {
     const tenantId = request.tenantId;
-    this.logger.log(
-      `User ${user.id} attempting to join event chat room for ${eventSlug} in tenant ${tenantId}`,
+    this.logger.warn(
+      `DEPRECATED: joinEventChatRoom called for ${eventSlug} by user ${user.id}. This endpoint will be removed when MAS handles room joining automatically.`,
     );
 
     try {
@@ -118,22 +138,21 @@ export class ChatController {
         tenantId,
       );
 
-      // Get the room ID from the event
-      const result = await this.chatRoomService.ensureRoomAccess(
-        'event',
+      // Get the room entity to return room ID
+      const roomEntity = await this.chatRoomManager.ensureEventChatRoom(
         eventSlug,
         user.slug,
         tenantId,
       );
 
       this.logger.log(
-        `Successfully joined event chat room for ${eventSlug}, with Matrix room ID: ${result.roomId || 'unknown'}`,
+        `Successfully joined event chat room for ${eventSlug}, with Matrix room ID: ${roomEntity.matrixRoomId || 'unknown'}`,
       );
 
       return {
-        success: result.success,
-        roomId: result.roomId,
-        message: result.message,
+        success: true,
+        roomId: roomEntity.matrixRoomId,
+        message: 'Successfully joined event chat room',
       };
     } catch (error) {
       this.logger.error(
@@ -197,7 +216,7 @@ export class ChatController {
       throw new Error('Tenant ID is required');
     }
 
-    // Use ChatRoomManager directly instead of going through DiscussionService  
+    // Use ChatRoomManager directly instead of going through DiscussionService
     await this.chatRoomManager.removeUserFromEventChatRoom(
       eventSlug,
       userSlug,
@@ -258,14 +277,17 @@ export class ChatController {
   @Post('group/:slug/join')
   @ApiOperation({
     summary: 'Join a group chat room with appropriate permissions',
+    deprecated: true,
+    description:
+      'DEPRECATED: Room joining will be handled automatically by Matrix Application Service (MAS). This endpoint will be removed in a future version.',
   })
   async joinGroupChatRoom(
     @Param('slug') groupSlug: string,
     @AuthUser() user: User,
     @Req() request: any,
   ): Promise<{ success: boolean; roomId?: string; message?: string }> {
-    this.logger.log(
-      `User ${user.id} attempting to join group chat room for ${groupSlug}`,
+    this.logger.warn(
+      `DEPRECATED: joinGroupChatRoom called for ${groupSlug} by user ${user.id}. This endpoint will be removed when MAS handles room joining automatically.`,
     );
 
     // Pass the tenant ID explicitly from the request
@@ -340,12 +362,14 @@ export class ChatController {
     this.logger.log(
       `removeMemberFromGroupDiscussion: Starting removal of ${userSlug} from group ${groupSlug}`,
     );
-    
+
     try {
       // Pass the tenant ID explicitly from the request
       const tenantId = request.tenantId;
       if (!tenantId) {
-        this.logger.error('removeMemberFromGroupDiscussion: Tenant ID is required');
+        this.logger.error(
+          'removeMemberFromGroupDiscussion: Tenant ID is required',
+        );
         throw new Error('Tenant ID is required');
       }
 
@@ -357,27 +381,29 @@ export class ChatController {
       this.logger.log(
         `removeMemberFromGroupDiscussion: About to call chatRoomManager.removeUserFromGroupChatRoom`,
       );
-      
+
       try {
         await this.chatRoomManager.removeUserFromGroupChatRoom(
           groupSlug,
           userSlug,
           tenantId,
         );
-        
+
         this.logger.log(
           `removeMemberFromGroupDiscussion: ChatRoomManager call completed successfully`,
         );
-        
+
         return { message: 'Member removed successfully' };
       } catch (chatRoomError) {
         this.logger.error(
           `removeMemberFromGroupDiscussion: ChatRoomManager call failed: ${chatRoomError.message}`,
           chatRoomError.stack,
         );
-        
+
         // Re-throw with more context
-        throw new Error(`Failed to remove user from group chat room: ${chatRoomError.message}`);
+        throw new Error(
+          `Failed to remove user from group chat room: ${chatRoomError.message}`,
+        );
       }
     } catch (error) {
       this.logger.error(
@@ -592,8 +618,9 @@ export class ChatController {
   @Post('event/:slug/ensure-room')
   @ApiOperation({
     summary: 'Ensure event Matrix room exists and is accessible',
+    deprecated: true,
     description:
-      'Verifies user access and ensures Matrix room exists, creating if missing',
+      'DEPRECATED: Matrix rooms will be created automatically by the Application Service (MAS). This endpoint will be removed in a future version.',
   })
   async ensureEventRoom(
     @Param('slug') eventSlug: string,
@@ -605,16 +632,24 @@ export class ChatController {
     recreated: boolean;
     message?: string;
   }> {
+    this.logger.warn(
+      `DEPRECATED: ensureEventRoom called for ${eventSlug} by user ${user.id}. This endpoint will be removed when MAS handles room creation automatically.`,
+    );
+
     try {
-      // Use ChatRoomService which tracks room recreation
-      const result = await this.chatRoomService.ensureRoomAccess(
-        'event',
+      // Use ChatRoomManager which supports Matrix bot authentication
+      const result = await this.chatRoomManager.ensureEventChatRoom(
         eventSlug,
         user.slug,
         request.tenantId,
       );
 
-      return result;
+      return {
+        success: true,
+        roomId: result.matrixRoomId,
+        recreated: false, // ChatRoomEntity doesn't track recreation
+        message: 'Room ensured successfully',
+      };
     } catch (error) {
       this.logger.error(
         `Error ensuring event room for ${eventSlug}: ${error.message}`,
@@ -630,8 +665,9 @@ export class ChatController {
   @Post('group/:slug/ensure-room')
   @ApiOperation({
     summary: 'Ensure group Matrix room exists and is accessible',
+    deprecated: true,
     description:
-      'Verifies user access and ensures Matrix room exists, creating if missing',
+      'DEPRECATED: Matrix rooms will be created automatically by the Application Service (MAS). This endpoint will be removed in a future version.',
   })
   async ensureGroupRoom(
     @Param('slug') groupSlug: string,
@@ -643,6 +679,10 @@ export class ChatController {
     recreated: boolean;
     message?: string;
   }> {
+    this.logger.warn(
+      `DEPRECATED: ensureGroupRoom called for ${groupSlug} by user ${user.id}. This endpoint will be removed when MAS handles room creation automatically.`,
+    );
+
     try {
       // Use ChatRoomService which tracks room recreation
       const result = await this.chatRoomService.ensureRoomAccess(
@@ -672,7 +712,8 @@ export class ChatController {
   @UseGuards(JWTAuthGuard, RolesGuard)
   @Roles(RoleEnum.Admin)
   @ApiOperation({
-    summary: 'Diagnose Matrix room permissions and test bot capabilities (admin only)',
+    summary:
+      'Diagnose Matrix room permissions and test bot capabilities (admin only)',
     description:
       'Tests if the Matrix bot has sufficient permissions in a room and attempts to fix them if needed',
   })
@@ -719,7 +760,7 @@ export class ChatController {
       }
 
       const roomId = roomResult.roomId;
-      const botUserId = this.matrixBotService.getBotUserId();
+      const botUserId = this.matrixBotService.getBotUserId(tenantId);
 
       this.logger.log(
         `Running diagnostics on room ${roomId} for bot ${botUserId}`,
@@ -739,19 +780,29 @@ export class ChatController {
 
       // Test 1: Check if room exists and bot can access it
       try {
-        const roomExists = await this.matrixBotService.verifyRoomExists(roomId, tenantId);
+        const roomExists = await this.matrixRoomService.verifyRoomExists(
+          roomId,
+          tenantId,
+        );
         diagnostics.roomExists = roomExists;
-        
+
         if (!roomExists) {
-          diagnostics.errors.push('Room does not exist or bot cannot access it');
+          diagnostics.errors.push(
+            'Room does not exist or bot cannot access it',
+          );
         }
       } catch (error) {
-        diagnostics.errors.push(`Room existence check failed: ${error.message}`);
+        diagnostics.errors.push(
+          `Room existence check failed: ${error.message}`,
+        );
       }
 
       // Test 2: Check if bot is in the room
       try {
-        const botInRoom = await this.matrixBotService.isBotInRoom(roomId, tenantId);
+        const botInRoom = await this.matrixBotService.isBotInRoom(
+          roomId,
+          tenantId,
+        );
         if (!botInRoom) {
           this.logger.log(`Bot not in room ${roomId}, attempting to join...`);
           await this.matrixBotService.joinRoom(roomId, tenantId);
@@ -764,13 +815,19 @@ export class ChatController {
       try {
         // We'll test invite capability by trying to invite the current user
         // This should be safe since they already have access to the room
-        await this.matrixBotService.inviteUser(roomId, `@${user.slug}:matrix.openmeet.net`, tenantId);
+        await this.matrixBotService.inviteUser(
+          roomId,
+          `@${user.slug}:matrix.openmeet.net`,
+          tenantId,
+        );
         diagnostics.botCanInvite = true;
         this.logger.log(`✅ Bot can invite users to room ${roomId}`);
       } catch (error) {
         diagnostics.botCanInvite = false;
         diagnostics.errors.push(`Bot invite test failed: ${error.message}`);
-        this.logger.log(`❌ Bot cannot invite users to room ${roomId}: ${error.message}`);
+        this.logger.log(
+          `❌ Bot cannot invite users to room ${roomId}: ${error.message}`,
+        );
       }
 
       // Test 4: Test bot's ability to kick users (requires moderate permissions)
@@ -778,20 +835,31 @@ export class ChatController {
       try {
         // Note: We won't actually remove the user, just test if the method would work
         // The removeUser method should handle "user not in room" gracefully
-        await this.matrixBotService.removeUser(roomId, `@nonexistent-user:matrix.openmeet.net`, tenantId);
+        await this.matrixBotService.removeUser(
+          roomId,
+          `@nonexistent-user:matrix.openmeet.net`,
+          tenantId,
+        );
         diagnostics.botCanKick = true;
         this.logger.log(`✅ Bot can kick users from room ${roomId}`);
       } catch (error) {
         // Check if error is about permissions vs user not found
         const errorMsg = error.message || error.toString();
-        if (errorMsg.includes('not found') || errorMsg.includes('not in room')) {
+        if (
+          errorMsg.includes('not found') ||
+          errorMsg.includes('not in room')
+        ) {
           // This is expected - user doesn't exist, but bot has kick permissions
           diagnostics.botCanKick = true;
-          this.logger.log(`✅ Bot can kick users from room ${roomId} (tested with non-existent user)`);
+          this.logger.log(
+            `✅ Bot can kick users from room ${roomId} (tested with non-existent user)`,
+          );
         } else {
           diagnostics.botCanKick = false;
           diagnostics.errors.push(`Bot kick test failed: ${error.message}`);
-          this.logger.log(`❌ Bot cannot kick users from room ${roomId}: ${error.message}`);
+          this.logger.log(
+            `❌ Bot cannot kick users from room ${roomId}: ${error.message}`,
+          );
         }
       }
 
@@ -805,39 +873,53 @@ export class ChatController {
           const powerLevels = {
             [botUserId]: 100, // Admin level for bot
           };
-          
-          await this.matrixBotService.syncPermissions(roomId, powerLevels, tenantId);
+
+          await this.matrixBotService.syncPermissions(
+            roomId,
+            powerLevels,
+            tenantId,
+          );
           diagnostics.permissionFixSuccessful = true;
-          this.logger.log(`✅ Successfully fixed permissions for room ${roomId}`);
+          this.logger.log(
+            `✅ Successfully fixed permissions for room ${roomId}`,
+          );
 
           // Re-test capabilities after fix
           try {
-            await this.matrixBotService.inviteUser(roomId, `@${user.slug}:matrix.openmeet.net`, tenantId);
+            await this.matrixBotService.inviteUser(
+              roomId,
+              `@${user.slug}:matrix.openmeet.net`,
+              tenantId,
+            );
             diagnostics.botCanInvite = true;
           } catch (retestError) {
-            diagnostics.errors.push(`Post-fix invite test failed: ${retestError.message}`);
+            diagnostics.errors.push(
+              `Post-fix invite test failed: ${retestError.message}`,
+            );
           }
-
         } catch (error) {
           diagnostics.permissionFixSuccessful = false;
           diagnostics.errors.push(`Permission fix failed: ${error.message}`);
-          this.logger.error(`❌ Failed to fix permissions for room ${roomId}: ${error.message}`);
+          this.logger.error(
+            `❌ Failed to fix permissions for room ${roomId}: ${error.message}`,
+          );
         }
       }
 
-      // Test 6: Determine bot's actual power level (if we can access room state)
+      // Test 6: Get bot's actual power level from Matrix room state
       try {
-        // This would require additional Matrix bot service methods to get room state
-        // For now, we'll infer power level from capabilities
-        if (diagnostics.botCanKick && diagnostics.botCanInvite) {
-          diagnostics.botCurrentPowerLevel = diagnostics.permissionFixSuccessful ? 100 : 50;
-          diagnostics.botCanModifyPowerLevels = diagnostics.permissionFixSuccessful;
-        } else {
-          diagnostics.botCurrentPowerLevel = 0;
-          diagnostics.botCanModifyPowerLevels = false;
-        }
+        diagnostics.botCurrentPowerLevel =
+          await this.matrixBotService.getBotPowerLevel(roomId, tenantId);
+        diagnostics.botCanModifyPowerLevels =
+          diagnostics.botCurrentPowerLevel >= 50;
+
+        this.logger.log(
+          `✅ Bot actual power level in room ${roomId}: ${diagnostics.botCurrentPowerLevel}`,
+        );
       } catch (error) {
-        diagnostics.errors.push(`Power level determination failed: ${error.message}`);
+        diagnostics.errors.push(`Power level query failed: ${error.message}`);
+        diagnostics.botCurrentPowerLevel = -1; // Indicate unknown/error state
+        diagnostics.botCanModifyPowerLevels = false;
       }
 
       this.logger.log(`Diagnostics complete for room ${roomId}:`, diagnostics);
@@ -848,7 +930,6 @@ export class ChatController {
         diagnostics,
         message: `Diagnostics completed. Bot has ${diagnostics.botCanKick && diagnostics.botCanInvite ? 'sufficient' : 'insufficient'} permissions.`,
       };
-
     } catch (error) {
       this.logger.error(
         `Error running room diagnostics for ${roomType} ${slug}: ${error.message}`,
@@ -858,6 +939,138 @@ export class ChatController {
       return {
         success: false,
         message: `Could not run diagnostics: ${error.message}`,
+      };
+    }
+  }
+
+  /**
+   * Admin endpoint to list all rooms with permission issues
+   */
+  @Get('admin/rooms/permission-issues')
+  @UseGuards(JWTAuthGuard, RolesGuard)
+  @Roles(RoleEnum.Admin)
+  @ApiOperation({
+    summary: 'List all rooms with Matrix permission issues (admin only)',
+    description:
+      'Scans all chat rooms and identifies those where bots have insufficient permissions',
+  })
+  async listRoomsWithPermissionIssues(
+    @AuthUser() user: User,
+    @Req() request: any,
+  ): Promise<{
+    success: boolean;
+    roomsWithIssues: Array<{
+      roomType: 'event' | 'group';
+      slug: string;
+      roomId: string;
+      botCurrentPowerLevel: number;
+      botExpectedPowerLevel: number;
+      canBeFixed: boolean;
+      issues: string[];
+    }>;
+    summary: {
+      totalRooms: number;
+      roomsWithIssues: number;
+      fixableRooms: number;
+    };
+    message?: string;
+  }> {
+    const tenantId = request.tenantId;
+    this.logger.log(
+      `Admin user ${user.id} requesting list of rooms with permission issues in tenant ${tenantId}`,
+    );
+
+    try {
+      const result =
+        await this.chatRoomService.findRoomsWithPermissionIssues(tenantId);
+
+      return {
+        success: true,
+        ...result,
+        message: `Found ${result.roomsWithIssues.length} rooms with permission issues`,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error listing rooms with permission issues: ${error.message}`,
+        error.stack,
+      );
+
+      return {
+        success: false,
+        roomsWithIssues: [],
+        summary: {
+          totalRooms: 0,
+          roomsWithIssues: 0,
+          fixableRooms: 0,
+        },
+        message: `Could not list rooms: ${error.message}`,
+      };
+    }
+  }
+
+  /**
+   * Admin endpoint to fix permissions for specific rooms
+   */
+  @Post('admin/rooms/fix-permissions')
+  @UseGuards(JWTAuthGuard, RolesGuard)
+  @Roles(RoleEnum.Admin)
+  @ApiOperation({
+    summary: 'Fix Matrix permissions for specified rooms (admin only)',
+    description:
+      'Attempts to fix bot permissions for the provided list of room IDs',
+  })
+  async fixRoomPermissions(
+    @Body() body: { roomIds: string[] },
+    @AuthUser() user: User,
+    @Req() request: any,
+  ): Promise<{
+    success: boolean;
+    results: Array<{
+      roomId: string;
+      fixed: boolean;
+      newPowerLevel: number;
+      error?: string;
+    }>;
+    summary: {
+      totalAttempted: number;
+      successfulFixes: number;
+      failedFixes: number;
+    };
+    message?: string;
+  }> {
+    const tenantId = request.tenantId;
+    const { roomIds } = body;
+
+    this.logger.log(
+      `Admin user ${user.id} attempting to fix permissions for ${roomIds.length} rooms in tenant ${tenantId}`,
+    );
+
+    try {
+      const result = await this.chatRoomService.fixRoomPermissions(
+        roomIds,
+        tenantId,
+      );
+
+      return {
+        success: true,
+        ...result,
+        message: `Fixed permissions for ${result.summary.successfulFixes}/${result.summary.totalAttempted} rooms`,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error fixing room permissions: ${error.message}`,
+        error.stack,
+      );
+
+      return {
+        success: false,
+        results: [],
+        summary: {
+          totalAttempted: roomIds.length,
+          successfulFixes: 0,
+          failedFixes: roomIds.length,
+        },
+        message: `Could not fix room permissions: ${error.message}`,
       };
     }
   }
