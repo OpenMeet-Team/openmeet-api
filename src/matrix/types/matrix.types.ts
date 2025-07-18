@@ -1,6 +1,8 @@
 // Using dynamic import (at runtime) instead of static import for ESM compatibility
 // The actual matrix-js-sdk import will happen in MatrixService
-import { Socket } from 'socket.io';
+
+// Generic WebSocket client type (can be socket.io Socket or any other WebSocket client)
+type WebSocketClient = any;
 
 // Types for MatrixClient and related interfaces
 export interface MatrixClientWithContext {
@@ -86,7 +88,7 @@ export interface StartClientOptions {
   deviceId?: string;
   onEvent?: (event: any) => void;
   onSync?: (state: string, prevState: string | null) => void;
-  wsClient?: Socket; // WebSocket client to associate with this Matrix client
+  wsClient?: WebSocketClient; // WebSocket client to associate with this Matrix client
 }
 
 export interface ActiveClient {
@@ -94,5 +96,5 @@ export interface ActiveClient {
   userId: string;
   lastActivity: Date;
   eventCallbacks: ((event: any) => void)[];
-  wsClient?: Socket; // WebSocket client associated with this Matrix client
+  wsClient?: WebSocketClient; // WebSocket client associated with this Matrix client
 }

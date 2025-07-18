@@ -20,7 +20,7 @@ database:
     password: "{{ .Env.DATABASE_PASSWORD }}"
     database: "{{ .Env.SYNAPSE_DATABASE_NAME }}"
     host: "{{ .Env.SYNAPSE_DATABASE_HOST }}"
-    port: "{{ .Env.DATABASE_PORT }}"
+    port: {{ .Env.DATABASE_PORT }}
     cp_min: 5
     cp_max: 10
   allow_unsafe_locale: true

@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
-import { createEvent, createTestUser, loginAsAdmin } from '../utils/functions';
+import { createEvent, createTestUser, loginAsAdmin, registerMatrixUserIdentity } from '../utils/functions';
 
 /**
  * Matrix Attendee Auto-Invitation E2E Tests
@@ -37,6 +37,14 @@ describe('Matrix Attendee Auto-Invitation (E2E)', () => {
       'TestUser',
     );
     testUserToken = testUser.token;
+
+    // Register user with Matrix for authentication (required for Matrix room access)
+    await registerMatrixUserIdentity(
+      TESTING_APP_URL,
+      TESTING_TENANT_ID,
+      testUserToken,
+      testUser.slug,
+    );
 
     // Create test event (Matrix room will be created automatically via event flow)
     const eventData = {
@@ -141,6 +149,14 @@ describe('Matrix Attendee Auto-Invitation (E2E)', () => {
         `auto-invite-error-test-${Date.now()}@example.com`,
         'ErrorTest',
         'User',
+      );
+
+      // Register second user with Matrix for authentication
+      await registerMatrixUserIdentity(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        testUser2.token,
+        testUser2.slug,
       );
 
       // User attends event (should trigger auto-invitation)

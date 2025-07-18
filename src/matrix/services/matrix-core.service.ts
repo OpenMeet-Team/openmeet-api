@@ -115,9 +115,8 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
 
       this.logger.log('Matrix core service loaded SDK and event listeners');
 
-      // Defer actual Matrix connection to avoid blocking API startup
-      // This will be retried when Matrix functionality is first needed
-      this.scheduleDelayedInitialization();
+      // Initialize Matrix connection immediately
+      await this.initializeMatrixConnection();
     } catch (error) {
       this.logger.error(
         `Failed to load Matrix SDK: ${error.message}`,
@@ -129,34 +128,52 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private scheduleDelayedInitialization() {
-    // Try to initialize Matrix connection after a delay
-    // This gives Matrix server time to start up
-    setTimeout(() => {
-      this.logger.log('Attempting delayed Matrix initialization...');
-      this.initializeMatrixConnection();
-    }, 10000); // Wait 10 seconds for Matrix to start
-  }
+  private async initializeMatrixConnection(): Promise<boolean> {
+    // Re-enabled admin token approach for room permission fixes
+    try {
+      const tenantConfig = this.getTenantConfig();
+      if (!tenantConfig?.matrixConfig?.adminUser) {
+        this.logger.warn(
+          'No admin credentials configured - admin operations will not be available',
+        );
+        this.adminAccessToken = '';
+        return false;
+      }
 
-  private initializeMatrixConnection(): boolean {
-    // Admin token approach is disabled - system now uses tenant-scoped bot users
-    this.logger.warn(
-      'Admin token approach disabled - Matrix admin operations will not be available',
-    );
-    this.logger.warn(
-      'Room creation and Matrix operations should use tenant-scoped bot users',
-    );
+      this.logger.log(
+        'Initializing Matrix admin connection for room permission management',
+      );
 
-    // Set adminAccessToken to empty to indicate admin operations are not available
-    this.adminAccessToken = '';
+      // Get admin token from token manager
+      const adminToken = await this.tokenManager.getAdminTokenForTenant(
+        tenantConfig.id,
+      );
+      if (!adminToken) {
+        this.logger.error(
+          'Failed to get admin token - admin operations will not be available',
+        );
+        this.adminAccessToken = '';
+        return false;
+      }
 
-    // Do not create admin client or client pool since admin tokens are disabled
-    // Individual operations will need to handle authentication differently
+      this.adminAccessToken = adminToken;
+      this.adminUserId = tenantConfig.matrixConfig.adminUser.userId;
 
-    this.logger.log(
-      'Matrix core service initialized without admin client (bot user mode)',
-    );
-    return false; // Return false to indicate admin operations are not available
+      // Create admin client with tenant-specific configuration
+      this.createAdminClient(tenantConfig);
+      this.initializeClientPool();
+
+      this.logger.log(
+        'Matrix core service initialized with admin client for room management',
+      );
+      return true; // Return true to indicate admin operations are available
+    } catch (error) {
+      this.logger.error(
+        `Failed to initialize Matrix admin connection: ${error.message}`,
+      );
+      this.adminAccessToken = '';
+      return false;
+    }
   }
 
   /**
@@ -255,7 +272,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
   /**
    * Create the admin client for privileged operations
    */
-  private createAdminClient(): void {
+  private createAdminClient(tenantConfig?: any): void {
     // Check if there's an existing client that needs to be stopped
     if (this.adminClient?.stopClient) {
       try {
@@ -270,10 +287,15 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
+    // Use tenant-specific configuration if provided, otherwise fall back to global config
+    const baseUrl = tenantConfig?.matrixConfig?.homeserverUrl || this.baseUrl;
+    const userId =
+      tenantConfig?.matrixConfig?.adminUser?.userId || this.adminUserId;
+
     // Create a new client with the current token
     this.adminClient = this.matrixSdk.createClient({
-      baseUrl: this.baseUrl,
-      userId: this.adminUserId,
+      baseUrl: baseUrl,
+      userId: userId,
       accessToken: this.adminAccessToken,
       useAuthorizationHeader: true,
       // Disable automatic capabilities refresh which causes error logs when token is invalid
@@ -358,6 +380,84 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
    */
   getAdminClient(): IMatrixClient {
     return this.adminClient;
+  }
+
+  /**
+   * Get admin client for specific tenant
+   * @param tenantId Tenant ID to get admin client for
+   * @returns Promise<IMatrixClient> Admin client for the tenant
+   */
+  async getAdminClientForTenant(tenantId: string): Promise<IMatrixClient> {
+    try {
+      const tenantConfig = this.getTenantConfigById(tenantId);
+      if (!tenantConfig?.matrixConfig?.adminUser) {
+        throw new Error(
+          `No admin credentials configured for tenant: ${tenantId}`,
+        );
+      }
+
+      // Get fresh admin token for the tenant
+      const adminToken =
+        await this.tokenManager.getAdminTokenForTenant(tenantId);
+      if (!adminToken) {
+        throw new Error(`Failed to get admin token for tenant: ${tenantId}`);
+      }
+
+      // Create tenant-specific admin client
+      const tenantAdminClient = this.matrixSdk.createClient({
+        baseUrl: tenantConfig.matrixConfig.homeserverUrl,
+        userId: tenantConfig.matrixConfig.adminUser.userId,
+        accessToken: adminToken,
+        useAuthorizationHeader: true,
+        timeoutCap: 60000,
+        localTimeoutMs: 120000,
+        logger: {
+          log: () => {},
+          info: () => {},
+          warn: () => {},
+          debug: () => {},
+          error: (msg: string) => this.logger.error(msg),
+        },
+      });
+
+      return tenantAdminClient;
+    } catch (error) {
+      this.logger.error(
+        `Failed to get admin client for tenant ${tenantId}: ${error.message}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Get tenant configuration for current request context
+   */
+  private getTenantConfig(): any {
+    try {
+      const { fetchTenants } = require('../../utils/tenant-config');
+      const tenants = fetchTenants();
+      // Return first non-empty tenant for now (will be enhanced for multi-tenant)
+      return tenants.find((t) => t.id && t.matrixConfig) || null;
+    } catch (error) {
+      this.logger.error(`Failed to get tenant config: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Get tenant configuration by ID
+   */
+  private getTenantConfigById(tenantId: string): any {
+    try {
+      const { fetchTenants } = require('../../utils/tenant-config');
+      const tenants = fetchTenants();
+      return tenants.find((t) => t.id === tenantId) || null;
+    } catch (error) {
+      this.logger.error(
+        `Failed to get tenant config for ${tenantId}: ${error.message}`,
+      );
+      return null;
+    }
   }
 
   /**

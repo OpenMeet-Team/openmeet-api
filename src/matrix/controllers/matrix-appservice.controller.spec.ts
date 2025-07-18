@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { MatrixAppServiceController } from './matrix-appservice.controller';
+import { UserRoomSyncService } from '../../chat/services/user-room-sync.service';
 
 describe('MatrixAppServiceController', () => {
   let controller: MatrixAppServiceController;
@@ -14,6 +15,12 @@ describe('MatrixAppServiceController', () => {
     },
   };
 
+  const mockUserRoomSyncService = {
+    handleMemberEvent: jest.fn().mockResolvedValue(undefined),
+    syncUserRoomMemberships: jest.fn().mockResolvedValue(undefined),
+    queueRoomSync: jest.fn().mockResolvedValue(undefined),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [MatrixAppServiceController],
@@ -24,12 +31,19 @@ describe('MatrixAppServiceController', () => {
             get: jest.fn().mockReturnValue(mockMatrixConfig),
           },
         },
+        {
+          provide: UserRoomSyncService,
+          useValue: mockUserRoomSyncService,
+        },
       ],
     }).compile();
 
     controller = module.get<MatrixAppServiceController>(
       MatrixAppServiceController,
     );
+
+    // Clear all mocks before each test
+    jest.clearAllMocks();
   });
 
   it('should be defined', () => {
@@ -77,10 +91,47 @@ describe('MatrixAppServiceController', () => {
       const events = [{ type: 'm.room.message', sender: '@user:example.com' }];
       const result = await controller.handleTransaction(
         'txn123',
-        events,
+        { events },
         'Bearer test-hs-token',
       );
       expect(result).toEqual({});
+    });
+
+    it('should trigger room sync for member join events', async () => {
+      const memberJoinEvent = {
+        type: 'm.room.member',
+        sender: '@user:example.com',
+        state_key: '@user:example.com',
+        content: { membership: 'join' },
+      };
+
+      const result = await controller.handleTransaction(
+        'txn456',
+        { events: [memberJoinEvent] },
+        'Bearer test-hs-token',
+      );
+
+      expect(result).toEqual({});
+      expect(mockUserRoomSyncService.handleMemberEvent).toHaveBeenCalledWith(
+        memberJoinEvent,
+      );
+    });
+
+    it('should not trigger room sync for non-member events', async () => {
+      const messageEvent = {
+        type: 'm.room.message',
+        sender: '@user:example.com',
+        content: { msgtype: 'm.text', body: 'Hello' },
+      };
+
+      const result = await controller.handleTransaction(
+        'txn789',
+        { events: [messageEvent] },
+        'Bearer test-hs-token',
+      );
+
+      expect(result).toEqual({});
+      expect(mockUserRoomSyncService.handleMemberEvent).not.toHaveBeenCalled();
     });
   });
 });

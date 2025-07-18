@@ -96,9 +96,10 @@ export interface IMatrixBot {
 
   /**
    * Get the bot's Matrix user ID
+   * @param tenantId Optional tenant ID for tenant-specific bot
    * @returns string - Bot's Matrix user ID (e.g., @openmeet-bot:matrix.openmeet.net)
    */
-  getBotUserId(): string;
+  getBotUserId(tenantId?: string): string;
 
   /**
    * Check if the bot is in a specific room
@@ -123,4 +124,33 @@ export interface IMatrixBot {
    * @returns Promise<boolean> - True if room exists and is accessible
    */
   verifyRoomExists(roomId: string, tenantId: string): Promise<boolean>;
+
+  /**
+   * Get the bot's current power level in a specific room
+   * @param roomId Matrix room ID to check
+   * @param tenantId Tenant ID for authentication context
+   * @returns Promise<number> - Bot's power level (0-100)
+   */
+  getBotPowerLevel(roomId: string, tenantId: string): Promise<number>;
+
+  /**
+   * Force join the bot to a room using admin API (bypasses normal Matrix permissions)
+   * @param roomId Matrix room ID to join
+   * @param tenantId Tenant ID for authentication context
+   * @returns Promise<void>
+   */
+  adminJoinRoom(roomId: string, tenantId: string): Promise<void>;
+
+  /**
+   * Set power levels in a room using admin API (bypasses normal Matrix permissions)
+   * @param roomId Matrix room ID
+   * @param powerLevels Map of user ID to power level
+   * @param tenantId Tenant ID for authentication context
+   * @returns Promise<void>
+   */
+  adminSetPowerLevels(
+    roomId: string,
+    powerLevels: Record<string, number>,
+    tenantId: string,
+  ): Promise<void>;
 }

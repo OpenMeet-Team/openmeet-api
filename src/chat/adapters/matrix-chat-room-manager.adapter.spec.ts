@@ -157,6 +157,9 @@ describe('MatrixChatRoomManagerAdapter', () => {
             createRoom: jest.fn().mockResolvedValue({ roomId: 'new-room-id' }),
             inviteUser: jest.fn().mockResolvedValue(undefined),
             joinRoom: jest.fn().mockResolvedValue(undefined),
+            getBotUserId: jest
+              .fn()
+              .mockReturnValue('@openmeet-bot-test:matrix.openmeet.net'),
           },
         },
         {
@@ -222,6 +225,12 @@ describe('MatrixChatRoomManagerAdapter', () => {
       module.get<MatrixMessageService>(MatrixMessageService);
     userService = module.get<UserService>(UserService);
     eventQueryService = module.get<EventQueryService>(EventQueryService);
+
+    // Ensure MatrixBotService mock is properly set
+    const matrixBotService = module.get<MatrixBotService>(MatrixBotService);
+    jest
+      .spyOn(matrixBotService, 'getBotUserId')
+      .mockReturnValue('@openmeet-bot-test:matrix.openmeet.net');
 
     // We need to update the service instances with our mock implementations
     (eventQueryService.showEventBySlug as jest.Mock).mockImplementation(
@@ -317,6 +326,16 @@ describe('MatrixChatRoomManagerAdapter', () => {
         updatedAt: new Date(),
       } as unknown as ChatRoomEntity;
       (mockChatRoomRepository.findOne as jest.Mock).mockResolvedValueOnce(
+        mockChatRoom,
+      );
+
+      // Mock the verifyAndEnsureMatrixRoom method to return the room ID
+      jest
+        .spyOn(service, 'verifyAndEnsureMatrixRoom')
+        .mockResolvedValueOnce('abc123');
+
+      // Mock the repository save method
+      (mockChatRoomRepository.save as jest.Mock).mockResolvedValueOnce(
         mockChatRoom,
       );
 

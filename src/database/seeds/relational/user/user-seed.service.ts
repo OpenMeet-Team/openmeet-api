@@ -101,7 +101,7 @@ export class UserSeedService {
     const tenants: TenantConfig[] = fetchTenants();
     const tenant = tenants.find((t) => t.id === tenantId);
 
-    if (!tenant?.botUser) {
+    if (!tenant?.matrixConfig?.botUser) {
       console.log(`No bot user configured for tenant: ${tenantId}`);
       return;
     }
@@ -109,11 +109,13 @@ export class UserSeedService {
     console.log(`🤖 Creating bot user for tenant: ${tenantId}`);
 
     const existingBot = await this.repository.findOne({
-      where: { email: tenant.botUser.email },
+      where: { email: tenant.matrixConfig.botUser.email },
     });
 
     if (existingBot) {
-      console.log(`  ✓ Bot user already exists: ${tenant.botUser.slug}`);
+      console.log(
+        `  ✓ Bot user already exists: ${tenant.matrixConfig.botUser.slug}`,
+      );
       return;
     }
 
@@ -129,20 +131,23 @@ export class UserSeedService {
     }
 
     const salt = await bcrypt.genSalt();
-    const hashedPassword = await bcrypt.hash(tenant.botUser.password, salt);
+    const hashedPassword = await bcrypt.hash(
+      tenant.matrixConfig.botUser.password,
+      salt,
+    );
 
     await this.repository.save(
       this.repository.create({
         firstName: 'OpenMeet',
         lastName: 'Bot',
-        email: tenant.botUser.email,
-        slug: tenant.botUser.slug,
+        email: tenant.matrixConfig.botUser.email,
+        slug: tenant.matrixConfig.botUser.slug,
         password: hashedPassword,
         role: userRole,
         status: new StatusEntity(),
       } as UserEntity),
     );
 
-    console.log(`  ✅ Created bot user: ${tenant.botUser.slug}`);
+    console.log(`  ✅ Created bot user: ${tenant.matrixConfig.botUser.slug}`);
   }
 }

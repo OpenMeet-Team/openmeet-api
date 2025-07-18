@@ -1332,4 +1332,27 @@ export class EventQueryService {
 
     return query.getMany();
   }
+
+  /**
+   * Get all events that have Matrix chat rooms
+   */
+  async getAllEventsWithMatrixRooms(
+    tenantId: string,
+  ): Promise<Array<{ slug: string; matrixRoomId: string; name: string }>> {
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    const eventRepository = dataSource.getRepository(EventEntity);
+
+    const events = await eventRepository
+      .createQueryBuilder('event')
+      .select(['event.slug', 'event.matrixRoomId', 'event.name'])
+      .where('event.matrixRoomId IS NOT NULL')
+      .getMany();
+
+    return events.map((event) => ({
+      slug: event.slug,
+      matrixRoomId: event.matrixRoomId!,
+      name: event.name,
+    }));
+  }
 }

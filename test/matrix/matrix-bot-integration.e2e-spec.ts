@@ -43,6 +43,7 @@ describe('Matrix Bot Integration (E2E)', () => {
     currentUser = userResponse.body;
 
     // Register Matrix user identities (simulating MAS authentication)
+    // Clear any existing corrupted Matrix identity and register fresh
     try {
       await registerMatrixUserIdentity(
         TESTING_APP_URL,
@@ -52,7 +53,10 @@ describe('Matrix Bot Integration (E2E)', () => {
       );
       console.log(`Registered Matrix identity for user ${currentUser.slug}`);
     } catch (error) {
-      console.warn(`Failed to register Matrix identity for user: ${error.message}`);
+      console.error(
+        `FAILED to register Matrix identity for user: ${error.message}`,
+      );
+      throw error; // Don't continue with invalid Matrix auth
     }
 
     // Create test event and group for bot operations
@@ -98,9 +102,13 @@ describe('Matrix Bot Integration (E2E)', () => {
         adminToken,
         adminUser.slug,
       );
-      console.log(`Registered Matrix identity for admin user ${adminUser.slug}`);
+      console.log(
+        `Registered Matrix identity for admin user ${adminUser.slug}`,
+      );
     } catch (error) {
-      console.warn(`Failed to register Matrix identity for admin: ${error.message}`);
+      console.warn(
+        `Failed to register Matrix identity for admin: ${error.message}`,
+      );
     }
 
     // Add admin user to the group so they can create chat rooms
@@ -308,31 +316,36 @@ describe('Matrix Bot Integration (E2E)', () => {
     }, 30000);
 
     it('should add and remove members from group chat room using bot', async () => {
-      // Add member
+      // Add member - this should succeed with proper Matrix authentication
       const addResponse = await request(TESTING_APP_URL)
         .post(`/api/chat/group/${groupSlug}/members/${currentUser.slug}`)
         .set('Authorization', `Bearer ${userToken}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
 
-      expect([201, 500]).toContain(addResponse.status);
-      if (addResponse.status === 500) {
-        console.log('Group member add failed - may be expected');
-        return; // Skip remove test if add failed
+      if (addResponse.status !== 201) {
+        console.error('Add member failed:', {
+          status: addResponse.status,
+          body: addResponse.body,
+        });
       }
 
-      // Remove member
+      // Test should fail if member cannot be added - no more accepting 500 errors
+      expect(addResponse.status).toBe(201);
+      console.log('Successfully added member to group chat room');
+
+      // Remove member - this should also succeed
       const removeResponse = await request(TESTING_APP_URL)
         .delete(`/api/chat/group/${groupSlug}/members/${currentUser.slug}`)
         .set('Authorization', `Bearer ${userToken}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
 
       if (removeResponse.status !== 200) {
-        console.log('Remove member failed:', {
+        console.error('Remove member failed:', {
           status: removeResponse.status,
           body: removeResponse.body,
         });
       }
-      
+
       expect(removeResponse.status).toBe(200);
       console.log('Bot managed group member add/remove successfully');
     }, 30000);

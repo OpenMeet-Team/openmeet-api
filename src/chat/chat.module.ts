@@ -4,6 +4,7 @@ import { ChatController } from './chat.controller';
 import { UserModule } from '../user/user.module';
 import { TenantModule } from '../tenant/tenant.module';
 import { DiscussionService } from './services/discussion.service';
+import { UserRoomSyncService } from './services/user-room-sync.service';
 import { MatrixChatProviderAdapter } from './adapters/matrix-chat-provider.adapter';
 import { MatrixChatServiceAdapter } from './adapters/matrix-chat-service.adapter';
 import { MatrixChatRoomManagerAdapter } from './adapters/matrix-chat-room-manager.adapter';
@@ -36,6 +37,7 @@ import { ElastiCacheModule } from '../elasticache/elasticache.module';
       provide: 'DiscussionService',
       useExisting: DiscussionService,
     },
+    UserRoomSyncService,
     ChatRoomService,
     MatrixChatRoomManagerAdapter,
     {
@@ -56,6 +58,7 @@ import { ElastiCacheModule } from '../elasticache/elasticache.module';
   exports: [
     DiscussionService,
     'DiscussionService',
+    UserRoomSyncService,
     MatrixChatRoomManagerAdapter,
     'ChatRoomManagerInterface',
     'CHAT_PROVIDER',

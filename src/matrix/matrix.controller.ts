@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Delete,
   UseGuards,
   HttpStatus,
   HttpCode,
@@ -681,6 +682,58 @@ export class MatrixController {
     } catch (error) {
       this.logger.error(
         `Error syncing Matrix user identity for user ${user.id}: ${error.message}`,
+        error.stack,
+      );
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  @ApiOperation({
+    summary: 'Clear Matrix user identity',
+    description:
+      'Remove Matrix user identity from the registry (for testing purposes)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Matrix user identity cleared successfully',
+  })
+  @UseGuards(JWTAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Delete('user-identity')
+  @Trace('matrix.api.clearUserIdentity')
+  async clearMatrixUserIdentity(
+    @AuthUser() user: { id: number },
+    @Req() req: Request,
+  ): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    this.logger.log(`Clearing Matrix user identity for user ID: ${user.id}`);
+
+    try {
+      // Get tenant ID from request context
+      const tenantId = req['tenantId'];
+      if (!tenantId) {
+        throw new BadRequestException('Tenant ID is required');
+      }
+
+      // Clear the Matrix handle from the global registry
+      await this.globalMatrixValidationService.unregisterMatrixHandle(
+        tenantId,
+        user.id,
+      );
+
+      this.logger.log(
+        `Matrix user identity cleared successfully for user ${user.id}`,
+      );
+
+      return {
+        success: true,
+        message: 'Matrix user identity cleared successfully',
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error clearing Matrix user identity for user ${user.id}: ${error.message}`,
         error.stack,
       );
       throw new BadRequestException(error.message);

@@ -23,6 +23,9 @@ import { MatrixBotService } from './services/matrix-bot.service';
 import { MatrixBotUserService } from './services/matrix-bot-user.service';
 import { MatrixBotRotationService } from './services/matrix-bot-rotation.service';
 import { TenantBotSetupService } from './services/tenant-bot-setup.service';
+import { ChatModule } from '../chat/chat.module';
+import { EventModule } from '../event/event.module';
+import { GroupModule } from '../group/group.module';
 
 // Configure Matrix logging at module load time
 // This runs before the module is instantiated
@@ -35,6 +38,9 @@ configureMatrixLogging();
     forwardRef(() => UserModule),
     TenantModule,
     forwardRef(() => AuthModule),
+    forwardRef(() => ChatModule),
+    forwardRef(() => EventModule),
+    forwardRef(() => GroupModule),
     EventEmitterModule.forRoot({
       // Set wildcard to true to support event namespaces
       wildcard: true,

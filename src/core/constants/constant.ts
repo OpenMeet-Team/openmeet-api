@@ -161,10 +161,25 @@ export interface TenantConfig {
   githubClientId: string; // github client id, ex: 1234567890
   githubClientSecret: string; // github client secret, ex: 0987654321
   blueskyConfig?: BlueskyConfig;
-  botUser?: {
-    email: string; // bot user email, ex: bot-tenant@openmeet.net
-    slug: string; // bot user slug, ex: openmeet-bot-tenant
-    password: string; // bot user password
+  // Matrix configuration including bot and admin credentials
+  matrixConfig?: {
+    homeserverUrl: string; // Matrix homeserver URL, ex: https://matrix.openmeet.net
+    serverName: string; // Matrix server name, ex: matrix.openmeet.net
+    botUser: {
+      email: string; // bot user email, ex: bot-tenant@openmeet.net
+      slug: string; // bot user slug, ex: openmeet-bot-tenant
+      password: string; // bot user password
+    };
+    adminUser: {
+      username: string; // admin username, ex: admin-tenant
+      password: string; // admin password
+      userId: string; // admin user ID, ex: @admin-tenant:matrix.openmeet.net
+    };
+    appservice: {
+      id: string; // appservice ID, ex: openmeet-appservice-tenant
+      token: string; // appservice token
+      hsToken: string; // homeserver token
+    };
   };
 }
 

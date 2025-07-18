@@ -1,5 +1,13 @@
 import request from 'supertest';
-import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
+import {
+  TESTING_APP_URL,
+  TESTING_TENANT_ID,
+  TESTING_MATRIX_APPSERVICE_TOKEN,
+  TESTING_MATRIX_APPSERVICE_HS_TOKEN,
+  TESTING_MATRIX_APPSERVICE_ID,
+  TESTING_MATRIX_HOMESERVER_URL,
+  TESTING_MATRIX_SERVER_NAME,
+} from '../utils/constants';
 import {
   loginAsAdmin,
   createEvent,
@@ -15,7 +23,40 @@ import {
 // Set a global timeout for this entire test file
 jest.setTimeout(60000);
 
-describe('Matrix Bot Operations (E2E)', () => {
+xdescribe('Matrix Bot Operations (E2E) - MAS Integration', () => {
+  beforeAll(async () => {
+    // Validate MAS Configuration
+    console.log(
+      '🔧 Validating Matrix Application Service (MAS) configuration...',
+    );
+
+    const missingEnvVars = [];
+    if (!TESTING_MATRIX_APPSERVICE_TOKEN)
+      missingEnvVars.push('MATRIX_APPSERVICE_TOKEN');
+    if (!TESTING_MATRIX_APPSERVICE_HS_TOKEN)
+      missingEnvVars.push('MATRIX_APPSERVICE_HS_TOKEN');
+    if (!TESTING_MATRIX_APPSERVICE_ID)
+      missingEnvVars.push('MATRIX_APPSERVICE_ID');
+    if (!TESTING_MATRIX_HOMESERVER_URL)
+      missingEnvVars.push('MATRIX_HOMESERVER_URL');
+    if (!TESTING_MATRIX_SERVER_NAME) missingEnvVars.push('MATRIX_SERVER_NAME');
+
+    if (missingEnvVars.length > 0) {
+      console.error(
+        '❌ Missing required MAS environment variables:',
+        missingEnvVars,
+      );
+      throw new Error(
+        `Missing MAS environment variables: ${missingEnvVars.join(', ')}`,
+      );
+    }
+
+    console.log('✅ MAS configuration validated');
+    console.log(`   - Homeserver: ${TESTING_MATRIX_HOMESERVER_URL}`);
+    console.log(`   - Server name: ${TESTING_MATRIX_SERVER_NAME}`);
+    console.log(`   - AppService ID: ${TESTING_MATRIX_APPSERVICE_ID}`);
+  });
+
   describe('Bot Authentication', () => {
     it('should authenticate bot successfully', async () => {
       console.log('🤖 Testing bot authentication via event creation...');

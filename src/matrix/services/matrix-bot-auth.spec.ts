@@ -214,42 +214,17 @@ describe('MatrixBotService - Authentication Integration Tests', () => {
         });
     });
 
-    it('should require AppService authentication when token not available', async () => {
-      // Create new service instance with no AppService token
-      const module: TestingModule = await Test.createTestingModule({
-        providers: [
-          MatrixBotService,
-          {
-            provide: ConfigService,
-            useValue: configService,
-          },
-          {
-            provide: MatrixCoreService,
-            useValue: matrixCoreService,
-          },
-          {
-            provide: MatrixUserService,
-            useValue: matrixUserService,
-          },
-          {
-            provide: MatrixBotUserService,
-            useValue: matrixBotUserService,
-          },
-          {
-            provide: 'USER_SERVICE_FOR_MATRIX',
-            useValue: {},
-          },
-        ],
-      }).compile();
-
-      const service = module.get<MatrixBotService>(MatrixBotService);
-
-      // Should throw error requiring AppService authentication
-      await expect(service.authenticateBot(testTenantId)).rejects.toThrow(
-        'Matrix AppService authentication is required for bot operations',
+    it('should require AppService authentication when token not available', () => {
+      // Test that the constructor throws when AppService token is missing
+      expect(() => {
+        new MatrixBotService(
+          matrixCoreService,
+          configService,
+          matrixBotUserService,
+        );
+      }).toThrow(
+        'Matrix Application Service authentication is required. Please configure MATRIX_APPSERVICE_TOKEN environment variable.',
       );
-
-      expect(service.isBotAuthenticated()).toBe(false);
     });
   });
 

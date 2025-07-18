@@ -299,16 +299,159 @@ export class MatrixTokenManagerService
   }
 
   /**
-   * Actual admin token regeneration logic (DISABLED - using bot users instead)
+   * Actual admin token regeneration logic - re-enabled for room permission fixes
    */
-  private regenerateAdminToken(): Promise<string | null> {
-    this.logger.warn(
-      'Admin token regeneration disabled - system now uses tenant-scoped bot users',
-    );
+  private async regenerateAdminToken(): Promise<string | null> {
+    try {
+      // Get tenant configuration to get admin credentials
+      const tenantConfig = this.getTenantConfig();
+      if (!tenantConfig?.matrixConfig?.adminUser) {
+        this.logger.warn('No admin credentials configured in tenant config');
+        return null;
+      }
 
-    // Return null to indicate admin tokens are not available
-    // This will cause dependent services to fall back to bot user authentication
-    return Promise.resolve(null);
+      const { username, password } = tenantConfig.matrixConfig.adminUser;
+      const { homeserverUrl } = tenantConfig.matrixConfig;
+
+      this.logger.log(`Generating admin token for user: ${username}`);
+
+      // Use Matrix client login API to get access token
+      const loginUrl = `${homeserverUrl}/_matrix/client/v3/login`;
+
+      const loginData = {
+        type: 'm.login.password',
+        identifier: {
+          type: 'm.id.user',
+          user: username,
+        },
+        password: password,
+        device_id: `OPENMEET_ADMIN_${Date.now()}`,
+        initial_device_display_name: 'OpenMeet Admin Client',
+      };
+
+      const response = await axios.post(loginUrl, loginData, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000,
+      });
+
+      if (response.data && response.data.access_token) {
+        this.logger.log('Successfully generated admin access token');
+        return response.data.access_token;
+      } else {
+        this.logger.error('Login response did not contain access_token');
+        return null;
+      }
+    } catch (error) {
+      this.logger.error(`Failed to regenerate admin token: ${error.message}`);
+      if (error.response) {
+        this.logger.error(
+          `HTTP ${error.response.status}: ${JSON.stringify(error.response.data)}`,
+        );
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Get admin token for specific tenant
+   * @param tenantId Tenant ID to get admin token for
+   * @returns Admin access token or null if not available
+   */
+  async getAdminTokenForTenant(tenantId: string): Promise<string | null> {
+    try {
+      const { fetchTenants } = require('../../utils/tenant-config');
+      const tenants = fetchTenants();
+      const tenant = tenants.find((t) => t.id === tenantId);
+
+      if (!tenant?.matrixConfig?.adminUser) {
+        this.logger.warn(
+          `No admin credentials configured for tenant: ${tenantId}`,
+        );
+        return null;
+      }
+
+      // For now, generate fresh token each time - could be optimized with caching
+      return await this.generateAdminTokenForTenant(tenant);
+    } catch (error) {
+      this.logger.error(
+        `Failed to get admin token for tenant ${tenantId}: ${error.message}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Generate admin token for specific tenant configuration
+   */
+  private async generateAdminTokenForTenant(
+    tenantConfig: any,
+  ): Promise<string | null> {
+    try {
+      const { username, password } = tenantConfig.matrixConfig.adminUser;
+      const { homeserverUrl } = tenantConfig.matrixConfig;
+
+      this.logger.log(
+        `Generating admin token for tenant ${tenantConfig.id}, user: ${username}`,
+      );
+
+      const loginUrl = `${homeserverUrl}/_matrix/client/v3/login`;
+
+      const loginData = {
+        type: 'm.login.password',
+        identifier: {
+          type: 'm.id.user',
+          user: username,
+        },
+        password: password,
+        device_id: `OPENMEET_ADMIN_${tenantConfig.id}_${Date.now()}`,
+        initial_device_display_name: `OpenMeet Admin Client (${tenantConfig.id})`,
+      };
+
+      const response = await axios.post(loginUrl, loginData, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000,
+      });
+
+      if (response.data && response.data.access_token) {
+        this.logger.log(
+          `Successfully generated admin access token for tenant: ${tenantConfig.id}`,
+        );
+        return response.data.access_token;
+      } else {
+        this.logger.error('Login response did not contain access_token');
+        return null;
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to generate admin token for tenant ${tenantConfig.id}: ${error.message}`,
+      );
+      if (error.response) {
+        this.logger.error(
+          `HTTP ${error.response.status}: ${JSON.stringify(error.response.data)}`,
+        );
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Get tenant configuration for current request context
+   */
+  private getTenantConfig(): any {
+    // For now, return default tenant config - this will be enhanced to get from request context
+    try {
+      const { fetchTenants } = require('../../utils/tenant-config');
+      const tenants = fetchTenants();
+      // Return first non-empty tenant for now (will be enhanced for multi-tenant)
+      return tenants.find((t) => t.id && t.matrixConfig) || null;
+    } catch (error) {
+      this.logger.error(`Failed to get tenant config: ${error.message}`);
+      return null;
+    }
   }
 
   // USER TOKEN METHODS

@@ -2665,3 +2665,59 @@ envsubst < /templates/mas-config.template.yaml > /config/mas-config.yaml
 
 **Decision Maker**: Development Team  
 **Next Review**: 2025-01-10
+
+---
+
+## 🔧 Recent Bug Fixes & Improvements
+
+### Fixed: Matrix Room Creation Power Level Issue (July 2025)
+
+**Problem**: Matrix room creation was failing with error:
+```
+MatrixError: [400] Not a valid power_level_content_override: 'users' did not contain @openmeet-bot:matrix.openmeet.net
+```
+
+**Root Cause**: 
+- AppService sender: `@openmeet-bot:matrix.openmeet.net` (without tenant ID)
+- Bot authentication: `@openmeet-bot-{tenantId}:matrix.openmeet.net` (with tenant ID)
+- Matrix requires the **acting user** (the one making API calls) to be included in power level overrides
+
+**Solution Implemented**:
+Updated room creation in `MatrixChatRoomManagerAdapter` to include both bots in power levels:
+
+```typescript
+powerLevelContentOverride: {
+  users: {
+    // AppService sender bot (required by Matrix protocol)
+    "@openmeet-bot:matrix.openmeet.net": 100,
+    // Tenant bot (performs actual operations)  
+    "@openmeet-bot-{tenantId}:matrix.openmeet.net": 100,
+    // Creator gets moderator level
+    "@creator:matrix.openmeet.net": 50,
+  }
+}
+```
+
+**Result**: 
+- ✅ Room creation now works without Matrix permission errors
+- ✅ Both AppService sender and tenant bots have admin level (100) permissions
+- ✅ Bots can invite users, kick users, and modify power levels as expected
+- ✅ Backwards compatible with existing room permission diagnostic system
+
+**Files Modified**:
+- `src/chat/adapters/matrix-chat-room-manager.adapter.ts` (power level logic for events and groups)
+- `src/matrix/interfaces/matrix-bot.interface.ts` (added tenantId parameter to getBotUserId)
+- `test/matrix/matrix-room-permission-diagnostic.e2e-spec.ts` (updated test expectations)
+
+**Expected Bot Capabilities** (with admin level 100):
+- ✅ Invite users to rooms
+- ✅ Remove/kick users from rooms  
+- ✅ Modify other users' power levels
+- ✅ Send messages and manage room state
+- ✅ Create and configure new rooms
+
+**Architecture Notes**:
+- Maintains single AppService approach while fixing immediate power level issues
+- Prepares for future per-tenant AppService architecture if needed
+- AppService webhook processing remains unaffected
+- No changes required to frontend Matrix SDK integration

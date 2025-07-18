@@ -7,6 +7,7 @@ import { EventQueryService } from '../event/services/event-query.service';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { GroupService } from '../group/group.service';
 import { GroupMemberService } from '../group-member/group-member.service';
+import { MatrixBotService } from '../matrix/services/matrix-bot.service';
 import { mockUser } from '../test/mocks';
 
 // Create mock discussion service with methods for active functionality only
@@ -42,9 +43,21 @@ const mockChatRoomService = {
   addUserToGroupChatRoom: jest.fn(),
 };
 
+const mockMatrixBotService = {
+  getBotUserId: jest.fn().mockReturnValue('@bot:matrix.example.com'),
+  verifyRoomExists: jest.fn().mockResolvedValue(true),
+  isBotInRoom: jest.fn().mockResolvedValue(true),
+  joinRoom: jest.fn().mockResolvedValue({}),
+  inviteUser: jest.fn().mockResolvedValue({}),
+  removeUser: jest.fn().mockResolvedValue({}),
+  syncPermissions: jest.fn().mockResolvedValue({}),
+  getBotPowerLevel: jest.fn().mockResolvedValue(100),
+};
+
 describe('ChatController', () => {
   let controller: ChatController;
   let discussionService: DiscussionService;
+  let chatRoomManager: any;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -100,11 +113,16 @@ describe('ChatController', () => {
           provide: ChatRoomService,
           useValue: mockChatRoomService,
         },
+        {
+          provide: MatrixBotService,
+          useValue: mockMatrixBotService,
+        },
       ],
     }).compile();
 
     controller = module.get<ChatController>(ChatController);
     discussionService = module.get<DiscussionService>(DiscussionService);
+    chatRoomManager = module.get('ChatRoomManagerInterface');
   });
 
   it('should be defined', () => {
@@ -135,16 +153,21 @@ describe('ChatController', () => {
     it('should remove a member from an event discussion', async () => {
       const eventSlug = 'test-event';
       const userSlug = 'test-user';
+      const mockRequest = { tenantId: 'test-tenant' };
 
       await controller.removeMemberFromEventDiscussion(
         eventSlug,
         userSlug,
         mockUser,
+        mockRequest,
       );
 
-      expect(
-        discussionService.removeMemberFromEventDiscussionBySlug,
-      ).toHaveBeenCalledWith(eventSlug, userSlug);
+      // Method now uses chatRoomManager instead of discussionService
+      expect(chatRoomManager.removeUserFromEventChatRoom).toHaveBeenCalledWith(
+        eventSlug,
+        userSlug,
+        'test-tenant',
+      );
     });
   });
 });

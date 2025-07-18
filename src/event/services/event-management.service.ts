@@ -441,8 +441,10 @@ export class EventManagementService {
     });
 
     // Return event by slug to ensure we have all relations
+    // Include 'user' relation to populate createdBy field for API responses
     const event = await this.eventRepository.findOne({
       where: { slug: createdEvent.slug },
+      relations: ['user'],
     });
 
     // Verify seriesSlug one final time after retrieving the complete event

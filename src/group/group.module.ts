@@ -10,7 +10,6 @@ import { GroupUserPermissionEntity } from './infrastructure/persistence/relation
 import { UserModule } from '../user/user.module';
 import { GroupMemberModule } from '../group-member/group-member.module';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { GroupRoleService } from '../group-role/group-role.service';
@@ -50,7 +49,6 @@ import { ConfigModule } from '@nestjs/config';
     GroupService,
     TenantConnectionService,
     CategoryService,
-    EventEmitter2,
     FilesS3PresignedService,
     GroupRoleService,
     EventRoleService,

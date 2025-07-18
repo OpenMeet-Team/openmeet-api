@@ -70,7 +70,7 @@ export class MatrixBotUserService {
       const tenants = JSON.parse(Buffer.from(tenantsB64, 'base64').toString());
       const tenant = tenants.find((t: any) => t.id === tenantId);
 
-      return tenant?.botUser?.password || null;
+      return tenant?.matrixConfig?.botUser?.password || null;
     } catch (error) {
       this.logger.warn(
         `Failed to get bot password from config for tenant ${tenantId}: ${error.message}`,

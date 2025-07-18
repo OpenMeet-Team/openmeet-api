@@ -8,6 +8,7 @@ import { IMatrixClient } from '../types/matrix.interfaces';
 
 describe('MatrixBotService', () => {
   let service: MatrixBotService;
+  let module: TestingModule;
   let mockMatrixCoreService: jest.Mocked<MatrixCoreService>;
   let mockMatrixClient: jest.Mocked<IMatrixClient>;
   let mockConfigService: jest.Mocked<ConfigService>;
@@ -86,7 +87,7 @@ describe('MatrixBotService', () => {
       }),
     } as any;
 
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         MatrixBotService,
         {
@@ -146,88 +147,28 @@ describe('MatrixBotService', () => {
     });
 
     it('should handle authentication failure gracefully', async () => {
-      // Arrange - Create module with no AppService token to force OIDC auth failure
-      const failingConfigService = {
-        get: jest.fn().mockImplementation((key: string) => {
-          const config = {
-            ADMIN_EMAIL: 'admin@openmeet.net',
-            ADMIN_PASSWORD: 'test-admin-password',
-            'matrix.bot.username': mockBotConfig.username,
-            'matrix.bot.displayName': mockBotConfig.displayName,
-            'matrix.serverName': mockBotConfig.serverName,
-            'matrix.baseUrl': mockBotConfig.homeServerUrl,
-            matrix: {
-              appservice: {
-                token: '', // No token - should fall back to OIDC which will fail
-              },
-            },
-          };
-          return config[key];
-        }),
-      } as any;
-
-      const failingModule: TestingModule = await Test.createTestingModule({
-        providers: [
-          MatrixBotService,
-          {
-            provide: MatrixCoreService,
-            useValue: mockMatrixCoreService,
-          },
-          {
-            provide: ConfigService,
-            useValue: failingConfigService,
-          },
-          {
-            provide: MatrixUserService,
-            useValue: {
-              getClientForUser: jest
-                .fn()
-                .mockRejectedValue(new Error('Invalid credentials')),
-            },
-          },
-          {
-            provide: MatrixBotUserService,
-            useValue: {
-              getOrCreateBotUser: jest.fn().mockResolvedValue({
-                id: 1,
-                slug: 'openmeet-bot-test-tenant-123',
-                email: 'bot-test-tenant-123@system.openmeet.net',
-              }),
-              needsPasswordRotation: jest.fn().mockResolvedValue(false),
-              rotateBotPassword: jest.fn().mockResolvedValue(undefined),
-            },
-          },
-          {
-            provide: 'USER_SERVICE_FOR_MATRIX',
-            useValue: {
-              findByEmail: jest.fn().mockResolvedValue({
-                id: 1,
-                slug: 'admin-user',
-                email: 'admin@openmeet.net',
-              }),
-            },
-          },
-        ],
-      }).compile();
-
-      const failingService =
-        failingModule.get<MatrixBotService>(MatrixBotService);
+      // Arrange - Get the MatrixBotUserService from the module and mock it to fail
+      const matrixBotUserService =
+        module.get<MatrixBotUserService>(MatrixBotUserService);
+      jest
+        .spyOn(matrixBotUserService, 'getOrCreateBotUser')
+        .mockRejectedValue(new Error('Bot creation failed'));
 
       // Act & Assert
-      await expect(
-        failingService.authenticateBot(testTenantId),
-      ).rejects.toThrow(
-        'Matrix AppService authentication is required for bot operations',
+      await expect(service.authenticateBot(testTenantId)).rejects.toThrow(
+        'Bot creation failed',
       );
-      expect(failingService.isBotAuthenticated()).toBe(false);
+      expect(service.isBotAuthenticated()).toBe(false);
     });
 
     it('should return correct bot user ID', () => {
       // Act
-      const botUserId = service.getBotUserId();
+      const botUserId = service.getBotUserId(testTenantId);
 
       // Assert
-      expect(botUserId).toBe('@openmeet-bot:matrix.openmeet.net');
+      expect(botUserId).toBe(
+        '@openmeet-bot-test-tenant-123:matrix.openmeet.net',
+      );
     });
 
     it('should indicate when bot is not authenticated', () => {
@@ -582,55 +523,11 @@ describe('MatrixBotService', () => {
 
     it('should construct correct bot user ID from configuration', () => {
       // Act
-      const botUserId = service.getBotUserId();
+      const botUserId = service.getBotUserId(testTenantId);
 
       // Assert
-      expect(botUserId).toBe('@openmeet-bot:matrix.openmeet.net');
-    });
-
-    it('should throw error if admin password is not configured', () => {
-      // Arrange
-      const mockConfigServiceWithoutPassword = {
-        get: jest.fn().mockImplementation((key: string) => {
-          const config = {
-            ADMIN_EMAIL: 'admin@openmeet.net',
-            ADMIN_PASSWORD: undefined, // Missing admin password
-            'matrix.bot.username': 'openmeet-bot',
-            'matrix.bot.displayName': 'OpenMeet Bot',
-            'matrix.serverName': 'matrix.openmeet.net',
-            'matrix.baseUrl': 'http://localhost:8448',
-          };
-          return config[key];
-        }),
-      } as any;
-
-      // Act & Assert
-      expect(() => {
-        new MatrixBotService(
-          mockMatrixCoreService,
-          mockConfigServiceWithoutPassword,
-          {
-            getClientForUser: jest.fn().mockResolvedValue(mockMatrixClient),
-          } as any,
-          {
-            getOrCreateBotUser: jest.fn().mockResolvedValue({
-              id: 1,
-              slug: 'openmeet-bot-test-tenant-123',
-              email: 'bot-test-tenant-123@system.openmeet.net',
-            }),
-            needsPasswordRotation: jest.fn().mockResolvedValue(false),
-            rotateBotPassword: jest.fn().mockResolvedValue(undefined),
-          } as any,
-          {
-            findByEmail: jest.fn().mockResolvedValue({
-              id: 1,
-              slug: 'admin-user',
-              email: 'admin@openmeet.net',
-            }),
-          } as any,
-        );
-      }).toThrow(
-        'Admin password not configured. Set ADMIN_PASSWORD environment variable.',
+      expect(botUserId).toBe(
+        '@openmeet-bot-test-tenant-123:matrix.openmeet.net',
       );
     });
   });

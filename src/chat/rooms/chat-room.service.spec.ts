@@ -937,7 +937,6 @@ describe('ChatRoomService', () => {
     });
   });
 
-
   describe('Slug-based methods', () => {
     it('should add user to event chat room by slugs', async () => {
       // We shouldn't be mocking our service methods, but we should mock all the dependencies
@@ -984,6 +983,5 @@ describe('ChatRoomService', () => {
       );
       expect(userService.getUserBySlug).toHaveBeenCalledWith('test-user');
     });
-
   });
 });
