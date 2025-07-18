@@ -1075,6 +1075,55 @@ export class MatrixRoomService implements IMatrixRoomProvider {
   }
 
   /**
+   * Verify if a Matrix room exists and is accessible
+   * This is the canonical room existence check that should be used throughout the application
+   */
+  async verifyRoomExists(roomId: string, tenantId: string): Promise<boolean> {
+    let client = null;
+    
+    try {
+      this.logger.debug(`Verifying room exists: ${roomId} for tenant ${tenantId}`);
+      
+      // Create a bot client for the tenant to check room existence
+      client = await this.createBotClient(tenantId);
+      
+      if (!client) {
+        this.logger.warn(`Could not create bot client for tenant ${tenantId} to verify room ${roomId}`);
+        return false;
+      }
+
+      // Try to get room state - this will fail if room doesn't exist or bot has no access
+      await client.roomState(roomId);
+      this.logger.debug(`Room ${roomId} exists and is accessible`);
+      return true;
+      
+    } catch (error) {
+      this.logger.debug(`Room ${roomId} verification failed: ${error.message}`);
+      
+      // Check for specific error types that indicate room doesn't exist
+      if (error.httpStatus === 404 || 
+          (error.data && error.data.errcode === 'M_NOT_FOUND') ||
+          (error.message && error.message.includes('404')) ||
+          (error.message && error.message.includes('not found'))) {
+        this.logger.debug(`Room ${roomId} does not exist (404)`);
+        return false;
+      }
+      
+      // Check for forbidden errors (room exists but no access)
+      if (error.httpStatus === 403 || 
+          (error.data && error.data.errcode === 'M_FORBIDDEN')) {
+        this.logger.debug(`Room ${roomId} exists but bot has no access (403)`);
+        // For our purposes, if bot can't access it, treat as non-existent
+        return false;
+      }
+      
+      // Other errors (network, etc.) - assume room doesn't exist
+      this.logger.warn(`Room ${roomId} verification failed with error: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
    * Get the rooms for a specific Matrix user using a Matrix client
    */
   async getUserRoomsWithClient(

@@ -38,6 +38,7 @@ export class ChatRoomService {
   private chatRoomRepository: Repository<ChatRoomEntity>;
   private eventRepository: Repository<EventEntity>;
   private groupRepository: Repository<GroupEntity>;
+  private repositoriesInitialized = false;
   private readonly LOCK_TTL = 30000; // 30 seconds lock TTL
 
   /**
@@ -236,18 +237,29 @@ export class ChatRoomService {
     private readonly elastiCacheService: ElastiCacheService,
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
   ) {
-    void this.initializeRepositories();
+    // Repository initialization is now lazy - called when needed in methods
   }
 
   @Trace('chat-room.initializeRepositories')
   private async initializeRepositories() {
+    if (this.repositoriesInitialized) {
+      return; // Already initialized
+    }
+    
     const tenantId = this.request.tenantId;
+    if (!tenantId) {
+      throw new Error('Tenant ID is required but not found in request');
+    }
+    
     const dataSource =
       await this.tenantConnectionService.getTenantConnection(tenantId);
 
     this.chatRoomRepository = dataSource.getRepository(ChatRoomEntity);
     this.eventRepository = dataSource.getRepository(EventEntity);
     this.groupRepository = dataSource.getRepository(GroupEntity);
+    this.repositoriesInitialized = true;
+    
+    this.logger.debug(`Repositories initialized for tenant: ${tenantId}`);
   }
 
   /**
@@ -683,7 +695,7 @@ export class ChatRoomService {
           !this.request?._wsContext &&
           !(this.userService as any)?._wsContext
         ) {
-          const roomExists = await this.matrixBotService.verifyRoomExists(
+          const roomExists = await this.matrixRoomService.verifyRoomExists(
             chatRoom.matrixRoomId,
             this.request.tenantId,
           );
@@ -2458,5 +2470,341 @@ export class ChatRoomService {
         message: `Access denied: ${error.message}`,
       };
     }
+  }
+
+  /**
+   * Get all events with chat rooms for permission checking
+   */
+  async getAllEventsWithChatRooms(
+    tenantId: string,
+  ): Promise<Array<{ slug: string; matrixRoomId: string; name: string }>> {
+    // Use EventQueryService to get events with Matrix rooms
+    const events =
+      await this.eventQueryService.getAllEventsWithMatrixRooms(tenantId);
+    return events.map((event) => ({
+      slug: event.slug,
+      matrixRoomId: event.matrixRoomId,
+      name: event.name,
+    }));
+  }
+
+  /**
+   * Get all groups with chat rooms for permission checking
+   */
+  async getAllGroupsWithChatRooms(
+    tenantId: string,
+  ): Promise<Array<{ slug: string; matrixRoomId: string; name: string }>> {
+    // Use GroupService to get groups with Matrix rooms
+    const groups =
+      await this.groupService.getAllGroupsWithMatrixRooms(tenantId);
+    return groups.map((group) => ({
+      slug: group.slug,
+      matrixRoomId: group.matrixRoomId,
+      name: group.name,
+    }));
+  }
+
+  /**
+   * Scan all rooms and identify those with permission issues
+   */
+  async findRoomsWithPermissionIssues(tenantId: string): Promise<{
+    roomsWithIssues: Array<{
+      roomType: 'event' | 'group';
+      slug: string;
+      roomId: string;
+      botCurrentPowerLevel: number;
+      botExpectedPowerLevel: number;
+      canBeFixed: boolean;
+      issues: string[];
+    }>;
+    summary: {
+      totalRooms: number;
+      roomsWithIssues: number;
+      fixableRooms: number;
+    };
+  }> {
+    this.logger.log(
+      `Scanning for rooms with permission issues in tenant ${tenantId}`,
+    );
+
+    const roomsWithIssues: Array<{
+      roomType: 'event' | 'group';
+      slug: string;
+      roomId: string;
+      botCurrentPowerLevel: number;
+      botExpectedPowerLevel: number;
+      canBeFixed: boolean;
+      issues: string[];
+    }> = [];
+    let totalRooms = 0;
+    let fixableRooms = 0;
+
+    try {
+      // Check event rooms
+      const events = await this.getAllEventsWithChatRooms(tenantId);
+
+      for (const event of events) {
+        if (event.matrixRoomId) {
+          totalRooms++;
+
+          try {
+            const botPowerLevel = await this.matrixBotService.getBotPowerLevel(
+              event.matrixRoomId,
+              tenantId,
+            );
+
+            if (botPowerLevel < 100) {
+              const issues = this.analyzePermissionIssues(botPowerLevel);
+
+              const canBeFixed = await this.matrixBotService.isBotInRoom(
+                event.matrixRoomId,
+                tenantId,
+              );
+
+              if (canBeFixed) fixableRooms++;
+
+              roomsWithIssues.push({
+                roomType: 'event' as const,
+                slug: event.slug,
+                roomId: event.matrixRoomId,
+                botCurrentPowerLevel: botPowerLevel,
+                botExpectedPowerLevel: 100,
+                canBeFixed,
+                issues,
+              });
+            }
+          } catch (error) {
+            this.logger.warn(
+              `Failed to check permissions for event room ${event.matrixRoomId}: ${error.message}`,
+            );
+          }
+        }
+      }
+
+      // Check group rooms
+      const groups = await this.getAllGroupsWithChatRooms(tenantId);
+
+      for (const group of groups) {
+        if (group.matrixRoomId) {
+          totalRooms++;
+
+          try {
+            const botPowerLevel = await this.matrixBotService.getBotPowerLevel(
+              group.matrixRoomId,
+              tenantId,
+            );
+
+            if (botPowerLevel < 100) {
+              const issues = this.analyzePermissionIssues(botPowerLevel);
+
+              const canBeFixed = await this.matrixBotService.isBotInRoom(
+                group.matrixRoomId,
+                tenantId,
+              );
+
+              if (canBeFixed) fixableRooms++;
+
+              roomsWithIssues.push({
+                roomType: 'group' as const,
+                slug: group.slug,
+                roomId: group.matrixRoomId,
+                botCurrentPowerLevel: botPowerLevel,
+                botExpectedPowerLevel: 100,
+                canBeFixed,
+                issues,
+              });
+            }
+          } catch (error) {
+            this.logger.warn(
+              `Failed to check permissions for group room ${group.matrixRoomId}: ${error.message}`,
+            );
+          }
+        }
+      }
+
+      this.logger.log(
+        `Found ${roomsWithIssues.length} rooms with permission issues out of ${totalRooms} total rooms`,
+      );
+
+      return {
+        roomsWithIssues,
+        summary: {
+          totalRooms,
+          roomsWithIssues: roomsWithIssues.length,
+          fixableRooms,
+        },
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error scanning for rooms with permission issues: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Fix permissions for a list of room IDs
+   */
+  async fixRoomPermissions(
+    roomIds: string[],
+    tenantId: string,
+  ): Promise<{
+    results: Array<{
+      roomId: string;
+      fixed: boolean;
+      newPowerLevel: number;
+      error?: string;
+    }>;
+    summary: {
+      totalAttempted: number;
+      successfulFixes: number;
+      failedFixes: number;
+    };
+  }> {
+    this.logger.log(
+      `Attempting to fix permissions for ${roomIds.length} rooms in tenant ${tenantId}`,
+    );
+
+    const results: Array<{
+      roomId: string;
+      fixed: boolean;
+      newPowerLevel: number;
+      error?: string;
+    }> = [];
+    let successfulFixes = 0;
+
+    for (const roomId of roomIds) {
+      try {
+        this.logger.log(`Fixing permissions for room ${roomId}`);
+
+        // Get current bot power level
+        const currentPowerLevel = await this.matrixBotService.getBotPowerLevel(
+          roomId,
+          tenantId,
+        );
+
+        if (currentPowerLevel >= 100) {
+          // Already has sufficient permissions
+          results.push({
+            roomId,
+            fixed: true,
+            newPowerLevel: currentPowerLevel,
+            error: 'Already had sufficient permissions',
+          });
+          continue;
+        }
+
+        // Apply the same fix used in room creation
+        const botUserId = this.matrixBotService.getBotUserId(tenantId);
+        const serverName =
+          process.env.MATRIX_SERVER_NAME || 'matrix.openmeet.net';
+        const appServiceSender = `@openmeet-bot:${serverName}`;
+
+        const powerLevels = {
+          [appServiceSender]: 100, // AppService sender (required by Matrix)
+          [botUserId]: 100, // Tenant bot (operations)
+        };
+
+        try {
+          // First try regular permission sync
+          await this.matrixBotService.syncPermissions(
+            roomId,
+            powerLevels,
+            tenantId,
+          );
+        } catch (syncError) {
+          this.logger.warn(
+            `Regular permission sync failed for room ${roomId}: ${syncError.message}. Trying admin API...`,
+          );
+
+          // Fall back to admin API if regular sync fails
+          try {
+            // Force-join bot to room using admin API
+            await this.matrixBotService.adminJoinRoom(roomId, tenantId);
+
+            // Set power levels using admin API
+            await this.matrixBotService.adminSetPowerLevels(
+              roomId,
+              powerLevels,
+              tenantId,
+            );
+
+            this.logger.log(
+              `Successfully used admin API to fix permissions for room ${roomId}`,
+            );
+          } catch (adminError) {
+            this.logger.error(
+              `Admin API also failed for room ${roomId}: ${adminError.message}`,
+            );
+            throw adminError;
+          }
+        }
+
+        // Verify the fix worked
+        const newPowerLevel = await this.matrixBotService.getBotPowerLevel(
+          roomId,
+          tenantId,
+        );
+
+        const fixed = newPowerLevel >= 100;
+        if (fixed) successfulFixes++;
+
+        results.push({
+          roomId,
+          fixed,
+          newPowerLevel,
+        });
+
+        this.logger.log(
+          `Permission fix for room ${roomId}: ${fixed ? 'SUCCESS' : 'FAILED'} (${currentPowerLevel} → ${newPowerLevel})`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to fix permissions for room ${roomId}: ${error.message}`,
+        );
+
+        results.push({
+          roomId,
+          fixed: false,
+          newPowerLevel: -1,
+          error: error.message,
+        });
+      }
+    }
+
+    const failedFixes = roomIds.length - successfulFixes;
+
+    this.logger.log(
+      `Permission fix complete: ${successfulFixes} successful, ${failedFixes} failed`,
+    );
+
+    return {
+      results,
+      summary: {
+        totalAttempted: roomIds.length,
+        successfulFixes,
+        failedFixes,
+      },
+    };
+  }
+
+  /**
+   * Analyze what permission issues a bot has based on its power level
+   */
+  private analyzePermissionIssues(powerLevel: number): string[] {
+    const issues: string[] = [];
+
+    if (powerLevel < 50) {
+      issues.push('Bot cannot invite or kick users');
+    }
+    if (powerLevel < 100) {
+      issues.push('Bot cannot modify power levels');
+    }
+    if (powerLevel === 0) {
+      issues.push('Bot has no special permissions');
+    }
+
+    return issues;
   }
 }
