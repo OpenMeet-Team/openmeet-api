@@ -1,7 +1,7 @@
 import { CategoryEntity } from '../../category/infrastructure/persistence/relational/entities/categories.entity';
 import { SubCategoryEntity } from '../../sub-category/infrastructure/persistence/relational/entities/sub-category.entity';
 import { FileEntity } from '../../file/infrastructure/persistence/relational/entities/file.entity';
-import { ChatRoomEntity } from 'src/chat/infrastructure/persistence/relational/entities/chat-room.entity';
+// ChatRoomEntity removed - Matrix Application Service handles rooms directly
 // Zulip mocks removed in favor of Matrix
 import {
   mockEvent,
@@ -69,7 +69,7 @@ export const mockChatRoom = {
   name: 'test-room',
   matrixRoomId: '!roomid:matrix.example.org',
   members: [mockUser],
-} as ChatRoomEntity;
+};
 
 export const mockDiscussions = {
   messages: [],

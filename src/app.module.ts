@@ -40,7 +40,7 @@ import { GroupRoleModule } from './group-role/group-role.module';
 import { RoleModule } from './role/role.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 // ZulipModule has been removed in favor of MatrixModule
-import { ChatModule } from './chat/chat.module';
+// ChatModule has been removed in favor of Matrix Application Service
 import { AuthGithubModule } from './auth-github/auth-github.module';
 import { GroupMailModule } from './group-mail/group-mail.module';
 import { EventMailModule } from './event-mail/event-mail.module';
@@ -133,7 +133,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     EventAttendeeModule,
     GroupRoleModule,
     RoleModule,
-    ChatModule,
+    // ChatModule removed - Matrix Application Service handles rooms directly
     GroupMailModule,
     EventMailModule,
     ChatMailModule,

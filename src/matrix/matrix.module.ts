@@ -23,9 +23,12 @@ import { MatrixBotService } from './services/matrix-bot.service';
 import { MatrixBotUserService } from './services/matrix-bot-user.service';
 import { MatrixBotRotationService } from './services/matrix-bot-rotation.service';
 import { TenantBotSetupService } from './services/tenant-bot-setup.service';
-import { ChatModule } from '../chat/chat.module';
+import { RoomAliasUtils } from './utils/room-alias.utils';
+import { MatrixEventListener } from './matrix-event.listener';
+// ChatModule removed - Matrix Application Service handles room operations directly
 import { EventModule } from '../event/event.module';
 import { GroupModule } from '../group/group.module';
+import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 
 // Configure Matrix logging at module load time
 // This runs before the module is instantiated
@@ -38,9 +41,10 @@ configureMatrixLogging();
     forwardRef(() => UserModule),
     TenantModule,
     forwardRef(() => AuthModule),
-    forwardRef(() => ChatModule),
+    // ChatModule removed - Matrix Application Service handles room operations directly
     forwardRef(() => EventModule),
     forwardRef(() => GroupModule),
+    forwardRef(() => EventAttendeeModule),
     EventEmitterModule.forRoot({
       // Set wildcard to true to support event namespaces
       wildcard: true,
@@ -69,6 +73,8 @@ configureMatrixLogging();
     MatrixHealthIndicator,
     GlobalMatrixValidationService,
     MatrixHandleMigrationService,
+    RoomAliasUtils,
+    MatrixEventListener,
 
     // User service provider
     {
@@ -89,6 +95,7 @@ configureMatrixLogging();
     MatrixTokenManagerService,
     MatrixHealthIndicator,
     GlobalMatrixValidationService,
+    RoomAliasUtils,
   ],
 })
 export class MatrixModule {}

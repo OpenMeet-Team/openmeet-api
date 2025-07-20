@@ -71,8 +71,7 @@ export class EventManagementService {
     private readonly blueskyService: BlueskyService,
     @Inject(forwardRef(() => BlueskyIdService))
     private readonly blueskyIdService: BlueskyIdService,
-    @Inject(forwardRef(() => 'DiscussionService'))
-    private readonly discussionService: any, // Using any here to avoid circular dependency issues
+    // DiscussionService removed - Matrix Application Service handles room operations directly
     @Inject(forwardRef(() => EventSeriesService))
     private readonly eventSeriesService: EventSeriesService,
     @Inject(forwardRef(() => EventQueryService))
@@ -979,40 +978,10 @@ export class EventManagementService {
       this.request.tenantId,
     );
 
-    // Check if the discussionService exists and has the cleanupEventChatRooms method
-    if (
-      !this.discussionService ||
-      typeof this.discussionService.cleanupEventChatRooms !== 'function'
-    ) {
-      throw new UnprocessableEntityException(
-        'Discussion service required for event deletion is not available. Event deletion cannot proceed safely.',
-      );
-    }
-
-    // Before starting the transaction, clean up chat rooms through the discussion service
-    try {
-      this.logger.log(
-        `Starting chat room cleanup for event ${event.id} via discussionService`,
-      );
-
-      // Call the service layer method to clean up chat rooms
-      await this.discussionService.cleanupEventChatRooms(
-        event.id,
-        this.request.tenantId,
-      );
-
-      this.logger.log(
-        `Successfully cleaned up chat rooms for event ${event.id}`,
-      );
-    } catch (chatCleanupError) {
-      this.logger.error(
-        `Error cleaning up chat rooms for event ${event.id}: ${chatCleanupError.message}`,
-        chatCleanupError.stack,
-      );
-      throw new UnprocessableEntityException(
-        `Failed to clean up chat rooms: ${chatCleanupError.message}`,
-      );
-    }
+    // Chat room cleanup removed - Matrix Application Service handles room lifecycle automatically
+    this.logger.log(
+      `Event ${event.id} deletion proceeding - Matrix Application Service handles room cleanup`,
+    );
 
     // Use a transaction for the rest of the event deletion
     await dataSource
@@ -1324,37 +1293,10 @@ export class EventManagementService {
     // Delete each event individually to ensure proper cleanup of related entities
     for (const event of events) {
       try {
-        // Clean up chat rooms for this event (this handles the foreign key dependencies)
-        try {
-          if (
-            this.discussionService &&
-            typeof this.discussionService.cleanupEventChatRooms === 'function'
-          ) {
-            this.logger.log(`Cleaning up chat rooms for event ${event.id}`);
-            await this.discussionService.cleanupEventChatRooms(
-              event.id,
-              this.request.tenantId,
-            );
-            this.logger.log(
-              `Successfully cleaned up chat rooms for event ${event.id}`,
-            );
-          } else {
-            this.logger.warn(
-              `discussionService.cleanupEventChatRooms is not available. This might cause FK constraint violations.`,
-            );
-
-            // Add this as a proper todo for the engineering team
-            this.logger.error(
-              `TODO: Implement proper chat room cleanup in the event management service that doesn't rely on discussionService`,
-            );
-          }
-        } catch (chatCleanupError) {
-          this.logger.error(
-            `Error cleaning up chat rooms for event ${event.id}: ${chatCleanupError.message}`,
-            chatCleanupError.stack,
-          );
-          // Continue with deletion despite the error
-        }
+        // Chat room cleanup removed - Matrix Application Service handles room lifecycle automatically
+        this.logger.log(
+          `Event ${event.id} deletion proceeding - Matrix Application Service handles room cleanup`,
+        );
 
         // Make sure to clear Matrix room ID from event to avoid stale references
         if (event.matrixRoomId) {

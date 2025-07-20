@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { MatrixCoreService } from './matrix-core.service';
@@ -7,6 +7,11 @@ import { MatrixBotService } from './matrix-bot.service';
 import { CreateRoomOptions, RoomInfo } from '../types/matrix.types';
 import { IMatrixClient, IMatrixRoomProvider } from '../types/matrix.interfaces';
 import { HttpStatus } from '@nestjs/common';
+import { RoomAliasUtils } from '../utils/room-alias.utils';
+import { fetchTenants } from '../../utils/tenant-config';
+import { TenantConnectionService } from '../../tenant/tenant.service';
+import { MatrixEventListener } from '../matrix-event.listener';
+import { EventQueryService } from '../../event/services/event-query.service';
 
 @Injectable()
 export class MatrixRoomService implements IMatrixRoomProvider {
@@ -17,6 +22,11 @@ export class MatrixRoomService implements IMatrixRoomProvider {
     private readonly matrixBotUserService: MatrixBotUserService,
     private readonly matrixBotService: MatrixBotService,
     private readonly configService: ConfigService,
+    private readonly roomAliasUtils: RoomAliasUtils,
+    private readonly tenantConnectionService: TenantConnectionService,
+    private readonly matrixEventListener: MatrixEventListener,
+    @Inject(forwardRef(() => EventQueryService))
+    private readonly eventQueryService: EventQueryService,
   ) {}
 
   /**
@@ -258,6 +268,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       encrypted = false,
       inviteUserIds = [],
       powerLevelContentOverride,
+      room_alias_name,
     } = options;
 
     let matrixClient: IMatrixClient | null = null;
@@ -337,6 +348,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
           is_direct: isDirect,
           invite: inviteUserIds,
           initial_state: initialState,
+          room_alias_name: room_alias_name, // Add room alias name
         });
 
         // Get room details
@@ -373,6 +385,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         is_direct: isDirect,
         invite: inviteUserIds,
         initial_state: initialState,
+        room_alias_name: room_alias_name, // Add room alias name
       };
 
       // Try with Bearer token auth
@@ -644,25 +657,19 @@ export class MatrixRoomService implements IMatrixRoomProvider {
     roomId: string,
     userId: string,
   ): Promise<Record<string, never>> {
-    let client;
-
     try {
-      client = await this.matrixCoreService.acquireClient();
-
-      // First ensure admin is in the room
-      await this.ensureAdminInRoom(roomId, client);
-
-      // Check if user is already in the room before inviting
-      const isAlreadyInRoom = await this.isUserInRoom(roomId, userId, client);
-      if (isAlreadyInRoom) {
-        this.logger.debug(
-          `User ${userId} is already in room ${roomId}, skipping invite`,
-        );
-        return {};
+      // Parse room alias to get tenant ID
+      const roomInfo = this.roomAliasUtils.parseRoomAlias(roomId);
+      if (!roomInfo) {
+        throw new Error(`Invalid room alias format: ${roomId}`);
       }
 
-      // Then invite the user
-      await client.client.invite(roomId, userId);
+      // Use MatrixBotService instead of disabled admin client
+      await this.matrixBotService.inviteUser(roomId, userId, roomInfo.tenantId);
+      
+      this.logger.log(
+        `Successfully invited user ${userId} to room ${roomId} using bot service`,
+      );
       return {};
     } catch (error) {
       // Handle different types of errors with appropriate severity
@@ -696,17 +703,6 @@ export class MatrixRoomService implements IMatrixRoomProvider {
           `Failed to invite user to Matrix room: ${error.message}`,
         );
       }
-    } finally {
-      if (client) {
-        try {
-          await this.matrixCoreService.releaseClient(client);
-        } catch (releaseError) {
-          this.logger.warn(
-            `Failed to release Matrix client: ${releaseError.message}`,
-          );
-          // Don't re-throw as this would mask the original error
-        }
-      }
     }
   }
 
@@ -717,18 +713,18 @@ export class MatrixRoomService implements IMatrixRoomProvider {
     roomId: string,
     userId: string,
   ): Promise<Record<string, never>> {
-    let client;
-
     try {
-      client = await this.matrixCoreService.acquireClient();
+      // Parse room alias to get tenant ID
+      const roomInfo = this.roomAliasUtils.parseRoomAlias(roomId);
+      if (!roomInfo) {
+        throw new Error(`Invalid room alias format: ${roomId}`);
+      }
 
-      // First ensure admin is in the room
-      await this.ensureAdminInRoom(roomId, client);
-
-      await client.client.kick(
-        roomId,
-        userId,
-        'Removed from event/group in OpenMeet',
+      // Use MatrixBotService instead of disabled admin client
+      await this.matrixBotService.removeUser(roomId, userId, roomInfo.tenantId);
+      
+      this.logger.log(
+        `Successfully removed user ${userId} from room ${roomId} using bot service`,
       );
       return {};
     } catch (error) {
@@ -739,17 +735,6 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       throw new Error(
         `Failed to remove user from Matrix room: ${error.message}`,
       );
-    } finally {
-      if (client) {
-        try {
-          await this.matrixCoreService.releaseClient(client);
-        } catch (releaseError) {
-          this.logger.warn(
-            `Failed to release Matrix client: ${releaseError.message}`,
-          );
-          // Don't re-throw as this would mask the original error
-        }
-      }
     }
   }
 
@@ -1079,7 +1064,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
    * This is the canonical room existence check that should be used throughout the application
    */
   async verifyRoomExists(roomId: string, tenantId: string): Promise<boolean> {
-    let client = null;
+    let client: IMatrixClient | null = null;
     
     try {
       this.logger.debug(`Verifying room exists: ${roomId} for tenant ${tenantId}`);
@@ -1188,4 +1173,199 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       throw new Error(`Failed to get rooms: ${error.message}`);
     }
   }
+
+  /**
+   * Sync all events with attendees across all tenants (admin function)
+   * Returns detailed results for admin dashboard
+   */
+  async syncAllEventAttendeesToMatrix(maxEventsPerTenant?: number): Promise<{
+    totalTenants: number;
+    totalEvents: number;
+    totalUsersAdded: number;
+    totalErrors: number;
+    startTime: Date;
+    endTime: Date;
+    duration: number;
+    tenants: Array<{
+      tenantId: string;
+      tenantName: string;
+      eventsProcessed: number;
+      totalUsersAdded: number;
+      totalErrors: number;
+      events: Array<{
+        eventSlug: string;
+        eventName: string;
+        attendeesFound: number;
+        usersAdded: number;
+        errors: string[];
+        success: boolean;
+      }>;
+      errors: string[];
+      success: boolean;
+    }>;
+  }> {
+    const startTime = new Date();
+    this.logger.log('🚀 Starting full Matrix attendee sync for all tenants');
+    
+    const tenantResults: Array<{
+      tenantId: string;
+      tenantName: string;
+      eventsProcessed: number;
+      totalUsersAdded: number;
+      totalErrors: number;
+      events: Array<{
+        eventSlug: string;
+        eventName: string;
+        attendeesFound: number;
+        usersAdded: number;
+        errors: string[];
+        success: boolean;
+      }>;
+      errors: string[];
+      success: boolean;
+    }> = [];
+    let totalEvents = 0;
+    let totalUsersAdded = 0;
+    let totalErrors = 0;
+
+    try {
+      // Get all tenants from configuration
+      const tenants = fetchTenants();
+      this.logger.log(`📋 Found ${tenants.length} tenants to process`);
+      
+      for (const tenant of tenants) {
+        const tenantResult = await this.syncTenantEvents(tenant.id, tenant.name || tenant.id, maxEventsPerTenant);
+        tenantResults.push(tenantResult);
+        
+        totalEvents += tenantResult.eventsProcessed;
+        totalUsersAdded += tenantResult.totalUsersAdded;
+        totalErrors += tenantResult.totalErrors;
+      }
+
+      const endTime = new Date();
+      const duration = endTime.getTime() - startTime.getTime();
+
+      this.logger.log(
+        `✨ Full sync completed: ${tenants.length} tenants, ${totalEvents} events processed, ${totalUsersAdded} users added, ${totalErrors} errors in ${duration}ms`
+      );
+
+      return {
+        totalTenants: tenants.length,
+        totalEvents,
+        totalUsersAdded,
+        totalErrors,
+        startTime,
+        endTime,
+        duration,
+        tenants: tenantResults,
+      };
+    } catch (error) {
+      this.logger.error(`💥 Fatal error during full sync: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * Sync all events for a specific tenant
+   */
+  private async syncTenantEvents(tenantId: string, tenantName?: string, maxEvents?: number): Promise<{
+    tenantId: string;
+    tenantName: string;
+    eventsProcessed: number;
+    totalUsersAdded: number;
+    totalErrors: number;
+    events: Array<{
+      eventSlug: string;
+      eventName: string;
+      attendeesFound: number;
+      usersAdded: number;
+      errors: string[];
+      success: boolean;
+    }>;
+    errors: string[];
+    success: boolean;
+  }> {
+    this.logger.log(`📋 Processing tenant: ${tenantId}`);
+    
+    const eventResults: Array<{
+      eventSlug: string;
+      eventName: string;
+      attendeesFound: number;
+      usersAdded: number;
+      errors: string[];
+      success: boolean;
+    }> = [];
+    const tenantErrors: string[] = [];
+    let totalUsersAdded = 0;
+    let totalErrors = 0;
+
+    try {
+      // Get all events with confirmed attendees for this tenant
+      const allEvents = await this.eventQueryService.findEventsWithConfirmedAttendees(tenantId);
+      
+      // Apply limit if specified
+      const events = maxEvents && maxEvents > 0 ? allEvents.slice(0, maxEvents) : allEvents;
+      
+      this.logger.log(`📅 Found ${allEvents.length} total events, processing ${events.length} events ${maxEvents ? `(limited to ${maxEvents})` : ''} with attendees in tenant ${tenantId}`);
+
+      for (const event of events) {
+        try {
+          const result = await this.matrixEventListener.syncEventAttendeesToMatrix(event.slug, tenantId);
+          
+          const eventResult = {
+            eventSlug: event.slug,
+            eventName: event.name || event.slug,
+            attendeesFound: result.attendeesFound,
+            usersAdded: result.usersAdded,
+            errors: result.errors,
+            success: result.success,
+          };
+          
+          eventResults.push(eventResult);
+          totalUsersAdded += result.usersAdded;
+          totalErrors += result.errors.length;
+        } catch (eventError) {
+          const errorMsg = `Error processing event ${event.slug}: ${eventError.message}`;
+          this.logger.error(errorMsg);
+          tenantErrors.push(errorMsg);
+          totalErrors++;
+          
+          eventResults.push({
+            eventSlug: event.slug,
+            eventName: event.name || event.slug,
+            attendeesFound: 0,
+            usersAdded: 0,
+            errors: [errorMsg],
+            success: false,
+          });
+        }
+      }
+
+      return {
+        tenantId,
+        tenantName: tenantName || tenantId,
+        eventsProcessed: events.length,
+        totalUsersAdded,
+        totalErrors,
+        events: eventResults,
+        errors: tenantErrors,
+        success: tenantErrors.length === 0,
+      };
+    } catch (tenantError) {
+      const errorMsg = `Error processing tenant ${tenantId}: ${tenantError.message}`;
+      this.logger.error(errorMsg);
+      
+      return {
+        tenantId,
+        tenantName: tenantName || tenantId,
+        eventsProcessed: 0,
+        totalUsersAdded: 0,
+        totalErrors: 1,
+        events: [],
+        errors: [errorMsg],
+        success: false,
+      };
+    }
+  }
+
 }

@@ -21,7 +21,7 @@ import { GroupMailModule } from '../group-mail/group-mail.module';
 import { EventModule } from '../event/event.module';
 import { EventMailModule } from '../event-mail/event-mail.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
-import { ChatModule } from '../chat/chat.module';
+// ChatModule removed - Matrix Application Service handles room operations directly
 import { ConfigModule } from '@nestjs/config';
 
 @Module({
@@ -42,7 +42,7 @@ import { ConfigModule } from '@nestjs/config';
     forwardRef(() => EventModule),
     EventMailModule,
     BlueskyModule,
-    forwardRef(() => ChatModule),
+    // ChatModule removed - Matrix Application Service handles room operations directly
   ],
   controllers: [GroupController],
   providers: [

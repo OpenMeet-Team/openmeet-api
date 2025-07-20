@@ -28,6 +28,7 @@ import { MatrixPasswordDto } from './dto/matrix-password.dto';
 import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
 import { Trace } from '../utils/trace.decorator';
 import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
+import { MatrixEventListener } from './matrix-event.listener';
 
 @ApiTags('Matrix')
 @Controller({
@@ -43,6 +44,7 @@ export class MatrixController {
     private readonly userService: UserService,
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
     private readonly tempAuthCodeService: TempAuthCodeService,
+    private readonly matrixEventListener: MatrixEventListener,
     @Inject(REQUEST) private readonly request: any,
   ) {}
 
@@ -737,6 +739,75 @@ export class MatrixController {
         error.stack,
       );
       throw new BadRequestException(error.message);
+    }
+  }
+
+  @ApiOperation({
+    summary: 'Sync all existing event attendees to Matrix rooms (Admin)',
+    description:
+      'One-time sync of all confirmed attendees across all tenants to their respective Matrix rooms. Returns detailed results for admin dashboard.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Matrix sync completed with detailed results',
+  })
+  @UseGuards(JWTAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('admin/sync-all-attendees')
+  @Trace('matrix.api.syncAllAttendees')
+  async syncAllEventAttendees(
+    @Body() body: { maxEventsPerTenant?: number },
+  ): Promise<{
+    success: boolean;
+    message: string;
+    results: {
+      totalTenants: number;
+      totalEvents: number;
+      totalUsersAdded: number;
+      totalErrors: number;
+      startTime: Date;
+      endTime: Date;
+      duration: number;
+      tenants: Array<{
+        tenantId: string;
+        tenantName: string;
+        eventsProcessed: number;
+        totalUsersAdded: number;
+        totalErrors: number;
+        events: Array<{
+          eventSlug: string;
+          eventName: string;
+          attendeesFound: number;
+          usersAdded: number;
+          errors: string[];
+          success: boolean;
+        }>;
+        errors: string[];
+        success: boolean;
+      }>;
+    };
+  }> {
+    this.logger.log('🚀 Admin Matrix sync initiated for all tenants');
+
+    try {
+      // Call the sync method in MatrixRoomService with optional limit
+      const results = await this.matrixRoomService.syncAllEventAttendeesToMatrix(body.maxEventsPerTenant);
+
+      this.logger.log(
+        `✨ Admin Matrix sync completed: ${results.totalTenants} tenants, ${results.totalEvents} events, ${results.totalUsersAdded} users added, ${results.totalErrors} errors`
+      );
+
+      return {
+        success: true,
+        message: `Matrix sync completed for ${results.totalTenants} tenants and ${results.totalEvents} events`,
+        results,
+      };
+    } catch (error) {
+      this.logger.error(
+        `💥 Error during admin Matrix sync: ${error.message}`,
+        error.stack,
+      );
+      throw new BadRequestException(`Matrix sync failed: ${error.message}`);
     }
   }
 }

@@ -86,9 +86,9 @@ describe('Past Events Section (e2e)', () => {
   }, 30000);
 
   it('should exclude events with end dates in the past from the public events list', async () => {
-    // Get events with a much larger page size to ensure we catch all our test events
+    // Get events with a much larger page size and sort by creation date to ensure we catch our newest test events
     const response = await serverApp
-      .get('/api/events?limit=500')
+      .get('/api/events?limit=2000&sort=createdAt:DESC')
       .set('Authorization', `Bearer ${testUser.token}`)
       .expect(200);
 
@@ -108,9 +108,6 @@ describe('Past Events Section (e2e)', () => {
       (event: any) => event.slug === cancelledEvent.slug,
     );
 
-    console.log('Found past event:', !!foundPastEvent);
-    console.log('Found future event:', !!foundFutureEvent);
-    console.log('Found cancelled event:', !!foundCancelledEvent);
 
     // Past event should NOT be included in the public events list
     expect(foundPastEvent).toBeUndefined();
@@ -128,7 +125,7 @@ describe('Past Events Section (e2e)', () => {
 
   it('should show cancelled events with cancelled status', async () => {
     const response = await serverApp
-      .get('/api/events?limit=500')
+      .get('/api/events?limit=2000&sort=createdAt:DESC')
       .set('Authorization', `Bearer ${testUser.token}`)
       .expect(200);
 
@@ -145,7 +142,7 @@ describe('Past Events Section (e2e)', () => {
 
   it('should return events in chronological order (earliest start date first)', async () => {
     const response = await serverApp
-      .get('/api/events?limit=500')
+      .get('/api/events?limit=2000&sort=createdAt:DESC')
       .set('Authorization', `Bearer ${testUser.token}`)
       .expect(200);
 

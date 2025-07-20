@@ -5,13 +5,13 @@ import { GroupMemberEntity } from './infrastructure/persistence/relational/entit
 import { GroupMemberService } from './group-member.service';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { GroupRoleModule } from '../group-role/group-role.module';
-import { ChatModule } from '../chat/chat.module';
+// ChatModule removed - Matrix Application Service handles room operations directly
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([GroupEntity, GroupMemberEntity]),
     GroupRoleModule,
-    forwardRef(() => ChatModule),
+    // ChatModule removed - Matrix Application Service handles room operations directly
   ],
   controllers: [],
   providers: [GroupMemberService, TenantConnectionService],

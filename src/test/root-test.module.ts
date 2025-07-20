@@ -10,7 +10,7 @@ import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
 import { EventMailModule } from '../event-mail/event-mail.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
-import { ChatModule } from '../chat/chat.module';
+// ChatModule removed - Matrix Application Service handles room operations directly
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventQueryService } from '../event/services/event-query.service';
 import { EventOccurrenceService } from '../event/services/occurrences/event-occurrence.service';
@@ -41,7 +41,7 @@ import { ConfigModule } from '@nestjs/config';
     forwardRef(() => GroupModule),
     EventMailModule,
     BlueskyModule,
-    forwardRef(() => ChatModule),
+    // ChatModule removed - Matrix Application Service handles room operations directly
   ],
   providers: [
     EventManagementService,

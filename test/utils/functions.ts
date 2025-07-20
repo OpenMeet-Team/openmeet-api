@@ -31,12 +31,21 @@ async function createGroup(
   authToken: string,
   groupData: any,
 ): Promise<any> {
-  const server = request(app);
-  const response = await server
+  // Handle both Express app instances and URL strings
+  const response = await request(app)
     .post('/api/groups')
     .set('x-tenant-id', TESTING_TENANT_ID)
     .set('Authorization', `Bearer ${authToken}`)
     .send(groupData);
+
+  if (response.status !== 201) {
+    console.error('Create group failed:', {
+      status: response.status,
+      body: response.body,
+    });
+  }
+
+  expect(response.status).toBe(201);
   return response.body;
 }
 
@@ -132,9 +141,14 @@ async function createEvent(app: string, authToken: string, eventData: any) {
 
   const payload = {
     timeZone: 'UTC', // Default timezone
-    ...eventData, // Spread incoming eventData, potentially overriding the default timeZone if provided
+    maxAttendees: 100, // Default max attendees
+    categories: [], // Default empty categories
+    startDate: new Date(Date.now() + 86400000).toISOString(), // Default start date (1 day from now)
+    endDate: new Date(Date.now() + 90000000).toISOString(), // Default end date (1 hour after start)
+    ...eventData, // Spread incoming eventData, potentially overriding the defaults if provided
   };
 
+  // Handle both Express app instances and URL strings
   const response = await request(app)
     .post('/api/events')
     .set('Authorization', `Bearer ${authToken}`)
@@ -248,6 +262,7 @@ async function createTestUser(
   lastName,
   password = 'Test@1234',
 ) {
+  // Handle both Express app instances and URL strings
   const response = await request(app)
     .post('/api/v1/auth/email/register')
     .set('x-tenant-id', tenantId)
@@ -447,48 +462,7 @@ async function deleteGroupBySlug(token: string, groupSlug: string) {
   return response;
 }
 
-// Chat-related helper functions
-async function getGroupChatRooms(token: string, groupSlug: string) {
-  const response = await request(TESTING_APP_URL)
-    .get(`/api/chat/group/${groupSlug}/rooms`)
-    .set('Authorization', `Bearer ${token}`)
-    .set('x-tenant-id', TESTING_TENANT_ID);
-
-  console.log(`Get group chat rooms for ${groupSlug}:`, {
-    status: response.status,
-    body: response.body,
-  });
-
-  return response;
-}
-
-async function joinGroupChatRoom(token: string, groupSlug: string) {
-  const response = await request(TESTING_APP_URL)
-    .post(`/api/chat/group/${groupSlug}/join`)
-    .set('Authorization', `Bearer ${token}`)
-    .set('x-tenant-id', TESTING_TENANT_ID);
-
-  console.log(`Join group chat room for ${groupSlug}:`, {
-    status: response.status,
-    body: response.body,
-  });
-
-  return response;
-}
-
-async function ensureGroupChatRoom(token: string, groupSlug: string) {
-  const response = await request(TESTING_APP_URL)
-    .post(`/api/chat/group/${groupSlug}/ensure-room`)
-    .set('Authorization', `Bearer ${token}`)
-    .set('x-tenant-id', TESTING_TENANT_ID);
-
-  console.log(`Ensure group chat room for ${groupSlug}:`, {
-    status: response.status,
-    body: response.body,
-  });
-
-  return response;
-}
+// Chat-related helper functions removed - Matrix Application Service handles rooms directly
 
 // Utility functions
 async function waitForEventProcessing(ms: number = 2000) {
@@ -521,10 +495,7 @@ export {
   getGroupDetails,
   getCurrentUserDetails,
   deleteGroupBySlug,
-  // New chat-related functions
-  getGroupChatRooms,
-  joinGroupChatRoom,
-  ensureGroupChatRoom,
+  // Chat-related functions removed - Matrix Application Service handles rooms directly
   // Utility functions
   waitForEventProcessing,
 };

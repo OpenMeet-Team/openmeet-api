@@ -31,38 +31,11 @@ export class EventListener {
     // Use the tenant ID from the event payload (provided by event service)
     const tenantId = params.tenantId;
 
-    // Emit an event for the chat module to handle chat room creation
-    // instead of directly calling the chat room service
-    try {
-      this.logger.log(
-        `Emitting chat.event.created event for event ${params.slug}`,
-      );
-
-      // Create payload with all required fields including tenantId and userId
-      const payload = {
-        eventSlug: params.slug,
-        userId: params.userId, // Use userId from event creation payload
-        eventName: params.eventId.toString(), // We don't have the event name, use ID as fallback
-        eventVisibility: 'public', // Default visibility
-        tenantId: tenantId,
-      };
-
-      // Log crucial fields to debug
-      this.logger.log(`Chat event payload: ${JSON.stringify(payload)}`);
-
-      // Skip emitting event if we don't have any user identifier
-      if (!payload.userId) {
-        this.logger.warn(
-          `Cannot create chat room for event ${params.slug}: No user identifier provided`,
-        );
-        return;
-      }
-
-      // Emit the event with our prepared payload
-      this.eventEmitter.emit('chat.event.created', payload);
-    } catch (error) {
-      this.logger.error(`Error in handleEventCreatedEvent: ${error.message}`);
-    }
+    // Matrix-native approach: Rooms are created on-demand via Application Service
+    // No longer emit chat.event.created events - rooms are created when first accessed
+    this.logger.log(
+      `Event ${params.slug} created - rooms will be created on-demand via Matrix Application Service`,
+    );
   }
 
   @OnEvent('event.deleted')

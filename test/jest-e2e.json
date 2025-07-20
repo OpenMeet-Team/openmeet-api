@@ -10,5 +10,8 @@
         "allowJs": true
       }
     }]
-  }
+  },
+  "transformIgnorePatterns": [
+    "node_modules/(?!(matrix-js-sdk)/)"
+  ]
 }

@@ -38,6 +38,7 @@ export interface CreateRoomOptions {
   inviteUserIds?: string[];
   powerLevels?: Record<string, number>;
   powerLevelContentOverride?: any; // IPowerLevelsContent
+  room_alias_name?: string; // Localpart of the room alias
 }
 
 export interface RoomInfo {

@@ -43,37 +43,10 @@ export class GroupListener {
     // Use the tenant ID from the event payload (no fallback to request needed)
     const tenantId = params.tenantId;
 
-    // Emit an event for the chat module to handle chat room creation
-    // following the same pattern as event.created
-    try {
-      this.logger.log(
-        `Emitting chat.group.created event for group ${params.slug}`,
-      );
-
-      // Create payload with all required fields including tenantId and userId
-      const payload = {
-        groupSlug: params.slug,
-        userId: params.userId, // Use userId from group creation payload
-        groupName: params.groupId.toString(), // We don't have the group name, use ID as fallback
-        groupVisibility: 'public', // Default visibility
-        tenantId: tenantId,
-      };
-
-      // Log crucial fields to debug
-      this.logger.log(`Chat group payload: ${JSON.stringify(payload)}`);
-
-      // Skip emitting event if we don't have any user identifier
-      if (!payload.userId) {
-        this.logger.warn(
-          `Cannot create chat room for group ${params.slug}: No user identifier provided`,
-        );
-        return;
-      }
-
-      // Emit the event with our prepared payload
-      this.eventEmitter.emit('chat.group.created', payload);
-    } catch (error) {
-      this.logger.error(`Error in handleGroupCreatedEvent: ${error.message}`);
-    }
+    // Matrix-native approach: Rooms are created on-demand via Application Service
+    // No longer emit chat.group.created events - rooms are created when first accessed
+    this.logger.log(
+      `Group ${params.slug} created - rooms will be created on-demand via Matrix Application Service`,
+    );
   }
 }

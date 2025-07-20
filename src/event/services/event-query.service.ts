@@ -1355,4 +1355,30 @@ export class EventQueryService {
       name: event.name,
     }));
   }
+
+  /**
+   * Find all events that have confirmed attendees (for Matrix sync)
+   */
+  async findEventsWithConfirmedAttendees(
+    tenantId: string,
+  ): Promise<Array<{ id: number; slug: string; name: string }>> {
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    const eventRepository = dataSource.getRepository(EventEntity);
+
+    const events = await eventRepository
+      .createQueryBuilder('event')
+      .innerJoin('event.attendees', 'attendee')
+      .select(['event.id', 'event.slug', 'event.name'])
+      .where('attendee.status = :status', { status: EventAttendeeStatus.Confirmed })
+      .groupBy('event.id, event.slug, event.name')
+      .orderBy('event.createdAt', 'DESC')
+      .getMany();
+
+    return events.map((event) => ({
+      id: event.id,
+      slug: event.slug,
+      name: event.name,
+    }));
+  }
 }

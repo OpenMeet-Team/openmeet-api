@@ -49,7 +49,7 @@ import { EventQueryService } from '../event/services/event-query.service';
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventRecommendationService } from '../event/services/event-recommendation.service';
 import { forwardRef } from '@nestjs/common';
-import { ChatRoomService } from '../chat/rooms/chat-room.service';
+// ChatRoomService removed - Matrix Application Service handles room operations directly
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -75,8 +75,7 @@ export class GroupService {
     private readonly userService: UserService,
     private readonly eventEmitter: EventEmitter2,
     private readonly groupMailService: GroupMailService,
-    @Inject(forwardRef(() => ChatRoomService))
-    private readonly chatRoomService: ChatRoomService,
+    // ChatRoomService removed - Matrix Application Service handles room operations directly
   ) {}
 
   async getTenantSpecificGroupRepository() {
