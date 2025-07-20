@@ -1368,4 +1368,29 @@ export class MatrixRoomService implements IMatrixRoomProvider {
     }
   }
 
+  /**
+   * Resolve a room alias to a room ID
+   * @param roomAlias The room alias to resolve (e.g., #room-alias:server.com)
+   * @returns The room ID (e.g., !roomId:server.com)
+   */
+  async resolveRoomAlias(roomAlias: string): Promise<string> {
+    this.logger.log(`Resolving room alias: ${roomAlias}`);
+
+    // Extract tenant ID from the room alias to get the right tenant context
+    const parsed = this.roomAliasUtils.parseRoomAlias(roomAlias);
+    if (!parsed) {
+      throw new Error(`Invalid room alias format: ${roomAlias}`);
+    }
+
+    try {
+      // Use MatrixBotService to resolve the alias since it has the bot client with proper auth
+      const resolvedRoom = await this.matrixBotService.resolveRoomAlias(roomAlias, parsed.tenantId);
+      this.logger.log(`Resolved alias ${roomAlias} to room ID: ${resolvedRoom}`);
+      return resolvedRoom;
+    } catch (error) {
+      this.logger.error(`Failed to resolve room alias ${roomAlias}: ${error.message}`);
+      throw error;
+    }
+  }
+
 }

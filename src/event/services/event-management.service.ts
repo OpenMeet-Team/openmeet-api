@@ -2025,4 +2025,30 @@ export class EventManagementService {
 
     this.logger.log(`Successfully updated Matrix room ID for event ${eventId}`);
   }
+
+  /**
+   * Update the Matrix room ID for an event in a specific tenant
+   * This method is used by Matrix Application Service which doesn't have request context
+   */
+  @Trace('event-management.updateMatrixRoomIdWithTenant')
+  async updateMatrixRoomIdWithTenant(
+    eventId: number,
+    matrixRoomId: string,
+    tenantId: string,
+  ): Promise<void> {
+    this.logger.log(
+      `Updating Matrix room ID for event ${eventId} to ${matrixRoomId} in tenant ${tenantId}`,
+    );
+
+    // Get tenant-specific database connection
+    const dataSource = await this.tenantConnectionService.getTenantConnection(tenantId);
+    const eventRepository = dataSource.getRepository(EventEntity);
+
+    await eventRepository.update(
+      { id: eventId },
+      { matrixRoomId: matrixRoomId },
+    );
+
+    this.logger.log(`Successfully updated Matrix room ID for event ${eventId} in tenant ${tenantId}`);
+  }
 }

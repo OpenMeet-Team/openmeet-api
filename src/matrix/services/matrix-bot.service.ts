@@ -281,8 +281,22 @@ export class MatrixBotService implements IMatrixBot {
     this.logger.log(`Inviting user ${userId} to room ${roomId}`);
 
     try {
-      await this.botClient!.invite(roomId, userId);
-      this.logger.log(`Successfully invited user ${userId} to room ${roomId}`);
+      // Resolve room alias to room ID if needed
+      let resolvedRoomId = roomId;
+      if (roomId.startsWith('#')) {
+        this.logger.debug(`Resolving room alias ${roomId} to room ID`);
+        try {
+          const roomInfo = await this.botClient!.getRoomIdForAlias(roomId);
+          resolvedRoomId = roomInfo.room_id;
+          this.logger.debug(`Resolved alias ${roomId} to room ID ${resolvedRoomId}`);
+        } catch (aliasError) {
+          this.logger.warn(`Failed to resolve room alias ${roomId}: ${aliasError.message}`);
+          // Continue with original roomId - it might be a room ID already
+        }
+      }
+
+      await this.botClient!.invite(resolvedRoomId, userId);
+      this.logger.log(`Successfully invited user ${userId} to room ${resolvedRoomId}`);
     } catch (error) {
       this.logger.error(
         `Failed to invite user ${userId} to room ${roomId}: ${error.message}`,
@@ -666,6 +680,33 @@ export class MatrixBotService implements IMatrixBot {
         `Failed to set power levels in room ${roomId}: ${error.message}`,
       );
       throw new Error(`Admin set power levels failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Resolve a room alias to a room ID
+   * @param roomAlias The room alias to resolve (e.g., #room-alias:server.com)
+   * @param tenantId The tenant ID for authentication context
+   * @returns The room ID (e.g., !roomId:server.com)
+   */
+  async resolveRoomAlias(roomAlias: string, tenantId: string): Promise<string> {
+    await this.ensureBotAuthenticated(tenantId);
+
+    this.logger.log(`Resolving room alias: ${roomAlias}`);
+
+    try {
+      if (!roomAlias.startsWith('#')) {
+        throw new Error(`Invalid room alias format: ${roomAlias} (must start with #)`);
+      }
+
+      const roomInfo = await this.botClient!.getRoomIdForAlias(roomAlias);
+      const roomId = roomInfo.room_id;
+      
+      this.logger.log(`Successfully resolved alias ${roomAlias} to room ID: ${roomId}`);
+      return roomId;
+    } catch (error) {
+      this.logger.error(`Failed to resolve room alias ${roomAlias}: ${error.message}`);
+      throw error;
     }
   }
 }

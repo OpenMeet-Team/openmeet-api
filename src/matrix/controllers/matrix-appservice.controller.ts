@@ -19,7 +19,9 @@ import { GroupService } from '../../group/group.service';
 import { MatrixRoomService } from '../services/matrix-room.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
+import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
+import { EventManagementService } from '../../event/services/event-management.service';
 import { GlobalMatrixValidationService } from '../services/global-matrix-validation.service';
 import { getTenantConfig } from '../../utils/tenant-config';
 
@@ -39,6 +41,7 @@ export class MatrixAppServiceController {
     private readonly matrixRoomService: MatrixRoomService,
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly eventAttendeeService: EventAttendeeService,
+    private readonly eventManagementService: EventManagementService,
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
   ) {
     const matrixConfig = this.configService.get('matrix', { infer: true })!;
@@ -263,8 +266,7 @@ export class MatrixAppServiceController {
           room_alias_name: localpart, // Use localpart for room alias
           name: `${event.name} Chat`,
           topic: `Chat room for ${event.name}`,
-          visibility: 'public',
-          preset: 'public_chat',
+          isPublic: true, // This will set preset to PublicChat in MatrixRoomService
         };
 
         const roomResult = await this.matrixRoomService.createRoom(roomOptions, tenantId);
@@ -371,8 +373,7 @@ export class MatrixAppServiceController {
           room_alias_name: localpart, // Use localpart for room alias
           name: `${group.name} Chat`,
           topic: `Chat room for ${group.name}`,
-          visibility: group.isPublic ? 'public' : 'private',
-          preset: group.isPublic ? 'public_chat' : 'private_chat',
+          isPublic: group.isPublic, // Use proper boolean for MatrixRoomService
         };
 
         const roomResult = await this.matrixRoomService.createRoom(roomOptions, tenantId);
@@ -478,11 +479,34 @@ export class MatrixAppServiceController {
         return;
       }
 
-      // Configure room settings using MatrixRoomService
-      // Note: We can't call createRoom again, room already exists, so we need different methods
-      // For now, log what we would do - we may need to add room update methods to MatrixRoomService
+      // Get the actual room ID - either from parameter or resolve from alias
+      let actualRoomId = roomId;
+      if (!actualRoomId) {
+        this.logger.log(`Resolving room ID from alias: ${alias}`);
+        try {
+          // Use MatrixBotService to resolve the alias to room ID
+          actualRoomId = await this.matrixRoomService.resolveRoomAlias(alias);
+          this.logger.log(`Resolved alias ${alias} to room ID: ${actualRoomId}`);
+        } catch (error) {
+          this.logger.error(`Failed to resolve room alias ${alias}: ${error.message}`);
+          return;
+        }
+      }
 
-      this.logger.log(`Room configured for event ${event.name} (${event.id})`);
+      // Update the event's matrixRoomId field in the database
+      if (actualRoomId && event.matrixRoomId !== actualRoomId) {
+        this.logger.log(`Updating event ${event.id} matrixRoomId to: ${actualRoomId}`);
+        try {
+          await this.eventManagementService.updateMatrixRoomIdWithTenant(event.id, actualRoomId, tenantId);
+          this.logger.log(`Successfully updated event ${event.id} matrixRoomId`);
+        } catch (error) {
+          this.logger.error(`Failed to update event matrixRoomId: ${error.message}`);
+        }
+      } else {
+        this.logger.log(`Event ${event.id} already has correct matrixRoomId: ${actualRoomId}`);
+      }
+
+      this.logger.log(`Room configured for event ${event.name} (${event.id}), room ID: ${actualRoomId}`);
       
       // Get all confirmed attendees for this event
       const confirmedAttendees = await this.eventAttendeeService.showConfirmedEventAttendeesByEventId(event.id);
