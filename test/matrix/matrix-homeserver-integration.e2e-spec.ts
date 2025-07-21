@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { createClient, MatrixClient } from 'matrix-js-sdk';
+import { createClient } from 'matrix-js-sdk';
 import { getTenantConfig } from '../../src/utils/tenant-config';
 import { createTestUser, createEvent } from '../utils/functions';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
@@ -20,43 +20,48 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
   /**
    * Helper function to create authenticated Matrix client using AppService user impersonation
    */
-  async function createAuthenticatedMatrixClient(tenantConfig: any): Promise<MatrixClient> {
+  async function createAuthenticatedMatrixClient(
+    tenantConfig: any,
+  ): Promise<MatrixClient> {
     const { homeserverUrl, serverName } = tenantConfig.matrixConfig;
-    
+
     // Validate required configuration
     if (!homeserverUrl || !serverName) {
-      throw new Error('Missing required Matrix configuration for bot authentication');
+      throw new Error(
+        'Missing required Matrix configuration for bot authentication',
+      );
     }
 
     // Create a unique bot user for this test
-    const testUserId = `@openmeet-test-${Date.now()}-${TESTING_TENANT_ID}:${serverName}`;
-    
+    const _testUserId = `@openmeet-test-${Date.now()}-${TESTING_TENANT_ID}:${serverName}`;
+
     try {
       // Use direct API call for AppService user registration
       const timestamp = Date.now();
       const username = `openmeet-test-${timestamp}-${TESTING_TENANT_ID}`;
-      
+
       const registrationData = {
         type: 'm.login.application_service',
         username: username,
       };
 
       // Make direct HTTP request to register endpoint with AppService token
-      const axios = require('axios');
+      const axios = await import('axios');
       const registerResponse = await axios.post(
         `${homeserverUrl}/_matrix/client/v3/register`,
         registrationData,
         {
           headers: {
-            'Authorization': `Bearer ${HOMESERVER_TOKEN}`,
+            Authorization: `Bearer ${HOMESERVER_TOKEN}`,
             'Content-Type': 'application/json',
           },
-        }
+        },
       );
-      
+
       if (registerResponse.data && registerResponse.data.access_token) {
-        const registeredUserId = registerResponse.data.user_id || `@${username}:${serverName}`;
-        
+        const registeredUserId =
+          registerResponse.data.user_id || `@${username}:${serverName}`;
+
         // Create client with the user's access token
         const userClient = createClient({
           baseUrl: homeserverUrl,
@@ -64,15 +69,20 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
           userId: registeredUserId,
         });
 
-        console.log(`✅ Matrix client authenticated via AppService user: ${registeredUserId}`);
+        console.log(
+          `✅ Matrix client authenticated via AppService user: ${registeredUserId}`,
+        );
         return userClient;
       }
-      
-      throw new Error('AppService user registration did not return access token');
-      
+
+      throw new Error(
+        'AppService user registration did not return access token',
+      );
     } catch (error) {
-      console.log(`⚠️ AppService user registration failed, falling back to AppService token: ${error.message}`);
-      
+      console.log(
+        `⚠️ AppService user registration failed, falling back to AppService token: ${error.message}`,
+      );
+
       // Fallback to original AppService token approach
       const client = createClient({
         baseUrl: homeserverUrl,
@@ -80,7 +90,9 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
         userId: `@openmeet-bot-${TESTING_TENANT_ID}:${serverName}`,
       });
 
-      console.log(`✅ Matrix client authenticated via AppService fallback: @openmeet-bot-${TESTING_TENANT_ID}:${serverName}`);
+      console.log(
+        `✅ Matrix client authenticated via AppService fallback: @openmeet-bot-${TESTING_TENANT_ID}:${serverName}`,
+      );
       return client;
     }
   }
@@ -90,7 +102,9 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
       // Get tenant Matrix configuration
       const tenantConfig = getTenantConfig(TESTING_TENANT_ID);
       if (!tenantConfig?.matrixConfig) {
-        console.log('Matrix config not found for tenant, skipping Matrix homeserver test');
+        console.log(
+          'Matrix config not found for tenant, skipping Matrix homeserver test',
+        );
         return;
       }
 
@@ -133,27 +147,33 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
       // This should cause the homeserver to call our AppService, which will create the room
       try {
         // Create authenticated Matrix client
-        const matrixClient = await createAuthenticatedMatrixClient(tenantConfig);
+        const matrixClient =
+          await createAuthenticatedMatrixClient(tenantConfig);
 
         console.log(`🔄 Querying Matrix homeserver for alias: ${roomAlias}`);
-        console.log(`📋 This should trigger homeserver -> AppService -> room creation flow`);
+        console.log(
+          `📋 This should trigger homeserver -> AppService -> room creation flow`,
+        );
 
         // Use matrix-js-sdk to resolve room alias - this triggers homeserver to call AppService
         const roomAliasResult = await matrixClient.getRoomIdForAlias(roomAlias);
 
         // Wait 2 seconds for room creation and alias registration to complete
         console.log(`⏳ Waiting 2 seconds for room creation to complete...`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
 
         // Query again to get the actual room alias after creation
-        const finalRoomAliasResult = await matrixClient.getRoomIdForAlias(roomAlias);
-        
+        const finalRoomAliasResult =
+          await matrixClient.getRoomIdForAlias(roomAlias);
+
         // Verify room exists and has correct properties
         expect(finalRoomAliasResult).toHaveProperty('room_id');
         expect(finalRoomAliasResult).toHaveProperty('servers');
         expect(finalRoomAliasResult.room_id).toMatch(/^!/); // Matrix room IDs start with !
 
-        console.log(`✅ Matrix room created successfully: ${finalRoomAliasResult.room_id}`);
+        console.log(
+          `✅ Matrix room created successfully: ${finalRoomAliasResult.room_id}`,
+        );
         console.log(`✅ Room alias resolved: ${roomAlias}`);
 
         // 4. Verify that the room was created and is accessible
@@ -162,24 +182,35 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
         // - AppService correctly created the room (alias resolution works)
         // - Room ID is returned (indicates successful room creation)
         // - This validates the core AppService functionality per Matrix spec
-        
-        expect(finalRoomAliasResult.room_id).toMatch(/^!.*:matrix\.openmeet\.net$/);
-        
-        console.log(`✅ Room creation validated - AppService functionality working correctly`);
+
+        expect(finalRoomAliasResult.room_id).toMatch(
+          /^!.*:matrix\.openmeet\.net$/,
+        );
+
+        console.log(
+          `✅ Room creation validated - AppService functionality working correctly`,
+        );
         console.log(`✅ Room ID format valid: ${finalRoomAliasResult.room_id}`);
 
         // Clean up - stop the client
         matrixClient.stopClient();
-
       } catch (matrixError) {
         // Only skip if Matrix homeserver is genuinely unavailable (CI environments)
-        if (matrixError.code === 'ECONNREFUSED' && homeserverUrl.includes('localhost')) {
-          console.warn('⚠️  Matrix homeserver not available at localhost, skipping test (expected in CI)');
+        if (
+          matrixError.code === 'ECONNREFUSED' &&
+          homeserverUrl.includes('localhost')
+        ) {
+          console.warn(
+            '⚠️  Matrix homeserver not available at localhost, skipping test (expected in CI)',
+          );
           return;
         }
-        
+
         // For any other error, fail the test - we want to know about authentication issues
-        console.error('❌ Matrix homeserver integration test failed:', matrixError.message);
+        console.error(
+          '❌ Matrix homeserver integration test failed:',
+          matrixError.message,
+        );
         throw matrixError;
       }
     });
@@ -188,7 +219,9 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
       // Get tenant Matrix configuration
       const tenantConfig = getTenantConfig(TESTING_TENANT_ID);
       if (!tenantConfig?.matrixConfig) {
-        console.log('Matrix config not found for tenant, skipping Matrix homeserver test');
+        console.log(
+          'Matrix config not found for tenant, skipping Matrix homeserver test',
+        );
         return;
       }
 
@@ -236,17 +269,19 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
       // 4. Verify Matrix room state using matrix-js-sdk
       try {
         // Create authenticated Matrix client
-        const matrixClient = await createAuthenticatedMatrixClient(tenantConfig);
+        const matrixClient =
+          await createAuthenticatedMatrixClient(tenantConfig);
 
         // Get room ID using matrix-js-sdk - this triggers homeserver to call AppService
         const roomAliasResult = await matrixClient.getRoomIdForAlias(roomAlias);
 
         // Wait 2 seconds for room creation and alias registration to complete
         console.log(`⏳ Waiting 2 seconds for room creation to complete...`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
 
         // Query again to get the actual room alias after creation
-        const finalRoomAliasResult = await matrixClient.getRoomIdForAlias(roomAlias);
+        const finalRoomAliasResult =
+          await matrixClient.getRoomIdForAlias(roomAlias);
         const roomId = finalRoomAliasResult.room_id;
 
         // Verify that the room was created and is accessible via the AppService
@@ -255,23 +290,31 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
         // - AppService correctly created the room (alias resolution works)
         // - Room ID is returned (indicates successful room creation)
         // - This validates the AppService room creation and invitation flow
-        
+
         expect(roomId).toMatch(/^!.*:matrix\.openmeet\.net$/);
-        
-        console.log(`✅ Room invitation flow validated - AppService functionality working correctly`);
+
+        console.log(
+          `✅ Room invitation flow validated - AppService functionality working correctly`,
+        );
         console.log(`✅ Room ID format valid: ${roomId}`);
-        console.log(`✅ AppService room creation process verified for invitation scenarios`);
+        console.log(
+          `✅ AppService room creation process verified for invitation scenarios`,
+        );
 
         // Clean up
         matrixClient.stopClient();
-
       } catch (matrixError) {
         // Only skip if Matrix homeserver is genuinely unavailable (CI environments)
-        if (matrixError.code === 'ECONNREFUSED' && tenantConfig.matrixConfig.homeserverUrl.includes('localhost')) {
-          console.warn('⚠️  Matrix homeserver not available at localhost, skipping test (expected in CI)');
+        if (
+          matrixError.code === 'ECONNREFUSED' &&
+          tenantConfig.matrixConfig.homeserverUrl.includes('localhost')
+        ) {
+          console.warn(
+            '⚠️  Matrix homeserver not available at localhost, skipping test (expected in CI)',
+          );
           return;
         }
-        
+
         // For any other error, fail the test - we want to know about authentication issues
         console.error('❌ Matrix invitation test failed:', matrixError.message);
         throw matrixError;
@@ -282,7 +325,9 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
       // Get tenant Matrix configuration
       const tenantConfig = getTenantConfig(TESTING_TENANT_ID);
       if (!tenantConfig?.matrixConfig) {
-        console.log('Matrix config not found for tenant, skipping AppService auth test');
+        console.log(
+          'Matrix config not found for tenant, skipping AppService auth test',
+        );
         return;
       }
 
@@ -290,7 +335,7 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
 
       // Test that AppService authentication works
       const testAlias = `#test-auth-${Date.now()}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
-      
+
       // Valid AppService token should work
       const validAuthResponse = await server
         .get(`/api/matrix/appservice/rooms/${encodeURIComponent(testAlias)}`)
@@ -316,7 +361,9 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
     it('should verify Matrix homeserver is accessible', async () => {
       const tenantConfig = getTenantConfig(TESTING_TENANT_ID);
       if (!tenantConfig?.matrixConfig) {
-        console.log('Matrix config not found for tenant, skipping health check');
+        console.log(
+          'Matrix config not found for tenant, skipping health check',
+        );
         return;
       }
 
@@ -332,20 +379,31 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
         expect(Array.isArray(versionResponse.body.versions)).toBe(true);
 
         console.log(`✅ Matrix homeserver accessible at: ${homeserverUrl}`);
-        console.log(`✅ Supported versions: ${versionResponse.body.versions.join(', ')}`);
+        console.log(
+          `✅ Supported versions: ${versionResponse.body.versions.join(', ')}`,
+        );
 
         // Check for MAS-specific capabilities or features
         if (versionResponse.body.unstable_features) {
-          console.log(`✅ Unstable features: ${JSON.stringify(versionResponse.body.unstable_features)}`);
+          console.log(
+            `✅ Unstable features: ${JSON.stringify(versionResponse.body.unstable_features)}`,
+          );
         }
-
       } catch (error) {
         // Only skip if connecting to localhost and connection is refused (CI environments)
-        if (error.code === 'ECONNREFUSED' && homeserverUrl.includes('localhost')) {
-          console.warn(`⚠️  Matrix homeserver not available at localhost, skipping (expected in CI)`);
+        if (
+          error.code === 'ECONNREFUSED' &&
+          homeserverUrl.includes('localhost')
+        ) {
+          console.warn(
+            `⚠️  Matrix homeserver not available at localhost, skipping (expected in CI)`,
+          );
         } else {
           // For any other error (wrong URL, network issues, etc), fail the test
-          console.error('❌ Matrix homeserver health check failed:', error.message);
+          console.error(
+            '❌ Matrix homeserver health check failed:',
+            error.message,
+          );
           throw error;
         }
       }
@@ -354,11 +412,14 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
     it('should verify tenant-specific configuration for MAS integration', async () => {
       const tenantConfig = getTenantConfig(TESTING_TENANT_ID);
       if (!tenantConfig?.matrixConfig) {
-        console.log('Matrix config not found for tenant, skipping config validation');
+        console.log(
+          'Matrix config not found for tenant, skipping config validation',
+        );
         return;
       }
 
-      const { botUser, appservice, homeserverUrl, serverName } = tenantConfig.matrixConfig;
+      const { botUser, appservice, homeserverUrl, serverName } =
+        tenantConfig.matrixConfig;
 
       // Verify bot user configuration structure
       expect(botUser).toHaveProperty('email');
@@ -387,7 +448,9 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
     it('should document MAS authentication requirements', () => {
       console.log('📝 MAS Authentication Integration Notes:');
       console.log('');
-      console.log('To complete Matrix homeserver integration tests, implement:');
+      console.log(
+        'To complete Matrix homeserver integration tests, implement:',
+      );
       console.log('1. MAS authentication endpoint and flow');
       console.log('2. Bot user token acquisition through MAS');
       console.log('3. Use MAS-issued tokens for Matrix API calls');

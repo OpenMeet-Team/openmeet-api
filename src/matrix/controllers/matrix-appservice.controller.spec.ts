@@ -6,6 +6,7 @@ import { GroupService } from '../../group/group.service';
 import { MatrixRoomService } from '../services/matrix-room.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
+import { EventManagementService } from '../../event/services/event-management.service';
 import { GlobalMatrixValidationService } from '../services/global-matrix-validation.service';
 
 describe('MatrixAppServiceController', () => {
@@ -29,7 +30,9 @@ describe('MatrixAppServiceController', () => {
   };
 
   const mockMatrixRoomService = {
-    createRoom: jest.fn().mockResolvedValue({ roomId: '!test:matrix.example.com' }),
+    createRoom: jest
+      .fn()
+      .mockResolvedValue({ roomId: '!test:matrix.example.com' }),
   };
 
   const mockEventAttendeeService = {
@@ -42,6 +45,12 @@ describe('MatrixAppServiceController', () => {
 
   const mockTenantConnectionService = {
     getTenantConnection: jest.fn().mockResolvedValue(null),
+  };
+
+  const mockEventManagementService = {
+    findOne: jest.fn(),
+    update: jest.fn(),
+    create: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -73,6 +82,10 @@ describe('MatrixAppServiceController', () => {
         {
           provide: EventAttendeeService,
           useValue: mockEventAttendeeService,
+        },
+        {
+          provide: EventManagementService,
+          useValue: mockEventManagementService,
         },
         {
           provide: GlobalMatrixValidationService,
@@ -182,11 +195,15 @@ describe('MatrixAppServiceController', () => {
     };
 
     beforeEach(() => {
-      mockEventQueryService.showEventBySlugWithTenant.mockResolvedValue(mockEvent);
+      mockEventQueryService.showEventBySlugWithTenant.mockResolvedValue(
+        mockEvent,
+      );
     });
 
     it('should return success when room creation succeeds', async () => {
-      mockMatrixRoomService.createRoom.mockResolvedValue({ roomId: '!test:matrix.example.com' });
+      mockMatrixRoomService.createRoom.mockResolvedValue({
+        roomId: '!test:matrix.example.com',
+      });
 
       const result = await controller.queryRoomStandard(
         '#event-test-event-tenant123:matrix.openmeet.net',
@@ -211,7 +228,9 @@ describe('MatrixAppServiceController', () => {
     });
 
     it('should treat "MatrixError: [400]" as success', async () => {
-      const matrix400Error = new Error('MatrixError: [400] Room alias already taken');
+      const matrix400Error = new Error(
+        'MatrixError: [400] Room alias already taken',
+      );
       mockMatrixRoomService.createRoom.mockRejectedValue(matrix400Error);
 
       const result = await controller.queryRoomStandard(
@@ -223,7 +242,9 @@ describe('MatrixAppServiceController', () => {
     });
 
     it('should treat "MatrixError: [409]" as success', async () => {
-      const matrix409Error = new Error('MatrixError: [409] Room alias already exists');
+      const matrix409Error = new Error(
+        'MatrixError: [409] Room alias already exists',
+      );
       mockMatrixRoomService.createRoom.mockRejectedValue(matrix409Error);
 
       const result = await controller.queryRoomStandard(
@@ -235,7 +256,9 @@ describe('MatrixAppServiceController', () => {
     });
 
     it('should treat "alias already taken" as success', async () => {
-      const aliasConflictError = new Error('M_ROOM_IN_USE: alias already taken');
+      const aliasConflictError = new Error(
+        'M_ROOM_IN_USE: alias already taken',
+      );
       mockMatrixRoomService.createRoom.mockRejectedValue(aliasConflictError);
 
       const result = await controller.queryRoomStandard(
@@ -259,7 +282,9 @@ describe('MatrixAppServiceController', () => {
     });
 
     it('should return error for genuine Matrix failures', async () => {
-      const genuineError = new Error('MatrixError: [500] Internal server error');
+      const genuineError = new Error(
+        'MatrixError: [500] Internal server error',
+      );
       mockMatrixRoomService.createRoom.mockRejectedValue(genuineError);
 
       const result = await controller.queryRoomStandard(

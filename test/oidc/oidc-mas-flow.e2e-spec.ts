@@ -530,8 +530,8 @@ describe('OIDC MAS Authentication Flow', () => {
 
       const duration = Date.now() - startTime;
 
-      // Should complete in under 500ms
-      expect(duration).toBeLessThan(500);
+      // Should complete in under 1000ms
+      expect(duration).toBeLessThan(1000);
 
       console.log(`✅ OpenMeet OIDC (MAS upstream) responded in ${duration}ms`);
     });

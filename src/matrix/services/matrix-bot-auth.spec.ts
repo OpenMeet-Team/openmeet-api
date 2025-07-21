@@ -9,7 +9,7 @@ describe('MatrixBotService - Authentication Integration Tests', () => {
   let service: MatrixBotService;
   let configService: ConfigService;
   let matrixCoreService: MatrixCoreService;
-  let matrixUserService: MatrixUserService;
+  let _matrixUserService: MatrixUserService;
   let matrixBotUserService: MatrixBotUserService;
 
   const testTenantId = 'lsdfaopkljdfs';
@@ -125,7 +125,7 @@ describe('MatrixBotService - Authentication Integration Tests', () => {
     service = module.get<MatrixBotService>(MatrixBotService);
     configService = module.get<ConfigService>(ConfigService);
     matrixCoreService = module.get<MatrixCoreService>(MatrixCoreService);
-    matrixUserService = module.get<MatrixUserService>(MatrixUserService);
+    _matrixUserService = module.get<MatrixUserService>(MatrixUserService);
     matrixBotUserService =
       module.get<MatrixBotUserService>(MatrixBotUserService);
   });

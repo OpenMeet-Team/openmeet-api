@@ -361,7 +361,7 @@ export class MatrixTokenManagerService
    */
   async getAdminTokenForTenant(tenantId: string): Promise<string | null> {
     try {
-      const { fetchTenants } = require('../../utils/tenant-config');
+      const { fetchTenants } = await import('../../utils/tenant-config');
       const tenants = fetchTenants();
       const tenant = tenants.find((t) => t.id === tenantId);
 
@@ -441,10 +441,10 @@ export class MatrixTokenManagerService
   /**
    * Get tenant configuration for current request context
    */
-  private getTenantConfig(): any {
+  private async getTenantConfig(): Promise<any> {
     // For now, return default tenant config - this will be enhanced to get from request context
     try {
-      const { fetchTenants } = require('../../utils/tenant-config');
+      const { fetchTenants } = await import('../../utils/tenant-config');
       const tenants = fetchTenants();
       // Return first non-empty tenant for now (will be enhanced for multi-tenant)
       return tenants.find((t) => t.id && t.matrixConfig) || null;

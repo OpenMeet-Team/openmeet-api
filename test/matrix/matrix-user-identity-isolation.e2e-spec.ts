@@ -5,7 +5,7 @@ import {
   TESTING_MAS_URL,
   TESTING_MAS_CLIENT_SECRET,
 } from '../utils/constants';
-import { loginAsTester, createTestUser } from '../utils/functions';
+import { createTestUser } from '../utils/functions';
 
 // Environment-specific client configuration
 const TEST_CLIENT_ID = process.env.OAUTH_CLIENT_ID;

@@ -29,7 +29,7 @@ export class EventListener {
     });
 
     // Use the tenant ID from the event payload (provided by event service)
-    const tenantId = params.tenantId;
+    // const tenantId = params.tenantId; // Currently not used
 
     // Matrix-native approach: Rooms are created on-demand via Application Service
     // No longer emit chat.event.created events - rooms are created when first accessed

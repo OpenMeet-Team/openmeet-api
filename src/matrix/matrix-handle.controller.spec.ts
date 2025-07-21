@@ -8,6 +8,7 @@ import { MatrixMessageService } from './services/matrix-message.service';
 import { UserService } from '../user/user.service';
 import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
 import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
+import { MatrixEventListener } from './matrix-event.listener';
 
 describe('MatrixController - Handle Endpoints', () => {
   let controller: MatrixController;
@@ -84,6 +85,10 @@ describe('MatrixController - Handle Endpoints', () => {
             validateAndConsumeAuthCode: jest.fn().mockResolvedValue(null),
             getActiveCodeCount: jest.fn().mockResolvedValue(0),
           },
+        },
+        {
+          provide: MatrixEventListener,
+          useValue: {},
         },
         {
           provide: REQUEST,

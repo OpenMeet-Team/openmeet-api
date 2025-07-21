@@ -2041,7 +2041,8 @@ export class EventManagementService {
     );
 
     // Get tenant-specific database connection
-    const dataSource = await this.tenantConnectionService.getTenantConnection(tenantId);
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
     const eventRepository = dataSource.getRepository(EventEntity);
 
     await eventRepository.update(
@@ -2049,6 +2050,8 @@ export class EventManagementService {
       { matrixRoomId: matrixRoomId },
     );
 
-    this.logger.log(`Successfully updated Matrix room ID for event ${eventId} in tenant ${tenantId}`);
+    this.logger.log(
+      `Successfully updated Matrix room ID for event ${eventId} in tenant ${tenantId}`,
+    );
   }
 }

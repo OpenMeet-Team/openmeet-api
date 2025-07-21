@@ -48,7 +48,9 @@ describe('Matrix Application Service Room Alias Conflicts (e2e)', () => {
 
       // 3. First request should create the room successfully
       const firstResponse = await server
-        .get(`/api/matrix/appservice/_matrix/app/v1/rooms/${encodeURIComponent(roomAlias)}`)
+        .get(
+          `/api/matrix/appservice/_matrix/app/v1/rooms/${encodeURIComponent(roomAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
         .expect(200);
 
@@ -56,7 +58,9 @@ describe('Matrix Application Service Room Alias Conflicts (e2e)', () => {
 
       // 4. Second request should handle "room already exists" gracefully
       const secondResponse = await server
-        .get(`/api/matrix/appservice/_matrix/app/v1/rooms/${encodeURIComponent(roomAlias)}`)
+        .get(
+          `/api/matrix/appservice/_matrix/app/v1/rooms/${encodeURIComponent(roomAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
         .expect(200);
 
@@ -93,8 +97,10 @@ describe('Matrix Application Service Room Alias Conflicts (e2e)', () => {
       // 3. Make multiple concurrent requests
       const requests = Array.from({ length: 3 }, () =>
         server
-          .get(`/api/matrix/appservice/_matrix/app/v1/rooms/${encodeURIComponent(roomAlias)}`)
-          .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
+          .get(
+            `/api/matrix/appservice/_matrix/app/v1/rooms/${encodeURIComponent(roomAlias)}`,
+          )
+          .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`),
       );
 
       const responses = await Promise.all(requests);
@@ -135,13 +141,17 @@ describe('Matrix Application Service Room Alias Conflicts (e2e)', () => {
 
       // 3. First request creates the room
       await server
-        .get(`/api/matrix/appservice/_matrix/app/v1/rooms/${encodeURIComponent(roomAlias)}`)
+        .get(
+          `/api/matrix/appservice/_matrix/app/v1/rooms/${encodeURIComponent(roomAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
         .expect(200);
 
       // 4. Second request should still succeed even if invitation logic has issues
       const response = await server
-        .get(`/api/matrix/appservice/_matrix/app/v1/rooms/${encodeURIComponent(roomAlias)}`)
+        .get(
+          `/api/matrix/appservice/_matrix/app/v1/rooms/${encodeURIComponent(roomAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
         .expect(200);
 
@@ -159,7 +169,9 @@ describe('Matrix Application Service Room Alias Conflicts (e2e)', () => {
 
       for (const alias of malformedAliases) {
         const response = await server
-          .get(`/api/matrix/appservice/_matrix/app/v1/rooms/${encodeURIComponent(alias)}`)
+          .get(
+            `/api/matrix/appservice/_matrix/app/v1/rooms/${encodeURIComponent(alias)}`,
+          )
           .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
           .expect(200);
 
@@ -173,7 +185,9 @@ describe('Matrix Application Service Room Alias Conflicts (e2e)', () => {
       const nonExistentAlias = `#event-nonexistent-${Date.now()}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
 
       const response = await server
-        .get(`/api/matrix/appservice/_matrix/app/v1/rooms/${encodeURIComponent(nonExistentAlias)}`)
+        .get(
+          `/api/matrix/appservice/_matrix/app/v1/rooms/${encodeURIComponent(nonExistentAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
         .expect(200);
 
@@ -187,7 +201,9 @@ describe('Matrix Application Service Room Alias Conflicts (e2e)', () => {
       const roomAlias = `#event-test-${TESTING_TENANT_ID}:matrix.openmeet.net`;
 
       const response = await server
-        .get(`/api/matrix/appservice/_matrix/app/v1/rooms/${encodeURIComponent(roomAlias)}`)
+        .get(
+          `/api/matrix/appservice/_matrix/app/v1/rooms/${encodeURIComponent(roomAlias)}`,
+        )
         .set('Authorization', 'Bearer invalid-token')
         .expect(200);
 
@@ -199,7 +215,9 @@ describe('Matrix Application Service Room Alias Conflicts (e2e)', () => {
       const roomAlias = `#event-test-${TESTING_TENANT_ID}:matrix.openmeet.net`;
 
       const response = await server
-        .get(`/api/matrix/appservice/_matrix/app/v1/rooms/${encodeURIComponent(roomAlias)}`)
+        .get(
+          `/api/matrix/appservice/_matrix/app/v1/rooms/${encodeURIComponent(roomAlias)}`,
+        )
         .expect(200);
 
       expect(response.body).toHaveProperty('error');

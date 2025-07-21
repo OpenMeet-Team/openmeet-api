@@ -75,12 +75,15 @@ describe('MatrixBotService', () => {
           ADMIN_PASSWORD: 'test-admin-password',
           'matrix.bot.username': mockBotConfig.username,
           'matrix.bot.displayName': mockBotConfig.displayName,
-          'matrix.serverName': mockBotConfig.serverName,
+          'matrix.serverName': 'matrix.openmeet.net',
           'matrix.baseUrl': mockBotConfig.homeServerUrl,
+          'matrix.appservice.id': 'openmeet-bot',
           matrix: {
             appservice: {
               token: 'test-appservice-token',
+              id: 'openmeet-bot',
             },
+            serverName: 'matrix.openmeet.net',
           },
         };
         return config[key];
@@ -111,6 +114,13 @@ describe('MatrixBotService', () => {
               id: 1,
               slug: 'openmeet-bot-test-tenant-123',
               email: 'bot-test-tenant-123@system.openmeet.net',
+              tenantId: 'test-tenant-123',
+            }),
+            getBotUser: jest.fn().mockResolvedValue({
+              id: 1,
+              slug: 'openmeet-bot-test-tenant-123',
+              email: 'bot-test-tenant-123@system.openmeet.net',
+              tenantId: 'test-tenant-123',
             }),
             needsPasswordRotation: jest.fn().mockResolvedValue(false),
             rotateBotPassword: jest.fn().mockResolvedValue(undefined),
@@ -399,7 +409,8 @@ describe('MatrixBotService', () => {
         redact: 50,
         invite: 50,
       };
-      mockMatrixClient.getStateEvent.mockResolvedValueOnce(existingPowerLevels);
+      // Mock getStateEvent to return existing power levels twice (once for ensureBotHasAdminRights, once for syncPermissions)
+      mockMatrixClient.getStateEvent.mockResolvedValue(existingPowerLevels);
 
       const newUserPowerLevels = {
         '@admin:matrix.openmeet.net': 100,
@@ -408,8 +419,26 @@ describe('MatrixBotService', () => {
       // Act
       await service.syncPermissions(roomId, newUserPowerLevels, testTenantId);
 
-      // Assert
-      expect(mockMatrixClient.sendStateEvent).toHaveBeenCalledWith(
+      // Assert - expect two calls: one for bot admin rights, one for user permissions
+      expect(mockMatrixClient.sendStateEvent).toHaveBeenCalledTimes(2);
+      
+      // First call should grant bot admin rights
+      expect(mockMatrixClient.sendStateEvent).toHaveBeenNthCalledWith(
+        1,
+        roomId,
+        'm.room.power_levels',
+        expect.objectContaining({
+          ...existingPowerLevels,
+          users: {
+            '@openmeet-bot:matrix.openmeet.net': 100,
+          },
+        }),
+        '',
+      );
+
+      // Second call should sync user permissions
+      expect(mockMatrixClient.sendStateEvent).toHaveBeenNthCalledWith(
+        2,
         roomId,
         'm.room.power_levels',
         expect.objectContaining({

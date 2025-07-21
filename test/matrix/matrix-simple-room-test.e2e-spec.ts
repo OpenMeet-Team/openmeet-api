@@ -1,5 +1,4 @@
 import request from 'supertest';
-import { createClient } from 'matrix-js-sdk';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import { createTestUser, createEvent } from '../utils/functions';
 import { getTenantConfig } from '../../src/utils/tenant-config';
@@ -59,20 +58,23 @@ describe('Simple Matrix Room Test (e2e)', () => {
     // 4. Test Matrix homeserver directly
     console.log(`📋 Step 2: Testing Matrix homeserver directly...`);
     const tenantConfig = getTenantConfig(TESTING_TENANT_ID);
-    const homeserverUrl = tenantConfig?.matrixConfig?.homeserverUrl || 'http://localhost:8448';
-    
+    const homeserverUrl =
+      tenantConfig?.matrixConfig?.homeserverUrl || 'http://localhost:8448';
+
     try {
       const directHomeserverResponse = await fetch(
         `${homeserverUrl}/_matrix/client/v3/directory/room/${encodeURIComponent(roomAlias)}`,
         {
           headers: {
-            'Authorization': `Bearer ${HOMESERVER_TOKEN}`,
+            Authorization: `Bearer ${HOMESERVER_TOKEN}`,
           },
-        }
+        },
       );
-      
-      console.log(`📊 Direct homeserver response status: ${directHomeserverResponse.status}`);
-      
+
+      console.log(
+        `📊 Direct homeserver response status: ${directHomeserverResponse.status}`,
+      );
+
       if (directHomeserverResponse.ok) {
         const data = await directHomeserverResponse.json();
         console.log(`✅ Direct homeserver response:`, data);
@@ -96,7 +98,6 @@ describe('Simple Matrix Room Test (e2e)', () => {
       console.log(`🔄 Matrix client querying: ${roomAlias}`);
       const roomAliasResult = await matrixClient.getRoomIdForAlias(roomAlias);
       console.log(`✅ Matrix client success:`, roomAliasResult);
-      
     } catch (matrixError) {
       console.log(`❌ Matrix client error:`, matrixError.message);
       console.log(`📊 Error details:`, {
@@ -106,7 +107,8 @@ describe('Simple Matrix Room Test (e2e)', () => {
     }
 
     // 6. Check logs for AppService calls
-    console.log(`📋 Check running.log to see if AppService received any calls during Matrix client query`);
-    
+    console.log(
+      `📋 Check running.log to see if AppService received any calls during Matrix client query`,
+    );
   }, 30000);
 });

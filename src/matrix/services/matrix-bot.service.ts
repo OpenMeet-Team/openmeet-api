@@ -81,9 +81,13 @@ export class MatrixBotService implements IMatrixBot {
 
       // Create bot client using application service token
       // For Application Services, authenticate as the AS sender, not tenant-specific bots
-      const appServiceId = this.configService.get<string>('matrix.appservice.id', 'openmeet-bot', { infer: true });
+      const appServiceId = this.configService.get<string>(
+        'matrix.appservice.id',
+        'openmeet-bot',
+        { infer: true },
+      );
       const appServiceSender = `@${appServiceId}:${this.serverName}`;
-      
+
       this.currentBotUserId = appServiceSender; // Use AS sender as the bot user ID
       this.currentTenantId = tenantId;
 
@@ -288,15 +292,21 @@ export class MatrixBotService implements IMatrixBot {
         try {
           const roomInfo = await this.botClient!.getRoomIdForAlias(roomId);
           resolvedRoomId = roomInfo.room_id;
-          this.logger.debug(`Resolved alias ${roomId} to room ID ${resolvedRoomId}`);
+          this.logger.debug(
+            `Resolved alias ${roomId} to room ID ${resolvedRoomId}`,
+          );
         } catch (aliasError) {
-          this.logger.warn(`Failed to resolve room alias ${roomId}: ${aliasError.message}`);
+          this.logger.warn(
+            `Failed to resolve room alias ${roomId}: ${aliasError.message}`,
+          );
           // Continue with original roomId - it might be a room ID already
         }
       }
 
       await this.botClient!.invite(resolvedRoomId, userId);
-      this.logger.log(`Successfully invited user ${userId} to room ${resolvedRoomId}`);
+      this.logger.log(
+        `Successfully invited user ${userId} to room ${resolvedRoomId}`,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to invite user ${userId} to room ${roomId}: ${error.message}`,
@@ -349,7 +359,9 @@ export class MatrixBotService implements IMatrixBot {
     await this.ensureBotAuthenticated(tenantId);
 
     const botUserId = this.getBotUserId(tenantId);
-    this.logger.log(`Ensuring bot ${botUserId} has admin rights in room ${roomId}`);
+    this.logger.log(
+      `Ensuring bot ${botUserId} has admin rights in room ${roomId}`,
+    );
 
     try {
       // Get existing power levels
@@ -362,7 +374,9 @@ export class MatrixBotService implements IMatrixBot {
       // Check if bot already has admin rights
       const currentBotPowerLevel = existingPowerLevels?.users?.[botUserId] || 0;
       if (currentBotPowerLevel >= 100) {
-        this.logger.log(`Bot ${botUserId} already has admin rights (${currentBotPowerLevel}) in room ${roomId}`);
+        this.logger.log(
+          `Bot ${botUserId} already has admin rights (${currentBotPowerLevel}) in room ${roomId}`,
+        );
         return;
       }
 
@@ -382,7 +396,9 @@ export class MatrixBotService implements IMatrixBot {
         '',
       );
 
-      this.logger.log(`Successfully granted admin rights to bot ${botUserId} in room ${roomId}`);
+      this.logger.log(
+        `Successfully granted admin rights to bot ${botUserId} in room ${roomId}`,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to grant admin rights to bot in room ${roomId}: ${error.message}`,
@@ -580,7 +596,7 @@ export class MatrixBotService implements IMatrixBot {
       const botUserId = this.getBotUserId(tenantId);
 
       // Get tenant configuration for homeserver URL
-      const { fetchTenants } = require('../../utils/tenant-config');
+      const { fetchTenants } = await import('../../utils/tenant-config');
       const tenants = fetchTenants();
       const tenant = tenants.find((t) => t.id === tenantId);
       const homeserverUrl =
@@ -696,16 +712,22 @@ export class MatrixBotService implements IMatrixBot {
 
     try {
       if (!roomAlias.startsWith('#')) {
-        throw new Error(`Invalid room alias format: ${roomAlias} (must start with #)`);
+        throw new Error(
+          `Invalid room alias format: ${roomAlias} (must start with #)`,
+        );
       }
 
       const roomInfo = await this.botClient!.getRoomIdForAlias(roomAlias);
       const roomId = roomInfo.room_id;
-      
-      this.logger.log(`Successfully resolved alias ${roomAlias} to room ID: ${roomId}`);
+
+      this.logger.log(
+        `Successfully resolved alias ${roomAlias} to room ID: ${roomId}`,
+      );
       return roomId;
     } catch (error) {
-      this.logger.error(`Failed to resolve room alias ${roomAlias}: ${error.message}`);
+      this.logger.error(
+        `Failed to resolve room alias ${roomAlias}: ${error.message}`,
+      );
       throw error;
     }
   }

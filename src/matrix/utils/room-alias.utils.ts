@@ -46,11 +46,13 @@ export class RoomAliasUtils {
       this.logger.debug(`Parsing room alias: ${roomAlias}`);
 
       // Remove # prefix if present
-      const aliasWithoutHash = roomAlias.startsWith('#') ? roomAlias.substring(1) : roomAlias;
-      
+      const aliasWithoutHash = roomAlias.startsWith('#')
+        ? roomAlias.substring(1)
+        : roomAlias;
+
       // Split by colon to get localpart and server
       const [localpart, serverName] = aliasWithoutHash.split(':');
-      
+
       if (!localpart || !serverName) {
         this.logger.warn(`Invalid room alias format: ${roomAlias}`);
         return null;
@@ -66,7 +68,9 @@ export class RoomAliasUtils {
         return null;
       }
     } catch (error) {
-      this.logger.error(`Error parsing room alias ${roomAlias}: ${error.message}`);
+      this.logger.error(
+        `Error parsing room alias ${roomAlias}: ${error.message}`,
+      );
       return null;
     }
   }
@@ -75,7 +79,10 @@ export class RoomAliasUtils {
    * Parse an event room alias localpart
    * Format: event-{slug}-{tenantId}
    */
-  private parseEventRoomAlias(localpart: string, fullAlias: string): RoomAliasInfo | null {
+  private parseEventRoomAlias(
+    localpart: string,
+    fullAlias: string,
+  ): RoomAliasInfo | null {
     const parts = localpart.split('-');
     if (parts.length < 3 || parts[0] !== 'event') {
       this.logger.warn(`Invalid event room alias format: ${localpart}`);
@@ -87,7 +94,9 @@ export class RoomAliasUtils {
     const eventSlug = parts.slice(1, -1).join('-');
 
     if (!tenantId || !eventSlug) {
-      this.logger.warn(`Could not extract tenant ID or event slug from: ${localpart}`);
+      this.logger.warn(
+        `Could not extract tenant ID or event slug from: ${localpart}`,
+      );
       return null;
     }
 
@@ -103,7 +112,10 @@ export class RoomAliasUtils {
    * Parse a group room alias localpart
    * Format: group-{slug}-{tenantId}
    */
-  private parseGroupRoomAlias(localpart: string, fullAlias: string): RoomAliasInfo | null {
+  private parseGroupRoomAlias(
+    localpart: string,
+    fullAlias: string,
+  ): RoomAliasInfo | null {
     const parts = localpart.split('-');
     if (parts.length < 3 || parts[0] !== 'group') {
       this.logger.warn(`Invalid group room alias format: ${localpart}`);
@@ -115,7 +127,9 @@ export class RoomAliasUtils {
     const groupSlug = parts.slice(1, -1).join('-');
 
     if (!tenantId || !groupSlug) {
-      this.logger.warn(`Could not extract tenant ID or group slug from: ${localpart}`);
+      this.logger.warn(
+        `Could not extract tenant ID or group slug from: ${localpart}`,
+      );
       return null;
     }
 

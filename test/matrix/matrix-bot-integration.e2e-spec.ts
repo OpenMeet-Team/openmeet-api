@@ -5,7 +5,6 @@ import {
   loginAsAdmin,
   createEvent,
   createGroup,
-  createTestUser,
   registerMatrixUserIdentity,
 } from '../utils/functions';
 
@@ -27,10 +26,10 @@ describe('Matrix Application Service Integration (E2E)', () => {
   let eventSlug: string;
   let groupSlug: string;
   let currentUser: any;
-  
+
   // Matrix Application Service homeserver token
   const HOMESERVER_TOKEN = process.env.MATRIX_APPSERVICE_HS_TOKEN;
-  
+
   if (!HOMESERVER_TOKEN) {
     throw new Error(
       'MATRIX_APPSERVICE_HS_TOKEN environment variable is required for appservice tests',
@@ -164,10 +163,12 @@ describe('Matrix Application Service Integration (E2E)', () => {
     console.log(`Test setup complete: Event ${eventSlug}, Group ${groupSlug}`);
   }, 60000);
 
-  afterAll(async () => {
+  afterAll(() => {
     // Note: With Matrix Application Service, rooms are managed via Matrix server directly
     // No explicit cleanup needed as rooms are created on-demand via Application Service
-    console.log('Matrix Application Service handles room lifecycle automatically');
+    console.log(
+      'Matrix Application Service handles room lifecycle automatically',
+    );
 
     jest.setTimeout(5000);
   });
@@ -175,14 +176,18 @@ describe('Matrix Application Service Integration (E2E)', () => {
   describe('Matrix Application Service Event Room Operations', () => {
     it('should create event chat room using Application Service', async () => {
       const response = await request(TESTING_APP_URL)
-        .get(`/api/matrix/appservice/rooms/${encodeURIComponent(`#event-${eventSlug}-${TESTING_TENANT_ID}:matrix.openmeet.net`)}`)
+        .get(
+          `/api/matrix/appservice/rooms/${encodeURIComponent(`#event-${eventSlug}-${TESTING_TENANT_ID}:matrix.openmeet.net`)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`);
 
       console.log(`Event room creation response:`, response.body);
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({}); // AppService returns empty object for successful room creation per Matrix spec
-      console.log(`✅ Application Service confirmed event chat room creation (Matrix spec compliant)`);
+      console.log(
+        `✅ Application Service confirmed event chat room creation (Matrix spec compliant)`,
+      );
     }, 30000);
 
     it('should allow users to join event chat room via Application Service', async () => {
@@ -193,18 +198,22 @@ describe('Matrix Application Service Integration (E2E)', () => {
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`);
 
       expect(createResponse.status).toBe(200);
-      const roomId = createResponse.body.room_id;
+      const _roomId = createResponse.body.room_id;
 
       // Now test joining via Application Service user query
       const userResponse = await request(TESTING_APP_URL)
-        .get(`/api/matrix/appservice/users/${encodeURIComponent(`@${currentUser.slug}:matrix.openmeet.net`)}`)
+        .get(
+          `/api/matrix/appservice/users/${encodeURIComponent(`@${currentUser.slug}:matrix.openmeet.net`)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`);
 
       console.log(`User query response:`, userResponse.body);
       expect(userResponse.status).toBe(200);
       // Empty response means success for Application Service user queries
       expect(Object.keys(userResponse.body)).toHaveLength(0);
-      console.log(`Application Service successfully accepted user in namespace`);
+      console.log(
+        `Application Service successfully accepted user in namespace`,
+      );
     }, 30000);
 
     it('should ensure event room exists and is accessible via Application Service', async () => {
@@ -217,7 +226,9 @@ describe('Matrix Application Service Integration (E2E)', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({}); // AppService returns empty object per Matrix spec
-      console.log(`Room accessible via Application Service (Matrix spec compliant response)`);
+      console.log(
+        `Room accessible via Application Service (Matrix spec compliant response)`,
+      );
     }, 30000);
 
     it('should handle user queries via Application Service', async () => {
@@ -232,13 +243,17 @@ describe('Matrix Application Service Integration (E2E)', () => {
       expect(response.status).toBe(200);
       // Empty response means success for Application Service user queries
       expect(Object.keys(response.body)).toHaveLength(0);
-      console.log(`Application Service successfully accepted user in namespace`);
+      console.log(
+        `Application Service successfully accepted user in namespace`,
+      );
     }, 30000);
 
     it('should create group room via Application Service', async () => {
       const groupRoomAlias = `#group-${groupSlug}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
       const response = await request(TESTING_APP_URL)
-        .get(`/api/matrix/appservice/rooms/${encodeURIComponent(groupRoomAlias)}`)
+        .get(
+          `/api/matrix/appservice/rooms/${encodeURIComponent(groupRoomAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`);
 
       expect(response.status).toBe(200);
@@ -251,7 +266,9 @@ describe('Matrix Application Service Integration (E2E)', () => {
     it('should create group chat room using Application Service', async () => {
       const groupRoomAlias = `#group-${groupSlug}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
       const response = await request(TESTING_APP_URL)
-        .get(`/api/matrix/appservice/rooms/${encodeURIComponent(groupRoomAlias)}`)
+        .get(
+          `/api/matrix/appservice/rooms/${encodeURIComponent(groupRoomAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`);
 
       console.log(`Group room creation response:`, response.body);
@@ -259,13 +276,17 @@ describe('Matrix Application Service Integration (E2E)', () => {
       expect(response.status).toBe(200);
       expect(response.body).toEqual({}); // AppService returns empty object per Matrix spec
 
-      console.log(`Application Service created group chat room (Matrix spec compliant response)`);
+      console.log(
+        `Application Service created group chat room (Matrix spec compliant response)`,
+      );
     }, 30000);
 
     it('should allow users to access group chat room via Application Service', async () => {
       const groupRoomAlias = `#group-${groupSlug}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
       const response = await request(TESTING_APP_URL)
-        .get(`/api/matrix/appservice/rooms/${encodeURIComponent(groupRoomAlias)}`)
+        .get(
+          `/api/matrix/appservice/rooms/${encodeURIComponent(groupRoomAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`);
 
       console.log(`Group room access response:`, response.body);
@@ -273,19 +294,25 @@ describe('Matrix Application Service Integration (E2E)', () => {
       expect(response.status).toBe(200);
       expect(response.body).toEqual({}); // AppService returns empty object per Matrix spec
 
-      console.log(`User can access group chat room via Application Service (Matrix spec compliant response)`);
+      console.log(
+        `User can access group chat room via Application Service (Matrix spec compliant response)`,
+      );
     }, 30000);
 
     it('should ensure group room exists and is accessible via Application Service', async () => {
       const groupRoomAlias = `#group-${groupSlug}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
       const response = await request(TESTING_APP_URL)
-        .get(`/api/matrix/appservice/rooms/${encodeURIComponent(groupRoomAlias)}`)
+        .get(
+          `/api/matrix/appservice/rooms/${encodeURIComponent(groupRoomAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`);
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({}); // AppService returns empty object per Matrix spec
 
-      console.log(`Group room accessible via Application Service (Matrix spec compliant response)`);
+      console.log(
+        `Group room accessible via Application Service (Matrix spec compliant response)`,
+      );
     }, 30000);
 
     it('should handle Application Service user queries for group access', async () => {
@@ -298,14 +325,16 @@ describe('Matrix Application Service Integration (E2E)', () => {
       expect(userResponse.status).toBe(200);
       // Empty response means success for Application Service user queries
       expect(Object.keys(userResponse.body)).toHaveLength(0);
-      console.log('Application Service successfully accepted user in namespace for group access');
+      console.log(
+        'Application Service successfully accepted user in namespace for group access',
+      );
     }, 30000);
   });
 
   describe('Room Recreation and Recovery via Application Service', () => {
     it('should ensure room availability via Application Service', async () => {
       const roomAlias = `#event-${eventSlug}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
-      
+
       // First request to create/ensure room exists
       const firstResponse = await request(TESTING_APP_URL)
         .get(`/api/matrix/appservice/rooms/${encodeURIComponent(roomAlias)}`)
@@ -314,7 +343,9 @@ describe('Matrix Application Service Integration (E2E)', () => {
       console.log(`First room creation response:`, firstResponse.body);
       expect(firstResponse.status).toBe(200);
       expect(firstResponse.body).toEqual({}); // AppService returns empty object per Matrix spec
-      console.log(`First room creation confirmed (Matrix spec compliant response)`);
+      console.log(
+        `First room creation confirmed (Matrix spec compliant response)`,
+      );
 
       // Second request should also successfully create a room (Application Service creates on-demand)
       const secondResponse = await request(TESTING_APP_URL)
@@ -325,15 +356,18 @@ describe('Matrix Application Service Integration (E2E)', () => {
       expect(secondResponse.status).toBe(200);
       expect(secondResponse.body).toEqual({}); // AppService returns empty object per Matrix spec
 
-      console.log(`Application Service ensures room availability consistently for alias: ${roomAlias}`);
+      console.log(
+        `Application Service ensures room availability consistently for alias: ${roomAlias}`,
+      );
     }, 45000);
   });
 
   describe('Authentication and Authorization for Application Service Operations', () => {
     it('should require authentication for Application Service operations', async () => {
       const roomAlias = `#event-${eventSlug}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
-      const response = await request(TESTING_APP_URL)
-        .get(`/api/matrix/appservice/rooms/${encodeURIComponent(roomAlias)}`);
+      const response = await request(TESTING_APP_URL).get(
+        `/api/matrix/appservice/rooms/${encodeURIComponent(roomAlias)}`,
+      );
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('error');
@@ -367,7 +401,9 @@ describe('Matrix Application Service Integration (E2E)', () => {
     it('should handle invalid room alias format', async () => {
       const invalidRoomAlias = 'invalid-room-alias';
       const response = await request(TESTING_APP_URL)
-        .get(`/api/matrix/appservice/rooms/${encodeURIComponent(invalidRoomAlias)}`)
+        .get(
+          `/api/matrix/appservice/rooms/${encodeURIComponent(invalidRoomAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`);
 
       expect(response.status).toBe(200);
@@ -378,7 +414,9 @@ describe('Matrix Application Service Integration (E2E)', () => {
     it('should accept users with any ID format (Matrix-native approach)', async () => {
       const invalidUserId = 'invalid-user-id';
       const response = await request(TESTING_APP_URL)
-        .get(`/api/matrix/appservice/users/${encodeURIComponent(invalidUserId)}`)
+        .get(
+          `/api/matrix/appservice/users/${encodeURIComponent(invalidUserId)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`);
 
       expect(response.status).toBe(200);
@@ -389,7 +427,7 @@ describe('Matrix Application Service Integration (E2E)', () => {
   describe('Matrix SDK Integration (Frontend)', () => {
     it('should confirm Application Service provides room creation for frontend Matrix SDK', async () => {
       const roomAlias = `#event-${eventSlug}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
-      
+
       // Application Service creates rooms that frontend Matrix SDK can use
       const response = await request(TESTING_APP_URL)
         .get(`/api/matrix/appservice/rooms/${encodeURIComponent(roomAlias)}`)

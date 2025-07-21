@@ -92,7 +92,9 @@ describe('Matrix Room Creation and Invitation Flow (e2e)', () => {
 
       for (const testCase of testCases) {
         const response = await server
-          .get(`/api/matrix/appservice/rooms/${encodeURIComponent(testCase.alias)}`)
+          .get(
+            `/api/matrix/appservice/rooms/${encodeURIComponent(testCase.alias)}`,
+          )
           .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
           .expect(200);
 
@@ -112,7 +114,7 @@ describe('Matrix Room Creation and Invitation Flow (e2e)', () => {
         'Test',
         'User',
       );
-      const testEvent = await createEvent(TESTING_APP_URL, testUser.token, {
+      const _testEvent = await createEvent(TESTING_APP_URL, testUser.token, {
         slug: `test-event-create-${Date.now()}`,
         name: 'Test Event for Create Handler',
         type: 'in-person',
@@ -145,7 +147,9 @@ describe('Matrix Room Creation and Invitation Flow (e2e)', () => {
       };
 
       const response = await server
-        .put(`/api/matrix/appservice/_matrix/app/v1/transactions/txn-${Date.now()}`)
+        .put(
+          `/api/matrix/appservice/_matrix/app/v1/transactions/txn-${Date.now()}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
         .send(roomCreateEvent)
         .expect(200);
@@ -204,7 +208,9 @@ describe('Matrix Room Creation and Invitation Flow (e2e)', () => {
       };
 
       const response = await server
-        .put(`/api/matrix/appservice/_matrix/app/v1/transactions/txn-${Date.now()}`)
+        .put(
+          `/api/matrix/appservice/_matrix/app/v1/transactions/txn-${Date.now()}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
         .send(roomAliasEvent)
         .expect(200);
@@ -260,7 +266,9 @@ describe('Matrix Room Creation and Invitation Flow (e2e)', () => {
       };
 
       const response = await server
-        .put(`/api/matrix/appservice/_matrix/app/v1/transactions/txn-${Date.now()}`)
+        .put(
+          `/api/matrix/appservice/_matrix/app/v1/transactions/txn-${Date.now()}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
         .send(multiEventTransaction)
         .expect(200);
@@ -464,7 +472,9 @@ describe('Matrix Room Creation and Invitation Flow (e2e)', () => {
       };
 
       const response = await server
-        .put(`/api/matrix/appservice/_matrix/app/v1/transactions/txn-malformed-${Date.now()}`)
+        .put(
+          `/api/matrix/appservice/_matrix/app/v1/transactions/txn-malformed-${Date.now()}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
         .send(malformedEvent)
         .expect(200);
@@ -528,7 +538,10 @@ describe('Matrix Room Creation and Invitation Flow (e2e)', () => {
 
       // All these should return "Room not found" since events/groups don't exist
       // But they should be processed by the AppService (not rejected due to namespace mismatch)
-      for (const alias of [...validNamespaceAliases, ...invalidNamespaceAliases]) {
+      for (const alias of [
+        ...validNamespaceAliases,
+        ...invalidNamespaceAliases,
+      ]) {
         const response = await server
           .get(`/api/matrix/appservice/rooms/${encodeURIComponent(alias)}`)
           .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
@@ -565,16 +578,16 @@ describe('Matrix Room Creation and Invitation Flow (e2e)', () => {
       const roomAlias = `#event-${testEvent.slug}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
 
       // Make multiple concurrent requests to the AppService
-      const concurrentRequests = Array.from({ length: 5 }, (_, i) =>
+      const concurrentRequests = Array.from({ length: 5 }, (_, _i) =>
         server
           .get(`/api/matrix/appservice/rooms/${encodeURIComponent(roomAlias)}`)
-          .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
+          .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`),
       );
 
       const responses = await Promise.all(concurrentRequests);
 
       // All requests should succeed
-      responses.forEach((response, index) => {
+      responses.forEach((response, _index) => {
         expect(response.status).toBe(200);
         expect(response.body).toEqual({});
       });

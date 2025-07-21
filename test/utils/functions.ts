@@ -394,7 +394,7 @@ async function clearMatrixUserIdentity(app, tenantId, userToken) {
 async function registerMatrixUserIdentity(app, tenantId, userToken, userSlug) {
   // Clear any existing Matrix identity first
   await clearMatrixUserIdentity(app, tenantId, userToken);
-  
+
   // Generate a Matrix user ID based on the user slug (simulating MAS authentication)
   const serverName = process.env.MATRIX_SERVER_NAME || 'matrix.openmeet.net';
   const matrixUserId = `@${userSlug}:${serverName}`;

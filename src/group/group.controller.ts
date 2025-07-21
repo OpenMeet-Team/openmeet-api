@@ -176,7 +176,7 @@ export class GroupController {
   @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Get(':slug/discussions')
   @ApiOperation({ summary: 'Get all group discussions' })
-  async showGroupDiscussions(
+  showGroupDiscussions(
     @Param('slug') slug: string,
   ): Promise<{ messages: MatrixMessage[] }> {
     return this.groupService.showGroupDiscussions(slug);

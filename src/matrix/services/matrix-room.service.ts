@@ -666,7 +666,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
 
       // Use MatrixBotService instead of disabled admin client
       await this.matrixBotService.inviteUser(roomId, userId, roomInfo.tenantId);
-      
+
       this.logger.log(
         `Successfully invited user ${userId} to room ${roomId} using bot service`,
       );
@@ -722,7 +722,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
 
       // Use MatrixBotService instead of disabled admin client
       await this.matrixBotService.removeUser(roomId, userId, roomInfo.tenantId);
-      
+
       this.logger.log(
         `Successfully removed user ${userId} from room ${roomId} using bot service`,
       );
@@ -1065,15 +1065,19 @@ export class MatrixRoomService implements IMatrixRoomProvider {
    */
   async verifyRoomExists(roomId: string, tenantId: string): Promise<boolean> {
     let client: IMatrixClient | null = null;
-    
+
     try {
-      this.logger.debug(`Verifying room exists: ${roomId} for tenant ${tenantId}`);
-      
+      this.logger.debug(
+        `Verifying room exists: ${roomId} for tenant ${tenantId}`,
+      );
+
       // Create a bot client for the tenant to check room existence
       client = await this.createBotClient(tenantId);
-      
+
       if (!client) {
-        this.logger.warn(`Could not create bot client for tenant ${tenantId} to verify room ${roomId}`);
+        this.logger.warn(
+          `Could not create bot client for tenant ${tenantId} to verify room ${roomId}`,
+        );
         return false;
       }
 
@@ -1081,29 +1085,34 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       await client.roomState(roomId);
       this.logger.debug(`Room ${roomId} exists and is accessible`);
       return true;
-      
     } catch (error) {
       this.logger.debug(`Room ${roomId} verification failed: ${error.message}`);
-      
+
       // Check for specific error types that indicate room doesn't exist
-      if (error.httpStatus === 404 || 
-          (error.data && error.data.errcode === 'M_NOT_FOUND') ||
-          (error.message && error.message.includes('404')) ||
-          (error.message && error.message.includes('not found'))) {
+      if (
+        error.httpStatus === 404 ||
+        (error.data && error.data.errcode === 'M_NOT_FOUND') ||
+        (error.message && error.message.includes('404')) ||
+        (error.message && error.message.includes('not found'))
+      ) {
         this.logger.debug(`Room ${roomId} does not exist (404)`);
         return false;
       }
-      
+
       // Check for forbidden errors (room exists but no access)
-      if (error.httpStatus === 403 || 
-          (error.data && error.data.errcode === 'M_FORBIDDEN')) {
+      if (
+        error.httpStatus === 403 ||
+        (error.data && error.data.errcode === 'M_FORBIDDEN')
+      ) {
         this.logger.debug(`Room ${roomId} exists but bot has no access (403)`);
         // For our purposes, if bot can't access it, treat as non-existent
         return false;
       }
-      
+
       // Other errors (network, etc.) - assume room doesn't exist
-      this.logger.warn(`Room ${roomId} verification failed with error: ${error.message}`);
+      this.logger.warn(
+        `Room ${roomId} verification failed with error: ${error.message}`,
+      );
       return false;
     }
   }
@@ -1206,7 +1215,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
   }> {
     const startTime = new Date();
     this.logger.log('🚀 Starting full Matrix attendee sync for all tenants');
-    
+
     const tenantResults: Array<{
       tenantId: string;
       tenantName: string;
@@ -1232,11 +1241,15 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       // Get all tenants from configuration
       const tenants = fetchTenants();
       this.logger.log(`📋 Found ${tenants.length} tenants to process`);
-      
+
       for (const tenant of tenants) {
-        const tenantResult = await this.syncTenantEvents(tenant.id, tenant.name || tenant.id, maxEventsPerTenant);
+        const tenantResult = await this.syncTenantEvents(
+          tenant.id,
+          tenant.name || tenant.id,
+          maxEventsPerTenant,
+        );
         tenantResults.push(tenantResult);
-        
+
         totalEvents += tenantResult.eventsProcessed;
         totalUsersAdded += tenantResult.totalUsersAdded;
         totalErrors += tenantResult.totalErrors;
@@ -1246,7 +1259,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       const duration = endTime.getTime() - startTime.getTime();
 
       this.logger.log(
-        `✨ Full sync completed: ${tenants.length} tenants, ${totalEvents} events processed, ${totalUsersAdded} users added, ${totalErrors} errors in ${duration}ms`
+        `✨ Full sync completed: ${tenants.length} tenants, ${totalEvents} events processed, ${totalUsersAdded} users added, ${totalErrors} errors in ${duration}ms`,
       );
 
       return {
@@ -1260,7 +1273,10 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         tenants: tenantResults,
       };
     } catch (error) {
-      this.logger.error(`💥 Fatal error during full sync: ${error.message}`, error.stack);
+      this.logger.error(
+        `💥 Fatal error during full sync: ${error.message}`,
+        error.stack,
+      );
       throw error;
     }
   }
@@ -1268,7 +1284,11 @@ export class MatrixRoomService implements IMatrixRoomProvider {
   /**
    * Sync all events for a specific tenant
    */
-  private async syncTenantEvents(tenantId: string, tenantName?: string, maxEvents?: number): Promise<{
+  private async syncTenantEvents(
+    tenantId: string,
+    tenantName?: string,
+    maxEvents?: number,
+  ): Promise<{
     tenantId: string;
     tenantName: string;
     eventsProcessed: number;
@@ -1286,7 +1306,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
     success: boolean;
   }> {
     this.logger.log(`📋 Processing tenant: ${tenantId}`);
-    
+
     const eventResults: Array<{
       eventSlug: string;
       eventName: string;
@@ -1301,17 +1321,25 @@ export class MatrixRoomService implements IMatrixRoomProvider {
 
     try {
       // Get all events with confirmed attendees for this tenant
-      const allEvents = await this.eventQueryService.findEventsWithConfirmedAttendees(tenantId);
-      
+      const allEvents =
+        await this.eventQueryService.findEventsWithConfirmedAttendees(tenantId);
+
       // Apply limit if specified
-      const events = maxEvents && maxEvents > 0 ? allEvents.slice(0, maxEvents) : allEvents;
-      
-      this.logger.log(`📅 Found ${allEvents.length} total events, processing ${events.length} events ${maxEvents ? `(limited to ${maxEvents})` : ''} with attendees in tenant ${tenantId}`);
+      const events =
+        maxEvents && maxEvents > 0 ? allEvents.slice(0, maxEvents) : allEvents;
+
+      this.logger.log(
+        `📅 Found ${allEvents.length} total events, processing ${events.length} events ${maxEvents ? `(limited to ${maxEvents})` : ''} with attendees in tenant ${tenantId}`,
+      );
 
       for (const event of events) {
         try {
-          const result = await this.matrixEventListener.syncEventAttendeesToMatrix(event.slug, tenantId);
-          
+          const result =
+            await this.matrixEventListener.syncEventAttendeesToMatrix(
+              event.slug,
+              tenantId,
+            );
+
           const eventResult = {
             eventSlug: event.slug,
             eventName: event.name || event.slug,
@@ -1320,7 +1348,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
             errors: result.errors,
             success: result.success,
           };
-          
+
           eventResults.push(eventResult);
           totalUsersAdded += result.usersAdded;
           totalErrors += result.errors.length;
@@ -1329,7 +1357,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
           this.logger.error(errorMsg);
           tenantErrors.push(errorMsg);
           totalErrors++;
-          
+
           eventResults.push({
             eventSlug: event.slug,
             eventName: event.name || event.slug,
@@ -1354,7 +1382,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
     } catch (tenantError) {
       const errorMsg = `Error processing tenant ${tenantId}: ${tenantError.message}`;
       this.logger.error(errorMsg);
-      
+
       return {
         tenantId,
         tenantName: tenantName || tenantId,
@@ -1384,13 +1412,19 @@ export class MatrixRoomService implements IMatrixRoomProvider {
 
     try {
       // Use MatrixBotService to resolve the alias since it has the bot client with proper auth
-      const resolvedRoom = await this.matrixBotService.resolveRoomAlias(roomAlias, parsed.tenantId);
-      this.logger.log(`Resolved alias ${roomAlias} to room ID: ${resolvedRoom}`);
+      const resolvedRoom = await this.matrixBotService.resolveRoomAlias(
+        roomAlias,
+        parsed.tenantId,
+      );
+      this.logger.log(
+        `Resolved alias ${roomAlias} to room ID: ${resolvedRoom}`,
+      );
       return resolvedRoom;
     } catch (error) {
-      this.logger.error(`Failed to resolve room alias ${roomAlias}: ${error.message}`);
+      this.logger.error(
+        `Failed to resolve room alias ${roomAlias}: ${error.message}`,
+      );
       throw error;
     }
   }
-
 }

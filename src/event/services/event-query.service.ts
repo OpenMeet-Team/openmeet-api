@@ -1370,7 +1370,9 @@ export class EventQueryService {
       .createQueryBuilder('event')
       .innerJoin('event.attendees', 'attendee')
       .select(['event.id', 'event.slug', 'event.name'])
-      .where('attendee.status = :status', { status: EventAttendeeStatus.Confirmed })
+      .where('attendee.status = :status', {
+        status: EventAttendeeStatus.Confirmed,
+      })
       .groupBy('event.id, event.slug, event.name')
       .orderBy('event.createdAt', 'DESC')
       .getMany();

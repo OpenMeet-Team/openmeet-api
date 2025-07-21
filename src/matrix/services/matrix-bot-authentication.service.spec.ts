@@ -37,6 +37,7 @@ describe('MatrixBotService - Authentication Patterns Analysis', () => {
     id: 1,
     slug: 'openmeet-bot-test-tenant-123',
     email: 'bot-test-tenant-123@openmeet.net',
+    tenantId: 'test-tenant-123',
   };
 
   beforeEach(async () => {
@@ -87,11 +88,12 @@ describe('MatrixBotService - Authentication Patterns Analysis', () => {
           'matrix.baseUrl': 'http://localhost:8448',
 
           // Application Service config (primary authentication)
+          'matrix.appservice.id': 'openmeet-bot',
           matrix: {
             appservice: {
               token: 'test-appservice-token',
               hsToken: 'test-hs-token',
-              id: 'test-appservice-id',
+              id: 'openmeet-bot',
               url: 'http://localhost:3000/api/matrix/appservice',
             },
           },
@@ -134,7 +136,7 @@ describe('MatrixBotService - Authentication Patterns Analysis', () => {
         expect.objectContaining({
           baseUrl: 'http://localhost:8448',
           accessToken: 'test-appservice-token',
-          userId: '@openmeet-bot-test-tenant-123:matrix.openmeet.net',
+          userId: '@openmeet-bot:matrix.openmeet.net',
           localTimeoutMs: 30000,
           useAuthorizationHeader: true,
         }),
@@ -147,7 +149,7 @@ describe('MatrixBotService - Authentication Patterns Analysis', () => {
       const sdk = mockMatrixCoreService.getSdk();
       expect(sdk.createClient).toHaveBeenCalledWith(
         expect.objectContaining({
-          userId: '@openmeet-bot-test-tenant-123:matrix.openmeet.net',
+          userId: '@openmeet-bot:matrix.openmeet.net',
         }),
       );
     });
@@ -260,7 +262,7 @@ describe('MatrixBotService - Authentication Patterns Analysis', () => {
       const sdk = mockMatrixCoreService.getSdk();
       expect(sdk.createClient).toHaveBeenCalledWith(
         expect.objectContaining({
-          userId: '@openmeet-bot-test-tenant-123:matrix.openmeet.net',
+          userId: '@openmeet-bot:matrix.openmeet.net',
         }),
       );
     });
@@ -406,7 +408,7 @@ describe('MatrixBotService - Authentication Patterns Analysis', () => {
       await service.authenticateBot(TEST_TENANT_ID);
       const botUserId = service.getBotUserId();
       expect(botUserId).toBe(
-        '@openmeet-bot-test-tenant-123:matrix.openmeet.net',
+        '@openmeet-bot:matrix.openmeet.net',
       );
     });
 

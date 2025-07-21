@@ -4,10 +4,15 @@ import { MatrixRoomService } from './matrix-room.service';
 import { MatrixCoreService } from './matrix-core.service';
 import { MatrixBotUserService } from './matrix-bot-user.service';
 import { MatrixBotService } from './matrix-bot.service';
+import { RoomAliasUtils } from '../utils/room-alias.utils';
+import { TenantConnectionService } from '../../tenant/tenant.service';
+import { MatrixEventListener } from '../matrix-event.listener';
+import { EventQueryService } from '../../event/services/event-query.service';
 
 describe('MatrixRoomService', () => {
   let service: MatrixRoomService;
   let matrixCoreService: MatrixCoreService;
+  let module: TestingModule;
 
   // Mock Matrix client
   const mockMatrixClient = {
@@ -38,7 +43,7 @@ describe('MatrixRoomService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
 
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         MatrixRoomService,
         {
@@ -51,6 +56,8 @@ describe('MatrixRoomService', () => {
               defaultDeviceId: 'OPENMEET_SERVER',
               defaultInitialDeviceDisplayName: 'OpenMeet Server',
             }),
+            acquireClient: jest.fn().mockResolvedValue(mockMatrixClient),
+            releaseClient: jest.fn().mockResolvedValue(undefined),
             getSdk: jest.fn().mockReturnValue({
               createClient: jest.fn().mockReturnValue(mockMatrixClient),
               Visibility: {
@@ -82,12 +89,38 @@ describe('MatrixRoomService', () => {
             authenticateBot: jest.fn().mockResolvedValue(undefined),
             isBotAuthenticated: jest.fn().mockReturnValue(true),
             botClient: mockMatrixClient,
+            inviteUser: jest.fn().mockResolvedValue(undefined),
+            removeUser: jest.fn().mockResolvedValue(undefined),
           },
         },
         {
           provide: ConfigService,
           useValue: {
             get: jest.fn().mockReturnValue('mock-config-value'),
+          },
+        },
+        {
+          provide: RoomAliasUtils,
+          useValue: {
+            generateEventRoomAlias: jest.fn().mockReturnValue('#event-test:matrix.openmeet.net'),
+            generateGroupRoomAlias: jest.fn().mockReturnValue('#group-test:matrix.openmeet.net'),
+            parseRoomAlias: jest.fn().mockReturnValue({ type: 'event', slug: 'test', tenantId: 'test' }),
+          },
+        },
+        {
+          provide: TenantConnectionService,
+          useValue: {
+            getTenantConnection: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: MatrixEventListener,
+          useValue: {},
+        },
+        {
+          provide: EventQueryService,
+          useValue: {
+            findOne: jest.fn().mockResolvedValue(null),
           },
         },
       ],
@@ -186,17 +219,16 @@ describe('MatrixRoomService', () => {
 
       await service.inviteUser(roomId, userId);
 
-      // Verify client acquire/release
-      expect(matrixCoreService.acquireClient).toHaveBeenCalled();
-      expect(matrixCoreService.releaseClient).toHaveBeenCalled();
 
-      // Verify invite was called with correct parameters
-      expect(mockMatrixClient.invite).toHaveBeenCalledWith(roomId, userId);
+      // Verify MatrixBotService inviteUser was called with correct parameters
+      const mockMatrixBotService = module.get(MatrixBotService);
+      expect(mockMatrixBotService.inviteUser).toHaveBeenCalledWith(roomId, userId, expect.any(String));
     });
 
     it('should handle errors when inviting users', async () => {
-      // Mock invite to fail
-      mockMatrixClient.invite.mockRejectedValueOnce(
+      // Mock MatrixBotService inviteUser to fail
+      const mockMatrixBotService = module.get(MatrixBotService);
+      mockMatrixBotService.inviteUser.mockRejectedValueOnce(
         new Error('User does not exist'),
       );
 
@@ -207,8 +239,6 @@ describe('MatrixRoomService', () => {
         'Failed to invite user to Matrix room: User does not exist',
       );
 
-      // Should still release client even after error
-      expect(matrixCoreService.releaseClient).toHaveBeenCalled();
     });
   });
 
@@ -292,9 +322,6 @@ describe('MatrixRoomService', () => {
 
       await service.setRoomPowerLevels(roomId, userLevels);
 
-      // Verify client acquire/release
-      expect(matrixCoreService.acquireClient).toHaveBeenCalled();
-      expect(matrixCoreService.releaseClient).toHaveBeenCalled();
 
       // Verify get/set of state events
       expect(mockMatrixClient.getStateEvent).toHaveBeenCalledWith(
@@ -367,16 +394,10 @@ describe('MatrixRoomService', () => {
 
       await service.removeUserFromRoom(roomId, userId);
 
-      // Verify client acquire/release
-      expect(matrixCoreService.acquireClient).toHaveBeenCalled();
-      expect(matrixCoreService.releaseClient).toHaveBeenCalled();
 
-      // Verify kick was called with correct parameters
-      expect(mockMatrixClient.kick).toHaveBeenCalledWith(
-        roomId,
-        userId,
-        'Removed from event/group in OpenMeet',
-      );
+      // Verify MatrixBotService removeUser was called with correct parameters
+      const mockMatrixBotService = module.get(MatrixBotService);
+      expect(mockMatrixBotService.removeUser).toHaveBeenCalledWith(roomId, userId, expect.any(String));
     });
 
     it('should use the default reason', async () => {
@@ -385,12 +406,9 @@ describe('MatrixRoomService', () => {
 
       await service.removeUserFromRoom(roomId, userId);
 
-      // Verify kick was called with default reason
-      expect(mockMatrixClient.kick).toHaveBeenCalledWith(
-        roomId,
-        userId,
-        'Removed from event/group in OpenMeet',
-      );
+      // Verify MatrixBotService removeUser was called
+      const mockMatrixBotService = module.get(MatrixBotService);
+      expect(mockMatrixBotService.removeUser).toHaveBeenCalledWith(roomId, userId, expect.any(String));
     });
   });
 });

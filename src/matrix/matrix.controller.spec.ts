@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { REQUEST } from '@nestjs/core';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
+import { MatrixEventListener } from './matrix-event.listener';
 
 describe('MatrixController', () => {
   let controller: MatrixController;
@@ -126,6 +127,12 @@ describe('MatrixController', () => {
             generateAuthCode: jest.fn().mockResolvedValue('mock-auth-code'),
             validateAndConsumeAuthCode: jest.fn().mockResolvedValue(null),
             getActiveCodeCount: jest.fn().mockResolvedValue(0),
+          },
+        },
+        {
+          provide: MatrixEventListener,
+          useValue: {
+            // Mock methods that might be called by the controller
           },
         },
         {

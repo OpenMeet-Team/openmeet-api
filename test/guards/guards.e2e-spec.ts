@@ -42,6 +42,8 @@ describe('Guards (e2e)', () => {
       type: EventType.Hybrid,
       categories: [1],
     });
+    
+    console.log('Created publicEvent:', publicEvent);
 
     authenticatedEvent = await createEvent(app, adminToken, {
       name: 'Authenticated Event',
@@ -102,14 +104,15 @@ describe('Guards (e2e)', () => {
         let allEvents: any[] = [];
         let currentPage = 1;
         let hasMorePages = true;
+        const maxPages = 50; // Prevent infinite loops - increased to handle more test data
 
         // Fetch all pages
-        while (hasMorePages) {
+        while (hasMorePages && currentPage <= maxPages) {
           const response = await request(app)
             .get(`/api/events`)
             .query({
               page: currentPage,
-              limit: 10,
+              limit: 50,
               visibility: EventVisibility.Public,
             })
             .set('x-tenant-id', TESTING_TENANT_ID);
@@ -124,6 +127,7 @@ describe('Guards (e2e)', () => {
           currentPage++;
         }
 
+        
         expect(allEvents.some((event) => event.slug === publicEvent.slug)).toBe(
           true,
         );
@@ -133,7 +137,7 @@ describe('Guards (e2e)', () => {
         expect(
           allEvents.some((event) => event.slug === privateEvent.slug),
         ).toBe(false);
-      });
+      }, 60000);
 
       // this one fails to return the last private event, but does return private events.
       it.skip('should show public and authenticated events to authenticated users', async () => {

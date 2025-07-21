@@ -432,9 +432,9 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
   /**
    * Get tenant configuration for current request context
    */
-  private getTenantConfig(): any {
+  private async getTenantConfig(): Promise<any> {
     try {
-      const { fetchTenants } = require('../../utils/tenant-config');
+      const { fetchTenants } = await import('../../utils/tenant-config');
       const tenants = fetchTenants();
       // Return first non-empty tenant for now (will be enhanced for multi-tenant)
       return tenants.find((t) => t.id && t.matrixConfig) || null;
@@ -447,9 +447,9 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
   /**
    * Get tenant configuration by ID
    */
-  private getTenantConfigById(tenantId: string): any {
+  private async getTenantConfigById(tenantId: string): Promise<any> {
     try {
-      const { fetchTenants } = require('../../utils/tenant-config');
+      const { fetchTenants } = await import('../../utils/tenant-config');
       const tenants = fetchTenants();
       return tenants.find((t) => t.id === tenantId) || null;
     } catch (error) {

@@ -34,7 +34,9 @@ export interface IMatrixClient {
     reason?: string,
   ) => Promise<Record<string, never>>;
   joinRoom: (roomId: string) => Promise<Record<string, never>>;
-  getRoomIdForAlias: (roomAlias: string) => Promise<{ room_id: string; servers?: string[] }>;
+  getRoomIdForAlias: (
+    roomAlias: string,
+  ) => Promise<{ room_id: string; servers?: string[] }>;
 
   // State and profile operations
   getStateEvent: (

@@ -13,5 +13,16 @@
   },
   "transformIgnorePatterns": [
     "node_modules/(?!(matrix-js-sdk)/)"
-  ]
+  ],
+  "moduleNameMapper": {
+    "^matrix-js-sdk$": "<rootDir>/mocks/matrix/matrix-js-sdk.ts"
+  },
+  "setupFiles": [
+    "dotenv/config"
+  ],
+  "setupFilesAfterEnv": [
+    "<rootDir>/jest-setup.ts"
+  ],
+  "testTimeout": 30000,
+  "forceExit": true
 }

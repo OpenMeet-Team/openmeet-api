@@ -111,7 +111,7 @@ describe('Matrix Application Service Room Aliases (e2e)', () => {
 
       // 3. Verify the response is successful (empty object per Matrix AppService spec)
       expect(response.body).toEqual({});
-      
+
       // TODO: Add tests for room properties once Matrix SDK integration is available
       // - Room should be private
       // - Room should be encrypted
@@ -206,7 +206,9 @@ describe('Matrix Application Service Room Aliases (e2e)', () => {
 
       for (const testCase of testCases) {
         const response = await server
-          .get(`/api/matrix/appservice/rooms/${encodeURIComponent(testCase.alias)}`)
+          .get(
+            `/api/matrix/appservice/rooms/${encodeURIComponent(testCase.alias)}`,
+          )
           .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
           .expect(200);
 
@@ -243,7 +245,7 @@ describe('Matrix Application Service Room Aliases (e2e)', () => {
 
       // 2. First, create the room with a single request
       const roomAlias = `#event-${testEvent.slug}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
-      
+
       const firstResponse = await server
         .get(`/api/matrix/appservice/rooms/${encodeURIComponent(roomAlias)}`)
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`);
@@ -252,8 +254,8 @@ describe('Matrix Application Service Room Aliases (e2e)', () => {
       expect(firstResponse.body).toEqual({});
 
       // 3. Subsequent requests should return the same room (after short delay to avoid race conditions)
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       const secondResponse = await server
         .get(`/api/matrix/appservice/rooms/${encodeURIComponent(roomAlias)}`)
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`);

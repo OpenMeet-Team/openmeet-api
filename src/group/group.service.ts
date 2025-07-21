@@ -48,7 +48,7 @@ import { Trace } from '../utils/trace.decorator';
 import { EventQueryService } from '../event/services/event-query.service';
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventRecommendationService } from '../event/services/event-recommendation.service';
-import { forwardRef } from '@nestjs/common';
+// import { forwardRef } from '@nestjs/common'; // Currently not used
 // ChatRoomService removed - Matrix Application Service handles room operations directly
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
@@ -824,10 +824,8 @@ export class GroupService {
     return await this.eventQueryService.findEventsForGroup(group.id, 0);
   }
 
-  async showGroupDiscussions(
-    slug: string,
-  ): Promise<{ messages: MatrixMessage[] }> {
-    // This method has been deprecated - group discussions should be accessed 
+  showGroupDiscussions(slug: string): { messages: MatrixMessage[] } {
+    // This method has been deprecated - group discussions should be accessed
     // directly through the DiscussionService or ChatController to avoid circular dependencies
     this.logger.warn(
       `showGroupDiscussions() deprecated for group ${slug} - use DiscussionService directly`,

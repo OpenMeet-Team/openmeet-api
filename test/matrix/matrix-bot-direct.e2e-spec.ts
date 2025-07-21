@@ -24,7 +24,7 @@ import {
 jest.setTimeout(60000);
 
 xdescribe('Matrix Bot Operations (E2E) - MAS Integration', () => {
-  beforeAll(async () => {
+  beforeAll(() => {
     // Validate MAS Configuration
     console.log(
       '🔧 Validating Matrix Application Service (MAS) configuration...',

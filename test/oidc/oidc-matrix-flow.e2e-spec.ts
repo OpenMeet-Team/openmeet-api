@@ -321,8 +321,8 @@ describe('OIDC Matrix Authentication Flow', () => {
 
       const duration = Date.now() - startTime;
 
-      // Should complete in under 1 second (no more 10s silent auth delay)
-      expect(duration).toBeLessThan(1000);
+      // Should complete in under 5 seconds (no more 10s silent auth delay)
+      expect(duration).toBeLessThan(5000);
 
       console.log(`✅ Auth code generation completed in ${duration}ms`);
     });

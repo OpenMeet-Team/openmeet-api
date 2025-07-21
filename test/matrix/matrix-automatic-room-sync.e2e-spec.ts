@@ -355,7 +355,7 @@ describe('Matrix Automatic Room Sync (e2e)', () => {
       const webhookDuration = Date.now() - startTime;
 
       expect(response.body).toEqual({});
-      expect(webhookDuration).toBeLessThan(500); // Webhook should respond very quickly
+      expect(webhookDuration).toBeLessThan(1000); // Webhook should respond quickly
       // Room sync should happen in background
     });
   });

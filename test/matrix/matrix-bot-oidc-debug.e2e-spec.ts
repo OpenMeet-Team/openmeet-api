@@ -56,13 +56,18 @@ describe('Matrix Bot OIDC Authentication Debug (E2E)', () => {
       const roomAlias = `#event-${eventSlug}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
       const response = await request(TESTING_APP_URL)
         .get(`/api/matrix/appservice/rooms/${encodeURIComponent(roomAlias)}`)
-        .set('Authorization', `Bearer ${process.env.MATRIX_APPSERVICE_HS_TOKEN}`);
+        .set(
+          'Authorization',
+          `Bearer ${process.env.MATRIX_APPSERVICE_HS_TOKEN}`,
+        );
 
       console.log('📊 Response Status:', response.status);
       console.log('📊 Response Body:', JSON.stringify(response.body, null, 2));
 
       console.log('✅ Matrix-native room creation successful!');
-      console.log('✅ Room creation confirmed (empty response per Matrix AppService spec)');
+      console.log(
+        '✅ Room creation confirmed (empty response per Matrix AppService spec)',
+      );
       expect(response.status).toBe(200);
       expect(response.body).toEqual({}); // Matrix AppService spec: empty object for success
     }, 45000);

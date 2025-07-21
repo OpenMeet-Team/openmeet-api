@@ -30,7 +30,7 @@ describe('Matrix Native Room Creation (e2e)', () => {
         'Test',
         'User',
       );
-      
+
       const testEvent = await createEvent(TESTING_APP_URL, testUser.token, {
         slug: `test-matrix-event-${Date.now()}`,
         name: 'Test Matrix Event',
@@ -80,7 +80,7 @@ describe('Matrix Native Room Creation (e2e)', () => {
         'Test',
         'User',
       );
-      
+
       const testGroup = await createGroup(TESTING_APP_URL, testUser.token, {
         name: 'Test Matrix Group',
         description: 'Test group for Matrix room creation',
@@ -125,7 +125,10 @@ describe('Matrix Native Room Creation (e2e)', () => {
       const testCases = [
         { slug: 'simple-event', name: 'Simple Event' },
         { slug: 'event-with-numbers-123', name: 'Event with Numbers 123' },
-        { slug: 'very-long-event-name-with-hyphens', name: 'Very Long Event Name' },
+        {
+          slug: 'very-long-event-name-with-hyphens',
+          name: 'Very Long Event Name',
+        },
       ];
 
       for (const testCase of testCases) {
@@ -168,7 +171,7 @@ describe('Matrix Native Room Creation (e2e)', () => {
         'Test',
         'User',
       );
-      
+
       const testEvent = await createEvent(TESTING_APP_URL, testUser.token, {
         slug: 'tenant-test-event',
         name: 'Tenant Test Event',
@@ -186,20 +189,24 @@ describe('Matrix Native Room Creation (e2e)', () => {
       // Test with correct tenant ID
       const correctTenantAlias = `#event-${testEvent.slug}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
       const correctResponse = await server
-        .get(`/api/matrix/appservice/rooms/${encodeURIComponent(correctTenantAlias)}`)
+        .get(
+          `/api/matrix/appservice/rooms/${encodeURIComponent(correctTenantAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
         .expect(200);
 
       // Test with incorrect tenant ID
       const incorrectTenantAlias = `#event-${testEvent.slug}-different-tenant:matrix.openmeet.net`;
       const incorrectResponse = await server
-        .get(`/api/matrix/appservice/rooms/${encodeURIComponent(incorrectTenantAlias)}`)
+        .get(
+          `/api/matrix/appservice/rooms/${encodeURIComponent(incorrectTenantAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
         .expect(200);
 
       // Verify correct tenant finds the event (empty object per Matrix AppService spec)
       expect(correctResponse.body).toEqual({});
-      
+
       // Verify incorrect tenant doesn't find the event
       expect(incorrectResponse.body).toHaveProperty('error');
       expect(incorrectResponse.body.error).toBe('Room not found');

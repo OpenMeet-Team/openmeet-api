@@ -1,6 +1,11 @@
 import request from 'supertest';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
-import { createEvent, createTestUser, loginAsAdmin, registerMatrixUserIdentity } from '../utils/functions';
+import {
+  createEvent,
+  createTestUser,
+  loginAsAdmin,
+  registerMatrixUserIdentity,
+} from '../utils/functions';
 
 /**
  * Matrix Attendee Auto-Invitation E2E Tests
@@ -70,7 +75,9 @@ describe('Matrix Attendee Auto-Invitation (E2E)', () => {
   afterAll(async () => {
     // Note: With Matrix Application Service, rooms are managed by Matrix server
     // No explicit cleanup needed as rooms are created on-demand
-    console.log('Matrix Application Service handles room lifecycle automatically');
+    console.log(
+      'Matrix Application Service handles room lifecycle automatically',
+    );
 
     jest.setTimeout(5000);
   });
@@ -173,7 +180,9 @@ describe('Matrix Attendee Auto-Invitation (E2E)', () => {
       expect(roomResponse.status).toBe(200);
       expect(roomResponse.body).toEqual({}); // Matrix AppService spec: empty object for success
 
-      console.log(`✅ Multiple users can access the same Matrix room via Application Service`);
+      console.log(
+        `✅ Multiple users can access the same Matrix room via Application Service`,
+      );
     }, 45000);
 
     it('should log Matrix bot errors visibly instead of swallowing them', async () => {
@@ -239,7 +248,10 @@ describe('Matrix Attendee Auto-Invitation (E2E)', () => {
       console.log(`Historical messages access test result:`, {
         attendanceStatus: userAttendance.status,
         matrixAccess: roomAccessResponse.status === 200 ? 'SUCCESS' : 'FAILED',
-        roomId: Object.keys(roomAccessResponse.body).length === 0 ? 'ACCESSIBLE' : 'NOT_ACCESSIBLE',
+        roomId:
+          Object.keys(roomAccessResponse.body).length === 0
+            ? 'ACCESSIBLE'
+            : 'NOT_ACCESSIBLE',
       });
 
       expect(roomAccessResponse.status).toBe(200);
@@ -249,7 +261,9 @@ describe('Matrix Attendee Auto-Invitation (E2E)', () => {
         `✅ PASS: Confirmed attendee can access Matrix room via Application Service`,
       );
       console.log(`Room creation successful (empty response per Matrix spec)`);
-      console.log(`Historical messages are accessible via Matrix JS SDK directly`);
+      console.log(
+        `Historical messages are accessible via Matrix JS SDK directly`,
+      );
     }, 30000);
   });
 });

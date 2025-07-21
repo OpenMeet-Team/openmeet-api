@@ -41,7 +41,7 @@ export class GroupListener {
     });
 
     // Use the tenant ID from the event payload (no fallback to request needed)
-    const tenantId = params.tenantId;
+    // const tenantId = params.tenantId; // Currently not used
 
     // Matrix-native approach: Rooms are created on-demand via Application Service
     // No longer emit chat.group.created events - rooms are created when first accessed

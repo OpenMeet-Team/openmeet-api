@@ -44,7 +44,9 @@ describe('Matrix Room Alias Generation (e2e)', () => {
       // 2. Query the Application Service
       const expectedAlias = `#event-${testEvent.slug}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
       const response = await server
-        .get(`/api/matrix/appservice/rooms/${encodeURIComponent(expectedAlias)}`)
+        .get(
+          `/api/matrix/appservice/rooms/${encodeURIComponent(expectedAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
         .expect(200);
 
@@ -79,7 +81,9 @@ describe('Matrix Room Alias Generation (e2e)', () => {
       // 2. Query the Application Service
       const expectedAlias = `#event-${testEvent.slug}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
       const response = await server
-        .get(`/api/matrix/appservice/rooms/${encodeURIComponent(expectedAlias)}`)
+        .get(
+          `/api/matrix/appservice/rooms/${encodeURIComponent(expectedAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
         .expect(200);
 
@@ -114,7 +118,9 @@ describe('Matrix Room Alias Generation (e2e)', () => {
       // 2. Query the Application Service
       const expectedAlias = `#event-${testEvent.slug}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
       const response = await server
-        .get(`/api/matrix/appservice/rooms/${encodeURIComponent(expectedAlias)}`)
+        .get(
+          `/api/matrix/appservice/rooms/${encodeURIComponent(expectedAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
         .expect(200);
 
@@ -145,7 +151,9 @@ describe('Matrix Room Alias Generation (e2e)', () => {
       // 2. Query the Application Service
       const expectedAlias = `#group-${testGroup.slug}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
       const response = await server
-        .get(`/api/matrix/appservice/rooms/${encodeURIComponent(expectedAlias)}`)
+        .get(
+          `/api/matrix/appservice/rooms/${encodeURIComponent(expectedAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
         .expect(200);
 
@@ -173,7 +181,9 @@ describe('Matrix Room Alias Generation (e2e)', () => {
       // 2. Query the Application Service
       const expectedAlias = `#group-${testGroup.slug}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
       const response = await server
-        .get(`/api/matrix/appservice/rooms/${encodeURIComponent(expectedAlias)}`)
+        .get(
+          `/api/matrix/appservice/rooms/${encodeURIComponent(expectedAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
         .expect(200);
 
@@ -314,14 +324,18 @@ describe('Matrix Room Alias Generation (e2e)', () => {
       // 2. Test with correct tenant ID
       const correctTenantAlias = `#event-${testEvent.slug}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
       const correctResponse = await server
-        .get(`/api/matrix/appservice/rooms/${encodeURIComponent(correctTenantAlias)}`)
+        .get(
+          `/api/matrix/appservice/rooms/${encodeURIComponent(correctTenantAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
         .expect(200);
 
       // 3. Test with incorrect tenant ID
       const incorrectTenantAlias = `#event-${testEvent.slug}-different-tenant:matrix.openmeet.net`;
       const incorrectResponse = await server
-        .get(`/api/matrix/appservice/rooms/${encodeURIComponent(incorrectTenantAlias)}`)
+        .get(
+          `/api/matrix/appservice/rooms/${encodeURIComponent(incorrectTenantAlias)}`,
+        )
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`)
         .expect(200);
 
@@ -329,7 +343,7 @@ describe('Matrix Room Alias Generation (e2e)', () => {
       if (correctResponse.body.room_id) {
         expect(correctResponse.body.room_id).toMatch(/^!/);
       }
-      
+
       expect(incorrectResponse.body).toHaveProperty('error');
       expect(incorrectResponse.body.error).toBe('Room not found');
     });
@@ -347,7 +361,7 @@ describe('Matrix Room Alias Generation (e2e)', () => {
         'Test',
         'User',
       );
-      
+
       // Note: In a real implementation, these might be sanitized before reaching the alias
       const testCases = [
         {

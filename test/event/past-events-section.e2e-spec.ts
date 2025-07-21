@@ -108,7 +108,6 @@ describe('Past Events Section (e2e)', () => {
       (event: any) => event.slug === cancelledEvent.slug,
     );
 
-
     // Past event should NOT be included in the public events list
     expect(foundPastEvent).toBeUndefined();
 

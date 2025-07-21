@@ -791,10 +791,13 @@ export class MatrixController {
 
     try {
       // Call the sync method in MatrixRoomService with optional limit
-      const results = await this.matrixRoomService.syncAllEventAttendeesToMatrix(body.maxEventsPerTenant);
+      const results =
+        await this.matrixRoomService.syncAllEventAttendeesToMatrix(
+          body.maxEventsPerTenant,
+        );
 
       this.logger.log(
-        `✨ Admin Matrix sync completed: ${results.totalTenants} tenants, ${results.totalEvents} events, ${results.totalUsersAdded} users added, ${results.totalErrors} errors`
+        `✨ Admin Matrix sync completed: ${results.totalTenants} tenants, ${results.totalEvents} events, ${results.totalUsersAdded} users added, ${results.totalErrors} errors`,
       );
 
       return {
