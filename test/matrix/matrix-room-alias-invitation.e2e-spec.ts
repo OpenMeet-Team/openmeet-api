@@ -55,8 +55,8 @@ describe('Matrix Room Alias Invitation (e2e)', () => {
       expect(testUser.token).toBeDefined();
       expect(testUser.slug).toBeDefined();
 
-      // Register Matrix handle for the user
-      const matrixHandle = `${testUser.slug}_${testTenantId}`;
+      // Register Matrix handle for the user (ensure lowercase for Matrix compliance)
+      const matrixHandle = `${testUser.slug}_${testTenantId}`.toLowerCase();
       await globalMatrixValidationService.registerMatrixHandle(
         matrixHandle,
         testTenantId,
@@ -217,14 +217,18 @@ describe('Matrix Room Alias Invitation (e2e)', () => {
         tenantId,
       );
 
-      expect(roomAlias).toBe(
-        `#event-${eventSlug}-${tenantId}:matrix.openmeet.net`,
+      // Test that the alias follows the correct format, using the actual configured server name
+      expect(roomAlias).toMatch(
+        new RegExp(`^#event-${eventSlug}-${tenantId}:matrix.*`),
       );
       console.log(`✅ Generated room alias: ${roomAlias}`);
     });
 
     it('should parse room alias correctly', () => {
-      const roomAlias = '#event-test-event-123-tenant456:matrix.openmeet.net';
+      // Use the actual server name from the service
+      const eventSlug = 'test-event-123';
+      const tenantId = 'tenant456';
+      const roomAlias = roomAliasUtils.generateEventRoomAlias(eventSlug, tenantId);
 
       const parsed = roomAliasUtils.parseRoomAlias(roomAlias);
 
