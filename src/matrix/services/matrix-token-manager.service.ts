@@ -304,7 +304,7 @@ export class MatrixTokenManagerService
   private async regenerateAdminToken(): Promise<string | null> {
     try {
       // Get tenant configuration to get admin credentials
-      const tenantConfig = this.getTenantConfig();
+      const tenantConfig = await this.getTenantConfig();
       if (!tenantConfig?.matrixConfig?.adminUser) {
         this.logger.warn('No admin credentials configured in tenant config');
         return null;

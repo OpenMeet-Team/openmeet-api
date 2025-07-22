@@ -42,7 +42,7 @@ describe('Guards (e2e)', () => {
       type: EventType.Hybrid,
       categories: [1],
     });
-    
+
     console.log('Created publicEvent:', publicEvent);
 
     authenticatedEvent = await createEvent(app, adminToken, {
@@ -127,7 +127,6 @@ describe('Guards (e2e)', () => {
           currentPage++;
         }
 
-        
         expect(allEvents.some((event) => event.slug === publicEvent.slug)).toBe(
           true,
         );

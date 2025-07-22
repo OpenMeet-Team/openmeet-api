@@ -52,10 +52,13 @@ describe('Matrix SDK Simple Test (e2e)', () => {
         accessToken: 'fake-token-for-testing',
         userId: '@test:matrix.openmeet.net',
       });
-      
+
       console.log('✅ Client created:', typeof client);
-      console.log('Client methods:', Object.getOwnPropertyNames(client).slice(0, 10));
-      
+      console.log(
+        'Client methods:',
+        Object.getOwnPropertyNames(client).slice(0, 10),
+      );
+
       expect(client).toBeDefined();
       expect(typeof client.createRoom).toBe('function');
     } catch (error) {

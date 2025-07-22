@@ -407,9 +407,7 @@ describe('MatrixBotService - Authentication Patterns Analysis', () => {
     it('should return authenticated bot user ID when available', async () => {
       await service.authenticateBot(TEST_TENANT_ID);
       const botUserId = service.getBotUserId();
-      expect(botUserId).toBe(
-        '@openmeet-bot:matrix.openmeet.net',
-      );
+      expect(botUserId).toBe('@openmeet-bot:matrix.openmeet.net');
     });
 
     it('should throw error when no authentication and no tenant ID provided', () => {

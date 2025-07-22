@@ -1122,4 +1122,34 @@ export class EventAttendeeService {
 
     return updatedAttendee;
   }
+
+  /**
+   * Check if a user is allowed to chat in an event room
+   * Users with Confirmed, Cancelled, or Rejected status are allowed to chat
+   * @param eventId - The event ID
+   * @param userId - The user ID
+   * @returns Promise<boolean> - True if user is allowed to chat
+   */
+  async isUserAllowedToChat(eventId: number, userId: number): Promise<boolean> {
+    try {
+      const attendee = await this.findEventAttendeeByUserId(eventId, userId);
+      if (!attendee) {
+        return false;
+      }
+
+      // Allow confirmed attendees and those who cancelled/rejected (they can still chat)
+      const allowedStatuses = [
+        EventAttendeeStatus.Confirmed,
+        EventAttendeeStatus.Cancelled,
+        EventAttendeeStatus.Rejected,
+      ];
+
+      return allowedStatuses.includes(attendee.status);
+    } catch {
+      this.logger.debug(
+        `User ${userId} is not an attendee of event ${eventId}`,
+      );
+      return false;
+    }
+  }
 }

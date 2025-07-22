@@ -421,7 +421,7 @@ describe('MatrixBotService', () => {
 
       // Assert - expect two calls: one for bot admin rights, one for user permissions
       expect(mockMatrixClient.sendStateEvent).toHaveBeenCalledTimes(2);
-      
+
       // First call should grant bot admin rights
       expect(mockMatrixClient.sendStateEvent).toHaveBeenNthCalledWith(
         1,

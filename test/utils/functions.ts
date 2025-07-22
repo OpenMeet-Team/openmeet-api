@@ -378,42 +378,42 @@ async function getCurrentUser(app, tenantId, userToken) {
   return userResponse.body;
 }
 
-async function clearMatrixUserIdentity(app, tenantId, userToken) {
-  // Clear any existing Matrix identity for this user
-  const response = await request(app)
-    .delete('/api/matrix/user-identity')
-    .set('Authorization', `Bearer ${userToken}`)
-    .set('x-tenant-id', tenantId);
+// async function clearMatrixUserIdentity(app, tenantId, userToken) {
+//   // Clear any existing Matrix identity for this user
+//   const response = await request(app)
+//     .delete('/api/matrix/user-identity')
+//     .set('Authorization', `Bearer ${userToken}`)
+//     .set('x-tenant-id', tenantId);
 
-  // Don't throw error if clearing fails - the identity might not exist
-  if (response.status !== 200 && response.status !== 404) {
-    console.warn('Failed to clear Matrix user identity:', response.body);
-  }
-}
+//   // Don't throw error if clearing fails - the identity might not exist
+//   if (response.status !== 200 && response.status !== 404) {
+//     console.warn('Failed to clear Matrix user identity:', response.body);
+//   }
+// }
 
-async function registerMatrixUserIdentity(app, tenantId, userToken, userSlug) {
-  // Clear any existing Matrix identity first
-  await clearMatrixUserIdentity(app, tenantId, userToken);
+// async function registerMatrixUserIdentity(app, tenantId, userToken, userSlug) {
+//   // Clear any existing Matrix identity first
+//   await clearMatrixUserIdentity(app, tenantId, userToken);
 
-  // Generate a Matrix user ID based on the user slug (simulating MAS authentication)
-  const serverName = process.env.MATRIX_SERVER_NAME || 'matrix.openmeet.net';
-  const matrixUserId = `@${userSlug}:${serverName}`;
+//   // Generate a Matrix user ID based on the user slug (simulating MAS authentication)
+//   const serverName = process.env.MATRIX_SERVER_NAME || 'matrix.openmeet.net';
+//   const matrixUserId = `@${userSlug}:${serverName}`;
 
-  const response = await request(app)
-    .post('/api/matrix/sync-user-identity')
-    .set('Authorization', `Bearer ${userToken}`)
-    .set('x-tenant-id', tenantId)
-    .send({ matrixUserId });
+//   const response = await request(app)
+//     .post('/api/matrix/sync-user-identity')
+//     .set('Authorization', `Bearer ${userToken}`)
+//     .set('x-tenant-id', tenantId)
+//     .send({ matrixUserId });
 
-  if (response.status !== 200) {
-    console.error('Failed to register Matrix user identity:', response.body);
-    throw new Error(
-      `Failed to register Matrix user identity: ${response.status}`,
-    );
-  }
+//   if (response.status !== 200) {
+//     console.error('Failed to register Matrix user identity:', response.body);
+//     throw new Error(
+//       `Failed to register Matrix user identity: ${response.status}`,
+//     );
+//   }
 
-  return response.body;
-}
+//   return response.body;
+// }
 
 async function getGroupDetails(token: string, groupSlug: string) {
   const response = await request(TESTING_APP_URL)
@@ -490,7 +490,6 @@ export {
   updateGroupMemberRole,
   getGroupMembers,
   getCurrentUser,
-  registerMatrixUserIdentity,
   // Enhanced helper functions
   getGroupDetails,
   getCurrentUserDetails,

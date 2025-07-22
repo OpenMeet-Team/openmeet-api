@@ -25,7 +25,7 @@ import { QueryGroupDto } from './dto/group-query.dto';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
-import { MatrixMessage } from '../matrix/matrix-types';
+// import { MatrixMessage } from '../matrix/matrix-types';
 import { Permissions } from '../shared/guard/permissions.decorator';
 import { PermissionsGuard } from '../shared/guard/permissions.guard';
 import { GroupPermission, UserPermission } from '../core/constants/constant';
@@ -172,15 +172,8 @@ export class GroupController {
     return this.groupService.showGroupMembers(slug);
   }
 
-  @Public()
-  @UseGuards(JWTAuthGuard, VisibilityGuard)
-  @Get(':slug/discussions')
-  @ApiOperation({ summary: 'Get all group discussions' })
-  showGroupDiscussions(
-    @Param('slug') slug: string,
-  ): Promise<{ messages: MatrixMessage[] }> {
-    return this.groupService.showGroupDiscussions(slug);
-  }
+  // DEPRECATED: Group discussions endpoint removed
+  // Events are handling Matrix chats correctly - groups will be adapted later
 
   @Public()
   @UseGuards(JWTAuthGuard, VisibilityGuard)

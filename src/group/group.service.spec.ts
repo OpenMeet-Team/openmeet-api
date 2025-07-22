@@ -17,8 +17,8 @@ import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import {
   mockCategory,
   mockCategoryService,
-  mockChatRoomService,
-  mockDiscussionService,
+  // mockChatRoomService,
+  // mockDiscussionService,
   mockEvent,
   mockFile,
   mockFilesS3PresignedService,

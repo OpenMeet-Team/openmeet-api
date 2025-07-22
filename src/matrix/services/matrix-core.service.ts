@@ -131,7 +131,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
   private async initializeMatrixConnection(): Promise<boolean> {
     // Re-enabled admin token approach for room permission fixes
     try {
-      const tenantConfig = this.getTenantConfig();
+      const tenantConfig = await this.getTenantConfig();
       if (!tenantConfig?.matrixConfig?.adminUser) {
         this.logger.warn(
           'No admin credentials configured - admin operations will not be available',
@@ -389,7 +389,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
    */
   async getAdminClientForTenant(tenantId: string): Promise<IMatrixClient> {
     try {
-      const tenantConfig = this.getTenantConfigById(tenantId);
+      const tenantConfig = await this.getTenantConfigById(tenantId);
       if (!tenantConfig?.matrixConfig?.adminUser) {
         throw new Error(
           `No admin credentials configured for tenant: ${tenantId}`,

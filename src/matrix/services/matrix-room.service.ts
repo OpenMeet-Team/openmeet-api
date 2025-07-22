@@ -1427,4 +1427,46 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       throw error;
     }
   }
+
+  /**
+   * Get the canonical alias for a Matrix room by room ID
+   * @param roomId - The Matrix room ID
+   * @param tenantId - Tenant ID for tenant-specific bot client
+   * @returns Promise<string | null> - The canonical alias or null if not found
+   */
+  async getRoomCanonicalAlias(
+    roomId: string,
+    tenantId: string,
+  ): Promise<string | null> {
+    try {
+      this.logger.debug(
+        `Getting canonical alias for room ${roomId} (tenant: ${tenantId})`,
+      );
+
+      // Get the tenant-specific Matrix client
+      const matrixClient = await this.createBotClient(tenantId);
+      if (!matrixClient) {
+        throw new Error(`Matrix client not available for tenant ${tenantId}`);
+      }
+
+      // Get the canonical alias from room state
+      const canonicalAliasState = await matrixClient.getStateEvent(
+        roomId,
+        'm.room.canonical_alias',
+        '',
+      );
+
+      const canonicalAlias = canonicalAliasState?.alias;
+
+      this.logger.debug(
+        `Found canonical alias for room ${roomId}: ${canonicalAlias || 'none'}`,
+      );
+      return canonicalAlias || null;
+    } catch (error) {
+      this.logger.error(
+        `Failed to get canonical alias for room ${roomId} (tenant: ${tenantId}): ${error.message}`,
+      );
+      return null;
+    }
+  }
 }

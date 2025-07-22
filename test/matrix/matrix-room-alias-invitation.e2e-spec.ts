@@ -134,13 +134,13 @@ describe('Matrix Room Alias Invitation (e2e)', () => {
       // Verify it failed with the expected error
       expect(inviteError).toBeDefined();
       // The error structure might be different, so let's be more flexible
-      const errorMessage = inviteError.message || inviteError.toString() || String(inviteError);
+      const errorMessage =
+        inviteError.message || inviteError.toString() || String(inviteError);
       console.log(`🔍 Error structure:`, inviteError);
       console.log(`🔍 Error message:`, errorMessage);
       // For now, just verify that we got an error (the test is about demonstrating the problem)
       expect(errorMessage).toBeTruthy();
     });
-
 
     it('should successfully invite user after room alias resolution (AFTER fix)', async () => {
       // This test will pass after we implement the fix
@@ -224,8 +224,7 @@ describe('Matrix Room Alias Invitation (e2e)', () => {
     });
 
     it('should parse room alias correctly', () => {
-      const roomAlias =
-        '#event-test-event-123-tenant456:matrix.openmeet.net';
+      const roomAlias = '#event-test-event-123-tenant456:matrix.openmeet.net';
 
       const parsed = roomAliasUtils.parseRoomAlias(roomAlias);
 

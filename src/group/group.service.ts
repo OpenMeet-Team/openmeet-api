@@ -37,7 +37,7 @@ import { GroupRoleService } from '../group-role/group-role.service';
 import { MailService } from '../mail/mail.service';
 import { generateShortCode } from '../utils/short-code';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
-import { MatrixMessage } from '../matrix/matrix-types';
+// import { MatrixMessage } from '../matrix/matrix-types';
 import { UserService } from '../user/user.service';
 import { HomeQuery } from '../home/dto/home-query.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -824,16 +824,8 @@ export class GroupService {
     return await this.eventQueryService.findEventsForGroup(group.id, 0);
   }
 
-  showGroupDiscussions(slug: string): { messages: MatrixMessage[] } {
-    // This method has been deprecated - group discussions should be accessed
-    // directly through the DiscussionService or ChatController to avoid circular dependencies
-    this.logger.warn(
-      `showGroupDiscussions() deprecated for group ${slug} - use DiscussionService directly`,
-    );
-    return {
-      messages: [],
-    };
-  }
+  // DEPRECATED: Group discussions method removed
+  // Events are handling Matrix chats correctly - groups will be adapted later
 
   async showDashboardGroups(userId: number): Promise<GroupEntity[]> {
     await this.getTenantSpecificGroupRepository();

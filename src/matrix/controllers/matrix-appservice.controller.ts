@@ -21,7 +21,7 @@ import { GroupEntity } from '../../group/infrastructure/persistence/relational/e
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { EventManagementService } from '../../event/services/event-management.service';
 import { GlobalMatrixValidationService } from '../services/global-matrix-validation.service';
-import { getTenantConfig } from '../../utils/tenant-config';
+import { getTenantConfig, fetchTenants } from '../../utils/tenant-config';
 
 @ApiTags('Matrix Application Service')
 @TenantPublic()
@@ -148,7 +148,13 @@ export class MatrixAppServiceController {
           break;
         case 'm.room.member':
           this.logger.debug(`Member event: ${event.content?.membership}`);
-          // Note: Matrix Application Service handles room membership automatically
+          if (
+            event.content?.membership === 'join' &&
+            event.sender === event.state_key
+          ) {
+            // User attempting to join - check if they need invitation
+            await this.handleJoinAttempt(event);
+          }
           break;
         case 'm.room.create':
           this.logger.debug(`Room create event for room ${event.room_id}`);
@@ -668,6 +674,199 @@ export class MatrixAppServiceController {
     } catch (error) {
       this.logger.error(
         `Failed to configure event room: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
+  /**
+   * Handle user join attempts - check if they should be proactively invited
+   */
+  private async handleJoinAttempt(event: any): Promise<void> {
+    try {
+      const { sender, room_id } = event;
+      this.logger.log(`Join attempt by ${sender} in room ${room_id}`);
+
+      // Find which tenant owns this room by checking canonical alias across all tenants
+      const tenants = fetchTenants();
+      let roomAlias: string | null = null;
+      let owningTenantId: string | null = null;
+
+      for (const tenant of tenants) {
+        try {
+          roomAlias = await this.matrixRoomService.getRoomCanonicalAlias(
+            room_id,
+            tenant.id,
+          );
+          if (roomAlias) {
+            this.logger.debug(
+              `Found room ${room_id} in tenant ${tenant.id} with alias ${roomAlias}`,
+            );
+            owningTenantId = tenant.id;
+            break;
+          }
+        } catch (error) {
+          this.logger.debug(
+            `Room ${room_id} not found in tenant ${tenant.id}: ${error.message}`,
+          );
+          continue;
+        }
+      }
+
+      if (!roomAlias || !owningTenantId) {
+        this.logger.warn(
+          `No canonical alias found for room ${room_id} in any tenant`,
+        );
+        return;
+      }
+
+      // Parse room alias to get entity information
+      const entityInfo = this.parseRoomAliasToEntityInfo(roomAlias);
+      if (!entityInfo) {
+        this.logger.warn(`Unable to parse room alias: ${roomAlias}`);
+        return;
+      }
+
+      const { entityType, entitySlug, tenantId } = entityInfo;
+      this.logger.debug(
+        `Parsed room alias: type=${entityType}, slug=${entitySlug}, tenant=${tenantId}`,
+      );
+
+      // Verify parsed tenant ID matches the owning tenant ID
+      if (tenantId !== owningTenantId) {
+        this.logger.warn(
+          `Tenant ID mismatch: alias says ${tenantId}, but room found in ${owningTenantId}`,
+        );
+      }
+
+      if (entityType === 'event') {
+        await this.handleEventJoinAttempt(
+          sender,
+          entitySlug,
+          owningTenantId,
+          room_id,
+        );
+      } else if (entityType === 'group') {
+        // TODO: Implement group join attempt handling
+        this.logger.debug(
+          `Group join attempt handling not yet implemented for ${entitySlug}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error handling join attempt: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
+  /**
+   * Parse room alias to extract entity type, slug, and tenant ID
+   * Reuses the same parsing logic used throughout the controller
+   */
+  private parseRoomAliasToEntityInfo(
+    roomAlias: string,
+  ): { entityType: string; entitySlug: string; tenantId: string } | null {
+    try {
+      // Reuse existing parsing logic from handleRoomAliasEvent
+      const aliasWithoutHash = roomAlias.startsWith('#')
+        ? roomAlias.substring(1)
+        : roomAlias;
+      const [localpart] = aliasWithoutHash.split(':');
+
+      const parts = localpart.split('-');
+      if (parts.length < 3) {
+        return null;
+      }
+
+      const entityType = parts[0]; // 'event' or 'group'
+      const tenantId = parts[parts.length - 1]; // Last part is tenant ID
+      const entitySlug = parts.slice(1, -1).join('-'); // Everything between type and tenant
+
+      return { entityType, entitySlug, tenantId };
+    } catch (error) {
+      this.logger.error(
+        `Error parsing room alias ${roomAlias}: ${error.message}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Handle join attempt for event rooms - check if user is confirmed attendee
+   */
+  private async handleEventJoinAttempt(
+    senderMatrixId: string,
+    eventSlug: string,
+    tenantId: string,
+    _roomId: string,
+  ): Promise<void> {
+    try {
+      this.logger.log(
+        `Checking event join attempt for ${senderMatrixId} in event ${eventSlug}`,
+      );
+
+      // Get the event
+      const event = await this.eventQueryService.showEventBySlugWithTenant(
+        eventSlug,
+        tenantId,
+      );
+      if (!event) {
+        this.logger.warn(`Event not found: ${eventSlug} in tenant ${tenantId}`);
+        return;
+      }
+
+      // Extract Matrix handle from sender ID (@handle:server -> handle)
+      const handleMatch = senderMatrixId.match(/^@([^:]+):/);
+      if (!handleMatch) {
+        this.logger.warn(`Invalid Matrix ID format: ${senderMatrixId}`);
+        return;
+      }
+      const handle = handleMatch[1];
+
+      // Get user by Matrix handle
+      const matrixHandleRegistration =
+        await this.globalMatrixValidationService.getUserByMatrixHandle(
+          handle,
+          tenantId,
+        );
+
+      if (!matrixHandleRegistration) {
+        this.logger.debug(
+          `Matrix handle ${handle} not registered in tenant ${tenantId}`,
+        );
+        return;
+      }
+
+      // Check if user is allowed to chat (confirmed, cancelled, or rejected attendees)
+      const isAllowedToChat =
+        await this.eventAttendeeService.isUserAllowedToChat(
+          event.id,
+          matrixHandleRegistration.userId,
+        );
+
+      if (isAllowedToChat) {
+        this.logger.log(
+          `User ${senderMatrixId} is allowed to chat, inviting to room`,
+        );
+
+        // Generate room alias for invitation (reuse existing format)
+        const roomAlias = `#event-${eventSlug}-${tenantId}:${this.configService.get('matrix', { infer: true })?.serverName || 'matrix.openmeet.net'}`;
+
+        // Send invitation via MatrixRoomService
+        await this.matrixRoomService.inviteUser(roomAlias, senderMatrixId);
+
+        this.logger.log(
+          `Successfully invited ${senderMatrixId} to event room ${roomAlias}`,
+        );
+      } else {
+        this.logger.debug(
+          `User ${senderMatrixId} is not allowed to chat in event ${eventSlug}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error handling event join attempt: ${error.message}`,
         error.stack,
       );
     }
