@@ -316,6 +316,13 @@ export class MatrixRoomService implements IMatrixRoomProvider {
             history_visibility: 'shared',
           },
         },
+        {
+          type: 'm.room.join_rules',
+          state_key: '',
+          content: {
+            join_rule: isPublic ? 'public' : 'invite',
+          },
+        },
       ];
 
       // Add encryption state event if room should be encrypted

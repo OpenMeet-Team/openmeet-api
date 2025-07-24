@@ -692,7 +692,12 @@ export class MatrixAppServiceController {
       let roomAlias: string | null = null;
       let owningTenantId: string | null = null;
 
-      for (const tenant of tenants) {
+      // Filter out any tenants with empty or invalid IDs
+      const validTenants = tenants.filter(
+        (tenant) => tenant && tenant.id && tenant.id.trim(),
+      );
+
+      for (const tenant of validTenants) {
         try {
           roomAlias = await this.matrixRoomService.getRoomCanonicalAlias(
             room_id,
