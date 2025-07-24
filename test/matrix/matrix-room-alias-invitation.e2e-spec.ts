@@ -228,7 +228,10 @@ describe('Matrix Room Alias Invitation (e2e)', () => {
       // Use the actual server name from the service
       const eventSlug = 'test-event-123';
       const tenantId = 'tenant456';
-      const roomAlias = roomAliasUtils.generateEventRoomAlias(eventSlug, tenantId);
+      const roomAlias = roomAliasUtils.generateEventRoomAlias(
+        eventSlug,
+        tenantId,
+      );
 
       const parsed = roomAliasUtils.parseRoomAlias(roomAlias);
 

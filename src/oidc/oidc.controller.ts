@@ -23,6 +23,7 @@ import { JwtPayloadType } from '../auth/strategies/types/jwt-payload.type';
 import { getTenantConfig } from '../utils/tenant-config';
 import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
 import { UserService } from '../user/user.service';
+import { MatrixRoomService } from '../matrix/services/matrix-room.service';
 // Removed MacaroonsVerifier - simplified to use URL state parameter
 
 @ApiTags('OIDC')
@@ -34,6 +35,7 @@ export class OidcController {
     private readonly jwtService: JwtService,
     private readonly tempAuthCodeService: TempAuthCodeService,
     private readonly userService: UserService,
+    private readonly matrixRoomService: MatrixRoomService,
   ) {}
 
   // Removed extractStateFromMatrixSessionCookie - simplified to use URL state parameter

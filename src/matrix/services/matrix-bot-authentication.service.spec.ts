@@ -154,7 +154,7 @@ describe('MatrixBotService - Authentication Patterns Analysis', () => {
       );
     });
 
-    it('should fail when AppService token is missing', async () => {
+    it('should fail when AppService token is missing', () => {
       // TDD: This test should fail initially, then pass after we fix the config validation
       const configWithoutAppService = {
         get: jest.fn().mockImplementation((key: string, options?: any) => {
@@ -196,7 +196,7 @@ describe('MatrixBotService - Authentication Patterns Analysis', () => {
   });
 
   describe('Authentication Pattern 2: OIDC Authentication (Deprecated Fallback)', () => {
-    it('should reject OIDC authentication when AppService is not configured', async () => {
+    it('should reject OIDC authentication when AppService is not configured', () => {
       // TDD: This documents the current behavior - OIDC is no longer supported
       const configWithoutAppService = {
         get: jest.fn().mockImplementation((key: string, options?: any) => {
@@ -269,7 +269,7 @@ describe('MatrixBotService - Authentication Patterns Analysis', () => {
   });
 
   describe('Authentication Pattern 5: Configuration Validation', () => {
-    it('should validate Matrix homeserver URL configuration', async () => {
+    it('should validate Matrix homeserver URL configuration', () => {
       // TDD: This test should fail if homeserver URL validation is missing
       mockConfigService.get.mockImplementation((key: string, options?: any) => {
         const configs = {

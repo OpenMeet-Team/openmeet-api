@@ -20,7 +20,7 @@ describe('Matrix Application Service Webhooks (e2e)', () => {
       const userId = '@openmeet-bot-test:matrix.example.com';
       const encodedUserId = encodeURIComponent(userId);
 
-      const _response = await server
+      await server
         .get(`/api/matrix/appservice/users/${encodedUserId}`)
         .set('Authorization', `Bearer ${HOMESERVER_TOKEN}`);
 
