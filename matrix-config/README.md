@@ -29,7 +29,7 @@ Key variables used in both environments:
 
 | Variable | Description | Default (Local) |
 |----------|-------------|----------------|
-| SYNAPSE_SERVER_NAME | Matrix server domain | matrix-local.openmeet.test |
+| MATRIX_SERVER_NAME | Matrix server domain | matrix-local.openmeet.test |
 | POSTGRES_HOST | Database hostname | postgres |
 | POSTGRES_USER | Database username | root |
 | POSTGRES_PASSWORD | Database password | secret |
@@ -80,7 +80,7 @@ The Kubernetes deployment in `/openmeet-infrastructure/k8s/matrix/` follows the 
 
 ### Invalid Server Name Error
 
-If you see `Invalid server name '${SYNAPSE_SERVER_NAME}'`, this means:
+If you see `Invalid server name '${MATRIX_SERVER_NAME}'`, this means:
 - Environment variable substitution failed
 - Check that `envsubst` is installed in the container
 - Verify Docker Compose environment variables are correct

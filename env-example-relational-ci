@@ -151,9 +151,6 @@ SYNAPSE_URL_PREVIEW_ENABLED=false
 FRONTEND_REDIRECT_URIS=http://platform:9005/auth/matrix/callback,http://platform:9005/events/*
 POLICY_ADMIN_USERS=ci-test-admin,@ci-test-admin:matrix-ci.openmeet.test
 
-# Missing Synapse template variables
-SYNAPSE_SERVER_NAME=matrix-ci.openmeet.test
-
 # MAS Matrix Homeserver URL for CI environment
 MAS_MATRIX_HOMESERVER_URL=http://matrix:8448
 

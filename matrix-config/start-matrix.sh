@@ -15,7 +15,7 @@ echo "Processing homeserver.yaml template..."
 
 # Export environment variables with defaults for local development
 # These match the variables used in Kubernetes configuration
-export SYNAPSE_SERVER_NAME=${SYNAPSE_SERVER_NAME:-matrix-local.openmeet.test}
+export MATRIX_SERVER_NAME=${MATRIX_SERVER_NAME:-matrix-local.openmeet.test}
 export POSTGRES_HOST=${POSTGRES_HOST:-postgres}
 export POSTGRES_USER=${POSTGRES_USER:-root}
 export POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-secret}

@@ -112,7 +112,7 @@ services:
     ports:
       - "8448:8448"
     environment:
-      SYNAPSE_SERVER_NAME: ${MATRIX_SERVER_NAME:-matrix-ci.openmeet.test}
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME:-matrix-ci.openmeet.test}
       SYNAPSE_REPORT_STATS: "no"
       SYNAPSE_LOG_LEVEL: "INFO"
       POSTGRES_HOST: postgres

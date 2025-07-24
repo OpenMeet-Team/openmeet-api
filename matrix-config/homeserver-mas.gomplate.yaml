@@ -1,4 +1,4 @@
-server_name: "{{ .Env.SYNAPSE_SERVER_NAME }}"
+server_name: "{{ .Env.MATRIX_SERVER_NAME }}"
 public_baseurl: "{{ .Env.SYNAPSE_PUBLIC_BASEURL }}"
 pid_file: /data/homeserver.pid
 web_client_location: "{{ .Env.WEB_CLIENT_LOCATION }}"
