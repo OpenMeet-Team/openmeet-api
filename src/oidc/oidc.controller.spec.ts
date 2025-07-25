@@ -73,9 +73,13 @@ describe('OidcController', () => {
         {
           provide: MatrixRoomService,
           useValue: {
-            createRoom: jest.fn().mockResolvedValue('!room:matrix.openmeet.net'),
+            createRoom: jest
+              .fn()
+              .mockResolvedValue('!room:matrix.openmeet.net'),
             inviteUserToRoom: jest.fn().mockResolvedValue(undefined),
-            getRoomAlias: jest.fn().mockResolvedValue('#room-alias:matrix.openmeet.net'),
+            getRoomAlias: jest
+              .fn()
+              .mockResolvedValue('#room-alias:matrix.openmeet.net'),
           },
         },
       ],

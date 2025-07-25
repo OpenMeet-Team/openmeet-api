@@ -220,6 +220,40 @@ graph TD
 - **Automatic token refresh** with sessionStorage/localStorage
 - **Encryption support** with IndexedDB persistence
 
+#### Critical Configuration Requirements
+
+**REQUIRED for MSC3861 compatibility**:
+```typescript
+this.client = createClient({
+    baseUrl,
+    accessToken: credentials.accessToken,
+    userId: credentials.userId,
+    deviceId: credentials.deviceId,
+    timelineSupport: true,
+    useAuthorizationHeader: true, // CRITICAL: Required for MSC3861 compatibility
+    cryptoStore,
+    pickleKey: credentials.userId
+})
+```
+
+**Why This Matters**:
+- Without `useAuthorizationHeader: true`, Matrix client sends tokens in query parameters
+- MSC3861/MAS expects tokens in Authorization headers for proper server-side introspection
+- Element Web sets this flag by default, which is why it works seamlessly
+- Query parameter authentication fails with `access_token_id` errors when using MAS
+
+**Environment-Specific Client Validation Pattern**:
+```typescript
+const validClientIds = [
+  'matrix_synapse', // Legacy client ID
+  '0000000000000000000SYNAPSE', // Synapse ULID client ID
+  process.env.OAUTH_CLIENT_ID, // Environment-specific frontend client ID
+  process.env.BOT_CLIENT_ID, // Environment-specific bot client ID
+].filter(Boolean); // Remove undefined values
+```
+
+This supports different client IDs across local/CI/dev/prod environments while maintaining backward compatibility.
+
 ## Key Technical Insights
 
 ### 1. Authentication Header Requirements

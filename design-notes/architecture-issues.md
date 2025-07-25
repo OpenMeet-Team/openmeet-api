@@ -496,3 +496,36 @@ The codebase has inconsistent approaches to handling authentication and visibili
 - Create migration plan with backwards compatibility considerations
 - Implement new guards and begin controller migration
 - Update coding standards documentation to prevent future inconsistencies
+
+## Outstanding Matrix Integration Issues
+
+### Video Chat Infrastructure Missing (July 2025)
+
+**Status:** Not implemented - TURN server required
+
+**Issue:** Matrix text chat works but video calls fail with "MISSING_MATRIX_RTC_FOCUS" error
+
+**Required Infrastructure:**
+- TURN server deployment and configuration (coturn)
+- Element Call service setup
+- Matrix homeserver RTC focus configuration
+- SSL certificates for video call services
+- Network firewall rules for TURN ports
+
+**Priority:** Future enhancement
+
+### Group Room Creation Not Automated (July 2025) 
+
+**Status:** Partially implemented - Groups require manual room creation
+
+**Issue:** Event rooms auto-create via event listeners, but group rooms still need deprecated endpoints
+
+**Current State:**
+- Events: Auto-creation via `chat.event.created` event ✅
+- Groups: Only logs `group.created` with no room creation ❌  
+
+**Required Fix:**
+- Update `GroupListener.handleGroupCreatedEvent()` to emit `chat.group.created`
+- Mirror event room creation pattern for groups
+
+**Priority:** High - Removes dependency on deprecated endpoints
