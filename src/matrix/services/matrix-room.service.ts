@@ -1476,4 +1476,157 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       return null;
     }
   }
+
+  /**
+   * Update a user's m.direct account data to include a DM room
+   * This helps Matrix clients recognize which rooms are direct messages
+   */
+  async updateUserDirectAccountData(
+    userMatrixId: string,
+    otherUserMatrixId: string,
+    roomId: string,
+    tenantId: string,
+  ): Promise<void> {
+    try {
+      this.logger.log(
+        `Updating m.direct account data for ${userMatrixId} to include DM with ${otherUserMatrixId} (room: ${roomId})`,
+      );
+
+      // Create bot client for the tenant to perform admin operations
+      const botClient = await this.createBotClient(tenantId);
+      if (!botClient) {
+        throw new Error(`Failed to create bot client for tenant ${tenantId}`);
+      }
+
+      // Get current m.direct account data for the user
+      let currentDirectData: Record<string, string[]> = {};
+      try {
+        const existingData = await botClient.getAccountData('m.direct');
+        if (existingData) {
+          currentDirectData = existingData;
+        }
+      } catch {
+        // If no existing m.direct data, start with empty object
+        this.logger.debug(
+          `No existing m.direct data for ${userMatrixId}, starting fresh`,
+        );
+      }
+
+      // Add the room to the user's direct message list for the other user
+      if (!currentDirectData[otherUserMatrixId]) {
+        currentDirectData[otherUserMatrixId] = [];
+      }
+
+      // Only add if not already present
+      if (!currentDirectData[otherUserMatrixId].includes(roomId)) {
+        currentDirectData[otherUserMatrixId].push(roomId);
+      }
+
+      // Update the account data
+      await botClient.setAccountData('m.direct', currentDirectData);
+
+      this.logger.log(
+        `Successfully updated m.direct account data for ${userMatrixId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to update m.direct account data for ${userMatrixId}: ${error.message}`,
+      );
+      // Don't throw error - DM room can still work without this metadata
+    }
+  }
+
+  /**
+   * Update both users' m.direct account data for a new DM room
+   * This should be called after creating a DM room to ensure clients recognize it as a DM
+   */
+  async configureDMRoomAccountData(
+    user1MatrixId: string,
+    user2MatrixId: string,
+    roomId: string,
+    tenantId: string,
+  ): Promise<void> {
+    try {
+      this.logger.log(
+        `Configuring m.direct account data for DM room ${roomId} between ${user1MatrixId} and ${user2MatrixId}`,
+      );
+
+      // Update both users' account data in parallel
+      await Promise.all([
+        this.updateUserDirectAccountData(
+          user1MatrixId,
+          user2MatrixId,
+          roomId,
+          tenantId,
+        ),
+        this.updateUserDirectAccountData(
+          user2MatrixId,
+          user1MatrixId,
+          roomId,
+          tenantId,
+        ),
+      ]);
+
+      this.logger.log(
+        `Successfully configured m.direct account data for DM room ${roomId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to configure DM room account data: ${error.message}`,
+      );
+      // Don't throw error - DM room can still work without this metadata
+    }
+  }
+
+  /**
+   * Check if a DM room already exists between two users by querying their m.direct account data
+   */
+  async findExistingDMRoom(
+    user1MatrixId: string,
+    user2MatrixId: string,
+    tenantId: string,
+  ): Promise<string | null> {
+    try {
+      this.logger.debug(
+        `Checking for existing DM room between ${user1MatrixId} and ${user2MatrixId}`,
+      );
+
+      // Create bot client for the tenant
+      const botClient = await this.createBotClient(tenantId);
+      if (!botClient) {
+        this.logger.warn(`Failed to create bot client for tenant ${tenantId}`);
+        return null;
+      }
+
+      // Check user1's m.direct account data for rooms with user2
+      try {
+        const user1DirectData = await botClient.getAccountData('m.direct');
+        if (user1DirectData && user1DirectData[user2MatrixId]) {
+          const rooms = user1DirectData[user2MatrixId];
+          if (rooms && rooms.length > 0) {
+            // Return the first room found (there should typically be only one)
+            const roomId = rooms[0];
+            this.logger.log(
+              `Found existing DM room ${roomId} between ${user1MatrixId} and ${user2MatrixId}`,
+            );
+            return roomId;
+          }
+        }
+      } catch (error) {
+        this.logger.debug(
+          `Could not check m.direct data for ${user1MatrixId}: ${error.message}`,
+        );
+      }
+
+      this.logger.debug(
+        `No existing DM room found between ${user1MatrixId} and ${user2MatrixId}`,
+      );
+      return null;
+    } catch (error) {
+      this.logger.error(
+        `Error checking for existing DM room: ${error.message}`,
+      );
+      return null;
+    }
+  }
 }

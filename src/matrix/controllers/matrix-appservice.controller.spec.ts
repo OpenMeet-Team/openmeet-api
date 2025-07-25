@@ -8,6 +8,7 @@ import { TenantConnectionService } from '../../tenant/tenant.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { EventManagementService } from '../../event/services/event-management.service';
 import { GlobalMatrixValidationService } from '../services/global-matrix-validation.service';
+import { GroupRoleService } from '../../group-role/group-role.service';
 
 describe('MatrixAppServiceController', () => {
   let controller: MatrixAppServiceController;
@@ -90,6 +91,12 @@ describe('MatrixAppServiceController', () => {
         {
           provide: GlobalMatrixValidationService,
           useValue: mockGlobalMatrixValidationService,
+        },
+        {
+          provide: GroupRoleService,
+          useValue: {
+            // Mock methods if needed by the service
+          },
         },
       ],
     }).compile();

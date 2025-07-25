@@ -79,6 +79,13 @@ export interface IMatrixClient {
   getAccessToken: () => string | null;
   getUserId: () => string | null;
 
+  // Account data operations
+  getAccountData: (eventType: string) => Promise<any>;
+  setAccountData: (
+    eventType: string,
+    content: any,
+  ) => Promise<Record<string, never>>;
+
   // Event handling
   on: (event: string, callback: (...args: any[]) => void) => void;
   removeListener: (event: string, callback: (...args: any[]) => void) => void;

@@ -28,6 +28,7 @@ import { MatrixEventListener } from './matrix-event.listener';
 // ChatModule removed - Matrix Application Service handles room operations directly
 import { EventModule } from '../event/event.module';
 import { GroupModule } from '../group/group.module';
+import { GroupRoleModule } from '../group-role/group-role.module';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
 
 // Configure Matrix logging at module load time
@@ -44,6 +45,7 @@ configureMatrixLogging();
     // ChatModule removed - Matrix Application Service handles room operations directly
     forwardRef(() => EventModule),
     forwardRef(() => GroupModule),
+    GroupRoleModule,
     forwardRef(() => EventAttendeeModule),
     EventEmitterModule.forRoot({
       // Set wildcard to true to support event namespaces

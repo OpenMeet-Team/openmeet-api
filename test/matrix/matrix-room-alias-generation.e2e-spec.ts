@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import { createEvent, createGroup, createTestUser } from '../utils/functions';
+import { cleanupTestEntities } from '../utils/database-cleanup';
 
 describe('Matrix Room Alias Generation (e2e)', () => {
   const server = request
@@ -15,7 +16,15 @@ describe('Matrix Room Alias Generation (e2e)', () => {
     );
   }
 
-  // Test cleanup happens automatically via test database isolation
+  // Clean up test data before running tests to prevent interference
+  beforeAll(async () => {
+    await cleanupTestEntities(['simple-group', 'another-very-long-group', 'group-with-numbers', 'test-group']);
+  });
+
+  // Clean up test data after tests complete
+  afterAll(async () => {
+    await cleanupTestEntities(['simple-group', 'another-very-long-group', 'group-with-numbers', 'test-group']);
+  });
 
   describe('Event Room Alias Generation', () => {
     it('should generate correct room alias for simple event slug', async () => {

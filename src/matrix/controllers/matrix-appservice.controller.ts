@@ -21,6 +21,9 @@ import { GroupEntity } from '../../group/infrastructure/persistence/relational/e
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { EventManagementService } from '../../event/services/event-management.service';
 import { GlobalMatrixValidationService } from '../services/global-matrix-validation.service';
+import { GroupMemberService } from '../../group-member/group-member.service';
+import { GroupRoleService } from '../../group-role/group-role.service';
+import { GroupRole } from '../../core/constants/constant';
 import { getTenantConfig, fetchTenants } from '../../utils/tenant-config';
 
 @ApiTags('Matrix Application Service')
@@ -41,6 +44,7 @@ export class MatrixAppServiceController {
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly eventManagementService: EventManagementService,
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
+    private readonly groupRoleService: GroupRoleService,
   ) {
     const matrixConfig = this.configService.get('matrix', { infer: true })!;
 
@@ -226,6 +230,8 @@ export class MatrixAppServiceController {
         return await this.handleEventRoomQuery(localpart);
       } else if (localpart.startsWith('group-')) {
         return await this.handleGroupRoomQuery(localpart);
+      } else if (localpart.startsWith('dm-')) {
+        return await this.handleDMRoomQuery(localpart);
       } else {
         this.logger.warn(`Unknown room alias pattern: ${roomAlias}`);
         return { error: 'Room not found' };
@@ -366,6 +372,26 @@ export class MatrixAppServiceController {
   }
 
   /**
+   * Helper method to create a tenant-aware GroupMemberService instance
+   * Bypasses REQUEST-scoped dependency by creating a mock request with tenantId
+   */
+  private createTenantAwareGroupMemberService(
+    tenantId: string,
+  ): GroupMemberService {
+    // Create a mock request object with the tenant ID
+    const mockRequest = { tenantId };
+
+    // Create a new instance of GroupMemberService with the mock request
+    const tenantAwareService = new GroupMemberService(
+      mockRequest,
+      this.tenantConnectionService,
+      this.groupRoleService,
+    );
+
+    return tenantAwareService;
+  }
+
+  /**
    * Handle group room queries and create room if group exists
    */
   private async handleGroupRoomQuery(localpart: string): Promise<any> {
@@ -457,8 +483,18 @@ export class MatrixAppServiceController {
             roomError.message.includes('alias already taken'))
         ) {
           this.logger.log(
-            `Matrix room already exists for alias ${roomAlias} - returning success`,
+            `Matrix room already exists for alias ${roomAlias} - ensuring group members are invited`,
           );
+
+          // Room exists, but we should ensure confirmed group members are invited
+          try {
+            await this.configureGroupRoom('', groupSlug, tenantId, roomAlias);
+          } catch (configError) {
+            this.logger.warn(
+              `Failed to configure existing group room ${roomAlias}: ${configError.message}`,
+            );
+          }
+
           return {};
         }
         this.logger.error(`Failed to create Matrix room: ${roomError.message}`);
@@ -466,6 +502,140 @@ export class MatrixAppServiceController {
       }
     } catch (error) {
       this.logger.error(`Error creating group room: ${error.message}`);
+      return { error: 'Room not found' };
+    }
+  }
+
+  /**
+   * Handle DM room queries and create room if both users exist
+   */
+  private async handleDMRoomQuery(localpart: string): Promise<any> {
+    try {
+      // Parse: dm-{user1Handle}-{user2Handle}-{tenantId}
+      // Users handles are sorted alphabetically to ensure consistent room aliases
+      const parts = localpart.split('-');
+      if (parts.length < 4 || parts[0] !== 'dm') {
+        this.logger.warn(`Invalid DM room alias format: ${localpart}`);
+        return { error: 'Room not found' };
+      }
+
+      // Extract tenant ID (last part) and user handles (everything between dm- and -{tenantId})
+      const tenantId = parts[parts.length - 1];
+      const userHandles = parts.slice(1, -1);
+
+      if (userHandles.length !== 2) {
+        this.logger.warn(`DM room must have exactly 2 users: ${localpart}`);
+        return { error: 'Room not found' };
+      }
+
+      const [user1Handle, user2Handle] = userHandles;
+
+      this.logger.log(
+        `Checking if DM users exist: ${user1Handle} and ${user2Handle} in tenant ${tenantId}`,
+      );
+
+      // Validate both users exist and have Matrix handles
+      const user1Registration =
+        await this.globalMatrixValidationService.getUserByMatrixHandle(
+          user1Handle,
+          tenantId,
+        );
+      const user2Registration =
+        await this.globalMatrixValidationService.getUserByMatrixHandle(
+          user2Handle,
+          tenantId,
+        );
+
+      if (!user1Registration || !user2Registration) {
+        this.logger.log(
+          `One or both DM users not found: ${user1Handle} (${!!user1Registration}), ${user2Handle} (${!!user2Registration}) in tenant ${tenantId}`,
+        );
+        return { error: 'Room not found' };
+      }
+
+      this.logger.log(
+        `Both DM users exist: ${user1Handle} and ${user2Handle}, creating room`,
+      );
+
+      // Generate the room alias for this DM
+      const roomAlias = `#${localpart}:${this.configService.get('matrix', { infer: true })?.serverName || 'matrix.openmeet.net'}`;
+
+      // Get Matrix server name from tenant config
+      const tenantConfig = getTenantConfig(tenantId);
+      const serverName = tenantConfig?.matrixConfig?.serverName;
+      if (!serverName) {
+        this.logger.error(
+          `Matrix server name not configured for tenant: ${tenantId}`,
+        );
+        return { error: 'Room not found' };
+      }
+
+      // Generate Matrix IDs for both users
+      const user1MatrixId = `@${user1Handle}:${serverName}`;
+      const user2MatrixId = `@${user2Handle}:${serverName}`;
+
+      // Create the Matrix DM room
+      try {
+        const roomOptions = {
+          room_alias_name: localpart, // Use localpart for room alias
+          name: `${user1Handle} and ${user2Handle}`, // Optional, clients often hide this
+          topic: `Direct message between ${user1Handle} and ${user2Handle}`,
+          isDirect: true, // Key parameter for DM rooms
+          isPublic: false, // DMs are always private
+          encrypted: true, // Enable encryption for privacy
+          inviteUserIds: [user1MatrixId, user2MatrixId],
+        };
+
+        const roomResult = await this.matrixRoomService.createRoom(
+          roomOptions,
+          tenantId,
+        );
+        this.logger.log(
+          `Matrix DM room created successfully: ${roomResult.roomId} with alias ${roomAlias}`,
+        );
+
+        // Update both users' m.direct account data to include the new room
+        try {
+          await this.matrixRoomService.configureDMRoomAccountData(
+            user1MatrixId,
+            user2MatrixId,
+            roomResult.roomId,
+            tenantId,
+          );
+          this.logger.log(
+            `Successfully configured m.direct account data for DM room ${roomResult.roomId}`,
+          );
+        } catch (accountDataError) {
+          this.logger.warn(
+            `Failed to configure m.direct account data for DM room ${roomResult.roomId}: ${accountDataError.message}`,
+          );
+          // Continue - room still works without this metadata
+        }
+
+        // Return empty object as per Matrix spec - indicates room alias exists
+        return {};
+      } catch (roomError) {
+        // Handle "Room alias already taken" as success - room exists
+        if (
+          roomError.message &&
+          (roomError.message.includes('Room alias already taken') ||
+            roomError.message.includes('already exists') ||
+            roomError.message.includes('MatrixError: [409]') ||
+            roomError.message.includes('MatrixError: [400]') ||
+            roomError.message.includes('alias already taken'))
+        ) {
+          this.logger.log(
+            `Matrix DM room already exists for alias ${roomAlias} - returning success`,
+          );
+          return {};
+        }
+        this.logger.error(
+          `Failed to create Matrix DM room: ${roomError.message}`,
+        );
+        return { error: 'Room not found' };
+      }
+    } catch (error) {
+      this.logger.error(`Error creating DM room: ${error.message}`);
       return { error: 'Room not found' };
     }
   }
@@ -752,9 +922,11 @@ export class MatrixAppServiceController {
           room_id,
         );
       } else if (entityType === 'group') {
-        // TODO: Implement group join attempt handling
-        this.logger.debug(
-          `Group join attempt handling not yet implemented for ${entitySlug}`,
+        await this.handleGroupJoinAttempt(
+          sender,
+          entitySlug,
+          owningTenantId,
+          room_id,
         );
       }
     } catch (error) {
@@ -878,6 +1050,100 @@ export class MatrixAppServiceController {
   }
 
   /**
+   * Handle join attempt for group rooms - check if user is confirmed member
+   */
+  private async handleGroupJoinAttempt(
+    senderMatrixId: string,
+    groupSlug: string,
+    tenantId: string,
+    _roomId: string,
+  ): Promise<void> {
+    try {
+      this.logger.log(
+        `Checking group join attempt for ${senderMatrixId} in group ${groupSlug}`,
+      );
+
+      // Get the group
+      const group = await this.getGroupBySlugWithTenant(groupSlug, tenantId);
+      if (!group) {
+        this.logger.warn(`Group not found: ${groupSlug} in tenant ${tenantId}`);
+        return;
+      }
+
+      // Extract Matrix handle from sender ID (@handle:server -> handle)
+      const handleMatch = senderMatrixId.match(/^@([^:]+):/);
+      if (!handleMatch) {
+        this.logger.warn(`Invalid Matrix ID format: ${senderMatrixId}`);
+        return;
+      }
+      const handle = handleMatch[1];
+
+      // Get user by Matrix handle
+      const matrixHandleRegistration =
+        await this.globalMatrixValidationService.getUserByMatrixHandle(
+          handle,
+          tenantId,
+        );
+
+      if (!matrixHandleRegistration) {
+        this.logger.debug(
+          `Matrix handle ${handle} not registered in tenant ${tenantId}`,
+        );
+        return;
+      }
+
+      // Check if user is a confirmed group member (not guest)
+      const groupMemberService =
+        this.createTenantAwareGroupMemberService(tenantId);
+      const groupMember = await groupMemberService.findGroupMemberByUserId(
+        group.id,
+        matrixHandleRegistration.userId,
+      );
+
+      if (!groupMember) {
+        this.logger.debug(
+          `User ${senderMatrixId} is not a member of group ${groupSlug}`,
+        );
+        return;
+      }
+
+      // Check if user has a confirmed role (not guest)
+      const allowedRoles = [
+        GroupRole.Owner,
+        GroupRole.Admin,
+        GroupRole.Moderator,
+        GroupRole.Member,
+      ];
+
+      if (!allowedRoles.includes(groupMember.groupRole.name as GroupRole)) {
+        this.logger.debug(
+          `User ${senderMatrixId} has role ${groupMember.groupRole.name}, not allowed to join group ${groupSlug}`,
+        );
+        return;
+      }
+
+      this.logger.log(
+        `User ${senderMatrixId} is confirmed group member with role ${groupMember.groupRole.name}, inviting to room`,
+      );
+
+      // Generate room alias for invitation (reuse existing format)
+      const roomAlias = `#group-${groupSlug}-${tenantId}:${this.configService.get('matrix', { infer: true })?.serverName || 'matrix.openmeet.net'}`;
+
+      // Send invitation via MatrixRoomService
+      await this.matrixRoomService.inviteUser(roomAlias, senderMatrixId);
+
+      this.logger.log(
+        `Successfully invited ${senderMatrixId} to group room ${roomAlias}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error handling group join attempt: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
+  /**
    * Configure a group room and invite all members
    */
   private async configureGroupRoom(
@@ -910,9 +1176,91 @@ export class MatrixAppServiceController {
         return;
       }
 
-      // TODO: Get all group members - we need to implement this
+      // Get all confirmed group members (excluding guests) using service layer
+      let groupMembers: any[] = [];
+      try {
+        const groupMemberService =
+          this.createTenantAwareGroupMemberService(tenantId);
+        groupMembers =
+          await groupMemberService.getConfirmedGroupMembersForMatrix(group.id);
+        this.logger.log(
+          `Found ${groupMembers.length} confirmed group members for group ${groupSlug}`,
+        );
+      } catch (memberError) {
+        this.logger.error(
+          `Failed to retrieve group members for ${groupSlug}: ${memberError.message}`,
+        );
+        return; // Can't invite members if we can't retrieve them
+      }
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      // Invite each confirmed group member to the Matrix room
+      for (const groupMember of groupMembers) {
+        try {
+          // Get user's Matrix handle
+          const matrixHandleRegistration =
+            await this.globalMatrixValidationService.getMatrixHandleForUser(
+              groupMember.user.id,
+              tenantId,
+            );
+          if (!matrixHandleRegistration) {
+            this.logger.debug(
+              `User ${groupMember.user.slug} has no Matrix handle, skipping`,
+            );
+            continue;
+          }
+
+          // Get user's Matrix ID from their handle
+          const userMatrixId = `@${matrixHandleRegistration.handle}:${serverName}`;
+
+          this.logger.debug(
+            `Inviting group member ${userMatrixId} (${groupMember.groupRole.name}) to room ${alias}`,
+          );
+
+          // Invite user to the Matrix room using room alias
+          await this.matrixRoomService.inviteUser(alias, userMatrixId);
+          successCount++;
+
+          this.logger.debug(
+            `Successfully invited group member ${userMatrixId} to room ${alias}`,
+          );
+        } catch (error) {
+          errorCount++;
+          this.logger.error(
+            `Failed to invite group member ${groupMember.user.slug} to Matrix room: ${error.message}`,
+          );
+        }
+      }
+
+      // Update the group's matrixRoomId field in the database if we have the room ID
+      if (roomId && group.matrixRoomId !== roomId) {
+        this.logger.log(
+          `Updating group ${group.id} matrixRoomId to: ${roomId}`,
+        );
+        try {
+          // Update group's matrixRoomId using direct repository access (similar to event pattern)
+          const dataSource =
+            await this.tenantConnectionService.getTenantConnection(tenantId);
+          const groupRepository = dataSource.getRepository(GroupEntity);
+          await groupRepository.update(group.id, { matrixRoomId: roomId });
+          this.logger.log(
+            `Successfully updated group ${group.id} matrixRoomId`,
+          );
+        } catch (error) {
+          this.logger.error(
+            `Failed to update group matrixRoomId: ${error.message}`,
+          );
+        }
+      } else if (roomId) {
+        this.logger.log(
+          `Group ${group.id} already has correct matrixRoomId: ${roomId}`,
+        );
+      }
+
       this.logger.log(
-        `TODO: Get group members for group ${groupSlug} and invite to room ${alias}`,
+        `Group room invitation completed: ${successCount} users invited, ${errorCount} errors`,
       );
     } catch (error) {
       this.logger.error(

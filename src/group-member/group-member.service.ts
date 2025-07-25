@@ -422,4 +422,46 @@ export class GroupMemberService {
       },
     });
   }
+
+  /**
+   * Get confirmed group members for Matrix room invitations
+   * Only returns members with roles: owner, admin, moderator, member (excludes guests)
+   * Used by Matrix Application Service for auto-invitations
+   */
+  async getConfirmedGroupMembersForMatrix(
+    groupId: number,
+  ): Promise<GroupMemberEntity[]> {
+    await this.getTenantSpecificEventRepository();
+
+    // Get all group members excluding guests
+    const allowedRoles = [
+      GroupRole.Owner,
+      GroupRole.Admin,
+      GroupRole.Moderator,
+      GroupRole.Member,
+    ];
+
+    const groupMembers = await this.groupMemberRepository.find({
+      where: {
+        group: { id: groupId },
+        groupRole: { name: In(allowedRoles) },
+      },
+      relations: ['user', 'groupRole'],
+      select: {
+        id: true,
+        user: {
+          id: true,
+          slug: true,
+          firstName: true,
+          lastName: true,
+          name: true,
+        },
+        groupRole: {
+          name: true,
+        },
+      },
+    });
+
+    return groupMembers;
+  }
 }
