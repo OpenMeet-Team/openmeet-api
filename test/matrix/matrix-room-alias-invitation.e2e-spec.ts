@@ -3,7 +3,6 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { MatrixRoomService } from '../../src/matrix/services/matrix-room.service';
-import { MatrixBotService } from '../../src/matrix/services/matrix-bot.service';
 import { RoomAliasUtils } from '../../src/matrix/utils/room-alias.utils';
 import { GlobalMatrixValidationService } from '../../src/matrix/services/global-matrix-validation.service';
 import { createTestUser, createEvent } from '../utils/functions';
@@ -12,7 +11,6 @@ import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 describe('Matrix Room Alias Invitation (e2e)', () => {
   let app: INestApplication;
   let matrixRoomService: MatrixRoomService;
-  let matrixBotService: MatrixBotService;
   let roomAliasUtils: RoomAliasUtils;
   let globalMatrixValidationService: GlobalMatrixValidationService;
 
@@ -29,7 +27,6 @@ describe('Matrix Room Alias Invitation (e2e)', () => {
     await app.init();
 
     matrixRoomService = moduleFixture.get<MatrixRoomService>(MatrixRoomService);
-    matrixBotService = moduleFixture.get<MatrixBotService>(MatrixBotService);
     roomAliasUtils = moduleFixture.get<RoomAliasUtils>(RoomAliasUtils);
     globalMatrixValidationService =
       moduleFixture.get<GlobalMatrixValidationService>(

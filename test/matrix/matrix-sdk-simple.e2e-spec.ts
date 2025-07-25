@@ -1,18 +1,11 @@
-import request from 'supertest';
-import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
-
 // Try static import at top level
 import { createClient } from 'matrix-js-sdk';
 
 describe('Matrix SDK Simple Test (e2e)', () => {
-  const server = request
-    .agent(TESTING_APP_URL)
-    .set('x-tenant-id', TESTING_TENANT_ID);
-
   // Test 1: Try requiring matrix-js-sdk dynamically
-  it('should import matrix-js-sdk dynamically', async () => {
+  it('should import matrix-js-sdk dynamically', () => {
     try {
-      const matrixSdk = require('matrix-js-sdk');
+      const matrixSdk = require('matrix-js-sdk'); // eslint-disable-line @typescript-eslint/no-require-imports
       console.log('✅ CommonJS require worked:', typeof matrixSdk.createClient);
       expect(typeof matrixSdk.createClient).toBe('function');
     } catch (error) {
@@ -34,7 +27,7 @@ describe('Matrix SDK Simple Test (e2e)', () => {
   });
 
   // Test 3: Try top-level static import
-  it('should use top-level static import', async () => {
+  it('should use top-level static import', () => {
     try {
       console.log('✅ Top-level static import worked:', typeof createClient);
       expect(typeof createClient).toBe('function');
@@ -45,7 +38,7 @@ describe('Matrix SDK Simple Test (e2e)', () => {
   });
 
   // Test 4: Try creating a client with top-level import
-  it('should create a Matrix client instance with top-level import', async () => {
+  it('should create a Matrix client instance with top-level import', () => {
     try {
       const client = createClient({
         baseUrl: 'http://localhost:8448',

@@ -114,7 +114,7 @@ describe('Matrix Room Creation and Invitation Flow (e2e)', () => {
         'Test',
         'User',
       );
-      const _testEvent = await createEvent(TESTING_APP_URL, testUser.token, {
+      await createEvent(TESTING_APP_URL, testUser.token, {
         slug: `test-event-create-${Date.now()}`,
         name: 'Test Event for Create Handler',
         type: 'in-person',

@@ -33,7 +33,6 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
     }
 
     // Create a unique bot user for this test
-    const _testUserId = `@openmeet-test-${Date.now()}-${TESTING_TENANT_ID}:${serverName}`;
 
     try {
       // Use direct API call for AppService user registration
@@ -108,7 +107,7 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
         return;
       }
 
-      const { homeserverUrl } = tenantConfig.matrixConfig;
+      // const { homeserverUrl } = tenantConfig.matrixConfig;
 
       // 1. Create test event through our API
       const testUser = await createTestUser(
@@ -156,7 +155,7 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
         );
 
         // Use matrix-js-sdk to resolve room alias - this triggers homeserver to call AppService
-        const roomAliasResult = await matrixClient.getRoomIdForAlias(roomAlias);
+        await matrixClient.getRoomIdForAlias(roomAlias);
 
         // Wait 2 seconds for room creation and alias registration to complete
         console.log(`⏳ Waiting 2 seconds for room creation to complete...`);
@@ -225,7 +224,7 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
         return;
       }
 
-      const { homeserverUrl } = tenantConfig.matrixConfig;
+      // const { homeserverUrl } = tenantConfig.matrixConfig;
 
       // 1. Create test event and user
       const testUser = await createTestUser(
@@ -273,7 +272,7 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
           await createAuthenticatedMatrixClient(tenantConfig);
 
         // Get room ID using matrix-js-sdk - this triggers homeserver to call AppService
-        const roomAliasResult = await matrixClient.getRoomIdForAlias(roomAlias);
+        await matrixClient.getRoomIdForAlias(roomAlias);
 
         // Wait 2 seconds for room creation and alias registration to complete
         console.log(`⏳ Waiting 2 seconds for room creation to complete...`);
@@ -331,7 +330,7 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
         return;
       }
 
-      const { homeserverUrl } = tenantConfig.matrixConfig;
+      // const { homeserverUrl } = tenantConfig.matrixConfig;
 
       // Test that AppService authentication works
       const testAlias = `#test-auth-${Date.now()}-${TESTING_TENANT_ID}:matrix.openmeet.net`;
@@ -367,10 +366,11 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
         return;
       }
 
-      const { homeserverUrl } = tenantConfig.matrixConfig;
+      // const { homeserverUrl } = tenantConfig.matrixConfig;
 
       try {
         // Check Matrix server version endpoint (public endpoint)
+        const homeserverUrl = tenantConfig.matrixConfig.homeserverUrl;
         const versionResponse = await request(homeserverUrl)
           .get('/_matrix/client/versions')
           .expect(200);
@@ -409,7 +409,7 @@ describe('Matrix Homeserver Integration with MAS (e2e)', () => {
       }
     });
 
-    it('should verify tenant-specific configuration for MAS integration', async () => {
+    it('should verify tenant-specific configuration for MAS integration', () => {
       const tenantConfig = getTenantConfig(TESTING_TENANT_ID);
       if (!tenantConfig?.matrixConfig) {
         console.log(
