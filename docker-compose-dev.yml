@@ -132,7 +132,6 @@ services:
       MATRIX_HOST: localhost
       MATRIX_PORT: 8448
       # Standard Synapse settings
-      SYNAPSE_REPORT_STATS: "no"
       SYNAPSE_LOG_LEVEL: "INFO"
       # MAS integration
       MAS_ISSUER: "http://matrix-auth-service:8080/"

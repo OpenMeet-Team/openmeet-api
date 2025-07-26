@@ -60,6 +60,27 @@ media_store_path: /data/media
 uploads_path: /data/uploads
 data_dir: /data
 
+# S3 Media Storage Configuration
+{{- if .Env.ACCESS_KEY_ID }}
+media_storage_providers:
+  - module: s3_storage_provider.S3StorageProviderBackend
+    store_local: false
+    store_remote: true
+    store_synchronous: true
+    config:
+{{- if eq .Env.ENVIRONMENT "prod" }}
+      bucket: openmeet-matrix-media.s3.openmeet.net
+{{- else }}
+      bucket: openmeet-matrix-media-dev.s3.openmeet.net
+{{- end }}
+      region_name: "{{ .Env.AWS_S3_REGION }}"
+      endpoint_url: https://s3.amazonaws.com
+      access_key_id: "{{ .Env.ACCESS_KEY_ID }}"
+      secret_access_key: "{{ .Env.SECRET_ACCESS_KEY }}"
+      storage_class: STANDARD
+      thumbnails: true
+{{- end }}
+
 log_config: "/data/log.config"
 
 federation_domain_whitelist: []

@@ -36,7 +36,6 @@ services:
       - "8448:8448"
     environment:
       MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME:-matrix-ci.openmeet.test}
-      SYNAPSE_REPORT_STATS: "no"
       SYNAPSE_LOG_LEVEL: "INFO"
       POSTGRES_USER: ${DATABASE_USERNAME}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}

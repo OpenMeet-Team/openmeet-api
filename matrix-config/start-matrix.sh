@@ -4,6 +4,10 @@ set -x  # Enable debug mode to see what's happening
 
 echo "Starting Matrix Synapse server..."
 
+# Install S3 storage provider for Matrix media storage
+echo "Installing S3 storage provider..."
+pip install synapse-s3-storage-provider || echo "Failed to install S3 storage provider, continuing without it"
+
 # Create processed configuration directory if it doesn't exist
 mkdir -p /processed-config
 
