@@ -1,5 +1,10 @@
 import request from 'supertest';
-import { TESTING_APP_URL, TESTING_TENANT_ID, TESTING_ADMIN_EMAIL, TESTING_ADMIN_PASSWORD } from './constants';
+import {
+  TESTING_APP_URL,
+  TESTING_TENANT_ID,
+  TESTING_ADMIN_EMAIL,
+  TESTING_ADMIN_PASSWORD,
+} from './constants';
 
 /**
  * Clean up test entities using API calls to prevent test interference
@@ -30,10 +35,10 @@ export async function cleanupTestEntities(patterns: string[]): Promise<void> {
 
     if (groupsResponse.status === 200 && groupsResponse.body.data) {
       for (const group of groupsResponse.body.data) {
-        const shouldDelete = patterns.some(pattern => 
-          group.slug && group.slug.includes(pattern)
+        const shouldDelete = patterns.some(
+          (pattern) => group.slug && group.slug.includes(pattern),
         );
-        
+
         if (shouldDelete) {
           await request(TESTING_APP_URL)
             .delete(`/api/groups/${group.slug}`)
@@ -51,10 +56,10 @@ export async function cleanupTestEntities(patterns: string[]): Promise<void> {
 
     if (eventsResponse.status === 200 && eventsResponse.body.data) {
       for (const event of eventsResponse.body.data) {
-        const shouldDelete = patterns.some(pattern => 
-          event.slug && event.slug.includes(pattern)
+        const shouldDelete = patterns.some(
+          (pattern) => event.slug && event.slug.includes(pattern),
         );
-        
+
         if (shouldDelete) {
           await request(TESTING_APP_URL)
             .delete(`/api/events/${event.slug}`)
@@ -64,7 +69,9 @@ export async function cleanupTestEntities(patterns: string[]): Promise<void> {
       }
     }
 
-    console.log(`✅ Cleaned up entities matching patterns: ${patterns.join(', ')}`);
+    console.log(
+      `✅ Cleaned up entities matching patterns: ${patterns.join(', ')}`,
+    );
   } catch (error) {
     console.warn('⚠️ API cleanup failed:', error.message);
     // Don't throw - cleanup failures shouldn't break tests

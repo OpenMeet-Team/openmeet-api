@@ -15,7 +15,7 @@ describe('User Self-Update (/auth/me) - UI Path', () => {
     beforeAll(async () => {
       // Clean up any existing test users first
       await cleanupTestEntities(['openmeet-test.user']);
-      
+
       // Create a test user using the registration endpoint
       testEmail = `openmeet-test.user-${Date.now()}@openmeet.net`;
       const userData = await createTestUser(

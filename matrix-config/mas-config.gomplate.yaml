@@ -55,8 +55,28 @@ clients:
     client_secret: "{{ .Env.MAS_CLIENT_SECRET }}"
     redirect_uris: []  # Synapse doesn't need redirect URIs for introspection
 
-  # Note: OpenMeet Platform Frontend uses dynamic client registration
-  # No static client configuration needed - OAuth provider is available globally
+{{- if and (or (eq .Env.ENVIRONMENT "local") (eq .Env.ENVIRONMENT "dev")) .Env.MAS_STATIC_TEST_CLIENT_ID }}
+  # OpenMeet Platform Frontend Client (SPA) - Static Test Client
+  # This client is used for Cypress E2E tests and local development
+  - client_id: "{{ .Env.MAS_STATIC_TEST_CLIENT_ID }}"
+    client_auth_method: "none"  # Public client, no secrets
+    client_name: "OpenMeet Platform (Static Test Client)"
+    client_uri: "http://localhost:8087/"
+    logo_uri: "http://localhost:8087/openmeet/openmeet-logo.png"
+    redirect_uris:
+{{- range (.Env.MAS_STATIC_TEST_REDIRECT_URLS | strings.Split ",") }}
+      - "{{ . }}"
+{{- end }}
+    grant_types:
+      - "authorization_code"
+      - "refresh_token"
+    response_types:
+      - "code"
+    scope: "openid email"
+{{- else }}
+  # Note: OpenMeet Platform Frontend uses dynamic client registration in production
+  # No static client configuration needed - OAuth provider handles registration
+{{- end }}
 
   # OpenMeet Bot Client for Client Credentials Grant
   - client_id: "01JAYS74TCG3BTWKADN5Q4518E"

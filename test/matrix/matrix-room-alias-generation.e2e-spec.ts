@@ -18,12 +18,22 @@ describe('Matrix Room Alias Generation (e2e)', () => {
 
   // Clean up test data before running tests to prevent interference
   beforeAll(async () => {
-    await cleanupTestEntities(['simple-group', 'another-very-long-group', 'group-with-numbers', 'test-group']);
+    await cleanupTestEntities([
+      'simple-group',
+      'another-very-long-group',
+      'group-with-numbers',
+      'test-group',
+    ]);
   });
 
   // Clean up test data after tests complete
   afterAll(async () => {
-    await cleanupTestEntities(['simple-group', 'another-very-long-group', 'group-with-numbers', 'test-group']);
+    await cleanupTestEntities([
+      'simple-group',
+      'another-very-long-group',
+      'group-with-numbers',
+      'test-group',
+    ]);
   });
 
   describe('Event Room Alias Generation', () => {
