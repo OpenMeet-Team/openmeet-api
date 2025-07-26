@@ -23,7 +23,7 @@ import { EventManagementService } from '../../event/services/event-management.se
 import { GlobalMatrixValidationService } from '../services/global-matrix-validation.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
 import { GroupRoleService } from '../../group-role/group-role.service';
-import { GroupRole } from '../../core/constants/constant';
+import { GroupRole, GroupVisibility } from '../../core/constants/constant';
 import { getTenantConfig, fetchTenants } from '../../utils/tenant-config';
 
 @ApiTags('Matrix Application Service')
@@ -445,7 +445,7 @@ export class MatrixAppServiceController {
           room_alias_name: localpart, // Use localpart for room alias
           name: `${group.name} Chat`,
           topic: `Chat room for ${group.name}`,
-          isPublic: group.isPublic, // Use proper boolean for MatrixRoomService
+          isPublic: group.visibility === GroupVisibility.Public, // Use proper boolean for MatrixRoomService
         };
 
         const roomResult = await this.matrixRoomService.createRoom(
