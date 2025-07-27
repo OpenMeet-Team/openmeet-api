@@ -23,7 +23,7 @@ import { EventManagementService } from '../../event/services/event-management.se
 import { GlobalMatrixValidationService } from '../services/global-matrix-validation.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
 import { GroupRoleService } from '../../group-role/group-role.service';
-import { GroupRole, GroupVisibility } from '../../core/constants/constant';
+import { GroupRole } from '../../core/constants/constant';
 import { getTenantConfig, fetchTenants } from '../../utils/tenant-config';
 
 @ApiTags('Matrix Application Service')
@@ -445,7 +445,7 @@ export class MatrixAppServiceController {
           room_alias_name: localpart, // Use localpart for room alias
           name: `${group.name} Chat`,
           topic: `Chat room for ${group.name}`,
-          isPublic: group.visibility === GroupVisibility.Public, // Use proper boolean for MatrixRoomService
+          isPublic: true, // Always public like events - AppService handles access control
         };
 
         const roomResult = await this.matrixRoomService.createRoom(
@@ -1092,20 +1092,33 @@ export class MatrixAppServiceController {
         return;
       }
 
+      this.logger.log(
+        `Found Matrix handle registration for ${handle}: userId=${matrixHandleRegistration.userId}`,
+      );
+
       // Check if user is a confirmed group member (not guest)
       const groupMemberService =
         this.createTenantAwareGroupMemberService(tenantId);
+
+      this.logger.log(
+        `Checking group membership: groupId=${group.id}, userId=${matrixHandleRegistration.userId}`,
+      );
+
       const groupMember = await groupMemberService.findGroupMemberByUserId(
         group.id,
         matrixHandleRegistration.userId,
       );
 
       if (!groupMember) {
-        this.logger.debug(
-          `User ${senderMatrixId} is not a member of group ${groupSlug}`,
+        this.logger.warn(
+          `User ${senderMatrixId} (userId: ${matrixHandleRegistration.userId}) is not a member of group ${groupSlug} (groupId: ${group.id}) - access denied`,
         );
         return;
       }
+
+      this.logger.log(
+        `Found group membership: userId=${matrixHandleRegistration.userId}, groupId=${group.id}, role=${groupMember.groupRole.name}`,
+      );
 
       // Check if user has a confirmed role (not guest)
       const allowedRoles = [
