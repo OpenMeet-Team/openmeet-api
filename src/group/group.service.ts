@@ -727,8 +727,30 @@ export class GroupService {
 
   async approveMember(slug: string, groupMemberId: number) {
     await this.getTenantSpecificGroupRepository();
-    await this.getGroupBySlug(slug);
-    return await this.groupMemberService.approveMember(groupMemberId);
+    const groupEntity = await this.getGroupBySlug(slug);
+
+    // Get member details before approval for Matrix integration
+    const groupMember = await this.groupMemberService
+      .findGroupDetailsMembers(groupEntity.id, 0)
+      .then((members) => members.find((m) => m.id === groupMemberId));
+
+    if (!groupMember) {
+      throw new NotFoundException('Group member not found');
+    }
+
+    const result = await this.groupMemberService.approveMember(groupMemberId);
+
+    // Emit event for Matrix integration to add newly approved member to group chat
+    this.eventEmitter.emit('chat.group.member.add', {
+      groupSlug: groupEntity.slug,
+      userSlug: groupMember.user.slug,
+      tenantId: this.request.tenantId,
+    });
+    this.logger.log(
+      `Emitted chat.group.member.add event for approved user ${groupMember.user.slug} in group ${groupEntity.slug}`,
+    );
+
+    return result;
   }
 
   async rejectMember(slug: string, groupMemberId: number) {
@@ -765,6 +787,16 @@ export class GroupService {
       await this.groupMemberService.createGroupMember(
         { userId: userEntity.id, groupId: groupEntity.id },
         GroupRole.Member,
+      );
+
+      // Emit event for Matrix integration to add user to group chat
+      this.eventEmitter.emit('chat.group.member.add', {
+        groupSlug: groupEntity.slug,
+        userSlug: userEntity.slug,
+        tenantId: this.request.tenantId,
+      });
+      this.logger.log(
+        `Emitted chat.group.member.add event for user ${userEntity.slug} in group ${groupEntity.slug}`,
       );
     }
 
