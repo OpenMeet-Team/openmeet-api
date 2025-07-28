@@ -165,7 +165,9 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       }
 
       // Now have admin leave the room to avoid client errors
-      await this.leaveRoom(roomId, adminUserId, accessToken);
+      if (adminUserId) {
+        await this.leaveRoom(roomId, adminUserId, accessToken);
+      }
 
       // Try modern admin API first (Synapse 1.59+)
       try {
@@ -468,7 +470,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
             );
           } catch (joinError) {
             // Check error details
-            this.handleJoinError(joinError, roomId, adminUserId, 'admin');
+            this.handleJoinError(joinError, roomId, adminUserId || '@unknown:deprecated.net', 'admin');
           }
         } else {
           // Standard join without server_name parameter
@@ -479,7 +481,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
             );
           } catch (joinError) {
             // Check error details
-            this.handleJoinError(joinError, roomId, adminUserId, 'admin');
+            this.handleJoinError(joinError, roomId, adminUserId || '@unknown:deprecated.net', 'admin');
           }
         }
       } catch (error) {

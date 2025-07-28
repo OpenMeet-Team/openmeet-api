@@ -5,24 +5,28 @@ import {
   HealthCheckError,
 } from '@nestjs/terminus';
 import axios from 'axios';
-import { MatrixTokenManagerService } from '../services/matrix-token-manager.service';
+import { MatrixCoreService } from '../services/matrix-core.service';
+import { MatrixBotService } from '../services/matrix-bot.service';
+import { fetchTenants } from '../../utils/tenant-config';
 
 @Injectable()
 export class MatrixHealthIndicator extends HealthIndicator {
-  constructor(private readonly tokenManager: MatrixTokenManagerService) {
+  constructor(
+    private readonly matrixCoreService: MatrixCoreService,
+    private readonly matrixBotService: MatrixBotService,
+  ) {
     super();
   }
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
     try {
-      const baseUrl = this.tokenManager['baseUrl']; // Access baseUrl from token manager
-      const tokenState = this.tokenManager.getAdminTokenState();
-      const adminToken = this.tokenManager.getAdminToken();
+      // Get Matrix server configuration from core service
+      const config = this.matrixCoreService.getConfig();
+      const baseUrl = config.baseUrl;
 
-      // Basic checks that don't require auth
+      // Basic server availability check
       let serverAvailable = false;
       try {
-        // Do a quick check of Matrix server without requiring token
         const serverInfoUrl = `${baseUrl}/_matrix/client/versions`;
         const serverInfoResponse = await axios.get(serverInfoUrl, {
           timeout: 2000, // 2 second timeout
@@ -37,72 +41,56 @@ export class MatrixHealthIndicator extends HealthIndicator {
         serverAvailable = false;
       }
 
-      // Auth checks - only if server is available
-      let tokenValid = false;
-      let adminPrivilegesValid = false;
+      // Bot authentication check - only if server is available
+      let botAuthenticated = false;
+      let botFunctional = false;
 
-      if (serverAvailable && tokenState === 'valid' && adminToken) {
+      if (serverAvailable) {
         try {
-          // Check if token is valid using whoami endpoint
-          const whoamiUrl = `${baseUrl}/_matrix/client/v3/account/whoami`;
-          const whoamiResponse = await axios.get(whoamiUrl, {
-            headers: { Authorization: `Bearer ${adminToken}` },
-          });
-
-          tokenValid = whoamiResponse.status === 200;
-
-          // Check admin privileges if token is valid
-          if (tokenValid) {
-            try {
-              // Try admin endpoint
-              const adminUrl = `${baseUrl}/_synapse/admin/v2/users?from=0&limit=1`;
-              const adminResponse = await axios.get(adminUrl, {
-                headers: { Authorization: `Bearer ${adminToken}` },
-              });
-
-              adminPrivilegesValid = adminResponse.status === 200;
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            } catch (_adminError) {
-              adminPrivilegesValid = false;
+          // Get first valid tenant to test bot authentication
+          const tenants = fetchTenants();
+          const testTenant = tenants.find(t => t.id && t.matrixConfig);
+          
+          if (testTenant) {
+            // Try to authenticate bot for health check
+            await this.matrixBotService.authenticateBot(testTenant.id);
+            botAuthenticated = this.matrixBotService.isBotAuthenticated();
+            
+            // If bot is authenticated, test basic functionality
+            if (botAuthenticated) {
+              botFunctional = true; // Bot service handles its own health internally
             }
           }
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        } catch (_tokenError) {
-          tokenValid = false;
-
-          // Report invalid token if it fails the health check
-          if (tokenState === 'valid') {
-            // Use the async method, but don't block health check on completion
-            void this.tokenManager.reportTokenInvalid();
-          }
+        } catch (_botError) {
+          botAuthenticated = false;
+          botFunctional = false;
         }
       }
 
       const data = {
         serverAvailable,
-        tokenState,
-        tokenValid,
-        adminPrivilegesValid,
+        botAuthenticated,
+        botFunctional,
         serverUrl: baseUrl,
       };
 
-      // Consider healthy if server is available and either token is valid or being regenerated
-      const isHealthy =
-        serverAvailable && (tokenValid || tokenState === 'regenerating');
+      // Consider healthy if server is available and bot is functional
+      const isHealthy = serverAvailable && botFunctional;
 
       if (isHealthy) {
         return this.getStatus(key, true, data);
       }
 
       throw new HealthCheckError(
-        'Matrix server check failed',
+        'Matrix health check failed',
         this.getStatus(key, false, data),
       );
     } catch (error) {
       // General error handling
+      const config = this.matrixCoreService.getConfig();
       return this.getStatus(key, false, {
         message: error.message,
-        serverUrl: this.tokenManager['baseUrl'],
+        serverUrl: config.baseUrl,
         error: error.toString(),
       });
     }

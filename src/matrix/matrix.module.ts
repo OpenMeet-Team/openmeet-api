@@ -14,7 +14,6 @@ import { MatrixCoreService } from './services/matrix-core.service';
 import { MatrixUserService } from './services/matrix-user.service';
 import { MatrixRoomService } from './services/matrix-room.service';
 import { MatrixMessageService } from './services/matrix-message.service';
-import { MatrixTokenManagerService } from './services/matrix-token-manager.service';
 import { MatrixHealthIndicator } from './health/matrix.health';
 import { configureMatrixLogging } from './config/matrix-logger';
 import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
@@ -63,7 +62,6 @@ configureMatrixLogging();
   controllers: [MatrixController, MatrixAppServiceController],
   providers: [
     // Matrix services
-    MatrixTokenManagerService, // Token manager must be initialized before core service
     MatrixCoreService,
     MatrixBotService,
     MatrixBotUserService,
@@ -94,7 +92,6 @@ configureMatrixLogging();
     MatrixUserService,
     MatrixRoomService,
     MatrixMessageService,
-    MatrixTokenManagerService,
     MatrixHealthIndicator,
     GlobalMatrixValidationService,
     RoomAliasUtils,
