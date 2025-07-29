@@ -60,14 +60,18 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     this.baseUrl = baseUrl;
     this.serverName = serverName;
 
-    this.logger.log(`Matrix Core Service configured with server: ${serverName}`);
+    this.logger.log(
+      `Matrix Core Service configured with server: ${serverName}`,
+    );
   }
 
   async onModuleInit() {
     try {
       // Load the Matrix SDK for use by other services
       await this.loadMatrixSdk();
-      this.logger.log('Matrix Core Service initialized - SDK loaded successfully');
+      this.logger.log(
+        'Matrix Core Service initialized - SDK loaded successfully',
+      );
     } catch (error) {
       this.logger.error(
         `Failed to load Matrix SDK: ${error.message}`,
@@ -79,9 +83,6 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-
-
-
   /**
    * Helper function for implementing delay
    */
@@ -89,7 +90,7 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  async onModuleDestroy() {
+  onModuleDestroy() {
     this.logger.log('Matrix Core Service destroyed');
   }
 
@@ -132,11 +133,6 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
 
   // No mock SDK implementation - we will require the real SDK to work properly
 
-
-
-
-
-
   /**
    * Get the event emitter for Matrix-related events
    * Used for system-wide notifications about token refreshes, etc.
@@ -145,14 +141,12 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     return this.eventEmitter;
   }
 
-
   /**
    * Get the Matrix SDK
    */
   getSdk(): IMatrixSdk {
     return this.matrixSdk;
   }
-
 
   /**
    * Get the Matrix server configuration
@@ -230,5 +224,4 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
       // Add other methods as needed by the services
     } as any;
   }
-
 }

@@ -49,19 +49,19 @@ export class MatrixHealthIndicator extends HealthIndicator {
         try {
           // Get first valid tenant to test bot authentication
           const tenants = fetchTenants();
-          const testTenant = tenants.find(t => t.id && t.matrixConfig);
-          
+          const testTenant = tenants.find((t) => t.id && t.matrixConfig);
+
           if (testTenant) {
             // Try to authenticate bot for health check
             await this.matrixBotService.authenticateBot(testTenant.id);
             botAuthenticated = this.matrixBotService.isBotAuthenticated();
-            
+
             // If bot is authenticated, test basic functionality
             if (botAuthenticated) {
               botFunctional = true; // Bot service handles its own health internally
             }
           }
-        } catch (_botError) {
+        } catch {
           botAuthenticated = false;
           botFunctional = false;
         }

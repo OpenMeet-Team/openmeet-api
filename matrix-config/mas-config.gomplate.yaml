@@ -148,6 +148,12 @@ email:
   port: {{ .Env.MAS_MAIL_PORT | default .Env.MAIL_PORT }}
   mode: "{{ .Env.MAIL_MODE }}"
 
+# Experimental settings for {{ .Env.ENVIRONMENT }} 
+experimental:
+  # Shorter token timeouts for local dev testing (default: 300 seconds/5 minutes)
+  access_token_ttl: {{ .Env.MAS_ACCESS_TOKEN_TTL | default "300" }}
+  compat_token_ttl: {{ .Env.MAS_COMPAT_TOKEN_TTL | default "300" }}
+
 # Minimal telemetry for {{ .Env.ENVIRONMENT }}
 telemetry:
   metrics:

@@ -470,7 +470,12 @@ export class MatrixRoomService implements IMatrixRoomProvider {
             );
           } catch (joinError) {
             // Check error details
-            this.handleJoinError(joinError, roomId, adminUserId || '@unknown:deprecated.net', 'admin');
+            this.handleJoinError(
+              joinError,
+              roomId,
+              adminUserId || '@unknown:deprecated.net',
+              'admin',
+            );
           }
         } else {
           // Standard join without server_name parameter
@@ -481,7 +486,12 @@ export class MatrixRoomService implements IMatrixRoomProvider {
             );
           } catch (joinError) {
             // Check error details
-            this.handleJoinError(joinError, roomId, adminUserId || '@unknown:deprecated.net', 'admin');
+            this.handleJoinError(
+              joinError,
+              roomId,
+              adminUserId || '@unknown:deprecated.net',
+              'admin',
+            );
           }
         }
       } catch (error) {
