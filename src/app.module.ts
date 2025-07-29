@@ -44,7 +44,6 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AuthGithubModule } from './auth-github/auth-github.module';
 import { GroupMailModule } from './group-mail/group-mail.module';
 import { EventMailModule } from './event-mail/event-mail.module';
-import { ChatMailModule } from './chat-mail/chat-mail.module';
 import { AuthBlueskyModule } from './auth-bluesky/auth-bluesky.module';
 import { AuditLoggerService } from './logger/audit-logger.provider';
 import { TracingModule } from './tracing/tracing.module';
@@ -136,7 +135,6 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     // ChatModule removed - Matrix Application Service handles rooms directly
     GroupMailModule,
     EventMailModule,
-    ChatMailModule,
     AuthBlueskyModule,
     ShadowAccountModule,
     BlueskyModule,

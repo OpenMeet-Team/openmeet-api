@@ -198,9 +198,6 @@ export const mockHomeQuery = {
   categories: [],
 };
 
-export const mockChatMailService = {
-  sendMailNewMessage: jest.fn().mockResolvedValue(undefined),
-};
 
 export const mockMailerService = {
   sendMjmlMail: jest.fn().mockResolvedValue(undefined),

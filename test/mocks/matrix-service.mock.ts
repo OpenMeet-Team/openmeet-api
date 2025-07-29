@@ -24,9 +24,7 @@ export class MockMatrixService {
   setRoomPowerLevels = jest.fn();
   getRoomPowerLevels = jest.fn();
 
-  // Message operations
-  sendMessage = jest.fn();
-  getRoomMessages = jest.fn();
+  // Message operations (deprecated - now handled client-side)
 
   // Room visibility operations
   setRoomVisibility = jest.fn();
