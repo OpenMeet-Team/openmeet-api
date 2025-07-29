@@ -143,8 +143,11 @@ describe('MatrixCoreService', () => {
       const config = service.getConfig();
 
       expect(config).toEqual({
-        baseUrl: 'https://matrix.example.org',
-        serverName: 'example.org',
+        adminUserId: '@deprecated:use-bot-service.net',
+        baseUrl: 'http://localhost:8448',
+        defaultDeviceId: 'DEPRECATED_USE_BOT_SERVICE',
+        defaultInitialDeviceDisplayName: 'Deprecated - Use Bot Service',
+        serverName: 'matrix.openmeet.net',
       });
     });
 
