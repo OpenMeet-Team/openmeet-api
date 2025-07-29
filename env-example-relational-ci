@@ -157,3 +157,7 @@ MAS_MATRIX_HOMESERVER_URL=http://matrix:8448
 # MAS Mail configuration for CI environment
 MAS_MAIL_HOST=maildev
 MAS_MAIL_PORT=1025
+
+# MAS Token TTL configuration for CI environment (in seconds)
+MAS_ACCESS_TOKEN_TTL=300
+MAS_COMPAT_TOKEN_TTL=300

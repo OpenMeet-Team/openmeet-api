@@ -127,3 +127,7 @@ SYNAPSE_URL_PREVIEW_ENABLED=false
 MAS_ISSUER=http://api:3000
 MAS_CLIENT_SECRET=ci_test_mas_client_secret_for_synapse
 MAS_ADMIN_TOKEN=ci_test_matrix_admin_token
+
+# MAS Token TTL configuration (in seconds)
+MAS_ACCESS_TOKEN_TTL=300
+MAS_COMPAT_TOKEN_TTL=300
