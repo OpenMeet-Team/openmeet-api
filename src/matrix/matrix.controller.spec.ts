@@ -45,6 +45,13 @@ describe('MatrixController', () => {
     deviceId: 'mock_device_id',
   };
 
+  // Mock request object for deprecated endpoint tests
+  const mockRequest = {
+    res: {
+      setHeader: jest.fn(),
+    },
+  } as any;
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [MatrixController],
@@ -170,12 +177,17 @@ describe('MatrixController', () => {
         .spyOn(userService, 'findById')
         .mockResolvedValueOnce(mockUserWithMatrix);
 
-      const result = await controller.provisionMatrixUser(mockUser as any);
+      const result = await controller.provisionMatrixUser(
+        mockUser as any,
+        mockRequest,
+      );
 
       expect(result).toEqual({
         matrixUserId: mockUserWithMatrix.matrixUserId,
         success: true,
         provisioned: false,
+        deprecationWarning:
+          'This endpoint is deprecated and will be removed on 2025-10-29. Please migrate to POST /matrix/provision-user-with-handle for better handle control.',
       });
 
       // Should not create a new Matrix user
@@ -183,7 +195,10 @@ describe('MatrixController', () => {
     });
 
     it('should provision a new Matrix user if user does not have Matrix credentials', async () => {
-      const result = await controller.provisionMatrixUser(mockUser as any);
+      const result = await controller.provisionMatrixUser(
+        mockUser as any,
+        mockRequest,
+      );
 
       expect(matrixUserService.provisionMatrixUser).toHaveBeenCalledWith(
         mockFullUser,
@@ -215,6 +230,8 @@ describe('MatrixController', () => {
         matrixUserId: mockMatrixUserInfo.userId,
         success: true,
         provisioned: true,
+        deprecationWarning:
+          'This endpoint is deprecated and will be removed on 2025-10-29. Please migrate to POST /matrix/provision-user-with-handle for better handle control.',
       });
     });
 
@@ -225,7 +242,7 @@ describe('MatrixController', () => {
         .mockRejectedValueOnce(error);
 
       await expect(
-        controller.provisionMatrixUser(mockUser as any),
+        controller.provisionMatrixUser(mockUser as any, mockRequest),
       ).rejects.toThrow(error);
     });
   });

@@ -1001,7 +1001,7 @@ export class EventQueryService {
     // Find the event using the provided tenant connection
     const event = await eventRepo.findOne({
       where: { slug },
-      relations: ['user'],
+      relations: ['user', 'group'],
     });
 
     if (!event) {

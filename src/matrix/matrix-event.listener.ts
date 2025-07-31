@@ -7,7 +7,7 @@ import { UserService } from '../user/user.service';
 import { EventQueryService } from '../event/services/event-query.service';
 import { GroupService } from '../group/group.service';
 import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
-import { EventAttendeeService } from '../event-attendee/event-attendee.service';
+import { EventAttendeeQueryService } from '../event-attendee/event-attendee-query.service';
 import { EventAttendeeStatus } from '../core/constants/constant';
 import { getTenantConfig } from '../utils/tenant-config';
 
@@ -45,7 +45,7 @@ export class MatrixEventListener {
     private readonly eventQueryService: EventQueryService,
     private readonly groupService: GroupService,
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
-    private readonly eventAttendeeService: EventAttendeeService,
+    private readonly eventAttendeeQueryService: EventAttendeeQueryService,
   ) {
     this.logger.log(
       '🔥 MatrixEventListener initialized and ready to handle events',
@@ -384,8 +384,9 @@ export class MatrixEventListener {
 
       // Get all confirmed attendees for this event
       const confirmedAttendees =
-        await this.eventAttendeeService.showConfirmedEventAttendeesByEventId(
+        await this.eventAttendeeQueryService.showConfirmedEventAttendeesByEventId(
           event.id,
+          payload.tenantId,
         );
 
       this.logger.log(
@@ -598,8 +599,9 @@ export class MatrixEventListener {
 
       // Get all confirmed attendees for this event
       const confirmedAttendees =
-        await this.eventAttendeeService.showConfirmedEventAttendeesByEventId(
+        await this.eventAttendeeQueryService.showConfirmedEventAttendeesByEventId(
           event.id,
+          tenantId,
         );
 
       this.logger.log(

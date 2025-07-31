@@ -18,10 +18,10 @@ import { MatrixRoomService } from '../services/matrix-room.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
 // import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity'; // Currently not used
-import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
+import { EventAttendeeQueryService } from '../../event-attendee/event-attendee-query.service';
 import { EventManagementService } from '../../event/services/event-management.service';
 import { GlobalMatrixValidationService } from '../services/global-matrix-validation.service';
-import { GroupMemberService } from '../../group-member/group-member.service';
+import { GroupMemberQueryService } from '../../group-member/group-member-query.service';
 import { GroupRoleService } from '../../group-role/group-role.service';
 import { GroupRole } from '../../core/constants/constant';
 import { getTenantConfig, fetchTenants } from '../../utils/tenant-config';
@@ -41,9 +41,10 @@ export class MatrixAppServiceController {
     private readonly groupService: GroupService,
     private readonly matrixRoomService: MatrixRoomService,
     private readonly tenantConnectionService: TenantConnectionService,
-    private readonly eventAttendeeService: EventAttendeeService,
+    private readonly eventAttendeeQueryService: EventAttendeeQueryService,
     private readonly eventManagementService: EventManagementService,
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
+    private readonly groupMemberQueryService: GroupMemberQueryService,
     private readonly groupRoleService: GroupRoleService,
   ) {
     const matrixConfig = this.configService.get('matrix', { infer: true })!;
@@ -149,6 +150,8 @@ export class MatrixAppServiceController {
       switch (event.type) {
         case 'm.room.message':
           this.logger.debug(`Message event: ${event.content?.body}`);
+          // Sync power levels when users are active in Matrix rooms
+          await this.handleUserActivity(event);
           break;
         case 'm.room.member':
           this.logger.debug(`Member event: ${event.content?.membership}`);
@@ -369,26 +372,6 @@ export class MatrixAppServiceController {
       `Group query result: ${group ? `Found group ID ${group.id}` : 'No group found'}`,
     );
     return group;
-  }
-
-  /**
-   * Helper method to create a tenant-aware GroupMemberService instance
-   * Bypasses REQUEST-scoped dependency by creating a mock request with tenantId
-   */
-  private createTenantAwareGroupMemberService(
-    tenantId: string,
-  ): GroupMemberService {
-    // Create a mock request object with the tenant ID
-    const mockRequest = { tenantId };
-
-    // Create a new instance of GroupMemberService with the mock request
-    const tenantAwareService = new GroupMemberService(
-      mockRequest,
-      this.tenantConnectionService,
-      this.groupRoleService,
-    );
-
-    return tenantAwareService;
   }
 
   /**
@@ -780,8 +763,9 @@ export class MatrixAppServiceController {
 
       // Get all confirmed attendees for this event
       const confirmedAttendees =
-        await this.eventAttendeeService.showConfirmedEventAttendeesByEventId(
+        await this.eventAttendeeQueryService.showConfirmedEventAttendeesByEventId(
           event.id,
+          tenantId,
         );
       this.logger.log(
         `Found ${confirmedAttendees.length} confirmed attendees for event ${eventSlug}`,
@@ -1017,9 +1001,10 @@ export class MatrixAppServiceController {
 
       // Check if user is allowed to chat (confirmed, cancelled, or rejected attendees)
       const isAllowedToChat =
-        await this.eventAttendeeService.isUserAllowedToChat(
+        await this.eventAttendeeQueryService.isUserAllowedToChat(
           event.id,
           matrixHandleRegistration.userId,
+          tenantId,
         );
 
       if (isAllowedToChat) {
@@ -1096,18 +1081,16 @@ export class MatrixAppServiceController {
         `Found Matrix handle registration for ${handle}: userId=${matrixHandleRegistration.userId}`,
       );
 
-      // Check if user is a confirmed group member (not guest)
-      const groupMemberService =
-        this.createTenantAwareGroupMemberService(tenantId);
-
       this.logger.log(
         `Checking group membership: groupId=${group.id}, userId=${matrixHandleRegistration.userId}`,
       );
 
-      const groupMember = await groupMemberService.findGroupMemberByUserId(
-        group.id,
-        matrixHandleRegistration.userId,
-      );
+      const groupMember =
+        await this.groupMemberQueryService.findGroupMemberByUserId(
+          group.id,
+          matrixHandleRegistration.userId,
+          tenantId,
+        );
 
       if (!groupMember) {
         this.logger.warn(
@@ -1192,10 +1175,11 @@ export class MatrixAppServiceController {
       // Get all confirmed group members (excluding guests) using service layer
       let groupMembers: any[] = [];
       try {
-        const groupMemberService =
-          this.createTenantAwareGroupMemberService(tenantId);
         groupMembers =
-          await groupMemberService.getConfirmedGroupMembersForMatrix(group.id);
+          await this.groupMemberQueryService.getConfirmedGroupMembersForMatrix(
+            group.id,
+            tenantId,
+          );
         this.logger.log(
           `Found ${groupMembers.length} confirmed group members for group ${groupSlug}`,
         );
@@ -1280,6 +1264,466 @@ export class MatrixAppServiceController {
         `Failed to configure group room: ${error.message}`,
         error.stack,
       );
+    }
+  }
+
+  /**
+   * Handle user activity in Matrix rooms - sync power levels based on OpenMeet roles
+   * Triggered by m.room.message events when users are active
+   */
+  private async handleUserActivity(event: any): Promise<void> {
+    try {
+      const { sender, room_id } = event;
+
+      // Skip bot messages to avoid recursive sync
+      if (sender.includes('openmeet-bot')) {
+        this.logger.debug(
+          `Skipping bot message from ${sender} in room ${room_id}`,
+        );
+        return;
+      }
+
+      this.logger.log(
+        `🔄 POWER SYNC: Handling user activity: ${sender} in room ${room_id}`,
+      );
+
+      // Find which tenant owns this room
+      const tenants = fetchTenants();
+      let roomAlias: string | null = null;
+      let owningTenantId: string | null = null;
+
+      const validTenants = tenants.filter(
+        (tenant) => tenant && tenant.id && tenant.id.trim(),
+      );
+
+      for (const tenant of validTenants) {
+        try {
+          roomAlias = await this.matrixRoomService.getRoomCanonicalAlias(
+            room_id,
+            tenant.id,
+          );
+          if (roomAlias) {
+            owningTenantId = tenant.id;
+            break;
+          }
+        } catch {
+          continue;
+        }
+      }
+
+      if (!roomAlias || !owningTenantId) {
+        this.logger.log(
+          `🔄 POWER SYNC: No alias found for room ${room_id} - skipping sync`,
+        );
+        return;
+      }
+
+      this.logger.log(
+        `🔄 POWER SYNC: Found room alias ${roomAlias} for tenant ${owningTenantId}`,
+      );
+
+      // Parse room alias to get entity information
+      const entityInfo = this.parseRoomAliasToEntityInfo(roomAlias);
+      if (!entityInfo) {
+        this.logger.debug(`Unable to parse room alias: ${roomAlias}`);
+        return;
+      }
+
+      this.logger.log(
+        `🔄 POWER SYNC: Syncing power levels for ${entityInfo.entityType} ${entityInfo.entitySlug} after user activity`,
+      );
+
+      // Sync power levels based on room type
+      switch (entityInfo.entityType) {
+        case 'event':
+          await this.syncEventPowerLevels(
+            entityInfo.entitySlug,
+            entityInfo.tenantId,
+            room_id,
+          );
+          break;
+        case 'group':
+          await this.syncGroupPowerLevels(
+            entityInfo.entitySlug,
+            entityInfo.tenantId,
+            room_id,
+          );
+          break;
+        case 'dm':
+          await this.syncDMPowerLevels(
+            entityInfo.entitySlug,
+            entityInfo.tenantId,
+            room_id,
+          );
+          break;
+        default:
+          this.logger.debug(`Unknown room type: ${entityInfo.entityType}`);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error handling user activity for power level sync: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
+  /**
+   * Sync Matrix power levels for event rooms based on OpenMeet attendee roles
+   */
+  private async syncEventPowerLevels(
+    eventSlug: string,
+    tenantId: string,
+    roomId: string,
+  ): Promise<void> {
+    try {
+      // Get the event
+      const event = await this.eventQueryService.showEventBySlugWithTenant(
+        eventSlug,
+        tenantId,
+      );
+
+      if (!event) {
+        this.logger.debug(
+          `Event not found: ${eventSlug} in tenant ${tenantId}`,
+        );
+        return;
+      }
+
+      // Get all confirmed attendees with their roles
+      this.logger.log(
+        `🔄 POWER SYNC: Getting confirmed attendees for event ${eventSlug} (ID: ${event.id}) in tenant ${tenantId}`,
+      );
+      const confirmedAttendees =
+        await this.eventAttendeeQueryService.showConfirmedEventAttendeesByEventId(
+          event.id,
+          tenantId,
+        );
+
+      this.logger.log(
+        `🔄 POWER SYNC: Found ${confirmedAttendees.length} confirmed attendees for event ${eventSlug}`,
+      );
+
+      if (confirmedAttendees.length === 0) {
+        this.logger.debug(
+          `No confirmed attendees for event ${eventSlug} - skipping power level sync`,
+        );
+        return;
+      }
+
+      const powerLevelsMap = await this.buildEventPowerLevelsMap(
+        confirmedAttendees,
+        tenantId,
+      );
+      await this.applyPowerLevels(
+        roomId,
+        powerLevelsMap,
+        tenantId,
+        `event ${eventSlug}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error syncing event power levels: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
+  /**
+   * Sync Matrix power levels for group rooms based on OpenMeet member roles
+   */
+  private async syncGroupPowerLevels(
+    groupSlug: string,
+    tenantId: string,
+    roomId: string,
+  ): Promise<void> {
+    try {
+      // Get the group
+      const group = await this.getGroupBySlugWithTenant(groupSlug, tenantId);
+      if (!group) {
+        this.logger.debug(
+          `Group not found: ${groupSlug} in tenant ${tenantId}`,
+        );
+        return;
+      }
+
+      // Get all confirmed group members
+      const confirmedMembers =
+        await this.groupMemberQueryService.getConfirmedGroupMembersForMatrix(
+          group.id,
+          tenantId,
+        );
+
+      if (confirmedMembers.length === 0) {
+        this.logger.debug(
+          `No confirmed members for group ${groupSlug} - skipping power level sync`,
+        );
+        return;
+      }
+
+      const powerLevelsMap = await this.buildGroupPowerLevelsMap(
+        confirmedMembers,
+        tenantId,
+      );
+      await this.applyPowerLevels(
+        roomId,
+        powerLevelsMap,
+        tenantId,
+        `group ${groupSlug}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error syncing group power levels: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
+  /**
+   * Sync Matrix power levels for DM rooms (equal power levels for both users)
+   */
+  private async syncDMPowerLevels(
+    dmIdentifier: string,
+    tenantId: string,
+    roomId: string,
+  ): Promise<void> {
+    try {
+      // Parse DM identifier: user1Handle-user2Handle
+      const userHandles = dmIdentifier.split('-');
+      if (userHandles.length !== 2) {
+        this.logger.warn(`Invalid DM identifier format: ${dmIdentifier}`);
+        return;
+      }
+
+      const powerLevelsMap = await this.buildDMPowerLevelsMap(
+        userHandles,
+        tenantId,
+      );
+      await this.applyPowerLevels(
+        roomId,
+        powerLevelsMap,
+        tenantId,
+        `DM ${dmIdentifier}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error syncing DM power levels: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
+  /**
+   * Build power levels map for event attendees
+   */
+  private async buildEventPowerLevelsMap(
+    attendees: any[],
+    tenantId: string,
+  ): Promise<Record<string, number>> {
+    const powerLevelsMap: Record<string, number> = {};
+    const serverName = await this.getMatrixServerName(tenantId);
+    if (!serverName) return powerLevelsMap;
+
+    for (const attendee of attendees) {
+      try {
+        this.logger.log(
+          `🔄 POWER SYNC: Processing attendee ${attendee.user.slug} (ID: ${attendee.user.id}) with role: ${attendee.role?.name || 'unknown'}`,
+        );
+
+        const matrixHandleRegistration =
+          await this.globalMatrixValidationService.getMatrixHandleForUser(
+            attendee.user.id,
+            tenantId,
+          );
+
+        if (!matrixHandleRegistration) {
+          this.logger.warn(
+            `🔄 POWER SYNC: No Matrix handle found for user ${attendee.user.slug} (ID: ${attendee.user.id}) - skipping power level assignment`,
+          );
+          continue;
+        }
+
+        const userMatrixId = `@${matrixHandleRegistration.handle}:${serverName}`;
+
+        // Map OpenMeet attendee roles to Matrix power levels
+        let powerLevel = 0;
+        const roleName = attendee.role?.name || 'unknown';
+        this.logger.log(
+          `🔄 POWER SYNC: Found Matrix handle for ${attendee.user.slug}: ${userMatrixId}, role: ${roleName}`,
+        );
+
+        switch (roleName) {
+          case 'host':
+            powerLevel = 100; // Admin level
+            break;
+          case 'moderator':
+            powerLevel = 50; // Moderator level
+            break;
+          case 'speaker':
+            powerLevel = 25; // Elevated participant
+            break;
+          case 'participant':
+          case 'guest':
+          default:
+            powerLevel = 0; // Regular user
+            break;
+        }
+
+        powerLevelsMap[userMatrixId] = powerLevel;
+        this.logger.log(
+          `🔄 POWER SYNC: Assigned power level ${powerLevel} to ${attendee.user.slug} (${userMatrixId})`,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Failed to process attendee ${attendee.user.slug}: ${error.message}`,
+        );
+      }
+    }
+
+    return powerLevelsMap;
+  }
+
+  /**
+   * Build power levels map for group members
+   */
+  private async buildGroupPowerLevelsMap(
+    members: any[],
+    tenantId: string,
+  ): Promise<Record<string, number>> {
+    const powerLevelsMap: Record<string, number> = {};
+    const serverName = await this.getMatrixServerName(tenantId);
+    if (!serverName) return powerLevelsMap;
+
+    for (const member of members) {
+      try {
+        const matrixHandleRegistration =
+          await this.globalMatrixValidationService.getMatrixHandleForUser(
+            member.user.id,
+            tenantId,
+          );
+
+        if (!matrixHandleRegistration) continue;
+
+        const userMatrixId = `@${matrixHandleRegistration.handle}:${serverName}`;
+
+        // Map OpenMeet group roles to Matrix power levels
+        let powerLevel = 0;
+        switch (member.groupRole.name) {
+          case GroupRole.Owner:
+            powerLevel = 100; // Admin level
+            break;
+          case GroupRole.Admin:
+            powerLevel = 75; // High moderator level
+            break;
+          case GroupRole.Moderator:
+            powerLevel = 50; // Standard moderator level
+            break;
+          case GroupRole.Member:
+          default:
+            powerLevel = 0; // Regular user
+            break;
+        }
+
+        powerLevelsMap[userMatrixId] = powerLevel;
+      } catch (error) {
+        this.logger.warn(
+          `Failed to process group member ${member.user.slug}: ${error.message}`,
+        );
+      }
+    }
+
+    return powerLevelsMap;
+  }
+
+  /**
+   * Build power levels map for DM rooms (equal power for both users)
+   */
+  private async buildDMPowerLevelsMap(
+    userHandles: string[],
+    tenantId: string,
+  ): Promise<Record<string, number>> {
+    const powerLevelsMap: Record<string, number> = {};
+    const serverName = await this.getMatrixServerName(tenantId);
+    if (!serverName) return powerLevelsMap;
+
+    // Both users get equal power in DMs (moderator level for room management)
+    for (const handle of userHandles) {
+      const userMatrixId = `@${handle}:${serverName}`;
+      powerLevelsMap[userMatrixId] = 50; // Both users can moderate their DM
+    }
+
+    return powerLevelsMap;
+  }
+
+  /**
+   * Apply power levels to Matrix room with bot admin access
+   */
+  private async applyPowerLevels(
+    roomId: string,
+    powerLevelsMap: Record<string, number>,
+    tenantId: string,
+    roomDescription: string,
+  ): Promise<void> {
+    try {
+      // Add bot with admin level
+      const botUserId = await this.getBotUserIdForTenant(tenantId);
+      if (botUserId) {
+        powerLevelsMap[botUserId] = 100;
+      }
+
+      // Apply power levels to Matrix room
+      await this.matrixRoomService.setRoomPowerLevels(
+        roomId,
+        powerLevelsMap,
+        tenantId,
+      );
+
+      this.logger.log(
+        `Successfully synced power levels for ${roomDescription}: ${Object.keys(powerLevelsMap).length} users`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error applying power levels for ${roomDescription}: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
+  /**
+   * Get Matrix server name for a tenant
+   */
+  private getMatrixServerName(tenantId: string): string | null {
+    try {
+      const tenantConfig = getTenantConfig(tenantId);
+      return tenantConfig?.matrixConfig?.serverName || null;
+    } catch (error) {
+      this.logger.error(
+        `Error getting Matrix server name for tenant ${tenantId}: ${error.message}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Get the bot user ID for a tenant
+   */
+  private async getBotUserIdForTenant(
+    tenantId: string,
+  ): Promise<string | null> {
+    try {
+      const serverName = await this.getMatrixServerName(tenantId);
+      if (!serverName) return null;
+
+      // Use the main AppService bot for power level operations
+      const appServiceId = this.configService.get('matrix', { infer: true })
+        ?.appservice?.id;
+      if (!appServiceId) return null;
+
+      return `@${appServiceId}:${serverName}`;
+    } catch (error) {
+      this.logger.error(
+        `Error getting bot user ID for tenant ${tenantId}: ${error.message}`,
+      );
+      return null;
     }
   }
 }

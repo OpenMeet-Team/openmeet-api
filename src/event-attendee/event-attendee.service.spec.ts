@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventAttendeeService } from './event-attendee.service';
+import { EventAttendeeQueryService } from './event-attendee-query.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import { EventRoleService } from '../event-role/event-role.service';
@@ -112,6 +113,21 @@ describe('EventAttendeeService', () => {
             findById: jest.fn(),
             findBySlug: jest.fn(),
           }),
+        },
+        {
+          provide: EventAttendeeQueryService,
+          useValue: {
+            showConfirmedEventAttendeesByEventId: jest.fn(),
+            findEventAttendeeByUserId: jest.fn(),
+            findEventAttendeeByUserSlug: jest.fn(),
+            findEventAttendees: jest.fn(),
+            showEventAttendeesCount: jest.fn(),
+            showConfirmedEventAttendeesCount: jest.fn(),
+            findBySourceId: jest.fn(),
+            findByUserSlug: jest.fn(),
+            findOne: jest.fn(),
+            isUserAllowedToChat: jest.fn(),
+          },
         },
         {
           provide: REQUEST,

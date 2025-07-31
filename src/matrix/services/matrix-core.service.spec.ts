@@ -148,12 +148,14 @@ describe('MatrixCoreService', () => {
       expect(config).toHaveProperty('defaultDeviceId');
       expect(config).toHaveProperty('defaultInitialDeviceDisplayName');
       expect(config).toHaveProperty('serverName');
-      
+
       // Test specific values we can predict
       expect(config.adminUserId).toBe('@deprecated:use-bot-service.net');
       expect(config.defaultDeviceId).toBe('DEPRECATED_USE_BOT_SERVICE');
-      expect(config.defaultInitialDeviceDisplayName).toBe('Deprecated - Use Bot Service');
-      
+      expect(config.defaultInitialDeviceDisplayName).toBe(
+        'Deprecated - Use Bot Service',
+      );
+
       // Test that environment-dependent values are strings
       expect(typeof config.baseUrl).toBe('string');
       expect(typeof config.serverName).toBe('string');

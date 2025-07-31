@@ -38,7 +38,9 @@ describe('MatrixBotService', () => {
       sendStateEvent: jest.fn().mockResolvedValue({}),
       getJoinedRooms: jest.fn().mockResolvedValue({ joined_rooms: [] }),
       getRoom: jest.fn().mockReturnValue(null),
-      getUserId: jest.fn().mockReturnValue('@openmeet-bot:matrix.openmeet.net'),
+      getUserId: jest
+        .fn()
+        .mockReturnValue('@openmeet-bot-test-tenant-123:matrix.openmeet.net'),
       getAccessToken: jest.fn().mockReturnValue('test-bot-token'),
       on: jest.fn(),
       removeListener: jest.fn(),
@@ -430,7 +432,7 @@ describe('MatrixBotService', () => {
         expect.objectContaining({
           ...existingPowerLevels,
           users: {
-            '@openmeet-bot:matrix.openmeet.net': 100,
+            '@openmeet-bot-test-tenant-123:matrix.openmeet.net': 100,
           },
         }),
         '',

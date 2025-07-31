@@ -331,7 +331,8 @@ export class MatrixController {
   @ApiOperation({
     summary: 'Provision a Matrix user for the authenticated user (legacy)',
     description:
-      'Legacy endpoint using tenant-prefixed usernames. Use provision-user-with-handle instead.',
+      'DEPRECATED: Legacy endpoint using tenant-prefixed usernames. Use provision-user-with-handle instead. This endpoint will be removed on 2025-10-29.',
+    deprecated: true,
   })
   @ApiResponse({
     status: HttpStatus.OK,
@@ -347,15 +348,37 @@ export class MatrixController {
   @UseGuards(JWTAuthGuard)
   @HttpCode(HttpStatus.OK)
   @Post('provision-user')
-  async provisionMatrixUser(@AuthUser() user: { id: number }): Promise<{
+  async provisionMatrixUser(
+    @AuthUser() user: { id: number },
+    @Req() req: Request,
+  ): Promise<{
     matrixUserId: string;
     provisioned: boolean;
     success: boolean;
+    deprecationWarning?: string;
   }> {
     const tenantId = this.request?.tenantId;
     if (!tenantId) {
       throw new BadRequestException('Tenant ID is required');
     }
+
+    // Log deprecation warning
+    this.logger.warn(
+      `DEPRECATED: POST /matrix/provision-user endpoint used by user ${user.id}. ` +
+        `This endpoint will be removed on 2025-10-29. ` +
+        `Please migrate to POST /matrix/provision-user-with-handle.`,
+    );
+
+    // Set deprecation headers
+    if (req.res) {
+      req.res.setHeader('Deprecation', 'true');
+      req.res.setHeader('Sunset', 'Wed, 29 Oct 2025 00:00:00 GMT');
+      req.res.setHeader(
+        'Link',
+        '</api/matrix/provision-user-with-handle>; rel="successor-version"',
+      );
+    }
+
     this.logger.log(`Provisioning Matrix user for user ID: ${user.id}`);
 
     // Check if user already has Matrix credentials via registry
@@ -384,6 +407,8 @@ export class MatrixController {
         matrixUserId,
         provisioned: false, // Already provisioned
         success: true,
+        deprecationWarning:
+          'This endpoint is deprecated and will be removed on 2025-10-29. Please migrate to POST /matrix/provision-user-with-handle for better handle control.',
       };
     }
 
@@ -400,6 +425,8 @@ export class MatrixController {
         matrixUserId: fullUser.matrixUserId,
         provisioned: false, // Already provisioned
         success: true,
+        deprecationWarning:
+          'This endpoint is deprecated and will be removed on 2025-10-29. Please migrate to POST /matrix/provision-user-with-handle for better handle control.',
       };
     }
 
@@ -451,6 +478,8 @@ export class MatrixController {
         matrixUserId: matrixUserInfo.userId,
         provisioned: true,
         success: true,
+        deprecationWarning:
+          'This endpoint is deprecated and will be removed on 2025-10-29. Please migrate to POST /matrix/provision-user-with-handle for better handle control.',
       };
     } catch (error) {
       this.logger.error(

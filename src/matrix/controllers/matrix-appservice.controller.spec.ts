@@ -5,9 +5,10 @@ import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupService } from '../../group/group.service';
 import { MatrixRoomService } from '../services/matrix-room.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
-import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
+import { EventAttendeeQueryService } from '../../event-attendee/event-attendee-query.service';
 import { EventManagementService } from '../../event/services/event-management.service';
 import { GlobalMatrixValidationService } from '../services/global-matrix-validation.service';
+import { GroupMemberQueryService } from '../../group-member/group-member-query.service';
 import { GroupRoleService } from '../../group-role/group-role.service';
 
 describe('MatrixAppServiceController', () => {
@@ -36,8 +37,9 @@ describe('MatrixAppServiceController', () => {
       .mockResolvedValue({ roomId: '!test:matrix.example.com' }),
   };
 
-  const mockEventAttendeeService = {
+  const mockEventAttendeeQueryService = {
     showConfirmedEventAttendeesByEventId: jest.fn().mockResolvedValue([]),
+    isUserAllowedToChat: jest.fn().mockResolvedValue(false),
   };
 
   const mockGlobalMatrixValidationService = {
@@ -81,8 +83,8 @@ describe('MatrixAppServiceController', () => {
           useValue: mockTenantConnectionService,
         },
         {
-          provide: EventAttendeeService,
-          useValue: mockEventAttendeeService,
+          provide: EventAttendeeQueryService,
+          useValue: mockEventAttendeeQueryService,
         },
         {
           provide: EventManagementService,
@@ -91,6 +93,27 @@ describe('MatrixAppServiceController', () => {
         {
           provide: GlobalMatrixValidationService,
           useValue: mockGlobalMatrixValidationService,
+        },
+        {
+          provide: GroupMemberQueryService,
+          useValue: {
+            getConfirmedGroupMembersForMatrix: jest.fn(),
+            findGroupMemberByUserId: jest.fn(),
+            findGroupMemberByUserSlugAndGroupSlug: jest.fn(),
+            createGroupOwner: jest.fn(),
+            updateGroupMemberRole: jest.fn(),
+            leaveGroup: jest.fn(),
+            removeGroupMember: jest.fn(),
+            findGroupDetailsMembers: jest.fn(),
+            approveMember: jest.fn(),
+            rejectMember: jest.fn(),
+            createGroupMember: jest.fn(),
+            getGroupMembersCount: jest.fn(),
+            getMailServiceGroupMember: jest.fn(),
+            getMailServiceGroupMembersByPermission: jest.fn(),
+            getSpecificGroupMembers: jest.fn(),
+            showGroupDetailsMember: jest.fn(),
+          },
         },
         {
           provide: GroupRoleService,

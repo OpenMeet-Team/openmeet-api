@@ -27,6 +27,7 @@ import { Trace } from '../utils/trace.decorator';
 import { EventSourceType } from '../core/constants/source-type.constant';
 import { BlueskyRsvpService } from '../bluesky/bluesky-rsvp.service';
 import { UserService } from '../user/user.service';
+import { EventAttendeeQueryService } from './event-attendee-query.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventAttendeeService {
@@ -43,6 +44,7 @@ export class EventAttendeeService {
     private readonly blueskyRsvpService: BlueskyRsvpService,
     @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
+    private readonly eventAttendeeQueryService: EventAttendeeQueryService,
   ) {
     this.logger.log('EventAttendeeService Constructed');
   }
@@ -788,24 +790,11 @@ export class EventAttendeeService {
     eventId: number,
     limit: number = 0,
   ): Promise<EventAttendeesEntity[]> {
-    await this.getTenantSpecificEventRepository();
-    return await this.eventAttendeesRepository.find({
-      where: { event: { id: eventId } },
-      relations: ['user'],
-      take: limit,
-      select: {
-        role: {
-          name: true,
-        },
-        user: {
-          name: true,
-          slug: true,
-          photo: {
-            path: true,
-          },
-        },
-      },
-    });
+    return this.eventAttendeeQueryService.showConfirmedEventAttendeesByEventId(
+      eventId,
+      this.request.tenantId,
+      limit,
+    );
   }
 
   @Trace('event-attendee.showEventAttendeesCount')
@@ -1131,25 +1120,10 @@ export class EventAttendeeService {
    * @returns Promise<boolean> - True if user is allowed to chat
    */
   async isUserAllowedToChat(eventId: number, userId: number): Promise<boolean> {
-    try {
-      const attendee = await this.findEventAttendeeByUserId(eventId, userId);
-      if (!attendee) {
-        return false;
-      }
-
-      // Allow confirmed attendees and those who cancelled/rejected (they can still chat)
-      const allowedStatuses = [
-        EventAttendeeStatus.Confirmed,
-        EventAttendeeStatus.Cancelled,
-        EventAttendeeStatus.Rejected,
-      ];
-
-      return allowedStatuses.includes(attendee.status);
-    } catch {
-      this.logger.debug(
-        `User ${userId} is not an attendee of event ${eventId}`,
-      );
-      return false;
-    }
+    return this.eventAttendeeQueryService.isUserAllowedToChat(
+      eventId,
+      userId,
+      this.request.tenantId,
+    );
   }
 }

@@ -136,7 +136,7 @@ describe('MatrixBotService - Authentication Patterns Analysis', () => {
         expect.objectContaining({
           baseUrl: 'http://localhost:8448',
           accessToken: 'test-appservice-token',
-          userId: '@openmeet-bot:matrix.openmeet.net',
+          userId: '@openmeet-bot-test-tenant-123:matrix.openmeet.net',
           localTimeoutMs: 30000,
           useAuthorizationHeader: true,
         }),
@@ -149,7 +149,7 @@ describe('MatrixBotService - Authentication Patterns Analysis', () => {
       const sdk = mockMatrixCoreService.getSdk();
       expect(sdk.createClient).toHaveBeenCalledWith(
         expect.objectContaining({
-          userId: '@openmeet-bot:matrix.openmeet.net',
+          userId: '@openmeet-bot-test-tenant-123:matrix.openmeet.net',
         }),
       );
     });
@@ -262,7 +262,7 @@ describe('MatrixBotService - Authentication Patterns Analysis', () => {
       const sdk = mockMatrixCoreService.getSdk();
       expect(sdk.createClient).toHaveBeenCalledWith(
         expect.objectContaining({
-          userId: '@openmeet-bot:matrix.openmeet.net',
+          userId: '@openmeet-bot-test-tenant-123:matrix.openmeet.net',
         }),
       );
     });
@@ -407,7 +407,9 @@ describe('MatrixBotService - Authentication Patterns Analysis', () => {
     it('should return authenticated bot user ID when available', async () => {
       await service.authenticateBot(TEST_TENANT_ID);
       const botUserId = service.getBotUserId();
-      expect(botUserId).toBe('@openmeet-bot:matrix.openmeet.net');
+      expect(botUserId).toBe(
+        '@openmeet-bot-test-tenant-123:matrix.openmeet.net',
+      );
     });
 
     it('should throw error when no authentication and no tenant ID provided', () => {
