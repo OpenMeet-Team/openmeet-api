@@ -80,21 +80,16 @@ export class MatrixBotService implements IMatrixBot {
       }
 
       // Create bot client using application service token
-      // For Application Services, authenticate as the AS sender, not tenant-specific bots
-      const appServiceId = this.configService.get<string>(
-        'matrix.appservice.id',
-        'openmeet-bot',
-        { infer: true },
-      );
-      const appServiceSender = `@${appServiceId}:${this.serverName}`;
+      // Use tenant-specific bot user ID for proper namespacing
+      const tenantSpecificBotUserId = `@${botUser.slug}:${this.serverName}`;
 
-      this.currentBotUserId = appServiceSender; // Use AS sender as the bot user ID
+      this.currentBotUserId = tenantSpecificBotUserId; // Use tenant-specific bot user ID
       this.currentTenantId = tenantId;
 
       this.botClient = sdk.createClient({
         baseUrl: this.homeServerUrl,
         accessToken: this.appServiceToken,
-        userId: appServiceSender, // Authenticate as Application Service sender
+        userId: tenantSpecificBotUserId, // Authenticate as tenant-specific bot user
         localTimeoutMs: 30000,
         useAuthorizationHeader: true,
       });

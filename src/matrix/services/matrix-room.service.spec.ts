@@ -9,6 +9,32 @@ import { TenantConnectionService } from '../../tenant/tenant.service';
 import { MatrixEventListener } from '../matrix-event.listener';
 import { EventQueryService } from '../../event/services/event-query.service';
 
+// Mock tenant config utilities
+jest.mock('../../utils/tenant-config', () => ({
+  getTenantConfig: jest.fn().mockReturnValue({
+    id: 'test-tenant',
+    name: 'Test Tenant',
+    matrixConfig: {
+      serverName: 'matrix.openmeet.net',
+      botUser: {
+        slug: 'openmeet-bot-test-tenant',
+      },
+    },
+  }),
+  fetchTenants: jest.fn().mockReturnValue([
+    {
+      id: 'test-tenant',
+      name: 'Test Tenant',
+      matrixConfig: {
+        serverName: 'matrix.openmeet.net',
+        botUser: {
+          slug: 'openmeet-bot-test-tenant',
+        },
+      },
+    },
+  ]),
+}));
+
 describe('MatrixRoomService', () => {
   let service: MatrixRoomService;
   let matrixCoreService: MatrixCoreService;
@@ -81,6 +107,22 @@ describe('MatrixRoomService', () => {
             createBotUser: jest.fn().mockResolvedValue(undefined),
             getBotUser: jest.fn().mockResolvedValue(null),
             deleteBotUser: jest.fn().mockResolvedValue(undefined),
+            getOrCreateBotUser: jest.fn().mockResolvedValue({
+              id: 1,
+              slug: 'openmeet-bot-test-tenant',
+              email: 'bot-test-tenant@openmeet.net',
+              tenantId: 'test-tenant',
+              firstName: 'OpenMeet',
+              lastName: 'Bot',
+            }),
+            findBotUser: jest.fn().mockResolvedValue({
+              id: 1,
+              slug: 'openmeet-bot-test-tenant',
+              email: 'bot-test-tenant@openmeet.net',
+              tenantId: 'test-tenant',
+              firstName: 'OpenMeet',
+              lastName: 'Bot',
+            }),
           },
         },
         {
@@ -91,6 +133,9 @@ describe('MatrixRoomService', () => {
             botClient: mockMatrixClient,
             inviteUser: jest.fn().mockResolvedValue(undefined),
             removeUser: jest.fn().mockResolvedValue(undefined),
+            getBotUserId: jest
+              .fn()
+              .mockReturnValue('@openmeet-bot-test-tenant:matrix.openmeet.net'),
           },
         },
         {
@@ -330,7 +375,7 @@ describe('MatrixRoomService', () => {
         redact: 50,
       });
 
-      await service.setRoomPowerLevels(roomId, userLevels);
+      await service.setRoomPowerLevels(roomId, userLevels, 'test-tenant');
 
       // Verify get/set of state events
       expect(mockMatrixClient.getStateEvent).toHaveBeenCalledWith(
@@ -374,7 +419,7 @@ describe('MatrixRoomService', () => {
         });
       });
 
-      await service.setRoomPowerLevels(roomId, userLevels);
+      await service.setRoomPowerLevels(roomId, userLevels, 'test-tenant');
 
       // Should create a default power levels structure
       expect(mockMatrixClient.sendStateEvent).toHaveBeenCalledWith(

@@ -8,7 +8,7 @@ import { CreateRoomOptions, RoomInfo } from '../types/matrix.types';
 import { IMatrixClient, IMatrixRoomProvider } from '../types/matrix.interfaces';
 import { HttpStatus } from '@nestjs/common';
 import { RoomAliasUtils } from '../utils/room-alias.utils';
-import { fetchTenants } from '../../utils/tenant-config';
+import { fetchTenants, getTenantConfig } from '../../utils/tenant-config';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { MatrixEventListener } from '../matrix-event.listener';
 import { EventQueryService } from '../../event/services/event-query.service';
@@ -363,11 +363,32 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         // Get room details
         const roomId = createRoomResponse.room_id;
 
-        // Set power levels if needed
-        if (powerLevelContentOverride && powerLevelContentOverride.users) {
-          await this.setRoomPowerLevels(
-            roomId,
-            powerLevelContentOverride.users,
+        // Always ensure tenant-specific bot has admin privileges
+        const tenantConfig = getTenantConfig(tenantId);
+        const botUser = tenantConfig?.matrixConfig?.botUser;
+        const serverName = tenantConfig?.matrixConfig?.serverName;
+
+        if (botUser?.slug && serverName) {
+          const tenantBotUserId = `@${botUser.slug}:${serverName}`;
+
+          // Build power levels with tenant bot admin privileges
+          const botPowerLevels: Record<string, number> = {
+            [tenantBotUserId]: 100, // Tenant bot gets admin privileges
+          };
+
+          // Merge with any custom power levels
+          if (powerLevelContentOverride && powerLevelContentOverride.users) {
+            Object.assign(botPowerLevels, powerLevelContentOverride.users);
+          }
+
+          this.logger.log(
+            `Setting power levels for newly created room ${roomId}, including tenant bot ${tenantBotUserId} with admin privileges`,
+          );
+
+          await this.setRoomPowerLevels(roomId, botPowerLevels, tenantId);
+        } else {
+          this.logger.warn(
+            `Could not determine tenant bot configuration for tenant ${tenantId}, skipping power level setup`,
           );
         }
 
@@ -409,7 +430,11 @@ export class MatrixRoomService implements IMatrixRoomProvider {
 
       // Set power levels if needed
       if (powerLevelContentOverride && powerLevelContentOverride.users) {
-        await this.setRoomPowerLevels(roomId, powerLevelContentOverride.users);
+        await this.setRoomPowerLevels(
+          roomId,
+          powerLevelContentOverride.users,
+          tenantId,
+        );
       }
 
       return {
@@ -1018,29 +1043,129 @@ export class MatrixRoomService implements IMatrixRoomProvider {
   }
 
   /**
-   * Set room power levels
+   * Set room power levels using bot authentication
    */
   async setRoomPowerLevels(
-    roomId: string,
+    roomIdOrAlias: string,
     userPowerLevels: Record<string, number>,
+    explicitTenantId?: string,
   ): Promise<Record<string, never>> {
-    let client;
-
     try {
-      client = await this.matrixCoreService.acquireClient();
-
-      // First ensure admin is in the room
-      await this.ensureAdminInRoom(roomId, client);
-
-      // Get current power levels
-      const stateEvent = await client.client.getStateEvent(
-        roomId,
-        'm.room.power_levels',
-        '',
+      this.logger.log(
+        `Setting power levels in room ${roomIdOrAlias} for ${Object.keys(userPowerLevels).length} users`,
       );
 
-      // Update user power levels
+      // Use explicit tenant ID if provided, otherwise parse from room alias
+      let tenantId: string | null = explicitTenantId || null;
+
+      if (!tenantId && roomIdOrAlias.startsWith('#')) {
+        const parsed = this.roomAliasUtils.parseRoomAlias(roomIdOrAlias);
+        if (parsed) {
+          tenantId = parsed.tenantId;
+        }
+      }
+
+      // If we couldn't parse tenant ID from alias, we need to find it by checking all tenants
+      if (!tenantId) {
+        const tenants = fetchTenants();
+        for (const tenant of tenants) {
+          try {
+            // Try to get canonical alias for this room in this tenant
+            const alias = await this.getRoomCanonicalAlias(
+              roomIdOrAlias,
+              tenant.id,
+            );
+            if (alias) {
+              tenantId = tenant.id;
+              break;
+            }
+          } catch {
+            continue;
+          }
+        }
+      }
+
+      if (!tenantId) {
+        throw new Error(`Could not determine tenant for room ${roomIdOrAlias}`);
+      }
+
+      // Create bot client for the tenant
+      const botClient = await this.createBotClient(tenantId);
+      if (!botClient) {
+        throw new Error(`Failed to create bot client for tenant ${tenantId}`);
+      }
+
+      // Ensure the AppService bot is in the room before attempting to set power levels
+      // Since we're using AppService authentication, we operate as the main AppService sender
+      const appServiceSender = this.matrixBotService.getBotUserId(tenantId);
+
+      try {
+        // Check if bot is already in the room by trying to get its membership state
+        try {
+          await botClient.getStateEvent(
+            roomIdOrAlias,
+            'm.room.member',
+            appServiceSender,
+          );
+          this.logger.debug(
+            `AppService bot ${appServiceSender} is already in room ${roomIdOrAlias}`,
+          );
+        } catch {
+          // Bot is not in room, try to join
+          this.logger.debug(
+            `AppService bot ${appServiceSender} not in room ${roomIdOrAlias}, attempting to join`,
+          );
+
+          try {
+            const joinResult = await botClient.joinRoom(roomIdOrAlias);
+            this.logger.log(
+              `AppService bot successfully joined room ${roomIdOrAlias}, roomId: ${joinResult?.roomId || roomIdOrAlias}`,
+            );
+          } catch (joinError) {
+            // If regular join fails, try admin join using MatrixBotService
+            this.logger.warn(
+              `Regular join failed for ${roomIdOrAlias}, attempting admin join: ${joinError.message}`,
+            );
+            await this.matrixBotService.adminJoinRoom(roomIdOrAlias, tenantId);
+            this.logger.log(
+              `AppService bot successfully admin-joined room ${roomIdOrAlias}`,
+            );
+          }
+        }
+      } catch (error) {
+        this.logger.error(
+          `Failed to ensure bot is in room ${roomIdOrAlias}: ${error.message}`,
+          error.stack,
+        );
+        throw new Error(
+          `Bot cannot access room ${roomIdOrAlias} to set power levels: ${error.message}`,
+        );
+      }
+
+      // Get current power levels or create default structure
+      let stateEvent;
+      try {
+        stateEvent = await botClient.getStateEvent(
+          roomIdOrAlias,
+          'm.room.power_levels',
+          '',
+        );
+      } catch {
+        // If no power levels exist, create default structure
+        this.logger.debug(
+          `No existing power levels found, creating default structure`,
+        );
+        stateEvent = {};
+      }
+
+      // Update user power levels with proper redaction permissions
       const updatedContent = {
+        users_default: 0,
+        events_default: 0,
+        state_default: 50,
+        ban: 50,
+        kick: 50,
+        redact: 50, // Allow users with power level 50+ to redact messages
         ...stateEvent,
         users: {
           ...(stateEvent?.users || {}),
@@ -1048,33 +1173,29 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         },
       };
 
+      this.logger.debug(
+        `Updating power levels: ${JSON.stringify(userPowerLevels)}`,
+      );
+
       // Set updated power levels
-      await client.client.sendStateEvent(
-        roomId,
+      await botClient.sendStateEvent(
+        roomIdOrAlias,
         'm.room.power_levels',
         updatedContent,
         '',
       );
+
+      this.logger.log(`Successfully set power levels in room ${roomIdOrAlias}`);
+
       return {};
     } catch (error) {
       this.logger.error(
-        `Error setting power levels in room ${roomId}: ${error.message}`,
+        `Error setting power levels in room ${roomIdOrAlias}: ${error.message}`,
         error.stack,
       );
       throw new Error(
         `Failed to set power levels in Matrix room: ${error.message}`,
       );
-    } finally {
-      if (client) {
-        try {
-          await this.matrixCoreService.releaseClient(client);
-        } catch (releaseError) {
-          this.logger.warn(
-            `Failed to release Matrix client: ${releaseError.message}`,
-          );
-          // Don't re-throw as this would mask the original error
-        }
-      }
     }
   }
 
