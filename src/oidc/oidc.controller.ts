@@ -11,6 +11,7 @@ import {
   HttpStatus,
   Req,
   Res,
+  Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { OidcService } from './services/oidc.service';
@@ -29,6 +30,8 @@ import { MatrixRoomService } from '../matrix/services/matrix-room.service';
 @ApiTags('OIDC')
 @Controller('oidc')
 export class OidcController {
+  private readonly logger = new Logger(OidcController.name);
+
   constructor(
     private readonly oidcService: OidcService,
     private readonly configService: ConfigService,
@@ -89,14 +92,14 @@ export class OidcController {
     @Query('nonce') nonce?: string,
     @Query('auth_code') authCode?: string,
   ) {
-    console.log('🔐 OIDC Auth Debug - Authorization endpoint called');
-    console.log('  - Client ID:', clientId);
-    console.log('  - State (Matrix session):', state?.substring(0, 20) + '...');
-    console.log('  - Tenant ID from query:', request.query.tenantId);
-    console.log(
+    this.logger.debug('🔐 OIDC Auth Debug - Authorization endpoint called');
+    this.logger.debug('  - Client ID:', clientId);
+    this.logger.debug('  - State (Matrix session):', state?.substring(0, 20) + '...');
+    this.logger.debug('  - Tenant ID from query:', request.query.tenantId);
+    this.logger.debug(
       '  - Matrix State Preservation: Will preserve state parameter for session validation',
     );
-    console.log('  - Headers:', {
+    this.logger.debug('  - Headers:', {
       authorization: !!request.headers.authorization,
       cookie: !!request.headers.cookie,
       'x-tenant-id': request.headers['x-tenant-id'],
@@ -120,20 +123,20 @@ export class OidcController {
       (request.headers['x-tenant-id'] as string) ||
       null;
 
-    console.log(
+    this.logger.debug(
       '🔐 OIDC Auth Debug - Unified endpoint - checking for user authentication...',
     );
 
     // Method 1: Check for auth code in query parameters (highest priority for seamless authentication)
     if (!user && authCode) {
-      console.log(
+      this.logger.debug(
         '🔐 OIDC Auth Debug - Method 1: Found auth_code in query parameters, validating...',
       );
       try {
         const validatedUser =
           await this.tempAuthCodeService.validateAndConsumeAuthCode(authCode);
         if (validatedUser) {
-          console.log(
+          this.logger.debug(
             '✅ OIDC Auth Debug - Method 1 SUCCESS: Valid auth code, user ID:',
             validatedUser.userId,
           );
@@ -141,7 +144,7 @@ export class OidcController {
           tenantId = validatedUser.tenantId;
         }
       } catch (error) {
-        console.error(
+        this.logger.error(
           '❌ OIDC Auth Debug - Method 1 FAILED: Auth code validation failed:',
           error.message,
         );
@@ -157,7 +160,7 @@ export class OidcController {
       // Re-enabled: needed for third-party Matrix OIDC flow
       const userToken = request.query.user_token as string;
       if (userToken) {
-        console.log(
+        this.logger.debug(
           '🔐 OIDC Auth Debug - Method 2: Found user_token in query parameters, validating...',
         );
         try {
@@ -169,14 +172,14 @@ export class OidcController {
           );
 
           if (payload && payload.id) {
-            console.log(
+            this.logger.debug(
               '✅ OIDC Auth Debug - Method 2 SUCCESS: Valid user token, user ID:',
               payload.id,
             );
             user = { id: payload.id };
           }
         } catch (error) {
-          console.error(
+          this.logger.error(
             '❌ OIDC Auth Debug - Method 2 FAILED: User token validation failed:',
             error.message,
           );
@@ -191,7 +194,7 @@ export class OidcController {
       typeof authHeader === 'string' &&
       authHeader.startsWith('Bearer ')
     ) {
-      console.log(
+      this.logger.debug(
         '🔐 OIDC Auth Debug - Method 3: Trying Authorization header...',
       );
       try {
@@ -204,14 +207,14 @@ export class OidcController {
         );
 
         if (payload && payload.id) {
-          console.log(
+          this.logger.debug(
             '✅ OIDC Auth Debug - Method 3 SUCCESS: Valid JWT token from header, user ID:',
             payload.id,
           );
           user = { id: payload.id };
         }
       } catch (error) {
-        console.error(
+        this.logger.error(
           '❌ OIDC Auth Debug - Method 3 FAILED: Authorization header JWT validation failed:',
           error.message,
         );
@@ -220,36 +223,36 @@ export class OidcController {
 
     // Method 4: Check for Matrix session cookie (OIDC flow)
     if (!user) {
-      console.log(
+      this.logger.debug(
         '🔐 OIDC Auth Debug - Method 4: Checking Matrix session authentication...',
       );
       try {
-        console.log(
+        this.logger.debug(
           '🔐 OIDC Auth Debug - Available cookies:',
           Object.keys(request.cookies || {}),
         );
         const sessionCookie = request.cookies?.['oidc_session'];
-        console.log(
+        this.logger.debug(
           '🔐 OIDC Auth Debug - Matrix session cookie value:',
           sessionCookie ? 'found' : 'not found',
         );
 
         if (sessionCookie) {
-          console.log('🔍 Matrix Session Cookie DEBUG - Raw cookie analysis:');
-          console.log('Length:', sessionCookie.length);
-          console.log('First 50 chars:', sessionCookie.substring(0, 50));
+          this.logger.debug('🔍 Matrix Session Cookie DEBUG - Raw cookie analysis:');
+          this.logger.debug('Length:', sessionCookie.length);
+          this.logger.debug('First 50 chars:', sessionCookie.substring(0, 50));
 
           // IMPORTANT: Matrix session cookies are macaroons, not OpenMeet session IDs
           // We should NOT try to validate them as OpenMeet sessions
           // Instead, treat them as opaque session identifiers from Matrix
 
-          console.log(
+          this.logger.debug(
             '🔐 OIDC Auth Debug - Method 4: Matrix session cookie detected - this indicates Matrix SSO flow',
           );
-          console.log(
+          this.logger.debug(
             '🔐 OIDC Auth Debug - Method 4: Matrix macaroon cookies are opaque to us - skipping validation',
           );
-          console.log(
+          this.logger.debug(
             '🔐 OIDC Auth Debug - Method 4: User must authenticate through other methods for OIDC',
           );
 
@@ -257,12 +260,12 @@ export class OidcController {
           // Do NOT try to validate them as OpenMeet sessions
           // Matrix will validate them when we redirect back with auth code
         } else {
-          console.log(
+          this.logger.debug(
             '❌ OIDC Auth Debug - Method 4: No Matrix session cookie found',
           );
         }
       } catch (error) {
-        console.log(
+        this.logger.debug(
           '🔐 OIDC Auth Debug - Method 4 FAILED: Session authentication error:',
           error.message,
         );
@@ -272,7 +275,7 @@ export class OidcController {
     // Method 5: Try login_hint if provided (for seamless Matrix authentication)
     if (!user && request.query.login_hint) {
       const loginHint = request.query.login_hint as string;
-      console.log(
+      this.logger.debug(
         '🔐 OIDC Auth Debug - Method 5: Trying login_hint to find user:',
         loginHint,
       );
@@ -283,7 +286,7 @@ export class OidcController {
           await this.oidcService.findUserByEmailAcrossTenants(loginHint);
 
         if (userResult) {
-          console.log(
+          this.logger.debug(
             '✅ OIDC Auth Debug - Method 5 SUCCESS: Found user via login_hint in tenant:',
             userResult.tenantId,
             'user ID:',
@@ -307,19 +310,19 @@ export class OidcController {
           authUrl.searchParams.set('auth_code', authCode);
           authUrl.searchParams.set('tenantId', tenantId);
 
-          console.log(
+          this.logger.debug(
             '🔄 OIDC Auth Debug - Method 5: Redirecting with generated auth code',
           );
           response.redirect(authUrl.toString());
           return;
         } else {
-          console.log(
+          this.logger.debug(
             '❌ OIDC Auth Debug - Method 5 FAILED: User not found with login_hint:',
             loginHint,
           );
         }
       } catch (error) {
-        console.error(
+        this.logger.error(
           '❌ OIDC Auth Debug - Method 5 ERROR: Failed to process login_hint:',
           error.message,
         );
@@ -328,7 +331,7 @@ export class OidcController {
 
     // Method 7 (Last Resort): If no authenticated user found, redirect to login/email form
     if (!user) {
-      console.log(
+      this.logger.debug(
         '🔐 OIDC Auth Debug - Method 7 (LAST RESORT): No authenticated user found via any method, redirecting to login flow',
       );
       const baseUrl =
@@ -353,7 +356,7 @@ export class OidcController {
         `${baseUrl}/api/oidc/login?` +
         new URLSearchParams(oidcLoginParams).toString();
 
-      console.log(
+      this.logger.debug(
         '📧 OIDC Auth Debug - Method 7: Redirecting to login with email pre-fill:',
         loginHint || 'none',
       );
@@ -376,7 +379,7 @@ export class OidcController {
         const userEntity = await this.userService.findById(user.id, tenantId);
 
         if (userEntity && userEntity.email !== loginHint) {
-          console.log(
+          this.logger.debug(
             `🚨 SECURITY WARNING: Session user email (${userEntity.email}) does not match login_hint (${loginHint}) - redirecting to login`,
           );
           // Do NOT clear Matrix session cookies - they belong to Matrix server
@@ -400,7 +403,7 @@ export class OidcController {
           return;
         }
       } catch (error) {
-        console.error(
+        this.logger.error(
           'Error validating user identity against login_hint:',
           error.message,
         );
@@ -442,11 +445,11 @@ export class OidcController {
     @Body('client_id') clientId?: string,
     @Body('client_secret') clientSecret?: string,
   ) {
-    console.log(
+    this.logger.debug(
       '🔧 OIDC Token Debug - Request body:',
       JSON.stringify(body, null, 2),
     );
-    console.log('🔧 OIDC Token Debug - Parameters:', {
+    this.logger.debug('🔧 OIDC Token Debug - Parameters:', {
       grantType,
       code: code?.substring(0, 20) + '...',
       refreshToken: refreshToken?.substring(0, 20) + '...',
@@ -533,7 +536,7 @@ export class OidcController {
       throw new BadRequestException('Missing required OIDC parameters');
     }
 
-    console.log(
+    this.logger.debug(
       '🔐 OIDC Login Debug - Checking if user is already authenticated...',
     );
 
@@ -546,7 +549,7 @@ export class OidcController {
     const userToken = request.query.user_token as string;
     if (userToken) {
       // Re-enabled: needed for third-party Matrix OIDC flow
-      console.log(
+      this.logger.debug(
         '🔐 OIDC Login Debug - Found user_token in query parameters, validating...',
       );
       try {
@@ -558,14 +561,14 @@ export class OidcController {
         );
 
         if (payload && payload.id) {
-          console.log(
+          this.logger.debug(
             '✅ OIDC Login Debug - Valid user token, user ID:',
             payload.id,
           );
           user = { id: payload.id };
         }
       } catch (error) {
-        console.error(
+        this.logger.error(
           '❌ OIDC Login Debug - User token validation failed:',
           error.message,
         );
@@ -579,7 +582,7 @@ export class OidcController {
       typeof authHeader === 'string' &&
       authHeader.startsWith('Bearer ')
     ) {
-      console.log('🔐 OIDC Login Debug - Trying Authorization header...');
+      this.logger.debug('🔐 OIDC Login Debug - Trying Authorization header...');
       try {
         const token = authHeader.substring(7); // Remove 'Bearer ' prefix
         const payload: JwtPayloadType = await this.jwtService.verifyAsync(
@@ -590,14 +593,14 @@ export class OidcController {
         );
 
         if (payload && payload.id) {
-          console.log(
+          this.logger.debug(
             '✅ OIDC Login Debug - Valid Authorization header, user ID:',
             payload.id,
           );
           user = { id: payload.id };
         }
       } catch (error) {
-        console.error(
+        this.logger.error(
           '❌ OIDC Login Debug - Authorization header validation failed:',
           error.message,
         );
@@ -606,23 +609,23 @@ export class OidcController {
 
     // Check for Matrix session cookie (but don't validate as OpenMeet session)
     if (!user) {
-      console.log('🔐 OIDC Login Debug - Checking for Matrix session...');
+      this.logger.debug('🔐 OIDC Login Debug - Checking for Matrix session...');
       try {
         const sessionCookie = request.cookies?.['oidc_session'];
         if (sessionCookie) {
-          console.log(
+          this.logger.debug(
             '🔐 OIDC Login Debug - Matrix session cookie detected - user may have active Matrix session',
           );
-          console.log(
+          this.logger.debug(
             '🔐 OIDC Login Debug - Matrix macaroon cookies are opaque to us - cannot validate as OpenMeet sessions',
           );
           // Do NOT try to validate Matrix cookies as OpenMeet sessions
           // Do NOT clear Matrix cookies - they belong to Matrix
         } else {
-          console.log('🔐 OIDC Login Debug - No Matrix session cookie found');
+          this.logger.debug('🔐 OIDC Login Debug - No Matrix session cookie found');
         }
       } catch (error) {
-        console.log(
+        this.logger.debug(
           '🔐 OIDC Login Debug - Error checking Matrix session:',
           error.message,
         );
@@ -631,38 +634,38 @@ export class OidcController {
 
     // If user is authenticated, try to generate auth code and redirect seamlessly
     if (user) {
-      console.log(
+      this.logger.debug(
         '🔄 OIDC Login Debug - User is authenticated, attempting seamless OIDC flow...',
       );
 
       // For authenticated users, we need tenant information to proceed
       // Since Matrix cookies can't be validated as OpenMeet sessions,
       // we'll need the user to have been authenticated through other methods
-      console.log(
+      this.logger.debug(
         '✅ OIDC Login Debug - User authenticated, but need tenant info for seamless flow',
       );
-      console.log(
+      this.logger.debug(
         '⚠️ OIDC Login Debug - Cannot determine tenant from Matrix session cookies',
       );
-      console.log(
+      this.logger.debug(
         '🔄 OIDC Login Debug - Falling back to email form for tenant detection',
       );
     }
 
-    console.log(
+    this.logger.debug(
       '🔐 OIDC Login Debug - No authentication found, checking for tenant_id parameter',
     );
 
     // If tenant_id is provided from the frontend, skip email prompt and redirect directly
     if (tenantId) {
-      console.log(
+      this.logger.debug(
         `🏢 OIDC Login Debug - Tenant ID provided (${tenantId}), skipping email prompt for tenant discovery`,
       );
 
       // Validate that the tenant exists
       try {
         getTenantConfig(tenantId);
-        console.log(
+        this.logger.debug(
           `✅ OIDC Login Debug - Tenant ${tenantId} validated, redirecting to tenant-specific auth`,
         );
 
@@ -682,21 +685,21 @@ export class OidcController {
             tenant_id: tenantId,
           }).toString();
 
-        console.log(
+        this.logger.debug(
           `🔄 OIDC Login Debug - Redirecting to tenant-specific login: ${returnUrl}`,
         );
 
         response.redirect(returnUrl);
         return;
       } catch (error) {
-        console.error(
+        this.logger.error(
           `❌ OIDC Login Debug - Invalid tenant ID ${tenantId}: ${error.message}`,
         );
         // Fall through to email form if tenant is invalid
       }
     }
 
-    console.log(
+    this.logger.debug(
       '🔐 OIDC Login Debug - No valid tenant_id provided, showing email form for tenant discovery',
     );
 
@@ -799,7 +802,7 @@ export class OidcController {
         ...(nonce && { nonce }),
       }).toString();
 
-    console.log('🔗 OIDC Email Form Debug - Generated return URL:', returnUrl);
+    this.logger.debug('🔗 OIDC Email Form Debug - Generated return URL:', returnUrl);
 
     // Create a login URL that stores OIDC flow data
     const tenantLoginUrl =
@@ -810,7 +813,7 @@ export class OidcController {
         oidc_tenant_id: tenantId, // Store tenant ID for session validation
       }).toString();
 
-    console.log(
+    this.logger.debug(
       '🔗 OIDC Email Form Debug - Tenant login URL with OIDC data:',
       tenantLoginUrl,
     );

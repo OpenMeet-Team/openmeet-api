@@ -77,7 +77,7 @@ export class OidcService {
     const publicKeyEnv = process.env.OIDC_RSA_PUBLIC_KEY;
 
     if (privateKeyEnv && publicKeyEnv) {
-      console.log('🔑 Using persistent RSA key pair from environment');
+      this.logger.debug('🔑 Using persistent RSA key pair from environment');
       return {
         privateKey: privateKeyEnv.replace(/\\n/g, '\n'),
         publicKey: publicKeyEnv.replace(/\\n/g, '\n'),
@@ -85,7 +85,7 @@ export class OidcService {
     }
 
     // Generate new key pair and log it for persistence
-    console.log(
+    this.logger.debug(
       '🔑 Generating new RSA key pair (should be persisted in production)',
     );
     return this.generateRSAKeyPair();
@@ -160,8 +160,8 @@ export class OidcService {
     const publicKeyObject = crypto.createPublicKey(this.rsaKeyPair.publicKey);
     const jwk = publicKeyObject.export({ format: 'jwk' });
 
-    console.log('🔧 JWKS Debug - JWKS endpoint called');
-    console.log(
+    this.logger.debug('🔧 JWKS Debug - JWKS endpoint called');
+    this.logger.debug(
       '🔧 JWKS Debug - Public key JWK:',
       JSON.stringify(jwk, null, 2),
     );
@@ -299,7 +299,7 @@ export class OidcService {
       process.env.OAUTH_CLIENT_ID, // Environment-specific frontend client ID
       process.env.BOT_CLIENT_ID, // Environment-specific bot client ID
     ].filter(Boolean); // Remove undefined values
-    console.log('🔧 OIDC Debug - Client validation:', {
+    this.logger.debug('🔧 OIDC Debug - Client validation:', {
       provided: params.client_id,
       valid: validClientIds,
       isValid: validClientIds.includes(params.client_id),
@@ -333,10 +333,10 @@ export class OidcService {
       pattern.test(params.redirect_uri),
     );
 
-    console.log('🔧 OIDC Debug - Redirect URI validation:');
-    console.log('  - Provided redirect_uri:', params.redirect_uri);
-    console.log('  - Is valid:', isValidRedirectUri);
-    console.log(
+    this.logger.debug('🔧 OIDC Debug - Redirect URI validation:');
+    this.logger.debug('  - Provided redirect_uri:', params.redirect_uri);
+    this.logger.debug('  - Is valid:', isValidRedirectUri);
+    this.logger.debug(
       '  - Patterns tested:',
       allowedRedirectUriPatterns.map((p) => p.toString()),
     );
@@ -380,7 +380,7 @@ export class OidcService {
     // Decode and validate authorization code first
     const authData = this.validateAuthCode(params.code);
 
-    console.log(
+    this.logger.debug(
       '🔧 OIDC Token Exchange Debug - Validated auth code with Matrix state:',
       authData.matrix_original_state?.substring(0, 20) + '...',
     );
@@ -402,7 +402,7 @@ export class OidcService {
 
     // Generate tokens
     const userInfo = await this.mapUserToOidcClaims(user, authData.tenantId);
-    console.log(
+    this.logger.debug(
       '🔧 OIDC User Claims Debug:',
       JSON.stringify(userInfo, null, 2),
     );
@@ -419,7 +419,7 @@ export class OidcService {
       accessToken,
     );
 
-    console.log('🔧 OIDC Token Response Debug:', {
+    this.logger.debug('🔧 OIDC Token Response Debug:', {
       access_token: accessToken.substring(0, 50) + '...',
       refresh_token: refreshToken.substring(0, 50) + '...',
       id_token: idToken.substring(0, 50) + '...',
@@ -508,7 +508,7 @@ export class OidcService {
       accessToken,
     );
 
-    console.log('🔧 OIDC Refresh Token Debug:', {
+    this.logger.debug('🔧 OIDC Refresh Token Debug:', {
       access_token: accessToken.substring(0, 50) + '...',
       refresh_token: newRefreshToken.substring(0, 50) + '...',
       id_token: idToken.substring(0, 50) + '...',
@@ -566,7 +566,7 @@ export class OidcService {
       matrix_original_state: params.state,
     };
 
-    console.log(
+    this.logger.debug(
       '🔧 DEBUG: About to sign auth code JWT with RS256, preserving Matrix state:',
       params.state?.substring(0, 20) + '...',
     );
@@ -581,28 +581,28 @@ export class OidcService {
    */
   private validateAuthCode(code: string): any {
     try {
-      console.log('🔧 OIDC Auth Code Debug - Validating code...');
+      this.logger.debug('🔧 OIDC Auth Code Debug - Validating code...');
       const payload = jwt.verify(code, this.rsaKeyPair.publicKey, {
         algorithms: ['RS256'],
       }) as any;
 
-      console.log(
+      this.logger.debug(
         '🔧 OIDC Auth Code Debug - Decoded payload:',
         JSON.stringify(payload, null, 2),
       );
 
       if (payload.type !== 'auth_code') {
-        console.log(
+        this.logger.debug(
           '❌ OIDC Auth Code Debug - Invalid code type:',
           payload.type,
         );
         throw new Error('Invalid code type');
       }
 
-      console.log('✅ OIDC Auth Code Debug - Validation successful');
+      this.logger.debug('✅ OIDC Auth Code Debug - Validation successful');
       return payload;
     } catch (error) {
-      console.log(
+      this.logger.debug(
         '❌ OIDC Auth Code Debug - Validation failed:',
         error.message,
       );
@@ -660,7 +660,7 @@ export class OidcService {
       throw new UnauthorizedException('Invalid client credentials');
     }
 
-    console.log('✅ OIDC Client Debug - Client validated:', {
+    this.logger.debug('✅ OIDC Client Debug - Client validated:', {
       clientId,
       isPublic: client.isPublic,
       hasSecret: !!clientSecret,
@@ -762,7 +762,7 @@ export class OidcService {
 
       if (registryEntry) {
         matrixHandle = registryEntry.handle;
-        console.log(
+        this.logger.debug(
           `🔧 OIDC Found Matrix handle for user ${user.id}: ${matrixHandle}`,
         );
       } else {
@@ -775,7 +775,7 @@ export class OidcService {
           .replace(/[^a-z0-9._-]/g, '');
         // Append tenant suffix for consistency with legacy users
         matrixHandle = `${cleanHandle}_${tenantId}`;
-        console.log(
+        this.logger.debug(
           `🔧 OIDC No Matrix handle found for user ${user.id}, suggesting: ${matrixHandle}`,
         );
       }
