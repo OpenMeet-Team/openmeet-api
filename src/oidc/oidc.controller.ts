@@ -94,7 +94,10 @@ export class OidcController {
   ) {
     this.logger.debug('🔐 OIDC Auth Debug - Authorization endpoint called');
     this.logger.debug('  - Client ID:', clientId);
-    this.logger.debug('  - State (Matrix session):', state?.substring(0, 20) + '...');
+    this.logger.debug(
+      '  - State (Matrix session):',
+      state?.substring(0, 20) + '...',
+    );
     this.logger.debug('  - Tenant ID from query:', request.query.tenantId);
     this.logger.debug(
       '  - Matrix State Preservation: Will preserve state parameter for session validation',
@@ -238,7 +241,9 @@ export class OidcController {
         );
 
         if (sessionCookie) {
-          this.logger.debug('🔍 Matrix Session Cookie DEBUG - Raw cookie analysis:');
+          this.logger.debug(
+            '🔍 Matrix Session Cookie DEBUG - Raw cookie analysis:',
+          );
           this.logger.debug('Length:', sessionCookie.length);
           this.logger.debug('First 50 chars:', sessionCookie.substring(0, 50));
 
@@ -285,7 +290,7 @@ export class OidcController {
       // This prevents cross-user attacks where one user could impersonate another
       try {
         const userEntity = await this.userService.findById(user.id, tenantId);
-        
+
         if (userEntity && userEntity.email === loginHint) {
           this.logger.debug(
             '✅ OIDC Auth Debug - Method 5 SUCCESS: login_hint matches authenticated user email',
@@ -603,7 +608,9 @@ export class OidcController {
           // Do NOT try to validate Matrix cookies as OpenMeet sessions
           // Do NOT clear Matrix cookies - they belong to Matrix
         } else {
-          this.logger.debug('🔐 OIDC Login Debug - No Matrix session cookie found');
+          this.logger.debug(
+            '🔐 OIDC Login Debug - No Matrix session cookie found',
+          );
         }
       } catch (error) {
         this.logger.debug(
@@ -783,7 +790,10 @@ export class OidcController {
         ...(nonce && { nonce }),
       }).toString();
 
-    this.logger.debug('🔗 OIDC Email Form Debug - Generated return URL:', returnUrl);
+    this.logger.debug(
+      '🔗 OIDC Email Form Debug - Generated return URL:',
+      returnUrl,
+    );
 
     // Create a login URL that stores OIDC flow data
     const tenantLoginUrl =

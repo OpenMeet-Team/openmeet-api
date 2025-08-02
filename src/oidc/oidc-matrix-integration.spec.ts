@@ -69,9 +69,13 @@ describe('OIDC Matrix Integration (E2E)', () => {
         {
           provide: MatrixRoomService,
           useValue: {
-            createRoom: jest.fn().mockResolvedValue('!room:matrix.openmeet.net'),
+            createRoom: jest
+              .fn()
+              .mockResolvedValue('!room:matrix.openmeet.net'),
             inviteUserToRoom: jest.fn().mockResolvedValue(undefined),
-            getRoomAlias: jest.fn().mockResolvedValue('#room-alias:matrix.openmeet.net'),
+            getRoomAlias: jest
+              .fn()
+              .mockResolvedValue('#room-alias:matrix.openmeet.net'),
           },
         },
       ],
@@ -109,7 +113,8 @@ describe('OIDC Matrix Integration (E2E)', () => {
 
       // Step 3: Mock OIDC service for successful authorization
       mockOidcService.handleAuthorization.mockReturnValue({
-        redirect_url: 'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=matrix-auth-code',
+        redirect_url:
+          'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=matrix-auth-code',
       });
 
       // Step 4: Simulate Matrix client request with user_token and login_hint
@@ -120,7 +125,8 @@ describe('OIDC Matrix Integration (E2E)', () => {
         .get('/oidc/auth')
         .query({
           client_id: 'matrix_synapse',
-          redirect_uri: 'https://matrix.openmeet.net/_synapse/client/oidc/callback',
+          redirect_uri:
+            'https://matrix.openmeet.net/_synapse/client/oidc/callback',
           response_type: 'code',
           scope: 'openid profile email',
           state: 'matrix-session-state-123',
@@ -139,10 +145,11 @@ describe('OIDC Matrix Integration (E2E)', () => {
       expect(mockOidcService.handleAuthorization).toHaveBeenCalledWith(
         expect.objectContaining({
           client_id: 'matrix_synapse',
-          redirect_uri: 'https://matrix.openmeet.net/_synapse/client/oidc/callback',
+          redirect_uri:
+            'https://matrix.openmeet.net/_synapse/client/oidc/callback',
         }),
         1, // userId
-        'tenant123' // tenantId
+        'tenant123', // tenantId
       );
     });
 
@@ -167,7 +174,8 @@ describe('OIDC Matrix Integration (E2E)', () => {
         .get('/oidc/auth')
         .query({
           client_id: 'matrix_synapse',
-          redirect_uri: 'https://matrix.openmeet.net/_synapse/client/oidc/callback',
+          redirect_uri:
+            'https://matrix.openmeet.net/_synapse/client/oidc/callback',
           response_type: 'code',
           scope: 'openid profile email',
           state: 'matrix-session-state-123',
@@ -179,7 +187,9 @@ describe('OIDC Matrix Integration (E2E)', () => {
       // Step 4: Verify that request is redirected to login form (security measure)
       expect(response.status).toBe(302);
       expect(response.headers.location).toContain('/api/oidc/login');
-      expect(response.headers.location).toContain('login_hint=victim%40company.com');
+      expect(response.headers.location).toContain(
+        'login_hint=victim%40company.com',
+      );
 
       // Step 5: Verify that user validation was attempted but authorization was blocked
       expect(mockUserService.findById).toHaveBeenCalledWith(1, 'tenant123');
@@ -192,7 +202,8 @@ describe('OIDC Matrix Integration (E2E)', () => {
         .get('/oidc/auth')
         .query({
           client_id: 'matrix_synapse',
-          redirect_uri: 'https://matrix.openmeet.net/_synapse/client/oidc/callback',
+          redirect_uri:
+            'https://matrix.openmeet.net/_synapse/client/oidc/callback',
           response_type: 'code',
           scope: 'openid profile email',
           state: 'matrix-session-state-123',
@@ -202,12 +213,16 @@ describe('OIDC Matrix Integration (E2E)', () => {
       // Step 2: Verify that request is redirected to login form
       expect(response.status).toBe(302);
       expect(response.headers.location).toContain('/api/oidc/login');
-      expect(response.headers.location).toContain('login_hint=victim%40company.com');
+      expect(response.headers.location).toContain(
+        'login_hint=victim%40company.com',
+      );
 
       // Step 3: Verify that NO authentication bypass occurred
       expect(mockUserService.findById).not.toHaveBeenCalled();
       expect(mockOidcService.handleAuthorization).not.toHaveBeenCalled();
-      expect(mockOidcService.findUserByEmailAcrossTenants).not.toHaveBeenCalled();
+      expect(
+        mockOidcService.findUserByEmailAcrossTenants,
+      ).not.toHaveBeenCalled();
     });
   });
 
@@ -222,7 +237,8 @@ describe('OIDC Matrix Integration (E2E)', () => {
 
       // Step 2: Mock OIDC service for successful authorization
       mockOidcService.handleAuthorization.mockReturnValue({
-        redirect_url: 'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=oauth-callback-code',
+        redirect_url:
+          'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=oauth-callback-code',
       });
 
       // Step 3: Simulate OAuth callback request (from GitHub/Bluesky pages)
@@ -230,7 +246,8 @@ describe('OIDC Matrix Integration (E2E)', () => {
         .get('/oidc/auth')
         .query({
           client_id: 'matrix_synapse',
-          redirect_uri: 'https://matrix.openmeet.net/_synapse/client/oidc/callback',
+          redirect_uri:
+            'https://matrix.openmeet.net/_synapse/client/oidc/callback',
           response_type: 'code',
           scope: 'openid profile email',
           state: 'oauth-callback-state-456',
@@ -248,7 +265,7 @@ describe('OIDC Matrix Integration (E2E)', () => {
           client_id: 'matrix_synapse',
         }),
         2, // userId from OAuth callback
-        'tenant456' // tenantId from OAuth callback
+        'tenant456', // tenantId from OAuth callback
       );
     });
   });

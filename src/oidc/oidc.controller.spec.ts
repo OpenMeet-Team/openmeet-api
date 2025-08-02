@@ -217,10 +217,15 @@ describe('OidcController', () => {
           userId: 1,
           tenantId: 'tenant123',
         };
-        const mockTempAuthCodeService = controller['tempAuthCodeService'] as jest.Mocked<any>;
-        mockTempAuthCodeService.validateAndConsumeAuthCode.mockResolvedValue(mockTempAuthData);
+        const mockTempAuthCodeService = controller[
+          'tempAuthCodeService'
+        ] as jest.Mocked<any>;
+        mockTempAuthCodeService.validateAndConsumeAuthCode.mockResolvedValue(
+          mockTempAuthData,
+        );
         mockOidcService.handleAuthorization.mockReturnValue({
-          redirect_url: 'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=auth123',
+          redirect_url:
+            'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=auth123',
         });
 
         const mockRequest = {
@@ -241,24 +246,30 @@ describe('OidcController', () => {
           authParams.scope,
           authParams.state,
           authParams.nonce,
-          'valid-auth-code-123'
+          'valid-auth-code-123',
         );
 
-        expect(mockTempAuthCodeService.validateAndConsumeAuthCode).toHaveBeenCalledWith('valid-auth-code-123');
+        expect(
+          mockTempAuthCodeService.validateAndConsumeAuthCode,
+        ).toHaveBeenCalledWith('valid-auth-code-123');
         expect(mockOidcService.handleAuthorization).toHaveBeenCalledWith(
           expect.objectContaining({
             client_id: authParams.clientId,
             redirect_uri: authParams.redirectUri,
           }),
           1, // userId
-          'tenant123' // tenantId
+          'tenant123', // tenantId
         );
         expect(mockResponse.redirect).toHaveBeenCalled();
       });
 
       it('should redirect to login for invalid auth_code', async () => {
-        const mockTempAuthCodeService = controller['tempAuthCodeService'] as jest.Mocked<any>;
-        mockTempAuthCodeService.validateAndConsumeAuthCode.mockResolvedValue(null);
+        const mockTempAuthCodeService = controller[
+          'tempAuthCodeService'
+        ] as jest.Mocked<any>;
+        mockTempAuthCodeService.validateAndConsumeAuthCode.mockResolvedValue(
+          null,
+        );
 
         const mockRequest = {
           query: { auth_code: 'invalid-auth-code' },
@@ -278,7 +289,7 @@ describe('OidcController', () => {
           authParams.scope,
           authParams.state,
           authParams.nonce,
-          'invalid-auth-code'
+          'invalid-auth-code',
         );
 
         expect(mockResponse.redirect).toHaveBeenCalled();
@@ -300,13 +311,14 @@ describe('OidcController', () => {
         const mockPayload = { id: 1 };
         mockJwtService.verifyAsync.mockResolvedValue(mockPayload);
         mockOidcService.handleAuthorization.mockReturnValue({
-          redirect_url: 'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=auth123',
+          redirect_url:
+            'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=auth123',
         });
 
         const mockRequest = {
-          query: { 
+          query: {
             user_token: 'valid-jwt-token',
-            tenantId: 'tenant123' 
+            tenantId: 'tenant123',
           },
           headers: {},
         } as any;
@@ -323,22 +335,27 @@ describe('OidcController', () => {
           authParams.responseType,
           authParams.scope,
           authParams.state,
-          authParams.nonce
+          authParams.nonce,
         );
 
-        expect(mockJwtService.verifyAsync).toHaveBeenCalledWith('valid-jwt-token', expect.any(Object));
+        expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(
+          'valid-jwt-token',
+          expect.any(Object),
+        );
         expect(mockOidcService.handleAuthorization).toHaveBeenCalledWith(
           expect.objectContaining({
             client_id: authParams.clientId,
           }),
           1, // userId
-          'tenant123' // tenantId
+          'tenant123', // tenantId
         );
         expect(mockResponse.redirect).toHaveBeenCalled();
       });
 
       it('should redirect to login for invalid user_token', async () => {
-        mockJwtService.verifyAsync.mockRejectedValue(new Error('Invalid token'));
+        mockJwtService.verifyAsync.mockRejectedValue(
+          new Error('Invalid token'),
+        );
 
         const mockRequest = {
           query: { user_token: 'invalid-jwt-token' },
@@ -357,7 +374,7 @@ describe('OidcController', () => {
           authParams.responseType,
           authParams.scope,
           authParams.state,
-          authParams.nonce
+          authParams.nonce,
         );
 
         expect(mockResponse.redirect).toHaveBeenCalled();
@@ -377,7 +394,8 @@ describe('OidcController', () => {
         const mockPayload = { id: 1 };
         mockJwtService.verifyAsync.mockResolvedValue(mockPayload);
         mockOidcService.handleAuthorization.mockReturnValue({
-          redirect_url: 'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=auth123',
+          redirect_url:
+            'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=auth123',
         });
 
         const mockRequest = {
@@ -397,16 +415,21 @@ describe('OidcController', () => {
           authParams.responseType,
           authParams.scope,
           authParams.state,
-          authParams.nonce
+          authParams.nonce,
         );
 
-        expect(mockJwtService.verifyAsync).toHaveBeenCalledWith('valid-jwt-token', expect.any(Object));
+        expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(
+          'valid-jwt-token',
+          expect.any(Object),
+        );
         expect(mockOidcService.handleAuthorization).toHaveBeenCalled();
         expect(mockResponse.redirect).toHaveBeenCalled();
       });
 
       it('should redirect to login for invalid Bearer token', async () => {
-        mockJwtService.verifyAsync.mockRejectedValue(new Error('Invalid token'));
+        mockJwtService.verifyAsync.mockRejectedValue(
+          new Error('Invalid token'),
+        );
 
         const mockRequest = {
           query: {},
@@ -425,7 +448,7 @@ describe('OidcController', () => {
           authParams.responseType,
           authParams.scope,
           authParams.state,
-          authParams.nonce
+          authParams.nonce,
         );
 
         expect(mockResponse.redirect).toHaveBeenCalled();
@@ -449,7 +472,7 @@ describe('OidcController', () => {
         // Setup: User is authenticated via user_token
         const mockPayload = { id: 1 };
         mockJwtService.verifyAsync.mockResolvedValue(mockPayload);
-        
+
         // User entity matches login_hint email
         mockUserService.findById.mockResolvedValue({
           id: 1,
@@ -458,16 +481,19 @@ describe('OidcController', () => {
           lastName: 'User',
         });
 
-        mockTempAuthCodeService.generateAuthCode.mockResolvedValue('generated-auth-code');
+        mockTempAuthCodeService.generateAuthCode.mockResolvedValue(
+          'generated-auth-code',
+        );
         mockOidcService.handleAuthorization.mockReturnValue({
-          redirect_url: 'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=auth123',
+          redirect_url:
+            'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=auth123',
         });
 
         const mockRequest = {
-          query: { 
+          query: {
             user_token: 'valid-jwt-token',
             login_hint: 'user@example.com',
-            tenantId: 'tenant123'
+            tenantId: 'tenant123',
           },
           headers: {},
         } as any;
@@ -484,7 +510,7 @@ describe('OidcController', () => {
           authParams.responseType,
           authParams.scope,
           authParams.state,
-          authParams.nonce
+          authParams.nonce,
         );
 
         expect(mockUserService.findById).toHaveBeenCalledWith(1, 'tenant123');
@@ -496,12 +522,12 @@ describe('OidcController', () => {
         // SECURITY: This is the critical test - login_hint alone should NOT work
         mockOidcService.findUserByEmailAcrossTenants.mockResolvedValue({
           user: { id: 999, email: 'victim@company.com' },
-          tenantId: 'victim-tenant'
+          tenantId: 'victim-tenant',
         });
 
         const mockRequest = {
-          query: { 
-            login_hint: 'victim@company.com' // Only login_hint, no authentication
+          query: {
+            login_hint: 'victim@company.com', // Only login_hint, no authentication
           },
           headers: {},
         } as any;
@@ -518,7 +544,7 @@ describe('OidcController', () => {
           authParams.responseType,
           authParams.scope,
           authParams.state,
-          authParams.nonce
+          authParams.nonce,
         );
 
         // Should redirect to login form, NOT auto-authenticate
@@ -526,9 +552,11 @@ describe('OidcController', () => {
         const redirectUrl = mockResponse.redirect.mock.calls[0][0];
         expect(redirectUrl).toContain('/api/oidc/login');
         expect(redirectUrl).toContain('login_hint=victim%40company.com'); // Email pre-fill only
-        
+
         // Should NOT call findUserByEmailAcrossTenants or generateAuthCode
-        expect(mockOidcService.findUserByEmailAcrossTenants).not.toHaveBeenCalled();
+        expect(
+          mockOidcService.findUserByEmailAcrossTenants,
+        ).not.toHaveBeenCalled();
         expect(mockTempAuthCodeService.generateAuthCode).not.toHaveBeenCalled();
       });
 
@@ -536,7 +564,7 @@ describe('OidcController', () => {
         // Setup: User is authenticated but login_hint is for different user
         const mockPayload = { id: 1 };
         mockJwtService.verifyAsync.mockResolvedValue(mockPayload);
-        
+
         // Session user has different email than login_hint
         mockUserService.findById.mockResolvedValue({
           id: 1,
@@ -546,10 +574,10 @@ describe('OidcController', () => {
         });
 
         const mockRequest = {
-          query: { 
+          query: {
             user_token: 'valid-jwt-token',
             login_hint: 'victim@company.com', // Different from session user
-            tenantId: 'tenant123'
+            tenantId: 'tenant123',
           },
           headers: {},
         } as any;
@@ -566,7 +594,7 @@ describe('OidcController', () => {
           authParams.responseType,
           authParams.scope,
           authParams.state,
-          authParams.nonce
+          authParams.nonce,
         );
 
         // Should redirect to login form due to email mismatch
@@ -574,7 +602,7 @@ describe('OidcController', () => {
         expect(mockResponse.redirect).toHaveBeenCalled();
         const redirectUrl = mockResponse.redirect.mock.calls[0][0];
         expect(redirectUrl).toContain('/api/oidc/login');
-        
+
         // Should NOT generate auth code for mismatched user
         expect(mockTempAuthCodeService.generateAuthCode).not.toHaveBeenCalled();
       });
