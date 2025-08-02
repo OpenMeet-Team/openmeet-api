@@ -272,60 +272,41 @@ export class OidcController {
       }
     }
 
-    // Method 5: Try login_hint if provided (for seamless Matrix authentication)
-    if (!user && request.query.login_hint) {
+    // Method 5: Secure login_hint - ONLY works for already authenticated users
+    // This provides seamless Matrix authentication while preventing account takeover attacks
+    if (user && request.query.login_hint) {
       const loginHint = request.query.login_hint as string;
       this.logger.debug(
-        '🔐 OIDC Auth Debug - Method 5: Trying login_hint to find user:',
+        '🔐 OIDC Auth Debug - Method 5: Processing login_hint for authenticated user:',
         loginHint,
       );
 
+      // SECURITY: Verify the login_hint matches the authenticated user's email
+      // This prevents cross-user attacks where one user could impersonate another
       try {
-        // Find user by email across all tenants
-        const userResult =
-          await this.oidcService.findUserByEmailAcrossTenants(loginHint);
-
-        if (userResult) {
+        const userEntity = await this.userService.findById(user.id, tenantId);
+        
+        if (userEntity && userEntity.email === loginHint) {
           this.logger.debug(
-            '✅ OIDC Auth Debug - Method 5 SUCCESS: Found user via login_hint in tenant:',
-            userResult.tenantId,
-            'user ID:',
-            userResult.user.id,
+            '✅ OIDC Auth Debug - Method 5 SUCCESS: login_hint matches authenticated user email',
           );
-
-          // Generate a temporary auth code for this user
-          const authCode = await this.tempAuthCodeService.generateAuthCode(
-            userResult.user.id,
-            userResult.tenantId,
-          );
-
-          // Store tenant ID for later use
-          tenantId = userResult.tenantId;
-
-          // Redirect to auth endpoint with the auth code
-          const authUrl = new URL(
-            request.url,
-            `${request.protocol}://${request.get('host')}`,
-          );
-          authUrl.searchParams.set('auth_code', authCode);
-          authUrl.searchParams.set('tenantId', tenantId);
-
-          this.logger.debug(
-            '🔄 OIDC Auth Debug - Method 5: Redirecting with generated auth code',
-          );
-          response.redirect(authUrl.toString());
-          return;
+          // Continue with normal authorization flow - user and tenantId are already set
         } else {
           this.logger.debug(
-            '❌ OIDC Auth Debug - Method 5 FAILED: User not found with login_hint:',
-            loginHint,
+            `🚨 SECURITY WARNING: Authenticated user email (${userEntity?.email}) does not match login_hint (${loginHint}) - treating as security violation`,
           );
+          // Clear user to force login - this prevents cross-user attacks
+          user = null;
+          tenantId = null;
         }
       } catch (error) {
         this.logger.error(
-          '❌ OIDC Auth Debug - Method 5 ERROR: Failed to process login_hint:',
+          '❌ OIDC Auth Debug - Method 5 ERROR: Failed to validate user against login_hint:',
           error.message,
         );
+        // Clear user on validation error to be safe
+        user = null;
+        tenantId = null;
       }
     }
 
