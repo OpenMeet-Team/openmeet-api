@@ -118,13 +118,13 @@ export class OidcController {
     // Check if user is authenticated via active session or JWT token
     const authHeader = request.headers.authorization;
     let user: { id: number } | null = null;
-    let tenantId: string | null = null;
+    let tenantId: string | undefined = undefined;
 
     // First, get tenant ID from query parameters (added during email form submission)
     tenantId =
       (request.query.tenantId as string) ||
       (request.headers['x-tenant-id'] as string) ||
-      null;
+      undefined;
 
     this.logger.debug(
       '🔐 OIDC Auth Debug - Unified endpoint - checking for user authentication...',
@@ -302,7 +302,7 @@ export class OidcController {
           );
           // Clear user to force login - this prevents cross-user attacks
           user = null;
-          tenantId = null;
+          tenantId = undefined;
         }
       } catch (error) {
         this.logger.error(
@@ -311,7 +311,7 @@ export class OidcController {
         );
         // Clear user on validation error to be safe
         user = null;
-        tenantId = null;
+        tenantId = undefined;
       }
     }
 
