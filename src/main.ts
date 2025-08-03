@@ -34,11 +34,11 @@ async function bootstrap() {
           'https://localhost:9005',
           'http://localhost:8087',
           'https://localhost:8087',
-          'https://localdev.openmeet.net',
-          'http://localdev.openmeet.net',
+          'https://om-api.ngrok.app',
+          'http://om-api.ngrok.app',
           'https://platform.openmeet.net',
           'https://platform-dev.openmeet.net',
-          'https://00d23135e123.ngrok.app', // ngrok URL for development
+          'https://om-platform.ngrok.app', // ngrok URL for development
         ],
         credentials: true,
         allowedHeaders: [

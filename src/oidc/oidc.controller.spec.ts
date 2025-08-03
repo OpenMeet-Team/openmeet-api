@@ -7,6 +7,7 @@ import { OidcService } from './services/oidc.service';
 import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
 import { UserService } from '../user/user.service';
 import { MatrixRoomService } from '../matrix/services/matrix-room.service';
+import { SessionService } from '../session/session.service';
 
 describe('OidcController', () => {
   let controller: OidcController;
@@ -80,6 +81,21 @@ describe('OidcController', () => {
             getRoomAlias: jest
               .fn()
               .mockResolvedValue('#room-alias:matrix.openmeet.net'),
+          },
+        },
+        {
+          provide: SessionService,
+          useValue: {
+            createSession: jest.fn().mockResolvedValue({
+              sessionId: 'test-session-id',
+              userId: 1,
+              tenantId: 'tenant123',
+            }),
+            validateSession: jest.fn().mockResolvedValue({
+              userId: 1,
+              tenantId: 'tenant123',
+            }),
+            deleteSession: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],

@@ -36,6 +36,7 @@ import { ClaimShadowAccountDto } from './dto/claim-shadow-account.dto';
 import { Roles } from './decorators/roles.decorator';
 import { RoleEnum } from '../role/role.enum';
 import { RolesGuard } from '../role/role.guard';
+import { getOidcCookieOptions } from '../utils/cookie-config';
 
 @ApiTags('Auth')
 @Controller({
@@ -68,36 +69,10 @@ export class AuthController {
 
     // Set oidc_session cookie for cross-domain OIDC authentication
     if (loginResult.sessionId) {
-      // Configure cookie domain based on environment
-      const backendDomain = process.env.BACKEND_DOMAIN || '';
-      const isLocalhost = backendDomain.includes('localhost');
-      // Only real openmeet.net subdomains (api-dev, platform-dev, matrix-dev, etc.) - NOT localdev
-      const isActualOpenMeetSubdomain = backendDomain.match(
-        /^https?:\/\/(api|platform|matrix)-[a-zA-Z0-9-]+\.openmeet\.net/,
-      );
-
-      const cookieOptions = {
-        sameSite: 'lax' as const, // Allow cross-site requests
-        httpOnly: true, // Security
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
-        ...(isLocalhost
-          ? {
-              // Pure localhost development - no domain restriction
-              secure: false, // HTTP for localhost
-            }
-          : isActualOpenMeetSubdomain
-            ? {
-                // Real openmeet.net subdomains (api-dev.openmeet.net, platform-dev.openmeet.net)
-                domain: '.openmeet.net',
-                secure: true, // HTTPS for openmeet.net subdomains
-              }
-            : {
-                // localdev.openmeet.net or other domains - no domain restriction (same-origin only)
-                secure: true, // HTTPS only
-              }),
-      };
+      const cookieOptions = getOidcCookieOptions();
 
       response.cookie('oidc_session', loginResult.sessionId, cookieOptions);
+      response.cookie('oidc_tenant', request.tenantId, cookieOptions);
     }
 
     return loginResult;
@@ -122,36 +97,10 @@ export class AuthController {
 
     // Set oidc_session cookie for cross-domain OIDC authentication
     if (loginResult.sessionId) {
-      // Configure cookie domain based on environment
-      const backendDomain = process.env.BACKEND_DOMAIN || '';
-      const isLocalhost = backendDomain.includes('localhost');
-      // Only real openmeet.net subdomains (api-dev, platform-dev, matrix-dev, etc.) - NOT localdev
-      const isActualOpenMeetSubdomain = backendDomain.match(
-        /^https?:\/\/(api|platform|matrix)-[a-zA-Z0-9-]+\.openmeet\.net/,
-      );
-
-      const cookieOptions = {
-        sameSite: 'lax' as const, // Allow cross-site requests
-        httpOnly: true, // Security
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
-        ...(isLocalhost
-          ? {
-              // Pure localhost development - no domain restriction
-              secure: false, // HTTP for localhost
-            }
-          : isActualOpenMeetSubdomain
-            ? {
-                // Real openmeet.net subdomains (api-dev.openmeet.net, platform-dev.openmeet.net)
-                domain: '.openmeet.net',
-                secure: true, // HTTPS for openmeet.net subdomains
-              }
-            : {
-                // localdev.openmeet.net or other domains - no domain restriction (same-origin only)
-                secure: true, // HTTPS only
-              }),
-      };
+      const cookieOptions = getOidcCookieOptions();
 
       response.cookie('oidc_session', loginResult.sessionId, cookieOptions);
+      response.cookie('oidc_tenant', request.tenantId, cookieOptions);
     }
 
     return loginResult;

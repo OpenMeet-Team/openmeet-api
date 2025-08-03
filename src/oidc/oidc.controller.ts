@@ -25,6 +25,7 @@ import { getTenantConfig } from '../utils/tenant-config';
 import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
 import { UserService } from '../user/user.service';
 import { MatrixRoomService } from '../matrix/services/matrix-room.service';
+import { SessionService } from '../session/session.service';
 // Removed MacaroonsVerifier - simplified to use URL state parameter
 
 @ApiTags('OIDC')
@@ -39,6 +40,7 @@ export class OidcController {
     private readonly tempAuthCodeService: TempAuthCodeService,
     private readonly userService: UserService,
     private readonly matrixRoomService: MatrixRoomService,
+    private readonly sessionService: SessionService,
   ) {}
 
   // Removed extractStateFromMatrixSessionCookie - simplified to use URL state parameter
@@ -224,10 +226,10 @@ export class OidcController {
       }
     }
 
-    // Method 4: Check for Matrix session cookie (OIDC flow)
+    // Method 4: Check for OpenMeet session cookie (OIDC flow)
     if (!user) {
       this.logger.debug(
-        '🔐 OIDC Auth Debug - Method 4: Checking Matrix session authentication...',
+        '🔐 OIDC Auth Debug - Method 4: Checking OpenMeet session authentication...',
       );
       try {
         this.logger.debug(
@@ -235,38 +237,102 @@ export class OidcController {
           Object.keys(request.cookies || {}),
         );
         const sessionCookie = request.cookies?.['oidc_session'];
+        const tenantCookie = request.cookies?.['oidc_tenant'];
         this.logger.debug(
-          '🔐 OIDC Auth Debug - Matrix session cookie value:',
+          '🔐 OIDC Auth Debug - OpenMeet session cookie value:',
           sessionCookie ? 'found' : 'not found',
         );
+        this.logger.debug(
+          '🔐 OIDC Auth Debug - OpenMeet tenant cookie value:',
+          tenantCookie ? 'found' : 'not found',
+        );
 
-        if (sessionCookie) {
+        if (sessionCookie && tenantCookie) {
           this.logger.debug(
-            '🔍 Matrix Session Cookie DEBUG - Raw cookie analysis:',
+            '🔍 OpenMeet Session Cookie DEBUG - Raw cookie analysis:',
           );
-          this.logger.debug('Length:', sessionCookie.length);
-          this.logger.debug('First 50 chars:', sessionCookie.substring(0, 50));
+          this.logger.debug('Session Length:', sessionCookie.length);
+          this.logger.debug(
+            'Session First 50 chars:',
+            sessionCookie.substring(0, 50),
+          );
+          this.logger.debug('Tenant ID:', tenantCookie);
 
-          // IMPORTANT: Matrix session cookies are macaroons, not OpenMeet session IDs
-          // We should NOT try to validate them as OpenMeet sessions
-          // Instead, treat them as opaque session identifiers from Matrix
+          // IMPORTANT: oidc_session cookies are OpenMeet session IDs
+          // These are set by OpenMeet auth controllers after successful login
+          // We validate them as OpenMeet sessions to enable seamless OIDC flow
 
           this.logger.debug(
-            '🔐 OIDC Auth Debug - Method 4: Matrix session cookie detected - this indicates Matrix SSO flow',
-          );
-          this.logger.debug(
-            '🔐 OIDC Auth Debug - Method 4: Matrix macaroon cookies are opaque to us - skipping validation',
-          );
-          this.logger.debug(
-            '🔐 OIDC Auth Debug - Method 4: User must authenticate through other methods for OIDC',
+            '🔐 OIDC Auth Debug - Method 4: OpenMeet session and tenant cookies detected - validating session...',
           );
 
-          // Do NOT clear Matrix session cookies - they belong to Matrix, not us
-          // Do NOT try to validate them as OpenMeet sessions
-          // Matrix will validate them when we redirect back with auth code
+          try {
+            // Validate the OpenMeet session with the tenant context
+            await this.sessionService.getTenantSpecificRepository(tenantCookie);
+            const session = await this.sessionService.findById(sessionCookie);
+
+            if (session && session.user) {
+              this.logger.debug(
+                '✅ OIDC Auth Debug - Method 4 SUCCESS: Valid OpenMeet session, user ID:',
+                session.user.id,
+              );
+              user = { id: session.user.id };
+              tenantId = tenantCookie;
+
+              this.logger.debug(
+                '✅ OIDC Auth Debug - Method 4: Tenant ID from cookie:',
+                tenantId,
+              );
+            } else {
+              this.logger.debug(
+                '❌ OIDC Auth Debug - Method 4 FAILED: Invalid or expired OpenMeet session',
+              );
+            }
+          } catch (sessionError) {
+            this.logger.debug(
+              '❌ OIDC Auth Debug - Method 4 FAILED: Session validation error:',
+              sessionError.message,
+            );
+          }
+        } else if (sessionCookie && !tenantCookie) {
+          this.logger.debug(
+            '🔄 OIDC Auth Debug - Method 4: Found old format session cookie without tenant - attempting backward compatibility',
+          );
+
+          // Backward compatibility: try to find user across all tenants
+          // This handles sessions created before we added the separate tenant cookie
+          try {
+            const userResult =
+              await this.oidcService.findUserBySessionIdAcrossTenants(
+                Number(sessionCookie),
+              );
+
+            if (userResult) {
+              this.logger.debug(
+                '✅ OIDC Auth Debug - Method 4 BACKWARD COMPATIBILITY SUCCESS: Found session across tenants, user ID:',
+                userResult.user.id,
+              );
+              user = { id: userResult.user.id };
+              tenantId = userResult.tenantId;
+
+              this.logger.debug(
+                '✅ OIDC Auth Debug - Method 4: Tenant ID from cross-tenant lookup:',
+                tenantId,
+              );
+            } else {
+              this.logger.debug(
+                '❌ OIDC Auth Debug - Method 4 BACKWARD COMPATIBILITY FAILED: Session not found across tenants',
+              );
+            }
+          } catch (backwardCompatError) {
+            this.logger.debug(
+              '❌ OIDC Auth Debug - Method 4 BACKWARD COMPATIBILITY ERROR:',
+              backwardCompatError.message,
+            );
+          }
         } else {
           this.logger.debug(
-            '❌ OIDC Auth Debug - Method 4: No Matrix session cookie found',
+            '❌ OIDC Auth Debug - Method 4: No OpenMeet session cookie found',
           );
         }
       } catch (error) {
@@ -320,9 +386,14 @@ export class OidcController {
       this.logger.debug(
         '🔐 OIDC Auth Debug - Method 7 (LAST RESORT): No authenticated user found via any method, redirecting to login flow',
       );
-      const baseUrl =
-        this.configService.get('app.oidcIssuerUrl', { infer: true }) ||
-        'http://localhost:3000';
+      const baseUrl = this.configService.get('app.oidcIssuerUrl', {
+        infer: true,
+      });
+      if (!baseUrl) {
+        throw new Error(
+          'OIDC issuer URL not configured - app.oidcIssuerUrl is required',
+        );
+      }
 
       // Extract login_hint for email pre-fill
       const loginHint = request.query.login_hint as string;
@@ -371,9 +442,14 @@ export class OidcController {
           // Do NOT clear Matrix session cookies - they belong to Matrix server
           // Matrix will validate its own session cookies when we redirect back
 
-          const baseUrl =
-            this.configService.get('app.oidcIssuerUrl', { infer: true }) ||
-            'http://localhost:3000';
+          const baseUrl = this.configService.get('app.oidcIssuerUrl', {
+            infer: true,
+          });
+          if (!baseUrl) {
+            throw new Error(
+              'OIDC issuer URL not configured - app.oidcIssuerUrl is required',
+            );
+          }
           const oidcLoginUrl =
             `${baseUrl}/api/oidc/login?` +
             new URLSearchParams({
@@ -593,28 +669,91 @@ export class OidcController {
       }
     }
 
-    // Check for Matrix session cookie (but don't validate as OpenMeet session)
+    // Check for OpenMeet session cookie (same logic as auth endpoint)
     if (!user) {
-      this.logger.debug('🔐 OIDC Login Debug - Checking for Matrix session...');
+      this.logger.debug(
+        '🔐 OIDC Login Debug - Checking for OpenMeet session...',
+      );
       try {
         const sessionCookie = request.cookies?.['oidc_session'];
-        if (sessionCookie) {
+        const tenantCookie = request.cookies?.['oidc_tenant'];
+
+        if (sessionCookie && tenantCookie) {
           this.logger.debug(
-            '🔐 OIDC Login Debug - Matrix session cookie detected - user may have active Matrix session',
+            '🔐 OIDC Login Debug - OpenMeet session and tenant cookies detected - validating session...',
           );
+
+          try {
+            // Validate the OpenMeet session with the tenant context
+            await this.sessionService.getTenantSpecificRepository(tenantCookie);
+            const session = await this.sessionService.findById(sessionCookie);
+
+            if (session && session.user) {
+              this.logger.debug(
+                '✅ OIDC Login Debug - Valid OpenMeet session, user ID:',
+                session.user.id,
+              );
+              user = { id: session.user.id };
+              tenantId = tenantCookie;
+
+              this.logger.debug(
+                '✅ OIDC Login Debug - Tenant ID from cookie:',
+                tenantId,
+              );
+            } else {
+              this.logger.debug(
+                '❌ OIDC Login Debug - Invalid or expired OpenMeet session',
+              );
+            }
+          } catch (sessionError) {
+            this.logger.debug(
+              '❌ OIDC Login Debug - Session validation error:',
+              sessionError.message,
+            );
+          }
+        } else if (sessionCookie && !tenantCookie) {
           this.logger.debug(
-            '🔐 OIDC Login Debug - Matrix macaroon cookies are opaque to us - cannot validate as OpenMeet sessions',
+            '🔄 OIDC Login Debug - Found old format session cookie without tenant - attempting backward compatibility',
           );
-          // Do NOT try to validate Matrix cookies as OpenMeet sessions
-          // Do NOT clear Matrix cookies - they belong to Matrix
+
+          // Backward compatibility: try to find user across all tenants
+          try {
+            const userResult =
+              await this.oidcService.findUserBySessionIdAcrossTenants(
+                Number(sessionCookie),
+              );
+
+            if (userResult) {
+              this.logger.debug(
+                '✅ OIDC Login Debug - BACKWARD COMPATIBILITY SUCCESS: Found session across tenants, user ID:',
+                userResult.user.id,
+              );
+              user = { id: userResult.user.id };
+              tenantId = userResult.tenantId;
+
+              this.logger.debug(
+                '✅ OIDC Login Debug - Tenant ID from cross-tenant lookup:',
+                tenantId,
+              );
+            } else {
+              this.logger.debug(
+                '❌ OIDC Login Debug - BACKWARD COMPATIBILITY FAILED: Session not found across tenants',
+              );
+            }
+          } catch (backwardCompatError) {
+            this.logger.debug(
+              '❌ OIDC Login Debug - BACKWARD COMPATIBILITY ERROR:',
+              backwardCompatError.message,
+            );
+          }
         } else {
           this.logger.debug(
-            '🔐 OIDC Login Debug - No Matrix session cookie found',
+            '🔐 OIDC Login Debug - No complete OpenMeet session cookies found',
           );
         }
       } catch (error) {
         this.logger.debug(
-          '🔐 OIDC Login Debug - Error checking Matrix session:',
+          '🔐 OIDC Login Debug - Error checking OpenMeet session:',
           error.message,
         );
       }
@@ -626,14 +765,86 @@ export class OidcController {
         '🔄 OIDC Login Debug - User is authenticated, attempting seamless OIDC flow...',
       );
 
-      // For authenticated users, we need tenant information to proceed
-      // Since Matrix cookies can't be validated as OpenMeet sessions,
-      // we'll need the user to have been authenticated through other methods
+      // Check for tenant cookie first - if available, we can skip email form entirely
+      const tenantCookie = request.cookies?.['oidc_tenant'];
+
+      // For ngrok domains where cookies don't work, extract tenant from user_token JWT
+      let tenantFromToken: string | undefined;
+      if (!tenantCookie) {
+        const userToken = request.query.user_token as string;
+        if (userToken) {
+          try {
+            const payload: any = await this.jwtService.verifyAsync(userToken, {
+              secret: this.configService.get('auth.secret', { infer: true }),
+            });
+            tenantFromToken = payload.tenantId;
+            this.logger.debug(
+              `🔑 OIDC Login Debug - Extracted tenant from JWT: ${tenantFromToken}`,
+            );
+          } catch (error) {
+            this.logger.debug(
+              '❌ OIDC Login Debug - Failed to extract tenant from JWT:',
+              error.message,
+            );
+          }
+        }
+      }
+
+      const effectiveTenant = tenantCookie || tenantFromToken;
+
+      if (effectiveTenant) {
+        this.logger.debug(
+          '✅ OIDC Login Debug - User authenticated AND tenant info found, bypassing email form',
+        );
+        this.logger.debug(
+          `🏢 OIDC Login Debug - Using tenant: ${effectiveTenant} (source: ${tenantCookie ? 'cookie' : 'JWT'})`,
+        );
+
+        // Validate that the tenant exists
+        try {
+          getTenantConfig(effectiveTenant);
+          this.logger.debug(
+            `✅ OIDC Login Debug - Tenant ${effectiveTenant} validated, redirecting directly to auth endpoint`,
+          );
+
+          const baseUrl = this.configService.get('app.oidcIssuerUrl', {
+            infer: true,
+          });
+          if (!baseUrl) {
+            throw new Error(
+              'OIDC issuer URL not configured - app.oidcIssuerUrl is required',
+            );
+          }
+
+          const returnUrl =
+            `${baseUrl}/api/oidc/auth?` +
+            new URLSearchParams({
+              client_id: clientId,
+              redirect_uri: redirectUri,
+              response_type: responseType,
+              scope: scope,
+              ...(state && { state }),
+              ...(nonce && { nonce }),
+              tenant_id: effectiveTenant,
+            }).toString();
+
+          this.logger.debug(
+            `🚀 OIDC Login Debug - Seamless redirect to: ${returnUrl}`,
+          );
+
+          response.redirect(returnUrl);
+          return;
+        } catch (error) {
+          this.logger.error(
+            `❌ OIDC Login Debug - Error during seamless flow: ${error.message}`,
+          );
+          // Fall through to email form if tenant is invalid or config missing
+        }
+      }
+
+      // No valid tenant info - need tenant information to proceed
       this.logger.debug(
-        '✅ OIDC Login Debug - User authenticated, but need tenant info for seamless flow',
-      );
-      this.logger.debug(
-        '⚠️ OIDC Login Debug - Cannot determine tenant from Matrix session cookies',
+        '✅ OIDC Login Debug - User authenticated, but no valid tenant info found',
       );
       this.logger.debug(
         '🔄 OIDC Login Debug - Falling back to email form for tenant detection',
@@ -657,9 +868,14 @@ export class OidcController {
           `✅ OIDC Login Debug - Tenant ${tenantId} validated, redirecting to tenant-specific auth`,
         );
 
-        const baseUrl =
-          this.configService.get('app.oidcIssuerUrl', { infer: true }) ||
-          'http://localhost:3000';
+        const baseUrl = this.configService.get('app.oidcIssuerUrl', {
+          infer: true,
+        });
+        if (!baseUrl) {
+          throw new Error(
+            'OIDC issuer URL not configured - app.oidcIssuerUrl is required',
+          );
+        }
 
         const returnUrl =
           `${baseUrl}/api/oidc/auth?` +
@@ -774,9 +990,14 @@ export class OidcController {
     const { tenantId } = userResult;
     const tenantConfig = getTenantConfig(tenantId);
 
-    const baseUrl =
-      this.configService.get('app.oidcIssuerUrl', { infer: true }) ||
-      'http://localhost:3000';
+    const baseUrl = this.configService.get('app.oidcIssuerUrl', {
+      infer: true,
+    });
+    if (!baseUrl) {
+      throw new Error(
+        'OIDC issuer URL not configured - app.oidcIssuerUrl is required',
+      );
+    }
 
     const returnUrl =
       `${baseUrl}/api/oidc/auth?` +

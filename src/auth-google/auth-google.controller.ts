@@ -14,6 +14,7 @@ import { AuthGoogleService } from './auth-google.service';
 import { AuthGoogleLoginDto } from './dto/auth-google-login.dto';
 import { LoginResponseDto } from '../auth/dto/login-response.dto';
 import { Request, Response } from 'express';
+import { getOidcCookieOptions } from '../utils/cookie-config';
 
 @ApiTags('Auth')
 @Controller({
@@ -50,13 +51,10 @@ export class AuthGoogleController {
 
     // Set oidc_session cookie for cross-domain OIDC authentication
     if (loginResult.sessionId) {
-      response.cookie('oidc_session', loginResult.sessionId, {
-        domain: '.openmeet.net', // Cross-subdomain sharing
-        secure: true, // HTTPS only
-        sameSite: 'lax', // Allow cross-site requests
-        httpOnly: true, // Security
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      });
+      const cookieOptions = getOidcCookieOptions();
+
+      response.cookie('oidc_session', loginResult.sessionId, cookieOptions);
+      response.cookie('oidc_tenant', tenantId, cookieOptions);
     }
 
     return loginResult;

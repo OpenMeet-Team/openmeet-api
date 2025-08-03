@@ -35,6 +35,7 @@ describe('MatrixAppServiceController', () => {
     createRoom: jest
       .fn()
       .mockResolvedValue({ roomId: '!test:matrix.example.com' }),
+    resolveRoomAlias: jest.fn().mockResolvedValue('!test:matrix.example.com'),
   };
 
   const mockEventAttendeeQueryService = {
@@ -54,6 +55,7 @@ describe('MatrixAppServiceController', () => {
     findOne: jest.fn(),
     update: jest.fn(),
     create: jest.fn(),
+    updateMatrixRoomIdWithTenant: jest.fn().mockResolvedValue(undefined),
   };
 
   beforeEach(async () => {
