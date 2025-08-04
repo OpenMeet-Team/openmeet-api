@@ -1,10 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleDestroy,
-  Inject,
-  forwardRef,
-} from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ContextIdFactory, ModuleRef } from '@nestjs/core';
 import axios from 'axios';
 import { MatrixCoreService } from './matrix-core.service';
@@ -17,7 +11,8 @@ import {
   IMatrixClient,
   IMatrixClientProvider,
 } from '../types/matrix.interfaces';
-import { MatrixGateway } from '../matrix.gateway';
+import { GlobalMatrixValidationService } from './global-matrix-validation.service';
+import { Trace } from '../../utils/trace.decorator';
 
 @Injectable()
 export class MatrixUserService
@@ -77,7 +72,90 @@ export class MatrixUserService
   }
 
   /**
-   * Provisions a Matrix user for an OpenMeet user if they don't already have Matrix credentials
+   * Provisions a Matrix user with a chosen handle for an OpenMeet user
+   * @param user The OpenMeet user object
+   * @param tenantId Tenant ID for registry tracking
+   * @param userId User ID for registry tracking
+   * @param chosenHandle Optional user-chosen Matrix handle
+   * @returns Matrix user credentials
+   */
+  @Trace('matrix.user.provisionWithHandle')
+  async provisionMatrixUserWithHandle(
+    user: {
+      slug: string;
+      firstName?: string | null;
+      lastName?: string | null;
+      email?: string | null;
+    },
+    tenantId: string,
+    userId: number,
+    chosenHandle?: string,
+  ): Promise<MatrixUserInfo> {
+    let finalHandle: string;
+
+    if (chosenHandle) {
+      // Use the chosen handle if provided
+      const isAvailable =
+        await this.globalMatrixValidationService.isMatrixHandleUnique(
+          chosenHandle,
+        );
+      if (!isAvailable) {
+        throw new Error(`Matrix handle ${chosenHandle} is already taken`);
+      }
+      finalHandle = chosenHandle;
+    } else {
+      // Generate a handle suggestion based on user's name and ensure uniqueness
+      finalHandle = await this.generateUniqueHandle(user);
+    }
+
+    this.logger.log(`Provisioning Matrix user with handle: ${finalHandle}`);
+
+    // Generate password and display name
+    const password = MatrixUserService.generateMatrixPassword();
+    const displayName = MatrixUserService.generateDisplayName(user);
+
+    // Create the Matrix user with the chosen handle and tenant suffix
+    const matrixUsername = `${finalHandle}_${tenantId}`;
+    const matrixUserInfo = await this.createUser({
+      username: matrixUsername,
+      password,
+      displayName,
+    });
+
+    // Register the handle in the global registry
+    await this.globalMatrixValidationService.registerMatrixHandle(
+      matrixUsername,
+      tenantId,
+      userId,
+    );
+
+    // Ensure display name is set properly
+    try {
+      await this.setUserDisplayName(
+        matrixUserInfo.userId,
+        matrixUserInfo.accessToken,
+        displayName,
+        matrixUserInfo.deviceId,
+      );
+      this.logger.debug(
+        `Set Matrix display name for ${matrixUserInfo.userId} to "${displayName}"`,
+      );
+    } catch (displayNameError) {
+      this.logger.warn(
+        `Failed to set Matrix display name: ${displayNameError.message}`,
+      );
+      // Non-fatal error, continue
+    }
+
+    this.logger.log(
+      `Successfully provisioned Matrix user: ${matrixUserInfo.userId}`,
+    );
+    return matrixUserInfo;
+  }
+
+  /**
+   * Legacy method - provisions a Matrix user using the old tenant-prefixed approach
+   * @deprecated Use provisionMatrixUserWithHandle for new implementations
    * @param user The OpenMeet user object
    * @param tenantId Optional tenant ID for multi-tenant support
    * @returns Matrix user credentials
@@ -123,6 +201,106 @@ export class MatrixUserService
 
     return matrixUserInfo;
   }
+
+  /**
+   * Generate a unique Matrix handle based on user information
+   * @param user The OpenMeet user object
+   * @returns A unique Matrix handle
+   */
+  @Trace('matrix.user.generateUniqueHandle')
+  private async generateUniqueHandle(user: {
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+    slug?: string;
+  }): Promise<string> {
+    // Try different handle strategies until we find a unique one
+    const strategies = [
+      // Strategy 1: firstname.lastname
+      () => {
+        if (user.firstName && user.lastName) {
+          return `${user.firstName}.${user.lastName}`
+            .toLowerCase()
+            .replace(/[^a-z0-9.\-]/g, '')
+            .slice(0, 255);
+        }
+        return null;
+      },
+
+      // Strategy 2: firstname + lastname (no dot)
+      () => {
+        if (user.firstName && user.lastName) {
+          return `${user.firstName}${user.lastName}`
+            .toLowerCase()
+            .replace(/[^a-z0-9.\-]/g, '')
+            .slice(0, 255);
+        }
+        return null;
+      },
+
+      // Strategy 3: email username
+      () => {
+        if (user.email) {
+          const emailUsername = user.email.split('@')[0];
+          return emailUsername
+            .toLowerCase()
+            .replace(/[^a-z0-9.\-]/g, '')
+            .slice(0, 255);
+        }
+        return null;
+      },
+
+      // Strategy 4: use slug
+      () => {
+        if (user.slug) {
+          return user.slug
+            .toLowerCase()
+            .replace(/[^a-z0-9.\-]/g, '')
+            .slice(0, 255);
+        }
+        return null;
+      },
+    ];
+
+    // Try each strategy
+    for (const strategy of strategies) {
+      const baseHandle = strategy();
+      if (baseHandle) {
+        // Try the base handle first
+        if (
+          await this.globalMatrixValidationService.isMatrixHandleUnique(
+            baseHandle,
+          )
+        ) {
+          return baseHandle;
+        }
+
+        // If not unique, try numbered variants
+        for (let i = 2; i <= 999; i++) {
+          const numberedHandle = `${baseHandle}${i}`;
+          if (
+            await this.globalMatrixValidationService.isMatrixHandleUnique(
+              numberedHandle,
+            )
+          ) {
+            return numberedHandle;
+          }
+        }
+      }
+    }
+
+    // Fallback: generate a random handle
+    const randomHandle = `user${Math.random().toString(36).substr(2, 9)}`;
+    if (
+      await this.globalMatrixValidationService.isMatrixHandleUnique(
+        randomHandle,
+      )
+    ) {
+      return randomHandle;
+    }
+
+    throw new Error('Unable to generate a unique Matrix handle');
+  }
   private readonly logger = new Logger(MatrixUserService.name);
 
   // Map to store user-specific Matrix clients (using slug as key)
@@ -141,8 +319,7 @@ export class MatrixUserService
   constructor(
     private readonly matrixCoreService: MatrixCoreService,
     private readonly moduleRef: ModuleRef,
-    @Inject(forwardRef(() => MatrixGateway))
-    private readonly matrixGateway: any,
+    private readonly globalMatrixValidationService: GlobalMatrixValidationService,
   ) {
     // Set up a cleanup interval for inactive clients (30 minutes)
     this.cleanupInterval = setInterval(
@@ -156,6 +333,15 @@ export class MatrixUserService
    */
   async createUser(options: CreateUserOptions): Promise<MatrixUserInfo> {
     const { username, password, displayName, adminUser = false } = options;
+
+    // Ensure Matrix is ready before attempting operations
+    const isReady = await this.matrixCoreService.ensureMatrixReady();
+    if (!isReady) {
+      throw new Error(
+        'Matrix server is not available. Please try again later.',
+      );
+    }
+
     const config = this.matrixCoreService.getConfig();
 
     this.logger.debug('Creating Matrix user:', {
@@ -661,9 +847,17 @@ export class MatrixUserService
   async generateNewAccessToken(matrixUserId: string): Promise<string | null> {
     try {
       const config = this.matrixCoreService.getConfig();
-      const adminToken = this.matrixCoreService
-        .getAdminClient()
-        .getAccessToken();
+
+      // Check if admin client is available
+      const adminClient = this.matrixCoreService.getAdminClient();
+      if (!adminClient) {
+        this.logger.warn(
+          'Matrix admin client not available - cannot generate token via admin API',
+        );
+        return null;
+      }
+
+      const adminToken = adminClient.getAccessToken();
 
       // Use admin API to create a new access token
       const url = `${config.baseUrl}/_synapse/admin/v1/users/${encodeURIComponent(matrixUserId)}/login`;
@@ -721,6 +915,13 @@ export class MatrixUserService
   /**
    * Get or create a Matrix client for a specific user
    * This method fetches user credentials from the database
+   *
+   * @param userSlug The user's slug
+   * @param userService DEPRECATED: parameter will be removed in future version
+   * @param tenantId The tenant ID for the user
+   *
+   * Note: This method should primarily be used for bot authentication fallback.
+   * Regular user Matrix clients should be created in the frontend via MAS OIDC.
    */
   async getClientForUser(
     userSlug: string,
@@ -769,8 +970,44 @@ export class MatrixUserService
       throw new Error(`Failed to get user data: ${error.message}`);
     }
 
-    if (!user || !user.matrixUserId) {
-      this.logger.warn(`User ${userSlug} has no Matrix user ID`);
+    if (!user) {
+      this.logger.warn(`User ${userSlug} not found`);
+      throw new Error('User not found');
+    }
+
+    // Check if user has Matrix credentials via registry
+    let matrixUserId: string | null = null;
+    try {
+      if (!tenantId) {
+        throw new Error('Tenant ID is required for Matrix registry lookup');
+      }
+      const registryEntry =
+        await this.globalMatrixValidationService.getMatrixHandleForUser(
+          user.id,
+          tenantId,
+        );
+      if (registryEntry) {
+        const serverName = process.env.MATRIX_SERVER_NAME;
+        if (!serverName) {
+          throw new Error(
+            'MATRIX_SERVER_NAME environment variable is required',
+          );
+        }
+        matrixUserId = `@${registryEntry.handle}:${serverName}`;
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Error checking Matrix registry for user ${user.id}: ${error.message}`,
+      );
+    }
+
+    // Fallback: Check legacy matrixUserId field
+    if (!matrixUserId && user.matrixUserId) {
+      matrixUserId = user.matrixUserId;
+    }
+
+    if (!matrixUserId) {
+      this.logger.warn(`User ${userSlug} has no Matrix credentials`);
       throw new Error('User has no Matrix credentials');
     }
 
@@ -779,7 +1016,7 @@ export class MatrixUserService
     let deviceId = user.matrixDeviceId;
 
     const isTokenValid = accessToken
-      ? await this.verifyAccessToken(user.matrixUserId, accessToken)
+      ? await this.verifyAccessToken(matrixUserId, accessToken)
       : false;
 
     if (!isTokenValid) {
@@ -788,7 +1025,7 @@ export class MatrixUserService
       );
 
       // Generate a new token using admin API
-      const newToken = await this.generateNewAccessToken(user.matrixUserId);
+      const newToken = await this.generateNewAccessToken(matrixUserId);
 
       if (newToken) {
         // Update the user record with the new token
@@ -848,10 +1085,13 @@ export class MatrixUserService
           // Continue anyway with the new token, even if DB update failed
         }
       } else {
-        this.logger.error(
-          `Failed to generate new token for ${userSlug}, can't connect to Matrix`,
+        this.logger.warn(
+          `Cannot generate admin token for ${userSlug} - Matrix admin API unavailable. User should authenticate via MAS OIDC flow.`,
         );
-        throw new Error('Failed to refresh Matrix credentials');
+        // Instead of throwing, return a more informative error that suggests using the proper authentication flow
+        throw new Error(
+          'Matrix authentication unavailable. Please log out and log back in to refresh your Matrix credentials.',
+        );
       }
     }
 
@@ -862,7 +1102,7 @@ export class MatrixUserService
       // Create a Matrix client with the user's credentials
       const client = sdk.createClient({
         baseUrl: config.baseUrl,
-        userId: user.matrixUserId,
+        userId: matrixUserId,
         accessToken: accessToken,
         deviceId: deviceId || undefined,
         useAuthorizationHeader: true,
@@ -901,33 +1141,10 @@ export class MatrixUserService
                 //   `Got new message event in room ${room.roomId} from user ${event.getSender()}`,
                 // );
 
-                // Use the injected MatrixGateway instance
-                if (
-                  this.matrixGateway &&
-                  this.matrixGateway.broadcastRoomEvent
-                ) {
-                  // Convert event to plain object for broadcasting
-                  const eventData = {
-                    type: event.getType(),
-                    room_id: room.roomId,
-                    sender: event.getSender(),
-                    content: event.getContent(),
-                    event_id: event.getId(),
-                    origin_server_ts: event.getTs(),
-                    user_slug: userSlug, // Include user slug for context
-                    tenant_id: tenantId || 'default', // Include tenant ID for multi-tenancy
-                  };
-
-                  // Broadcast the event to all connected clients
-                  this.matrixGateway.broadcastRoomEvent(room.roomId, eventData);
-                  // this.logger.debug(
-                  //   `Broadcast Matrix message event for room ${room.roomId} (tenant: ${tenantId || 'default'})`,
-                  // );
-                } else {
-                  this.logger.warn(
-                    'Could not get MatrixGateway instance to broadcast event',
-                  );
-                }
+                // Note: Message broadcasting removed - frontend Matrix client handles real-time updates directly
+                this.logger.debug(
+                  `Received Matrix message event in room ${room.roomId} from ${event.getSender()}`,
+                );
               }
             },
           );
@@ -949,12 +1166,12 @@ export class MatrixUserService
       // Store the client using slug
       this.userMatrixClients.set(userSlug, {
         client,
-        matrixUserId: user.matrixUserId,
+        matrixUserId: matrixUserId,
         lastActivity: new Date(),
       });
 
       this.logger.log(
-        `Created Matrix client for user ${userSlug} (${user.matrixUserId})`,
+        `Created Matrix client for user ${userSlug} (${matrixUserId})`,
       );
 
       return client;
@@ -1133,7 +1350,38 @@ export class MatrixUserService
       throw new Error('User not found');
     }
 
-    if (!user.matrixUserId) {
+    // Check if user has Matrix credentials via registry
+    let matrixUserId: string | null = null;
+    try {
+      if (!tenantId) {
+        throw new Error('Tenant ID is required for Matrix registry lookup');
+      }
+      const registryEntry =
+        await this.globalMatrixValidationService.getMatrixHandleForUser(
+          userId,
+          tenantId,
+        );
+      if (registryEntry) {
+        const serverName = process.env.MATRIX_SERVER_NAME;
+        if (!serverName) {
+          throw new Error(
+            'MATRIX_SERVER_NAME environment variable is required',
+          );
+        }
+        matrixUserId = `@${registryEntry.handle}:${serverName}`;
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Error checking Matrix registry for user ${userId}: ${error.message}`,
+      );
+    }
+
+    // Fallback: Check legacy matrixUserId field
+    if (!matrixUserId && user.matrixUserId) {
+      matrixUserId = user.matrixUserId;
+    }
+
+    if (!matrixUserId) {
       this.logger.warn(`User ${userId} has no Matrix account`);
       throw new Error(
         'User has no Matrix account. Please provision a Matrix account first.',
@@ -1142,7 +1390,7 @@ export class MatrixUserService
 
     // Update the Matrix password using admin API
     await this.updatePassword({
-      matrixUserId: user.matrixUserId,
+      matrixUserId: matrixUserId,
       password,
       tenantId,
     });

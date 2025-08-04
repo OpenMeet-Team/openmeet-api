@@ -1,0 +1,161 @@
+http:
+  listeners:
+    - name: web
+      binds:
+        - address: "[::]:8080"
+      resources:
+        - name: discovery
+        - name: human
+        - name: oauth
+        - name: compat
+        - name: graphql
+        - name: assets
+  public_base: "{{ .Env.MAS_PUBLIC_BASE }}"
+  trusted_proxies: []
+
+database:
+  host: "{{ .Env.MAS_DATABASE_HOST }}"
+  port: {{ .Env.DATABASE_PORT }}
+  username: "{{ .Env.DATABASE_USERNAME }}"
+  password: "{{ .Env.DATABASE_PASSWORD }}"
+  database: "{{ .Env.MAS_DATABASE_NAME }}"
+  max_connections: 5  # Reduced for CI memory constraints
+  min_connections: 0
+
+secrets:
+  encryption: "{{ .Env.MAS_ENCRYPTION_SECRET }}"
+  keys:
+    # RSA key for RS256 algorithm ({{ .Env.ENVIRONMENT }})
+    - kid: "rsa-key-{{ .Env.ENVIRONMENT }}-001"
+      key: |
+{{- if .Env.MAS_RSA_PRIVATE_KEY }}
+{{ .Env.MAS_RSA_PRIVATE_KEY | strings.Indent 8 }}
+{{- else }}
+        # RSA key will be generated at runtime
+{{- end }}
+
+    # EC P-256 key for ES256 algorithm ({{ .Env.ENVIRONMENT }})
+    - kid: "ec-key-{{ .Env.ENVIRONMENT }}-001"
+      key: |
+{{- if .Env.MAS_EC_PRIVATE_KEY }}
+{{ .Env.MAS_EC_PRIVATE_KEY | strings.Indent 8 }}
+{{- else }}
+        # EC key will be generated at runtime
+{{- end }}
+
+matrix:
+  homeserver: "{{ .Env.MATRIX_SERVER_NAME }}"
+  endpoint: "{{ .Env.MAS_MATRIX_HOMESERVER_URL }}"
+  secret: "{{ .Env.MAS_ADMIN_TOKEN }}"
+
+clients:
+  # Matrix Synapse Homeserver Client for MSC3861
+  - client_id: "0000000000000000000SYNAPSE"
+    client_auth_method: "client_secret_basic"
+    client_secret: "{{ .Env.MAS_CLIENT_SECRET }}"
+    redirect_uris: []  # Synapse doesn't need redirect URIs for introspection
+
+{{- if and (or (eq .Env.ENVIRONMENT "local") (eq .Env.ENVIRONMENT "dev")) .Env.MAS_STATIC_TEST_CLIENT_ID }}
+  # OpenMeet Platform Frontend Client (SPA) - Static Test Client
+  # This client is used for Cypress E2E tests and local development
+  - client_id: "{{ .Env.MAS_STATIC_TEST_CLIENT_ID }}"
+    client_auth_method: "none"  # Public client, no secrets
+    client_name: "OpenMeet Platform (Static Test Client)"
+    client_uri: "http://localhost:8087/"
+    logo_uri: "http://localhost:8087/openmeet/openmeet-logo.png"
+    redirect_uris:
+{{- range (.Env.MAS_STATIC_TEST_REDIRECT_URLS | strings.Split ",") }}
+      - "{{ . }}"
+{{- end }}
+    grant_types:
+      - "authorization_code"
+      - "refresh_token"
+    response_types:
+      - "code"
+    scope: "openid email"
+{{- else }}
+  # Note: OpenMeet Platform Frontend uses dynamic client registration in production
+  # No static client configuration needed - OAuth provider handles registration
+{{- end }}
+
+  # OpenMeet Bot Client for Client Credentials Grant
+  - client_id: "01JAYS74TCG3BTWKADN5Q4518E"
+    client_auth_method: "client_secret_basic"
+    client_secret: "{{ .Env.BOT_CLIENT_SECRET }}"
+    redirect_uris: []  # No redirects needed for client credentials
+    grant_types:
+      - "client_credentials"
+    scopes:
+      - "urn:matrix:org.matrix.msc2967.client:api:*"
+
+upstream_oauth2:
+  providers:
+    - id: "01JAYS74TCG3BTWKADN5Q4518C"
+      human_name: "{{ .Env.OAUTH_PROVIDER_NAME }}"
+      brand_name: "openmeet"
+      issuer: "{{ .Env.OAUTH_ISSUER }}"
+      client_id: "{{ .Env.OAUTH_CLIENT_ID }}"
+      client_secret: "{{ .Env.OAUTH_CLIENT_SECRET }}"
+      token_endpoint_auth_method: "client_secret_post"
+      scope: "openid email"
+      # Forward login_hint to OpenMeet OIDC (contains tenant context)
+      forward_login_hint: true
+      claims_imports:
+        localpart:
+          action: require
+          template: "{{"{{"}} user.preferred_username {{"}}"}}"
+        displayname:
+          action: suggest
+          template: "{{"{{"}} user.name {{"}}"}}"
+        email:
+          action: suggest
+          template: "{{"{{"}} user.email {{"}}"}}"
+        tenant_id:
+          action: suggest
+          template: "{{"{{"}} user.tenant_id or 'default' {{"}}"}}"
+
+policy:
+  wasm_module: "/usr/local/share/mas-cli/policy.wasm"
+  data:
+    # Allow all users for {{ .Env.ENVIRONMENT }} testing
+    allow_all: true
+    admin_users:
+{{- range (.Env.POLICY_ADMIN_USERS | strings.Split ",") }}
+      - "{{ . }}"
+{{- end }}
+    # Bot clients that can use client credentials grant for admin operations
+    admin_clients:
+      - "01JAYS74TCG3BTWKADN5Q4518E"
+
+branding:
+  service_name: "{{ .Env.MAS_SERVICE_NAME }}"
+  policy_uri: "https://openmeet.net/privacy"
+  tos_uri: "https://openmeet.net/terms"
+
+# Disable password authentication to make OAuth primary
+passwords:
+  enabled: false
+
+account:
+  password_registration_enabled: false
+  login_with_email_allowed: false
+
+email:
+  from: "{{ .Env.MAIL_DEFAULT_EMAIL }}"
+  reply_to: "{{ .Env.MAIL_DEFAULT_EMAIL }}"
+  transport: "smtp"
+  hostname: "{{ .Env.MAS_MAIL_HOST | default .Env.MAIL_HOST }}"
+  port: {{ .Env.MAS_MAIL_PORT | default .Env.MAIL_PORT }}
+  mode: "{{ .Env.MAIL_MODE }}"
+
+# Experimental settings for {{ .Env.ENVIRONMENT }} 
+experimental:
+  # Shorter token timeouts for local dev testing (default: 300 seconds/5 minutes)
+  access_token_ttl: {{ .Env.MAS_ACCESS_TOKEN_TTL | default "300" }}
+  compat_token_ttl: {{ .Env.MAS_COMPAT_TOKEN_TTL | default "300" }}
+
+# Minimal telemetry for {{ .Env.ENVIRONMENT }}
+telemetry:
+  metrics:
+    prometheus:
+      enabled: {{ .Env.PROMETHEUS_ENABLED }}

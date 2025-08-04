@@ -1,0 +1,105 @@
+server_name: "{{ .Env.MATRIX_SERVER_NAME }}"
+public_baseurl: "{{ .Env.SYNAPSE_PUBLIC_BASEURL }}"
+pid_file: /data/homeserver.pid
+web_client_location: "{{ .Env.WEB_CLIENT_LOCATION }}"
+
+listeners:
+  - port: 8448
+    tls: false
+    type: http
+    x_forwarded: true
+    bind_addresses: ['0.0.0.0']
+    resources:
+      - names: [client, federation, metrics, media]
+        compress: false
+
+database:
+  name: psycopg2
+  args:
+    user: "{{ .Env.DATABASE_USERNAME }}"
+    password: "{{ .Env.DATABASE_PASSWORD }}"
+    database: "{{ .Env.SYNAPSE_DATABASE_NAME }}"
+    host: "{{ .Env.SYNAPSE_DATABASE_HOST }}"
+    port: {{ .Env.DATABASE_PORT }}
+    cp_min: 5
+    cp_max: 10
+  allow_unsafe_locale: true
+
+# MSC3861 - Delegate authentication to MAS
+experimental_features:
+  msc3861:
+    enabled: true
+    issuer: "{{ .Env.MAS_ISSUER }}"
+    client_id: "0000000000000000000SYNAPSE"
+    client_auth_method: "client_secret_basic"
+    client_secret: "{{ .Env.MAS_CLIENT_SECRET }}"
+    admin_token: "{{ .Env.MAS_ADMIN_TOKEN }}"
+{{- if .Env.MAS_INTROSPECTION_ENDPOINT }}
+    introspection_endpoint: "{{ .Env.MAS_INTROSPECTION_ENDPOINT }}"
+{{- end }}
+{{- if .Env.MAS_ACCOUNT_MANAGEMENT_URL }}
+    account_management_url: "{{ .Env.MAS_ACCOUNT_MANAGEMENT_URL }}"
+{{- end }}
+  # MSC3970: Scope transaction IDs to devices instead of access tokens
+  msc3970_enabled: true
+
+# Disable built-in authentication since MAS handles it
+password_providers: []
+enable_registration: false
+registration_shared_secret: null
+
+# Remove OIDC providers - MAS handles this now
+oidc_providers: []
+
+# Existing configuration
+macaroon_secret_key: "{{ .Env.SYNAPSE_MACAROON_SECRET_KEY }}"
+form_secret: "{{ .Env.SYNAPSE_FORM_SECRET }}"
+signing_key_path: "/data/signing.key"
+
+media_store_path: /data/media
+uploads_path: /data/uploads
+data_dir: /data
+
+# S3 Media Storage Configuration
+{{- if .Env.ACCESS_KEY_ID }}
+media_storage_providers:
+  - module: s3_storage_provider.S3StorageProviderBackend
+    store_local: false
+    store_remote: true
+    store_synchronous: true
+    config:
+{{- if eq .Env.ENVIRONMENT "prod" }}
+      bucket: openmeet-matrix-media.s3.openmeet.net
+{{- else }}
+      bucket: openmeet-matrix-media-dev.s3.openmeet.net
+{{- end }}
+      region_name: "{{ .Env.AWS_S3_REGION }}"
+      endpoint_url: https://s3.amazonaws.com
+      access_key_id: "{{ .Env.ACCESS_KEY_ID }}"
+      secret_access_key: "{{ .Env.SECRET_ACCESS_KEY }}"
+      storage_class: STANDARD
+      thumbnails: true
+{{- end }}
+
+log_config: "/data/log.config"
+
+federation_domain_whitelist: []
+federation_ip_range_blacklist:
+  - '127.0.0.0/8'
+  - '10.0.0.0/8'
+  - '192.168.0.0/16'
+
+enable_metrics: {{ .Env.SYNAPSE_ENABLE_METRICS }}
+report_stats: false
+
+app_service_config_files:
+  - /config/appservices/openmeet-appservice.yaml
+
+user_directory:
+  enabled: true
+  search_all_users: false
+  prefer_local_users: true
+
+# Room and user limits
+max_upload_size: "{{ .Env.SYNAPSE_MAX_UPLOAD_SIZE }}"
+url_preview_enabled: {{ .Env.SYNAPSE_URL_PREVIEW_ENABLED }}

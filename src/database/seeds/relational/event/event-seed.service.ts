@@ -48,7 +48,18 @@ export class EventSeedService {
       where: { name: EventAttendeeRole.Host },
     });
 
+    // Get actual users from the database instead of using hardcoded IDs
+    const availableUsers = await this.userRepository.find();
+    if (availableUsers.length === 0) {
+      console.log('No users found - skipping event seeding');
+      return;
+    }
+
     for (const eventData of eventSeedData) {
+      // Assign a random actual user to each event
+      const randomUser =
+        availableUsers[Math.floor(Math.random() * availableUsers.length)];
+
       const numberOfCategories = Math.floor(Math.random() * 3) + 1;
       const selectedCategories = this.getRandomCategories(
         allCategories,
@@ -69,7 +80,7 @@ export class EventSeedService {
         status: eventData.status,
         visibility: eventData.visibility,
         group: eventData.group,
-        user: eventData.user,
+        user: randomUser, // Use actual user instead of hardcoded ID
         categories: selectedCategories.map((category) => category),
         approvalQuestion: eventData.approvalQuestion ?? '',
         allowWaitlist: eventData.allowWaitlist ?? false,
@@ -83,7 +94,7 @@ export class EventSeedService {
         status: EventAttendeeStatus.Confirmed,
         role: { id: hostRole?.id },
         event: { id: createdEvent.id },
-        user: eventData.user,
+        user: randomUser, // Use the same user as the event owner
       });
       await this.eventAttendeesRepository.save(attendee);
     }

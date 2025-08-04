@@ -69,7 +69,10 @@ export class AuthBlueskyService {
     }
   }
 
-  async handleAuthCallback(query: any, tenantId: string): Promise<string> {
+  async handleAuthCallback(
+    query: any,
+    tenantId: string,
+  ): Promise<{ redirectUrl: string; sessionId: string | undefined }> {
     this.logger.debug('handleAuthCallback', { query, tenantId });
     if (!tenantId) {
       // Check if tenantId is in the request object
@@ -220,11 +223,14 @@ export class AuthBlueskyService {
       profile: Buffer.from(JSON.stringify(profileData)).toString('base64'),
     });
 
-    this.logger.debug(
-      'calling redirect to ',
-      `${tenantConfig.frontendDomain}/auth/bluesky/callback?${newParams.toString()}`,
-    );
-    return `${tenantConfig.frontendDomain}/auth/bluesky/callback?${newParams.toString()}`;
+    const redirectUrl = `${tenantConfig.frontendDomain}/auth/bluesky/callback?${newParams.toString()}`;
+    this.logger.debug('calling redirect to', redirectUrl);
+
+    // Return both the redirect URL and session ID for cookie setting
+    return {
+      redirectUrl,
+      sessionId: loginResponse.sessionId,
+    };
   }
 
   async createAuthUrl(handle: string, tenantId: string): Promise<string> {

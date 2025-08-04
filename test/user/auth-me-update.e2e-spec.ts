@@ -1,6 +1,7 @@
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import request from 'supertest';
 import { createTestUser } from '../utils/functions';
+import { cleanupTestEntities } from '../utils/database-cleanup';
 
 describe('User Self-Update (/auth/me) - UI Path', () => {
   const app = TESTING_APP_URL;
@@ -12,6 +13,9 @@ describe('User Self-Update (/auth/me) - UI Path', () => {
     const newPassword = 'new-password-456';
 
     beforeAll(async () => {
+      // Clean up any existing test users first
+      await cleanupTestEntities(['openmeet-test.user']);
+
       // Create a test user using the registration endpoint
       testEmail = `openmeet-test.user-${Date.now()}@openmeet.net`;
       const userData = await createTestUser(
@@ -23,6 +27,11 @@ describe('User Self-Update (/auth/me) - UI Path', () => {
         originalPassword,
       );
       userToken = userData.token;
+    });
+
+    afterAll(async () => {
+      // Clean up test user after tests complete
+      await cleanupTestEntities(['openmeet-test.user']);
     });
 
     describe('Basic Profile Updates', () => {

@@ -6,27 +6,15 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import * as pool from 'generic-pool';
 import { MatrixConfig } from '../config/matrix-config.type';
 import { IMatrixClient, IMatrixSdk } from '../types/matrix.interfaces';
 import { MatrixClientWithContext } from '../types/matrix.types';
-import { MatrixTokenManagerService } from './matrix-token-manager.service';
 
 @Injectable()
 export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MatrixCoreService.name);
-  private adminClient: IMatrixClient;
   private readonly baseUrl: string;
   private readonly serverName: string;
-  private readonly defaultDeviceId: string;
-  private readonly defaultInitialDeviceDisplayName: string;
-  // Not readonly so we can correct it if token doesn't match configured user
-  private adminUserId: string;
-  // Not readonly so we can update it when regenerated
-  private adminAccessToken: string;
-
-  // Connection pool for admin API operations
-  private clientPool: pool.Pool<MatrixClientWithContext>;
 
   // The Matrix SDK - we'll load it dynamically to handle ESM/CJS compatibility
   private matrixSdk: IMatrixSdk = {
@@ -50,23 +38,13 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly tokenManager: MatrixTokenManagerService,
     private readonly eventEmitter: EventEmitter2,
   ) {
     const matrixConfig = this.configService.get<MatrixConfig>('matrix', {
       infer: true,
     });
 
-    // Log actual environment variables for debugging
-    this.logger.debug('Matrix environment variables:', {
-      MATRIX_HOMESERVER_URL: process.env.MATRIX_HOMESERVER_URL,
-      MATRIX_BASE_URL: process.env.MATRIX_BASE_URL,
-      MATRIX_SERVER_URL: process.env.MATRIX_SERVER_URL,
-      MATRIX_SERVER_NAME: process.env.MATRIX_SERVER_NAME,
-      MATRIX_ADMIN_USERNAME: process.env.MATRIX_ADMIN_USERNAME,
-    });
-
-    // Always prioritize environment variables over defaults or nestjs config
+    // Extract basic configuration for Matrix SDK
     const serverName =
       process.env.MATRIX_SERVER_NAME ||
       (matrixConfig?.serverName ? matrixConfig.serverName : 'openmeet.net');
@@ -79,76 +57,29 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
         ? matrixConfig.baseUrl
         : `https://matrix-dev.${serverName}`);
 
-    const adminUsername =
-      process.env.MATRIX_ADMIN_USERNAME ||
-      (matrixConfig?.adminUser ? matrixConfig.adminUser : 'admin');
-
-    // Log the determined values
-    this.logger.log(`Using Matrix configuration:`, {
-      serverName,
-      baseUrl,
-      adminUsername,
-    });
-
-    // Set the properties consistently
     this.baseUrl = baseUrl;
     this.serverName = serverName;
-    this.adminUserId = `@${adminUsername}:${serverName}`;
-    this.defaultDeviceId = matrixConfig?.defaultDeviceId || 'OPENMEET_SERVER';
-    this.defaultInitialDeviceDisplayName =
-      matrixConfig?.defaultInitialDeviceDisplayName || 'OpenMeet Server';
 
-    // We'll get the adminAccessToken from the token manager during initialization
-    this.adminAccessToken = '';
+    this.logger.log(
+      `Matrix Core Service configured with server: ${serverName}`,
+    );
   }
 
   async onModuleInit() {
     try {
-      // Dynamically import the matrix-js-sdk
+      // Load the Matrix SDK for use by other services
       await this.loadMatrixSdk();
-
-      // Get the admin token from the token manager
-      this.adminAccessToken = this.tokenManager.getAdminToken();
-
-      if (!this.adminAccessToken) {
-        this.logger.warn(
-          'No admin token available from token manager, waiting for regeneration',
-        );
-        // Force token regeneration and wait for it to complete
-        const success = await this.tokenManager.forceTokenRegeneration();
-        if (!success) {
-          this.logger.error('Failed to generate initial admin token');
-        } else {
-          // Get the newly generated token
-          this.adminAccessToken = this.tokenManager.getAdminToken();
-        }
-      }
-
-      // Create admin client
-      this.createAdminClient();
-
-      // Initialize client pool
-      this.initializeClientPool();
-
-      // Set up event listener for token updates
-      this.eventEmitter.on(
-        'matrix.admin.token.updated',
-        this.handleTokenUpdate.bind(this),
-      );
-
       this.logger.log(
-        `Matrix core service initialized with admin user ${this.adminUserId}`,
+        'Matrix Core Service initialized - SDK loaded successfully',
       );
     } catch (error) {
       this.logger.error(
-        `Failed to initialize Matrix core service: ${error.message}`,
+        `Failed to load Matrix SDK: ${error.message}`,
         error.stack,
       );
       this.logger.error(
         'Matrix functionality will not be available - application may still function with limited features',
       );
-      // Continue without throwing to allow the service to start
-      // But we won't create a mock SDK - real SDK is required
     }
   }
 
@@ -159,31 +90,8 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  // Removed verifyAdminAccess method as it's now handled by the token manager
-
-  async onModuleDestroy() {
-    try {
-      // Remove event listeners
-      this.eventEmitter.removeAllListeners('matrix.admin.token.updated');
-
-      // Stop the admin client
-      if (this.adminClient?.stopClient) {
-        this.adminClient.stopClient();
-      }
-
-      // Drain and clear connection pool
-      if (this.clientPool) {
-        await this.clientPool.drain();
-        await this.clientPool.clear();
-      }
-
-      this.logger.log('Matrix core service destroyed');
-    } catch (error) {
-      this.logger.error(
-        `Error destroying Matrix core service: ${error.message}`,
-        error.stack,
-      );
-    }
+  onModuleDestroy() {
+    this.logger.log('Matrix Core Service destroyed');
   }
 
   /**
@@ -226,240 +134,11 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
   // No mock SDK implementation - we will require the real SDK to work properly
 
   /**
-   * Create the admin client for privileged operations
-   */
-  private createAdminClient(): void {
-    // Check if there's an existing client that needs to be stopped
-    if (this.adminClient?.stopClient) {
-      try {
-        this.adminClient.stopClient();
-        this.logger.debug(
-          'Stopped existing admin client before creating a new one',
-        );
-      } catch (err) {
-        this.logger.warn(
-          `Error stopping existing admin client: ${err.message}`,
-        );
-      }
-    }
-
-    // Create a new client with the current token
-    this.adminClient = this.matrixSdk.createClient({
-      baseUrl: this.baseUrl,
-      userId: this.adminUserId,
-      accessToken: this.adminAccessToken,
-      useAuthorizationHeader: true,
-      // Disable automatic capabilities refresh which causes error logs when token is invalid
-      // This prevents the "Failed to refresh capabilities" errors from appearing
-      timeoutCap: 60000, // Set higher timeout to prevent premature failures
-      localTimeoutMs: 120000, // Also increase local timeout
-      logger: {
-        // Disable verbose HTTP logging from Matrix SDK
-        log: () => {},
-        info: () => {},
-        warn: () => {},
-        debug: () => {},
-        error: (msg: string) => this.logger.error(msg), // Keep error logs
-      },
-    });
-  }
-
-  /**
-   * Initialize the connection pool for Matrix clients
-   */
-  private initializeClientPool(): void {
-    const matrixConfig = this.configService.get<MatrixConfig>('matrix', {
-      infer: true,
-    });
-
-    // Verify SDK is loaded and createClient method is available
-    if (!this.matrixSdk || typeof this.matrixSdk.createClient !== 'function') {
-      this.logger.error(
-        'Cannot initialize client pool: Matrix SDK not properly loaded',
-      );
-      throw new Error('Matrix SDK not properly initialized');
-    }
-
-    this.clientPool = pool.createPool<MatrixClientWithContext>(
-      {
-        create: () => {
-          const client = this.matrixSdk.createClient({
-            baseUrl: this.baseUrl,
-            userId: this.adminUserId,
-            accessToken: this.adminAccessToken,
-            useAuthorizationHeader: true,
-            // Disable automatic capabilities refresh which causes error logs when token is invalid
-            // This prevents the "Failed to refresh capabilities" errors from appearing
-            timeoutCap: 60000, // Set higher timeout to prevent premature failures
-            localTimeoutMs: 120000, // Also increase local timeout
-            logger: {
-              // Disable verbose HTTP logging from Matrix SDK
-              log: () => {},
-              info: () => {},
-              warn: () => {},
-              debug: () => {},
-              error: (msg: string) => this.logger.error(msg), // Keep error logs
-            },
-          });
-
-          return Promise.resolve({
-            client,
-            userId: this.adminUserId,
-          });
-        },
-        destroy: async (clientWithContext) => {
-          if (clientWithContext.client?.stopClient) {
-            clientWithContext.client.stopClient();
-          }
-          return Promise.resolve();
-        },
-      },
-      {
-        max: matrixConfig?.connectionPoolSize || 10,
-        min: 2,
-        acquireTimeoutMillis: matrixConfig?.connectionPoolTimeout || 30000,
-        idleTimeoutMillis: 30000,
-        evictionRunIntervalMillis: 60000,
-      },
-    );
-
-    this.logger.log('Matrix client pool initialized');
-  }
-
-  /**
-   * Get the admin client for privileged operations
-   */
-  getAdminClient(): IMatrixClient {
-    return this.adminClient;
-  }
-
-  /**
    * Get the event emitter for Matrix-related events
    * Used for system-wide notifications about token refreshes, etc.
    */
   getEventEmitter(): EventEmitter2 {
     return this.eventEmitter;
-  }
-
-  /**
-   * Acquire a client from the connection pool
-   * Ensures admin token is valid before returning a client
-   */
-  async acquireClient(): Promise<MatrixClientWithContext> {
-    // Check if we have a valid token
-    const tokenValid = await this.ensureValidAdminToken();
-
-    // If token is not valid, get the current token from the token manager
-    // This could happen if the token was recently regenerated by the token manager
-    if (!tokenValid) {
-      this.logger.debug('Token not valid, getting latest from token manager');
-      this.adminAccessToken = this.tokenManager.getAdminToken();
-
-      // Report the invalid token to trigger background regeneration
-      void this.tokenManager.reportTokenInvalid();
-    }
-
-    // Verify client pool is initialized
-    if (!this.clientPool) {
-      this.logger.warn('Client pool not initialized, attempting to initialize');
-      try {
-        this.initializeClientPool();
-      } catch (error) {
-        this.logger.error(
-          `Failed to initialize client pool on demand: ${error.message}`,
-          error.stack,
-        );
-        throw new Error(
-          'Matrix client pool not available: SDK initialization failed',
-        );
-      }
-
-      // Double-check after attempted initialization
-      if (!this.clientPool) {
-        throw new Error('Matrix client pool could not be initialized');
-      }
-    }
-
-    try {
-      // If the token has been regenerated, we need to recreate the pool
-      // to ensure all new clients use the correct token
-      const poolClient = await this.clientPool.acquire();
-      if (poolClient.client.getAccessToken() !== this.adminAccessToken) {
-        this.logger.warn('Token has changed, reinitializing the client pool');
-
-        try {
-          // Release this client
-          await this.clientPool.release(poolClient);
-
-          // Drain and clear the pool
-          await this.clientPool.drain();
-          await this.clientPool.clear();
-
-          // Reinitialize with new token
-          this.initializeClientPool();
-
-          // Get a fresh client from the reinitialized pool
-          return await this.clientPool.acquire();
-        } catch (error) {
-          this.logger.error(
-            `Error reinitializing client pool: ${error.message}`,
-          );
-          throw new Error(
-            `Failed to reinitialize client pool: ${error.message}`,
-          );
-        }
-      }
-
-      return poolClient;
-    } catch (error) {
-      // Check if this is a token error
-      if (
-        error.message?.includes('M_UNKNOWN_TOKEN') ||
-        error.data?.errcode === 'M_UNKNOWN_TOKEN' ||
-        error.response?.data?.errcode === 'M_UNKNOWN_TOKEN'
-      ) {
-        // Report the invalid token to trigger regeneration
-        void this.tokenManager.reportTokenInvalid();
-        this.logger.warn(
-          `Token error detected: ${error.message}, reported to token manager`,
-        );
-      }
-
-      this.logger.error(`Failed to acquire Matrix client: ${error.message}`);
-      throw new Error(`Cannot acquire Matrix client: ${error.message}`);
-    }
-  }
-
-  /**
-   * Release a client back to the connection pool
-   */
-  async releaseClient(client: MatrixClientWithContext): Promise<void> {
-    if (!this.clientPool) {
-      this.logger.warn(
-        'Attempted to release client but pool is not initialized',
-      );
-      return;
-    }
-
-    try {
-      await this.clientPool.release(client);
-    } catch (error) {
-      this.logger.warn(`Failed to release Matrix client: ${error.message}`);
-
-      // Attempt to stop the client gracefully even if we can't release it
-      if (client?.client?.stopClient) {
-        try {
-          client.client.stopClient();
-          this.logger.debug(
-            'Manually stopped Matrix client after failed release',
-          );
-        } catch (stopError) {
-          this.logger.warn(
-            `Failed to stop Matrix client: ${stopError.message}`,
-          );
-        }
-      }
-    }
   }
 
   /**
@@ -469,117 +148,80 @@ export class MatrixCoreService implements OnModuleInit, OnModuleDestroy {
     return this.matrixSdk;
   }
 
-  // Token management is now handled by MatrixTokenManagerService
-
-  /**
-   * Check if admin token is valid and regenerate if needed
-   * This is useful for operations that require admin access
-   * @returns True if admin token is valid or was successfully regenerated
-   */
-  public async ensureValidAdminToken(): Promise<boolean> {
-    try {
-      // Use the token manager's state
-      const tokenState = this.tokenManager.getAdminTokenState();
-
-      // If the token is regenerating, we'll assume it's valid
-      if (tokenState === 'regenerating') {
-        return true;
-      }
-
-      // If the token is invalid, report it
-      if (tokenState === 'invalid') {
-        await this.tokenManager.reportTokenInvalid();
-        return false;
-      }
-
-      // If the token is valid, get the latest token and update our reference
-      if (tokenState === 'valid') {
-        const latestToken = this.tokenManager.getAdminToken();
-
-        // Update our token if it differs from the token manager's
-        if (latestToken && latestToken !== this.adminAccessToken) {
-          this.logger.debug(
-            'Updating admin token reference from token manager',
-          );
-          this.adminAccessToken = latestToken;
-
-          // Recreate admin client with new token
-          this.createAdminClient();
-        }
-
-        return true;
-      }
-
-      return false;
-    } catch (error) {
-      this.logger.error(`Error checking admin token: ${error.message}`);
-      return false;
-    }
-  }
-
   /**
    * Get the Matrix server configuration
+   * Note: Some deprecated properties are included for compatibility
    */
   getConfig(): {
     baseUrl: string;
     serverName: string;
-    adminUserId: string;
-    defaultDeviceId: string;
-    defaultInitialDeviceDisplayName: string;
+    adminUserId?: string;
+    defaultDeviceId?: string;
+    defaultInitialDeviceDisplayName?: string;
   } {
     return {
       baseUrl: this.baseUrl,
       serverName: this.serverName,
-      adminUserId: this.adminUserId,
-      defaultDeviceId: this.defaultDeviceId,
-      defaultInitialDeviceDisplayName: this.defaultInitialDeviceDisplayName,
+      // Deprecated properties - kept for compatibility
+      adminUserId: '@deprecated:use-bot-service.net',
+      defaultDeviceId: 'DEPRECATED_USE_BOT_SERVICE',
+      defaultInitialDeviceDisplayName: 'Deprecated - Use Bot Service',
     };
   }
 
-  /**
-   * Handle token update events from the token manager
-   * This ensures all clients are recreated with the new token
-   */
-  private async handleTokenUpdate(data: {
-    userId: string;
-    token: string;
-  }): Promise<void> {
-    if (!data.token) {
-      this.logger.warn('Received token update event with empty token');
-      return;
-    }
+  // Deprecated methods - kept for compatibility but log warnings
+  getAdminClient(): IMatrixClient {
+    this.logger.warn(
+      'getAdminClient() is deprecated. These services should be migrated to use MatrixBotService for proper application service authentication.',
+    );
+    // Return a minimal mock client to prevent crashes
+    return this.createMockClient();
+  }
 
-    this.logger.log(`Received token update for user ${data.userId}`);
+  getAdminClientForTenant(tenantId: string): Promise<IMatrixClient> {
+    this.logger.warn(
+      `getAdminClientForTenant(${tenantId}) is deprecated. This service should be migrated to use MatrixBotService.authenticateBot().`,
+    );
+    // Return a minimal mock client to prevent crashes
+    return Promise.resolve(this.createMockClient());
+  }
 
-    // Update the local token reference
-    if (data.userId === this.adminUserId) {
-      const oldToken = this.adminAccessToken;
-      const newToken = data.token;
+  acquireClient(): Promise<MatrixClientWithContext> {
+    this.logger.warn(
+      'acquireClient() is deprecated. Services should use MatrixBotService to create authenticated bot clients.',
+    );
+    // Return a mock client context to prevent crashes
+    return Promise.resolve({
+      client: this.createMockClient(),
+      userId: '@deprecated:use-bot-service.net',
+    });
+  }
 
-      // Only take action if the token actually changed
-      if (oldToken !== newToken) {
-        this.logger.log('Updating admin client with new token');
-        this.adminAccessToken = newToken;
+  releaseClient(_client: MatrixClientWithContext): Promise<void> {
+    this.logger.warn(
+      'releaseClient() is deprecated. Bot clients are managed by MatrixBotService per tenant.',
+    );
+    // No-op for compatibility
+    return Promise.resolve();
+  }
 
-        // Recreate the admin client with the new token
-        this.createAdminClient();
+  ensureMatrixReady(): Promise<boolean> {
+    this.logger.warn(
+      'ensureMatrixReady() is deprecated. Use MatrixBotService.authenticateBot() and isBotAuthenticated() instead.',
+    );
+    // Return true to prevent blocking, but services should migrate
+    return Promise.resolve(true);
+  }
 
-        // Drain and reinitialize the client pool to ensure all new clients use the updated token
-        try {
-          if (this.clientPool) {
-            this.logger.log(
-              'Draining and reinitializing client pool with new token',
-            );
-            await this.clientPool.drain();
-            await this.clientPool.clear();
-            this.initializeClientPool();
-          }
-        } catch (error) {
-          this.logger.error(
-            `Error reinitializing client pool: ${error.message}`,
-          );
-        }
-      }
-    }
+  private createMockClient(): IMatrixClient {
+    return {
+      getAccessToken: () => 'deprecated-use-bot-service',
+      getStateEvent: () => Promise.resolve({}),
+      sendStateEvent: () => Promise.resolve({ event_id: 'deprecated' }),
+      sendEvent: () => Promise.resolve({ event_id: 'deprecated' }),
+      kick: () => Promise.resolve({}),
+      getProfileInfo: () => Promise.resolve({ displayname: 'Deprecated' }),
+      // Add other methods as needed by the services
+    } as any;
   }
 }

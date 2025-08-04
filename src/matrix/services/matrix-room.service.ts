@@ -1,62 +1,74 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { MatrixCoreService } from './matrix-core.service';
+import { MatrixBotUserService } from './matrix-bot-user.service';
+import { MatrixBotService } from './matrix-bot.service';
 import { CreateRoomOptions, RoomInfo } from '../types/matrix.types';
 import { IMatrixClient, IMatrixRoomProvider } from '../types/matrix.interfaces';
 import { HttpStatus } from '@nestjs/common';
+import { RoomAliasUtils } from '../utils/room-alias.utils';
+import { fetchTenants, getTenantConfig } from '../../utils/tenant-config';
+import { TenantConnectionService } from '../../tenant/tenant.service';
+import { MatrixEventListener } from '../matrix-event.listener';
+import { EventQueryService } from '../../event/services/event-query.service';
 
 @Injectable()
 export class MatrixRoomService implements IMatrixRoomProvider {
   private readonly logger = new Logger(MatrixRoomService.name);
 
-  constructor(private readonly matrixCoreService: MatrixCoreService) {}
+  constructor(
+    private readonly matrixCoreService: MatrixCoreService,
+    private readonly matrixBotUserService: MatrixBotUserService,
+    private readonly matrixBotService: MatrixBotService,
+    private readonly configService: ConfigService,
+    private readonly roomAliasUtils: RoomAliasUtils,
+    private readonly tenantConnectionService: TenantConnectionService,
+    private readonly matrixEventListener: MatrixEventListener,
+    @Inject(forwardRef(() => EventQueryService))
+    private readonly eventQueryService: EventQueryService,
+  ) {}
 
   /**
-   * Verify if a Matrix room exists by checking room state
-   * @param roomId Matrix room ID to verify
-   * @returns true if room exists, false if not
+   * Create a Matrix client using bot user credentials for a specific tenant
+   * Uses MatrixBotService which supports both Application Service and OIDC authentication
    */
-  async verifyRoomExists(roomId: string): Promise<boolean> {
-    let client;
+  private async createBotClient(
+    tenantId: string,
+  ): Promise<IMatrixClient | null> {
     try {
-      client = await this.matrixCoreService.acquireClient();
-      try {
-        // Check if room exists using the correct method based on the Matrix SDK interface
-        // Use roomState instead of getRoomState as defined in IMatrixClient
-        await client.client.roomState(roomId);
-        this.logger.debug(`Room ${roomId} exists in Matrix`);
-        return true;
-      } catch (error) {
-        if (
-          error.statusCode === 404 ||
-          (error.data && error.data.errcode === 'M_NOT_FOUND') ||
-          (error.message && error.message.includes('404')) ||
-          (error.message && error.message.includes('not found'))
-        ) {
-          this.logger.warn(`Room ${roomId} doesn't exist in Matrix`);
-          return false;
-        }
-        // Other errors might be permission-related, not existence-related
-        this.logger.error(
-          `Error checking if room ${roomId} exists: ${error.message}`,
-        );
-        throw error;
+      this.logger.log(
+        `Creating bot client for tenant ${tenantId} using MatrixBotService`,
+      );
+
+      // Authenticate the bot using MatrixBotService (handles both appservice and OIDC)
+      await this.matrixBotService.authenticateBot(tenantId);
+
+      if (!this.matrixBotService.isBotAuthenticated()) {
+        this.logger.error(`Bot authentication failed for tenant ${tenantId}`);
+        return null;
       }
+
+      // Get the authenticated bot client
+      // Note: MatrixBotService doesn't expose the client directly, so we need to access it via reflection
+      // This is a temporary solution until we refactor the interface
+      const botClient = (this.matrixBotService as any).botClient;
+
+      if (!botClient) {
+        this.logger.error(
+          `Bot client not available after authentication for tenant ${tenantId}`,
+        );
+        return null;
+      }
+
+      this.logger.log(`Successfully created bot client for tenant ${tenantId}`);
+
+      return botClient;
     } catch (error) {
       this.logger.error(
-        `Error acquiring client to check room ${roomId}: ${error.message}`,
+        `Failed to create bot client for tenant ${tenantId}: ${error.message}`,
       );
-      return false; // Assume room doesn't exist if we can't check
-    } finally {
-      if (client) {
-        try {
-          await this.matrixCoreService.releaseClient(client);
-        } catch (releaseError) {
-          this.logger.warn(
-            `Failed to release Matrix client: ${releaseError.message}`,
-          );
-        }
-      }
+      return null;
     }
   }
 
@@ -153,7 +165,9 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       }
 
       // Now have admin leave the room to avoid client errors
-      await this.leaveRoom(roomId, adminUserId, accessToken);
+      if (adminUserId) {
+        await this.leaveRoom(roomId, adminUserId, accessToken);
+      }
 
       // Try modern admin API first (Synapse 1.59+)
       try {
@@ -244,7 +258,10 @@ export class MatrixRoomService implements IMatrixRoomProvider {
   /**
    * Create a new Matrix room
    */
-  async createRoom(options: CreateRoomOptions): Promise<RoomInfo> {
+  async createRoom(
+    options: CreateRoomOptions,
+    tenantId?: string,
+  ): Promise<RoomInfo> {
     const {
       name,
       topic,
@@ -253,15 +270,32 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       encrypted = false,
       inviteUserIds = [],
       powerLevelContentOverride,
+      room_alias_name,
     } = options;
 
-    let client;
+    let matrixClient: IMatrixClient | null = null;
 
     try {
-      client = await this.matrixCoreService.acquireClient();
+      // Admin client is deprecated - use bot authentication only
+      if (!tenantId) {
+        throw new Error(
+          'Cannot create room: tenant ID is required for bot authentication',
+        );
+      }
+
+      this.logger.log(
+        `Creating room using bot authentication for tenant ${tenantId}`,
+      );
+      matrixClient = await this.createBotClient(tenantId);
+
+      if (!matrixClient) {
+        throw new Error(
+          `Failed to authenticate bot user for tenant ${tenantId}`,
+        );
+      }
+
       const matrixSdk = this.matrixCoreService.getSdk();
       const config = this.matrixCoreService.getConfig();
-      const matrixClient = client.client;
 
       // Build initial state for the room
       // Define the type explicitly to allow for different content structures
@@ -282,6 +316,13 @@ export class MatrixRoomService implements IMatrixRoomProvider {
           state_key: '',
           content: {
             history_visibility: 'shared',
+          },
+        },
+        {
+          type: 'm.room.join_rules',
+          state_key: '',
+          content: {
+            join_rule: isPublic ? 'public' : 'invite',
           },
         },
       ];
@@ -316,16 +357,38 @@ export class MatrixRoomService implements IMatrixRoomProvider {
           is_direct: isDirect,
           invite: inviteUserIds,
           initial_state: initialState,
+          room_alias_name: room_alias_name, // Add room alias name
         });
 
         // Get room details
         const roomId = createRoomResponse.room_id;
 
-        // Set power levels if needed
-        if (powerLevelContentOverride && powerLevelContentOverride.users) {
-          await this.setRoomPowerLevels(
-            roomId,
-            powerLevelContentOverride.users,
+        // Always ensure tenant-specific bot has admin privileges
+        const tenantConfig = getTenantConfig(tenantId);
+        const botUser = tenantConfig?.matrixConfig?.botUser;
+        const serverName = tenantConfig?.matrixConfig?.serverName;
+
+        if (botUser?.slug && serverName) {
+          const tenantBotUserId = `@${botUser.slug}:${serverName}`;
+
+          // Build power levels with tenant bot admin privileges
+          const botPowerLevels: Record<string, number> = {
+            [tenantBotUserId]: 100, // Tenant bot gets admin privileges
+          };
+
+          // Merge with any custom power levels
+          if (powerLevelContentOverride && powerLevelContentOverride.users) {
+            Object.assign(botPowerLevels, powerLevelContentOverride.users);
+          }
+
+          this.logger.log(
+            `Setting power levels for newly created room ${roomId}, including tenant bot ${tenantBotUserId} with admin privileges`,
+          );
+
+          await this.setRoomPowerLevels(roomId, botPowerLevels, tenantId);
+        } else {
+          this.logger.warn(
+            `Could not determine tenant bot configuration for tenant ${tenantId}, skipping power level setup`,
           );
         }
 
@@ -342,8 +405,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
 
       // Use the Matrix client API directly
       const apiUrl = `${config.baseUrl}/_matrix/client/v3/createRoom`;
-      const accessToken =
-        matrixClient.getAccessToken?.() || client.client.getAccessToken?.();
+      const accessToken = matrixClient.getAccessToken?.();
 
       const roomPayload = {
         name,
@@ -353,6 +415,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         is_direct: isDirect,
         invite: inviteUserIds,
         initial_state: initialState,
+        room_alias_name: room_alias_name, // Add room alias name
       };
 
       // Try with Bearer token auth
@@ -367,7 +430,11 @@ export class MatrixRoomService implements IMatrixRoomProvider {
 
       // Set power levels if needed
       if (powerLevelContentOverride && powerLevelContentOverride.users) {
-        await this.setRoomPowerLevels(roomId, powerLevelContentOverride.users);
+        await this.setRoomPowerLevels(
+          roomId,
+          powerLevelContentOverride.users,
+          tenantId,
+        );
       }
 
       return {
@@ -383,15 +450,12 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       );
       throw new Error(`Failed to create Matrix room: ${error.message}`);
     } finally {
-      if (client) {
-        try {
-          await this.matrixCoreService.releaseClient(client);
-        } catch (releaseError) {
-          this.logger.warn(
-            `Failed to release Matrix client: ${releaseError.message}`,
-          );
-          // Don't re-throw as this would mask the original error
-        }
+      // Bot clients are not pooled, so no cleanup needed
+      // The authenticated client will be garbage collected
+      if (matrixClient) {
+        this.logger.debug(
+          'Room creation completed, bot client will be disposed',
+        );
       }
     }
   }
@@ -431,7 +495,12 @@ export class MatrixRoomService implements IMatrixRoomProvider {
             );
           } catch (joinError) {
             // Check error details
-            this.handleJoinError(joinError, roomId, adminUserId, 'admin');
+            this.handleJoinError(
+              joinError,
+              roomId,
+              adminUserId || '@unknown:deprecated.net',
+              'admin',
+            );
           }
         } else {
           // Standard join without server_name parameter
@@ -442,7 +511,12 @@ export class MatrixRoomService implements IMatrixRoomProvider {
             );
           } catch (joinError) {
             // Check error details
-            this.handleJoinError(joinError, roomId, adminUserId, 'admin');
+            this.handleJoinError(
+              joinError,
+              roomId,
+              adminUserId || '@unknown:deprecated.net',
+              'admin',
+            );
           }
         }
       } catch (error) {
@@ -627,25 +701,19 @@ export class MatrixRoomService implements IMatrixRoomProvider {
     roomId: string,
     userId: string,
   ): Promise<Record<string, never>> {
-    let client;
-
     try {
-      client = await this.matrixCoreService.acquireClient();
-
-      // First ensure admin is in the room
-      await this.ensureAdminInRoom(roomId, client);
-
-      // Check if user is already in the room before inviting
-      const isAlreadyInRoom = await this.isUserInRoom(roomId, userId, client);
-      if (isAlreadyInRoom) {
-        this.logger.debug(
-          `User ${userId} is already in room ${roomId}, skipping invite`,
-        );
-        return {};
+      // Parse room alias to get tenant ID
+      const roomInfo = this.roomAliasUtils.parseRoomAlias(roomId);
+      if (!roomInfo) {
+        throw new Error(`Invalid room alias format: ${roomId}`);
       }
 
-      // Then invite the user
-      await client.client.invite(roomId, userId);
+      // Use MatrixBotService instead of disabled admin client
+      await this.matrixBotService.inviteUser(roomId, userId, roomInfo.tenantId);
+
+      this.logger.log(
+        `Successfully invited user ${userId} to room ${roomId} using bot service`,
+      );
       return {};
     } catch (error) {
       // Handle different types of errors with appropriate severity
@@ -679,17 +747,6 @@ export class MatrixRoomService implements IMatrixRoomProvider {
           `Failed to invite user to Matrix room: ${error.message}`,
         );
       }
-    } finally {
-      if (client) {
-        try {
-          await this.matrixCoreService.releaseClient(client);
-        } catch (releaseError) {
-          this.logger.warn(
-            `Failed to release Matrix client: ${releaseError.message}`,
-          );
-          // Don't re-throw as this would mask the original error
-        }
-      }
     }
   }
 
@@ -700,18 +757,18 @@ export class MatrixRoomService implements IMatrixRoomProvider {
     roomId: string,
     userId: string,
   ): Promise<Record<string, never>> {
-    let client;
-
     try {
-      client = await this.matrixCoreService.acquireClient();
+      // Parse room alias to get tenant ID
+      const roomInfo = this.roomAliasUtils.parseRoomAlias(roomId);
+      if (!roomInfo) {
+        throw new Error(`Invalid room alias format: ${roomId}`);
+      }
 
-      // First ensure admin is in the room
-      await this.ensureAdminInRoom(roomId, client);
+      // Use MatrixBotService instead of disabled admin client
+      await this.matrixBotService.removeUser(roomId, userId, roomInfo.tenantId);
 
-      await client.client.kick(
-        roomId,
-        userId,
-        'Removed from event/group in OpenMeet',
+      this.logger.log(
+        `Successfully removed user ${userId} from room ${roomId} using bot service`,
       );
       return {};
     } catch (error) {
@@ -722,17 +779,6 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       throw new Error(
         `Failed to remove user from Matrix room: ${error.message}`,
       );
-    } finally {
-      if (client) {
-        try {
-          await this.matrixCoreService.releaseClient(client);
-        } catch (releaseError) {
-          this.logger.warn(
-            `Failed to release Matrix client: ${releaseError.message}`,
-          );
-          // Don't re-throw as this would mask the original error
-        }
-      }
     }
   }
 
@@ -997,29 +1043,129 @@ export class MatrixRoomService implements IMatrixRoomProvider {
   }
 
   /**
-   * Set room power levels
+   * Set room power levels using bot authentication
    */
   async setRoomPowerLevels(
-    roomId: string,
+    roomIdOrAlias: string,
     userPowerLevels: Record<string, number>,
+    explicitTenantId?: string,
   ): Promise<Record<string, never>> {
-    let client;
-
     try {
-      client = await this.matrixCoreService.acquireClient();
-
-      // First ensure admin is in the room
-      await this.ensureAdminInRoom(roomId, client);
-
-      // Get current power levels
-      const stateEvent = await client.client.getStateEvent(
-        roomId,
-        'm.room.power_levels',
-        '',
+      this.logger.log(
+        `Setting power levels in room ${roomIdOrAlias} for ${Object.keys(userPowerLevels).length} users`,
       );
 
-      // Update user power levels
+      // Use explicit tenant ID if provided, otherwise parse from room alias
+      let tenantId: string | null = explicitTenantId || null;
+
+      if (!tenantId && roomIdOrAlias.startsWith('#')) {
+        const parsed = this.roomAliasUtils.parseRoomAlias(roomIdOrAlias);
+        if (parsed) {
+          tenantId = parsed.tenantId;
+        }
+      }
+
+      // If we couldn't parse tenant ID from alias, we need to find it by checking all tenants
+      if (!tenantId) {
+        const tenants = fetchTenants();
+        for (const tenant of tenants) {
+          try {
+            // Try to get canonical alias for this room in this tenant
+            const alias = await this.getRoomCanonicalAlias(
+              roomIdOrAlias,
+              tenant.id,
+            );
+            if (alias) {
+              tenantId = tenant.id;
+              break;
+            }
+          } catch {
+            continue;
+          }
+        }
+      }
+
+      if (!tenantId) {
+        throw new Error(`Could not determine tenant for room ${roomIdOrAlias}`);
+      }
+
+      // Create bot client for the tenant
+      const botClient = await this.createBotClient(tenantId);
+      if (!botClient) {
+        throw new Error(`Failed to create bot client for tenant ${tenantId}`);
+      }
+
+      // Ensure the AppService bot is in the room before attempting to set power levels
+      // Since we're using AppService authentication, we operate as the main AppService sender
+      const appServiceSender = this.matrixBotService.getBotUserId(tenantId);
+
+      try {
+        // Check if bot is already in the room by trying to get its membership state
+        try {
+          await botClient.getStateEvent(
+            roomIdOrAlias,
+            'm.room.member',
+            appServiceSender,
+          );
+          this.logger.debug(
+            `AppService bot ${appServiceSender} is already in room ${roomIdOrAlias}`,
+          );
+        } catch {
+          // Bot is not in room, try to join
+          this.logger.debug(
+            `AppService bot ${appServiceSender} not in room ${roomIdOrAlias}, attempting to join`,
+          );
+
+          try {
+            const joinResult = await botClient.joinRoom(roomIdOrAlias);
+            this.logger.log(
+              `AppService bot successfully joined room ${roomIdOrAlias}, roomId: ${joinResult?.roomId || roomIdOrAlias}`,
+            );
+          } catch (joinError) {
+            // If regular join fails, try admin join using MatrixBotService
+            this.logger.warn(
+              `Regular join failed for ${roomIdOrAlias}, attempting admin join: ${joinError.message}`,
+            );
+            await this.matrixBotService.adminJoinRoom(roomIdOrAlias, tenantId);
+            this.logger.log(
+              `AppService bot successfully admin-joined room ${roomIdOrAlias}`,
+            );
+          }
+        }
+      } catch (error) {
+        this.logger.error(
+          `Failed to ensure bot is in room ${roomIdOrAlias}: ${error.message}`,
+          error.stack,
+        );
+        throw new Error(
+          `Bot cannot access room ${roomIdOrAlias} to set power levels: ${error.message}`,
+        );
+      }
+
+      // Get current power levels or create default structure
+      let stateEvent;
+      try {
+        stateEvent = await botClient.getStateEvent(
+          roomIdOrAlias,
+          'm.room.power_levels',
+          '',
+        );
+      } catch {
+        // If no power levels exist, create default structure
+        this.logger.debug(
+          `No existing power levels found, creating default structure`,
+        );
+        stateEvent = {};
+      }
+
+      // Update user power levels with proper redaction permissions
       const updatedContent = {
+        users_default: 0,
+        events_default: 0,
+        state_default: 50,
+        ban: 50,
+        kick: 50,
+        redact: 50, // Allow users with power level 50+ to redact messages
         ...stateEvent,
         users: {
           ...(stateEvent?.users || {}),
@@ -1027,33 +1173,87 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         },
       };
 
+      this.logger.debug(
+        `Updating power levels: ${JSON.stringify(userPowerLevels)}`,
+      );
+
       // Set updated power levels
-      await client.client.sendStateEvent(
-        roomId,
+      await botClient.sendStateEvent(
+        roomIdOrAlias,
         'm.room.power_levels',
         updatedContent,
         '',
       );
+
+      this.logger.log(`Successfully set power levels in room ${roomIdOrAlias}`);
+
       return {};
     } catch (error) {
       this.logger.error(
-        `Error setting power levels in room ${roomId}: ${error.message}`,
+        `Error setting power levels in room ${roomIdOrAlias}: ${error.message}`,
         error.stack,
       );
       throw new Error(
         `Failed to set power levels in Matrix room: ${error.message}`,
       );
-    } finally {
-      if (client) {
-        try {
-          await this.matrixCoreService.releaseClient(client);
-        } catch (releaseError) {
-          this.logger.warn(
-            `Failed to release Matrix client: ${releaseError.message}`,
-          );
-          // Don't re-throw as this would mask the original error
-        }
+    }
+  }
+
+  /**
+   * Verify if a Matrix room exists and is accessible
+   * This is the canonical room existence check that should be used throughout the application
+   */
+  async verifyRoomExists(roomId: string, tenantId: string): Promise<boolean> {
+    let client: IMatrixClient | null = null;
+
+    try {
+      this.logger.debug(
+        `Verifying room exists: ${roomId} for tenant ${tenantId}`,
+      );
+
+      // Create a bot client for the tenant to check room existence
+      client = await this.createBotClient(tenantId);
+
+      if (!client) {
+        this.logger.warn(
+          `Could not create bot client for tenant ${tenantId} to verify room ${roomId}`,
+        );
+        return false;
       }
+
+      // Try to get room state - this will fail if room doesn't exist or bot has no access
+      await client.roomState(roomId);
+      this.logger.debug(`Room ${roomId} exists and is accessible`);
+      return true;
+    } catch (error) {
+      this.logger.debug(`Room ${roomId} verification failed: ${error.message}`);
+
+      // Check for specific error types that indicate room doesn't exist
+      if (
+        error.httpStatus === 404 ||
+        (error.data && error.data.errcode === 'M_NOT_FOUND') ||
+        (error.message && error.message.includes('404')) ||
+        (error.message && error.message.includes('not found'))
+      ) {
+        this.logger.debug(`Room ${roomId} does not exist (404)`);
+        return false;
+      }
+
+      // Check for forbidden errors (room exists but no access)
+      if (
+        error.httpStatus === 403 ||
+        (error.data && error.data.errcode === 'M_FORBIDDEN')
+      ) {
+        this.logger.debug(`Room ${roomId} exists but bot has no access (403)`);
+        // For our purposes, if bot can't access it, treat as non-existent
+        return false;
+      }
+
+      // Other errors (network, etc.) - assume room doesn't exist
+      this.logger.warn(
+        `Room ${roomId} verification failed with error: ${error.message}`,
+      );
+      return false;
     }
   }
 
@@ -1120,6 +1320,446 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         error.stack,
       );
       throw new Error(`Failed to get rooms: ${error.message}`);
+    }
+  }
+
+  /**
+   * Sync all events with attendees across all tenants (admin function)
+   * Returns detailed results for admin dashboard
+   */
+  async syncAllEventAttendeesToMatrix(maxEventsPerTenant?: number): Promise<{
+    totalTenants: number;
+    totalEvents: number;
+    totalUsersAdded: number;
+    totalErrors: number;
+    startTime: Date;
+    endTime: Date;
+    duration: number;
+    tenants: Array<{
+      tenantId: string;
+      tenantName: string;
+      eventsProcessed: number;
+      totalUsersAdded: number;
+      totalErrors: number;
+      events: Array<{
+        eventSlug: string;
+        eventName: string;
+        attendeesFound: number;
+        usersAdded: number;
+        errors: string[];
+        success: boolean;
+      }>;
+      errors: string[];
+      success: boolean;
+    }>;
+  }> {
+    const startTime = new Date();
+    this.logger.log('🚀 Starting full Matrix attendee sync for all tenants');
+
+    const tenantResults: Array<{
+      tenantId: string;
+      tenantName: string;
+      eventsProcessed: number;
+      totalUsersAdded: number;
+      totalErrors: number;
+      events: Array<{
+        eventSlug: string;
+        eventName: string;
+        attendeesFound: number;
+        usersAdded: number;
+        errors: string[];
+        success: boolean;
+      }>;
+      errors: string[];
+      success: boolean;
+    }> = [];
+    let totalEvents = 0;
+    let totalUsersAdded = 0;
+    let totalErrors = 0;
+
+    try {
+      // Get all tenants from configuration
+      const tenants = fetchTenants();
+      this.logger.log(`📋 Found ${tenants.length} tenants to process`);
+
+      for (const tenant of tenants) {
+        const tenantResult = await this.syncTenantEvents(
+          tenant.id,
+          tenant.name || tenant.id,
+          maxEventsPerTenant,
+        );
+        tenantResults.push(tenantResult);
+
+        totalEvents += tenantResult.eventsProcessed;
+        totalUsersAdded += tenantResult.totalUsersAdded;
+        totalErrors += tenantResult.totalErrors;
+      }
+
+      const endTime = new Date();
+      const duration = endTime.getTime() - startTime.getTime();
+
+      this.logger.log(
+        `✨ Full sync completed: ${tenants.length} tenants, ${totalEvents} events processed, ${totalUsersAdded} users added, ${totalErrors} errors in ${duration}ms`,
+      );
+
+      return {
+        totalTenants: tenants.length,
+        totalEvents,
+        totalUsersAdded,
+        totalErrors,
+        startTime,
+        endTime,
+        duration,
+        tenants: tenantResults,
+      };
+    } catch (error) {
+      this.logger.error(
+        `💥 Fatal error during full sync: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Sync all events for a specific tenant
+   */
+  private async syncTenantEvents(
+    tenantId: string,
+    tenantName?: string,
+    maxEvents?: number,
+  ): Promise<{
+    tenantId: string;
+    tenantName: string;
+    eventsProcessed: number;
+    totalUsersAdded: number;
+    totalErrors: number;
+    events: Array<{
+      eventSlug: string;
+      eventName: string;
+      attendeesFound: number;
+      usersAdded: number;
+      errors: string[];
+      success: boolean;
+    }>;
+    errors: string[];
+    success: boolean;
+  }> {
+    this.logger.log(`📋 Processing tenant: ${tenantId}`);
+
+    const eventResults: Array<{
+      eventSlug: string;
+      eventName: string;
+      attendeesFound: number;
+      usersAdded: number;
+      errors: string[];
+      success: boolean;
+    }> = [];
+    const tenantErrors: string[] = [];
+    let totalUsersAdded = 0;
+    let totalErrors = 0;
+
+    try {
+      // Get all events with confirmed attendees for this tenant
+      const allEvents =
+        await this.eventQueryService.findEventsWithConfirmedAttendees(tenantId);
+
+      // Apply limit if specified
+      const events =
+        maxEvents && maxEvents > 0 ? allEvents.slice(0, maxEvents) : allEvents;
+
+      this.logger.log(
+        `📅 Found ${allEvents.length} total events, processing ${events.length} events ${maxEvents ? `(limited to ${maxEvents})` : ''} with attendees in tenant ${tenantId}`,
+      );
+
+      for (const event of events) {
+        try {
+          const result =
+            await this.matrixEventListener.syncEventAttendeesToMatrix(
+              event.slug,
+              tenantId,
+            );
+
+          const eventResult = {
+            eventSlug: event.slug,
+            eventName: event.name || event.slug,
+            attendeesFound: result.attendeesFound,
+            usersAdded: result.usersAdded,
+            errors: result.errors,
+            success: result.success,
+          };
+
+          eventResults.push(eventResult);
+          totalUsersAdded += result.usersAdded;
+          totalErrors += result.errors.length;
+        } catch (eventError) {
+          const errorMsg = `Error processing event ${event.slug}: ${eventError.message}`;
+          this.logger.error(errorMsg);
+          tenantErrors.push(errorMsg);
+          totalErrors++;
+
+          eventResults.push({
+            eventSlug: event.slug,
+            eventName: event.name || event.slug,
+            attendeesFound: 0,
+            usersAdded: 0,
+            errors: [errorMsg],
+            success: false,
+          });
+        }
+      }
+
+      return {
+        tenantId,
+        tenantName: tenantName || tenantId,
+        eventsProcessed: events.length,
+        totalUsersAdded,
+        totalErrors,
+        events: eventResults,
+        errors: tenantErrors,
+        success: tenantErrors.length === 0,
+      };
+    } catch (tenantError) {
+      const errorMsg = `Error processing tenant ${tenantId}: ${tenantError.message}`;
+      this.logger.error(errorMsg);
+
+      return {
+        tenantId,
+        tenantName: tenantName || tenantId,
+        eventsProcessed: 0,
+        totalUsersAdded: 0,
+        totalErrors: 1,
+        events: [],
+        errors: [errorMsg],
+        success: false,
+      };
+    }
+  }
+
+  /**
+   * Resolve a room alias to a room ID
+   * @param roomAlias The room alias to resolve (e.g., #room-alias:server.com)
+   * @returns The room ID (e.g., !roomId:server.com)
+   */
+  async resolveRoomAlias(roomAlias: string): Promise<string> {
+    this.logger.log(`Resolving room alias: ${roomAlias}`);
+
+    // Extract tenant ID from the room alias to get the right tenant context
+    const parsed = this.roomAliasUtils.parseRoomAlias(roomAlias);
+    if (!parsed) {
+      throw new Error(`Invalid room alias format: ${roomAlias}`);
+    }
+
+    try {
+      // Use MatrixBotService to resolve the alias since it has the bot client with proper auth
+      const resolvedRoom = await this.matrixBotService.resolveRoomAlias(
+        roomAlias,
+        parsed.tenantId,
+      );
+      this.logger.log(
+        `Resolved alias ${roomAlias} to room ID: ${resolvedRoom}`,
+      );
+      return resolvedRoom;
+    } catch (error) {
+      this.logger.error(
+        `Failed to resolve room alias ${roomAlias}: ${error.message}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Get the canonical alias for a Matrix room by room ID
+   * @param roomId - The Matrix room ID
+   * @param tenantId - Tenant ID for tenant-specific bot client
+   * @returns Promise<string | null> - The canonical alias or null if not found
+   */
+  async getRoomCanonicalAlias(
+    roomId: string,
+    tenantId: string,
+  ): Promise<string | null> {
+    try {
+      this.logger.debug(
+        `Getting canonical alias for room ${roomId} (tenant: ${tenantId})`,
+      );
+
+      // Get the tenant-specific Matrix client
+      const matrixClient = await this.createBotClient(tenantId);
+      if (!matrixClient) {
+        throw new Error(`Matrix client not available for tenant ${tenantId}`);
+      }
+
+      // Get the canonical alias from room state
+      const canonicalAliasState = await matrixClient.getStateEvent(
+        roomId,
+        'm.room.canonical_alias',
+        '',
+      );
+
+      const canonicalAlias = canonicalAliasState?.alias;
+
+      this.logger.debug(
+        `Found canonical alias for room ${roomId}: ${canonicalAlias || 'none'}`,
+      );
+      return canonicalAlias || null;
+    } catch (error) {
+      this.logger.error(
+        `Failed to get canonical alias for room ${roomId} (tenant: ${tenantId}): ${error.message}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Update a user's m.direct account data to include a DM room
+   * This helps Matrix clients recognize which rooms are direct messages
+   */
+  async updateUserDirectAccountData(
+    userMatrixId: string,
+    otherUserMatrixId: string,
+    roomId: string,
+    tenantId: string,
+  ): Promise<void> {
+    try {
+      this.logger.log(
+        `Updating m.direct account data for ${userMatrixId} to include DM with ${otherUserMatrixId} (room: ${roomId})`,
+      );
+
+      // Create bot client for the tenant to perform admin operations
+      const botClient = await this.createBotClient(tenantId);
+      if (!botClient) {
+        throw new Error(`Failed to create bot client for tenant ${tenantId}`);
+      }
+
+      // Get current m.direct account data for the user
+      let currentDirectData: Record<string, string[]> = {};
+      try {
+        const existingData = await botClient.getAccountData('m.direct');
+        if (existingData) {
+          currentDirectData = existingData;
+        }
+      } catch {
+        // If no existing m.direct data, start with empty object
+        this.logger.debug(
+          `No existing m.direct data for ${userMatrixId}, starting fresh`,
+        );
+      }
+
+      // Add the room to the user's direct message list for the other user
+      if (!currentDirectData[otherUserMatrixId]) {
+        currentDirectData[otherUserMatrixId] = [];
+      }
+
+      // Only add if not already present
+      if (!currentDirectData[otherUserMatrixId].includes(roomId)) {
+        currentDirectData[otherUserMatrixId].push(roomId);
+      }
+
+      // Update the account data
+      await botClient.setAccountData('m.direct', currentDirectData);
+
+      this.logger.log(
+        `Successfully updated m.direct account data for ${userMatrixId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to update m.direct account data for ${userMatrixId}: ${error.message}`,
+      );
+      // Don't throw error - DM room can still work without this metadata
+    }
+  }
+
+  /**
+   * Update both users' m.direct account data for a new DM room
+   * This should be called after creating a DM room to ensure clients recognize it as a DM
+   */
+  async configureDMRoomAccountData(
+    user1MatrixId: string,
+    user2MatrixId: string,
+    roomId: string,
+    tenantId: string,
+  ): Promise<void> {
+    try {
+      this.logger.log(
+        `Configuring m.direct account data for DM room ${roomId} between ${user1MatrixId} and ${user2MatrixId}`,
+      );
+
+      // Update both users' account data in parallel
+      await Promise.all([
+        this.updateUserDirectAccountData(
+          user1MatrixId,
+          user2MatrixId,
+          roomId,
+          tenantId,
+        ),
+        this.updateUserDirectAccountData(
+          user2MatrixId,
+          user1MatrixId,
+          roomId,
+          tenantId,
+        ),
+      ]);
+
+      this.logger.log(
+        `Successfully configured m.direct account data for DM room ${roomId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to configure DM room account data: ${error.message}`,
+      );
+      // Don't throw error - DM room can still work without this metadata
+    }
+  }
+
+  /**
+   * Check if a DM room already exists between two users by querying their m.direct account data
+   */
+  async findExistingDMRoom(
+    user1MatrixId: string,
+    user2MatrixId: string,
+    tenantId: string,
+  ): Promise<string | null> {
+    try {
+      this.logger.debug(
+        `Checking for existing DM room between ${user1MatrixId} and ${user2MatrixId}`,
+      );
+
+      // Create bot client for the tenant
+      const botClient = await this.createBotClient(tenantId);
+      if (!botClient) {
+        this.logger.warn(`Failed to create bot client for tenant ${tenantId}`);
+        return null;
+      }
+
+      // Check user1's m.direct account data for rooms with user2
+      try {
+        const user1DirectData = await botClient.getAccountData('m.direct');
+        if (user1DirectData && user1DirectData[user2MatrixId]) {
+          const rooms = user1DirectData[user2MatrixId];
+          if (rooms && rooms.length > 0) {
+            // Return the first room found (there should typically be only one)
+            const roomId = rooms[0];
+            this.logger.log(
+              `Found existing DM room ${roomId} between ${user1MatrixId} and ${user2MatrixId}`,
+            );
+            return roomId;
+          }
+        }
+      } catch (error) {
+        this.logger.debug(
+          `Could not check m.direct data for ${user1MatrixId}: ${error.message}`,
+        );
+      }
+
+      this.logger.debug(
+        `No existing DM room found between ${user1MatrixId} and ${user2MatrixId}`,
+      );
+      return null;
+    } catch (error) {
+      this.logger.error(
+        `Error checking for existing DM room: ${error.message}`,
+      );
+      return null;
     }
   }
 }

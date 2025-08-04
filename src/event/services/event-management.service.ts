@@ -71,8 +71,7 @@ export class EventManagementService {
     private readonly blueskyService: BlueskyService,
     @Inject(forwardRef(() => BlueskyIdService))
     private readonly blueskyIdService: BlueskyIdService,
-    @Inject(forwardRef(() => 'DiscussionService'))
-    private readonly discussionService: any, // Using any here to avoid circular dependency issues
+    // DiscussionService removed - Matrix Application Service handles room operations directly
     @Inject(forwardRef(() => EventSeriesService))
     private readonly eventSeriesService: EventSeriesService,
     @Inject(forwardRef(() => EventQueryService))
@@ -441,8 +440,10 @@ export class EventManagementService {
     });
 
     // Return event by slug to ensure we have all relations
+    // Include 'user' relation to populate createdBy field for API responses
     const event = await this.eventRepository.findOne({
       where: { slug: createdEvent.slug },
+      relations: ['user'],
     });
 
     // Verify seriesSlug one final time after retrieving the complete event
@@ -977,40 +978,10 @@ export class EventManagementService {
       this.request.tenantId,
     );
 
-    // Check if the discussionService exists and has the cleanupEventChatRooms method
-    if (
-      !this.discussionService ||
-      typeof this.discussionService.cleanupEventChatRooms !== 'function'
-    ) {
-      throw new UnprocessableEntityException(
-        'Discussion service required for event deletion is not available. Event deletion cannot proceed safely.',
-      );
-    }
-
-    // Before starting the transaction, clean up chat rooms through the discussion service
-    try {
-      this.logger.log(
-        `Starting chat room cleanup for event ${event.id} via discussionService`,
-      );
-
-      // Call the service layer method to clean up chat rooms
-      await this.discussionService.cleanupEventChatRooms(
-        event.id,
-        this.request.tenantId,
-      );
-
-      this.logger.log(
-        `Successfully cleaned up chat rooms for event ${event.id}`,
-      );
-    } catch (chatCleanupError) {
-      this.logger.error(
-        `Error cleaning up chat rooms for event ${event.id}: ${chatCleanupError.message}`,
-        chatCleanupError.stack,
-      );
-      throw new UnprocessableEntityException(
-        `Failed to clean up chat rooms: ${chatCleanupError.message}`,
-      );
-    }
+    // Chat room cleanup removed - Matrix Application Service handles room lifecycle automatically
+    this.logger.log(
+      `Event ${event.id} deletion proceeding - Matrix Application Service handles room cleanup`,
+    );
 
     // Use a transaction for the rest of the event deletion
     await dataSource
@@ -1322,37 +1293,10 @@ export class EventManagementService {
     // Delete each event individually to ensure proper cleanup of related entities
     for (const event of events) {
       try {
-        // Clean up chat rooms for this event (this handles the foreign key dependencies)
-        try {
-          if (
-            this.discussionService &&
-            typeof this.discussionService.cleanupEventChatRooms === 'function'
-          ) {
-            this.logger.log(`Cleaning up chat rooms for event ${event.id}`);
-            await this.discussionService.cleanupEventChatRooms(
-              event.id,
-              this.request.tenantId,
-            );
-            this.logger.log(
-              `Successfully cleaned up chat rooms for event ${event.id}`,
-            );
-          } else {
-            this.logger.warn(
-              `discussionService.cleanupEventChatRooms is not available. This might cause FK constraint violations.`,
-            );
-
-            // Add this as a proper todo for the engineering team
-            this.logger.error(
-              `TODO: Implement proper chat room cleanup in the event management service that doesn't rely on discussionService`,
-            );
-          }
-        } catch (chatCleanupError) {
-          this.logger.error(
-            `Error cleaning up chat rooms for event ${event.id}: ${chatCleanupError.message}`,
-            chatCleanupError.stack,
-          );
-          // Continue with deletion despite the error
-        }
+        // Chat room cleanup removed - Matrix Application Service handles room lifecycle automatically
+        this.logger.log(
+          `Event ${event.id} deletion proceeding - Matrix Application Service handles room cleanup`,
+        );
 
         // Make sure to clear Matrix room ID from event to avoid stale references
         if (event.matrixRoomId) {
@@ -1575,6 +1519,8 @@ export class EventManagementService {
         `[attendEvent] Updating existing attendance record from ${eventAttendee.status} to ${attendeeStatus}`,
       );
 
+      // Store the previous status before updating for event emission
+      const previousStatus = eventAttendee.status;
       eventAttendee.status = attendeeStatus;
 
       // Update source fields if provided
@@ -1599,11 +1545,16 @@ export class EventManagementService {
       );
 
       // Emit event for status change
+      this.logger.debug(
+        `[attendEvent] Emitting event.attendee.status.changed: ${previousStatus} → ${attendeeStatus} for user ${user.id} in event ${event.id}`,
+      );
       this.eventEmitter.emit('event.attendee.status.changed', {
         eventId: event.id,
         userId: user.id,
-        previousStatus: eventAttendee.status,
+        previousStatus: previousStatus,
         newStatus: attendeeStatus,
+        eventSlug: event.slug,
+        userSlug: user.slug,
         tenantId: this.request.tenantId,
       });
 
@@ -1634,6 +1585,20 @@ export class EventManagementService {
             attendeeStatus,
             participantRole.id,
           );
+
+        // Emit event for status change from cancelled to confirmed
+        this.logger.debug(
+          `[attendEvent] Emitting event.attendee.status.changed for reactivation: cancelled → ${attendeeStatus} for user ${user.id} in event ${event.id}`,
+        );
+        this.eventEmitter.emit('event.attendee.status.changed', {
+          eventId: event.id,
+          userId: user.id,
+          previousStatus: EventAttendeeStatus.Cancelled,
+          newStatus: attendeeStatus,
+          eventSlug: event.slug,
+          userSlug: user.slug,
+          tenantId: this.request.tenantId,
+        });
 
         // Update source fields if needed
         if (
@@ -2035,5 +2000,58 @@ export class EventManagementService {
 
     // Delete the series instead of the recurring event
     await this.eventSeriesService.delete(event.series.slug, userId);
+  }
+
+  /**
+   * Update the Matrix room ID for an event
+   * This method should be called when Matrix rooms are created or recreated
+   * to keep the event cache in sync with the chat system
+   */
+  @Trace('event-management.updateMatrixRoomId')
+  async updateMatrixRoomId(
+    eventId: number,
+    matrixRoomId: string,
+  ): Promise<void> {
+    await this.initializeRepository();
+
+    this.logger.log(
+      `Updating Matrix room ID for event ${eventId} to ${matrixRoomId}`,
+    );
+
+    await this.eventRepository.update(
+      { id: eventId },
+      { matrixRoomId: matrixRoomId },
+    );
+
+    this.logger.log(`Successfully updated Matrix room ID for event ${eventId}`);
+  }
+
+  /**
+   * Update the Matrix room ID for an event in a specific tenant
+   * This method is used by Matrix Application Service which doesn't have request context
+   */
+  @Trace('event-management.updateMatrixRoomIdWithTenant')
+  async updateMatrixRoomIdWithTenant(
+    eventId: number,
+    matrixRoomId: string,
+    tenantId: string,
+  ): Promise<void> {
+    this.logger.log(
+      `Updating Matrix room ID for event ${eventId} to ${matrixRoomId} in tenant ${tenantId}`,
+    );
+
+    // Get tenant-specific database connection
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    const eventRepository = dataSource.getRepository(EventEntity);
+
+    await eventRepository.update(
+      { id: eventId },
+      { matrixRoomId: matrixRoomId },
+    );
+
+    this.logger.log(
+      `Successfully updated Matrix room ID for event ${eventId} in tenant ${tenantId}`,
+    );
   }
 }

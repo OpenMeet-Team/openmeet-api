@@ -106,10 +106,13 @@ describe('AuthService', () => {
       mockJwtService.signAsync.mockResolvedValue('newToken');
       mockConfigService.getOrThrow.mockReturnValue('1h');
       mockGroupService.findById.mockResolvedValue({ id: 1, name: 'Admin' });
-      const result = await authService.refreshToken({
-        sessionId: 1,
-        hash: 'oldHash',
-      });
+      const result = await authService.refreshToken(
+        {
+          sessionId: 1,
+          hash: 'oldHash',
+        },
+        'test-tenant-id',
+      );
 
       expect(result).toHaveProperty('token');
       expect(result).toHaveProperty('refreshToken');
@@ -121,7 +124,10 @@ describe('AuthService', () => {
       mockSessionService.findById.mockResolvedValue(null);
 
       await expect(
-        authService.refreshToken({ sessionId: 1, hash: 'oldHash' }),
+        authService.refreshToken(
+          { sessionId: 1, hash: 'oldHash' },
+          'test-tenant-id',
+        ),
       ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -134,7 +140,10 @@ describe('AuthService', () => {
       mockSessionService.findById.mockResolvedValue(mockSession);
 
       await expect(
-        authService.refreshToken({ sessionId: 1, hash: 'wrongHash' }),
+        authService.refreshToken(
+          { sessionId: 1, hash: 'wrongHash' },
+          'test-tenant-id',
+        ),
       ).rejects.toThrow(UnauthorizedException);
     });
 
@@ -153,7 +162,10 @@ describe('AuthService', () => {
       mockUserService.findById.mockResolvedValue(mockUser);
 
       await expect(
-        authService.refreshToken({ sessionId: 1, hash: 'oldHash' }),
+        authService.refreshToken(
+          { sessionId: 1, hash: 'oldHash' },
+          'test-tenant-id',
+        ),
       ).rejects.toThrow(UnauthorizedException);
     });
   });

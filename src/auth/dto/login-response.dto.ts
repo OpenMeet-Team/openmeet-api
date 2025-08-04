@@ -15,4 +15,7 @@ export class LoginResponseDto {
     type: () => User,
   })
   user: User;
+
+  @ApiProperty()
+  sessionId?: string;
 }

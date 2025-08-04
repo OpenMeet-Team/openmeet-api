@@ -10,7 +10,6 @@ import { GroupUserPermissionEntity } from './infrastructure/persistence/relation
 import { UserModule } from '../user/user.module';
 import { GroupMemberModule } from '../group-member/group-member.module';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FileEntity } from '../file/infrastructure/persistence/relational/entities/file.entity';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { GroupRoleService } from '../group-role/group-role.service';
@@ -22,7 +21,7 @@ import { GroupMailModule } from '../group-mail/group-mail.module';
 import { EventModule } from '../event/event.module';
 import { EventMailModule } from '../event-mail/event-mail.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
-import { ChatModule } from '../chat/chat.module';
+// ChatModule removed - Matrix Application Service handles room operations directly
 import { ConfigModule } from '@nestjs/config';
 
 @Module({
@@ -34,7 +33,7 @@ import { ConfigModule } from '@nestjs/config';
       GroupUserPermissionEntity,
       FileEntity,
     ]),
-    UserModule,
+    forwardRef(() => UserModule),
     MailModule,
     GroupMemberModule,
     EventAttendeeModule,
@@ -43,14 +42,13 @@ import { ConfigModule } from '@nestjs/config';
     forwardRef(() => EventModule),
     EventMailModule,
     BlueskyModule,
-    forwardRef(() => ChatModule),
+    // ChatModule removed - Matrix Application Service handles room operations directly
   ],
   controllers: [GroupController],
   providers: [
     GroupService,
     TenantConnectionService,
     CategoryService,
-    EventEmitter2,
     FilesS3PresignedService,
     GroupRoleService,
     EventRoleService,

@@ -40,11 +40,10 @@ import { GroupRoleModule } from './group-role/group-role.module';
 import { RoleModule } from './role/role.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 // ZulipModule has been removed in favor of MatrixModule
-import { ChatModule } from './chat/chat.module';
+// ChatModule has been removed in favor of Matrix Application Service
 import { AuthGithubModule } from './auth-github/auth-github.module';
 import { GroupMailModule } from './group-mail/group-mail.module';
 import { EventMailModule } from './event-mail/event-mail.module';
-import { ChatMailModule } from './chat-mail/chat-mail.module';
 import { AuthBlueskyModule } from './auth-bluesky/auth-bluesky.module';
 import { AuditLoggerService } from './logger/audit-logger.provider';
 import { TracingModule } from './tracing/tracing.module';
@@ -58,6 +57,7 @@ import { CalendarSourceModule } from './calendar-source/calendar-source.module';
 import { CalendarFeedModule } from './calendar-feed/calendar-feed.module';
 import { ExternalCalendarModule } from './external-calendar/external-calendar.module';
 import { SitemapModule } from './sitemap/sitemap.module';
+import { OidcModule } from './oidc/oidc.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -132,10 +132,9 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     EventAttendeeModule,
     GroupRoleModule,
     RoleModule,
-    ChatModule,
+    // ChatModule removed - Matrix Application Service handles rooms directly
     GroupMailModule,
     EventMailModule,
-    ChatMailModule,
     AuthBlueskyModule,
     ShadowAccountModule,
     BlueskyModule,
@@ -145,6 +144,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     CalendarFeedModule,
     ExternalCalendarModule,
     SitemapModule,
+    OidcModule,
   ],
   providers: [
     TenantConnectionService,

@@ -10,7 +10,9 @@ import {
   Patch,
   Delete,
   SerializeOptions,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { AuthService } from './auth.service';
 import {
   ApiBearerAuth,
@@ -34,6 +36,7 @@ import { ClaimShadowAccountDto } from './dto/claim-shadow-account.dto';
 import { Roles } from './decorators/roles.decorator';
 import { RoleEnum } from '../role/role.enum';
 import { RolesGuard } from '../role/role.guard';
+import { getOidcCookieOptions } from '../utils/cookie-config';
 
 @ApiTags('Auth')
 @Controller({
@@ -54,22 +57,25 @@ export class AuthController {
     type: LoginResponseDto,
   })
   @HttpCode(HttpStatus.OK)
-  public login(@Body() loginDto: AuthEmailLoginDto): Promise<LoginResponseDto> {
-    return this.service.validateLogin(loginDto);
-  }
-
-  @SerializeOptions({
-    groups: ['me'],
-  })
-  @Post('admin/email/login')
-  @ApiOkResponse({
-    type: LoginResponseDto,
-  })
-  @HttpCode(HttpStatus.OK)
-  public adminLogin(
+  public async login(
     @Body() loginDto: AuthEmailLoginDto,
+    @Res({ passthrough: true }) response: Response,
+    @Request() request,
   ): Promise<LoginResponseDto> {
-    return this.service.validateLogin(loginDto);
+    const loginResult = await this.service.validateLogin(
+      loginDto,
+      request.tenantId,
+    );
+
+    // Set oidc_session cookie for cross-domain OIDC authentication
+    if (loginResult.sessionId) {
+      const cookieOptions = getOidcCookieOptions();
+
+      response.cookie('oidc_session', loginResult.sessionId, cookieOptions);
+      response.cookie('oidc_tenant', request.tenantId, cookieOptions);
+    }
+
+    return loginResult;
   }
 
   @Post('email/register')
@@ -79,10 +85,25 @@ export class AuthController {
     type: LoginResponseDto,
   })
   @HttpCode(HttpStatus.CREATED)
-  public register(
+  public async register(
     @Body() createUserDto: AuthRegisterLoginDto,
+    @Res({ passthrough: true }) response: Response,
+    @Request() request,
   ): Promise<LoginResponseDto> {
-    return this.service.register(createUserDto);
+    const loginResult = await this.service.register(
+      createUserDto,
+      request.tenantId,
+    );
+
+    // Set oidc_session cookie for cross-domain OIDC authentication
+    if (loginResult.sessionId) {
+      const cookieOptions = getOidcCookieOptions();
+
+      response.cookie('oidc_session', loginResult.sessionId, cookieOptions);
+      response.cookie('oidc_tenant', request.tenantId, cookieOptions);
+    }
+
+    return loginResult;
   }
 
   @Post('email/confirm')
@@ -172,10 +193,13 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt-refresh'))
   @HttpCode(HttpStatus.OK)
   public refresh(@Request() request): Promise<RefreshResponseDto> {
-    return this.service.refreshToken({
-      sessionId: request.user.sessionId,
-      hash: request.user.hash,
-    });
+    return this.service.refreshToken(
+      {
+        sessionId: request.user.sessionId,
+        hash: request.user.hash,
+      },
+      request.tenantId,
+    );
   }
 
   @ApiBearerAuth()

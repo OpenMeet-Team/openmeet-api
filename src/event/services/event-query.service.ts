@@ -1001,7 +1001,7 @@ export class EventQueryService {
     // Find the event using the provided tenant connection
     const event = await eventRepo.findOne({
       where: { slug },
-      relations: ['user'],
+      relations: ['user', 'group'],
     });
 
     if (!event) {
@@ -1331,5 +1331,56 @@ export class EventQueryService {
     query = query.orderBy('event.startDate', 'ASC');
 
     return query.getMany();
+  }
+
+  /**
+   * Get all events that have Matrix chat rooms
+   */
+  async getAllEventsWithMatrixRooms(
+    tenantId: string,
+  ): Promise<Array<{ slug: string; matrixRoomId: string; name: string }>> {
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    const eventRepository = dataSource.getRepository(EventEntity);
+
+    const events = await eventRepository
+      .createQueryBuilder('event')
+      .select(['event.slug', 'event.matrixRoomId', 'event.name'])
+      .where('event.matrixRoomId IS NOT NULL')
+      .getMany();
+
+    return events.map((event) => ({
+      slug: event.slug,
+      matrixRoomId: event.matrixRoomId!,
+      name: event.name,
+    }));
+  }
+
+  /**
+   * Find all events that have confirmed attendees (for Matrix sync)
+   */
+  async findEventsWithConfirmedAttendees(
+    tenantId: string,
+  ): Promise<Array<{ id: number; slug: string; name: string }>> {
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    const eventRepository = dataSource.getRepository(EventEntity);
+
+    const events = await eventRepository
+      .createQueryBuilder('event')
+      .innerJoin('event.attendees', 'attendee')
+      .select(['event.id', 'event.slug', 'event.name'])
+      .where('attendee.status = :status', {
+        status: EventAttendeeStatus.Confirmed,
+      })
+      .groupBy('event.id, event.slug, event.name')
+      .orderBy('event.createdAt', 'DESC')
+      .getMany();
+
+    return events.map((event) => ({
+      id: event.id,
+      slug: event.slug,
+      name: event.name,
+    }));
   }
 }

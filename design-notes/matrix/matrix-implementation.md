@@ -148,6 +148,26 @@ Try operation → If M_UNKNOWN_TOKEN error → Regenerate admin token using pass
    - Initialization in onModuleInit
    - Works in all environments (development, testing, production)
 
+## Matrix JS SDK Storage Configuration
+
+### IndexedDB Storage Critical Requirements
+
+**Breaking Changes in matrix-js-sdk v30+**:
+- Must call `setUserCreator()` before `store.startup()`
+- Must await `store.startup()` before `createClient()`
+- Web worker scripts improve stability and prevent transaction errors
+
+**Storage Safety Patterns**:
+- Feature detection before IndexedDB access prevents browser compatibility issues
+- Safe fallback to MemoryStore when IndexedDB fails
+- Request persistent storage via `navigator.storage.persist()` to prevent browser eviction
+- Monitor storage quota with `navigator.storage.estimate()`
+
+**Critical Warnings**:
+- Only one MatrixClient instance per IndexedDB database to prevent data corruption
+- Different browsers have varying IndexedDB quota behaviors
+- "Cannot read properties of undefined" errors typically indicate missing startup sequence
+
 ## Permission Management
 
 ### Power Level Assignment

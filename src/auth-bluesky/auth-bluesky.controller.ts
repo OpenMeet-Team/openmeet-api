@@ -15,6 +15,7 @@ import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from '../core/decorators/public.decorator';
 import { TenantPublic } from '../tenant/tenant-public.decorator';
 import { REQUEST } from '@nestjs/core';
+import { getOidcCookieOptions } from '../utils/cookie-config';
 
 @ApiTags('Auth')
 @Controller({
@@ -57,10 +58,19 @@ export class AuthBlueskyController {
       code: query.code,
     });
 
-    const redirectUrl = await this.authBlueskyService.handleAuthCallback(
-      query,
-      effectiveTenantId,
-    );
+    const { redirectUrl, sessionId } =
+      await this.authBlueskyService.handleAuthCallback(
+        query,
+        effectiveTenantId,
+      );
+
+    // Set oidc_session cookie for cross-domain OIDC authentication
+    if (sessionId) {
+      const cookieOptions = getOidcCookieOptions();
+
+      res.cookie('oidc_session', sessionId, cookieOptions);
+      res.cookie('oidc_tenant', effectiveTenantId, cookieOptions);
+    }
 
     res.redirect(redirectUrl);
   }

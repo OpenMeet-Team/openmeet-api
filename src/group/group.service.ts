@@ -37,7 +37,7 @@ import { GroupRoleService } from '../group-role/group-role.service';
 import { MailService } from '../mail/mail.service';
 import { generateShortCode } from '../utils/short-code';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
-import { MatrixMessage } from '../matrix/matrix-types';
+// import { MatrixMessage } from '../matrix/matrix-types';
 import { UserService } from '../user/user.service';
 import { HomeQuery } from '../home/dto/home-query.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -48,9 +48,8 @@ import { Trace } from '../utils/trace.decorator';
 import { EventQueryService } from '../event/services/event-query.service';
 import { EventManagementService } from '../event/services/event-management.service';
 import { EventRecommendationService } from '../event/services/event-recommendation.service';
-import { forwardRef } from '@nestjs/common';
-import { ChatRoomService } from '../chat/rooms/chat-room.service';
-import { DiscussionService } from '../chat/services/discussion.service';
+// import { forwardRef } from '@nestjs/common'; // Currently not used
+// ChatRoomService removed - Matrix Application Service handles room operations directly
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class GroupService {
@@ -76,10 +75,7 @@ export class GroupService {
     private readonly userService: UserService,
     private readonly eventEmitter: EventEmitter2,
     private readonly groupMailService: GroupMailService,
-    @Inject(forwardRef(() => ChatRoomService))
-    private readonly chatRoomService: ChatRoomService,
-    @Inject(forwardRef(() => DiscussionService))
-    private readonly discussionService: DiscussionService,
+    // ChatRoomService removed - Matrix Application Service handles room operations directly
   ) {}
 
   async getTenantSpecificGroupRepository() {
@@ -246,7 +242,21 @@ export class GroupService {
 
     const group = this.groupRepository.create(mappedGroupDto);
     const savedGroup = await this.groupRepository.save(group);
-    this.eventEmitter.emit('group.created', savedGroup);
+
+    // Emit group creation event with tenant context (following event service pattern)
+    this.logger.log('About to emit group.created event', {
+      groupId: savedGroup.id,
+      slug: savedGroup.slug,
+      userId: userId,
+      tenantId: this.request.tenantId,
+    });
+    this.eventEmitter.emit('group.created', {
+      groupId: savedGroup.id,
+      slug: savedGroup.slug,
+      userId: userId, // Creator user ID
+      tenantId: this.request.tenantId,
+    });
+    this.logger.log('group.created event emitted successfully');
 
     // Get the owner role
     const ownerRole = await this.groupRoleService.findOne(GroupRole.Owner);
@@ -717,8 +727,30 @@ export class GroupService {
 
   async approveMember(slug: string, groupMemberId: number) {
     await this.getTenantSpecificGroupRepository();
-    await this.getGroupBySlug(slug);
-    return await this.groupMemberService.approveMember(groupMemberId);
+    const groupEntity = await this.getGroupBySlug(slug);
+
+    // Get member details before approval for Matrix integration
+    const groupMember = await this.groupMemberService
+      .findGroupDetailsMembers(groupEntity.id, 0)
+      .then((members) => members.find((m) => m.id === groupMemberId));
+
+    if (!groupMember) {
+      throw new NotFoundException('Group member not found');
+    }
+
+    const result = await this.groupMemberService.approveMember(groupMemberId);
+
+    // Emit event for Matrix integration to add newly approved member to group chat
+    this.eventEmitter.emit('chat.group.member.add', {
+      groupSlug: groupEntity.slug,
+      userSlug: groupMember.user.slug,
+      tenantId: this.request.tenantId,
+    });
+    this.logger.log(
+      `Emitted chat.group.member.add event for approved user ${groupMember.user.slug} in group ${groupEntity.slug}`,
+    );
+
+    return result;
   }
 
   async rejectMember(slug: string, groupMemberId: number) {
@@ -755,6 +787,16 @@ export class GroupService {
       await this.groupMemberService.createGroupMember(
         { userId: userEntity.id, groupId: groupEntity.id },
         GroupRole.Member,
+      );
+
+      // Emit event for Matrix integration to add user to group chat
+      this.eventEmitter.emit('chat.group.member.add', {
+        groupSlug: groupEntity.slug,
+        userSlug: userEntity.slug,
+        tenantId: this.request.tenantId,
+      });
+      this.logger.log(
+        `Emitted chat.group.member.add event for user ${userEntity.slug} in group ${groupEntity.slug}`,
       );
     }
 
@@ -814,36 +856,8 @@ export class GroupService {
     return await this.eventQueryService.findEventsForGroup(group.id, 0);
   }
 
-  async showGroupDiscussions(
-    slug: string,
-  ): Promise<{ messages: MatrixMessage[] }> {
-    // Delegate to DiscussionService for actual message retrieval
-    // This method supports unauthenticated access for public groups
-
-    try {
-      const tenantId = this.request.tenantId;
-      const discussionResponse =
-        await this.discussionService.getGroupDiscussionMessages(
-          slug,
-          null, // null userId for unauthenticated access to public groups
-          50, // default limit
-          undefined, // no 'from' parameter
-          tenantId,
-        );
-
-      return {
-        messages: discussionResponse.messages,
-      };
-    } catch (error) {
-      // Log the error but return empty messages for backward compatibility
-      this.logger.warn(
-        `Error fetching group discussions for ${slug}: ${error.message}`,
-      );
-      return {
-        messages: [],
-      };
-    }
-  }
+  // DEPRECATED: Group discussions method removed
+  // Events are handling Matrix chats correctly - groups will be adapted later
 
   async showDashboardGroups(userId: number): Promise<GroupEntity[]> {
     await this.getTenantSpecificGroupRepository();
@@ -943,5 +957,28 @@ export class GroupService {
       throw new NotFoundException('Group by slug not found');
     }
     return group;
+  }
+
+  /**
+   * Get all groups that have Matrix chat rooms
+   */
+  async getAllGroupsWithMatrixRooms(
+    tenantId: string,
+  ): Promise<Array<{ slug: string; matrixRoomId: string; name: string }>> {
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    const groupRepository = dataSource.getRepository(GroupEntity);
+
+    const groups = await groupRepository
+      .createQueryBuilder('group')
+      .select(['group.slug', 'group.matrixRoomId', 'group.name'])
+      .where('group.matrixRoomId IS NOT NULL')
+      .getMany();
+
+    return groups.map((group) => ({
+      slug: group.slug,
+      matrixRoomId: group.matrixRoomId!,
+      name: group.name,
+    }));
   }
 }

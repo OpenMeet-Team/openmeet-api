@@ -16,7 +16,7 @@ import { ResolvePromisesInterceptor } from './utils/serializer.interceptor';
 import { AggregateByTenantContextIdStrategy } from './strategy/tenant.strategy';
 import { TenantGuard } from './tenant/tenant.guard';
 import { getBuildInfo } from './utils/version';
-import { IoAdapter } from '@nestjs/platform-socket.io';
+import cookieParser from 'cookie-parser';
 
 // Add direct console.log for startup debugging - these will show even before logger is configured
 const startupLog = (message: string) => {
@@ -34,10 +34,11 @@ async function bootstrap() {
           'https://localhost:9005',
           'http://localhost:8087',
           'https://localhost:8087',
-          'https://localdev.openmeet.net',
-          'http://localdev.openmeet.net',
+          'https://om-api.ngrok.app',
+          'http://om-api.ngrok.app',
           'https://platform.openmeet.net',
           'https://platform-dev.openmeet.net',
+          'https://om-platform.ngrok.app', // ngrok URL for development
         ],
         credentials: true,
         allowedHeaders: [
@@ -75,6 +76,11 @@ async function bootstrap() {
     useContainer(app.select(AppModule), { fallbackOnErrors: true });
     const configService = app.get(ConfigService<AllConfigType>);
     startupLog('ContextIdFactory setup complete');
+
+    // Configure cookie parser for OIDC authentication
+    startupLog('Configuring cookie parser for OIDC');
+    app.use(cookieParser());
+    startupLog('Cookie parser configured');
 
     // Enable shutdown hooks for graceful termination
     startupLog('Enabling shutdown hooks');
@@ -169,6 +175,7 @@ async function bootstrap() {
           '/metrics',
           '/',
           '/sitemap.xml',
+          '/oidc/.well-known/openid-configuration',
         ],
       },
     );
@@ -184,10 +191,10 @@ async function bootstrap() {
       'Using globally registered interceptors from InterceptorsModule',
     );
 
-    // Use the Socket.io adapter for WebSockets
-    startupLog('Setting up WebSocket adapter');
-    app.useWebSocketAdapter(new IoAdapter(app));
-    startupLog('WebSocket adapter configured');
+    // WebSocket adapter removed for performance optimization
+    startupLog(
+      'WebSocket adapter removed - using Matrix client for real-time events',
+    );
 
     // Add proper signal handlers for clean shutdown
     startupLog('Starting HTTP server');
@@ -233,7 +240,9 @@ async function bootstrap() {
       });
 
       logger.log(`Application is running on: ${await app.getUrl()}`);
-      logger.log(`WebSocket server is running on Matrix namespace`);
+      logger.log(
+        `WebSocket server removed - using Matrix client for real-time events`,
+      );
 
       return server;
     } catch (error) {

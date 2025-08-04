@@ -19,7 +19,7 @@ import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
 import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
 import { EventRecommendationService } from './services/event-recommendation.service';
-import { ChatModule } from '../chat/chat.module';
+// ChatModule removed - Matrix Application Service handles room operations directly
 import { ICalendarService } from './services/ical/ical.service';
 import { EventSeriesModule } from '../event-series/event-series.module';
 import { ConfigModule } from '@nestjs/config';
@@ -39,12 +39,12 @@ import { MetricsModule } from '../metrics/metrics.module';
     forwardRef(() => AuthModule),
     forwardRef(() => EventAttendeeModule),
     FileModule,
-    UserModule,
+    forwardRef(() => UserModule),
     forwardRef(() => GroupModule),
     EventMailModule,
-    BlueskyModule,
+    forwardRef(() => BlueskyModule),
     ShadowAccountModule,
-    forwardRef(() => ChatModule),
+    // ChatModule removed - Matrix Application Service handles room operations directly
     forwardRef(() => EventSeriesModule),
     MetricsModule,
   ],

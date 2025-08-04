@@ -3,20 +3,26 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { EventAttendeesEntity } from './infrastructure/persistence/relational/entities/event-attendee.entity';
 import { EventAttendeeService } from './event-attendee.service';
+import { EventAttendeeQueryService } from './event-attendee-query.service';
 import { EventRoleService } from '../event-role/event-role.service';
-import { ChatModule } from '../chat/chat.module';
+// ChatModule removed - Matrix Application Service handles room operations directly
 import { BlueskyModule } from '../bluesky/bluesky.module';
 import { UserModule } from '../user/user.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([EventAttendeesEntity]),
-    forwardRef(() => ChatModule),
+    // ChatModule removed - Matrix Application Service handles room operations directly
     forwardRef(() => BlueskyModule),
     forwardRef(() => UserModule),
   ],
   controllers: [],
-  providers: [EventAttendeeService, TenantConnectionService, EventRoleService],
-  exports: [EventAttendeeService],
+  providers: [
+    EventAttendeeService,
+    EventAttendeeQueryService,
+    TenantConnectionService,
+    EventRoleService,
+  ],
+  exports: [EventAttendeeService, EventAttendeeQueryService],
 })
 export class EventAttendeeModule {}

@@ -12,11 +12,36 @@ export const matrixConfig = registerAs<MatrixConfig>('matrix', () => {
   // For Matrix IDs we need the main domain, not necessarily the server hostname
   const serverName = process.env.MATRIX_SERVER_NAME || 'openmeet.net';
 
-  // Get username portion of admin user
+  // Bot configuration moved to tenant-based config in TENANTS_B64
+  // MATRIX_BOT_USERNAME, MATRIX_BOT_PASSWORD, and MATRIX_BOT_DISPLAY_NAME are deprecated
+
+  // Application Service configuration - required, no defaults
+  const appserviceToken =
+    process.env.MATRIX_APPSERVICE_TOKEN ||
+    process.env.MATRIX_APPSERVICE_AS_TOKEN;
+  const appserviceHsToken =
+    process.env.MATRIX_APPSERVICE_HS_TOKEN ||
+    process.env.MATRIX_APPSERVICE_HOMESERVER_TOKEN;
+  const appserviceId = process.env.MATRIX_APPSERVICE_ID;
+  const appserviceUrl = process.env.MATRIX_APPSERVICE_URL;
+
+  // Validate required appservice configuration
+  if (!appserviceToken) {
+    throw new Error('MATRIX_APPSERVICE_TOKEN is required');
+  }
+  if (!appserviceHsToken) {
+    throw new Error('MATRIX_APPSERVICE_HS_TOKEN is required');
+  }
+  if (!appserviceId) {
+    throw new Error('MATRIX_APPSERVICE_ID is required');
+  }
+  if (!appserviceUrl) {
+    throw new Error('MATRIX_APPSERVICE_URL is required');
+  }
+
+  // Legacy admin configuration (deprecated)
   const adminUsername = process.env.MATRIX_ADMIN_USERNAME || 'admin';
   const adminPassword = process.env.MATRIX_ADMIN_PASSWORD;
-
-  // Admin access token is optional and will be generated using the password
   const adminAccessToken = process.env.MATRIX_ADMIN_ACCESS_TOKEN || null;
 
   console.log('Matrix configuration environment variables:', {
@@ -26,6 +51,7 @@ export const matrixConfig = registerAs<MatrixConfig>('matrix', () => {
     MATRIX_ADMIN_USERNAME: process.env.MATRIX_ADMIN_USERNAME,
     MATRIX_ADMIN_PASSWORD: adminPassword ? '***exists***' : 'undefined',
     MATRIX_SERVER_NAME: process.env.MATRIX_SERVER_NAME,
+    TENANT_BASED_BOTS: 'enabled (check TENANTS_B64)',
   });
 
   // Log the server name extraction and the final resolved URL
@@ -36,18 +62,22 @@ export const matrixConfig = registerAs<MatrixConfig>('matrix', () => {
     baseUrl,
   );
 
-  if (!adminPassword) {
-    throw new Error(
-      'MATRIX_ADMIN_PASSWORD is required! Please set this environment variable.',
-    );
-  }
-
   return {
     baseUrl,
-    adminUser: adminUsername, // Just use the username, we'll construct the full ID in the service
-    adminPassword,
-    adminAccessToken: adminAccessToken || '', // Will be generated if not provided
     serverName,
+    // Bot configuration moved to tenant-based config (see MatrixBotUserService)
+    // Application Service configuration
+    appservice: {
+      token: appserviceToken,
+      hsToken: appserviceHsToken,
+      id: appserviceId,
+      url: appserviceUrl,
+    },
+    // Legacy admin configuration (deprecated)
+    adminUser: adminUsername,
+    adminPassword,
+    adminAccessToken: adminAccessToken || '',
+    // Connection settings
     defaultDeviceId: process.env.MATRIX_DEFAULT_DEVICE_ID || 'OPENMEET_SERVER',
     defaultInitialDeviceDisplayName:
       process.env.MATRIX_DEFAULT_DEVICE_DISPLAY_NAME || 'OpenMeet Server',

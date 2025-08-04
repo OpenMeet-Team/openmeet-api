@@ -1,0 +1,26 @@
+# Application service configuration for OpenMeet bot
+# This allows the OpenMeet API to act as an application service
+# and manage bot users directly without OIDC authentication
+
+id: {{ .Env.MATRIX_APPSERVICE_ID }}
+url: {{ .Env.MATRIX_APPSERVICE_URL }}
+as_token: {{ .Env.MATRIX_APPSERVICE_TOKEN }}
+hs_token: {{ .Env.MATRIX_APPSERVICE_HS_TOKEN }}
+sender_localpart: {{ .Env.MATRIX_APPSERVICE_ID }}
+rate_limited: false
+push_ephemeral: true
+
+namespaces:
+  users:
+    - exclusive: true
+      regex: "@openmeet-bot-.*:.*"
+    - exclusive: true
+      regex: "@openmeet-.*:.*"
+  rooms:
+    - exclusive: false
+      regex: ".*"
+  aliases:
+    - exclusive: true
+      regex: "#(event|group)-.*:{{ .Env.MATRIX_SERVER_NAME }}"
+    - exclusive: false
+      regex: "#openmeet-.*:{{ .Env.MATRIX_SERVER_NAME }}"

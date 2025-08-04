@@ -31,12 +31,21 @@ async function createGroup(
   authToken: string,
   groupData: any,
 ): Promise<any> {
-  const server = request(app);
-  const response = await server
+  // Handle both Express app instances and URL strings
+  const response = await request(app)
     .post('/api/groups')
     .set('x-tenant-id', TESTING_TENANT_ID)
     .set('Authorization', `Bearer ${authToken}`)
     .send(groupData);
+
+  if (response.status !== 201) {
+    console.error('Create group failed:', {
+      status: response.status,
+      body: response.body,
+    });
+  }
+
+  expect(response.status).toBe(201);
   return response.body;
 }
 
@@ -132,9 +141,14 @@ async function createEvent(app: string, authToken: string, eventData: any) {
 
   const payload = {
     timeZone: 'UTC', // Default timezone
-    ...eventData, // Spread incoming eventData, potentially overriding the default timeZone if provided
+    maxAttendees: 100, // Default max attendees
+    categories: [], // Default empty categories
+    startDate: new Date(Date.now() + 86400000).toISOString(), // Default start date (1 day from now)
+    endDate: new Date(Date.now() + 90000000).toISOString(), // Default end date (1 hour after start)
+    ...eventData, // Spread incoming eventData, potentially overriding the defaults if provided
   };
 
+  // Handle both Express app instances and URL strings
   const response = await request(app)
     .post('/api/events')
     .set('Authorization', `Bearer ${authToken}`)
@@ -248,6 +262,7 @@ async function createTestUser(
   lastName,
   password = 'Test@1234',
 ) {
+  // Handle both Express app instances and URL strings
   const response = await request(app)
     .post('/api/v1/auth/email/register')
     .set('x-tenant-id', tenantId)
@@ -363,6 +378,98 @@ async function getCurrentUser(app, tenantId, userToken) {
   return userResponse.body;
 }
 
+// async function clearMatrixUserIdentity(app, tenantId, userToken) {
+//   // Clear any existing Matrix identity for this user
+//   const response = await request(app)
+//     .delete('/api/matrix/user-identity')
+//     .set('Authorization', `Bearer ${userToken}`)
+//     .set('x-tenant-id', tenantId);
+
+//   // Don't throw error if clearing fails - the identity might not exist
+//   if (response.status !== 200 && response.status !== 404) {
+//     console.warn('Failed to clear Matrix user identity:', response.body);
+//   }
+// }
+
+// async function registerMatrixUserIdentity(app, tenantId, userToken, userSlug) {
+//   // Clear any existing Matrix identity first
+//   await clearMatrixUserIdentity(app, tenantId, userToken);
+
+//   // Generate a Matrix user ID based on the user slug (simulating MAS authentication)
+//   const serverName = process.env.MATRIX_SERVER_NAME || 'matrix.openmeet.net';
+//   const matrixUserId = `@${userSlug}:${serverName}`;
+
+//   const response = await request(app)
+//     .post('/api/matrix/sync-user-identity')
+//     .set('Authorization', `Bearer ${userToken}`)
+//     .set('x-tenant-id', tenantId)
+//     .send({ matrixUserId });
+
+//   if (response.status !== 200) {
+//     console.error('Failed to register Matrix user identity:', response.body);
+//     throw new Error(
+//       `Failed to register Matrix user identity: ${response.status}`,
+//     );
+//   }
+
+//   return response.body;
+// }
+
+async function getGroupDetails(token: string, groupSlug: string) {
+  const response = await request(TESTING_APP_URL)
+    .get(`/api/groups/${groupSlug}`)
+    .set('Authorization', `Bearer ${token}`)
+    .set('x-tenant-id', TESTING_TENANT_ID);
+
+  if (response.status !== 200) {
+    console.error('Failed to get group details:', {
+      status: response.status,
+      body: response.body,
+      groupSlug,
+    });
+    throw new Error(`Failed to get group ${groupSlug}: ${response.status}`);
+  }
+  return response.body;
+}
+
+async function getCurrentUserDetails(token: string) {
+  const response = await request(TESTING_APP_URL)
+    .get('/api/v1/auth/me')
+    .set('Authorization', `Bearer ${token}`)
+    .set('x-tenant-id', TESTING_TENANT_ID);
+
+  if (response.status !== 200) {
+    console.error('Failed to get current user:', {
+      status: response.status,
+      body: response.body,
+    });
+    throw new Error(`Failed to get current user: ${response.status}`);
+  }
+  return response.body;
+}
+
+async function deleteGroupBySlug(token: string, groupSlug: string) {
+  const response = await request(TESTING_APP_URL)
+    .delete(`/api/groups/${groupSlug}`)
+    .set('Authorization', `Bearer ${token}`)
+    .set('x-tenant-id', TESTING_TENANT_ID);
+
+  console.log(`Delete group ${groupSlug} response:`, {
+    status: response.status,
+    body: response.body,
+  });
+
+  return response;
+}
+
+// Chat-related helper functions removed - Matrix Application Service handles rooms directly
+
+// Utility functions
+async function waitForEventProcessing(ms: number = 2000) {
+  console.log(`Waiting ${ms}ms for event processing...`);
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export {
   getAuthToken,
   createGroup,
@@ -383,4 +490,11 @@ export {
   updateGroupMemberRole,
   getGroupMembers,
   getCurrentUser,
+  // Enhanced helper functions
+  getGroupDetails,
+  getCurrentUserDetails,
+  deleteGroupBySlug,
+  // Chat-related functions removed - Matrix Application Service handles rooms directly
+  // Utility functions
+  waitForEventProcessing,
 };

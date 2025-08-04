@@ -56,7 +56,10 @@ export class AuthService {
     @Inject(REQUEST) private readonly request?: any,
   ) {}
 
-  async validateLogin(loginDto: AuthEmailLoginDto): Promise<LoginResponseDto> {
+  async validateLogin(
+    loginDto: AuthEmailLoginDto,
+    tenantId: string,
+  ): Promise<LoginResponseDto> {
     const user = await this.userService.findByEmail(loginDto.email);
 
     if (!user) {
@@ -108,15 +111,15 @@ export class AuthService {
       .update(randomStringGenerator())
       .digest('hex');
 
-    console.log('🔐 Session Debug - Creating new session for user:', user.id);
-    console.log('  - Generated hash:', hash.substring(0, 10) + '...');
+    this.logger.debug(`🔐 Creating new session for user: ${user.id}`);
+    this.logger.debug(`Generated hash: ${hash.substring(0, 10)}...`);
 
     const session = await this.sessionService.create({
       user,
       hash,
     });
 
-    console.log('✅ Session Debug - Created session ID:', session.id);
+    this.logger.debug(`✅ Created session ID: ${session.id}`);
 
     const { token, refreshToken, tokenExpires } = await this.getTokensData({
       id: user.id,
@@ -124,6 +127,7 @@ export class AuthService {
       slug: user.slug,
       sessionId: session.id,
       hash,
+      tenantId,
     });
 
     return {
@@ -131,6 +135,7 @@ export class AuthService {
       token,
       tokenExpires,
       user,
+      sessionId: session.id.toString(),
     };
   }
 
@@ -207,6 +212,7 @@ export class AuthService {
       slug: user.slug,
       sessionId: session.id,
       hash,
+      tenantId,
     });
 
     return {
@@ -214,10 +220,11 @@ export class AuthService {
       token,
       tokenExpires,
       user,
+      sessionId: session.id.toString(),
     };
   }
 
-  async register(dto: AuthRegisterLoginDto): Promise<any> {
+  async register(dto: AuthRegisterLoginDto, tenantId: string): Promise<any> {
     const role = await this.roleService.findByName(RoleEnum.User);
     if (!role) {
       throw new Error(`Role not found: ${RoleEnum.User}`);
@@ -261,6 +268,7 @@ export class AuthService {
       slug: user.slug,
       sessionId: session.id,
       hash,
+      tenantId,
     });
 
     const createdUser = await this.userService.findById(user.id);
@@ -273,7 +281,7 @@ export class AuthService {
         },
       })
       .catch((err) => {
-        console.log(err);
+        this.logger.error('Error in login process:', err);
       });
 
     return {
@@ -281,6 +289,7 @@ export class AuthService {
       token,
       tokenExpires,
       user: createdUser,
+      sessionId: session.id.toString(),
     };
   }
 
@@ -570,48 +579,37 @@ export class AuthService {
 
   async refreshToken(
     data: Pick<JwtRefreshPayloadType, 'sessionId' | 'hash'>,
+    tenantId: string,
   ): Promise<Omit<LoginResponseDto, 'user'>> {
-    console.log(
-      '🔄 RefreshToken Debug - Starting refresh for sessionId:',
-      data.sessionId,
-    );
+    this.logger.debug(`🔄 Starting refresh for sessionId: ${data.sessionId}`);
     const session = await this.sessionService.findById(data.sessionId);
 
     if (!session) {
-      console.log(
-        '❌ RefreshToken Debug - Session not found for sessionId:',
-        data.sessionId,
-      );
+      this.logger.warn(`❌ Session not found for sessionId: ${data.sessionId}`);
       throw new UnauthorizedException();
     }
 
-    console.log('🔄 RefreshToken Debug - Found session:');
-    console.log('  - Session ID:', session.id);
-    console.log('  - Session deletedAt:', session.deletedAt);
-    console.log('  - Client hash:', data.hash?.substring(0, 10) + '...');
-    console.log('  - Server hash:', session.hash?.substring(0, 10) + '...');
-    console.log('  - Hashes match:', session.hash === data.hash);
+    this.logger.debug(`🔄 Found session: ${session.id}`);
+    this.logger.debug(`Session deletedAt: ${session.deletedAt}`);
+    this.logger.debug(`Client hash: ${data.hash?.substring(0, 10)}...`);
+    this.logger.debug(`Server hash: ${session.hash?.substring(0, 10)}...`);
+    this.logger.debug(`Hashes match: ${session.hash === data.hash}`);
 
     if (session.hash !== data.hash) {
-      console.log('❌ RefreshToken Debug - Hash mismatch!');
-      console.log('  - Full client hash:', data.hash);
-      console.log('  - Full server hash:', session.hash);
+      this.logger.warn('❌ Hash mismatch detected');
+      this.logger.debug(`Client hash: ${data.hash}`);
+      this.logger.debug(`Server hash: ${session.hash}`);
       throw new UnauthorizedException();
     }
 
-    console.log(
-      '✅ RefreshToken Debug - Hash validation passed, proceeding with refresh',
-    );
+    this.logger.debug('✅ Hash validation passed, proceeding with refresh');
 
     const hash = crypto
       .createHash('sha256')
       .update(randomStringGenerator())
       .digest('hex');
 
-    console.log(
-      '🔄 RefreshToken Debug - Generated new hash:',
-      hash.substring(0, 10) + '...',
-    );
+    this.logger.debug(`🔄 Generated new hash: ${hash.substring(0, 10)}...`);
 
     const user = await this.userService.findById(session.user.id);
 
@@ -619,15 +617,11 @@ export class AuthService {
       throw new UnauthorizedException();
     }
 
-    console.log(
-      '🔄 RefreshToken Debug - Updating session',
-      session.id,
-      'with new hash',
-    );
+    this.logger.debug(`🔄 Updating session ${session.id} with new hash`);
     await this.sessionService.update(session.id, {
       hash,
     });
-    console.log('✅ RefreshToken Debug - Session hash updated successfully');
+    this.logger.debug('✅ Session hash updated successfully');
 
     const { token, refreshToken, tokenExpires } = await this.getTokensData({
       id: session.user.id,
@@ -637,6 +631,7 @@ export class AuthService {
       slug: user.slug,
       sessionId: session.id,
       hash,
+      tenantId,
     });
 
     return {
@@ -660,6 +655,7 @@ export class AuthService {
     slug: User['slug'];
     sessionId: Session['id'];
     hash: Session['hash'];
+    tenantId: string;
   }) {
     const tokenExpiresIn = this.configService.getOrThrow('auth.expires', {
       infer: true,
@@ -679,6 +675,7 @@ export class AuthService {
           role: data.role,
           slug: data.slug,
           sessionId: data.sessionId,
+          tenantId: data.tenantId,
         },
         {
           secret: this.configService.getOrThrow('auth.secret', { infer: true }),

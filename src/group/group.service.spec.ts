@@ -17,8 +17,8 @@ import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import {
   mockCategory,
   mockCategoryService,
-  mockChatRoomService,
-  mockDiscussionService,
+  // mockChatRoomService,
+  // mockDiscussionService,
   mockEvent,
   mockFile,
   mockFilesS3PresignedService,
@@ -36,7 +36,6 @@ import {
   mockRepository,
   mockTenantConnectionService,
   mockUserService,
-  mockMatrixService,
 } from '../test/mocks';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
 import { mockUser } from '../test/mocks';
@@ -45,12 +44,9 @@ import { GroupMemberEntity } from '../group-member/infrastructure/persistence/re
 import { GroupRoleService } from '../group-role/group-role.service';
 import { MailService } from '../mail/mail.service';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
-import { MatrixChatProviderAdapter } from '../chat/adapters/matrix-chat-provider.adapter';
 import { UserService } from '../user/user.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupMailService } from '../group-mail/group-mail.service';
-import { ChatRoomService } from '../chat/rooms/chat-room.service';
-import { DiscussionService } from '../chat/services/discussion.service';
 
 describe('GroupService', () => {
   let service: GroupService;
@@ -107,10 +103,6 @@ describe('GroupService', () => {
           useValue: mockMailService,
         },
         {
-          provide: MatrixChatProviderAdapter,
-          useValue: mockMatrixService,
-        },
-        {
           provide: UserService,
           useValue: mockUserService,
         },
@@ -123,14 +115,6 @@ describe('GroupService', () => {
         {
           provide: GroupMailService,
           useValue: mockGroupMailService,
-        },
-        {
-          provide: ChatRoomService,
-          useValue: mockChatRoomService,
-        },
-        {
-          provide: DiscussionService,
-          useValue: mockDiscussionService,
         },
       ],
     }).compile();

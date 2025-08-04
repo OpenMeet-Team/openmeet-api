@@ -20,7 +20,7 @@ export class EventListener {
     eventId: number;
     slug: string;
     userId: number;
-    tenantId?: string;
+    tenantId: string;
   }) {
     this.logger.log('event.created', {
       id: params.eventId,
@@ -28,41 +28,14 @@ export class EventListener {
       tenantId: params.tenantId,
     });
 
-    // Get the tenant ID from the request context if not provided in the event
-    const tenantId = params.tenantId || this.request?.tenantId;
+    // Use the tenant ID from the event payload (provided by event service)
+    // const tenantId = params.tenantId; // Currently not used
 
-    // Emit an event for the chat module to handle chat room creation
-    // instead of directly calling the chat room service
-    try {
-      this.logger.log(
-        `Emitting chat.event.created event for event ${params.slug}`,
-      );
-
-      // Create payload with all required fields including tenantId and userId
-      const payload = {
-        eventSlug: params.slug,
-        userId: params.userId, // Use userId from event creation payload
-        eventName: params.eventId.toString(), // We don't have the event name, use ID as fallback
-        eventVisibility: 'public', // Default visibility
-        tenantId: tenantId,
-      };
-
-      // Log crucial fields to debug
-      this.logger.log(`Chat event payload: ${JSON.stringify(payload)}`);
-
-      // Skip emitting event if we don't have any user identifier
-      if (!payload.userId) {
-        this.logger.warn(
-          `Cannot create chat room for event ${params.slug}: No user identifier provided`,
-        );
-        return;
-      }
-
-      // Emit the event with our prepared payload
-      this.eventEmitter.emit('chat.event.created', payload);
-    } catch (error) {
-      this.logger.error(`Error in handleEventCreatedEvent: ${error.message}`);
-    }
+    // Matrix-native approach: Rooms are created on-demand via Application Service
+    // No longer emit chat.event.created events - rooms are created when first accessed
+    this.logger.log(
+      `Event ${params.slug} created - rooms will be created on-demand via Matrix Application Service`,
+    );
   }
 
   @OnEvent('event.deleted')
@@ -152,16 +125,18 @@ export class EventListener {
     }
   }
 
-  @OnEvent('event.attendee.updated')
+  @OnEvent('event.attendee.status.changed')
   async handleEventAttendeeUpdatedEvent(params: {
     eventId: number;
     userId: number;
-    status: string;
+    newStatus?: string;
+    status?: string;
+    previousStatus?: string;
     eventSlug?: string;
     userSlug?: string;
     tenantId?: string;
   }) {
-    this.logger.log('event.attendee.updated', params);
+    this.logger.log('event.attendee.status.changed received', params);
 
     try {
       // Get the attendee to fetch slugs if they weren't provided
@@ -183,15 +158,25 @@ export class EventListener {
         }
       }
 
+      // Get tenantId from params or request context
+      const tenantId = params.tenantId || this.request?.tenantId;
+
+      if (!tenantId) {
+        this.logger.error(
+          'No tenantId available in event parameters or request context',
+        );
+        return;
+      }
+
+      // Handle status parameter (for backward compatibility)
+      const currentStatus = params.newStatus || params.status;
+
       // If status changed to confirmed, add user to chat
       if (
-        params.status === EventAttendeeStatus.Confirmed &&
+        currentStatus === EventAttendeeStatus.Confirmed &&
         eventSlug &&
         userSlug
       ) {
-        // Get tenantId from params or request context
-        const tenantId = params.tenantId || this.request?.tenantId;
-
         // Emit an event for the chat module to handle
         this.eventEmitter.emit('chat.event.member.add', {
           eventSlug,
@@ -204,13 +189,11 @@ export class EventListener {
       }
       // If status changed from confirmed to something else, remove from chat
       else if (
-        params.status !== EventAttendeeStatus.Confirmed &&
+        params.previousStatus === EventAttendeeStatus.Confirmed &&
+        currentStatus !== EventAttendeeStatus.Confirmed &&
         eventSlug &&
         userSlug
       ) {
-        // Get tenantId from params or request context
-        const tenantId = params.tenantId || this.request?.tenantId;
-
         // Emit an event for the chat module to handle
         this.eventEmitter.emit('chat.event.member.remove', {
           eventSlug,

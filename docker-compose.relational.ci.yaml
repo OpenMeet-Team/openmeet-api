@@ -1,4 +1,41 @@
 services:
+  # Config renderer - generates Matrix configs from templates
+  config-renderer:
+    image: alpine:3.19
+    volumes:
+      - ./matrix-config:/templates:ro
+      - matrix-configs:/rendered-config
+    env_file:
+      - env-example-relational-ci
+    restart: "no"
+    command: >
+      sh -c "
+        echo 'Installing gomplate and openssl...' &&
+        apk add --no-cache openssl curl &&
+        curl -o /usr/local/bin/gomplate -sSL https://github.com/hairyhenderson/gomplate/releases/latest/download/gomplate_linux-amd64 &&
+        chmod +x /usr/local/bin/gomplate &&
+        echo 'Generating signing keys for CI...' &&
+        mkdir -p /tmp/keys &&
+        openssl genrsa -out /tmp/keys/rsa-key.pem 2048 &&
+        openssl ecparam -genkey -name prime256v1 -noout -out /tmp/keys/ec-key.pem &&
+        export MAS_RSA_PRIVATE_KEY=\"\$(cat /tmp/keys/rsa-key.pem)\" &&
+        export MAS_EC_PRIVATE_KEY=\"\$(cat /tmp/keys/ec-key.pem)\" &&
+        echo 'Rendering Matrix configurations for CI...' &&
+        gomplate -f /templates/mas-config.gomplate.yaml -o /rendered-config/mas-config.yaml &&
+        gomplate -f /templates/homeserver-mas.gomplate.yaml -o /rendered-config/homeserver.yaml &&
+        mkdir -p /rendered-config/appservices &&
+        gomplate -f /templates/openmeet-appservice.gomplate.yaml -o /rendered-config/appservices/openmeet-appservice.yaml &&
+        echo 'Configuration rendering completed successfully' &&
+        ls -la /rendered-config/ &&
+        echo 'Config renderer staying alive for CI...' &&
+        sleep infinity
+      "
+    healthcheck:
+      test: ["CMD", "test", "-f", "/rendered-config/mas-config.yaml"]
+      interval: 5s
+      timeout: 10s
+      retries: 3
+
   postgres:
     ## use the db with postGIS extentions
     image: postgis/postgis:16-3.4-alpine
@@ -26,35 +63,6 @@ services:
     expose:
       - 6379
 
-  matrix:
-    build:
-      context: .
-      dockerfile: matrix.ci.Dockerfile
-    expose:
-      - 8448
-    ports:
-      - "8448:8448"
-    environment:
-      SYNAPSE_SERVER_NAME: ${MATRIX_SERVER_NAME:-matrix-ci.openmeet.test}
-      SYNAPSE_REPORT_STATS: "no"
-      SYNAPSE_LOG_LEVEL: "INFO"
-      POSTGRES_HOST: postgres
-      POSTGRES_USER: ${DATABASE_USERNAME}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
-      POSTGRES_DB: "synapse"
-      MATRIX_REGISTRATION_SECRET: ${MATRIX_REGISTRATION_SECRET:-ci_test_registration_secret}
-    volumes:
-      - matrix-data:/data/media
-    depends_on:
-      - postgres
-    env_file:
-      - env-example-relational-ci
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8448/_matrix/client/versions"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   api:
     build:
       context: .
@@ -66,12 +74,76 @@ services:
     volumes:
       - ./matrix-config:/matrix-config
     depends_on:
-      matrix:
-        condition: service_healthy
       postgres:
         condition: service_started
       redis:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health/liveness"]
+      start_period: 60s
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  # Matrix Authentication Service (MAS) for CI testing
+  matrix-auth-service:
+    image: ghcr.io/element-hq/matrix-authentication-service:latest
+    expose:
+      - 8080
+    environment:
+      MAS_CONFIG: /data/mas-config.yaml
+    volumes:
+      - matrix-configs:/data:ro
+    depends_on:
+      config-renderer:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+    env_file:
+      - env-example-relational-ci
+    # No health check - distroless image has no shell tools
+
+  matrix:
+    build:
+      context: .
+      dockerfile: matrix.ci.Dockerfile
+    expose:
+      - 8448
+    ports:
+      - "8448:8448"
+    environment:
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME:-matrix-ci.openmeet.test}
+      SYNAPSE_LOG_LEVEL: "INFO"
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${DATABASE_USERNAME}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: "synapse"
+      MATRIX_REGISTRATION_SECRET: ${MATRIX_REGISTRATION_SECRET:-ci_test_registration_secret}
+      # MAS integration for CI
+      MAS_ISSUER: "${MAS_ISSUER}"
+      MAS_CLIENT_SECRET: "${MAS_CLIENT_SECRET}"
+      MAS_ADMIN_TOKEN: "${MAS_ADMIN_TOKEN}"
+    volumes:
+      - matrix-configs:/config:ro
+      - ./matrix-config/log.config:/data/log.config
+      - ./matrix-config/init.sh:/data/init.sh
+      - ./matrix-config/start-matrix.sh:/data/start-matrix.sh
+      - matrix-data:/data/media
+    depends_on:
+      config-renderer:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+      matrix-auth-service:
+        condition: service_started
+    env_file:
+      - env-example-relational-ci
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8448/_matrix/client/versions"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   matrix-data:
+  matrix-configs:

@@ -23,6 +23,10 @@ const mockClient = {
   removeListener: jest.fn(),
   roomState: jest.fn().mockResolvedValue([]),
   sendTyping: jest.fn().mockResolvedValue({}),
+  getRoomIdForAlias: jest.fn().mockResolvedValue({
+    room_id: '!mock-room-id:matrix.openmeet.net',
+    servers: ['matrix.openmeet.net'],
+  }),
 };
 
 // Create a createClient function that returns the mockClient

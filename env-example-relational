@@ -99,9 +99,35 @@ ELASTICACHE_TLS=false
 # If using auth
 ELASTICACHE_TOKEN=1234567890
 
-# Matrix configuration for CI testing
+# Matrix configuration for testing
 MATRIX_HOMESERVER_URL=http://matrix:8448
 MATRIX_SERVER_NAME=matrix-ci.openmeet.test
 MATRIX_ADMIN_USERNAME=admin
 MATRIX_ADMIN_PASSWORD=admin_secret_password
 MATRIX_REGISTRATION_SECRET=ci_test_registration_secret
+
+# Matrix OIDC endpoints
+MATRIX_OIDC_CLIENT_SECRET=local-matrix-client-secret-for-testing
+MATRIX_OIDC_AUTHORIZATION_ENDPOINT=http://api:3000/api/oidc/auth
+MATRIX_OIDC_TOKEN_ENDPOINT=http://api:3000/api/oidc/token
+MATRIX_OIDC_USERINFO_ENDPOINT=http://api:3000/api/oidc/userinfo
+MATRIX_OIDC_JWKS_URI=http://api:3000/api/oidc/jwks
+
+# Matrix Synapse configuration
+SYNAPSE_DATABASE_HOST=postgres
+SYNAPSE_DATABASE_NAME=synapse
+SYNAPSE_PUBLIC_BASEURL=http://matrix:8448
+SYNAPSE_MACAROON_SECRET_KEY=ci_test_macaroon_secret
+SYNAPSE_FORM_SECRET=ci_test_form_secret
+SYNAPSE_ENABLE_METRICS=false
+SYNAPSE_MAX_UPLOAD_SIZE=50M
+SYNAPSE_URL_PREVIEW_ENABLED=false
+
+# MAS (Matrix Authentication Service) configuration
+MAS_ISSUER=http://api:3000
+MAS_CLIENT_SECRET=ci_test_mas_client_secret_for_synapse
+MAS_ADMIN_TOKEN=ci_test_matrix_admin_token
+
+# MAS Token TTL configuration (in seconds)
+MAS_ACCESS_TOKEN_TTL=300
+MAS_COMPAT_TOKEN_TTL=300

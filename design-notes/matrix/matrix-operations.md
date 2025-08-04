@@ -4,29 +4,77 @@ This document provides practical guidance for developers working with the Matrix
 
 ## Local Development Setup
 
+### Matrix Bot Authentication (Current Implementation - July 2025)
+
+**Uses Dedicated Bot Users**: Each tenant has a dedicated bot user that authenticates via MAS → OpenMeet OIDC flow.
+
 1. **Start Matrix Server**
    ```bash
    docker-compose -f docker-compose-dev.yml up -d
    ```
 
-2. **Get Admin Token**
+2. **Bot User Configuration (Per Tenant)**
    ```bash
-   docker-compose -f docker-compose-dev.yml logs matrix | grep -A 10 "Success! Matrix server initialized"
+   # Bot users are defined in TENANTS_B64 configuration
+   # Example for tenant lsdfaopkljdfs:
+   "botUser": {
+     "email": "bot-lsdfaopkljdfs@openmeet.net",
+     "slug": "openmeet-bot-lsdfaopkljdfs", 
+     "password": "bot-secure-password-lsdfaopkljdfs-2025"
+   }
    ```
 
-3. **Update Environment Variables**
-   ```
-   MATRIX_ADMIN_ACCESS_TOKEN=your_token_from_logs
-   MATRIX_ADMIN_USER=@admin:matrix-local.openmeet.test
-   MATRIX_SERVER_NAME=matrix-local.openmeet.test
-   MATRIX_HOME_SERVER=http://matrix:8008
-   MATRIX_ADMIN_PASSWORD=your_admin_password  # Required for token regeneration
+3. **Environment Variables (MAS OIDC Configuration)**
+   ```bash
+   # MAS Authentication Service Configuration
+   MAS_PUBLIC_URL=http://localhost:8081
+   MAS_CLIENT_ID=01JAYS74TCG3BTWKADN5Q4518D
+   MAS_REDIRECT_URI=http://localhost:9005/auth/matrix/callback
+   MAS_SCOPES=openid email
+   
+   # Matrix server configuration
+   MATRIX_SERVER_NAME=matrix.openmeet.net
+   MATRIX_HOMESERVER_URL=http://localhost:8448
+   
+   # Bot email domain
+   BOT_EMAIL_DOMAIN=openmeet.net
    ```
 
-4. **Reset Credentials (if needed)**
+4. **Bot Authentication Flow (Updated July 3, 2025)**
+   ```
+   1. MatrixBotUserService retrieves bot user for specific tenant
+   2. MatrixRoomService.createBotClient() initiates OIDC flow with MAS
+   3. Bot authenticates using MAS /authorize endpoint (not /upstream/authorize/openmeet)
+   4. MAS redirects to OpenMeet OIDC using configured client ID and redirect URI
+   5. OpenMeet authenticates bot user and returns authorization code
+   6. MAS exchanges code for Matrix access token via /oauth2/token
+   7. Bot receives Matrix client with proper authentication
+   8. Bot performs room management operations for that tenant
+   ```
+
+5. **Reset User Credentials (if needed)**
    ```sql
    UPDATE "user" SET matrix_access_token = NULL, matrix_device_id = NULL;
    ```
+
+### Legacy Admin Token Setup (Deprecated)
+
+> **⚠️ DEPRECATED**: Admin token authentication has been replaced with Matrix bot authentication due to MacaroonDeserializationException and token instability issues.
+
+<details>
+<summary>Legacy Admin Token Instructions (For Reference Only)</summary>
+
+```bash
+# Get admin token (no longer used)
+docker-compose -f docker-compose-dev.yml logs matrix | grep -A 10 "Success! Matrix server initialized"
+
+# Old environment variables (removed)
+MATRIX_ADMIN_ACCESS_TOKEN=your_token_from_logs
+MATRIX_ADMIN_USER=@admin:matrix-local.openmeet.test
+MATRIX_ADMIN_PASSWORD=your_admin_password
+```
+
+</details>
 
 ## Testing Strategy
 
@@ -118,37 +166,59 @@ Key metrics to monitor:
 ### Application Monitoring
 
 1. **Error Tracking**
-   - Track Matrix authentication failures
-   - Monitor token refresh attempts
+   - Track Matrix bot authentication failures
+   - Monitor bot operation failures and retries
    - Alert on unusual error patterns
 
 2. **Performance Metrics**
    - Response times for chat operations
-   - WebSocket connection lifecycle events
+   - Bot operation success rates
    - Message delivery latency
 
 3. **Resource Usage**
-   - Matrix client instance count
+   - Matrix bot client connections
    - Database connection pool usage
    - Memory consumption
 
+4. **Bot Monitoring**
+   - Bot login success/failure rates
+   - Room operation completion times
+   - User invitation success rates
+
 ## Troubleshooting
 
-### Common Issues
+### Common Issues with Matrix Bot Authentication
 
-1. **M_UNKNOWN_TOKEN Errors**
-   - **Symptom**: Chat operations fail with 401 errors
-   - **Cause**: Invalid or expired Matrix tokens
+1. **Bot Authentication Failures**
+   - **Symptom**: Chat operations fail with authentication errors
+   - **Cause**: Invalid bot credentials or Matrix server issues
    - **Solution**: 
-     - System will automatically regenerate admin tokens if MATRIX_ADMIN_PASSWORD is configured
-     - For user tokens, reset in database; system will automatically reprovision
+     - Verify MATRIX_BOT_USERNAME and MATRIX_BOT_PASSWORD are correct
+     - Check Matrix server logs for authentication errors
+     - Ensure bot user exists on Matrix server
 
-2. **User Not In Room Errors**
-   - **Symptom**: "User not in room" errors when performing admin operations
-   - **Cause**: Admin user not joined to room before performing operations
+2. **Bot Not In Room Errors**
+   - **Symptom**: "User not in room" errors when bot performs operations
+   - **Cause**: Bot user not joined to room before performing operations
    - **Solution**: 
-     - Automatic with latest updates - admin will be joined to rooms before operations
-     - If issues persist, check Matrix server logs for rate limiting or permission errors
+     - Bot automatically joins rooms before operations
+     - If issues persist, check Matrix server logs for permission errors
+     - Verify bot has appropriate power levels
+
+3. **Bot Registration Issues**
+   - **Symptom**: Bot user creation fails during setup
+   - **Cause**: Username conflicts or Matrix server configuration issues
+   - **Solution**:
+     - Ensure bot username is unique on Matrix server
+     - Check Matrix server registration settings
+     - Verify Matrix server is accessible and running
+
+### Legacy Issues (Resolved with Bot Authentication)
+
+4. **Legacy Admin Token Issues** ❌ **(Resolved)**
+   - **Previous Issue**: MacaroonDeserializationException and token expiration
+   - **Resolution**: Replaced with stable bot authentication using username/password
+   - **Migration**: Admin token logic removed in favor of bot operations
 
 3. **Domain Mismatch Errors**
    - **Symptom**: "Unknown room" or cross-domain errors

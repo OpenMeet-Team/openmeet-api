@@ -34,6 +34,9 @@ export interface IMatrixClient {
     reason?: string,
   ) => Promise<Record<string, never>>;
   joinRoom: (roomId: string) => Promise<Record<string, never>>;
+  getRoomIdForAlias: (
+    roomAlias: string,
+  ) => Promise<{ room_id: string; servers?: string[] }>;
 
   // State and profile operations
   getStateEvent: (
@@ -69,8 +72,19 @@ export interface IMatrixClient {
   roomState: (roomId: string) => Promise<any[]>;
 
   // Authentication
+  login: (
+    type: string,
+    data: any,
+  ) => Promise<{ user_id: string; access_token: string; device_id: string }>;
   getAccessToken: () => string | null;
   getUserId: () => string | null;
+
+  // Account data operations
+  getAccountData: (eventType: string) => Promise<any>;
+  setAccountData: (
+    eventType: string,
+    content: any,
+  ) => Promise<Record<string, never>>;
 
   // Event handling
   on: (event: string, callback: (...args: any[]) => void) => void;
