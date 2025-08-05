@@ -20,7 +20,6 @@ import { Trace } from '../utils/trace.decorator';
 import { TenantPublic } from '../tenant/tenant-public.decorator';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { JwtPayloadType } from '../auth/strategies/types/jwt-payload.type';
 import { getTenantConfig } from '../utils/tenant-config';
 import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
 import { UserService } from '../user/user.service';
@@ -42,6 +41,39 @@ export class OidcController {
     private readonly matrixRoomService: MatrixRoomService,
     private readonly sessionService: SessionService,
   ) {}
+
+  /**
+   * Check if a session is valid according to max_age parameter
+   */
+  private isSessionValidForMaxAge(session: any, maxAge?: string): boolean {
+    if (!maxAge) return true; // No max_age restriction
+    
+    const maxAgeSeconds = parseInt(maxAge, 10);
+    if (isNaN(maxAgeSeconds)) return true; // Invalid max_age, ignore restriction
+    
+    // Calculate session age in seconds
+    const sessionCreatedAt = session.created_at || session.createdAt;
+    if (!sessionCreatedAt) return true; // No creation time, can't enforce max_age
+    
+    const sessionAge = Math.floor((Date.now() - new Date(sessionCreatedAt).getTime()) / 1000);
+    const isValid = sessionAge <= maxAgeSeconds;
+    
+    this.logger.debug(`🕐 Session age check: ${sessionAge}s <= ${maxAgeSeconds}s = ${isValid}`);
+    return isValid;
+  }
+
+  /**
+   * Return an OIDC error response for prompt=none failures
+   */
+  private returnPromptNoneError(redirectUri: string, state?: string, error: string = 'login_required') {
+    const errorParams = new URLSearchParams({
+      error,
+      error_description: 'Silent authentication failed',
+      ...(state && { state })
+    });
+    
+    return `${redirectUri}?${errorParams.toString()}`;
+  }
 
   // Removed extractStateFromMatrixSessionCookie - simplified to use URL state parameter
   // The macaroon parsing was incorrectly trying to decode binary data as UTF-8 text
@@ -93,6 +125,8 @@ export class OidcController {
     @Query('state') state?: string,
     @Query('nonce') nonce?: string,
     @Query('auth_code') authCode?: string,
+    @Query('prompt') prompt?: string,
+    @Query('max_age') maxAge?: string,
   ) {
     this.logger.debug('🔐 OIDC Auth Debug - Authorization endpoint called');
     this.logger.debug('  - Client ID:', clientId);
@@ -101,6 +135,8 @@ export class OidcController {
       state?.substring(0, 20) + '...',
     );
     this.logger.debug('  - Tenant ID from query:', request.query.tenantId);
+    this.logger.debug('  - Prompt parameter:', prompt);
+    this.logger.debug('  - Max age parameter:', maxAge);
     this.logger.debug(
       '  - Matrix State Preservation: Will preserve state parameter for session validation',
     );
@@ -127,6 +163,12 @@ export class OidcController {
       (request.query.tenantId as string) ||
       (request.headers['x-tenant-id'] as string) ||
       undefined;
+
+    if (!tenantId) {
+      throw new BadRequestException(
+        'Tenant ID is required - provide x-tenant-id header or tenantId query parameter',
+      );
+    }
 
     this.logger.debug(
       '🔐 OIDC Auth Debug - Unified endpoint - checking for user authentication...',
@@ -156,80 +198,10 @@ export class OidcController {
       }
     }
 
-    // Method 2: REMOVED - Do not decode state parameter as it's meant to be opaque per OIDC spec
-    // Matrix uses state for session macaroons, frontend uses other auth methods
-
-    // Method 2: Check for user token in query parameters (sent by platform after OIDC login)
-    // Re-enabled for third-party Matrix app authentication when no auth_code available
-    if (!user) {
-      // Re-enabled: needed for third-party Matrix OIDC flow
-      const userToken = request.query.user_token as string;
-      if (userToken) {
-        this.logger.debug(
-          '🔐 OIDC Auth Debug - Method 2: Found user_token in query parameters, validating...',
-        );
-        try {
-          const payload: JwtPayloadType = await this.jwtService.verifyAsync(
-            userToken,
-            {
-              secret: this.configService.get('auth.secret', { infer: true }),
-            },
-          );
-
-          if (payload && payload.id) {
-            this.logger.debug(
-              '✅ OIDC Auth Debug - Method 2 SUCCESS: Valid user token, user ID:',
-              payload.id,
-            );
-            user = { id: payload.id };
-          }
-        } catch (error) {
-          this.logger.error(
-            '❌ OIDC Auth Debug - Method 2 FAILED: User token validation failed:',
-            error.message,
-          );
-        }
-      }
-    }
-
-    // Method 3: Fallback to JWT token in Authorization header
-    if (
-      !user &&
-      authHeader &&
-      typeof authHeader === 'string' &&
-      authHeader.startsWith('Bearer ')
-    ) {
-      this.logger.debug(
-        '🔐 OIDC Auth Debug - Method 3: Trying Authorization header...',
-      );
-      try {
-        const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-        const payload: JwtPayloadType = await this.jwtService.verifyAsync(
-          token,
-          {
-            secret: this.configService.get('auth.secret', { infer: true }),
-          },
-        );
-
-        if (payload && payload.id) {
-          this.logger.debug(
-            '✅ OIDC Auth Debug - Method 3 SUCCESS: Valid JWT token from header, user ID:',
-            payload.id,
-          );
-          user = { id: payload.id };
-        }
-      } catch (error) {
-        this.logger.error(
-          '❌ OIDC Auth Debug - Method 3 FAILED: Authorization header JWT validation failed:',
-          error.message,
-        );
-      }
-    }
-
-    // Method 4: Check for OpenMeet session cookie (OIDC flow)
+    // Method 2: Check for OpenMeet session cookie (OIDC flow)
     if (!user) {
       this.logger.debug(
-        '🔐 OIDC Auth Debug - Method 4: Checking OpenMeet session authentication...',
+        '🔐 OIDC Auth Debug - Method 2: Checking OpenMeet session authentication...',
       );
       try {
         this.logger.debug(
@@ -263,40 +235,39 @@ export class OidcController {
           // We validate them as OpenMeet sessions to enable seamless OIDC flow
 
           this.logger.debug(
-            '🔐 OIDC Auth Debug - Method 4: OpenMeet session and tenant cookies detected - validating session...',
+            '🔐 OIDC Auth Debug - Method 2: OpenMeet session and tenant cookies detected - validating session...',
           );
 
           try {
             // Validate the OpenMeet session with the tenant context
-            await this.sessionService.getTenantSpecificRepository(tenantCookie);
-            const session = await this.sessionService.findById(sessionCookie);
+            const session = await this.sessionService.findById(sessionCookie, tenantCookie);
 
             if (session && session.user) {
               this.logger.debug(
-                '✅ OIDC Auth Debug - Method 4 SUCCESS: Valid OpenMeet session, user ID:',
+                '✅ OIDC Auth Debug - Method 2 SUCCESS: Valid OpenMeet session, user ID:',
                 session.user.id,
               );
               user = { id: session.user.id };
               tenantId = tenantCookie;
 
               this.logger.debug(
-                '✅ OIDC Auth Debug - Method 4: Tenant ID from cookie:',
+                '✅ OIDC Auth Debug - Method 2: Tenant ID from cookie:',
                 tenantId,
               );
             } else {
               this.logger.debug(
-                '❌ OIDC Auth Debug - Method 4 FAILED: Invalid or expired OpenMeet session',
+                '❌ OIDC Auth Debug - Method 2 FAILED: Invalid or expired OpenMeet session',
               );
             }
           } catch (sessionError) {
             this.logger.debug(
-              '❌ OIDC Auth Debug - Method 4 FAILED: Session validation error:',
+              '❌ OIDC Auth Debug - Method 2 FAILED: Session validation error:',
               sessionError.message,
             );
           }
         } else if (sessionCookie && !tenantCookie) {
           this.logger.debug(
-            '🔄 OIDC Auth Debug - Method 4: Found old format session cookie without tenant - attempting backward compatibility',
+            '🔄 OIDC Auth Debug - Method 2: Found old format session cookie without tenant - attempting backward compatibility',
           );
 
           // Backward compatibility: try to find user across all tenants
@@ -309,82 +280,85 @@ export class OidcController {
 
             if (userResult) {
               this.logger.debug(
-                '✅ OIDC Auth Debug - Method 4 BACKWARD COMPATIBILITY SUCCESS: Found session across tenants, user ID:',
+                '✅ OIDC Auth Debug - Method 2 BACKWARD COMPATIBILITY SUCCESS: Found session across tenants, user ID:',
                 userResult.user.id,
               );
               user = { id: userResult.user.id };
               tenantId = userResult.tenantId;
 
               this.logger.debug(
-                '✅ OIDC Auth Debug - Method 4: Tenant ID from cross-tenant lookup:',
+                '✅ OIDC Auth Debug - Method 2: Tenant ID from cross-tenant lookup:',
                 tenantId,
               );
             } else {
               this.logger.debug(
-                '❌ OIDC Auth Debug - Method 4 BACKWARD COMPATIBILITY FAILED: Session not found across tenants',
+                '❌ OIDC Auth Debug - Method 2 BACKWARD COMPATIBILITY FAILED: Session not found across tenants',
               );
             }
           } catch (backwardCompatError) {
             this.logger.debug(
-              '❌ OIDC Auth Debug - Method 4 BACKWARD COMPATIBILITY ERROR:',
+              '❌ OIDC Auth Debug - Method 2 BACKWARD COMPATIBILITY ERROR:',
               backwardCompatError.message,
             );
           }
         } else {
           this.logger.debug(
-            '❌ OIDC Auth Debug - Method 4: No OpenMeet session cookie found',
+            '❌ OIDC Auth Debug - Method 2: No OpenMeet session cookie found',
           );
         }
       } catch (error) {
         this.logger.debug(
-          '🔐 OIDC Auth Debug - Method 4 FAILED: Session authentication error:',
+          '🔐 OIDC Auth Debug - Method 2 FAILED: Session authentication error:',
           error.message,
         );
       }
     }
 
-    // Method 5: Secure login_hint - ONLY works for already authenticated users
-    // This provides seamless Matrix authentication while preventing account takeover attacks
-    if (user && request.query.login_hint) {
-      const loginHint = request.query.login_hint as string;
-      this.logger.debug(
-        '🔐 OIDC Auth Debug - Method 5: Processing login_hint for authenticated user:',
-        loginHint,
-      );
 
-      // SECURITY: Verify the login_hint matches the authenticated user's email
-      // This prevents cross-user attacks where one user could impersonate another
-      try {
-        const userEntity = await this.userService.findById(user.id, tenantId);
+    // Handle prompt=none - Silent Authentication
+    if (prompt === 'none') {
+      this.logger.debug('🔇 OIDC Silent Auth - prompt=none detected, checking authentication status');
+      
+      if (!user || !tenantId) {
+        this.logger.debug('❌ OIDC Silent Auth - No authenticated user found, returning login_required error');
+        const errorUrl = this.returnPromptNoneError(redirectUri, state, 'login_required');
+        response.redirect(errorUrl);
+        return;
+      }
 
-        if (userEntity && userEntity.email === loginHint) {
-          this.logger.debug(
-            '✅ OIDC Auth Debug - Method 5 SUCCESS: login_hint matches authenticated user email',
-          );
-          // Continue with normal authorization flow - user and tenantId are already set
-        } else {
-          this.logger.debug(
-            `🚨 SECURITY WARNING: Authenticated user email (${userEntity?.email}) does not match login_hint (${loginHint}) - treating as security violation`,
-          );
-          // Clear user to force login - this prevents cross-user attacks
-          user = null;
-          tenantId = undefined;
+      // Check session age if max_age is specified
+      if (maxAge) {
+        this.logger.debug(`🕐 OIDC Silent Auth - Checking session age against max_age: ${maxAge}s`);
+        
+        try {
+          // Get the session to check its age
+          const sessionCookie = request.cookies?.['oidc_session'];
+          if (sessionCookie && tenantId) {
+            const session = await this.sessionService.findById(sessionCookie, tenantId);
+            
+            if (!session || !this.isSessionValidForMaxAge(session, maxAge)) {
+              this.logger.debug('❌ OIDC Silent Auth - Session too old or invalid, returning login_required error');
+              const errorUrl = this.returnPromptNoneError(redirectUri, state, 'login_required');
+              response.redirect(errorUrl);
+              return;
+            }
+          }
+        } catch (error) {
+          this.logger.debug('❌ OIDC Silent Auth - Error checking session age:', error.message);
+          const errorUrl = this.returnPromptNoneError(redirectUri, state, 'login_required');
+          response.redirect(errorUrl);
+          return;
         }
-      } catch (error) {
-        this.logger.error(
-          '❌ OIDC Auth Debug - Method 5 ERROR: Failed to validate user against login_hint:',
-          error.message,
-        );
-        // Clear user on validation error to be safe
-        user = null;
-        tenantId = undefined;
       }
+
+      this.logger.debug('✅ OIDC Silent Auth - User authenticated and session valid, proceeding with silent flow');
+      // Continue to normal authorization flow below
     }
 
-    // Method 7 (Last Resort): If no authenticated user found, redirect to login/email form
+    // Method 3 (Last Resort): If no authenticated user found, redirect to login/email form
     if (!user) {
       this.logger.debug(
-        '🔐 OIDC Auth Debug - Method 7 (LAST RESORT): No authenticated user found via any method, redirecting to login flow',
+        '🔐 OIDC Auth Debug - Method 3 (LAST RESORT): No authenticated user found via any method, redirecting to login flow',
       );
       const baseUrl = this.configService.get('app.oidcIssuerUrl', {
         infer: true,
@@ -414,7 +388,7 @@ export class OidcController {
         new URLSearchParams(oidcLoginParams).toString();
 
       this.logger.debug(
-        '📧 OIDC Auth Debug - Method 7: Redirecting to login with email pre-fill:',
+        '📧 OIDC Auth Debug - Method 3: Redirecting to login with email pre-fill:',
         loginHint || 'none',
       );
 
@@ -602,72 +576,8 @@ export class OidcController {
       '🔐 OIDC Login Debug - Checking if user is already authenticated...',
     );
 
-    // Check if user is already authenticated via cookies or JWT token
-    const authHeader = request.headers.authorization;
+    // Check if user is already authenticated via session cookies
     let user: { id: number } | null = null;
-
-    // Check for user token in query parameters (sent by platform after OIDC login)
-    // Re-enabled for third-party Matrix app authentication flow
-    const userToken = request.query.user_token as string;
-    if (userToken) {
-      // Re-enabled: needed for third-party Matrix OIDC flow
-      this.logger.debug(
-        '🔐 OIDC Login Debug - Found user_token in query parameters, validating...',
-      );
-      try {
-        const payload: JwtPayloadType = await this.jwtService.verifyAsync(
-          userToken,
-          {
-            secret: this.configService.get('auth.secret', { infer: true }),
-          },
-        );
-
-        if (payload && payload.id) {
-          this.logger.debug(
-            '✅ OIDC Login Debug - Valid user token, user ID:',
-            payload.id,
-          );
-          user = { id: payload.id };
-        }
-      } catch (error) {
-        this.logger.error(
-          '❌ OIDC Login Debug - User token validation failed:',
-          error.message,
-        );
-      }
-    }
-
-    // Fallback to JWT token in Authorization header
-    if (
-      !user &&
-      authHeader &&
-      typeof authHeader === 'string' &&
-      authHeader.startsWith('Bearer ')
-    ) {
-      this.logger.debug('🔐 OIDC Login Debug - Trying Authorization header...');
-      try {
-        const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-        const payload: JwtPayloadType = await this.jwtService.verifyAsync(
-          token,
-          {
-            secret: this.configService.get('auth.secret', { infer: true }),
-          },
-        );
-
-        if (payload && payload.id) {
-          this.logger.debug(
-            '✅ OIDC Login Debug - Valid Authorization header, user ID:',
-            payload.id,
-          );
-          user = { id: payload.id };
-        }
-      } catch (error) {
-        this.logger.error(
-          '❌ OIDC Login Debug - Authorization header validation failed:',
-          error.message,
-        );
-      }
-    }
 
     // Check for OpenMeet session cookie (same logic as auth endpoint)
     if (!user) {
@@ -685,8 +595,7 @@ export class OidcController {
 
           try {
             // Validate the OpenMeet session with the tenant context
-            await this.sessionService.getTenantSpecificRepository(tenantCookie);
-            const session = await this.sessionService.findById(sessionCookie);
+            const session = await this.sessionService.findById(sessionCookie, tenantCookie);
 
             if (session && session.user) {
               this.logger.debug(

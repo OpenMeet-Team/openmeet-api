@@ -6,7 +6,7 @@
 export interface CookieOptions {
   domain?: string;
   secure: boolean;
-  sameSite: 'lax';
+  sameSite: 'lax' | 'none';
   httpOnly: boolean;
   maxAge: number;
 }
@@ -24,10 +24,10 @@ function extractDomainFromUrl(url: string): string | undefined {
       return undefined;
     }
 
-    // For ngrok domains, don't set domain restriction due to Public Suffix List restrictions
-    // ngrok.app is on the Public Suffix List, so .ngrok.app cookies are blocked by browsers
-    // Instead, don't set a domain so cookies work within the same exact domain
-    // Note: This means cookies won't be shared between om-api.ngrok.app and om-platform.ngrok.app
+    // For ngrok domains, don't set domain due to Public Suffix List restrictions
+    // ngrok.app is on the Public Suffix List, so browsers ignore domain settings
+    // Instead, use sameSite: 'none' to allow cross-origin cookie sharing
+    // This should work for requests between different ngrok subdomains
     if (hostname.includes('ngrok.app')) {
       return undefined;
     }
@@ -56,11 +56,14 @@ export function getOidcCookieOptions(): CookieOptions {
   const backendDomain = process.env.BACKEND_DOMAIN || '';
   const isSecure = backendDomain.startsWith('https://');
   const cookieDomain = extractDomainFromUrl(backendDomain);
+  
+  // Determine if this is an ngrok domain that needs cross-site cookie sharing
+  const isNgrokDomain = backendDomain.includes('ngrok.app');
 
   return {
     domain: cookieDomain, // Dynamically determined from BACKEND_DOMAIN
     secure: isSecure, // Use HTTPS if backend domain uses HTTPS
-    sameSite: 'lax' as const, // Allow cross-site requests
+    sameSite: isNgrokDomain ? 'none' : 'lax', // Use 'none' for ngrok cross-site sharing
     httpOnly: true, // Security
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
   };
