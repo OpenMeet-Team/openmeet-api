@@ -36,6 +36,10 @@ export $( grep -v "#" ".env" | xargs)
 # Install Node.js dependencies
 npm install
 
+# prep the database
+npm run migration:run:tenants
+npm run seed:run:prod
+
 # Start development server
 npm run start:dev
 ```
