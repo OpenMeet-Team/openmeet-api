@@ -47,31 +47,39 @@ export class OidcController {
    */
   private isSessionValidForMaxAge(session: any, maxAge?: string): boolean {
     if (!maxAge) return true; // No max_age restriction
-    
+
     const maxAgeSeconds = parseInt(maxAge, 10);
     if (isNaN(maxAgeSeconds)) return true; // Invalid max_age, ignore restriction
-    
+
     // Calculate session age in seconds
     const sessionCreatedAt = session.created_at || session.createdAt;
     if (!sessionCreatedAt) return true; // No creation time, can't enforce max_age
-    
-    const sessionAge = Math.floor((Date.now() - new Date(sessionCreatedAt).getTime()) / 1000);
+
+    const sessionAge = Math.floor(
+      (Date.now() - new Date(sessionCreatedAt).getTime()) / 1000,
+    );
     const isValid = sessionAge <= maxAgeSeconds;
-    
-    this.logger.debug(`🕐 Session age check: ${sessionAge}s <= ${maxAgeSeconds}s = ${isValid}`);
+
+    this.logger.debug(
+      `🕐 Session age check: ${sessionAge}s <= ${maxAgeSeconds}s = ${isValid}`,
+    );
     return isValid;
   }
 
   /**
    * Return an OIDC error response for prompt=none failures
    */
-  private returnPromptNoneError(redirectUri: string, state?: string, error: string = 'login_required') {
+  private returnPromptNoneError(
+    redirectUri: string,
+    state?: string,
+    error: string = 'login_required',
+  ) {
     const errorParams = new URLSearchParams({
       error,
       error_description: 'Silent authentication failed',
-      ...(state && { state })
+      ...(state && { state }),
     });
-    
+
     return `${redirectUri}?${errorParams.toString()}`;
   }
 
@@ -240,7 +248,10 @@ export class OidcController {
 
           try {
             // Validate the OpenMeet session with the tenant context
-            const session = await this.sessionService.findById(sessionCookie, tenantCookie);
+            const session = await this.sessionService.findById(
+              sessionCookie,
+              tenantCookie,
+            );
 
             if (session && session.user) {
               this.logger.debug(
@@ -314,44 +325,71 @@ export class OidcController {
       }
     }
 
-
     // Handle prompt=none - Silent Authentication
     if (prompt === 'none') {
-      this.logger.debug('🔇 OIDC Silent Auth - prompt=none detected, checking authentication status');
-      
+      this.logger.debug(
+        '🔇 OIDC Silent Auth - prompt=none detected, checking authentication status',
+      );
+
       if (!user || !tenantId) {
-        this.logger.debug('❌ OIDC Silent Auth - No authenticated user found, returning login_required error');
-        const errorUrl = this.returnPromptNoneError(redirectUri, state, 'login_required');
+        this.logger.debug(
+          '❌ OIDC Silent Auth - No authenticated user found, returning login_required error',
+        );
+        const errorUrl = this.returnPromptNoneError(
+          redirectUri,
+          state,
+          'login_required',
+        );
         response.redirect(errorUrl);
         return;
       }
 
       // Check session age if max_age is specified
       if (maxAge) {
-        this.logger.debug(`🕐 OIDC Silent Auth - Checking session age against max_age: ${maxAge}s`);
-        
+        this.logger.debug(
+          `🕐 OIDC Silent Auth - Checking session age against max_age: ${maxAge}s`,
+        );
+
         try {
           // Get the session to check its age
           const sessionCookie = request.cookies?.['oidc_session'];
           if (sessionCookie && tenantId) {
-            const session = await this.sessionService.findById(sessionCookie, tenantId);
-            
+            const session = await this.sessionService.findById(
+              sessionCookie,
+              tenantId,
+            );
+
             if (!session || !this.isSessionValidForMaxAge(session, maxAge)) {
-              this.logger.debug('❌ OIDC Silent Auth - Session too old or invalid, returning login_required error');
-              const errorUrl = this.returnPromptNoneError(redirectUri, state, 'login_required');
+              this.logger.debug(
+                '❌ OIDC Silent Auth - Session too old or invalid, returning login_required error',
+              );
+              const errorUrl = this.returnPromptNoneError(
+                redirectUri,
+                state,
+                'login_required',
+              );
               response.redirect(errorUrl);
               return;
             }
           }
         } catch (error) {
-          this.logger.debug('❌ OIDC Silent Auth - Error checking session age:', error.message);
-          const errorUrl = this.returnPromptNoneError(redirectUri, state, 'login_required');
+          this.logger.debug(
+            '❌ OIDC Silent Auth - Error checking session age:',
+            error.message,
+          );
+          const errorUrl = this.returnPromptNoneError(
+            redirectUri,
+            state,
+            'login_required',
+          );
           response.redirect(errorUrl);
           return;
         }
       }
 
-      this.logger.debug('✅ OIDC Silent Auth - User authenticated and session valid, proceeding with silent flow');
+      this.logger.debug(
+        '✅ OIDC Silent Auth - User authenticated and session valid, proceeding with silent flow',
+      );
       // Continue to normal authorization flow below
     }
 
@@ -595,7 +633,10 @@ export class OidcController {
 
           try {
             // Validate the OpenMeet session with the tenant context
-            const session = await this.sessionService.findById(sessionCookie, tenantCookie);
+            const session = await this.sessionService.findById(
+              sessionCookie,
+              tenantCookie,
+            );
 
             if (session && session.user) {
               this.logger.debug(

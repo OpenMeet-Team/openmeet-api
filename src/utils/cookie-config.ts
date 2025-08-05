@@ -56,7 +56,7 @@ export function getOidcCookieOptions(): CookieOptions {
   const backendDomain = process.env.BACKEND_DOMAIN || '';
   const isSecure = backendDomain.startsWith('https://');
   const cookieDomain = extractDomainFromUrl(backendDomain);
-  
+
   // Determine if this is an ngrok domain that needs cross-site cookie sharing
   const isNgrokDomain = backendDomain.includes('ngrok.app');
 

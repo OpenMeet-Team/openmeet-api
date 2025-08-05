@@ -27,7 +27,10 @@ export class SessionService {
     this.sessionRepository = dataSource.getRepository(SessionEntity);
   }
 
-  async findById(id: Session['id'], tenantId?: string): Promise<NullableType<Session>> {
+  async findById(
+    id: Session['id'],
+    tenantId?: string,
+  ): Promise<NullableType<Session>> {
     await this.getTenantSpecificRepository(tenantId);
 
     return this.sessionRepository.findOne({
