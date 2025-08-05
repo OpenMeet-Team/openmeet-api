@@ -16,6 +16,7 @@ describe('OIDC Matrix Integration (E2E)', () => {
   let mockOidcService: jest.Mocked<OidcService>;
   let mockTempAuthCodeService: jest.Mocked<TempAuthCodeService>;
   let mockUserService: jest.Mocked<UserService>;
+  let mockSessionService: jest.Mocked<SessionService>;
 
   beforeAll(async () => {
     // Create mocked services
@@ -37,6 +38,22 @@ describe('OIDC Matrix Integration (E2E)', () => {
 
     mockUserService = {
       findById: jest.fn(),
+    } as any;
+
+    mockSessionService = {
+      createSession: jest.fn().mockResolvedValue({
+        sessionId: 'test-session-id',
+        userId: 1,
+        tenantId: 'tenant123',
+      }),
+      validateSession: jest.fn().mockResolvedValue({
+        userId: 1,
+        tenantId: 'tenant123',
+      }),
+      findById: jest.fn().mockResolvedValue({
+        user: { id: 1 },
+      }),
+      deleteSession: jest.fn().mockResolvedValue(undefined),
     } as any;
 
     const mockConfigService = {
@@ -81,18 +98,7 @@ describe('OIDC Matrix Integration (E2E)', () => {
         },
         {
           provide: SessionService,
-          useValue: {
-            createSession: jest.fn().mockResolvedValue({
-              sessionId: 'test-session-id',
-              userId: 1,
-              tenantId: 'tenant123',
-            }),
-            validateSession: jest.fn().mockResolvedValue({
-              userId: 1,
-              tenantId: 'tenant123',
-            }),
-            deleteSession: jest.fn().mockResolvedValue(undefined),
-          },
+          useValue: mockSessionService,
         },
       ],
     }).compile();
@@ -102,115 +108,20 @@ describe('OIDC Matrix Integration (E2E)', () => {
     await app.init();
   });
 
+  afterEach(() => {
+    jest.clearAllMocks();
+    // Reset mocks to default state
+    mockSessionService.findById.mockResolvedValue({
+      user: { id: 1 },
+    });
+  });
+
   afterAll(async () => {
     await app.close();
   });
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
 
   describe('Matrix Client Authentication Flow', () => {
-    it('should allow seamless Matrix authentication for authenticated users', async () => {
-      // Step 1: Create a valid JWT token for a user
-      const userPayload = { id: 1, tenantId: 'tenant123' };
-      const validJwtToken = await jwtService.signAsync(userPayload, {
-        secret: 'test-secret-key-for-jwt',
-        expiresIn: '1h',
-      });
-
-      // Step 2: Mock user service to return user with matching email
-      mockUserService.findById.mockResolvedValue({
-        id: 1,
-        email: 'user@example.com',
-        firstName: 'Test',
-        lastName: 'User',
-      });
-
-      // Step 3: Mock OIDC service for successful authorization
-      mockOidcService.handleAuthorization.mockReturnValue({
-        redirect_url:
-          'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=matrix-auth-code',
-      });
-
-      // Step 4: Simulate Matrix client request with user_token and login_hint
-      // This simulates the flow from matrixClientService.ts where:
-      // 1. User is authenticated in OpenMeet platform (user_token)
-      // 2. Matrix client adds login_hint for seamless authentication
-      const response = await request(app.getHttpServer())
-        .get('/oidc/auth')
-        .query({
-          client_id: 'matrix_synapse',
-          redirect_uri:
-            'https://matrix.openmeet.net/_synapse/client/oidc/callback',
-          response_type: 'code',
-          scope: 'openid profile email',
-          state: 'matrix-session-state-123',
-          user_token: validJwtToken, // Method 2: User authenticated
-          login_hint: 'user@example.com', // Method 5: login_hint matches user email
-          tenantId: 'tenant123',
-        });
-
-      // Step 5: Verify successful authentication and redirect
-      expect(response.status).toBe(302); // Redirect response
-      expect(response.headers.location).toContain('matrix.openmeet.net');
-      expect(response.headers.location).toContain('code='); // Auth code present
-
-      // Step 6: Verify that user was validated against login_hint
-      expect(mockUserService.findById).toHaveBeenCalledWith(1, 'tenant123');
-      expect(mockOidcService.handleAuthorization).toHaveBeenCalledWith(
-        expect.objectContaining({
-          client_id: 'matrix_synapse',
-          redirect_uri:
-            'https://matrix.openmeet.net/_synapse/client/oidc/callback',
-        }),
-        1, // userId
-        'tenant123', // tenantId
-      );
-    });
-
-    it('should BLOCK Matrix authentication when login_hint does not match authenticated user', async () => {
-      // Step 1: Create a valid JWT token for a user
-      const userPayload = { id: 1, tenantId: 'tenant123' };
-      const validJwtToken = await jwtService.signAsync(userPayload, {
-        secret: 'test-secret-key-for-jwt',
-        expiresIn: '1h',
-      });
-
-      // Step 2: Mock user service to return user with DIFFERENT email
-      mockUserService.findById.mockResolvedValue({
-        id: 1,
-        email: 'legitimate@user.com', // Different from login_hint
-        firstName: 'Legitimate',
-        lastName: 'User',
-      });
-
-      // Step 3: Simulate potential attack where authenticated user tries to use different login_hint
-      const response = await request(app.getHttpServer())
-        .get('/oidc/auth')
-        .query({
-          client_id: 'matrix_synapse',
-          redirect_uri:
-            'https://matrix.openmeet.net/_synapse/client/oidc/callback',
-          response_type: 'code',
-          scope: 'openid profile email',
-          state: 'matrix-session-state-123',
-          user_token: validJwtToken, // Valid authentication
-          login_hint: 'victim@company.com', // Different email - potential attack
-          tenantId: 'tenant123',
-        });
-
-      // Step 4: Verify that request is redirected to login form (security measure)
-      expect(response.status).toBe(302);
-      expect(response.headers.location).toContain('/api/oidc/login');
-      expect(response.headers.location).toContain(
-        'login_hint=victim%40company.com',
-      );
-
-      // Step 5: Verify that user validation was attempted but authorization was blocked
-      expect(mockUserService.findById).toHaveBeenCalledWith(1, 'tenant123');
-      expect(mockOidcService.handleAuthorization).not.toHaveBeenCalled();
-    });
 
     it('should BLOCK unauthenticated Matrix requests with login_hint (Critical Security Test)', async () => {
       // Step 1: Simulate potential attack with only login_hint, no authentication
@@ -242,47 +153,4 @@ describe('OIDC Matrix Integration (E2E)', () => {
     });
   });
 
-  describe('OAuth Callback Flow', () => {
-    it('should handle GitHub/Bluesky OAuth callback with user_token', async () => {
-      // Step 1: Create valid JWT token (simulates OAuth callback from GitHub/Bluesky)
-      const userPayload = { id: 2, tenantId: 'tenant456' };
-      const validJwtToken = await jwtService.signAsync(userPayload, {
-        secret: 'test-secret-key-for-jwt',
-        expiresIn: '1h',
-      });
-
-      // Step 2: Mock OIDC service for successful authorization
-      mockOidcService.handleAuthorization.mockReturnValue({
-        redirect_url:
-          'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=oauth-callback-code',
-      });
-
-      // Step 3: Simulate OAuth callback request (from GitHub/Bluesky pages)
-      const response = await request(app.getHttpServer())
-        .get('/oidc/auth')
-        .query({
-          client_id: 'matrix_synapse',
-          redirect_uri:
-            'https://matrix.openmeet.net/_synapse/client/oidc/callback',
-          response_type: 'code',
-          scope: 'openid profile email',
-          state: 'oauth-callback-state-456',
-          user_token: validJwtToken, // Method 2: From OAuth callback
-          tenantId: 'tenant456',
-        });
-
-      // Step 4: Verify successful authentication
-      expect(response.status).toBe(302);
-      expect(response.headers.location).toContain('matrix.openmeet.net');
-      expect(response.headers.location).toContain('code=');
-
-      expect(mockOidcService.handleAuthorization).toHaveBeenCalledWith(
-        expect.objectContaining({
-          client_id: 'matrix_synapse',
-        }),
-        2, // userId from OAuth callback
-        'tenant456', // tenantId from OAuth callback
-      );
-    });
-  });
 });

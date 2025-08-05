@@ -95,6 +95,10 @@ describe('OidcController', () => {
               userId: 1,
               tenantId: 'tenant123',
             }),
+            findById: jest.fn().mockResolvedValue({
+              user: { id: 1 },
+              tenantId: 'tenant123',
+            }),
             deleteSession: jest.fn().mockResolvedValue(undefined),
           },
         },
@@ -314,166 +318,7 @@ describe('OidcController', () => {
       });
     });
 
-    describe('Method 2: user_token authentication', () => {
-      const mockJwtService = {
-        verifyAsync: jest.fn(),
-      };
-
-      beforeEach(() => {
-        (controller as any).jwtService = mockJwtService;
-      });
-
-      it('should authenticate user with valid user_token', async () => {
-        const mockPayload = { id: 1 };
-        mockJwtService.verifyAsync.mockResolvedValue(mockPayload);
-        mockOidcService.handleAuthorization.mockReturnValue({
-          redirect_url:
-            'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=auth123',
-        });
-
-        const mockRequest = {
-          query: {
-            user_token: 'valid-jwt-token',
-            tenantId: 'tenant123',
-          },
-          headers: {},
-        } as any;
-
-        const mockResponse = {
-          redirect: jest.fn(),
-        } as any;
-
-        await controller.authorize(
-          mockRequest,
-          mockResponse,
-          authParams.clientId,
-          authParams.redirectUri,
-          authParams.responseType,
-          authParams.scope,
-          authParams.state,
-          authParams.nonce,
-        );
-
-        expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(
-          'valid-jwt-token',
-          expect.any(Object),
-        );
-        expect(mockOidcService.handleAuthorization).toHaveBeenCalledWith(
-          expect.objectContaining({
-            client_id: authParams.clientId,
-          }),
-          1, // userId
-          'tenant123', // tenantId
-        );
-        expect(mockResponse.redirect).toHaveBeenCalled();
-      });
-
-      it('should redirect to login for invalid user_token', async () => {
-        mockJwtService.verifyAsync.mockRejectedValue(
-          new Error('Invalid token'),
-        );
-
-        const mockRequest = {
-          query: { user_token: 'invalid-jwt-token' },
-          headers: {},
-        } as any;
-
-        const mockResponse = {
-          redirect: jest.fn(),
-        } as any;
-
-        await controller.authorize(
-          mockRequest,
-          mockResponse,
-          authParams.clientId,
-          authParams.redirectUri,
-          authParams.responseType,
-          authParams.scope,
-          authParams.state,
-          authParams.nonce,
-        );
-
-        expect(mockResponse.redirect).toHaveBeenCalled();
-        const redirectUrl = mockResponse.redirect.mock.calls[0][0];
-        expect(redirectUrl).toContain('/api/oidc/login');
-      });
-    });
-
-    describe('Method 3: Authorization header JWT authentication', () => {
-      const mockJwtService = { verifyAsync: jest.fn() };
-
-      beforeEach(() => {
-        (controller as any).jwtService = mockJwtService;
-      });
-
-      it('should authenticate user with valid Bearer token', async () => {
-        const mockPayload = { id: 1 };
-        mockJwtService.verifyAsync.mockResolvedValue(mockPayload);
-        mockOidcService.handleAuthorization.mockReturnValue({
-          redirect_url:
-            'https://matrix.openmeet.net/_synapse/client/oidc/callback?code=auth123',
-        });
-
-        const mockRequest = {
-          query: { tenantId: 'tenant123' },
-          headers: { authorization: 'Bearer valid-jwt-token' },
-        } as any;
-
-        const mockResponse = {
-          redirect: jest.fn(),
-        } as any;
-
-        await controller.authorize(
-          mockRequest,
-          mockResponse,
-          authParams.clientId,
-          authParams.redirectUri,
-          authParams.responseType,
-          authParams.scope,
-          authParams.state,
-          authParams.nonce,
-        );
-
-        expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(
-          'valid-jwt-token',
-          expect.any(Object),
-        );
-        expect(mockOidcService.handleAuthorization).toHaveBeenCalled();
-        expect(mockResponse.redirect).toHaveBeenCalled();
-      });
-
-      it('should redirect to login for invalid Bearer token', async () => {
-        mockJwtService.verifyAsync.mockRejectedValue(
-          new Error('Invalid token'),
-        );
-
-        const mockRequest = {
-          query: {},
-          headers: { authorization: 'Bearer invalid-jwt-token' },
-        } as any;
-
-        const mockResponse = {
-          redirect: jest.fn(),
-        } as any;
-
-        await controller.authorize(
-          mockRequest,
-          mockResponse,
-          authParams.clientId,
-          authParams.redirectUri,
-          authParams.responseType,
-          authParams.scope,
-          authParams.state,
-          authParams.nonce,
-        );
-
-        expect(mockResponse.redirect).toHaveBeenCalled();
-        const redirectUrl = mockResponse.redirect.mock.calls[0][0];
-        expect(redirectUrl).toContain('/api/oidc/login');
-      });
-    });
-
-    describe('Method 5: login_hint with session validation (SECURITY CRITICAL)', () => {
+    describe('login_hint with session validation (SECURITY CRITICAL)', () => {
       const mockJwtService = { verifyAsync: jest.fn() };
       const mockUserService = { findById: jest.fn() };
       const mockTempAuthCodeService = { generateAuthCode: jest.fn() };
@@ -485,9 +330,13 @@ describe('OidcController', () => {
       });
 
       it('should allow login_hint for authenticated user with matching email', async () => {
-        // Setup: User is authenticated via user_token
-        const mockPayload = { id: 1 };
-        mockJwtService.verifyAsync.mockResolvedValue(mockPayload);
+        // Setup: User is authenticated via session cookies
+        const mockSessionService = { findById: jest.fn() };
+        (controller as any).sessionService = mockSessionService;
+        
+        mockSessionService.findById.mockResolvedValue({
+          user: { id: 1 },
+        });
 
         // User entity matches login_hint email
         mockUserService.findById.mockResolvedValue({
@@ -507,11 +356,13 @@ describe('OidcController', () => {
 
         const mockRequest = {
           query: {
-            user_token: 'valid-jwt-token',
             login_hint: 'user@example.com',
-            tenantId: 'tenant123',
           },
           headers: {},
+          cookies: {
+            oidc_session: 'session123',
+            oidc_tenant: 'tenant123',
+          },
         } as any;
 
         const mockResponse = {
@@ -578,8 +429,12 @@ describe('OidcController', () => {
 
       it('should REJECT login_hint when session user email does not match hint', async () => {
         // Setup: User is authenticated but login_hint is for different user
-        const mockPayload = { id: 1 };
-        mockJwtService.verifyAsync.mockResolvedValue(mockPayload);
+        const mockSessionService = { findById: jest.fn() };
+        (controller as any).sessionService = mockSessionService;
+        
+        mockSessionService.findById.mockResolvedValue({
+          user: { id: 1 },
+        });
 
         // Session user has different email than login_hint
         mockUserService.findById.mockResolvedValue({
@@ -591,11 +446,13 @@ describe('OidcController', () => {
 
         const mockRequest = {
           query: {
-            user_token: 'valid-jwt-token',
             login_hint: 'victim@company.com', // Different from session user
-            tenantId: 'tenant123',
           },
           headers: {},
+          cookies: {
+            oidc_session: 'session123',
+            oidc_tenant: 'tenant123',
+          },
         } as any;
 
         const mockResponse = {

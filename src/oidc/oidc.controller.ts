@@ -172,12 +172,6 @@ export class OidcController {
       (request.headers['x-tenant-id'] as string) ||
       undefined;
 
-    if (!tenantId) {
-      throw new BadRequestException(
-        'Tenant ID is required - provide x-tenant-id header or tenantId query parameter',
-      );
-    }
-
     this.logger.debug(
       '🔐 OIDC Auth Debug - Unified endpoint - checking for user authentication...',
     );
@@ -322,6 +316,41 @@ export class OidcController {
           '🔐 OIDC Auth Debug - Method 2 FAILED: Session authentication error:',
           error.message,
         );
+      }
+    }
+
+    // Validate login_hint for authenticated users (security check)
+    if (user && request.query.login_hint) {
+      const loginHint = request.query.login_hint as string;
+      this.logger.debug(
+        '🔐 OIDC Auth Debug - Validating login_hint for authenticated user:',
+        loginHint,
+      );
+
+      // SECURITY: Verify the login_hint matches the authenticated user's email
+      try {
+        const userEntity = await this.userService.findById(user.id, tenantId);
+
+        if (userEntity && userEntity.email === loginHint) {
+          this.logger.debug(
+            '✅ OIDC Auth Debug - login_hint matches authenticated user email',
+          );
+        } else {
+          this.logger.debug(
+            `🚨 SECURITY WARNING: Authenticated user email (${userEntity?.email}) does not match login_hint (${loginHint}) - treating as security violation`,
+          );
+          // Clear user to force login - this prevents cross-user attacks
+          user = null;
+          tenantId = undefined;
+        }
+      } catch (error) {
+        this.logger.error(
+          '❌ OIDC Auth Debug - Failed to validate user against login_hint:',
+          error.message,
+        );
+        // Clear user on validation error to be safe
+        user = null;
+        tenantId = undefined;
       }
     }
 
