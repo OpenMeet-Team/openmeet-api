@@ -2710,9 +2710,8 @@ database:
   uri: "postgresql://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@${DATABASE_HOST}:${DATABASE_PORT}/${MAS_DATABASE_NAME}"
 
 clients:
-  - client_id: "01JAYS74TCG3BTWKADN5Q4518D"
-    redirect_uris:
-      ${FRONTEND_REDIRECT_URIS}  # Environment-specific URIs
+  # Note: Client configuration removed - now using dynamic client registration
+  # OpenMeet platform uses OAuth2 dynamic client registration for all Matrix clients
 ```
 
 #### Environment-Specific Implementation
