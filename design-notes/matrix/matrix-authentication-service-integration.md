@@ -104,11 +104,8 @@ clients:
     client_auth_method: "client_secret_basic"
     client_secret: "local-dev-shared-secret-with-synapse"
     
-  # OpenMeet Frontend Client  
-  - client_id: "01JAYS74TCG3BTWKADN5Q4518D"
-    client_auth_method: "none"
-    redirect_uris:
-      - "http://localhost:9005/auth/matrix/callback"
+  # OpenMeet Frontend Client uses dynamic registration
+  # No static client configuration needed - OAuth2 dynamic client registration
 
 upstream_oauth2:
   providers:

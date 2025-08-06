@@ -26,9 +26,9 @@ This document provides practical guidance for developers working with the Matrix
 
 3. **Environment Variables (MAS OIDC Configuration)**
    ```bash
-   # MAS Authentication Service Configuration
+   # MAS Authentication Service Configuration  
    MAS_PUBLIC_URL=http://localhost:8081
-   MAS_CLIENT_ID=01JAYS74TCG3BTWKADN5Q4518D
+   # Note: No MAS_CLIENT_ID needed - uses dynamic client registration
    MAS_REDIRECT_URI=http://localhost:9005/auth/matrix/callback
    MAS_SCOPES=openid email
    
