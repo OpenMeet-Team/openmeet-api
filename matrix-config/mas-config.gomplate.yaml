@@ -79,14 +79,14 @@ clients:
 {{- end }}
 
   # OpenMeet Bot Client for Client Credentials Grant
-  - client_id: "01JAYS74TCG3BTWKADN5Q4518E"
-    client_auth_method: "client_secret_basic"
-    client_secret: "{{ .Env.BOT_CLIENT_SECRET }}"
-    redirect_uris: []  # No redirects needed for client credentials
-    grant_types:
-      - "client_credentials"
-    scopes:
-      - "urn:matrix:org.matrix.msc2967.client:api:*"
+  # - client_id: "01JAYS74TCG3BTWKADN5Q4518E"
+  #   client_auth_method: "client_secret_basic"
+  #   client_secret: "{{ .Env.BOT_CLIENT_SECRET }}"
+  #   redirect_uris: []  # No redirects needed for client credentials
+  #   grant_types:
+  #     - "client_credentials"
+  #   scopes:
+  #     - "urn:matrix:org.matrix.msc2967.client:api:*"
 
 upstream_oauth2:
   providers:
@@ -100,6 +100,10 @@ upstream_oauth2:
       scope: "openid email"
       # Forward login_hint to OpenMeet OIDC (contains tenant context)
       forward_login_hint: true
+      # Enable silent authentication for smooth Matrix login experience
+      additional_authorization_parameters:
+        prompt: "none"
+        max_age: "3600"
       claims_imports:
         localpart:
           action: require
