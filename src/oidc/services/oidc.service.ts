@@ -772,7 +772,7 @@ export class OidcService {
           `🔧 OIDC Found Matrix handle for user ${user.id}: ${matrixHandle}`,
         );
       } else {
-        // No Matrix handle registered yet - will be created on first chat access
+        // No Matrix handle registered yet - create and register it now
         const baseHandle =
           user.slug || user.email?.split('@')[0] || `user-${user.id}`;
         // Ensure Matrix username compliance (lowercase, no special chars except -, _, .)
@@ -781,8 +781,26 @@ export class OidcService {
           .replace(/[^a-z0-9._-]/g, '');
         // Append tenant suffix for consistency with legacy users
         matrixHandle = `${cleanHandle}_${tenantId}`;
+        
+        // Register the Matrix handle in the database
+        try {
+          await this.globalMatrixValidationService.registerMatrixHandle(
+            matrixHandle,
+            tenantId,
+            user.id,
+          );
+          this.logger.debug(
+            `🔧 OIDC Registered new Matrix handle for user ${user.id}: ${matrixHandle}`,
+          );
+        } catch (error) {
+          this.logger.error(
+            `🔧 OIDC Error registering Matrix handle for user ${user.id}: ${error.message}`,
+          );
+          // Continue with the generated handle even if registration fails
+        }
+        
         this.logger.debug(
-          `🔧 OIDC No Matrix handle found for user ${user.id}, suggesting: ${matrixHandle}`,
+          `🔧 OIDC No Matrix handle found for user ${user.id}, created: ${matrixHandle}`,
         );
       }
     } catch (error) {

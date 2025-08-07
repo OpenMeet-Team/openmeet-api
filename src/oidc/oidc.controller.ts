@@ -354,15 +354,107 @@ export class OidcController {
       }
     }
 
+    // Detect if this is a 3rd party client (non-web) that needs login redirect
+    const userAgent = Array.isArray(request.headers['user-agent']) 
+      ? request.headers['user-agent'][0] || '' 
+      : request.headers['user-agent'] || '';
+    
+    // Multiple detection methods for Element/Matrix clients
+    const hasElementUserAgent = userAgent.includes('Element') || 
+                               userAgent.includes('ElementAndroid') || 
+                               userAgent.includes('ElementiOS') ||
+                               userAgent.includes('Riot') ||  // Legacy Element name
+                               userAgent.includes('matrix');
+    
+    // Element desktop often uses embedded browser with standard UA but different fetch patterns
+    const hasElementFetchPattern = request.headers['sec-fetch-site'] === 'none' &&
+                                  request.headers['sec-fetch-mode'] === 'navigate' &&
+                                  request.headers['sec-fetch-dest'] === 'document' &&
+                                  !request.headers['referer']; // No referer for app navigation
+    
+    // Check for Matrix-specific client patterns
+    const hasMatrixClient = clientId && (clientId.includes('matrix') || clientId.includes('synapse'));
+    
+    const isThirdPartyClient = hasElementUserAgent || hasElementFetchPattern || hasMatrixClient;
+
     // Handle prompt=none - Silent Authentication
     if (prompt === 'none') {
       this.logger.debug(
         '🔇 OIDC Silent Auth - prompt=none detected, checking authentication status',
       );
+      this.logger.debug(
+        `📱 Client Detection - User-Agent: ${userAgent.substring(0, 100)}...`,
+      );
+      this.logger.debug(
+        `📱 Client Detection - Element UA: ${hasElementUserAgent}, Fetch Pattern: ${hasElementFetchPattern}, Matrix Client: ${hasMatrixClient}`,
+      );
+      this.logger.debug(
+        `📱 Client Detection - Is 3rd party client: ${isThirdPartyClient}`,
+      );
+      this.logger.debug(
+        '📱 Client Detection - Key Headers:',
+        {
+          'sec-fetch-site': request.headers['sec-fetch-site'],
+          'sec-fetch-mode': request.headers['sec-fetch-mode'], 
+          'sec-fetch-dest': request.headers['sec-fetch-dest'],
+          'referer': request.headers['referer'],
+          'client-id': clientId
+        }
+      );
 
       if (!user || !tenantId) {
+        // For 3rd party clients without authentication, redirect to login instead of error
+        if (isThirdPartyClient) {
+          this.logger.debug(
+            '🔄 OIDC Silent Auth - 3rd party client detected without session, redirecting to login flow instead of returning error',
+          );
+          
+          const baseUrl = this.configService.get('app.oidcIssuerUrl', {
+            infer: true,
+          });
+          if (!baseUrl) {
+            throw new Error(
+              'OIDC issuer URL not configured - app.oidcIssuerUrl is required',
+            );
+          }
+
+          // Extract login_hint for email pre-fill
+          const loginHint = request.query.login_hint as string;
+
+          const oidcLoginParams = {
+            client_id: clientId,
+            redirect_uri: redirectUri,
+            response_type: responseType,
+            scope,
+            ...(state && { state }),
+            ...(nonce && { nonce }),
+            // Include login_hint for email pre-fill in login form
+            ...(loginHint && { login_hint: loginHint }),
+          };
+
+          const oidcLoginUrl =
+            `${baseUrl}/api/oidc/login?` +
+            new URLSearchParams(oidcLoginParams).toString();
+
+          this.logger.debug(
+            '🚀 OIDC Silent Auth - 3rd party client redirect URL:',
+            oidcLoginUrl,
+          );
+
+          // Clear old session cookies to force fresh login for 3rd party clients
+          response.clearCookie('oidc_session');
+          response.clearCookie('oidc_tenant');
+          this.logger.debug(
+            '🔄 OIDC Silent Auth - Cleared old session cookies for 3rd party client fresh login',
+          );
+
+          response.redirect(oidcLoginUrl);
+          return;
+        }
+
+        // For web clients, return standard OIDC login_required error
         this.logger.debug(
-          '❌ OIDC Silent Auth - No authenticated user found, returning login_required error',
+          '❌ OIDC Silent Auth - Web client with no authenticated user found, returning login_required error',
         );
         const errorUrl = this.returnPromptNoneError(
           redirectUri,
@@ -389,8 +481,58 @@ export class OidcController {
             );
 
             if (!session || !this.isSessionValidForMaxAge(session, maxAge)) {
+              // For 3rd party clients with old sessions, redirect to login instead of error
+              if (isThirdPartyClient) {
+                this.logger.debug(
+                  '🔄 OIDC Silent Auth - 3rd party client with old/invalid session, redirecting to login flow instead of returning error',
+                );
+                
+                const baseUrl = this.configService.get('app.oidcIssuerUrl', {
+                  infer: true,
+                });
+                if (!baseUrl) {
+                  throw new Error(
+                    'OIDC issuer URL not configured - app.oidcIssuerUrl is required',
+                  );
+                }
+
+                // Extract login_hint for email pre-fill
+                const loginHint = request.query.login_hint as string;
+
+                const oidcLoginParams = {
+                  client_id: clientId,
+                  redirect_uri: redirectUri,
+                  response_type: responseType,
+                  scope,
+                  ...(state && { state }),
+                  ...(nonce && { nonce }),
+                  // Include login_hint for email pre-fill in login form
+                  ...(loginHint && { login_hint: loginHint }),
+                };
+
+                const oidcLoginUrl =
+                  `${baseUrl}/api/oidc/login?` +
+                  new URLSearchParams(oidcLoginParams).toString();
+
+                this.logger.debug(
+                  '🚀 OIDC Silent Auth - 3rd party client session age redirect URL:',
+                  oidcLoginUrl,
+                );
+
+                // Clear old session cookies to force fresh login for 3rd party clients
+                response.clearCookie('oidc_session');
+                response.clearCookie('oidc_tenant');
+                this.logger.debug(
+                  '🔄 OIDC Silent Auth - Cleared old session cookies for 3rd party client fresh login',
+                );
+
+                response.redirect(oidcLoginUrl);
+                return;
+              }
+
+              // For web clients, return standard OIDC login_required error
               this.logger.debug(
-                '❌ OIDC Silent Auth - Session too old or invalid, returning login_required error',
+                '❌ OIDC Silent Auth - Web client session too old or invalid, returning login_required error',
               );
               const errorUrl = this.returnPromptNoneError(
                 redirectUri,
@@ -406,6 +548,57 @@ export class OidcController {
             '❌ OIDC Silent Auth - Error checking session age:',
             error.message,
           );
+          
+          // For 3rd party clients, redirect to login instead of error
+          if (isThirdPartyClient) {
+            this.logger.debug(
+              '🔄 OIDC Silent Auth - 3rd party client with session check error, redirecting to login flow instead of returning error',
+            );
+            
+            const baseUrl = this.configService.get('app.oidcIssuerUrl', {
+              infer: true,
+            });
+            if (!baseUrl) {
+              throw new Error(
+                'OIDC issuer URL not configured - app.oidcIssuerUrl is required',
+              );
+            }
+
+            // Extract login_hint for email pre-fill
+            const loginHint = request.query.login_hint as string;
+
+            const oidcLoginParams = {
+              client_id: clientId,
+              redirect_uri: redirectUri,
+              response_type: responseType,
+              scope,
+              ...(state && { state }),
+              ...(nonce && { nonce }),
+              // Include login_hint for email pre-fill in login form
+              ...(loginHint && { login_hint: loginHint }),
+            };
+
+            const oidcLoginUrl =
+              `${baseUrl}/api/oidc/login?` +
+              new URLSearchParams(oidcLoginParams).toString();
+
+            this.logger.debug(
+              '🚀 OIDC Silent Auth - 3rd party client error redirect URL:',
+              oidcLoginUrl,
+            );
+
+            // Clear old session cookies to force fresh login for 3rd party clients
+            response.clearCookie('oidc_session');
+            response.clearCookie('oidc_tenant');
+            this.logger.debug(
+              '🔄 OIDC Silent Auth - Cleared old session cookies for 3rd party client fresh login',
+            );
+
+            response.redirect(oidcLoginUrl);
+            return;
+          }
+
+          // For web clients, return standard OIDC login_required error
           const errorUrl = this.returnPromptNoneError(
             redirectUri,
             state,
