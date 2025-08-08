@@ -170,7 +170,7 @@ oidc_providers:
     client_id: "matrix_synapse"
     user_mapping_provider:
       config:
-        localpart_template: "{{ user.matrix_handle }}"
+        localpart_template: "{{ user.preferred_username }}"
         display_name_template: "{{ user.name }}"
         email_template: "{{ user.email }}"
 ```
@@ -320,7 +320,7 @@ Response:
   "sub": "john.doe",
   "name": "John Doe",
   "email": "john@example.com", 
-  "matrix_handle": "john.doe",
+  "preferred_username": "john.doe",
   "tenant_id": "tenant123",
   "tenant_domain": "acme.openmeet.net"
 }
@@ -503,8 +503,7 @@ CREATE TABLE matrixHandleRegistry (
 **OIDC Integration**:
 ```typescript
 // Maps clean handles to Matrix authentication
-preferred_username: extractedMatrixHandle, // e.g., "john.doe"
-matrix_handle: extractedMatrixHandle,
+preferred_username: extractedMatrixHandle, // e.g., "john.doe" from registry lookup
 tenant_id: tenantId // For room access control
 ```
 
@@ -1194,7 +1193,7 @@ sequenceDiagram
     Note over A: Extract user info and format for Matrix consumption
     
     A->>M: 20. Return user claims for Matrix account creation
-    Note over A,M: { sub: "tom.scanlan", name: "Tom Scanlan", email: "...", matrix_handle: "tom.scanlan", tenant_id: "..." }
+    Note over A,M: { sub: "tom.scanlan", name: "Tom Scanlan", email: "...", preferred_username: "tom.scanlan", tenant_id: "..." }
     
     M->>M: 21. Create or update Matrix user account
     Note over M: @tom.scanlan:matrix.openmeet.net with display name "Tom Scanlan"
@@ -1256,7 +1255,7 @@ sequenceDiagram
   "sub": "tom.scanlan",                    // User-chosen Matrix handle (unique globally)
   "name": "Tom Scanlan",                   // Display name from OpenMeet profile  
   "email": "tompscanlan+updated@gmail.com", // Email from OpenMeet account
-  "matrix_handle": "tom.scanlan",          // Same as sub, for explicit clarity
+  "preferred_username": "tom.scanlan",     // Matrix handle from registry lookup
   "tenant_id": "lsdfaopkljdfs"            // Tenant isolation context
 }
 ```

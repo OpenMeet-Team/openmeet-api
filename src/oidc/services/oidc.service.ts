@@ -17,7 +17,6 @@ export interface OidcUserInfo {
   name: string;
   email: string;
   preferred_username: string;
-  matrix_handle: string;
   tenant_id: string;
 }
 
@@ -145,7 +144,6 @@ export class OidcService {
         'name',
         'email',
         'preferred_username',
-        'matrix_handle',
         'tenant_id',
       ],
     };
@@ -757,8 +755,8 @@ export class OidcService {
     user: any,
     tenantId: string,
   ): Promise<OidcUserInfo> {
-    // Get Matrix handle from global registry
-    let matrixHandle = 'unknown';
+    // Get Matrix handle from global registry for preferred_username
+    let preferredUsername: string;
     try {
       const registryEntry =
         await this.globalMatrixValidationService.getMatrixHandleForUser(
@@ -767,9 +765,9 @@ export class OidcService {
         );
 
       if (registryEntry) {
-        matrixHandle = registryEntry.handle;
+        preferredUsername = registryEntry.handle;
         this.logger.debug(
-          `🔧 OIDC Found Matrix handle for user ${user.id}: ${matrixHandle}`,
+          `🔧 OIDC Found Matrix handle for user ${user.id}: ${preferredUsername}`,
         );
       } else {
         // No Matrix handle registered yet - create and register it now
@@ -780,17 +778,17 @@ export class OidcService {
           .toLowerCase()
           .replace(/[^a-z0-9._-]/g, '');
         // Append tenant suffix for consistency with legacy users
-        matrixHandle = `${cleanHandle}_${tenantId}`;
+        preferredUsername = `${cleanHandle}_${tenantId}`;
 
         // Register the Matrix handle in the database
         try {
           await this.globalMatrixValidationService.registerMatrixHandle(
-            matrixHandle,
+            preferredUsername,
             tenantId,
             user.id,
           );
           this.logger.debug(
-            `🔧 OIDC Registered new Matrix handle for user ${user.id}: ${matrixHandle}`,
+            `🔧 OIDC Registered new Matrix handle for user ${user.id}: ${preferredUsername}`,
           );
         } catch (error) {
           this.logger.error(
@@ -800,7 +798,7 @@ export class OidcService {
         }
 
         this.logger.debug(
-          `🔧 OIDC No Matrix handle found for user ${user.id}, created: ${matrixHandle}`,
+          `🔧 OIDC No Matrix handle found for user ${user.id}, created: ${preferredUsername}`,
         );
       }
     } catch (error) {
@@ -812,7 +810,7 @@ export class OidcService {
         user.slug || user.email?.split('@')[0] || `user-${user.id}`;
       const cleanHandle = baseHandle.toLowerCase().replace(/[^a-z0-9._-]/g, '');
       // Append tenant suffix for consistency with legacy users
-      matrixHandle = `${cleanHandle}_${tenantId}`;
+      preferredUsername = `${cleanHandle}_${tenantId}`;
     }
 
     const displayName =
@@ -824,8 +822,7 @@ export class OidcService {
       sub: user.slug, // Use slug as stable user identifier
       name: displayName,
       email: user.email,
-      preferred_username: matrixHandle,
-      matrix_handle: matrixHandle,
+      preferred_username: preferredUsername,
       tenant_id: tenantId,
     };
   }

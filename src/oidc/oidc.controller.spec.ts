@@ -548,7 +548,6 @@ describe('OidcController', () => {
         name: 'John Smith',
         email: 'john@example.com',
         preferred_username: 'john.smith',
-        matrix_handle: 'john.smith',
         tenant_id: 'tenant123',
       };
       mockOidcService.getUserInfo.mockResolvedValue(mockUserInfo);

@@ -481,7 +481,9 @@ describe('Matrix User Identity Isolation', () => {
           .expect(200);
 
         // Verify correct user identity maintained
-        expect(userinfoResponse.body.preferred_username).toBe(step.user.slug);
+        expect(userinfoResponse.body.preferred_username).toBe(
+          `${step.user.slug}_${TESTING_TENANT_ID}`,
+        );
         console.log(`✅ ${step.label} context maintained: ${step.user.slug}`);
       }
 
