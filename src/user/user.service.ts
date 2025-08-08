@@ -589,6 +589,31 @@ export class UserService {
   }
 
   async remove(id: User['id']): Promise<void> {
+    // Get tenant ID for Matrix cleanup
+    const tenantId = this.request.tenantId;
+    
+    // Set up tenant-specific repository
+    await this.getTenantSpecificRepository();
+
+    // Clean up Matrix handle registry before soft deleting user
+    if (tenantId) {
+      try {
+        await this.globalMatrixValidationService.unregisterMatrixHandle(
+          tenantId,
+          id,
+        );
+        this.logger.log(
+          `Matrix handle unregistered for user ${id} in tenant ${tenantId}`,
+        );
+      } catch (error) {
+        // Log error but don't fail user deletion if Matrix cleanup fails
+        this.logger.warn(
+          `Failed to unregister Matrix handle for user ${id} in tenant ${tenantId}: ${error.message}`,
+          error.stack,
+        );
+      }
+    }
+
     await this.usersRepository.softDelete(id);
     this.auditLogger.log('user deleted', {
       id,

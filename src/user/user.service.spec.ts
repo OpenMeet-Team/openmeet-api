@@ -25,9 +25,10 @@ import { GlobalMatrixValidationService } from '../matrix/services/global-matrix-
 
 describe('UserService', () => {
   let userService: UserService;
+  let module: TestingModule;
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         UserService,
         {
@@ -71,6 +72,7 @@ describe('UserService', () => {
             getUserByMatrixHandle: jest.fn(),
             isMatrixHandleUnique: jest.fn(),
             registerMatrixHandle: jest.fn(),
+            unregisterMatrixHandle: jest.fn(),
             suggestAvailableHandles: jest.fn(),
           },
         },
@@ -164,10 +166,52 @@ describe('UserService', () => {
   });
 
   describe('remove', () => {
-    it('should remove a user', async () => {
-      jest.spyOn(userService, 'remove').mockResolvedValue();
-      const user = await userService.remove(mockUser.id);
-      expect(user).toBeUndefined();
+    let mockGlobalMatrixService: jest.Mocked<GlobalMatrixValidationService>;
+    let mockUsersRepository: any;
+
+    beforeEach(() => {
+      // Get the mocked services from the test module
+      mockGlobalMatrixService = module.get(GlobalMatrixValidationService);
+      mockUsersRepository = module.get(Repository);
+    });
+
+    it('should remove a user and clean up Matrix handle', async () => {
+      // Mock the repository methods
+      mockUsersRepository.softDelete = jest
+        .fn()
+        .mockResolvedValue({ affected: 1 });
+
+      // Mock Matrix cleanup
+      mockGlobalMatrixService.unregisterMatrixHandle.mockResolvedValue();
+
+      // Call remove
+      await userService.remove(mockUser.id);
+
+      // Verify Matrix cleanup was called with correct parameters
+      expect(
+        mockGlobalMatrixService.unregisterMatrixHandle,
+      ).toHaveBeenCalledWith(TESTING_TENANT_ID, mockUser.id);
+
+      // Verify user was soft deleted
+      expect(mockUsersRepository.softDelete).toHaveBeenCalledWith(mockUser.id);
+    });
+
+    it('should still remove user even if Matrix cleanup fails', async () => {
+      // Mock the repository methods
+      mockUsersRepository.softDelete = jest
+        .fn()
+        .mockResolvedValue({ affected: 1 });
+
+      // Mock Matrix cleanup to fail
+      mockGlobalMatrixService.unregisterMatrixHandle.mockRejectedValue(
+        new Error('Matrix service unavailable'),
+      );
+
+      // Call remove - should not throw
+      await expect(userService.remove(mockUser.id)).resolves.toBeUndefined();
+
+      // Verify user was still soft deleted despite Matrix failure
+      expect(mockUsersRepository.softDelete).toHaveBeenCalledWith(mockUser.id);
     });
   });
 
