@@ -12,6 +12,7 @@ import { SessionService } from '../session/session.service';
 
 describe('OIDC Matrix Integration (E2E)', () => {
   let app: INestApplication;
+  let jwtService: JwtService;
   let mockOidcService: jest.Mocked<OidcService>;
   let mockTempAuthCodeService: jest.Mocked<TempAuthCodeService>;
   let mockUserService: jest.Mocked<UserService>;

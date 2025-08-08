@@ -261,8 +261,15 @@ describe('Matrix User Identity Isolation', () => {
         .set('x-tenant-id', TESTING_TENANT_ID)
         .send({
           matrixUserId: expectedMatrixUserId,
-        })
-        .expect(200);
+        });
+      
+      // Log the actual response for debugging
+      if (syncResponse.status !== 200) {
+        console.log(`❌ Sync failed with status ${syncResponse.status}:`);
+        console.log('Response body:', JSON.stringify(syncResponse.body, null, 2));
+      }
+      
+      expect(syncResponse.status).toBe(200);
 
       expect(syncResponse.body).toHaveProperty('success', true);
       expect(syncResponse.body).toHaveProperty(
@@ -285,8 +292,15 @@ describe('Matrix User Identity Isolation', () => {
         .set('x-tenant-id', TESTING_TENANT_ID)
         .send({
           matrixUserId: expectedMatrixUserId,
-        })
-        .expect(200);
+        });
+      
+      // Log the actual response for debugging
+      if (syncResponse.status !== 200) {
+        console.log(`❌ Sync failed with status ${syncResponse.status}:`);
+        console.log('Response body:', JSON.stringify(syncResponse.body, null, 2));
+      }
+      
+      expect(syncResponse.status).toBe(200);
 
       expect(syncResponse.body).toHaveProperty('success', true);
       expect(syncResponse.body).toHaveProperty(
