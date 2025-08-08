@@ -100,14 +100,18 @@ describe('Matrix User Identity Isolation', () => {
           .post('/api/matrix/sync-user-identity')
           .set('Authorization', `Bearer ${testUser1Token}`)
           .set('x-tenant-id', TESTING_TENANT_ID)
-          .send({ matrixUserId: `@${testUser1Data.slug}_${TESTING_TENANT_ID}:matrix.openmeet.net` })
+          .send({
+            matrixUserId: `@${testUser1Data.slug}_${TESTING_TENANT_ID}:matrix.openmeet.net`,
+          })
           .expect(200);
 
         await request(TESTING_APP_URL)
           .post('/api/matrix/sync-user-identity')
           .set('Authorization', `Bearer ${testUser2Token}`)
           .set('x-tenant-id', TESTING_TENANT_ID)
-          .send({ matrixUserId: `@${testUser2Data.slug}_${TESTING_TENANT_ID}:matrix.openmeet.net` })
+          .send({
+            matrixUserId: `@${testUser2Data.slug}_${TESTING_TENANT_ID}:matrix.openmeet.net`,
+          })
           .expect(200);
 
         console.log(`✅ Matrix user identities synced with handles`);
@@ -501,13 +505,15 @@ describe('Matrix User Identity Isolation', () => {
       // First, verify both users have Matrix handles registered
       const user1HandleResponse = await request(TESTING_APP_URL)
         .get('/api/matrix/handle/check')
-        .query({ handle: testUser1Data.slug })
+        .query({ handle: `${testUser1Data.slug}_${TESTING_TENANT_ID}` })
         .set('Authorization', `Bearer ${testUser1Token}`)
         .set('x-tenant-id', TESTING_TENANT_ID)
         .expect(200);
 
       expect(user1HandleResponse.body).toHaveProperty('available', false);
-      console.log(`✅ User 1 handle ${testUser1Data.slug} is registered`);
+      console.log(
+        `✅ User 1 handle ${testUser1Data.slug}_${TESTING_TENANT_ID} is registered`,
+      );
 
       // Delete user 1 using admin token (this should trigger Matrix handle cleanup)
       const deleteResponse = await request(TESTING_APP_URL)
@@ -525,27 +531,27 @@ describe('Matrix User Identity Isolation', () => {
       // Verify the Matrix handle is now available (cleaned up)
       const postDeleteHandleResponse = await request(TESTING_APP_URL)
         .get('/api/matrix/handle/check')
-        .query({ handle: testUser1Data.slug })
+        .query({ handle: `${testUser1Data.slug}_${TESTING_TENANT_ID}` })
         .set('Authorization', `Bearer ${testUser2Token}`) // Use user 2's token since user 1 is deleted
         .set('x-tenant-id', TESTING_TENANT_ID)
         .expect(200);
 
       expect(postDeleteHandleResponse.body).toHaveProperty('available', true);
       console.log(
-        `✅ User 1 Matrix handle ${testUser1Data.slug} was automatically cleaned up`,
+        `✅ User 1 Matrix handle ${testUser1Data.slug}_${TESTING_TENANT_ID} was automatically cleaned up`,
       );
 
       // Verify user 2's handle is still registered (unaffected)
       const user2HandleResponse = await request(TESTING_APP_URL)
         .get('/api/matrix/handle/check')
-        .query({ handle: testUser2Data.slug })
+        .query({ handle: `${testUser2Data.slug}_${TESTING_TENANT_ID}` })
         .set('Authorization', `Bearer ${testUser2Token}`)
         .set('x-tenant-id', TESTING_TENANT_ID)
         .expect(200);
 
       expect(user2HandleResponse.body).toHaveProperty('available', false);
       console.log(
-        `✅ User 2 handle ${testUser2Data.slug} remains registered (unaffected)`,
+        `✅ User 2 handle ${testUser2Data.slug}_${TESTING_TENANT_ID} remains registered (unaffected)`,
       );
 
       console.log('✅ Matrix handle cleanup on user deletion works correctly');
