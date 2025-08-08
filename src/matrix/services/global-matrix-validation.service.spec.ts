@@ -179,6 +179,59 @@ describe('GlobalMatrixValidationService', () => {
         userId: 999,
       });
     });
+
+    it('should make handle available after unregistering', async () => {
+      // Setup: Register a handle
+      const handle = 'test-user-handle';
+      const tenantId = 'tenant123';
+      const userId = 789;
+
+      // First, simulate the handle is taken
+      mockRepository.findOne.mockResolvedValueOnce({
+        handle,
+        tenantId,
+        userId,
+      });
+
+      // Verify handle is not available before deletion
+      const beforeDelete = await service.isMatrixHandleUnique(handle);
+      expect(beforeDelete).toBe(false);
+
+      // Simulate successful deletion
+      mockRepository.delete.mockResolvedValue({ affected: 1 });
+
+      // Reset mock to simulate handle is now available
+      mockRepository.findOne.mockReset();
+      mockRepository.findOne.mockResolvedValue(null);
+
+      // Unregister the handle
+      await service.unregisterMatrixHandle(tenantId, userId);
+
+      // Verify the delete was called with correct params
+      expect(mockRepository.delete).toHaveBeenCalledWith({
+        tenantId,
+        userId,
+      });
+
+      // Verify handle is now available
+      const afterDelete = await service.isMatrixHandleUnique(handle);
+      expect(afterDelete).toBe(true);
+    });
+
+    it('should handle deletion with numeric userId correctly', async () => {
+      // This tests the exact scenario from the failing e2e test
+      const tenantId = 'oiupsdknasfdf'; // From the e2e test
+      const userId = 123; // Numeric user ID
+
+      mockRepository.delete.mockResolvedValue({ affected: 1 });
+
+      await service.unregisterMatrixHandle(tenantId, userId);
+
+      expect(mockRepository.delete).toHaveBeenCalledWith({
+        tenantId: 'oiupsdknasfdf',
+        userId: 123,
+      });
+    });
   });
 
   describe('suggestAvailableHandles', () => {
