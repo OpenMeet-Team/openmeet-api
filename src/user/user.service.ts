@@ -591,7 +591,7 @@ export class UserService {
   async remove(id: User['id']): Promise<void> {
     // Get tenant ID for Matrix cleanup
     const tenantId = this.request.tenantId;
-    
+
     // Set up tenant-specific repository
     await this.getTenantSpecificRepository();
 
