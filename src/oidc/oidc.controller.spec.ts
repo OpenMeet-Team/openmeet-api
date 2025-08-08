@@ -333,7 +333,7 @@ describe('OidcController', () => {
         // Setup: User is authenticated via session cookies
         const mockSessionService = { findById: jest.fn() };
         (controller as any).sessionService = mockSessionService;
-        
+
         mockSessionService.findById.mockResolvedValue({
           user: { id: 1 },
         });
@@ -431,7 +431,7 @@ describe('OidcController', () => {
         // Setup: User is authenticated but login_hint is for different user
         const mockSessionService = { findById: jest.fn() };
         (controller as any).sessionService = mockSessionService;
-        
+
         mockSessionService.findById.mockResolvedValue({
           user: { id: 1 },
         });

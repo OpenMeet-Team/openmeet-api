@@ -781,7 +781,7 @@ export class OidcService {
           .replace(/[^a-z0-9._-]/g, '');
         // Append tenant suffix for consistency with legacy users
         matrixHandle = `${cleanHandle}_${tenantId}`;
-        
+
         // Register the Matrix handle in the database
         try {
           await this.globalMatrixValidationService.registerMatrixHandle(
@@ -798,7 +798,7 @@ export class OidcService {
           );
           // Continue with the generated handle even if registration fails
         }
-        
+
         this.logger.debug(
           `🔧 OIDC No Matrix handle found for user ${user.id}, created: ${matrixHandle}`,
         );
