@@ -100,14 +100,14 @@ describe('Matrix User Identity Isolation', () => {
           .post('/api/matrix/sync-user-identity')
           .set('Authorization', `Bearer ${testUser1Token}`)
           .set('x-tenant-id', TESTING_TENANT_ID)
-          .send({ matrixUserId: `@${testUser1Data.slug}:matrix.openmeet.net` })
+          .send({ matrixUserId: `@${testUser1Data.slug}_${TESTING_TENANT_ID}:matrix.openmeet.net` })
           .expect(200);
 
         await request(TESTING_APP_URL)
           .post('/api/matrix/sync-user-identity')
           .set('Authorization', `Bearer ${testUser2Token}`)
           .set('x-tenant-id', TESTING_TENANT_ID)
-          .send({ matrixUserId: `@${testUser2Data.slug}:matrix.openmeet.net` })
+          .send({ matrixUserId: `@${testUser2Data.slug}_${TESTING_TENANT_ID}:matrix.openmeet.net` })
           .expect(200);
 
         console.log(`✅ Matrix user identities synced with handles`);
