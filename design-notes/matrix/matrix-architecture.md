@@ -170,7 +170,7 @@ oidc_providers:
     client_id: "matrix_synapse"
     user_mapping_provider:
       config:
-        localpart_template: "{{ user.matrix_handle }}"
+        localpart_template: "{{ user.preferred_username }}"
         display_name_template: "{{ user.name }}"
         email_template: "{{ user.email }}"
 ```
@@ -197,6 +197,38 @@ Not:       @user-slug_tenant123:matrix.openmeet.net  (Clunky & Technical)
 - Tenant isolation enforced via room membership and permissions
 - Admin bot ensures users only access rooms for their tenant
 - Cross-tenant communication possible if explicitly enabled
+
+#### Matrix Handle Requirements
+
+**Lowercase Compliance**: All Matrix handles MUST be lowercase per Matrix specification requirements.
+
+**Technical Implementation**:
+- **Database Storage**: All handles stored in lowercase in `matrixHandleRegistry` table
+- **Case-Insensitive Uniqueness**: Database constraint `LOWER(handle)` ensures no case conflicts
+- **Automatic Conversion**: System automatically converts handles to lowercase during:
+  - User registration and OIDC token generation
+  - Matrix user provisioning 
+  - Global handle registry operations
+  - Migration and cleanup processes
+
+**Matrix Protocol Requirements**:
+- Matrix server names and usernames are case-sensitive in protocol
+- Matrix specification recommends lowercase for compatibility
+- Federation and client compatibility requires consistent casing
+- Room aliases and user IDs must follow Matrix naming conventions
+
+**Implementation Points**:
+```typescript
+// All these methods ensure lowercase compliance
+generateMatrixUsername(user, tenantId)  // Returns lowercase
+registerMatrixHandle(handle, ...)       // Stores handle.toLowerCase()
+isMatrixHandleUnique(handle)            // Queries with LOWER(handle)
+```
+
+**Migration Strategy**: Existing mixed-case handles automatically converted during:
+- Database migration: `1750191378000-CreateAndPopulateMatrixHandleRegistry.ts`
+- OIDC authentication flows
+- Matrix user provisioning processes
 
 #### User Experience Benefits
 - **Clean Matrix IDs**: Professional handles like @john.doe:matrix.openmeet.net
@@ -320,7 +352,7 @@ Response:
   "sub": "john.doe",
   "name": "John Doe",
   "email": "john@example.com", 
-  "matrix_handle": "john.doe",
+  "preferred_username": "john.doe",
   "tenant_id": "tenant123",
   "tenant_domain": "acme.openmeet.net"
 }
@@ -503,8 +535,7 @@ CREATE TABLE matrixHandleRegistry (
 **OIDC Integration**:
 ```typescript
 // Maps clean handles to Matrix authentication
-preferred_username: extractedMatrixHandle, // e.g., "john.doe"
-matrix_handle: extractedMatrixHandle,
+preferred_username: extractedMatrixHandle, // e.g., "john.doe" from registry lookup
 tenant_id: tenantId // For room access control
 ```
 
@@ -1194,7 +1225,7 @@ sequenceDiagram
     Note over A: Extract user info and format for Matrix consumption
     
     A->>M: 20. Return user claims for Matrix account creation
-    Note over A,M: { sub: "tom.scanlan", name: "Tom Scanlan", email: "...", matrix_handle: "tom.scanlan", tenant_id: "..." }
+    Note over A,M: { sub: "tom.scanlan", name: "Tom Scanlan", email: "...", preferred_username: "tom.scanlan", tenant_id: "..." }
     
     M->>M: 21. Create or update Matrix user account
     Note over M: @tom.scanlan:matrix.openmeet.net with display name "Tom Scanlan"
@@ -1256,7 +1287,7 @@ sequenceDiagram
   "sub": "tom.scanlan",                    // User-chosen Matrix handle (unique globally)
   "name": "Tom Scanlan",                   // Display name from OpenMeet profile  
   "email": "tompscanlan+updated@gmail.com", // Email from OpenMeet account
-  "matrix_handle": "tom.scanlan",          // Same as sub, for explicit clarity
+  "preferred_username": "tom.scanlan",     // Matrix handle from registry lookup
   "tenant_id": "lsdfaopkljdfs"            // Tenant isolation context
 }
 ```

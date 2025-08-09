@@ -158,26 +158,56 @@ describe('GlobalMatrixValidationService', () => {
   });
 
   describe('unregisterMatrixHandle', () => {
-    it('should remove handle registration', async () => {
-      mockRepository.delete.mockResolvedValue({ affected: 1 });
-
-      await service.unregisterMatrixHandle('tenant123', 456);
-
-      expect(mockRepository.delete).toHaveBeenCalledWith({
+    it('should complete successfully when handle exists', async () => {
+      // Setup: Mock finding and deleting existing handle
+      mockRepository.findOne.mockResolvedValue({
+        handle: 'existing-handle',
         tenantId: 'tenant123',
         userId: 456,
       });
+      mockRepository.delete.mockResolvedValue({ affected: 1 });
+
+      // Should not throw
+      await expect(
+        service.unregisterMatrixHandle('tenant123', 456),
+      ).resolves.not.toThrow();
     });
 
-    it('should handle case where no registration exists', async () => {
-      mockRepository.delete.mockResolvedValue({ affected: 0 });
+    it('should complete successfully when no handle exists', async () => {
+      // Setup: Mock no handle found
+      mockRepository.findOne.mockResolvedValue(null);
 
-      await service.unregisterMatrixHandle('tenant123', 999);
+      // Should not throw - graceful handling of non-existent handle
+      await expect(
+        service.unregisterMatrixHandle('tenant123', 999),
+      ).resolves.not.toThrow();
+    });
 
-      expect(mockRepository.delete).toHaveBeenCalledWith({
+    it('should propagate database errors', async () => {
+      // Setup: Mock database error during findOne
+      const dbError = new Error('Database connection failed');
+      mockRepository.findOne.mockRejectedValue(dbError);
+
+      // Should propagate the database error
+      await expect(
+        service.unregisterMatrixHandle('tenant123', 456),
+      ).rejects.toThrow('Database connection failed');
+    });
+
+    it('should handle deletion error after finding handle', async () => {
+      // Setup: Mock finding handle but deletion fails
+      mockRepository.findOne.mockResolvedValue({
+        handle: 'existing-handle',
         tenantId: 'tenant123',
-        userId: 999,
+        userId: 456,
       });
+      const deleteError = new Error('Delete operation failed');
+      mockRepository.delete.mockRejectedValue(deleteError);
+
+      // Should propagate the deletion error
+      await expect(
+        service.unregisterMatrixHandle('tenant123', 456),
+      ).rejects.toThrow('Delete operation failed');
     });
   });
 

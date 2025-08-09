@@ -192,11 +192,31 @@ export class GlobalMatrixValidationService {
     userId: number,
   ): Promise<void> {
     try {
+      // First, check if the handle exists before deletion
+      const existing = await this.registry.findOne({
+        where: { tenantId, userId },
+      });
+
+      if (!existing) {
+        this.logger.warn(
+          `No Matrix handle found to unregister for user ${userId} in tenant ${tenantId}`,
+        );
+        return;
+      }
+
+      this.logger.log(
+        `Found Matrix handle to delete: ${existing.handle} for user ${userId} in tenant ${tenantId}`,
+      );
+
       const result = await this.registry.delete({ tenantId, userId });
 
       if (result.affected && result.affected > 0) {
         this.logger.log(
-          `Unregistered Matrix handle for user ${userId} in tenant ${tenantId}`,
+          `Successfully unregistered Matrix handle '${existing.handle}' for user ${userId} in tenant ${tenantId}`,
+        );
+      } else {
+        this.logger.warn(
+          `Delete operation completed but no rows affected for user ${userId} in tenant ${tenantId}`,
         );
       }
     } catch (error) {

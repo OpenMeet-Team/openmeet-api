@@ -419,7 +419,6 @@ describe('OidcService', () => {
         name: 'John Smith',
         email: 'john@example.com',
         preferred_username: 'john.smith',
-        matrix_handle: 'john.smith',
         tenant_id: 'tenant123',
       };
 
@@ -469,7 +468,6 @@ describe('OidcService', () => {
         name: 'John Smith',
         email: 'john@example.com',
         preferred_username: 'john.smith_tenant123',
-        matrix_handle: 'john.smith_tenant123',
         tenant_id: 'tenant123',
       });
     });
@@ -487,8 +485,7 @@ describe('OidcService', () => {
         'tenant123',
       );
 
-      expect(userInfo.matrix_handle).toBe('john-smith_tenant123'); // Uses slug as fallback with tenant suffix
-      expect(userInfo.preferred_username).toBe('john-smith_tenant123');
+      expect(userInfo.preferred_username).toBe('john-smith_tenant123'); // Uses registry lookup, falls back to slug_tenant format
     });
 
     it('should handle user with only email', async () => {

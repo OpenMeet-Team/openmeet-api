@@ -12,7 +12,6 @@ import { SessionService } from '../session/session.service';
 
 describe('OIDC Matrix Integration (E2E)', () => {
   let app: INestApplication;
-  let jwtService: JwtService;
   let mockOidcService: jest.Mocked<OidcService>;
   let mockTempAuthCodeService: jest.Mocked<TempAuthCodeService>;
   let mockUserService: jest.Mocked<UserService>;
@@ -104,7 +103,6 @@ describe('OIDC Matrix Integration (E2E)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    jwtService = moduleFixture.get<JwtService>(JwtService);
     await app.init();
   });
 
@@ -120,9 +118,7 @@ describe('OIDC Matrix Integration (E2E)', () => {
     await app.close();
   });
 
-
   describe('Matrix Client Authentication Flow', () => {
-
     it('should BLOCK unauthenticated Matrix requests with login_hint (Critical Security Test)', async () => {
       // Step 1: Simulate potential attack with only login_hint, no authentication
       const response = await request(app.getHttpServer())
@@ -152,5 +148,4 @@ describe('OIDC Matrix Integration (E2E)', () => {
       ).not.toHaveBeenCalled();
     });
   });
-
 });

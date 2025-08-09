@@ -23,7 +23,6 @@ import { UserService } from '../user/user.service';
 import { Request } from 'express';
 import { MatrixUserService } from './services/matrix-user.service';
 import { MatrixRoomService } from './services/matrix-room.service';
-import { MatrixMessageService } from './services/matrix-message.service';
 import { MatrixPasswordDto } from './dto/matrix-password.dto';
 import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
 import { Trace } from '../utils/trace.decorator';
@@ -40,7 +39,6 @@ export class MatrixController {
   constructor(
     private readonly matrixUserService: MatrixUserService,
     private readonly matrixRoomService: MatrixRoomService,
-    private readonly matrixMessageService: MatrixMessageService,
     private readonly userService: UserService,
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
     private readonly tempAuthCodeService: TempAuthCodeService,
