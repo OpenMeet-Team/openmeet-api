@@ -28,7 +28,9 @@ export class MatrixUserService
     user: { slug: string },
     tenantId?: string,
   ): string {
-    return tenantId ? `${user.slug}_${tenantId}`.toLowerCase() : user.slug.toLowerCase();
+    return tenantId
+      ? `${user.slug}_${tenantId}`.toLowerCase()
+      : user.slug.toLowerCase();
   }
 
   /**

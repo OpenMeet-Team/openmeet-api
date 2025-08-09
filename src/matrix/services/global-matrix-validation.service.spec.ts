@@ -168,8 +168,9 @@ describe('GlobalMatrixValidationService', () => {
       mockRepository.delete.mockResolvedValue({ affected: 1 });
 
       // Should not throw
-      await expect(service.unregisterMatrixHandle('tenant123', 456))
-        .resolves.not.toThrow();
+      await expect(
+        service.unregisterMatrixHandle('tenant123', 456),
+      ).resolves.not.toThrow();
     });
 
     it('should complete successfully when no handle exists', async () => {
@@ -177,8 +178,9 @@ describe('GlobalMatrixValidationService', () => {
       mockRepository.findOne.mockResolvedValue(null);
 
       // Should not throw - graceful handling of non-existent handle
-      await expect(service.unregisterMatrixHandle('tenant123', 999))
-        .resolves.not.toThrow();
+      await expect(
+        service.unregisterMatrixHandle('tenant123', 999),
+      ).resolves.not.toThrow();
     });
 
     it('should propagate database errors', async () => {
@@ -187,8 +189,9 @@ describe('GlobalMatrixValidationService', () => {
       mockRepository.findOne.mockRejectedValue(dbError);
 
       // Should propagate the database error
-      await expect(service.unregisterMatrixHandle('tenant123', 456))
-        .rejects.toThrow('Database connection failed');
+      await expect(
+        service.unregisterMatrixHandle('tenant123', 456),
+      ).rejects.toThrow('Database connection failed');
     });
 
     it('should handle deletion error after finding handle', async () => {
@@ -202,8 +205,9 @@ describe('GlobalMatrixValidationService', () => {
       mockRepository.delete.mockRejectedValue(deleteError);
 
       // Should propagate the deletion error
-      await expect(service.unregisterMatrixHandle('tenant123', 456))
-        .rejects.toThrow('Delete operation failed');
+      await expect(
+        service.unregisterMatrixHandle('tenant123', 456),
+      ).rejects.toThrow('Delete operation failed');
     });
   });
 
