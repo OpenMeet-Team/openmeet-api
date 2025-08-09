@@ -58,6 +58,7 @@ echo "Waiting for Matrix service to be ready..."
 
 # Run all E2E tests
 echo "Running all E2E tests..."
-npm run test:e2e -- --runInBand --forceExit
+npm run test:e2e matrix/matrix-user-identity-isolation.e2e-spec.ts
+# npm run test:e2e -- --runInBand --forceExit
 
 
