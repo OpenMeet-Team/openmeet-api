@@ -777,8 +777,8 @@ export class OidcService {
         const cleanHandle = baseHandle
           .toLowerCase()
           .replace(/[^a-z0-9._-]/g, '');
-        // Append tenant suffix for consistency with legacy users
-        preferredUsername = `${cleanHandle}_${tenantId}`;
+        // Append tenant suffix for consistency with legacy users (lowercase for Matrix compliance)
+        preferredUsername = `${cleanHandle}_${tenantId.toLowerCase()}`;
 
         // Register the Matrix handle in the database
         try {

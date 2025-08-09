@@ -4,6 +4,7 @@ import {
   TESTING_TENANT_ID,
   TESTING_MAS_URL,
   TESTING_MAS_CLIENT_SECRET,
+  TESTING_MATRIX_SERVER_NAME,
 } from '../utils/constants';
 import { createTestUser, loginAsAdmin } from '../utils/functions';
 
@@ -103,7 +104,8 @@ describe('Matrix User Identity Isolation', () => {
           .set('Authorization', `Bearer ${testUser1Token}`)
           .set('x-tenant-id', TESTING_TENANT_ID)
           .send({
-            matrixUserId: `@${testUser1Data.slug}_${TESTING_TENANT_ID}:matrix.openmeet.net`,
+            matrixUserId:
+              `@${testUser1Data.slug}_${TESTING_TENANT_ID}:${TESTING_MATRIX_SERVER_NAME}`.toLowerCase(),
           })
           .expect(200);
 
@@ -112,7 +114,8 @@ describe('Matrix User Identity Isolation', () => {
           .set('Authorization', `Bearer ${testUser2Token}`)
           .set('x-tenant-id', TESTING_TENANT_ID)
           .send({
-            matrixUserId: `@${testUser2Data.slug}_${TESTING_TENANT_ID}:matrix.openmeet.net`,
+            matrixUserId:
+              `@${testUser2Data.slug}_${TESTING_TENANT_ID}:${TESTING_MATRIX_SERVER_NAME}`.toLowerCase(),
           })
           .expect(200);
 
@@ -225,7 +228,7 @@ describe('Matrix User Identity Isolation', () => {
       expect(userinfoResponse.body).toHaveProperty('email', testUser1Email);
       expect(userinfoResponse.body).toHaveProperty(
         'preferred_username',
-        `${testUser1Data.slug}_${TESTING_TENANT_ID}`,
+        `${testUser1Data.slug}_${TESTING_TENANT_ID}`.toLowerCase(),
       );
 
       // CRITICAL: Should NOT return admin user or any other user
@@ -295,7 +298,7 @@ describe('Matrix User Identity Isolation', () => {
       expect(userinfoResponse.body).toHaveProperty('email', testUser2Email);
       expect(userinfoResponse.body).toHaveProperty(
         'preferred_username',
-        `${testUser2Data.slug}_${TESTING_TENANT_ID}`,
+        `${testUser2Data.slug}_${TESTING_TENANT_ID}`.toLowerCase(),
       );
 
       // CRITICAL: Should NOT return admin user, user 1, or any other user
@@ -488,7 +491,7 @@ describe('Matrix User Identity Isolation', () => {
 
         // Verify correct user identity maintained
         expect(userinfoResponse.body.preferred_username).toBe(
-          `${step.user.slug}_${TESTING_TENANT_ID}`,
+          `${step.user.slug}_${TESTING_TENANT_ID}`.toLowerCase(),
         );
         console.log(`✅ ${step.label} context maintained: ${step.user.slug}`);
       }
@@ -507,14 +510,22 @@ describe('Matrix User Identity Isolation', () => {
       // First, verify both users have Matrix handles registered
       const user1HandleResponse = await request(TESTING_APP_URL)
         .get('/api/matrix/handle/check')
-        .query({ handle: `${testUser1Data.slug}_${TESTING_TENANT_ID}` })
+        .query({
+          handle: `${testUser1Data.slug}_${TESTING_TENANT_ID}`.toLowerCase(),
+        })
         .set('Authorization', `Bearer ${testUser1Token}`)
         .set('x-tenant-id', TESTING_TENANT_ID)
         .expect(200);
 
+      console.log(user1HandleResponse.body);
+      console.log(
+        `checking handle for ${testUser1Data.slug}_${TESTING_TENANT_ID}`.toLowerCase() +
+          ` - ${testUser1Email}`,
+      );
+
       expect(user1HandleResponse.body).toHaveProperty('available', false);
       console.log(
-        `✅ User 1 handle ${testUser1Data.slug}_${TESTING_TENANT_ID} is registered`,
+        `✅ User 1 handle ${`${testUser1Data.slug}_${TESTING_TENANT_ID}`.toLowerCase()} is registered`,
       );
 
       // Delete user 1 using admin token (this should trigger Matrix handle cleanup)
@@ -533,27 +544,34 @@ describe('Matrix User Identity Isolation', () => {
       // Verify the Matrix handle is now available (cleaned up)
       const postDeleteHandleResponse = await request(TESTING_APP_URL)
         .get('/api/matrix/handle/check')
-        .query({ handle: `${testUser1Data.slug}_${TESTING_TENANT_ID}` })
+        .query({
+          handle: `${testUser1Data.slug}_${TESTING_TENANT_ID}`.toLowerCase(),
+        })
         .set('Authorization', `Bearer ${testUser2Token}`) // Use user 2's token since user 1 is deleted
         .set('x-tenant-id', TESTING_TENANT_ID)
         .expect(200);
 
+      console.log(
+        `Checking handle cleanup for ${`${testUser1Data.slug}_${TESTING_TENANT_ID}`.toLowerCase()} after deletion...`,
+      );
       expect(postDeleteHandleResponse.body).toHaveProperty('available', true);
       console.log(
-        `✅ User 1 Matrix handle ${testUser1Data.slug}_${TESTING_TENANT_ID} was automatically cleaned up`,
+        `✅ User 1 Matrix handle ${`${testUser1Data.slug}_${TESTING_TENANT_ID}`.toLowerCase()} was automatically cleaned up`,
       );
 
       // Verify user 2's handle is still registered (unaffected)
       const user2HandleResponse = await request(TESTING_APP_URL)
         .get('/api/matrix/handle/check')
-        .query({ handle: `${testUser2Data.slug}_${TESTING_TENANT_ID}` })
+        .query({
+          handle: `${testUser2Data.slug}_${TESTING_TENANT_ID}`.toLowerCase(),
+        })
         .set('Authorization', `Bearer ${testUser2Token}`)
         .set('x-tenant-id', TESTING_TENANT_ID)
         .expect(200);
 
       expect(user2HandleResponse.body).toHaveProperty('available', false);
       console.log(
-        `✅ User 2 handle ${testUser2Data.slug}_${TESTING_TENANT_ID} remains registered (unaffected)`,
+        `✅ User 2 handle ${`${testUser2Data.slug}_${TESTING_TENANT_ID}`.toLowerCase()} remains registered (unaffected)`,
       );
 
       console.log('✅ Matrix handle cleanup on user deletion works correctly');
