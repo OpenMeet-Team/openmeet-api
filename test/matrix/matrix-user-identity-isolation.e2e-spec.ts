@@ -44,30 +44,32 @@ describe('Matrix User Identity Isolation', () => {
     jest.setTimeout(180000);
 
     // Use more unique timestamp with microseconds for guaranteed uniqueness
-    const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const timestamp = Date.now();
+    const shortId = Math.random().toString(36).substring(2, 8);
+    const uniqueId = `${timestamp}-${shortId}`;
 
     // Create two unique test users with different identities using unique ID
     testUser1Email = `matrix-test-user-1-${uniqueId}@openmeet.net`;
     testUser2Email = `matrix-test-user-2-${uniqueId}@openmeet.net`;
 
     try {
-      // Create first test user
+      // Create first test user with unique name containing timestamp
       testUser1Data = await createTestUser(
         TESTING_APP_URL,
         TESTING_TENANT_ID,
         testUser1Email,
         'Matrix',
-        'TestUser1',
+        `User1${shortId}`,
         'password123',
       );
 
-      // Create second test user
+      // Create second test user with unique name containing timestamp
       testUser2Data = await createTestUser(
         TESTING_APP_URL,
         TESTING_TENANT_ID,
         testUser2Email,
         'Matrix',
-        'TestUser2',
+        `User2${shortId}`,
         'password123',
       );
 
