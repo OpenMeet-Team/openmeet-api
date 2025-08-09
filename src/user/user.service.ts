@@ -601,6 +601,7 @@ export class UserService {
     // Clean up Matrix handle registry before soft deleting user
     if (tenantId) {
       try {
+        this.logger.debug(`About to call unregisterMatrixHandle with userId=${numericId} (type: ${typeof numericId}), tenantId=${tenantId}`);
         await this.globalMatrixValidationService.unregisterMatrixHandle(
           tenantId,
           numericId,

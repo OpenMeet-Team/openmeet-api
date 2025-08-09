@@ -192,11 +192,46 @@ export class GlobalMatrixValidationService {
     userId: number,
   ): Promise<void> {
     try {
+      this.logger.debug(
+        `Attempting to unregister Matrix handle for user ${userId} (type: ${typeof userId}) in tenant ${tenantId}`,
+      );
+
+      // First check what's actually in the registry for this user
+      const existingRegistration = await this.registry.findOne({
+        where: { tenantId, userId },
+      });
+
+      if (existingRegistration) {
+        this.logger.debug(
+          `Found existing registration for user ${userId}: ${JSON.stringify(existingRegistration)}`,
+        );
+      } else {
+        this.logger.debug(
+          `No existing registration found for user ${userId} in tenant ${tenantId}`,
+        );
+        
+        // Try to find by any criteria to see what's actually there
+        const allForTenant = await this.registry.find({
+          where: { tenantId },
+        });
+        this.logger.debug(
+          `All registrations for tenant ${tenantId}: ${JSON.stringify(allForTenant.map(r => ({ id: r.id, userId: r.userId, userIdType: typeof r.userId, handle: r.handle })))}`,
+        );
+      }
+
       const result = await this.registry.delete({ tenantId, userId });
+
+      this.logger.debug(
+        `Delete result for user ${userId} in tenant ${tenantId}: affected=${result.affected}`,
+      );
 
       if (result.affected && result.affected > 0) {
         this.logger.log(
-          `Unregistered Matrix handle for user ${userId} in tenant ${tenantId}`,
+          `Successfully unregistered Matrix handle for user ${userId} in tenant ${tenantId}`,
+        );
+      } else {
+        this.logger.warn(
+          `No Matrix handle registration found to delete for user ${userId} in tenant ${tenantId}`,
         );
       }
     } catch (error) {
