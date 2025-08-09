@@ -198,6 +198,38 @@ Not:       @user-slug_tenant123:matrix.openmeet.net  (Clunky & Technical)
 - Admin bot ensures users only access rooms for their tenant
 - Cross-tenant communication possible if explicitly enabled
 
+#### Matrix Handle Requirements
+
+**Lowercase Compliance**: All Matrix handles MUST be lowercase per Matrix specification requirements.
+
+**Technical Implementation**:
+- **Database Storage**: All handles stored in lowercase in `matrixHandleRegistry` table
+- **Case-Insensitive Uniqueness**: Database constraint `LOWER(handle)` ensures no case conflicts
+- **Automatic Conversion**: System automatically converts handles to lowercase during:
+  - User registration and OIDC token generation
+  - Matrix user provisioning 
+  - Global handle registry operations
+  - Migration and cleanup processes
+
+**Matrix Protocol Requirements**:
+- Matrix server names and usernames are case-sensitive in protocol
+- Matrix specification recommends lowercase for compatibility
+- Federation and client compatibility requires consistent casing
+- Room aliases and user IDs must follow Matrix naming conventions
+
+**Implementation Points**:
+```typescript
+// All these methods ensure lowercase compliance
+generateMatrixUsername(user, tenantId)  // Returns lowercase
+registerMatrixHandle(handle, ...)       // Stores handle.toLowerCase()
+isMatrixHandleUnique(handle)            // Queries with LOWER(handle)
+```
+
+**Migration Strategy**: Existing mixed-case handles automatically converted during:
+- Database migration: `1750191378000-CreateAndPopulateMatrixHandleRegistry.ts`
+- OIDC authentication flows
+- Matrix user provisioning processes
+
 #### User Experience Benefits
 - **Clean Matrix IDs**: Professional handles like @john.doe:matrix.openmeet.net
 - **Single Credentials**: One OpenMeet login works for web, mobile, and third-party Matrix clients
