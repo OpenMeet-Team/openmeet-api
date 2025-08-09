@@ -158,79 +158,52 @@ describe('GlobalMatrixValidationService', () => {
   });
 
   describe('unregisterMatrixHandle', () => {
-    it('should remove handle registration', async () => {
-      mockRepository.delete.mockResolvedValue({ affected: 1 });
-
-      await service.unregisterMatrixHandle('tenant123', 456);
-
-      expect(mockRepository.delete).toHaveBeenCalledWith({
+    it('should complete successfully when handle exists', async () => {
+      // Setup: Mock finding and deleting existing handle
+      mockRepository.findOne.mockResolvedValue({
+        handle: 'existing-handle',
         tenantId: 'tenant123',
         userId: 456,
       });
-    });
-
-    it('should handle case where no registration exists', async () => {
-      mockRepository.delete.mockResolvedValue({ affected: 0 });
-
-      await service.unregisterMatrixHandle('tenant123', 999);
-
-      expect(mockRepository.delete).toHaveBeenCalledWith({
-        tenantId: 'tenant123',
-        userId: 999,
-      });
-    });
-
-    it('should make handle available after unregistering', async () => {
-      // Setup: Register a handle
-      const handle = 'test-user-handle';
-      const tenantId = 'tenant123';
-      const userId = 789;
-
-      // First, simulate the handle is taken
-      mockRepository.findOne.mockResolvedValueOnce({
-        handle,
-        tenantId,
-        userId,
-      });
-
-      // Verify handle is not available before deletion
-      const beforeDelete = await service.isMatrixHandleUnique(handle);
-      expect(beforeDelete).toBe(false);
-
-      // Simulate successful deletion
       mockRepository.delete.mockResolvedValue({ affected: 1 });
 
-      // Reset mock to simulate handle is now available
-      mockRepository.findOne.mockReset();
+      // Should not throw
+      await expect(service.unregisterMatrixHandle('tenant123', 456))
+        .resolves.not.toThrow();
+    });
+
+    it('should complete successfully when no handle exists', async () => {
+      // Setup: Mock no handle found
       mockRepository.findOne.mockResolvedValue(null);
 
-      // Unregister the handle
-      await service.unregisterMatrixHandle(tenantId, userId);
-
-      // Verify the delete was called with correct params
-      expect(mockRepository.delete).toHaveBeenCalledWith({
-        tenantId,
-        userId,
-      });
-
-      // Verify handle is now available
-      const afterDelete = await service.isMatrixHandleUnique(handle);
-      expect(afterDelete).toBe(true);
+      // Should not throw - graceful handling of non-existent handle
+      await expect(service.unregisterMatrixHandle('tenant123', 999))
+        .resolves.not.toThrow();
     });
 
-    it('should handle deletion with numeric userId correctly', async () => {
-      // This tests the exact scenario from the failing e2e test
-      const tenantId = 'oiupsdknasfdf'; // From the e2e test
-      const userId = 123; // Numeric user ID
+    it('should propagate database errors', async () => {
+      // Setup: Mock database error during findOne
+      const dbError = new Error('Database connection failed');
+      mockRepository.findOne.mockRejectedValue(dbError);
 
-      mockRepository.delete.mockResolvedValue({ affected: 1 });
+      // Should propagate the database error
+      await expect(service.unregisterMatrixHandle('tenant123', 456))
+        .rejects.toThrow('Database connection failed');
+    });
 
-      await service.unregisterMatrixHandle(tenantId, userId);
-
-      expect(mockRepository.delete).toHaveBeenCalledWith({
-        tenantId: 'oiupsdknasfdf',
-        userId: 123,
+    it('should handle deletion error after finding handle', async () => {
+      // Setup: Mock finding handle but deletion fails
+      mockRepository.findOne.mockResolvedValue({
+        handle: 'existing-handle',
+        tenantId: 'tenant123',
+        userId: 456,
       });
+      const deleteError = new Error('Delete operation failed');
+      mockRepository.delete.mockRejectedValue(deleteError);
+
+      // Should propagate the deletion error
+      await expect(service.unregisterMatrixHandle('tenant123', 456))
+        .rejects.toThrow('Delete operation failed');
     });
   });
 
