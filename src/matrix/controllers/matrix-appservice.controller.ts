@@ -286,11 +286,18 @@ export class MatrixAppServiceController {
 
       // Create the Matrix room before responding
       try {
+        // Determine if room should be encrypted based on event visibility
+        const shouldEncrypt = event.visibility === 'private';
+        this.logger.log(
+          `Event ${event.slug} has visibility ${event.visibility}, encryption: ${shouldEncrypt}`,
+        );
+
         const roomOptions = {
           room_alias_name: localpart, // Use localpart for room alias
           name: `${event.name} Chat`,
           topic: `Chat room for ${event.name}`,
-          isPublic: true, // This will set preset to PublicChat in MatrixRoomService
+          isPublic: !shouldEncrypt, // Private events get private rooms
+          encrypted: shouldEncrypt, // Private events get encrypted rooms
         };
 
         const roomResult = await this.matrixRoomService.createRoom(
@@ -424,11 +431,18 @@ export class MatrixAppServiceController {
 
       // Create the Matrix room before responding
       try {
+        // Determine if room should be encrypted based on group visibility
+        const shouldEncrypt = group.visibility === 'private';
+        this.logger.log(
+          `Group ${group.slug} has visibility ${group.visibility}, encryption: ${shouldEncrypt}`,
+        );
+
         const roomOptions = {
           room_alias_name: localpart, // Use localpart for room alias
           name: `${group.name} Chat`,
           topic: `Chat room for ${group.name}`,
-          isPublic: true, // Always public like events - AppService handles access control
+          isPublic: !shouldEncrypt, // Private groups get private rooms
+          encrypted: shouldEncrypt, // Private groups get encrypted rooms
         };
 
         const roomResult = await this.matrixRoomService.createRoom(
