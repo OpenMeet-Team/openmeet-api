@@ -106,7 +106,7 @@ export class GroupController {
   }
 
   @Public()
-  @UseGuards(JWTAuthGuard, VisibilityGuard)
+  @UseGuards(JWTAuthGuard)
   @Get(':slug')
   @ApiOperation({
     summary: 'Get group by group slug and authenticated user',
@@ -176,7 +176,7 @@ export class GroupController {
   // Events are handling Matrix chats correctly - groups will be adapted later
 
   @Public()
-  @UseGuards(JWTAuthGuard, VisibilityGuard)
+  @UseGuards(JWTAuthGuard)
   @Post(':slug/join')
   @ApiOperation({ summary: 'Joining a group through link' })
   async joinGroup(@AuthUser() user: User, @Param('slug') slug: string) {
@@ -184,7 +184,7 @@ export class GroupController {
   }
 
   @Public()
-  @UseGuards(JWTAuthGuard, VisibilityGuard)
+  @UseGuards(JWTAuthGuard)
   @Delete(':slug/leave')
   @ApiOperation({ summary: 'Leave a group' })
   async leaveGroup(@AuthUser() user: User, @Param('slug') slug: string) {
