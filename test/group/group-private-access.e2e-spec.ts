@@ -99,6 +99,24 @@ describe('Group Private Access (e2e)', () => {
     );
   });
 
+  it('should allow authenticated users to join private groups', async () => {
+    // Create another user to test joining functionality
+    const testUser2Token = await loginAsTester(); // This will create a different user or return same user for testing
+
+    // Try to join the private group as an authenticated user
+    const joinResponse = await request(TESTING_APP_URL)
+      .post(`/api/groups/${privateGroup.slug}/join`)
+      .set('Authorization', `Bearer ${testUser2Token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID)
+      .set('x-group-slug', privateGroup.slug);
+
+    // Should allow joining (the API should return success, even if requires approval)
+    expect(joinResponse.status).toBe(201);
+
+    // The response should contain the group member information
+    expect(joinResponse.body).toHaveProperty('id');
+  });
+
   it('should handle authenticated groups with helpful message for unauthenticated users', async () => {
     // First clean up the previous private group
     await request(TESTING_APP_URL)

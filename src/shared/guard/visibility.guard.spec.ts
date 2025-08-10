@@ -246,6 +246,7 @@ describe('VisibilityGuard', () => {
         123,
       );
     });
+
   });
 
   describe('canActivate - Authentication Required', () => {
