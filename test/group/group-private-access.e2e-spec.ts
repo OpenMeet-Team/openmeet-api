@@ -49,20 +49,24 @@ describe('Group Private Access (e2e)', () => {
     }
   });
 
-  it('should show helpful error message instead of "Group Not Found" for unauthenticated users accessing private groups', async () => {
+  it('should allow unauthenticated users to see basic private group info for discovery', async () => {
     // Try to access the private group without authentication
     const response = await request(TESTING_APP_URL)
       .get(`/api/groups/${privateGroup.slug}`)
       .set('x-tenant-id', TESTING_TENANT_ID)
       .set('x-group-slug', privateGroup.slug); // This header is needed for the VisibilityGuard
 
-    // Should return 403 but with a helpful message, not "Group Not Found"
-    expect(response.status).toBe(403);
+    // Should return 200 with basic group info for discovery
+    expect(response.status).toBe(200);
 
-    // The error message should be helpful and informative
-    expect(response.body.message).toBe(
-      'This is a private group. Please log in and request to join to view the group details.',
+    // Should get basic group information (name, description, visibility)
+    expect(response.body).toHaveProperty('name', 'Private Test Group');
+    expect(response.body).toHaveProperty(
+      'description',
+      'A private test group that should show minimal info to unauthenticated users',
     );
+    expect(response.body).toHaveProperty('slug', privateGroup.slug);
+    expect(response.body).toHaveProperty('visibility', 'private');
   });
 
   it('should show full group details for authenticated users who are members of private groups', async () => {
@@ -117,7 +121,7 @@ describe('Group Private Access (e2e)', () => {
     expect(joinResponse.body).toHaveProperty('id');
   });
 
-  it('should handle authenticated groups with helpful message for unauthenticated users', async () => {
+  it('should allow unauthenticated users to see basic authenticated group info for discovery', async () => {
     // First clean up the previous private group
     await request(TESTING_APP_URL)
       .delete(`/api/groups/${privateGroup.slug}`)
@@ -137,11 +141,10 @@ describe('Group Private Access (e2e)', () => {
       .set('x-tenant-id', TESTING_TENANT_ID)
       .set('x-group-slug', authenticatedGroup.slug);
 
-    // Should return 403 with helpful message for authenticated groups
-    expect(response.status).toBe(403);
-    expect(response.body.message).toBe(
-      'This group requires authentication. Please log in to view the group details.',
-    );
+    // Should return 200 with basic group info for discovery
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveProperty('name', 'Authenticated Test Group');
+    expect(response.body).toHaveProperty('visibility', 'authenticated');
 
     // Clean up
     await request(TESTING_APP_URL)
