@@ -78,7 +78,9 @@ jobs:
       - name: Login to Amazon ECR
         if: github.actor != 'dependabot[bot]'
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          mask-password: true
 
       - name: Set image tags
         run: |
@@ -173,7 +175,9 @@ jobs:
       - name: Login to Amazon ECR
         if: github.actor != 'dependabot[bot]'
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          mask-password: true
 
       - name: Build, tag, and push image to Amazon ECR
         env:
