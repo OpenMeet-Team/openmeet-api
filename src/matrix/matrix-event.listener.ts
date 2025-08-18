@@ -270,7 +270,9 @@ export class MatrixEventListener {
       const serverName = this.getMatrixServerName(payload.tenantId);
       const userMatrixId = `@${matrixHandleRegistration.handle}:${serverName}`;
 
-      this.logger.log(`Adding user ${userMatrixId} to group room ${roomAlias} with role ${payload.userRole}`);
+      this.logger.log(
+        `Adding user ${userMatrixId} to group room ${roomAlias} with role ${payload.userRole}`,
+      );
 
       // Get group details and ensure the Matrix room exists before trying to invite users
       const group = await this.groupService.findGroupBySlug(payload.groupSlug);
@@ -280,7 +282,7 @@ export class MatrixEventListener {
 
       // Add user to the Matrix room with appropriate permissions based on role
       await this.matrixRoomService.inviteUser(roomAlias, userMatrixId);
-      
+
       // TODO: Phase 2 - Set Matrix room permissions based on group role
       // For now, all invited users get default participant permissions
       // Future implementation will set power levels based on payload.userRole

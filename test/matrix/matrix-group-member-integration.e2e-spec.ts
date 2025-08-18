@@ -164,8 +164,12 @@ describe('Matrix Group Member Integration (e2e)', () => {
       const members = await getGroupMembers(ownerToken, testGroup.slug);
       expect(members).toHaveLength(3); // Owner + 2 members
 
-      const memberUser1 = members.find((m: any) => m.user.slug === memberUser.slug);
-      const memberUser2 = members.find((m: any) => m.user.slug === guestUser.slug);
+      const memberUser1 = members.find(
+        (m: any) => m.user.slug === memberUser.slug,
+      );
+      const memberUser2 = members.find(
+        (m: any) => m.user.slug === guestUser.slug,
+      );
 
       expect(memberUser1).toBeDefined();
       expect(memberUser1.groupRole.name).toBe('member');
@@ -372,8 +376,16 @@ describe('Matrix Group Member Integration (e2e)', () => {
 
     it('should emit Matrix events with role information for all group types', async () => {
       const groupTypes = [
-        { visibility: 'public', expectedRole: 'member', requireApproval: false },
-        { visibility: 'authenticated', expectedRole: 'member', requireApproval: false },
+        {
+          visibility: 'public',
+          expectedRole: 'member',
+          requireApproval: false,
+        },
+        {
+          visibility: 'authenticated',
+          expectedRole: 'member',
+          requireApproval: false,
+        },
         { visibility: 'private', expectedRole: 'guest', requireApproval: true },
       ];
 
@@ -419,7 +431,10 @@ describe('Matrix Group Member Integration (e2e)', () => {
           try {
             await deleteGroupBySlug(ownerToken, group.slug);
           } catch (cleanupError) {
-            console.log(`Cleanup error for ${group.slug}:`, cleanupError.message);
+            console.log(
+              `Cleanup error for ${group.slug}:`,
+              cleanupError.message,
+            );
           }
           throw error;
         }

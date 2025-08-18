@@ -55,14 +55,15 @@ export class MatrixAppServiceController {
     this.logger.log('Matrix Application Service configured successfully');
   }
 
-
   @Get('users/:userId')
   queryUser(
     @Param('userId') userId: string,
     @Headers('authorization') authHeader: string,
   ) {
     this.logger.log(`🚪 USER QUERY: Matrix is asking about user: ${userId}`);
-    this.logger.log(`🚪 USER QUERY: Authorization header: ${authHeader?.substring(0, 20)}...`);
+    this.logger.log(
+      `🚪 USER QUERY: Authorization header: ${authHeader?.substring(0, 20)}...`,
+    );
 
     // Validate authorization token
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -74,7 +75,9 @@ export class MatrixAppServiceController {
 
     const token = authHeader.replace('Bearer ', '');
     if (token !== this.homeserverToken) {
-      this.logger.warn(`❌ USER QUERY: Invalid token for user query: ${userId}`);
+      this.logger.warn(
+        `❌ USER QUERY: Invalid token for user query: ${userId}`,
+      );
       return { error: 'Invalid token' };
     }
 
@@ -144,13 +147,17 @@ export class MatrixAppServiceController {
 
     const token = authHeader.replace('Bearer ', '');
     if (token !== this.homeserverToken) {
-      this.logger.warn(`❌ TRANSACTION: Invalid token for transaction: ${txnId}`);
+      this.logger.warn(
+        `❌ TRANSACTION: Invalid token for transaction: ${txnId}`,
+      );
       return { error: 'Invalid token' };
     }
 
     // Process events
     for (const event of events) {
-      this.logger.log(`🔄 TRANSACTION: Processing event: ${event.type} from ${event.sender} in room ${event.room_id}`);
+      this.logger.log(
+        `🔄 TRANSACTION: Processing event: ${event.type} from ${event.sender} in room ${event.room_id}`,
+      );
 
       // Handle different event types
       switch (event.type) {
@@ -1862,7 +1869,9 @@ export class MatrixAppServiceController {
   // Debug endpoint to catch any unmatched requests - MUST BE LAST
   @Get('*')
   catchAllGet(@Param() params: any, @Headers() headers: any) {
-    this.logger.log(`🔍 APPSERVICE DEBUG: Received GET request to ${params[0]} with headers: ${JSON.stringify(Object.keys(headers))}`);
+    this.logger.log(
+      `🔍 APPSERVICE DEBUG: Received GET request to ${params[0]} with headers: ${JSON.stringify(Object.keys(headers))}`,
+    );
     return { debug: 'appservice is receiving requests' };
   }
 }
