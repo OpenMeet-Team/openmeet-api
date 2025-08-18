@@ -13,7 +13,9 @@ push_ephemeral: true
 namespaces:
   users:
     - exclusive: true
-      regex: "@openmeet-bot-.*:.*"
+      regex: "@openmeet-bot-.*:{{ .Env.MATRIX_SERVER_NAME }}"
+    - exclusive: false
+      regex: "@.*:{{ .Env.MATRIX_SERVER_NAME }}"
   rooms:
     - exclusive: false
       regex: ".*"
