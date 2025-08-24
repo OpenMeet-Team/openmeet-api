@@ -6,6 +6,20 @@ import { MatrixBotUserService } from './matrix-bot-user.service';
 import { MatrixBotService } from './matrix-bot.service';
 import { CreateRoomOptions, RoomInfo } from '../types/matrix.types';
 import { IMatrixClient, IMatrixRoomProvider } from '../types/matrix.interfaces';
+
+// Room configuration interfaces
+export interface RoomEntity {
+  name: string;
+  slug: string;
+  visibility: 'public' | 'private';
+}
+
+export interface DirectMessageConfig {
+  user1Handle: string;
+  user2Handle: string;
+  user1MatrixId: string;
+  user2MatrixId: string;
+}
 import { HttpStatus } from '@nestjs/common';
 import { RoomAliasUtils } from '../utils/room-alias.utils';
 import { fetchTenants, getTenantConfig } from '../../utils/tenant-config';
@@ -28,6 +42,124 @@ export class MatrixRoomService implements IMatrixRoomProvider {
     @Inject(forwardRef(() => EventQueryService))
     private readonly eventQueryService: EventQueryService,
   ) {}
+
+  /**
+   * Generate room configuration options for groups and events
+   * @param entity The group or event entity
+   * @param localpart The room alias localpart
+   * @param entityType Whether this is for a 'group' or 'event'
+   * @returns Room creation options with proper encryption settings
+   */
+  generateRoomOptions(
+    entity: RoomEntity,
+    localpart: string,
+    entityType: 'group' | 'event' = 'group',
+  ): CreateRoomOptions {
+    // Determine encryption based on visibility
+    const shouldEncrypt = entity.visibility === 'private';
+
+    this.logger.log(
+      `${entityType.charAt(0).toUpperCase() + entityType.slice(1)} ${entity.slug} has visibility ${entity.visibility}, encryption: ${shouldEncrypt}`,
+    );
+
+    return {
+      room_alias_name: localpart,
+      name: `${entity.name} Chat`,
+      topic: `Chat room for ${entity.name}`,
+      isPublic: !shouldEncrypt, // Private entities get private rooms
+      encrypted: shouldEncrypt, // Private entities get encrypted rooms
+    };
+  }
+
+  /**
+   * Generate room configuration options for direct messages
+   * @param config DM configuration with user details
+   * @returns Room creation options for DM
+   */
+  generateDirectMessageOptions(config: DirectMessageConfig): CreateRoomOptions {
+    this.logger.log(
+      `Creating DM room between ${config.user1Handle} and ${config.user2Handle}`,
+    );
+
+    return {
+      room_alias_name: undefined, // DMs don't need aliases
+      name: `${config.user1Handle} and ${config.user2Handle}`,
+      topic: `Direct message between ${config.user1Handle} and ${config.user2Handle}`,
+      isDirect: true,
+      isPublic: false, // DMs are always private
+      encrypted: true, // Enable encryption for privacy
+      inviteUserIds: [config.user1MatrixId, config.user2MatrixId],
+    };
+  }
+
+  /**
+   * Extract room alias localpart from full alias
+   * @param roomAlias Full room alias (e.g., "#group-slug-tenant:matrix.domain.com")
+   * @returns Localpart (e.g., "group-slug-tenant")
+   */
+  extractLocalpart(roomAlias: string): string {
+    return roomAlias.substring(1).split(':')[0]; // Remove # and get part before :
+  }
+
+  /**
+   * Log room creation success
+   * @param roomId The created room ID
+   * @param roomAlias The room alias
+   * @param entityType The type of entity (group/event/dm)
+   */
+  logRoomCreationSuccess(
+    roomId: string,
+    roomAlias: string,
+    entityType: 'group' | 'event' | 'dm' = 'group',
+  ): void {
+    this.logger.log(
+      `Matrix ${entityType} room created successfully: ${roomId} with alias ${roomAlias}`,
+    );
+  }
+
+  /**
+   * Create room for a group or event entity with proper configuration
+   * @param entity The group or event entity
+   * @param localpart The room alias localpart
+   * @param tenantId The tenant ID
+   * @param entityType Whether this is for a 'group' or 'event'
+   * @returns Room creation result
+   */
+  async createEntityRoom(
+    entity: RoomEntity,
+    localpart: string,
+    tenantId: string,
+    entityType: 'group' | 'event' = 'group',
+  ): Promise<RoomInfo> {
+    const roomOptions = this.generateRoomOptions(entity, localpart, entityType);
+    const result = await this.createRoom(roomOptions, tenantId);
+
+    const serverName =
+      this.configService.get('matrix', { infer: true })?.serverName ||
+      'matrix.openmeet.net';
+    const roomAlias = `#${localpart}:${serverName}`;
+
+    this.logRoomCreationSuccess(result.roomId, roomAlias, entityType);
+    return result;
+  }
+
+  /**
+   * Create direct message room with proper configuration
+   * @param config DM configuration
+   * @param tenantId The tenant ID
+   * @returns Room creation result
+   */
+  async createDirectMessageRoom(
+    config: DirectMessageConfig,
+    tenantId: string,
+  ): Promise<RoomInfo> {
+    const roomOptions = this.generateDirectMessageOptions(config);
+    const result = await this.createRoom(roomOptions, tenantId);
+
+    // DMs use a different alias format or no alias
+    this.logRoomCreationSuccess(result.roomId, 'DM Room', 'dm');
+    return result;
+  }
 
   /**
    * Create a Matrix client using bot user credentials for a specific tenant

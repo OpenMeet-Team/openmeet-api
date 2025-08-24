@@ -805,17 +805,19 @@ export class MatrixEventListener {
       );
 
       // Extract the local part from the room alias for room creation
-      const localpart = roomAlias.substring(1).split(':')[0]; // Remove # and get part before :
+      const localpart = this.matrixRoomService.extractLocalpart(roomAlias);
 
-      // Create the room using the same format as the Application Service
-      const roomOptions = {
-        room_alias_name: localpart, // Use localpart for room alias
-        name: `${group.name} Chat`,
-        topic: `Chat room for ${group.name}`,
-        isPublic: true, // This gets converted to visibility and preset internally
-      };
-
-      await this.matrixRoomService.createRoom(roomOptions, tenantId);
+      // Create the room using shared configuration logic
+      await this.matrixRoomService.createEntityRoom(
+        {
+          name: group.name,
+          slug: group.slug,
+          visibility: 'private',
+        },
+        localpart,
+        tenantId,
+        'group',
+      );
 
       this.logger.debug(`Room ensured for group ${group.slug}: ${roomAlias}`);
     } catch (error) {

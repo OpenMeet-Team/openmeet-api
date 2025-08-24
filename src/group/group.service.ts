@@ -988,4 +988,22 @@ export class GroupService {
       name: group.name,
     }));
   }
+
+  /**
+   * Update the Matrix room ID for a group using tenant-aware method
+   */
+  async updateMatrixRoomId(
+    groupId: number,
+    matrixRoomId: string,
+    tenantId: string,
+  ): Promise<void> {
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    const groupRepository = dataSource.getRepository(GroupEntity);
+
+    await groupRepository.update(groupId, { matrixRoomId });
+    this.logger.log(
+      `Updated group ${groupId} matrixRoomId to: ${matrixRoomId}`,
+    );
+  }
 }

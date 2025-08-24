@@ -11,13 +11,11 @@ import { ConfigService } from '@nestjs/config';
 import { ApiTags } from '@nestjs/swagger';
 import { AllConfigType } from '../../config/config.type';
 import { TenantPublic } from '../../tenant/tenant-public.decorator';
-// Chat services removed - Matrix Application Service handles room operations directly
 import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupService } from '../../group/group.service';
 import { MatrixRoomService } from '../services/matrix-room.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
-// import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity'; // Currently not used
 import { EventAttendeeQueryService } from '../../event-attendee/event-attendee-query.service';
 import { EventManagementService } from '../../event/services/event-management.service';
 import { GlobalMatrixValidationService } from '../services/global-matrix-validation.service';
@@ -329,26 +327,15 @@ export class MatrixAppServiceController {
 
       // Create the Matrix room before responding
       try {
-        // Determine if room should be encrypted based on event visibility
-        const shouldEncrypt = event.visibility === 'private';
-        this.logger.log(
-          `Event ${event.slug} has visibility ${event.visibility}, encryption: ${shouldEncrypt}`,
-        );
-
-        const roomOptions = {
-          room_alias_name: localpart, // Use localpart for room alias
-          name: `${event.name} Chat`,
-          topic: `Chat room for ${event.name}`,
-          isPublic: !shouldEncrypt, // Private events get private rooms
-          encrypted: shouldEncrypt, // Private events get encrypted rooms
-        };
-
-        const roomResult = await this.matrixRoomService.createRoom(
-          roomOptions,
+        const roomResult = await this.matrixRoomService.createEntityRoom(
+          {
+            name: event.name,
+            slug: event.slug,
+            visibility: event.visibility === 'public' ? 'public' : 'private',
+          },
+          localpart,
           tenantId,
-        );
-        this.logger.log(
-          `Matrix room created successfully: ${roomResult.roomId} with alias ${roomAlias}`,
+          'event',
         );
 
         // Configure the newly created room and invite attendees
@@ -480,26 +467,15 @@ export class MatrixAppServiceController {
 
       // Create the Matrix room before responding
       try {
-        // Determine if room should be encrypted based on group visibility
-        const shouldEncrypt = group.visibility === 'private';
-        this.logger.log(
-          `Group ${group.slug} has visibility ${group.visibility}, encryption: ${shouldEncrypt}`,
-        );
-
-        const roomOptions = {
-          room_alias_name: localpart, // Use localpart for room alias
-          name: `${group.name} Chat`,
-          topic: `Chat room for ${group.name}`,
-          isPublic: !shouldEncrypt, // Private groups get private rooms
-          encrypted: shouldEncrypt, // Private groups get encrypted rooms
-        };
-
-        const roomResult = await this.matrixRoomService.createRoom(
-          roomOptions,
+        const roomResult = await this.matrixRoomService.createEntityRoom(
+          {
+            name: group.name,
+            slug: group.slug,
+            visibility: group.visibility === 'public' ? 'public' : 'private',
+          },
+          localpart,
           tenantId,
-        );
-        this.logger.log(
-          `Matrix room created successfully: ${roomResult.roomId} with alias ${roomAlias}`,
+          'group',
         );
 
         // Configure the newly created room and invite members
@@ -622,22 +598,14 @@ export class MatrixAppServiceController {
 
       // Create the Matrix DM room
       try {
-        const roomOptions = {
-          room_alias_name: localpart, // Use localpart for room alias
-          name: `${user1Handle} and ${user2Handle}`, // Optional, clients often hide this
-          topic: `Direct message between ${user1Handle} and ${user2Handle}`,
-          isDirect: true, // Key parameter for DM rooms
-          isPublic: false, // DMs are always private
-          encrypted: true, // Enable encryption for privacy
-          inviteUserIds: [user1MatrixId, user2MatrixId],
-        };
-
-        const roomResult = await this.matrixRoomService.createRoom(
-          roomOptions,
+        const roomResult = await this.matrixRoomService.createDirectMessageRoom(
+          {
+            user1Handle,
+            user2Handle,
+            user1MatrixId,
+            user2MatrixId,
+          },
           tenantId,
-        );
-        this.logger.log(
-          `Matrix DM room created successfully: ${roomResult.roomId} with alias ${roomAlias}`,
         );
 
         // Update both users' m.direct account data to include the new room
@@ -1295,31 +1263,51 @@ export class MatrixAppServiceController {
         }
       }
 
-      // Update the group's matrixRoomId field in the database
-      if (actualRoomId && group.matrixRoomId !== actualRoomId) {
-        this.logger.log(
-          `Updating group ${group.id} matrixRoomId to: ${actualRoomId}`,
-        );
-        try {
-          // Update group's matrixRoomId using direct repository access (similar to event pattern)
-          const dataSource =
-            await this.tenantConnectionService.getTenantConnection(tenantId);
-          const groupRepository = dataSource.getRepository(GroupEntity);
-          await groupRepository.update(group.id, {
-            matrixRoomId: actualRoomId,
-          });
-          this.logger.log(
-            `Successfully updated group ${group.id} matrixRoomId`,
+      // Safely update the group's matrixRoomId field with room existence verification
+      if (actualRoomId) {
+        let shouldUpdateDatabase = false;
+        let updateReason = '';
+
+        if (!group.matrixRoomId) {
+          shouldUpdateDatabase = true;
+          updateReason = 'group has no room ID';
+        } else if (group.matrixRoomId === actualRoomId) {
+          this.logger.debug(
+            `Group ${group.id} already has correct matrixRoomId: ${actualRoomId}`,
           );
-        } catch (error) {
-          this.logger.error(
-            `Failed to update group matrixRoomId: ${error.message}`,
-          );
+        } else {
+          // Handle room conflict by verifying existing room exists
+          const existingRoomExists =
+            await this.matrixRoomService.verifyRoomExists(
+              group.matrixRoomId,
+              tenantId,
+            );
+          if (!existingRoomExists) {
+            shouldUpdateDatabase = true;
+            updateReason = `existing room ${group.matrixRoomId} no longer exists`;
+          } else {
+            this.logger.warn(
+              `Room conflict: keeping existing room ${group.matrixRoomId} for group ${group.id}`,
+            );
+          }
         }
-      } else {
-        this.logger.log(
-          `Group ${group.id} already has correct matrixRoomId: ${actualRoomId}`,
-        );
+
+        if (shouldUpdateDatabase) {
+          this.logger.log(
+            `Updating group ${group.id} matrixRoomId to: ${actualRoomId} (${updateReason})`,
+          );
+          try {
+            await this.groupService.updateMatrixRoomId(
+              group.id,
+              actualRoomId,
+              tenantId,
+            );
+          } catch (error) {
+            this.logger.error(
+              `Failed to update group matrixRoomId: ${error.message}`,
+            );
+          }
+        }
       }
 
       this.logger.log(
