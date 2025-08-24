@@ -6,6 +6,7 @@ import { MatrixBotUserService } from './matrix-bot-user.service';
 import { MatrixBotService } from './matrix-bot.service';
 import { CreateRoomOptions, RoomInfo } from '../types/matrix.types';
 import { IMatrixClient, IMatrixRoomProvider } from '../types/matrix.interfaces';
+import { MatrixConfig } from '../config/matrix-config.type';
 
 // Room configuration interfaces
 export interface RoomEntity {
@@ -135,7 +136,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
     const result = await this.createRoom(roomOptions, tenantId);
 
     const serverName =
-      this.configService.get('matrix', { infer: true })?.serverName ||
+      this.configService.get<MatrixConfig>('matrix', { infer: true })?.serverName ||
       'matrix.openmeet.net';
     const roomAlias = `#${localpart}:${serverName}`;
 
