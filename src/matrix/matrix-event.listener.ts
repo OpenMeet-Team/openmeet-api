@@ -367,6 +367,50 @@ export class MatrixEventListener {
     }
   }
 
+  @OnEvent('chat.group.member.role.update')
+  async handleGroupMemberRoleUpdate(payload: {
+    groupSlug: string;
+    userSlug: string;
+    oldRole: string;
+    newRole: string;
+    tenantId: string;
+  }) {
+    try {
+      this.logger.log(
+        `Handling chat.group.member.role.update for user ${payload.userSlug} in group ${payload.groupSlug} from ${payload.oldRole} to ${payload.newRole}`,
+      );
+
+      // Check if this is a promotion from guest to a confirmed role
+      const oldRoleIsGuest = payload.oldRole === 'guest';
+      const confirmedRoles = ['owner', 'admin', 'moderator', 'member'];
+      const newRoleIsConfirmed = confirmedRoles.includes(payload.newRole);
+
+      // If user is being promoted from guest to confirmed role, they need a Matrix invitation
+      if (oldRoleIsGuest && newRoleIsConfirmed) {
+        this.logger.log(
+          `User ${payload.userSlug} promoted from guest to ${payload.newRole} - sending Matrix invitation`,
+        );
+
+        // Reuse the existing member addition logic
+        await this.handleGroupMemberAdd({
+          groupSlug: payload.groupSlug,
+          userSlug: payload.userSlug,
+          userRole: payload.newRole,
+          tenantId: payload.tenantId,
+        });
+      } else {
+        this.logger.debug(
+          `Role change from ${payload.oldRole} to ${payload.newRole} does not require Matrix invitation`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle group member role update: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
   @OnEvent('matrix.sync.event.attendees')
   async handleSyncEventAttendees(payload: MatrixSyncEvent) {
     try {

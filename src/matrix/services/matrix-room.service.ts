@@ -136,8 +136,8 @@ export class MatrixRoomService implements IMatrixRoomProvider {
     const result = await this.createRoom(roomOptions, tenantId);
 
     const serverName =
-      this.configService.get<MatrixConfig>('matrix', { infer: true })?.serverName ||
-      'matrix.openmeet.net';
+      this.configService.get<MatrixConfig>('matrix', { infer: true })
+        ?.serverName || 'matrix.openmeet.net';
     const roomAlias = `#${localpart}:${serverName}`;
 
     this.logRoomCreationSuccess(result.roomId, roomAlias, entityType);

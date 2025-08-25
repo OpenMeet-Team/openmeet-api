@@ -251,7 +251,9 @@ describe('MatrixAppServiceController', () => {
 
     it('should treat "Room alias already taken" as success', async () => {
       const roomAlreadyTakenError = new Error('Room alias already taken');
-      mockMatrixRoomService.createEntityRoom.mockRejectedValue(roomAlreadyTakenError);
+      mockMatrixRoomService.createEntityRoom.mockRejectedValue(
+        roomAlreadyTakenError,
+      );
 
       const result = await controller.queryRoomStandard(
         '#event-test-event-tenant123:matrix.openmeet.net',
@@ -294,7 +296,9 @@ describe('MatrixAppServiceController', () => {
       const aliasConflictError = new Error(
         'M_ROOM_IN_USE: alias already taken',
       );
-      mockMatrixRoomService.createEntityRoom.mockRejectedValue(aliasConflictError);
+      mockMatrixRoomService.createEntityRoom.mockRejectedValue(
+        aliasConflictError,
+      );
 
       const result = await controller.queryRoomStandard(
         '#event-test-event-tenant123:matrix.openmeet.net',
