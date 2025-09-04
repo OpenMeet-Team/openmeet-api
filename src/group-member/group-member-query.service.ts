@@ -224,13 +224,15 @@ export class GroupMemberQueryService {
     await groupMemberRepository.save(targetGroupMember);
 
     // Emit event for Matrix integration to handle role changes
-    this.eventEmitter.emit('chat.group.member.role.update', {
+    const eventPayload = {
       groupSlug: targetGroupMember.group.slug,
       userSlug: targetGroupMember.user.slug,
       oldRole: oldRole,
       newRole: name,
       tenantId,
-    });
+    };
+    
+    this.eventEmitter.emit('chat.group.member.role.update', eventPayload);
 
     return await groupMemberRepository.findOne({
       where: { id: groupMemberId },

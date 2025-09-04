@@ -142,11 +142,15 @@ export class GlobalMatrixValidationService {
     tenantId: string,
     userId: number,
   ): Promise<MatrixHandleRegistration | null> {
+    this.logger.debug(`getMatrixHandleRegistration called with userId=${userId}, tenantId=${tenantId}`);
+    
     try {
       const registration = await this.registry.findOne({
         where: { tenantId, userId },
       });
 
+      this.logger.debug(`Matrix handle query result: ${registration ? JSON.stringify(registration) : 'null'}`);
+      
       return registration || null;
     } catch (error) {
       this.logger.error(

@@ -380,27 +380,47 @@ export class MatrixEventListener {
         `Handling chat.group.member.role.update for user ${payload.userSlug} in group ${payload.groupSlug} from ${payload.oldRole} to ${payload.newRole}`,
       );
 
-      // Check if this is a promotion from guest to a confirmed role
-      const oldRoleIsGuest = payload.oldRole === 'guest';
       const confirmedRoles = ['owner', 'admin', 'moderator', 'member'];
+      const oldRoleIsConfirmed = confirmedRoles.includes(payload.oldRole);
       const newRoleIsConfirmed = confirmedRoles.includes(payload.newRole);
+      const newRoleIsGuest = payload.newRole === 'guest';
 
-      // If user is being promoted from guest to confirmed role, they need a Matrix invitation
-      if (oldRoleIsGuest && newRoleIsConfirmed) {
+      // Case 1: Demotion to guest role - remove from Matrix room
+      if (oldRoleIsConfirmed && newRoleIsGuest) {
         this.logger.log(
-          `User ${payload.userSlug} promoted from guest to ${payload.newRole} - sending Matrix invitation`,
+          `User ${payload.userSlug} demoted from ${payload.oldRole} to guest - removing from Matrix room`,
         );
 
-        // Reuse the existing member addition logic
+        await this.handleGroupMemberRemove({
+          groupSlug: payload.groupSlug,
+          userSlug: payload.userSlug,
+          tenantId: payload.tenantId,
+        });
+      }
+      // Case 2: Promotion to confirmed role - add to Matrix room
+      else if (!oldRoleIsConfirmed && newRoleIsConfirmed) {
+        this.logger.log(
+          `User ${payload.userSlug} promoted from ${payload.oldRole} to ${payload.newRole} - sending Matrix invitation`,
+        );
+
         await this.handleGroupMemberAdd({
           groupSlug: payload.groupSlug,
           userSlug: payload.userSlug,
           userRole: payload.newRole,
           tenantId: payload.tenantId,
         });
-      } else {
+      }
+      // Case 3: Role change between confirmed roles - no Matrix action needed (user already in room)
+      else if (oldRoleIsConfirmed && newRoleIsConfirmed) {
         this.logger.debug(
-          `Role change from ${payload.oldRole} to ${payload.newRole} does not require Matrix invitation`,
+          `Role change from ${payload.oldRole} to ${payload.newRole} - user already has Matrix access, no invitation needed`,
+        );
+        // TODO: Future enhancement - update Matrix room power levels based on new role
+      }
+      // Case 4: Other transitions (guest to guest, etc.) - no Matrix action needed
+      else {
+        this.logger.debug(
+          `Role change from ${payload.oldRole} to ${payload.newRole} does not require Matrix room changes`,
         );
       }
     } catch (error) {
