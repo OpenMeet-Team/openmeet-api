@@ -231,7 +231,7 @@ export class GroupMemberQueryService {
       newRole: name,
       tenantId,
     };
-    
+
     this.eventEmitter.emit('chat.group.member.role.update', eventPayload);
 
     return await groupMemberRepository.findOne({
