@@ -773,32 +773,39 @@ export class GroupService {
       return groupMember;
     }
 
+    let assignedRole: GroupRole;
+    let newGroupMember;
+
     if (
       groupEntity?.requireApproval ||
       groupEntity?.visibility === GroupVisibility.Private
     ) {
-      const groupMember = await this.groupMemberService.createGroupMember(
+      newGroupMember = await this.groupMemberService.createGroupMember(
         { userId: userEntity.id, groupId: groupEntity.id },
         GroupRole.Guest,
       );
+      assignedRole = GroupRole.Guest;
 
-      await this.groupMailService.sendGroupGuestJoined(groupMember.id);
+      await this.groupMailService.sendGroupGuestJoined(newGroupMember.id);
     } else {
-      await this.groupMemberService.createGroupMember(
+      newGroupMember = await this.groupMemberService.createGroupMember(
         { userId: userEntity.id, groupId: groupEntity.id },
         GroupRole.Member,
       );
-
-      // Emit event for Matrix integration to add user to group chat
-      this.eventEmitter.emit('chat.group.member.add', {
-        groupSlug: groupEntity.slug,
-        userSlug: userEntity.slug,
-        tenantId: this.request.tenantId,
-      });
-      this.logger.log(
-        `Emitted chat.group.member.add event for user ${userEntity.slug} in group ${groupEntity.slug}`,
-      );
+      assignedRole = GroupRole.Member;
     }
+
+    // Emit event for Matrix integration to add user to group chat for ALL group types
+    // The Matrix event listener will handle role-based permissions appropriately
+    this.eventEmitter.emit('chat.group.member.add', {
+      groupSlug: groupEntity.slug,
+      userSlug: userEntity.slug,
+      userRole: assignedRole,
+      tenantId: this.request.tenantId,
+    });
+    this.logger.log(
+      `Emitted chat.group.member.add event for user ${userEntity.slug} in group ${groupEntity.slug} with role ${assignedRole}`,
+    );
 
     return await this.groupMemberService.findGroupMemberByUserId(
       groupEntity.id,
@@ -980,5 +987,23 @@ export class GroupService {
       matrixRoomId: group.matrixRoomId!,
       name: group.name,
     }));
+  }
+
+  /**
+   * Update the Matrix room ID for a group using tenant-aware method
+   */
+  async updateMatrixRoomId(
+    groupId: number,
+    matrixRoomId: string,
+    tenantId: string,
+  ): Promise<void> {
+    const dataSource =
+      await this.tenantConnectionService.getTenantConnection(tenantId);
+    const groupRepository = dataSource.getRepository(GroupEntity);
+
+    await groupRepository.update(groupId, { matrixRoomId });
+    this.logger.log(
+      `Updated group ${groupId} matrixRoomId to: ${matrixRoomId}`,
+    );
   }
 }

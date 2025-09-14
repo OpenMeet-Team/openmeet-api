@@ -15,6 +15,7 @@ interface ChatMemberEvent {
   eventSlug?: string;
   groupSlug?: string;
   userSlug: string;
+  userRole?: string; // Group role for role-based permissions
   tenantId: string;
 }
 
@@ -222,7 +223,7 @@ export class MatrixEventListener {
   async handleGroupMemberAdd(payload: ChatMemberEvent) {
     try {
       this.logger.log(
-        `Handling chat.group.member.add for user ${payload.userSlug} in group ${payload.groupSlug}`,
+        `Handling chat.group.member.add for user ${payload.userSlug} in group ${payload.groupSlug} with role ${payload.userRole}`,
       );
 
       // Validate required fields
@@ -269,13 +270,25 @@ export class MatrixEventListener {
       const serverName = this.getMatrixServerName(payload.tenantId);
       const userMatrixId = `@${matrixHandleRegistration.handle}:${serverName}`;
 
-      this.logger.log(`Adding user ${userMatrixId} to group room ${roomAlias}`);
+      this.logger.log(
+        `Adding user ${userMatrixId} to group room ${roomAlias} with role ${payload.userRole}`,
+      );
 
-      // Add user to the Matrix room
+      // Get group details and ensure the Matrix room exists before trying to invite users
+      const group = await this.groupService.findGroupBySlug(payload.groupSlug);
+      if (group) {
+        await this.ensureGroupRoomExists(group, roomAlias, payload.tenantId);
+      }
+
+      // Add user to the Matrix room with appropriate permissions based on role
       await this.matrixRoomService.inviteUser(roomAlias, userMatrixId);
 
+      // TODO: Phase 2 - Set Matrix room permissions based on group role
+      // For now, all invited users get default participant permissions
+      // Future implementation will set power levels based on payload.userRole
+
       this.logger.log(
-        `Successfully added user ${userMatrixId} to group room ${roomAlias}`,
+        `Successfully added user ${userMatrixId} to group room ${roomAlias} with role ${payload.userRole}`,
       );
     } catch (error) {
       this.logger.error(
@@ -349,6 +362,70 @@ export class MatrixEventListener {
     } catch (error) {
       this.logger.error(
         `Failed to remove user from group room: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
+  @OnEvent('chat.group.member.role.update')
+  async handleGroupMemberRoleUpdate(payload: {
+    groupSlug: string;
+    userSlug: string;
+    oldRole: string;
+    newRole: string;
+    tenantId: string;
+  }) {
+    try {
+      this.logger.log(
+        `Handling chat.group.member.role.update for user ${payload.userSlug} in group ${payload.groupSlug} from ${payload.oldRole} to ${payload.newRole}`,
+      );
+
+      const confirmedRoles = ['owner', 'admin', 'moderator', 'member'];
+      const oldRoleIsConfirmed = confirmedRoles.includes(payload.oldRole);
+      const newRoleIsConfirmed = confirmedRoles.includes(payload.newRole);
+      const newRoleIsGuest = payload.newRole === 'guest';
+
+      // Case 1: Demotion to guest role - remove from Matrix room
+      if (oldRoleIsConfirmed && newRoleIsGuest) {
+        this.logger.log(
+          `User ${payload.userSlug} demoted from ${payload.oldRole} to guest - removing from Matrix room`,
+        );
+
+        await this.handleGroupMemberRemove({
+          groupSlug: payload.groupSlug,
+          userSlug: payload.userSlug,
+          tenantId: payload.tenantId,
+        });
+      }
+      // Case 2: Promotion to confirmed role - add to Matrix room
+      else if (!oldRoleIsConfirmed && newRoleIsConfirmed) {
+        this.logger.log(
+          `User ${payload.userSlug} promoted from ${payload.oldRole} to ${payload.newRole} - sending Matrix invitation`,
+        );
+
+        await this.handleGroupMemberAdd({
+          groupSlug: payload.groupSlug,
+          userSlug: payload.userSlug,
+          userRole: payload.newRole,
+          tenantId: payload.tenantId,
+        });
+      }
+      // Case 3: Role change between confirmed roles - no Matrix action needed (user already in room)
+      else if (oldRoleIsConfirmed && newRoleIsConfirmed) {
+        this.logger.debug(
+          `Role change from ${payload.oldRole} to ${payload.newRole} - user already has Matrix access, no invitation needed`,
+        );
+        // TODO: Future enhancement - update Matrix room power levels based on new role
+      }
+      // Case 4: Other transitions (guest to guest, etc.) - no Matrix action needed
+      else {
+        this.logger.debug(
+          `Role change from ${payload.oldRole} to ${payload.newRole} does not require Matrix room changes`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle group member role update: ${error.message}`,
         error.stack,
       );
     }
@@ -763,6 +840,62 @@ export class MatrixEventListener {
       ) {
         this.logger.debug(
           `Room ${roomAlias} already exists for event ${event.slug}`,
+        );
+        return;
+      }
+
+      // For other errors, log but don't fail the entire sync
+      this.logger.warn(
+        `Failed to ensure room exists for ${roomAlias}: ${error.message}`,
+      );
+      // Don't throw - we'll try the invite anyway in case the room does exist
+    }
+  }
+
+  /**
+   * Ensure the Matrix room exists for a group, creating it if necessary
+   */
+  private async ensureGroupRoomExists(
+    group: { id: number; slug: string; name: string },
+    roomAlias: string,
+    tenantId: string,
+  ): Promise<void> {
+    try {
+      // Check if the room already exists by trying to get its info
+      // The Application Service should have already created the room when first accessed,
+      // but in case it wasn't, we'll create it manually
+      this.logger.debug(
+        `Ensuring room exists for group ${group.slug}: ${roomAlias}`,
+      );
+
+      // Extract the local part from the room alias for room creation
+      const localpart = this.matrixRoomService.extractLocalpart(roomAlias);
+
+      // Create the room using shared configuration logic
+      await this.matrixRoomService.createEntityRoom(
+        {
+          name: group.name,
+          slug: group.slug,
+          visibility: 'private',
+        },
+        localpart,
+        tenantId,
+        'group',
+      );
+
+      this.logger.debug(`Room ensured for group ${group.slug}: ${roomAlias}`);
+    } catch (error) {
+      // Handle "Room alias already taken" as success - room exists (same as Application Service)
+      if (
+        error.message &&
+        (error.message.includes('Room alias already taken') ||
+          error.message.includes('already exists') ||
+          error.message.includes('MatrixError: [409]') ||
+          error.message.includes('MatrixError: [400]') ||
+          error.message.includes('alias already taken'))
+      ) {
+        this.logger.debug(
+          `Room ${roomAlias} already exists for group ${group.slug}`,
         );
         return;
       }

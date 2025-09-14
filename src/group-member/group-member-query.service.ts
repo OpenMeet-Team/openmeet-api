@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { GroupMemberEntity } from './infrastructure/persistence/relational/entities/group-member.entity';
 import { Not, Repository, In } from 'typeorm';
@@ -28,6 +29,7 @@ export class GroupMemberQueryService {
   constructor(
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly groupRoleService: GroupRoleService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   private async getTenantSpecificRepository(
@@ -214,9 +216,23 @@ export class GroupMemberQueryService {
       name as GroupRole,
     );
 
+    // Capture the old role before changing it
+    const oldRole = targetGroupMember.groupRole.name;
+
     // If validation passes, proceed with the role change
     targetGroupMember.groupRole = newGroupRole;
     await groupMemberRepository.save(targetGroupMember);
+
+    // Emit event for Matrix integration to handle role changes
+    const eventPayload = {
+      groupSlug: targetGroupMember.group.slug,
+      userSlug: targetGroupMember.user.slug,
+      oldRole: oldRole,
+      newRole: name,
+      tenantId,
+    };
+
+    this.eventEmitter.emit('chat.group.member.role.update', eventPayload);
 
     return await groupMemberRepository.findOne({
       where: { id: groupMemberId },

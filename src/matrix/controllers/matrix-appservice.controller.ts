@@ -11,13 +11,11 @@ import { ConfigService } from '@nestjs/config';
 import { ApiTags } from '@nestjs/swagger';
 import { AllConfigType } from '../../config/config.type';
 import { TenantPublic } from '../../tenant/tenant-public.decorator';
-// Chat services removed - Matrix Application Service handles room operations directly
 import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupService } from '../../group/group.service';
 import { MatrixRoomService } from '../services/matrix-room.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
-// import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity'; // Currently not used
 import { EventAttendeeQueryService } from '../../event-attendee/event-attendee-query.service';
 import { EventManagementService } from '../../event/services/event-management.service';
 import { GlobalMatrixValidationService } from '../services/global-matrix-validation.service';
@@ -60,24 +58,29 @@ export class MatrixAppServiceController {
     @Param('userId') userId: string,
     @Headers('authorization') authHeader: string,
   ) {
-    this.logger.debug(`Query user request for: ${userId}`);
+    this.logger.log(`🚪 USER QUERY: Matrix is asking about user: ${userId}`);
+    this.logger.log(
+      `🚪 USER QUERY: Authorization header: ${authHeader?.substring(0, 20)}...`,
+    );
 
     // Validate authorization token
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       this.logger.warn(
-        `Invalid authorization header format for user query: ${userId}`,
+        `❌ USER QUERY: Invalid authorization header format for user query: ${userId}`,
       );
       return { error: 'Invalid token' };
     }
 
     const token = authHeader.replace('Bearer ', '');
     if (token !== this.homeserverToken) {
-      this.logger.warn(`Invalid token for user query: ${userId}`);
+      this.logger.warn(
+        `❌ USER QUERY: Invalid token for user query: ${userId}`,
+      );
       return { error: 'Invalid token' };
     }
 
     // Accept all users - anyone can chat in our rooms
-    this.logger.log(`Accepting user: ${userId}`);
+    this.logger.log(`✅ USER QUERY: Accepting user: ${userId}`);
     return {}; // Empty response = success
   }
 
@@ -86,6 +89,7 @@ export class MatrixAppServiceController {
     @Param('roomAlias') roomAlias: string,
     @Headers('authorization') authHeader: string,
   ) {
+    this.logger.log(`🏠 ROOM QUERY: Request for room alias: ${roomAlias}`);
     return this.handleRoomQueryWithAuth(roomAlias, authHeader);
   }
 
@@ -95,11 +99,14 @@ export class MatrixAppServiceController {
     @Param('roomAlias') roomAlias: string,
     @Headers('authorization') authHeader: string,
   ) {
+    this.logger.log(
+      `🏠 ROOM QUERY (standard): Request for room alias: ${roomAlias}`,
+    );
     return this.handleRoomQueryWithAuth(roomAlias, authHeader);
   }
 
   private async handleRoomQueryWithAuth(roomAlias: string, authHeader: string) {
-    this.logger.debug(`Query room request for: ${roomAlias}`);
+    this.logger.log(`🔍 ROOM QUERY AUTH: Processing query for: ${roomAlias}`);
 
     // Validate authorization token
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -126,25 +133,29 @@ export class MatrixAppServiceController {
     @Headers('authorization') authHeader: string,
   ) {
     const events = body.events || [];
-    this.logger.debug(`Transaction ${txnId} with ${events.length} events`);
+    this.logger.log(`🔄 TRANSACTION: ${txnId} with ${events.length} events`);
 
     // Validate authorization token
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       this.logger.warn(
-        `Invalid authorization header format for transaction: ${txnId}`,
+        `❌ TRANSACTION: Invalid authorization header format for transaction: ${txnId}`,
       );
       return { error: 'Invalid token' };
     }
 
     const token = authHeader.replace('Bearer ', '');
     if (token !== this.homeserverToken) {
-      this.logger.warn(`Invalid token for transaction: ${txnId}`);
+      this.logger.warn(
+        `❌ TRANSACTION: Invalid token for transaction: ${txnId}`,
+      );
       return { error: 'Invalid token' };
     }
 
     // Process events
     for (const event of events) {
-      this.logger.log(`Processing event: ${event.type} from ${event.sender}`);
+      this.logger.log(
+        `🔄 TRANSACTION: Processing event: ${event.type} from ${event.sender} in room ${event.room_id}`,
+      );
 
       // Handle different event types
       switch (event.type) {
@@ -154,13 +165,30 @@ export class MatrixAppServiceController {
           await this.handleUserActivity(event);
           break;
         case 'm.room.member':
-          this.logger.debug(`Member event: ${event.content?.membership}`);
+          this.logger.log(
+            `🔍 MEMBER EVENT: membership=${event.content?.membership}, sender=${event.sender}, state_key=${event.state_key}, room=${event.room_id}`,
+          );
           if (
             event.content?.membership === 'join' &&
             event.sender === event.state_key
           ) {
             // User attempting to join - check if they need invitation
+            this.logger.log(
+              `🚪 PROCESSING JOIN: User ${event.sender} joining room ${event.room_id}`,
+            );
             await this.handleJoinAttempt(event);
+          } else if (event.content?.membership === 'leave') {
+            this.logger.log(
+              `🚪 LEAVE EVENT: User ${event.sender} leaving room ${event.room_id} (state_key: ${event.state_key})`,
+            );
+          } else if (event.content?.membership === 'invite') {
+            this.logger.log(
+              `🚪 INVITE EVENT: User ${event.sender} inviting ${event.state_key} to room ${event.room_id}`,
+            );
+          } else {
+            this.logger.log(
+              `🚪 OTHER MEMBERSHIP: ${event.content?.membership} from ${event.sender} for ${event.state_key}`,
+            );
           }
           break;
         case 'm.room.create':
@@ -209,12 +237,25 @@ export class MatrixAppServiceController {
     return []; // No third-party users supported
   }
 
+  // Debug endpoint to test appservice connectivity
+  @Get('health')
+  healthCheck() {
+    this.logger.log('🩺 HEALTH CHECK: Appservice is reachable');
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      message: 'OpenMeet Matrix AppService is running',
+    };
+  }
+
   /**
    * Handle Matrix-native room queries and create rooms on-demand
    * This implements the Application Service room provisioning pattern
    */
   private async handleRoomQuery(roomAlias: string): Promise<any> {
-    this.logger.log(`Processing Matrix-native room query: ${roomAlias}`);
+    this.logger.log(
+      `🏗️ ROOM QUERY: Processing Matrix-native room query: ${roomAlias}`,
+    );
 
     try {
       // Parse room alias to determine entity type and identifier
@@ -286,19 +327,15 @@ export class MatrixAppServiceController {
 
       // Create the Matrix room before responding
       try {
-        const roomOptions = {
-          room_alias_name: localpart, // Use localpart for room alias
-          name: `${event.name} Chat`,
-          topic: `Chat room for ${event.name}`,
-          isPublic: true, // This will set preset to PublicChat in MatrixRoomService
-        };
-
-        const roomResult = await this.matrixRoomService.createRoom(
-          roomOptions,
+        const roomResult = await this.matrixRoomService.createEntityRoom(
+          {
+            name: event.name,
+            slug: event.slug,
+            visibility: event.visibility === 'public' ? 'public' : 'private',
+          },
+          localpart,
           tenantId,
-        );
-        this.logger.log(
-          `Matrix room created successfully: ${roomResult.roomId} with alias ${roomAlias}`,
+          'event',
         );
 
         // Configure the newly created room and invite attendees
@@ -379,10 +416,16 @@ export class MatrixAppServiceController {
    */
   private async handleGroupRoomQuery(localpart: string): Promise<any> {
     try {
+      this.logger.log(
+        `👥 GROUP ROOM QUERY: Processing group room query for: ${localpart}`,
+      );
+
       // Parse: group-{slug}-{tenantId}
       const parts = localpart.split('-');
       if (parts.length < 3 || parts[0] !== 'group') {
-        this.logger.warn(`Invalid group room alias format: ${localpart}`);
+        this.logger.warn(
+          `❌ GROUP ROOM QUERY: Invalid group room alias format: ${localpart}`,
+        );
         return { error: 'Room not found' };
       }
 
@@ -391,7 +434,7 @@ export class MatrixAppServiceController {
       const groupSlug = parts.slice(1, -1).join('-');
 
       this.logger.log(
-        `Checking if group exists: ${groupSlug} in tenant ${tenantId}`,
+        `👥 GROUP ROOM QUERY: Checking if group exists: ${groupSlug} in tenant ${tenantId}`,
       );
 
       // Check if group exists in the business logic using tenant-aware method
@@ -424,19 +467,15 @@ export class MatrixAppServiceController {
 
       // Create the Matrix room before responding
       try {
-        const roomOptions = {
-          room_alias_name: localpart, // Use localpart for room alias
-          name: `${group.name} Chat`,
-          topic: `Chat room for ${group.name}`,
-          isPublic: true, // Always public like events - AppService handles access control
-        };
-
-        const roomResult = await this.matrixRoomService.createRoom(
-          roomOptions,
+        const roomResult = await this.matrixRoomService.createEntityRoom(
+          {
+            name: group.name,
+            slug: group.slug,
+            visibility: group.visibility === 'public' ? 'public' : 'private',
+          },
+          localpart,
           tenantId,
-        );
-        this.logger.log(
-          `Matrix room created successfully: ${roomResult.roomId} with alias ${roomAlias}`,
+          'group',
         );
 
         // Configure the newly created room and invite members
@@ -559,22 +598,14 @@ export class MatrixAppServiceController {
 
       // Create the Matrix DM room
       try {
-        const roomOptions = {
-          room_alias_name: localpart, // Use localpart for room alias
-          name: `${user1Handle} and ${user2Handle}`, // Optional, clients often hide this
-          topic: `Direct message between ${user1Handle} and ${user2Handle}`,
-          isDirect: true, // Key parameter for DM rooms
-          isPublic: false, // DMs are always private
-          encrypted: true, // Enable encryption for privacy
-          inviteUserIds: [user1MatrixId, user2MatrixId],
-        };
-
-        const roomResult = await this.matrixRoomService.createRoom(
-          roomOptions,
+        const roomResult = await this.matrixRoomService.createDirectMessageRoom(
+          {
+            user1Handle,
+            user2Handle,
+            user1MatrixId,
+            user2MatrixId,
+          },
           tenantId,
-        );
-        this.logger.log(
-          `Matrix DM room created successfully: ${roomResult.roomId} with alias ${roomAlias}`,
         );
 
         // Update both users' m.direct account data to include the new room
@@ -839,7 +870,9 @@ export class MatrixAppServiceController {
   private async handleJoinAttempt(event: any): Promise<void> {
     try {
       const { sender, room_id } = event;
-      this.logger.log(`Join attempt by ${sender} in room ${room_id}`);
+      this.logger.log(
+        `🚪 JOIN ATTEMPT: User ${sender} trying to join room ${room_id}`,
+      );
 
       // Find which tenant owns this room by checking canonical alias across all tenants
       const tenants = fetchTenants();
@@ -899,6 +932,9 @@ export class MatrixAppServiceController {
       }
 
       if (entityType === 'event') {
+        this.logger.log(
+          `🚪 JOIN ATTEMPT: Processing event room join for ${sender} in ${entitySlug}`,
+        );
         await this.handleEventJoinAttempt(
           sender,
           entitySlug,
@@ -906,6 +942,9 @@ export class MatrixAppServiceController {
           room_id,
         );
       } else if (entityType === 'group') {
+        this.logger.log(
+          `🚪 JOIN ATTEMPT: Processing group room join for ${sender} in ${entitySlug}`,
+        );
         await this.handleGroupJoinAttempt(
           sender,
           entitySlug,
@@ -1021,6 +1060,29 @@ export class MatrixAppServiceController {
         this.logger.log(
           `Successfully invited ${senderMatrixId} to event room ${roomAlias}`,
         );
+
+        // Immediately sync power levels for this user to ensure proper permissions
+        try {
+          this.logger.log(
+            `🔄 POWER SYNC: Setting power levels for newly invited user ${senderMatrixId} in event ${eventSlug}`,
+          );
+
+          // Get room ID from alias for power level operations
+          const actualRoomId =
+            await this.matrixRoomService.resolveRoomAlias(roomAlias);
+
+          // Trigger power level sync for the entire event to ensure consistency
+          await this.syncEventPowerLevels(eventSlug, tenantId, actualRoomId);
+
+          this.logger.log(
+            `✅ POWER SYNC: Successfully updated power levels after inviting ${senderMatrixId}`,
+          );
+        } catch (powerLevelError) {
+          // Don't fail the invitation if power level sync fails - log and continue
+          this.logger.warn(
+            `Failed to sync power levels after inviting ${senderMatrixId}: ${powerLevelError.message}`,
+          );
+        }
       } else {
         this.logger.debug(
           `User ${senderMatrixId} is not allowed to chat in event ${eventSlug}`,
@@ -1131,6 +1193,29 @@ export class MatrixAppServiceController {
       this.logger.log(
         `Successfully invited ${senderMatrixId} to group room ${roomAlias}`,
       );
+
+      // Immediately sync power levels for this user to ensure proper permissions
+      try {
+        this.logger.log(
+          `🔄 POWER SYNC: Setting power levels for newly invited user ${senderMatrixId} in group ${groupSlug}`,
+        );
+
+        // Get room ID from alias for power level operations
+        const actualRoomId =
+          await this.matrixRoomService.resolveRoomAlias(roomAlias);
+
+        // Trigger power level sync for the entire group to ensure consistency
+        await this.syncGroupPowerLevels(groupSlug, tenantId, actualRoomId);
+
+        this.logger.log(
+          `✅ POWER SYNC: Successfully updated power levels after inviting ${senderMatrixId}`,
+        );
+      } catch (powerLevelError) {
+        // Don't fail the invitation if power level sync fails - log and continue
+        this.logger.warn(
+          `Failed to sync power levels after inviting ${senderMatrixId}: ${powerLevelError.message}`,
+        );
+      }
     } catch (error) {
       this.logger.error(
         `Error handling group join attempt: ${error.message}`,
@@ -1160,7 +1245,74 @@ export class MatrixAppServiceController {
         return;
       }
 
-      this.logger.log(`Room configured for group ${group.name} (${group.id})`);
+      // Get the actual room ID - either from parameter or resolve from alias
+      let actualRoomId = roomId;
+      if (!actualRoomId) {
+        this.logger.log(`Resolving room ID from alias: ${alias}`);
+        try {
+          // Use MatrixBotService to resolve the alias to room ID
+          actualRoomId = await this.matrixRoomService.resolveRoomAlias(alias);
+          this.logger.log(
+            `Resolved alias ${alias} to room ID: ${actualRoomId}`,
+          );
+        } catch (error) {
+          this.logger.error(
+            `Failed to resolve room alias ${alias}: ${error.message}`,
+          );
+          return;
+        }
+      }
+
+      // Safely update the group's matrixRoomId field with room existence verification
+      if (actualRoomId) {
+        let shouldUpdateDatabase = false;
+        let updateReason = '';
+
+        if (!group.matrixRoomId) {
+          shouldUpdateDatabase = true;
+          updateReason = 'group has no room ID';
+        } else if (group.matrixRoomId === actualRoomId) {
+          this.logger.debug(
+            `Group ${group.id} already has correct matrixRoomId: ${actualRoomId}`,
+          );
+        } else {
+          // Handle room conflict by verifying existing room exists
+          const existingRoomExists =
+            await this.matrixRoomService.verifyRoomExists(
+              group.matrixRoomId,
+              tenantId,
+            );
+          if (!existingRoomExists) {
+            shouldUpdateDatabase = true;
+            updateReason = `existing room ${group.matrixRoomId} no longer exists`;
+          } else {
+            this.logger.warn(
+              `Room conflict: keeping existing room ${group.matrixRoomId} for group ${group.id}`,
+            );
+          }
+        }
+
+        if (shouldUpdateDatabase) {
+          this.logger.log(
+            `Updating group ${group.id} matrixRoomId to: ${actualRoomId} (${updateReason})`,
+          );
+          try {
+            await this.groupService.updateMatrixRoomId(
+              group.id,
+              actualRoomId,
+              tenantId,
+            );
+          } catch (error) {
+            this.logger.error(
+              `Failed to update group matrixRoomId: ${error.message}`,
+            );
+          }
+        }
+      }
+
+      this.logger.log(
+        `Room configured for group ${group.name} (${group.id}), room ID: ${actualRoomId}`,
+      );
 
       // Get Matrix server name from tenant config
       const tenantConfig = getTenantConfig(tenantId);
@@ -1229,31 +1381,6 @@ export class MatrixAppServiceController {
             `Failed to invite group member ${groupMember.user.slug} to Matrix room: ${error.message}`,
           );
         }
-      }
-
-      // Update the group's matrixRoomId field in the database if we have the room ID
-      if (roomId && group.matrixRoomId !== roomId) {
-        this.logger.log(
-          `Updating group ${group.id} matrixRoomId to: ${roomId}`,
-        );
-        try {
-          // Update group's matrixRoomId using direct repository access (similar to event pattern)
-          const dataSource =
-            await this.tenantConnectionService.getTenantConnection(tenantId);
-          const groupRepository = dataSource.getRepository(GroupEntity);
-          await groupRepository.update(group.id, { matrixRoomId: roomId });
-          this.logger.log(
-            `Successfully updated group ${group.id} matrixRoomId`,
-          );
-        } catch (error) {
-          this.logger.error(
-            `Failed to update group matrixRoomId: ${error.message}`,
-          );
-        }
-      } else if (roomId) {
-        this.logger.log(
-          `Group ${group.id} already has correct matrixRoomId: ${roomId}`,
-        );
       }
 
       this.logger.log(
@@ -1725,5 +1852,14 @@ export class MatrixAppServiceController {
       );
       return null;
     }
+  }
+
+  // Debug endpoint to catch any unmatched requests - MUST BE LAST
+  @Get('*')
+  catchAllGet(@Param() params: any, @Headers() headers: any) {
+    this.logger.log(
+      `🔍 APPSERVICE DEBUG: Received GET request to ${params[0]} with headers: ${JSON.stringify(Object.keys(headers))}`,
+    );
+    return { debug: 'appservice is receiving requests' };
   }
 }

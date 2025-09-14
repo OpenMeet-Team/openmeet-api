@@ -35,6 +35,9 @@ describe('MatrixAppServiceController', () => {
     createRoom: jest
       .fn()
       .mockResolvedValue({ roomId: '!test:matrix.example.com' }),
+    createEntityRoom: jest
+      .fn()
+      .mockResolvedValue({ roomId: '!test:matrix.example.com' }),
     resolveRoomAlias: jest.fn().mockResolvedValue('!test:matrix.example.com'),
   };
 
@@ -243,12 +246,14 @@ describe('MatrixAppServiceController', () => {
       );
 
       expect(result).toEqual({});
-      expect(mockMatrixRoomService.createRoom).toHaveBeenCalled();
+      expect(mockMatrixRoomService.createEntityRoom).toHaveBeenCalled();
     });
 
     it('should treat "Room alias already taken" as success', async () => {
       const roomAlreadyTakenError = new Error('Room alias already taken');
-      mockMatrixRoomService.createRoom.mockRejectedValue(roomAlreadyTakenError);
+      mockMatrixRoomService.createEntityRoom.mockRejectedValue(
+        roomAlreadyTakenError,
+      );
 
       const result = await controller.queryRoomStandard(
         '#event-test-event-tenant123:matrix.openmeet.net',
@@ -256,14 +261,14 @@ describe('MatrixAppServiceController', () => {
       );
 
       expect(result).toEqual({});
-      expect(mockMatrixRoomService.createRoom).toHaveBeenCalled();
+      expect(mockMatrixRoomService.createEntityRoom).toHaveBeenCalled();
     });
 
     it('should treat "MatrixError: [400]" as success', async () => {
       const matrix400Error = new Error(
         'MatrixError: [400] Room alias already taken',
       );
-      mockMatrixRoomService.createRoom.mockRejectedValue(matrix400Error);
+      mockMatrixRoomService.createEntityRoom.mockRejectedValue(matrix400Error);
 
       const result = await controller.queryRoomStandard(
         '#event-test-event-tenant123:matrix.openmeet.net',
@@ -277,7 +282,7 @@ describe('MatrixAppServiceController', () => {
       const matrix409Error = new Error(
         'MatrixError: [409] Room alias already exists',
       );
-      mockMatrixRoomService.createRoom.mockRejectedValue(matrix409Error);
+      mockMatrixRoomService.createEntityRoom.mockRejectedValue(matrix409Error);
 
       const result = await controller.queryRoomStandard(
         '#event-test-event-tenant123:matrix.openmeet.net',
@@ -291,7 +296,9 @@ describe('MatrixAppServiceController', () => {
       const aliasConflictError = new Error(
         'M_ROOM_IN_USE: alias already taken',
       );
-      mockMatrixRoomService.createRoom.mockRejectedValue(aliasConflictError);
+      mockMatrixRoomService.createEntityRoom.mockRejectedValue(
+        aliasConflictError,
+      );
 
       const result = await controller.queryRoomStandard(
         '#event-test-event-tenant123:matrix.openmeet.net',
@@ -303,7 +310,7 @@ describe('MatrixAppServiceController', () => {
 
     it('should treat "already exists" as success', async () => {
       const existsError = new Error('Room already exists');
-      mockMatrixRoomService.createRoom.mockRejectedValue(existsError);
+      mockMatrixRoomService.createEntityRoom.mockRejectedValue(existsError);
 
       const result = await controller.queryRoomStandard(
         '#event-test-event-tenant123:matrix.openmeet.net',
@@ -317,7 +324,7 @@ describe('MatrixAppServiceController', () => {
       const genuineError = new Error(
         'MatrixError: [500] Internal server error',
       );
-      mockMatrixRoomService.createRoom.mockRejectedValue(genuineError);
+      mockMatrixRoomService.createEntityRoom.mockRejectedValue(genuineError);
 
       const result = await controller.queryRoomStandard(
         '#event-test-event-tenant123:matrix.openmeet.net',
@@ -329,7 +336,7 @@ describe('MatrixAppServiceController', () => {
 
     it('should return error for network failures', async () => {
       const networkError = new Error('ECONNREFUSED');
-      mockMatrixRoomService.createRoom.mockRejectedValue(networkError);
+      mockMatrixRoomService.createEntityRoom.mockRejectedValue(networkError);
 
       const result = await controller.queryRoomStandard(
         '#event-test-event-tenant123:matrix.openmeet.net',
