@@ -802,7 +802,7 @@ export class MatrixEventListener {
    * Ensure the Matrix room exists for an event, creating it if necessary
    */
   private async ensureRoomExists(
-    event: { id: number; slug: string; name: string },
+    event: { id: number; slug: string; name: string; visibility: string },
     roomAlias: string,
     tenantId: string,
   ): Promise<void> {
@@ -822,7 +822,7 @@ export class MatrixEventListener {
         room_alias_name: localpart, // Use localpart for room alias
         name: `${event.name} Chat`,
         topic: `Chat room for ${event.name}`,
-        isPublic: true, // This gets converted to visibility and preset internally
+        isPublic: event.visibility === 'public', // Use actual event visibility
       };
 
       await this.matrixRoomService.createRoom(roomOptions, tenantId);
@@ -856,7 +856,7 @@ export class MatrixEventListener {
    * Ensure the Matrix room exists for a group, creating it if necessary
    */
   private async ensureGroupRoomExists(
-    group: { id: number; slug: string; name: string },
+    group: { id: number; slug: string; name: string; visibility: string },
     roomAlias: string,
     tenantId: string,
   ): Promise<void> {
@@ -876,7 +876,7 @@ export class MatrixEventListener {
         {
           name: group.name,
           slug: group.slug,
-          visibility: 'private',
+          visibility: group.visibility === 'public' ? 'public' : 'private',
         },
         localpart,
         tenantId,
