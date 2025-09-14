@@ -802,7 +802,7 @@ export class MatrixEventListener {
    * Ensure the Matrix room exists for an event, creating it if necessary
    */
   private async ensureRoomExists(
-    event: { id: number; slug: string; name: string },
+    event: { id: number; slug: string; name: string; visibility: string },
     roomAlias: string,
     tenantId: string,
   ): Promise<void> {
@@ -856,7 +856,7 @@ export class MatrixEventListener {
    * Ensure the Matrix room exists for a group, creating it if necessary
    */
   private async ensureGroupRoomExists(
-    group: { id: number; slug: string; name: string },
+    group: { id: number; slug: string; name: string; visibility: string },
     roomAlias: string,
     tenantId: string,
   ): Promise<void> {
