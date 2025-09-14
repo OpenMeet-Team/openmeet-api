@@ -822,7 +822,7 @@ export class MatrixEventListener {
         room_alias_name: localpart, // Use localpart for room alias
         name: `${event.name} Chat`,
         topic: `Chat room for ${event.name}`,
-        isPublic: true, // This gets converted to visibility and preset internally
+        isPublic: event.visibility === 'public', // Use actual event visibility
       };
 
       await this.matrixRoomService.createRoom(roomOptions, tenantId);
@@ -876,7 +876,7 @@ export class MatrixEventListener {
         {
           name: group.name,
           slug: group.slug,
-          visibility: 'private',
+          visibility: group.visibility === 'public' ? 'public' : 'private',
         },
         localpart,
         tenantId,
