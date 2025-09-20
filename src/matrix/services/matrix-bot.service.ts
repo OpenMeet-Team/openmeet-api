@@ -4,7 +4,7 @@ import axios from 'axios';
 import { IMatrixBot } from '../interfaces/matrix-bot.interface';
 import { IMatrixClient } from '../types/matrix.interfaces';
 import { MatrixCoreService } from './matrix-core.service';
-import { MatrixBotUserService, BotUserInfo } from './matrix-bot-user.service';
+import { MatrixBotUserService } from './matrix-bot-user.service';
 import { AllConfigType } from '../../config/config.type';
 
 @Injectable()
@@ -169,7 +169,7 @@ export class MatrixBotService implements IMatrixBot {
     return this.isAuthenticated && this.botClient !== null;
   }
 
-  getBotUserId(tenantId?: string): string {
+  getBotUserId(_tenantId?: string): string {
     if (this.currentBotUserId) {
       return this.currentBotUserId;
     }

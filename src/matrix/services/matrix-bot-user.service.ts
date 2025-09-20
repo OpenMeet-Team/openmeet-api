@@ -20,9 +20,7 @@ export interface BotUserInfo {
 export class MatrixBotUserService {
   private readonly logger = new Logger(MatrixBotUserService.name);
 
-  constructor(
-    private readonly configService: ConfigService,
-  ) {}
+  constructor(private readonly configService: ConfigService) {}
 
   /**
    * Get bot email for a tenant
@@ -47,7 +45,7 @@ export class MatrixBotUserService {
    * With AppServices, we just need the username - the AppService
    * handles user creation and authentication automatically.
    */
-  async getOrCreateBotUser(tenantId: string): Promise<BotUserInfo> {
+  getOrCreateBotUser(tenantId: string): BotUserInfo {
     const botSlug = this.getBotSlug(tenantId);
     const botEmail = this.getBotEmail(tenantId);
 
@@ -67,7 +65,7 @@ export class MatrixBotUserService {
    * Legacy method for backward compatibility. With AppServices,
    * we always use the same bot user pattern.
    */
-  async getBotUserWithFallback(tenantId: string): Promise<BotUserInfo> {
+  getBotUserWithFallback(tenantId: string): BotUserInfo {
     return this.getOrCreateBotUser(tenantId);
   }
 }

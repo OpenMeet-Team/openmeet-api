@@ -6,13 +6,10 @@ import {
 } from '@nestjs/terminus';
 import axios from 'axios';
 import { MatrixCoreService } from '../services/matrix-core.service';
-import { fetchTenants } from '../../utils/tenant-config';
 
 @Injectable()
 export class MatrixHealthIndicator extends HealthIndicator {
-  constructor(
-    private readonly matrixCoreService: MatrixCoreService,
-  ) {
+  constructor(private readonly matrixCoreService: MatrixCoreService) {
     super();
   }
 

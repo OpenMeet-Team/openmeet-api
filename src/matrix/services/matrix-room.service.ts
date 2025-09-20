@@ -1291,8 +1291,13 @@ export class MatrixRoomService implements IMatrixRoomProvider {
 
       // Ensure bot has admin rights before setting other power levels
       const currentUsers = stateEvent?.users || {};
-      if (!currentUsers[appServiceSender] || currentUsers[appServiceSender] < 100) {
-        this.logger.debug(`Granting bot ${appServiceSender} admin rights in room ${roomIdOrAlias}`);
+      if (
+        !currentUsers[appServiceSender] ||
+        currentUsers[appServiceSender] < 100
+      ) {
+        this.logger.debug(
+          `Granting bot ${appServiceSender} admin rights in room ${roomIdOrAlias}`,
+        );
         const botAdminContent = {
           ...stateEvent,
           users: {
@@ -1308,12 +1313,20 @@ export class MatrixRoomService implements IMatrixRoomProvider {
             botAdminContent,
             '',
           );
-          this.logger.debug(`Successfully granted bot admin rights in room ${roomIdOrAlias}`);
+          this.logger.debug(
+            `Successfully granted bot admin rights in room ${roomIdOrAlias}`,
+          );
           stateEvent = botAdminContent; // Update our local copy
         } catch (adminError) {
-          this.logger.warn(`Bot cannot grant itself admin rights in room ${roomIdOrAlias}: ${adminError.message}`);
-          this.logger.warn(`This is expected for existing rooms where the bot was not granted admin rights during creation.`);
-          this.logger.warn(`Power level operations will be limited to what the bot can do with its current permissions.`);
+          this.logger.warn(
+            `Bot cannot grant itself admin rights in room ${roomIdOrAlias}: ${adminError.message}`,
+          );
+          this.logger.warn(
+            `This is expected for existing rooms where the bot was not granted admin rights during creation.`,
+          );
+          this.logger.warn(
+            `Power level operations will be limited to what the bot can do with its current permissions.`,
+          );
 
           // Continue with existing state instead of failing
           // In AppService architecture, bots should get admin rights during room creation
@@ -1329,11 +1342,12 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       if (botPowerLevel < requiredLevel) {
         // Check if there are other bots with admin rights (legacy bot users)
         const adminUsers = Object.entries(existingUsers)
-          .filter(([userId, powerLevel]) => (powerLevel as number) >= 100)
+          .filter(([_userId, powerLevel]) => (powerLevel as number) >= 100)
           .map(([userId]) => userId);
 
-        const legacyBots = adminUsers.filter(userId =>
-          userId.includes('openmeet-bot') && userId !== appServiceSender
+        const legacyBots = adminUsers.filter(
+          (userId) =>
+            userId.includes('openmeet-bot') && userId !== appServiceSender,
         );
 
         this.logger.warn(
@@ -1791,22 +1805,33 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       }
 
       // Check if bot is in room, join if necessary
-      const matrixConfig = this.configService.get<MatrixConfig>('matrix', { infer: true });
+      const matrixConfig = this.configService.get<MatrixConfig>('matrix', {
+        infer: true,
+      });
       const serverName = matrixConfig?.serverName;
       if (!serverName) {
         throw new Error('Matrix server name not configured');
       }
       const botUserId = `@openmeet-bot-${tenantId}:${serverName}`;
-      const isInRoom = await this.matrixBotService.isBotInRoom(roomId, tenantId);
+      const isInRoom = await this.matrixBotService.isBotInRoom(
+        roomId,
+        tenantId,
+      );
 
       if (!isInRoom) {
-        this.logger.debug(`Bot ${botUserId} not in room ${roomId}, attempting to join`);
+        this.logger.debug(
+          `Bot ${botUserId} not in room ${roomId}, attempting to join`,
+        );
         try {
           await this.matrixBotService.joinRoom(roomId, tenantId);
         } catch (joinError) {
-          this.logger.warn(`Failed to join room ${roomId}: ${joinError.message}`);
+          this.logger.warn(
+            `Failed to join room ${roomId}: ${joinError.message}`,
+          );
           // In AppService setup, if regular join fails, we can't access the room
-          throw new Error(`Bot cannot join room ${roomId}: ${joinError.message}`);
+          throw new Error(
+            `Bot cannot join room ${roomId}: ${joinError.message}`,
+          );
         }
       }
 
