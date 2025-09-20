@@ -4,6 +4,7 @@ import { EventEntity } from '../event/infrastructure/persistence/relational/enti
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { EventQueryService } from '../event/services/event-query.service';
 import { GroupService } from '../group/group.service';
+import { EventVisibility, GroupVisibility } from '../core/constants/constant';
 
 export interface SitemapUrl {
   loc: string;
@@ -33,19 +34,16 @@ export class SitemapService {
     // Set tenant ID on request for service layer
     this.request.tenantId = tenantId;
 
-    // SEO-focused filters: only upcoming events in next 6 months
+    // SEO-focused filters: only upcoming events (no end date limit)
     const now = new Date();
-    const sixMonthsFromNow = new Date();
-    sixMonthsFromNow.setMonth(sixMonthsFromNow.getMonth() + 6);
 
     // Format dates as YYYY-MM-DD as expected by the DTO
     const fromDate = now.toISOString().split('T')[0];
-    const toDate = sixMonthsFromNow.toISOString().split('T')[0];
+    // No toDate to include all future events
 
     // Use the event query service to get filtered public events
     const queryEventDto = {
       fromDate,
-      toDate,
       includeRecurring: true,
       expandRecurring: false,
     } as any; // Type assertion to avoid DTO validation issues
@@ -56,10 +54,13 @@ export class SitemapService {
       undefined, // No user (public access)
     );
 
-    // Filter events to only include those with 5+ attendees
+    // Filter events to only include public events with 3+ attendees per design notes
     const events = result.data || [];
     return events.filter((event: any) => {
-      return (event.attendeesCount || 0) >= 5;
+      return (
+        event.visibility === EventVisibility.Public &&
+        (event.attendeesCount || 0) >= 3
+      );
     });
   }
 
@@ -76,10 +77,13 @@ export class SitemapService {
       undefined, // No user (public access)
     );
 
-    // Filter groups to only include active ones (with 3+ members)
+    // Filter groups to only include public groups with 3+ members per design notes
     const groups = result.data || [];
     return groups.filter((group: any) => {
-      return (group.groupMembersCount || 0) >= 3;
+      return (
+        group.visibility === GroupVisibility.Public &&
+        (group.groupMembersCount || 0) >= 3
+      );
     });
   }
 

@@ -5,6 +5,7 @@ import { promisify } from 'util';
 import { SitemapService } from './sitemap.service';
 import { EventQueryService } from '../event/services/event-query.service';
 import { GroupService } from '../group/group.service';
+import { EventVisibility, GroupVisibility } from '../core/constants/constant';
 
 const parseXml = promisify(parseString);
 
@@ -50,19 +51,28 @@ describe('SitemapService', () => {
   });
 
   describe('getPublicEvents', () => {
-    it('should return events with 5+ attendees after filtering', async () => {
+    it('should return public events with 3+ attendees after filtering', async () => {
       const mockEvents = [
         {
           slug: 'event-1',
           updatedAt: new Date('2023-01-01'),
           startDate: new Date('2023-12-01'),
-          attendeesCount: 7,
+          attendeesCount: 5,
+          visibility: EventVisibility.Public,
         },
         {
           slug: 'event-2',
           updatedAt: new Date('2023-01-02'),
           startDate: new Date('2023-12-02'),
-          attendeesCount: 3, // This should be filtered out
+          attendeesCount: 4,
+          visibility: EventVisibility.Private, // Should be filtered out (private)
+        },
+        {
+          slug: 'event-3',
+          updatedAt: new Date('2023-01-03'),
+          startDate: new Date('2023-12-03'),
+          attendeesCount: 2, // Should be filtered out (< 3 attendees)
+          visibility: EventVisibility.Public,
         },
       ];
 
@@ -77,7 +87,6 @@ describe('SitemapService', () => {
         { page: 1, limit: 1000 },
         expect.objectContaining({
           fromDate: expect.any(String),
-          toDate: expect.any(String),
           includeRecurring: true,
           expandRecurring: false,
         }),
@@ -89,17 +98,25 @@ describe('SitemapService', () => {
   });
 
   describe('getPublicGroups', () => {
-    it('should return groups with 3+ members after filtering', async () => {
+    it('should return public groups with 3+ members after filtering', async () => {
       const mockGroups = [
         {
           slug: 'group-1',
           updatedAt: new Date('2023-01-01'),
           groupMembersCount: 5,
+          visibility: GroupVisibility.Public,
         },
         {
           slug: 'group-2',
           updatedAt: new Date('2023-01-02'),
-          groupMembersCount: 2, // This should be filtered out
+          groupMembersCount: 4,
+          visibility: GroupVisibility.Private, // Should be filtered out (private)
+        },
+        {
+          slug: 'group-3',
+          updatedAt: new Date('2023-01-03'),
+          groupMembersCount: 2, // Should be filtered out (< 3 members)
+          visibility: GroupVisibility.Public,
         },
       ];
 
@@ -127,7 +144,8 @@ describe('SitemapService', () => {
           slug: 'event-1',
           updatedAt: new Date('2023-01-01'),
           startDate: new Date('2023-12-01'),
-          attendeesCount: 7,
+          attendeesCount: 5,
+          visibility: EventVisibility.Public,
         },
       ];
       const mockGroups = [
@@ -135,6 +153,7 @@ describe('SitemapService', () => {
           slug: 'group-1',
           updatedAt: new Date('2023-01-01'),
           groupMembersCount: 5,
+          visibility: GroupVisibility.Public,
         },
       ];
 
