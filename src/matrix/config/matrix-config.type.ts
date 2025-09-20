@@ -13,6 +13,8 @@ export type MatrixConfig = {
   adminUser: string;
   adminPassword?: string;
   adminAccessToken?: string;
+  // MAS admin token for admin API operations
+  masAdminToken?: string;
   // Connection settings
   defaultDeviceId: string;
   defaultInitialDeviceDisplayName: string;

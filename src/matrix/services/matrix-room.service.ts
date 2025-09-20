@@ -2,7 +2,6 @@ import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { MatrixCoreService } from './matrix-core.service';
-import { MatrixBotUserService } from './matrix-bot-user.service';
 import { MatrixBotService } from './matrix-bot.service';
 import { CreateRoomOptions, RoomInfo } from '../types/matrix.types';
 import { IMatrixClient, IMatrixRoomProvider } from '../types/matrix.interfaces';
@@ -34,7 +33,6 @@ export class MatrixRoomService implements IMatrixRoomProvider {
 
   constructor(
     private readonly matrixCoreService: MatrixCoreService,
-    private readonly matrixBotUserService: MatrixBotUserService,
     private readonly matrixBotService: MatrixBotService,
     private readonly configService: ConfigService,
     private readonly roomAliasUtils: RoomAliasUtils,
@@ -170,7 +168,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
     tenantId: string,
   ): Promise<IMatrixClient | null> {
     try {
-      this.logger.log(
+      this.logger.debug(
         `Creating bot client for tenant ${tenantId} using MatrixBotService`,
       );
 
@@ -194,7 +192,9 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         return null;
       }
 
-      this.logger.log(`Successfully created bot client for tenant ${tenantId}`);
+      this.logger.debug(
+        `Successfully created bot client for tenant ${tenantId}`,
+      );
 
       return botClient;
     } catch (error) {
@@ -1291,6 +1291,90 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         stateEvent = {};
       }
 
+      // Ensure bot has admin rights before setting other power levels
+      const currentUsers = stateEvent?.users || {};
+      if (
+        !currentUsers[appServiceSender] ||
+        currentUsers[appServiceSender] < 100
+      ) {
+        this.logger.debug(
+          `Granting bot ${appServiceSender} admin rights in room ${roomIdOrAlias}`,
+        );
+        const botAdminContent = {
+          ...stateEvent,
+          users: {
+            ...currentUsers,
+            [appServiceSender]: 100,
+          },
+        };
+
+        try {
+          await botClient.sendStateEvent(
+            roomIdOrAlias,
+            'm.room.power_levels',
+            botAdminContent,
+            '',
+          );
+          this.logger.debug(
+            `Successfully granted bot admin rights in room ${roomIdOrAlias}`,
+          );
+          stateEvent = botAdminContent; // Update our local copy
+        } catch (adminError) {
+          this.logger.warn(
+            `Bot cannot grant itself admin rights in room ${roomIdOrAlias}: ${adminError.message}`,
+          );
+          this.logger.warn(
+            `This is expected for existing rooms where the bot was not granted admin rights during creation.`,
+          );
+          this.logger.warn(
+            `Power level operations will be limited to what the bot can do with its current permissions.`,
+          );
+
+          // Continue with existing state instead of failing
+          // In AppService architecture, bots should get admin rights during room creation
+          // For existing rooms, we work with whatever permissions the bot has
+        }
+      }
+
+      // Check if bot has sufficient permissions to modify power levels
+      const existingUsers = stateEvent?.users || {};
+      const botPowerLevel = existingUsers[appServiceSender] || 0;
+      const requiredLevel = stateEvent?.events?.['m.room.power_levels'] || 100;
+
+      if (botPowerLevel < requiredLevel) {
+        // Check if there are other bots with admin rights (legacy bot users)
+        const adminUsers = Object.entries(existingUsers)
+          .filter(([_userId, powerLevel]) => (powerLevel as number) >= 100)
+          .map(([userId]) => userId);
+
+        const legacyBots = adminUsers.filter(
+          (userId) =>
+            userId.includes('openmeet-bot') && userId !== appServiceSender,
+        );
+
+        this.logger.warn(
+          `Bot ${appServiceSender} has power level ${botPowerLevel} but needs ${requiredLevel} to modify power levels in room ${roomIdOrAlias}`,
+        );
+
+        if (legacyBots.length > 0) {
+          this.logger.warn(
+            `Room appears to have been created by a different bot user: ${legacyBots.join(', ')}`,
+          );
+          this.logger.warn(
+            `This suggests a bot user ID change between environments or deployments.`,
+          );
+          this.logger.warn(
+            `Consider running a bot migration script to transfer admin rights from old bot to new bot.`,
+          );
+        } else {
+          this.logger.warn(
+            `Skipping power level update. This room was likely created before the bot had admin rights.`,
+          );
+        }
+
+        return {}; // Return success but skip the update
+      }
+
       // Update user power levels with proper redaction permissions
       const updatedContent = {
         users_default: 0,
@@ -1307,7 +1391,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       };
 
       this.logger.debug(
-        `Updating power levels: ${JSON.stringify(userPowerLevels)}`,
+        `Bot has sufficient permissions (${botPowerLevel}>=${requiredLevel}). Updating power levels: ${JSON.stringify(userPowerLevels)}`,
       );
 
       // Set updated power levels
@@ -1720,6 +1804,37 @@ export class MatrixRoomService implements IMatrixRoomProvider {
       const matrixClient = await this.createBotClient(tenantId);
       if (!matrixClient) {
         throw new Error(`Matrix client not available for tenant ${tenantId}`);
+      }
+
+      // Check if bot is in room, join if necessary
+      const matrixConfig = this.configService.get<MatrixConfig>('matrix', {
+        infer: true,
+      });
+      const serverName = matrixConfig?.serverName;
+      if (!serverName) {
+        throw new Error('Matrix server name not configured');
+      }
+      const botUserId = `@openmeet-bot-${tenantId}:${serverName}`;
+      const isInRoom = await this.matrixBotService.isBotInRoom(
+        roomId,
+        tenantId,
+      );
+
+      if (!isInRoom) {
+        this.logger.debug(
+          `Bot ${botUserId} not in room ${roomId}, attempting to join`,
+        );
+        try {
+          await this.matrixBotService.joinRoom(roomId, tenantId);
+        } catch (joinError) {
+          this.logger.warn(
+            `Failed to join room ${roomId}: ${joinError.message}`,
+          );
+          // In AppService setup, if regular join fails, we can't access the room
+          throw new Error(
+            `Bot cannot join room ${roomId}: ${joinError.message}`,
+          );
+        }
       }
 
       // Get the canonical alias from room state

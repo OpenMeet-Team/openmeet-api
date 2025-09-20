@@ -240,9 +240,6 @@ async function bootstrap() {
       });
 
       logger.log(`Application is running on: ${await app.getUrl()}`);
-      logger.log(
-        `WebSocket server removed - using Matrix client for real-time events`,
-      );
 
       return server;
     } catch (error) {

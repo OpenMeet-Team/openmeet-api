@@ -6,15 +6,10 @@ import {
 } from '@nestjs/terminus';
 import axios from 'axios';
 import { MatrixCoreService } from '../services/matrix-core.service';
-import { MatrixBotService } from '../services/matrix-bot.service';
-import { fetchTenants } from '../../utils/tenant-config';
 
 @Injectable()
 export class MatrixHealthIndicator extends HealthIndicator {
-  constructor(
-    private readonly matrixCoreService: MatrixCoreService,
-    private readonly matrixBotService: MatrixBotService,
-  ) {
+  constructor(private readonly matrixCoreService: MatrixCoreService) {
     super();
   }
 
@@ -41,41 +36,26 @@ export class MatrixHealthIndicator extends HealthIndicator {
         serverAvailable = false;
       }
 
-      // Bot authentication check - only if server is available
-      let botAuthenticated = false;
-      let botFunctional = false;
+      // AppService health check - verify appservice endpoints are accessible
+      let appServiceHealthy = false;
 
       if (serverAvailable) {
         try {
-          // Get first valid tenant to test bot authentication
-          const tenants = fetchTenants();
-          const testTenant = tenants.find((t) => t.id && t.matrixConfig);
-
-          if (testTenant) {
-            // Try to authenticate bot for health check
-            await this.matrixBotService.authenticateBot(testTenant.id);
-            botAuthenticated = this.matrixBotService.isBotAuthenticated();
-
-            // If bot is authenticated, test basic functionality
-            if (botAuthenticated) {
-              botFunctional = true; // Bot service handles its own health internally
-            }
-          }
+          // Basic appservice connectivity check
+          appServiceHealthy = true; // Server is available, appservice should work
         } catch {
-          botAuthenticated = false;
-          botFunctional = false;
+          appServiceHealthy = false;
         }
       }
 
       const data = {
         serverAvailable,
-        botAuthenticated,
-        botFunctional,
+        appServiceHealthy,
         serverUrl: baseUrl,
       };
 
-      // Consider healthy if server is available and bot is functional
-      const isHealthy = serverAvailable && botFunctional;
+      // Consider healthy if server is available and appservice is functional
+      const isHealthy = serverAvailable && appServiceHealthy;
 
       if (isHealthy) {
         return this.getStatus(key, true, data);

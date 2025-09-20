@@ -1,6 +1,7 @@
 /**
- * Interface for Matrix Bot operations
- * Defines the contract for bot-based Matrix administrative operations
+ * Interface for Matrix AppService Bot operations
+ * Defines the contract for AppService-based Matrix administrative operations
+ * All operations use AppService authentication tokens, not individual bot credentials
  */
 
 export interface IMatrixBot {
