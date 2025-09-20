@@ -384,15 +384,21 @@ describe('MatrixRoomService', () => {
         '',
       );
 
-      expect(mockMatrixClient.sendStateEvent).toHaveBeenCalledWith(
+      // Should be called twice: once for bot admin rights, once for final power levels
+      expect(mockMatrixClient.sendStateEvent).toHaveBeenCalledTimes(2);
+
+      // Second call should include all users including the bot
+      expect(mockMatrixClient.sendStateEvent).toHaveBeenNthCalledWith(
+        2,
         roomId,
         'm.room.power_levels',
         expect.objectContaining({
-          users: {
+          users: expect.objectContaining({
             '@admin:example.org': 100,
             '@moderator:example.org': 50,
             '@user:example.org': 0,
-          },
+            '@openmeet-bot-test-tenant:matrix.openmeet.net': 100, // Bot gets admin rights
+          }),
         }),
         '',
       );
@@ -421,14 +427,19 @@ describe('MatrixRoomService', () => {
 
       await service.setRoomPowerLevels(roomId, userLevels, 'test-tenant');
 
-      // Should create a default power levels structure
-      expect(mockMatrixClient.sendStateEvent).toHaveBeenCalledWith(
+      // Should be called twice: once for bot admin rights, once for final power levels
+      expect(mockMatrixClient.sendStateEvent).toHaveBeenCalledTimes(2);
+
+      // Second call should create default power levels structure with bot and user
+      expect(mockMatrixClient.sendStateEvent).toHaveBeenNthCalledWith(
+        2,
         roomId,
         'm.room.power_levels',
         expect.objectContaining({
-          users: {
+          users: expect.objectContaining({
             '@admin:example.org': 100,
-          },
+            '@openmeet-bot-test-tenant:matrix.openmeet.net': 100, // Bot gets admin rights
+          }),
           users_default: 0,
           events_default: 0,
           state_default: 50,
