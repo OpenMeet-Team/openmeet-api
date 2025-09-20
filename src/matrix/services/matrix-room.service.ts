@@ -168,7 +168,7 @@ export class MatrixRoomService implements IMatrixRoomProvider {
     tenantId: string,
   ): Promise<IMatrixClient | null> {
     try {
-      this.logger.log(
+      this.logger.debug(
         `Creating bot client for tenant ${tenantId} using MatrixBotService`,
       );
 
@@ -192,7 +192,9 @@ export class MatrixRoomService implements IMatrixRoomProvider {
         return null;
       }
 
-      this.logger.log(`Successfully created bot client for tenant ${tenantId}`);
+      this.logger.debug(
+        `Successfully created bot client for tenant ${tenantId}`,
+      );
 
       return botClient;
     } catch (error) {

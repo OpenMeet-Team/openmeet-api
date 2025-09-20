@@ -100,7 +100,7 @@ export class MatrixBotService implements IMatrixBot {
       // The display name must be set via Synapse admin API or user profile management
 
       this.isAuthenticated = true;
-      this.logger.log(
+      this.logger.debug(
         `Matrix bot authenticated with Application Service for tenant: ${tenantId}`,
       );
     } catch (error) {

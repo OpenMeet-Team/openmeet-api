@@ -160,9 +160,7 @@ export class MatrixAppServiceController {
       // Handle different event types
       switch (event.type) {
         case 'm.room.message':
-          this.logger.debug(`Message event: ${event.content?.body}`);
-          // Sync power levels when users are active in Matrix rooms
-          await this.handleUserActivity(event);
+          // Message events are handled silently - no action needed
           break;
         case 'm.room.member':
           this.logger.log(
@@ -172,11 +170,13 @@ export class MatrixAppServiceController {
             event.content?.membership === 'join' &&
             event.sender === event.state_key
           ) {
-            // User attempting to join - check if they need invitation
+            // User attempting to join - check if they need invitation and sync power levels
             this.logger.log(
               `🚪 PROCESSING JOIN: User ${event.sender} joining room ${event.room_id}`,
             );
             await this.handleJoinAttempt(event);
+            // Sync power levels after user joins
+            await this.handleUserActivity(event);
           } else if (event.content?.membership === 'leave') {
             this.logger.log(
               `🚪 LEAVE EVENT: User ${event.sender} leaving room ${event.room_id} (state_key: ${event.state_key})`,
@@ -1396,7 +1396,7 @@ export class MatrixAppServiceController {
 
   /**
    * Handle user activity in Matrix rooms - sync power levels based on OpenMeet roles
-   * Triggered by m.room.message events when users are active
+   * Triggered by m.room.member join events when users join rooms
    */
   private async handleUserActivity(event: any): Promise<void> {
     try {
