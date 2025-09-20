@@ -11,17 +11,14 @@ import { JwtModule } from '@nestjs/jwt';
 import { TenantModule } from '../tenant/tenant.module';
 import { AuthModule } from '../auth/auth.module';
 import { MatrixCoreService } from './services/matrix-core.service';
+import { MatrixBotService } from './services/matrix-bot.service';
+import { MatrixBotUserService } from './services/matrix-bot-user.service';
 import { MatrixUserService } from './services/matrix-user.service';
 import { MatrixRoomService } from './services/matrix-room.service';
 import { MatrixMessageService } from './services/matrix-message.service';
 import { MatrixHealthIndicator } from './health/matrix.health';
 import { configureMatrixLogging } from './config/matrix-logger';
 import { GlobalMatrixValidationService } from './services/global-matrix-validation.service';
-import { MatrixHandleMigrationService } from './services/matrix-handle-migration.service';
-import { MatrixBotService } from './services/matrix-bot.service';
-import { MatrixBotUserService } from './services/matrix-bot-user.service';
-import { MatrixBotRotationService } from './services/matrix-bot-rotation.service';
-import { TenantBotSetupService } from './services/tenant-bot-setup.service';
 import { RoomAliasUtils } from './utils/room-alias.utils';
 import { MatrixEventListener } from './matrix-event.listener';
 // ChatModule removed - Matrix Application Service handles room operations directly
@@ -67,14 +64,11 @@ configureMatrixLogging();
     MatrixCoreService,
     MatrixBotService,
     MatrixBotUserService,
-    MatrixBotRotationService,
-    TenantBotSetupService,
     MatrixUserService,
     MatrixRoomService,
     MatrixMessageService,
     MatrixHealthIndicator,
     GlobalMatrixValidationService,
-    MatrixHandleMigrationService,
     RoomAliasUtils,
     MatrixEventListener,
 
@@ -89,8 +83,6 @@ configureMatrixLogging();
     MatrixCoreService,
     MatrixBotService,
     MatrixBotUserService,
-    MatrixBotRotationService,
-    TenantBotSetupService,
     MatrixUserService,
     MatrixRoomService,
     MatrixMessageService,

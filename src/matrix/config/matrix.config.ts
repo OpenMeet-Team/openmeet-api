@@ -44,6 +44,9 @@ export const matrixConfig = registerAs<MatrixConfig>('matrix', () => {
   const adminPassword = process.env.MATRIX_ADMIN_PASSWORD;
   const adminAccessToken = process.env.MATRIX_ADMIN_ACCESS_TOKEN || null;
 
+  // MAS admin token for admin API operations
+  const masAdminToken = process.env.MAS_ADMIN_TOKEN;
+
   console.log('Matrix configuration environment variables:', {
     MATRIX_HOMESERVER_URL: process.env.MATRIX_HOMESERVER_URL,
     MATRIX_BASE_URL: process.env.MATRIX_BASE_URL,
@@ -77,6 +80,8 @@ export const matrixConfig = registerAs<MatrixConfig>('matrix', () => {
     adminUser: adminUsername,
     adminPassword,
     adminAccessToken: adminAccessToken || '',
+    // MAS admin token for admin API operations
+    masAdminToken,
     // Connection settings
     defaultDeviceId: process.env.MATRIX_DEFAULT_DEVICE_ID || 'OPENMEET_SERVER',
     defaultInitialDeviceDisplayName:

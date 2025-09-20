@@ -4,7 +4,7 @@ import axios from 'axios';
 import { IMatrixBot } from '../interfaces/matrix-bot.interface';
 import { IMatrixClient } from '../types/matrix.interfaces';
 import { MatrixCoreService } from './matrix-core.service';
-import { MatrixBotUserService } from './matrix-bot-user.service';
+import { MatrixBotUserService, BotUserInfo } from './matrix-bot-user.service';
 import { AllConfigType } from '../../config/config.type';
 
 @Injectable()
@@ -18,6 +18,7 @@ export class MatrixBotService implements IMatrixBot {
   private readonly serverName: string;
   private readonly homeServerUrl: string;
   private readonly appServiceToken: string;
+  private readonly appServiceId: string;
   private readonly useAppServiceAuth: boolean;
 
   constructor(
@@ -47,6 +48,7 @@ export class MatrixBotService implements IMatrixBot {
     // Load Matrix Application Service configuration
     const matrixConfig = this.configService.get('matrix', { infer: true });
     this.appServiceToken = matrixConfig?.appservice?.token || '';
+    this.appServiceId = matrixConfig?.appservice?.id || '';
     this.useAppServiceAuth = !!this.appServiceToken;
 
     if (this.useAppServiceAuth) {
@@ -80,34 +82,22 @@ export class MatrixBotService implements IMatrixBot {
       }
 
       // Create bot client using application service token
-      // Use tenant-specific bot user ID for proper namespacing
-      const tenantSpecificBotUserId = `@${botUser.slug}:${this.serverName}`;
+      // Use AppService ID directly (no tenant suffix needed)
+      const botUserId = `@${this.appServiceId}:${this.serverName}`;
 
-      this.currentBotUserId = tenantSpecificBotUserId; // Use tenant-specific bot user ID
+      this.currentBotUserId = botUserId;
       this.currentTenantId = tenantId;
 
       this.botClient = sdk.createClient({
         baseUrl: this.homeServerUrl,
         accessToken: this.appServiceToken,
-        userId: tenantSpecificBotUserId, // Authenticate as tenant-specific bot user
+        userId: botUserId, // Authenticate as AppService bot user
         localTimeoutMs: 30000,
         useAuthorizationHeader: true,
       });
 
-      // Set display name for bot user
-      try {
-        const firstName = botUser.firstName?.trim();
-        const lastName = botUser.lastName?.trim();
-        const displayName =
-          firstName && lastName
-            ? `${firstName} ${lastName}`
-            : firstName || lastName || 'OpenMeet Bot';
-
-        await this.botClient.setDisplayName(displayName);
-        this.logger.log(`Bot display name set to: ${displayName}`);
-      } catch (error) {
-        this.logger.warn(`Failed to set bot display name: ${error.message}`);
-      }
+      // Note: AppServices can't set display names for users they impersonate
+      // The display name must be set via Synapse admin API or user profile management
 
       this.isAuthenticated = true;
       this.logger.log(
@@ -184,12 +174,8 @@ export class MatrixBotService implements IMatrixBot {
       return this.currentBotUserId;
     }
 
-    // If no authenticated bot, return the expected format
-    if (tenantId) {
-      return `@openmeet-bot-${tenantId}:${this.serverName}`;
-    }
-
-    throw new Error('No bot authenticated and no tenantId provided');
+    // If no authenticated bot, return the AppService ID directly
+    return `@${this.appServiceId}:${this.serverName}`;
   }
 
   private async ensureBotAuthenticated(tenantId: string): Promise<void> {
@@ -230,6 +216,17 @@ export class MatrixBotService implements IMatrixBot {
     this.logger.log(`Creating Matrix room: ${options.name}`);
 
     const sdk = this.matrixCoreService.getSdk();
+
+    // Ensure bot gets admin rights in the room by including it in power levels
+    const botUserId = this.getBotUserId(tenantId);
+    const powerLevelOverride = {
+      ...options.powerLevelContentOverride,
+      users: {
+        ...options.powerLevelContentOverride?.users,
+        [botUserId]: 100, // Bot always gets admin rights
+      },
+    };
+
     const createRoomOptions = {
       name: options.name,
       topic: options.topic,
@@ -239,7 +236,7 @@ export class MatrixBotService implements IMatrixBot {
       preset: options.isPublic ? sdk.Preset.PublicChat : sdk.Preset.PrivateChat,
       initial_state: [] as any[],
       invite: options.inviteUserIds || [],
-      power_level_content_override: options.powerLevelContentOverride,
+      power_level_content_override: powerLevelOverride,
     };
 
     // Set encryption if requested

@@ -1840,11 +1840,12 @@ export class MatrixAppServiceController {
       const serverName = await this.getMatrixServerName(tenantId);
       if (!serverName) return null;
 
-      // Use the main AppService bot for power level operations
+      // Use AppService bot for power level operations (no tenant suffix)
       const appServiceId = this.configService.get('matrix', { infer: true })
         ?.appservice?.id;
       if (!appServiceId) return null;
 
+      // Return AppService bot user ID to match MatrixBotService (simplified)
       return `@${appServiceId}:${serverName}`;
     } catch (error) {
       this.logger.error(
