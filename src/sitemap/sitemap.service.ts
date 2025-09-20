@@ -57,7 +57,10 @@ export class SitemapService {
     // Filter events to only include public events with 3+ attendees per design notes
     const events = result.data || [];
     return events.filter((event: any) => {
-      return event.visibility === EventVisibility.Public && (event.attendeesCount || 0) >= 3;
+      return (
+        event.visibility === EventVisibility.Public &&
+        (event.attendeesCount || 0) >= 3
+      );
     });
   }
 
@@ -77,7 +80,10 @@ export class SitemapService {
     // Filter groups to only include public groups with 3+ members per design notes
     const groups = result.data || [];
     return groups.filter((group: any) => {
-      return group.visibility === GroupVisibility.Public && (group.groupMembersCount || 0) >= 3;
+      return (
+        group.visibility === GroupVisibility.Public &&
+        (group.groupMembersCount || 0) >= 3
+      );
     });
   }
 
