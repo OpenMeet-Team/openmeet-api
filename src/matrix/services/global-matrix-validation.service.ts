@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { MatrixHandleRegistryEntity } from '../infrastructure/persistence/relational/entities/matrix-handle-registry.entity';
 import { Trace } from '../../utils/trace.decorator';
 
@@ -25,6 +26,7 @@ export class GlobalMatrixValidationService {
   constructor(
     @InjectDataSource()
     private readonly dataSource: DataSource,
+    private readonly eventEmitter: EventEmitter2,
   ) {
     this.registry = this.dataSource.getRepository(MatrixHandleRegistryEntity);
   }
@@ -109,6 +111,17 @@ export class GlobalMatrixValidationService {
 
       this.logger.log(
         `Registered Matrix handle: ${handle} for user ${userId} in tenant ${tenantId}`,
+      );
+
+      // Emit event to notify other modules that a Matrix handle was registered
+      // This allows event/group modules to reprocess pending chat invitations
+      this.eventEmitter.emit('matrix.handle.registered', {
+        userId,
+        tenantId,
+        handle,
+      });
+      this.logger.debug(
+        `Emitted matrix.handle.registered event for user ${userId} in tenant ${tenantId}`,
       );
     } catch (error) {
       this.logger.error(
