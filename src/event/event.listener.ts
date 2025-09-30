@@ -4,6 +4,7 @@ import { REQUEST } from '@nestjs/core';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventAttendeeStatus } from '../core/constants/constant';
+import { UserService } from '../user/user.service';
 
 @Injectable()
 export class EventListener {
@@ -12,6 +13,7 @@ export class EventListener {
   constructor(
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly userService: UserService,
     @Inject(REQUEST) private readonly request: any,
   ) {}
 
@@ -250,6 +252,67 @@ export class EventListener {
     } catch (error) {
       this.logger.error(
         `Failed to process event attendee deleted for user ${params.userId} in event ${params.eventId}: ${error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Handle Matrix handle registration event
+   * Reprocess pending event chat invitations for users who RSVP'd before connecting to Matrix
+   */
+  @OnEvent('matrix.handle.registered')
+  async handleMatrixHandleRegistered(params: {
+    userId: number;
+    tenantId: string;
+    handle: string;
+  }) {
+    try {
+      this.logger.log(
+        `Matrix handle registered for user ${params.userId}, reprocessing pending event invitations`,
+      );
+
+      // Get user to retrieve slug
+      const user = await this.userService.findById(params.userId);
+      if (!user) {
+        this.logger.warn(
+          `User ${params.userId} not found, cannot reprocess invitations`,
+        );
+        return;
+      }
+
+      // Find all attendances for this user
+      const attendances = await this.eventAttendeeService.findByUserSlug(
+        user.slug,
+      );
+
+      // Filter to attendances that allow chat access (confirmed, cancelled)
+      const chatAllowedStatuses = [
+        EventAttendeeStatus.Confirmed,
+        EventAttendeeStatus.Cancelled,
+      ];
+      const eligibleAttendances = attendances.filter((a) =>
+        chatAllowedStatuses.includes(a.status as EventAttendeeStatus),
+      );
+
+      this.logger.log(
+        `Found ${eligibleAttendances.length} eligible event attendances for user ${user.slug} (confirmed/cancelled)`,
+      );
+
+      // Re-emit chat.event.member.add for each eligible attendance
+      for (const attendance of eligibleAttendances) {
+        this.eventEmitter.emit('chat.event.member.add', {
+          eventSlug: attendance.event.slug,
+          userSlug: user.slug,
+          tenantId: params.tenantId,
+        });
+        this.logger.log(
+          `Re-emitted chat.event.member.add for user ${user.slug} in event ${attendance.event.slug}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to reprocess event invitations for user ${params.userId}: ${error.message}`,
+        error.stack,
       );
     }
   }

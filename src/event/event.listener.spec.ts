@@ -7,11 +7,13 @@ import { EventAttendeeStatus } from '../core/constants/constant';
 import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { UserService } from '../user/user.service';
 
 describe('EventListener - Event-Driven Matrix Invitation Flow', () => {
   let listener: EventListener;
   let eventAttendeeService: jest.Mocked<EventAttendeeService>;
   let eventEmitter: jest.Mocked<EventEmitter2>;
+  let userService: jest.Mocked<UserService>;
   let mockRequest: any;
 
   // Mock data
@@ -46,12 +48,19 @@ describe('EventListener - Event-Driven Matrix Invitation Flow', () => {
           provide: EventAttendeeService,
           useFactory: () => ({
             findOne: jest.fn(),
+            findByUserSlug: jest.fn(),
           }),
         },
         {
           provide: EventEmitter2,
           useFactory: () => ({
             emit: jest.fn(),
+          }),
+        },
+        {
+          provide: UserService,
+          useFactory: () => ({
+            findById: jest.fn(),
           }),
         },
         {
@@ -66,6 +75,7 @@ describe('EventListener - Event-Driven Matrix Invitation Flow', () => {
       EventAttendeeService,
     ) as jest.Mocked<EventAttendeeService>;
     eventEmitter = module.get(EventEmitter2) as jest.Mocked<EventEmitter2>;
+    userService = module.get(UserService) as jest.Mocked<UserService>;
 
     jest.clearAllMocks();
   });

@@ -77,7 +77,8 @@ export class AuthGoogleController {
     const tenantId = request.headers['x-tenant-id'] as string;
 
     // Get profile using OAuth2 code (new method)
-    const socialData = await this.authGoogleService.getProfileByOAuth2Code(oauth2Dto);
+    const socialData =
+      await this.authGoogleService.getProfileByOAuth2Code(oauth2Dto);
 
     // Reuse existing social login validation
     const loginResult = await this.authService.validateSocialLogin(
