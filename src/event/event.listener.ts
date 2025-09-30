@@ -281,8 +281,9 @@ export class EventListener {
       }
 
       // Find all attendances for this user
-      const attendances =
-        await this.eventAttendeeService.findByUserSlug(user.slug);
+      const attendances = await this.eventAttendeeService.findByUserSlug(
+        user.slug,
+      );
 
       // Filter to attendances that allow chat access (confirmed, cancelled)
       const chatAllowedStatuses = [

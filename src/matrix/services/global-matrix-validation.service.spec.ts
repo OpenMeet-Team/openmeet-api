@@ -1,10 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GlobalMatrixValidationService } from './global-matrix-validation.service';
 
 describe('GlobalMatrixValidationService', () => {
   let service: GlobalMatrixValidationService;
   let mockDataSource: jest.Mocked<DataSource>;
+  let mockEventEmitter: jest.Mocked<EventEmitter2>;
   let mockRepository: any;
 
   beforeEach(async () => {
@@ -19,12 +21,20 @@ describe('GlobalMatrixValidationService', () => {
       getRepository: jest.fn().mockReturnValue(mockRepository),
     } as any;
 
+    mockEventEmitter = {
+      emit: jest.fn(),
+    } as any;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         GlobalMatrixValidationService,
         {
           provide: DataSource,
           useValue: mockDataSource,
+        },
+        {
+          provide: EventEmitter2,
+          useValue: mockEventEmitter,
         },
       ],
     }).compile();

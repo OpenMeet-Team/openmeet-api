@@ -4,14 +4,14 @@ import { IsNotEmpty, IsOptional, IsUrl } from 'class-validator';
 export class AuthGoogleOAuth2Dto {
   @ApiProperty({
     example: 'abc123def456',
-    description: 'Authorization code received from Google OAuth2 redirect'
+    description: 'Authorization code received from Google OAuth2 redirect',
   })
   @IsNotEmpty()
   code: string;
 
   @ApiProperty({
     example: 'https://yourapp.com/auth/google/callback',
-    description: 'Redirect URI used in the OAuth2 flow'
+    description: 'Redirect URI used in the OAuth2 flow',
   })
   @IsNotEmpty()
   @IsUrl()
@@ -20,7 +20,7 @@ export class AuthGoogleOAuth2Dto {
   @ApiProperty({
     example: 'xyz789',
     description: 'State parameter for CSRF protection',
-    required: false
+    required: false,
   })
   @IsOptional()
   state?: string;
