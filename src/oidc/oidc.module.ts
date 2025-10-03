@@ -9,6 +9,7 @@ import { TenantModule } from '../tenant/tenant.module';
 import { SessionModule } from '../session/session.module';
 import { AuthModule } from '../auth/auth.module';
 import { MatrixModule } from '../matrix/matrix.module';
+import { ElastiCacheModule } from '../elasticache/elasticache.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { MatrixModule } from '../matrix/matrix.module';
     SessionModule,
     AuthModule,
     MatrixModule,
+    ElastiCacheModule,
     JwtModule.register({
       global: true,
       secret: process.env.JWT_SECRET || 'secret',

@@ -9,6 +9,7 @@ import { UserEntity } from '../../user/infrastructure/persistence/relational/ent
 import { SessionService } from '../../session/session.service';
 import { SessionEntity } from '../../session/infrastructure/persistence/relational/entities/session.entity';
 import { GlobalMatrixValidationService } from '../../matrix/services/global-matrix-validation.service';
+import { ElastiCacheService } from '../../elasticache/elasticache.service';
 import * as crypto from 'crypto';
 import * as jwt from 'jsonwebtoken';
 
@@ -54,6 +55,7 @@ export class OidcService {
     private readonly tenantConnectionService: TenantConnectionService,
     private readonly sessionService: SessionService,
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
+    private readonly elastiCacheService: ElastiCacheService,
   ) {
     // Use persistent RSA key pair for RS256 signing
     this.rsaKeyPair = this.getOrGenerateRSAKeyPair();
@@ -190,8 +192,14 @@ export class OidcService {
         const dataSource =
           await this.tenantConnectionService.getTenantConnection(tenantId);
         const sessionRepository = dataSource.getRepository(SessionEntity);
+
+        // Use secureId for lookup (string) or fall back to numeric id for backwards compatibility
+        const whereClause = typeof sessionId === 'string' && sessionId.includes('-')
+          ? { secureId: sessionId }
+          : { id: Number(sessionId) };
+
         const session = await sessionRepository.findOne({
-          where: { id: Number(sessionId) },
+          where: whereClause,
           relations: ['user'],
         });
 
@@ -224,8 +232,14 @@ export class OidcService {
           const dataSource =
             await this.tenantConnectionService.getTenantConnection(tenant.id);
           const sessionRepository = dataSource.getRepository(SessionEntity);
+
+          // Use secureId for lookup (string) or fall back to numeric id for backwards compatibility
+          const whereClause = typeof sessionId === 'string' && sessionId.includes('-')
+            ? { secureId: sessionId }
+            : { id: Number(sessionId) };
+
           const session = await sessionRepository.findOne({
-            where: { id: Number(sessionId) },
+            where: whereClause,
             relations: ['user'],
           });
 
@@ -382,12 +396,22 @@ export class OidcService {
     }
 
     // Decode and validate authorization code first
-    const authData = this.validateAuthCode(params.code);
+    const authData = await this.validateAuthCode(params.code);
 
     this.logger.debug(
       '🔧 OIDC Token Exchange Debug - Validated auth code with Matrix state:',
       authData.matrix_original_state?.substring(0, 20) + '...',
     );
+
+    // Validate redirect_uri matches the one from authorization request (OAuth 2.0 requirement)
+    if (params.redirect_uri !== authData.redirect_uri) {
+      this.logger.warn(
+        `⚠️  OIDC Security - redirect_uri mismatch: expected "${authData.redirect_uri}", got "${params.redirect_uri}"`,
+      );
+      throw new UnauthorizedException(
+        'redirect_uri does not match authorization request',
+      );
+    }
 
     // Use client_id from auth code if not provided in params
     const clientId = params.client_id || authData.client_id;
@@ -563,7 +587,7 @@ export class OidcService {
       // This contains Matrix's session macaroon that must be returned unchanged
       state: params.state,
       nonce: params.nonce,
-      exp: Math.floor(Date.now() / 1000) + 600, // 10 minutes
+      exp: Math.floor(Date.now() / 1000) + 60, // 60 seconds (OAuth 2.0 best practice)
       userId,
       tenantId,
       // Store original Matrix state for session validation
@@ -581,9 +605,9 @@ export class OidcService {
   }
 
   /**
-   * Validate authorization code
+   * Validate authorization code and check for reuse
    */
-  private validateAuthCode(code: string): any {
+  private async validateAuthCode(code: string): Promise<any> {
     try {
       this.logger.debug('🔧 OIDC Auth Code Debug - Validating code...');
       const payload = jwt.verify(code, this.rsaKeyPair.publicKey, {
@@ -603,9 +627,29 @@ export class OidcService {
         throw new Error('Invalid code type');
       }
 
+      // Check if code has already been used (replay attack detection)
+      const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+      const redisKey = `oidc:used_auth_code:${codeHash}`;
+
+      const isUsed = await this.elastiCacheService.get<boolean>(redisKey);
+      if (isUsed) {
+        this.logger.error(
+          `🚨 SECURITY ALERT: Authorization code reuse detected! Code: ${codeHash.substring(0, 16)}...`,
+        );
+        throw new UnauthorizedException(
+          'Authorization code has already been used',
+        );
+      }
+
+      // Mark code as used (TTL matches code expiry: 60 seconds + grace period)
+      await this.elastiCacheService.set(redisKey, true, 120);
+
       this.logger.debug('✅ OIDC Auth Code Debug - Validation successful');
       return payload;
     } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
       this.logger.debug(
         '❌ OIDC Auth Code Debug - Validation failed:',
         error.message,
@@ -625,18 +669,20 @@ export class OidcService {
     // TODO: Store client credentials securely (database or config)
     // Build valid clients from environment configuration
     const validClients = {
-      // Legacy Matrix Synapse client
+      // Legacy Matrix Synapse client - public client (for backward compatibility)
       matrix_synapse: {
         secret:
           process.env.MATRIX_OIDC_CLIENT_SECRET || 'change-me-in-production',
-        isPublic: true,
+        isPublic: true, // Public to maintain compatibility with existing Matrix deployments
+        requireSecret: process.env.MATRIX_REQUIRE_CLIENT_SECRET === 'true', // Optional enforcement via env var
       },
-      // ULID-based Synapse client
+      // ULID-based Synapse client - public client (for backward compatibility)
       '0000000000000000000SYNAPSE': {
         secret:
           process.env.MATRIX_OIDC_CLIENT_SECRET ||
           'local-dev-shared-secret-with-synapse',
-        isPublic: true,
+        isPublic: true, // Public to maintain compatibility with existing Matrix deployments
+        requireSecret: process.env.MATRIX_REQUIRE_CLIENT_SECRET === 'true', // Optional enforcement via env var
       },
     };
 
@@ -644,13 +690,15 @@ export class OidcService {
     if (process.env.OAUTH_CLIENT_ID) {
       validClients[process.env.OAUTH_CLIENT_ID] = {
         secret: process.env.OAUTH_CLIENT_SECRET,
-        isPublic: true, // Frontend public client
+        isPublic: process.env.OAUTH_CLIENT_IS_PUBLIC === 'true',
+        requireSecret: process.env.OAUTH_REQUIRE_CLIENT_SECRET === 'true',
       };
     }
     if (process.env.BOT_CLIENT_ID) {
       validClients[process.env.BOT_CLIENT_ID] = {
         secret: process.env.BOT_CLIENT_SECRET,
         isPublic: false, // Bot client requires secret
+        requireSecret: true,
       };
     }
 
@@ -659,9 +707,48 @@ export class OidcService {
       throw new UnauthorizedException('Invalid client_id');
     }
 
-    // For public clients, we don't require a client secret
-    if (!client.isPublic && client.secret !== clientSecret) {
-      throw new UnauthorizedException('Invalid client credentials');
+    // Enforce client authentication based on client type and configuration
+    if (client.requireSecret) {
+      // Client requires secret (either confidential or configured to require it)
+      if (!clientSecret) {
+        this.logger.warn(
+          `⚠️  OIDC Security - Client ${clientId} missing required client_secret`,
+        );
+        throw new UnauthorizedException(
+          'client_secret required for this client',
+        );
+      }
+      if (client.secret !== clientSecret) {
+        this.logger.warn(
+          `⚠️  OIDC Security - Invalid client_secret for client ${clientId}`,
+        );
+        throw new UnauthorizedException('Invalid client credentials');
+      }
+      this.logger.debug(
+        `✅ OIDC Client Debug - Client validated with secret: ${clientId}`,
+      );
+    } else if (client.isPublic) {
+      // Public client - optional secret validation
+      if (clientSecret && client.secret !== clientSecret) {
+        this.logger.warn(
+          `⚠️  OIDC Security - Invalid client_secret for public client ${clientId}`,
+        );
+        throw new UnauthorizedException('Invalid client credentials');
+      }
+      this.logger.debug(
+        `✅ OIDC Client Debug - Public client validated: ${clientId}`,
+      );
+    } else {
+      // Confidential client without requireSecret flag - validate if secret provided
+      if (clientSecret && client.secret !== clientSecret) {
+        this.logger.warn(
+          `⚠️  OIDC Security - Invalid client_secret for client ${clientId}`,
+        );
+        throw new UnauthorizedException('Invalid client credentials');
+      }
+      this.logger.debug(
+        `✅ OIDC Client Debug - Client validated: ${clientId}`,
+      );
     }
 
     this.logger.debug('✅ OIDC Client Debug - Client validated:', {

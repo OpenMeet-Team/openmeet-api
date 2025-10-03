@@ -12,8 +12,10 @@ import {
   Req,
   Res,
   Logger,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { OidcService } from './services/oidc.service';
 import { Request, Response } from 'express';
 import { Trace } from '../utils/trace.decorator';
@@ -241,7 +243,7 @@ export class OidcController {
 
           try {
             // Validate the OpenMeet session with the tenant context
-            const session = await this.sessionService.findById(
+            const session = await this.sessionService.findBySecureId(
               sessionCookie,
               tenantCookie,
             );
@@ -475,7 +477,7 @@ export class OidcController {
           // Get the session to check its age
           const sessionCookie = request.cookies?.['oidc_session'];
           if (sessionCookie && tenantId) {
-            const session = await this.sessionService.findById(
+            const session = await this.sessionService.findBySecureId(
               sessionCookie,
               tenantId,
             );
@@ -730,6 +732,8 @@ export class OidcController {
   })
   @Post('token')
   @TenantPublic()
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 requests per 60 seconds
   @HttpCode(HttpStatus.OK)
   async token(
     @Body() body: any,
@@ -855,7 +859,7 @@ export class OidcController {
 
           try {
             // Validate the OpenMeet session with the tenant context
-            const session = await this.sessionService.findById(
+            const session = await this.sessionService.findBySecureId(
               sessionCookie,
               tenantCookie,
             );

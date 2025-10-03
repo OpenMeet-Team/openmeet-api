@@ -111,13 +111,16 @@ export class AuthService {
       .update(randomStringGenerator())
       .digest('hex');
 
+    const secureId = crypto.randomUUID();
+
     this.logger.debug(`🔐 Creating new session for user: ${user.id}`);
     this.logger.debug(`Generated hash: ${hash.substring(0, 10)}...`);
+    this.logger.debug(`Generated secureId: ${secureId}`);
 
     const session = await this.sessionService.create({
       user,
       hash,
-      secureId: crypto.randomUUID(),
+      secureId,
     });
 
     this.logger.debug(`✅ Created session ID: ${session.id}`);
@@ -136,7 +139,7 @@ export class AuthService {
       token,
       tokenExpires,
       user,
-      sessionId: session.id.toString(),
+      sessionId: session.secureId,
     };
   }
 
@@ -199,11 +202,13 @@ export class AuthService {
       .update(randomStringGenerator())
       .digest('hex');
 
+    const secureId = crypto.randomUUID();
+
     const session = await this.sessionService.create(
       {
         user,
         hash,
-        secureId: crypto.randomUUID(),
+        secureId,
       },
       tenantId,
     );
@@ -222,7 +227,7 @@ export class AuthService {
       token,
       tokenExpires,
       user,
-      sessionId: session.id.toString(),
+      sessionId: session.secureId,
     };
   }
 
@@ -259,10 +264,12 @@ export class AuthService {
       .update(randomStringGenerator())
       .digest('hex');
 
+    const secureId = crypto.randomUUID();
+
     const session = await this.sessionService.create({
       user,
       hash: sessionHash,
-      secureId: crypto.randomUUID(),
+      secureId,
     });
 
     const { token, refreshToken, tokenExpires } = await this.getTokensData({
