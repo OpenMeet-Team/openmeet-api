@@ -109,12 +109,16 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       inject: [ConfigService],
     }),
     EventEmitterModule.forRoot(),
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60000, // 60 seconds
-        limit: 100, // 100 requests per minute (default for most endpoints)
-      },
-    ]),
+    ...(process.env.NODE_ENV === 'production'
+      ? [
+          ThrottlerModule.forRoot([
+            {
+              ttl: 60000, // 60 seconds
+              limit: 100, // 100 requests per minute (default for most endpoints)
+            },
+          ]),
+        ]
+      : []),
     HealthModule,
     TracingModule,
     MetricsModule,
