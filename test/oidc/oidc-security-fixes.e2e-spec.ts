@@ -1,8 +1,5 @@
 import request from 'supertest';
-import {
-  TESTING_APP_URL,
-  TESTING_TENANT_ID,
-} from '../utils/constants';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import { createTestUser } from '../utils/functions';
 
 jest.setTimeout(120000);
@@ -19,8 +16,11 @@ jest.setTimeout(120000);
  */
 describe('OIDC Security Fixes', () => {
   const OIDC_CLIENT_ID = '01JAYS74TCG3BTWKADN5Q4518F';
-  const OIDC_REDIRECT_URI = 'https://mas-dev.openmeet.net/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C';
-  const OIDC_CLIENT_SECRET = process.env.MATRIX_OIDC_CLIENT_SECRET || 'local-dev-shared-secret-with-synapse';
+  const OIDC_REDIRECT_URI =
+    'https://mas-dev.openmeet.net/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C';
+  const OIDC_CLIENT_SECRET =
+    process.env.MATRIX_OIDC_CLIENT_SECRET ||
+    'local-dev-shared-secret-with-synapse';
 
   describe('Redirect URI Validation', () => {
     it('should reject token request with mismatched redirect_uri', async () => {
@@ -63,8 +63,13 @@ describe('OIDC Security Fixes', () => {
 
       if (authorizeResponse.status !== 302) {
         console.log('Authorize response status:', authorizeResponse.status);
-        console.log('Authorize response location:', authorizeResponse.headers.location);
-        throw new Error(`Failed to get authorization code. Status: ${authorizeResponse.status}`);
+        console.log(
+          'Authorize response location:',
+          authorizeResponse.headers.location,
+        );
+        throw new Error(
+          `Failed to get authorization code. Status: ${authorizeResponse.status}`,
+        );
       }
 
       const redirectUrl = authorizeResponse.headers.location;
@@ -201,7 +206,7 @@ describe('OIDC Security Fixes', () => {
       const authCode = url.searchParams.get('code');
 
       console.log('⏳ Waiting 65 seconds for auth code to expire...');
-      await new Promise(resolve => setTimeout(resolve, 65000));
+      await new Promise((resolve) => setTimeout(resolve, 65000));
 
       // Try to use expired code
       const tokenResponse = await request(TESTING_APP_URL)
@@ -316,17 +321,19 @@ describe('OIDC Security Fixes', () => {
               client_id: testClientId,
               client_secret: OIDC_CLIENT_SECRET,
               redirect_uri: testRedirectUri,
-            })
+            }),
         );
       }
 
       const responses = await Promise.all(requests);
 
       // Count how many were rate limited (429)
-      const rateLimited = responses.filter(r => r.status === 429);
+      const rateLimited = responses.filter((r) => r.status === 429);
 
       expect(rateLimited.length).toBeGreaterThan(0);
-      console.log(`✅ Rate limiting active: ${rateLimited.length}/11 requests blocked`);
+      console.log(
+        `✅ Rate limiting active: ${rateLimited.length}/11 requests blocked`,
+      );
     });
   });
 
@@ -447,7 +454,9 @@ describe('OIDC Security Fixes', () => {
 
       // Should reject
       expect(tokenResponse.status).toBe(401);
-      expect(tokenResponse.body.message).toContain('Invalid client credentials');
+      expect(tokenResponse.body.message).toContain(
+        'Invalid client credentials',
+      );
       console.log('✅ Invalid client_secret rejected');
     });
   });

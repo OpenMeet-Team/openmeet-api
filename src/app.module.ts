@@ -30,7 +30,7 @@ import { TenantModule } from './tenant/tenant.module';
 import { EventModule } from './event/event.module';
 import { APP_GUARD } from '@nestjs/core';
 import { TenantGuard } from './tenant/tenant.guard';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { CategoryModule } from './category/category.module';
 import { GroupModule } from './group/group.module';
 import { SubCategoryModule } from './sub-category/sub-category.module';

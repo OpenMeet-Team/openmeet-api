@@ -194,9 +194,10 @@ export class OidcService {
         const sessionRepository = dataSource.getRepository(SessionEntity);
 
         // Use secureId for lookup (string) or fall back to numeric id for backwards compatibility
-        const whereClause = typeof sessionId === 'string' && sessionId.includes('-')
-          ? { secureId: sessionId }
-          : { id: Number(sessionId) };
+        const whereClause =
+          typeof sessionId === 'string' && sessionId.includes('-')
+            ? { secureId: sessionId }
+            : { id: Number(sessionId) };
 
         const session = await sessionRepository.findOne({
           where: whereClause,
@@ -234,9 +235,10 @@ export class OidcService {
           const sessionRepository = dataSource.getRepository(SessionEntity);
 
           // Use secureId for lookup (string) or fall back to numeric id for backwards compatibility
-          const whereClause = typeof sessionId === 'string' && sessionId.includes('-')
-            ? { secureId: sessionId }
-            : { id: Number(sessionId) };
+          const whereClause =
+            typeof sessionId === 'string' && sessionId.includes('-')
+              ? { secureId: sessionId }
+              : { id: Number(sessionId) };
 
           const session = await sessionRepository.findOne({
             where: whereClause,
@@ -746,9 +748,7 @@ export class OidcService {
         );
         throw new UnauthorizedException('Invalid client credentials');
       }
-      this.logger.debug(
-        `✅ OIDC Client Debug - Client validated: ${clientId}`,
-      );
+      this.logger.debug(`✅ OIDC Client Debug - Client validated: ${clientId}`);
     }
 
     this.logger.debug('✅ OIDC Client Debug - Client validated:', {

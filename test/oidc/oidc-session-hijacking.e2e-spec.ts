@@ -1,10 +1,5 @@
 import request from 'supertest';
-import {
-  TESTING_APP_URL,
-  TESTING_TENANT_ID,
-  TESTING_USER_EMAIL,
-  TESTING_USER_PASSWORD,
-} from '../utils/constants';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import { createTestUser } from '../utils/functions';
 
 jest.setTimeout(60000);
@@ -19,7 +14,8 @@ jest.setTimeout(60000);
  */
 describe('OIDC Session Hijacking Vulnerability', () => {
   const OIDC_CLIENT_ID = '01JAYS74TCG3BTWKADN5Q4518F';
-  const OIDC_REDIRECT_URI = 'https://mas-dev.openmeet.net/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C';
+  const OIDC_REDIRECT_URI =
+    'https://mas-dev.openmeet.net/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C';
 
   describe('Session Hijacking Prevention', () => {
     it('should prevent one user from hijacking another users session', async () => {
@@ -35,7 +31,7 @@ describe('OIDC Session Hijacking Vulnerability', () => {
         'Anderson',
       );
 
-      const userB = await createTestUser(
+      await createTestUser(
         TESTING_APP_URL,
         TESTING_TENANT_ID,
         `user-b-${Date.now()}@test.com`,
@@ -92,7 +88,9 @@ describe('OIDC Session Hijacking Vulnerability', () => {
           const url = new URL(redirectUrl);
           const authCode = url.searchParams.get('code');
 
-          console.log('⚠️  WARNING: Got auth code - this should not happen with the fix!');
+          console.log(
+            '⚠️  WARNING: Got auth code - this should not happen with the fix!',
+          );
 
           // Step 4: Exchange code for tokens
           const tokenResponse = await request(TESTING_APP_URL)
@@ -108,11 +106,13 @@ describe('OIDC Session Hijacking Vulnerability', () => {
           if (tokenResponse.status === 200 && tokenResponse.body.id_token) {
             const idToken = tokenResponse.body.id_token;
             const payload = JSON.parse(
-              Buffer.from(idToken.split('.')[1], 'base64').toString()
+              Buffer.from(idToken.split('.')[1], 'base64').toString(),
             );
 
             console.log('');
-            console.log('🚨 TEST FAILURE: SESSION HIJACKING STILL POSSIBLE! 🚨');
+            console.log(
+              '🚨 TEST FAILURE: SESSION HIJACKING STILL POSSIBLE! 🚨',
+            );
             console.log('User B was able to impersonate User A');
             console.log('ID Token contains:');
             console.log('  Email:', payload.email);
@@ -120,7 +120,9 @@ describe('OIDC Session Hijacking Vulnerability', () => {
             console.log('  Subject:', payload.sub);
 
             // This should NOT happen with the fix
-            fail('Session hijacking vulnerability still exists! User B obtained User A\'s identity.');
+            fail(
+              "Session hijacking vulnerability still exists! User B obtained User A's identity.",
+            );
           } else {
             console.log('✓ Token exchange failed - partial protection');
           }
@@ -159,12 +161,15 @@ describe('OIDC Session Hijacking Vulnerability', () => {
       console.log('✓ Session ID format check:');
       console.log(`   Session ID: ${sessionId}`);
 
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       expect(uuidRegex.test(sessionId)).toBe(true);
 
       // Verify an attacker cannot guess adjacent session IDs
       const guessedSessionId = sessionId - 1;
-      console.log(`   Attacker could try: ${sessionId - 1}, ${sessionId + 1}, ...`);
+      console.log(
+        `   Attacker could try: ${sessionId - 1}, ${sessionId + 1}, ...`,
+      );
 
       const hijackAttempt = await request(TESTING_APP_URL)
         .get('/api/oidc/auth')
@@ -182,10 +187,15 @@ describe('OIDC Session Hijacking Vulnerability', () => {
         ])
         .set('x-tenant-id', TESTING_TENANT_ID);
 
-      console.log(`   Guess attempt (ID ${guessedSessionId}): ${hijackAttempt.status}`);
+      console.log(
+        `   Guess attempt (ID ${guessedSessionId}): ${hijackAttempt.status}`,
+      );
 
       // Should NOT get an auth code with a guessed session ID
-      if (hijackAttempt.status === 302 && hijackAttempt.headers.location?.includes('code=')) {
+      if (
+        hijackAttempt.status === 302 &&
+        hijackAttempt.headers.location?.includes('code=')
+      ) {
         fail('⚠️  Guessed session ID was VALID - vulnerability still exists!');
       } else {
         console.log('   ✓ Guessed session ID rejected - secure!');
@@ -213,14 +223,16 @@ describe('OIDC Session Hijacking Vulnerability', () => {
         })
         .expect(200);
 
-      const sessionToken = loginResponse.body.sessionToken || loginResponse.body.sessionId;
+      const sessionToken =
+        loginResponse.body.sessionToken || loginResponse.body.sessionId;
 
       // Verify it's a string (UUID or crypto token)
       expect(typeof sessionToken).toBe('string');
       expect(typeof sessionToken).not.toBe('number');
 
       // Check if it's a UUID format
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const isUuid = uuidRegex.test(sessionToken);
 
       // Or check if it's a long random string (crypto token)
@@ -289,7 +301,8 @@ describe('OIDC Session Hijacking Vulnerability', () => {
         })
         .expect(200);
 
-      const sessionTokenA = loginResponseA.body.sessionToken || loginResponseA.body.sessionId;
+      const sessionTokenA =
+        loginResponseA.body.sessionToken || loginResponseA.body.sessionId;
 
       // Try to use user A's session to get user B's data
       const authorizeResponse = await request(TESTING_APP_URL)
@@ -329,7 +342,7 @@ describe('OIDC Session Hijacking Vulnerability', () => {
 
         const idToken = tokenResponse.body.id_token;
         const payload = JSON.parse(
-          Buffer.from(idToken.split('.')[1], 'base64').toString()
+          Buffer.from(idToken.split('.')[1], 'base64').toString(),
         );
 
         // Should get user A's email, not user B's
