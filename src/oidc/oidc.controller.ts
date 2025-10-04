@@ -733,7 +733,12 @@ export class OidcController {
   @Post('token')
   @TenantPublic()
   @UseGuards(ThrottlerGuard)
-  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 requests per 60 seconds
+  @Throttle({
+    default: {
+      limit: process.env.NODE_ENV === 'production' ? 10 : 1000,
+      ttl: 60000,
+    },
+  }) // 10 requests per 60s in production, 1000 in dev/test
   @HttpCode(HttpStatus.OK)
   async token(
     @Body() body: any,
