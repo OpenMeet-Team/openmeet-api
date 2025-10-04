@@ -129,7 +129,7 @@ export class AuthService {
       id: user.id,
       role: user.role,
       slug: user.slug,
-      sessionId: session.id,
+      sessionId: session.secureId,
       hash,
       tenantId,
     });
@@ -217,7 +217,7 @@ export class AuthService {
       id: user.id,
       role: user.role,
       slug: user.slug,
-      sessionId: session.id,
+      sessionId: session.secureId,
       hash,
       tenantId,
     });
@@ -276,7 +276,7 @@ export class AuthService {
       id: user.id,
       role: user.role,
       slug: user.slug,
-      sessionId: session.id,
+      sessionId: session.secureId,
       hash,
       tenantId,
     });
@@ -299,7 +299,7 @@ export class AuthService {
       token,
       tokenExpires,
       user: createdUser,
-      sessionId: session.id.toString(),
+      sessionId: session.secureId,
     };
   }
 
@@ -639,7 +639,7 @@ export class AuthService {
         id: user.role.id,
       },
       slug: user.slug,
-      sessionId: session.id,
+      sessionId: session.secureId,
       hash,
       tenantId,
     });
