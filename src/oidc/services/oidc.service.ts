@@ -652,6 +652,19 @@ export class OidcService {
       if (error instanceof UnauthorizedException) {
         throw error;
       }
+
+      // Don't hide Redis/infrastructure errors behind auth errors
+      if (
+        error.message?.includes('Redis client is not connected') ||
+        error.message?.includes('Redis operation timeout')
+      ) {
+        this.logger.error(
+          '❌ OIDC Infrastructure Error - Redis unavailable:',
+          error.message,
+        );
+        throw error;
+      }
+
       this.logger.debug(
         '❌ OIDC Auth Code Debug - Validation failed:',
         error.message,
