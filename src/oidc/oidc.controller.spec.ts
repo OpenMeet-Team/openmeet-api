@@ -331,10 +331,10 @@ describe('OidcController', () => {
 
       it('should allow login_hint for authenticated user with matching email', async () => {
         // Setup: User is authenticated via session cookies
-        const mockSessionService = { findById: jest.fn() };
+        const mockSessionService = { findBySecureId: jest.fn() };
         (controller as any).sessionService = mockSessionService;
 
-        mockSessionService.findById.mockResolvedValue({
+        mockSessionService.findBySecureId.mockResolvedValue({
           user: { id: 1 },
         });
 
@@ -429,10 +429,10 @@ describe('OidcController', () => {
 
       it('should REJECT login_hint when session user email does not match hint', async () => {
         // Setup: User is authenticated but login_hint is for different user
-        const mockSessionService = { findById: jest.fn() };
+        const mockSessionService = { findBySecureId: jest.fn() };
         (controller as any).sessionService = mockSessionService;
 
-        mockSessionService.findById.mockResolvedValue({
+        mockSessionService.findBySecureId.mockResolvedValue({
           user: { id: 1 },
         });
 
