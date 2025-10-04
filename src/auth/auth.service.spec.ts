@@ -20,7 +20,10 @@ describe('AuthService', () => {
 
   const mockSessionService = {
     findById: jest.fn(),
+    findBySecureId: jest.fn(),
     update: jest.fn(),
+    deleteBySecureId: jest.fn(),
+    deleteByUserIdWithExcludeSecureId: jest.fn(),
     getTenantSpecificRepository: jest.fn().mockResolvedValue(undefined),
   };
 
@@ -93,22 +96,24 @@ describe('AuthService', () => {
     it('should refresh token successfully', async () => {
       const mockSession = {
         id: 1,
+        secureId: 'test-secure-id-uuid',
         hash: 'oldHash',
-        user: { id: 1 },
+        user: { id: 1, slug: 'test-user' },
       };
       const mockUser = {
         id: 1,
         role: { id: 1 },
+        slug: 'test-user',
       };
 
-      mockSessionService.findById.mockResolvedValue(mockSession);
+      mockSessionService.findBySecureId.mockResolvedValue(mockSession);
       mockUserService.findById.mockResolvedValue(mockUser);
       mockJwtService.signAsync.mockResolvedValue('newToken');
       mockConfigService.getOrThrow.mockReturnValue('1h');
       mockGroupService.findById.mockResolvedValue({ id: 1, name: 'Admin' });
       const result = await authService.refreshToken(
         {
-          sessionId: 1,
+          sessionId: 'test-secure-id-uuid',
           hash: 'oldHash',
         },
         'test-tenant-id',
@@ -121,11 +126,11 @@ describe('AuthService', () => {
     });
 
     it('should throw UnauthorizedException if session not found', async () => {
-      mockSessionService.findById.mockResolvedValue(null);
+      mockSessionService.findBySecureId.mockResolvedValue(null);
 
       await expect(
         authService.refreshToken(
-          { sessionId: 1, hash: 'oldHash' },
+          { sessionId: 'test-secure-id-uuid', hash: 'oldHash' },
           'test-tenant-id',
         ),
       ).rejects.toThrow(UnauthorizedException);
@@ -134,14 +139,15 @@ describe('AuthService', () => {
     it('should throw UnauthorizedException if hash does not match', async () => {
       const mockSession = {
         id: 1,
+        secureId: 'test-secure-id-uuid',
         hash: 'correctHash',
         user: { id: 1 },
       };
-      mockSessionService.findById.mockResolvedValue(mockSession);
+      mockSessionService.findBySecureId.mockResolvedValue(mockSession);
 
       await expect(
         authService.refreshToken(
-          { sessionId: 1, hash: 'wrongHash' },
+          { sessionId: 'test-secure-id-uuid', hash: 'wrongHash' },
           'test-tenant-id',
         ),
       ).rejects.toThrow(UnauthorizedException);
@@ -150,6 +156,7 @@ describe('AuthService', () => {
     it('should throw UnauthorizedException if user role is not found', async () => {
       const mockSession = {
         id: 1,
+        secureId: 'test-secure-id-uuid',
         hash: 'oldHash',
         user: { id: 1 },
       };
@@ -158,12 +165,12 @@ describe('AuthService', () => {
         role: null,
       };
 
-      mockSessionService.findById.mockResolvedValue(mockSession);
+      mockSessionService.findBySecureId.mockResolvedValue(mockSession);
       mockUserService.findById.mockResolvedValue(mockUser);
 
       await expect(
         authService.refreshToken(
-          { sessionId: 1, hash: 'oldHash' },
+          { sessionId: 'test-secure-id-uuid', hash: 'oldHash' },
           'test-tenant-id',
         ),
       ).rejects.toThrow(UnauthorizedException);
