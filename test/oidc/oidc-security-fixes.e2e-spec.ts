@@ -12,11 +12,15 @@ jest.setTimeout(120000);
  * 2. Auth code expiry (60 seconds)
  * 3. Auth code reuse detection
  * 4. Client secret validation
+ *
+ * Note: OIDC_REDIRECT_URI is used only as a parameter for validation.
+ * Tests do not make actual HTTP requests to this URL.
  */
 describe('OIDC Security Fixes', () => {
   const OIDC_CLIENT_ID = process.env.OAUTH_CLIENT_ID as string;
+  // Localhost URL matching allowed MAS callback pattern - not actually called by tests
   const OIDC_REDIRECT_URI =
-    'https://mas-dev.openmeet.net/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C';
+    'http://localhost:8081/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C';
   const OIDC_CLIENT_SECRET = process.env.OAUTH_CLIENT_SECRET as string;
 
   describe('Redirect URI Validation', () => {

@@ -11,11 +11,15 @@ jest.setTimeout(60000);
  * - Session IDs are not guessable/enumerable (use UUIDs)
  * - Session tokens have cryptographic protection
  * - Invalid/guessed session tokens are rejected
+ *
+ * Note: OIDC_REDIRECT_URI is used only as a parameter for validation.
+ * Tests do not make actual HTTP requests to this URL.
  */
 describe('OIDC Session Hijacking Vulnerability', () => {
   const OIDC_CLIENT_ID = process.env.OAUTH_CLIENT_ID as string;
+  // Localhost URL matching allowed MAS callback pattern - not actually called by tests
   const OIDC_REDIRECT_URI =
-    'https://mas-dev.openmeet.net/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C';
+    'http://localhost:8081/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C';
 
   describe('Session Hijacking Prevention', () => {
     it('should verify session IDs are not guessable', async () => {
