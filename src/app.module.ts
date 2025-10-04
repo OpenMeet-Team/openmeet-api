@@ -30,6 +30,7 @@ import { TenantModule } from './tenant/tenant.module';
 import { EventModule } from './event/event.module';
 import { APP_GUARD } from '@nestjs/core';
 import { TenantGuard } from './tenant/tenant.guard';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { CategoryModule } from './category/category.module';
 import { GroupModule } from './group/group.module';
 import { SubCategoryModule } from './sub-category/sub-category.module';
@@ -108,6 +109,15 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
       inject: [ConfigService],
     }),
     EventEmitterModule.forRoot(),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000, // 60 seconds
+        limit:
+          process.env.NODE_ENV === 'production'
+            ? 100 // 100 requests per minute in production
+            : 10000, // Very high limit in dev/test to avoid hitting limits
+      },
+    ]),
     HealthModule,
     TracingModule,
     MetricsModule,

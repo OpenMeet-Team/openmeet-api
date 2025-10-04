@@ -121,11 +121,16 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
       throw new Error('Redis client is not connected');
     }
 
-    if (ttl) {
-      await this.redis.set(key, JSON.stringify(value), { EX: ttl });
-    } else {
-      await this.redis.set(key, JSON.stringify(value));
-    }
+    // Add timeout to prevent hanging when Redis is down/slow
+    const timeout = new Promise<void>((_, reject) => {
+      setTimeout(() => reject(new Error('Redis operation timeout')), 5000);
+    });
+
+    const operation = ttl
+      ? this.redis.set(key, JSON.stringify(value), { EX: ttl })
+      : this.redis.set(key, JSON.stringify(value));
+
+    await Promise.race([operation, timeout]);
   }
 
   async get<T>(key: string): Promise<T | null> {
@@ -133,8 +138,14 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
       throw new Error('Redis client is not connected');
     }
 
-    const value = await this.redis.get(key);
-    return value ? JSON.parse(value) : null;
+    // Add timeout to prevent hanging when Redis is down/slow
+    const timeout = new Promise<null>((_, reject) => {
+      setTimeout(() => reject(new Error('Redis operation timeout')), 5000);
+    });
+
+    const operation = this.redis.get(key);
+    const value = await Promise.race([operation, timeout]);
+    return value ? JSON.parse(value as string) : null;
   }
 
   async del(key: string): Promise<void> {

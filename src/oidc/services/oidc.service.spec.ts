@@ -7,6 +7,7 @@ import { UserService } from '../../user/user.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { SessionService } from '../../session/session.service';
 import { GlobalMatrixValidationService } from '../../matrix/services/global-matrix-validation.service';
+import { ElastiCacheService } from '../../elasticache/elasticache.service';
 import * as jwt from 'jsonwebtoken';
 
 describe('OidcService', () => {
@@ -82,6 +83,14 @@ describe('OidcService', () => {
         {
           provide: GlobalMatrixValidationService,
           useValue: mockGlobalMatrixValidationService,
+        },
+        {
+          provide: ElastiCacheService,
+          useValue: {
+            get: jest.fn(),
+            set: jest.fn(),
+            del: jest.fn(),
+          },
         },
       ],
     }).compile();

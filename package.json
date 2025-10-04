@@ -71,6 +71,7 @@
     "@nestjs/schedule": "^4.1.2",
     "@nestjs/swagger": "7.4.2",
     "@nestjs/terminus": "^10.2.3",
+    "@nestjs/throttler": "^6.4.0",
     "@nestjs/typeorm": "10.0.2",
     "@nestjs/websockets": "^10.4.1",
     "@opentelemetry/api": "^1.9.0",

@@ -46,6 +46,7 @@ export class SessionService {
 
     return this.sessionRepository.findOne({
       where: { secureId },
+      relations: ['user'],
     });
   }
 
@@ -96,6 +97,13 @@ export class SessionService {
     });
   }
 
+  async deleteBySecureId(secureId: string): Promise<void> {
+    await this.getTenantSpecificRepository();
+    await this.sessionRepository.softDelete({
+      secureId,
+    });
+  }
+
   async deleteByUserId(conditions: { userId: User['id'] }): Promise<void> {
     await this.getTenantSpecificRepository();
 
@@ -117,6 +125,20 @@ export class SessionService {
         id: Number(conditions.userId),
       },
       id: Not(Number(conditions.excludeSessionId)),
+    });
+  }
+
+  async deleteByUserIdWithExcludeSecureId(conditions: {
+    userId: User['id'];
+    excludeSecureId: string;
+  }): Promise<void> {
+    await this.getTenantSpecificRepository();
+
+    await this.sessionRepository.softDelete({
+      user: {
+        id: Number(conditions.userId),
+      },
+      secureId: Not(conditions.excludeSecureId),
     });
   }
 }

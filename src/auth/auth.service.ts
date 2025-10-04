@@ -111,13 +111,16 @@ export class AuthService {
       .update(randomStringGenerator())
       .digest('hex');
 
+    const secureId = crypto.randomUUID();
+
     this.logger.debug(`🔐 Creating new session for user: ${user.id}`);
     this.logger.debug(`Generated hash: ${hash.substring(0, 10)}...`);
+    this.logger.debug(`Generated secureId: ${secureId}`);
 
     const session = await this.sessionService.create({
       user,
       hash,
-      secureId: crypto.randomUUID(),
+      secureId,
     });
 
     this.logger.debug(`✅ Created session ID: ${session.id}`);
@@ -126,7 +129,7 @@ export class AuthService {
       id: user.id,
       role: user.role,
       slug: user.slug,
-      sessionId: session.id,
+      sessionId: session.secureId,
       hash,
       tenantId,
     });
@@ -136,7 +139,7 @@ export class AuthService {
       token,
       tokenExpires,
       user,
-      sessionId: session.id.toString(),
+      sessionId: session.secureId,
     };
   }
 
@@ -199,11 +202,13 @@ export class AuthService {
       .update(randomStringGenerator())
       .digest('hex');
 
+    const secureId = crypto.randomUUID();
+
     const session = await this.sessionService.create(
       {
         user,
         hash,
-        secureId: crypto.randomUUID(),
+        secureId,
       },
       tenantId,
     );
@@ -212,7 +217,7 @@ export class AuthService {
       id: user.id,
       role: user.role,
       slug: user.slug,
-      sessionId: session.id,
+      sessionId: session.secureId,
       hash,
       tenantId,
     });
@@ -222,7 +227,7 @@ export class AuthService {
       token,
       tokenExpires,
       user,
-      sessionId: session.id.toString(),
+      sessionId: session.secureId,
     };
   }
 
@@ -259,17 +264,19 @@ export class AuthService {
       .update(randomStringGenerator())
       .digest('hex');
 
+    const secureId = crypto.randomUUID();
+
     const session = await this.sessionService.create({
       user,
       hash: sessionHash,
-      secureId: crypto.randomUUID(),
+      secureId,
     });
 
     const { token, refreshToken, tokenExpires } = await this.getTokensData({
       id: user.id,
       role: user.role,
       slug: user.slug,
-      sessionId: session.id,
+      sessionId: session.secureId,
       hash,
       tenantId,
     });
@@ -292,7 +299,7 @@ export class AuthService {
       token,
       tokenExpires,
       user: createdUser,
-      sessionId: session.id.toString(),
+      sessionId: session.secureId,
     };
   }
 
@@ -530,9 +537,9 @@ export class AuthService {
           },
         });
       } else {
-        await this.sessionService.deleteByUserIdWithExclude({
+        await this.sessionService.deleteByUserIdWithExcludeSecureId({
           userId: currentUser.id,
-          excludeSessionId: userJwtPayload.sessionId,
+          excludeSecureId: userJwtPayload.sessionId,
         });
       }
     }
@@ -585,7 +592,10 @@ export class AuthService {
     tenantId: string,
   ): Promise<Omit<LoginResponseDto, 'user'>> {
     this.logger.debug(`🔄 Starting refresh for sessionId: ${data.sessionId}`);
-    const session = await this.sessionService.findById(data.sessionId);
+    const session = await this.sessionService.findBySecureId(
+      data.sessionId,
+      tenantId,
+    );
 
     if (!session) {
       this.logger.warn(`❌ Session not found for sessionId: ${data.sessionId}`);
@@ -632,7 +642,7 @@ export class AuthService {
         id: user.role.id,
       },
       slug: user.slug,
-      sessionId: session.id,
+      sessionId: session.secureId,
       hash,
       tenantId,
     });
@@ -649,7 +659,7 @@ export class AuthService {
   }
 
   async logout(data: Pick<JwtRefreshPayloadType, 'sessionId'>) {
-    return this.sessionService.deleteById(data.sessionId);
+    return this.sessionService.deleteBySecureId(data.sessionId);
   }
 
   private async getTokensData(data: {

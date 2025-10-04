@@ -3,6 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import { default as request } from 'supertest';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { OidcController } from './oidc.controller';
 import { OidcService } from './services/oidc.service';
 import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
@@ -100,7 +101,12 @@ describe('OIDC Matrix Integration (E2E)', () => {
           useValue: mockSessionService,
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(ThrottlerGuard)
+      .useValue({
+        canActivate: jest.fn().mockResolvedValue(true),
+      })
+      .compile();
 
     app = moduleFixture.createNestApplication();
     await app.init();
