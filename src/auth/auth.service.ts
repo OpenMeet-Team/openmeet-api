@@ -537,9 +537,9 @@ export class AuthService {
           },
         });
       } else {
-        await this.sessionService.deleteByUserIdWithExclude({
+        await this.sessionService.deleteByUserIdWithExcludeSecureId({
           userId: currentUser.id,
-          excludeSessionId: userJwtPayload.sessionId,
+          excludeSecureId: userJwtPayload.sessionId,
         });
       }
     }

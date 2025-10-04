@@ -127,4 +127,18 @@ export class SessionService {
       id: Not(Number(conditions.excludeSessionId)),
     });
   }
+
+  async deleteByUserIdWithExcludeSecureId(conditions: {
+    userId: User['id'];
+    excludeSecureId: string;
+  }): Promise<void> {
+    await this.getTenantSpecificRepository();
+
+    await this.sessionRepository.softDelete({
+      user: {
+        id: Number(conditions.userId),
+      },
+      secureId: Not(conditions.excludeSecureId),
+    });
+  }
 }
