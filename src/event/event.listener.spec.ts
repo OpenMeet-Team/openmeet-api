@@ -13,6 +13,7 @@ describe('EventListener - Event-Driven Matrix Invitation Flow', () => {
   let listener: EventListener;
   let eventAttendeeService: jest.Mocked<EventAttendeeService>;
   let eventEmitter: jest.Mocked<EventEmitter2>;
+  let userService: jest.Mocked<UserService>;
   let mockRequest: any;
 
   // Mock data

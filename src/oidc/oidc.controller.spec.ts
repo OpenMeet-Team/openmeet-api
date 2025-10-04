@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { OidcController } from './oidc.controller';
 import { OidcService } from './services/oidc.service';
 import { TempAuthCodeService } from '../auth/services/temp-auth-code.service';
@@ -103,7 +104,12 @@ describe('OidcController', () => {
           },
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(ThrottlerGuard)
+      .useValue({
+        canActivate: jest.fn().mockResolvedValue(true),
+      })
+      .compile();
 
     controller = module.get<OidcController>(OidcController);
   });
