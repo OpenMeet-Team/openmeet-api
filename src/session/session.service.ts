@@ -38,6 +38,17 @@ export class SessionService {
     });
   }
 
+  async findBySecureId(
+    secureId: string,
+    tenantId?: string,
+  ): Promise<NullableType<Session>> {
+    await this.getTenantSpecificRepository(tenantId);
+
+    return this.sessionRepository.findOne({
+      where: { secureId },
+    });
+  }
+
   async create(
     data: Omit<Session, 'id' | 'createdAt' | 'updatedAt' | 'deletedAt'>,
     tenantId?: string,
@@ -58,6 +69,7 @@ export class SessionService {
       id: savedSessionEntity.id,
       user: savedSessionEntity.user,
       hash: savedSessionEntity.hash,
+      secureId: savedSessionEntity.secureId,
       createdAt: savedSessionEntity.createdAt,
       updatedAt: savedSessionEntity.updatedAt,
       deletedAt: savedSessionEntity.deletedAt,

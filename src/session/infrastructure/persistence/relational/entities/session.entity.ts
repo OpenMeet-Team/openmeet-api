@@ -29,6 +29,10 @@ export class SessionEntity extends EntityRelationalHelper {
   @Column()
   hash: string;
 
+  @Column({ unique: true, nullable: false })
+  @Index()
+  secureId: string;
+
   @CreateDateColumn()
   createdAt: Date;
 
