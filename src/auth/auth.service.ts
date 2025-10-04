@@ -592,7 +592,7 @@ export class AuthService {
     tenantId: string,
   ): Promise<Omit<LoginResponseDto, 'user'>> {
     this.logger.debug(`🔄 Starting refresh for sessionId: ${data.sessionId}`);
-    const session = await this.sessionService.findById(data.sessionId);
+    const session = await this.sessionService.findBySecureId(data.sessionId, tenantId);
 
     if (!session) {
       this.logger.warn(`❌ Session not found for sessionId: ${data.sessionId}`);
@@ -656,7 +656,7 @@ export class AuthService {
   }
 
   async logout(data: Pick<JwtRefreshPayloadType, 'sessionId'>) {
-    return this.sessionService.deleteById(data.sessionId);
+    return this.sessionService.deleteBySecureId(data.sessionId);
   }
 
   private async getTokensData(data: {
