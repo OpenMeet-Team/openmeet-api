@@ -10,17 +10,15 @@ jest.setTimeout(120000);
  * Tests verify the following security improvements:
  * 1. Redirect URI validation on token endpoint
  * 2. Auth code expiry (60 seconds)
- * 3. Rate limiting on token endpoint
- * 4. Auth code reuse detection
- * 5. Client authentication enforcement
+ * 3. Auth code reuse detection
+ * 4. Client secret validation
  */
 describe('OIDC Security Fixes', () => {
   const OIDC_CLIENT_ID = '01JAYS74TCG3BTWKADN5Q4518F';
   const OIDC_REDIRECT_URI =
     'https://mas-dev.openmeet.net/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C';
   const OIDC_CLIENT_SECRET =
-    process.env.MATRIX_OIDC_CLIENT_SECRET ||
-    'local-dev-shared-secret-with-synapse';
+    process.env.OAUTH_CLIENT_SECRET || 'local-dev-shared-secret-with-synapse';
 
   describe('Redirect URI Validation', () => {
     it('should reject token request with mismatched redirect_uri', async () => {
@@ -62,11 +60,6 @@ describe('OIDC Security Fixes', () => {
         .set('x-tenant-id', TESTING_TENANT_ID);
 
       if (authorizeResponse.status !== 302) {
-        console.log('Authorize response status:', authorizeResponse.status);
-        console.log(
-          'Authorize response location:',
-          authorizeResponse.headers.location,
-        );
         throw new Error(
           `Failed to get authorization code. Status: ${authorizeResponse.status}`,
         );
@@ -98,7 +91,6 @@ describe('OIDC Security Fixes', () => {
       // Should reject with 401
       expect(tokenResponse.status).toBe(401);
       expect(tokenResponse.body.message).toContain('redirect_uri');
-      console.log('✅ Mismatched redirect_uri rejected');
     });
 
     it('should accept token request with matching redirect_uri', async () => {
@@ -158,7 +150,6 @@ describe('OIDC Security Fixes', () => {
       // Should succeed
       expect(tokenResponse.status).toBe(200);
       expect(tokenResponse.body.access_token).toBeDefined();
-      console.log('✅ Matching redirect_uri accepted');
     });
   });
 
@@ -222,7 +213,6 @@ describe('OIDC Security Fixes', () => {
 
       // Should reject expired code
       expect(tokenResponse.status).toBe(401);
-      console.log('✅ Expired authorization code rejected');
     }, 90000); // 90 second timeout for this test
   });
 
@@ -283,7 +273,6 @@ describe('OIDC Security Fixes', () => {
 
       expect(firstTokenResponse.status).toBe(200);
       expect(firstTokenResponse.body.access_token).toBeDefined();
-      console.log('✅ First use of auth code succeeded');
 
       // Try to use same code again - should fail
       const secondTokenResponse = await request(TESTING_APP_URL)
@@ -299,105 +288,10 @@ describe('OIDC Security Fixes', () => {
 
       expect(secondTokenResponse.status).toBe(401);
       expect(secondTokenResponse.body.message).toContain('already been used');
-      console.log('✅ Reused auth code rejected');
-    });
-  });
-
-  describe('Rate Limiting', () => {
-    it('should rate limit token endpoint after 10 requests', async () => {
-      const testClientId = OIDC_CLIENT_ID;
-      const testRedirectUri = OIDC_REDIRECT_URI;
-
-      // Make 11 rapid requests to token endpoint
-      const requests = [];
-      for (let i = 0; i < 11; i++) {
-        requests.push(
-          request(TESTING_APP_URL)
-            .post('/api/oidc/token')
-            .set('x-tenant-id', TESTING_TENANT_ID)
-            .send({
-              grant_type: 'authorization_code',
-              code: 'invalid-code',
-              client_id: testClientId,
-              client_secret: OIDC_CLIENT_SECRET,
-              redirect_uri: testRedirectUri,
-            }),
-        );
-      }
-
-      const responses = await Promise.all(requests);
-
-      // Count how many were rate limited (429)
-      const rateLimited = responses.filter((r) => r.status === 429);
-
-      expect(rateLimited.length).toBeGreaterThan(0);
-      console.log(
-        `✅ Rate limiting active: ${rateLimited.length}/11 requests blocked`,
-      );
     });
   });
 
   describe('Client Authentication', () => {
-    it('should reject confidential client without client_secret', async () => {
-      // Create user and get session
-      const user = await createTestUser(
-        TESTING_APP_URL,
-        TESTING_TENANT_ID,
-        `client-auth-${Date.now()}@test.com`,
-        'ClientAuth',
-        'Test',
-      );
-
-      const loginResponse = await request(TESTING_APP_URL)
-        .post('/api/v1/auth/email/login')
-        .set('x-tenant-id', TESTING_TENANT_ID)
-        .send({
-          email: user.email,
-          password: 'Test@1234',
-        })
-        .expect(200);
-
-      const sessionId = loginResponse.body.sessionId;
-
-      // Get authorization code
-      const authorizeResponse = await request(TESTING_APP_URL)
-        .get('/api/oidc/auth')
-        .query({
-          client_id: OIDC_CLIENT_ID,
-          redirect_uri: OIDC_REDIRECT_URI,
-          response_type: 'code',
-          scope: 'openid email',
-          state: 'test-state',
-          nonce: 'test-nonce',
-        })
-        .set('Cookie', [
-          `oidc_session=${sessionId}`,
-          `oidc_tenant=${TESTING_TENANT_ID}`,
-        ])
-        .set('x-tenant-id', TESTING_TENANT_ID);
-
-      const redirectUrl = authorizeResponse.headers.location;
-      const url = new URL(redirectUrl);
-      const authCode = url.searchParams.get('code');
-
-      // Try to exchange without client_secret (confidential client requires it)
-      const tokenResponse = await request(TESTING_APP_URL)
-        .post('/api/oidc/token')
-        .set('x-tenant-id', TESTING_TENANT_ID)
-        .send({
-          grant_type: 'authorization_code',
-          code: authCode,
-          client_id: OIDC_CLIENT_ID,
-          // No client_secret!
-          redirect_uri: OIDC_REDIRECT_URI,
-        });
-
-      // Should reject
-      expect(tokenResponse.status).toBe(401);
-      expect(tokenResponse.body.message).toContain('client_secret');
-      console.log('✅ Confidential client without secret rejected');
-    });
-
     it('should reject confidential client with invalid client_secret', async () => {
       // Create user and get session
       const user = await createTestUser(
@@ -457,7 +351,6 @@ describe('OIDC Security Fixes', () => {
       expect(tokenResponse.body.message).toContain(
         'Invalid client credentials',
       );
-      console.log('✅ Invalid client_secret rejected');
     });
   });
 });

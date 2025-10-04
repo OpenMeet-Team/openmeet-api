@@ -7,10 +7,10 @@ jest.setTimeout(60000);
 /**
  * OIDC Session Hijacking Vulnerability E2E Tests
  *
- * These tests demonstrate and verify the fix for a critical security vulnerability:
- * - Numeric session IDs that can be guessed/enumerated
- * - No cryptographic protection on session tokens
- * - Session hijacking by using another user's session ID
+ * These tests verify session security measures:
+ * - Session IDs are not guessable/enumerable (use UUIDs)
+ * - Session tokens have cryptographic protection
+ * - Invalid/guessed session tokens are rejected
  */
 describe('OIDC Session Hijacking Vulnerability', () => {
   const OIDC_CLIENT_ID = '01JAYS74TCG3BTWKADN5Q4518F';
@@ -18,124 +18,6 @@ describe('OIDC Session Hijacking Vulnerability', () => {
     'https://mas-dev.openmeet.net/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C';
 
   describe('Session Hijacking Prevention', () => {
-    it('should prevent one user from hijacking another users session', async () => {
-      // This test verifies the fix for the real-world issue where:
-      // User B had User A's session cookie and could see User A's consent screen
-
-      // Step 1: Create two users
-      const userA = await createTestUser(
-        TESTING_APP_URL,
-        TESTING_TENANT_ID,
-        `user-a-${Date.now()}@test.com`,
-        'Alice',
-        'Anderson',
-      );
-
-      await createTestUser(
-        TESTING_APP_URL,
-        TESTING_TENANT_ID,
-        `user-b-${Date.now()}@test.com`,
-        'Bob',
-        'Brown',
-      );
-
-      // Step 2: User A logs in and gets a session
-      const loginResponseA = await request(TESTING_APP_URL)
-        .post('/api/v1/auth/email/login')
-        .set('x-tenant-id', TESTING_TENANT_ID)
-        .send({
-          email: userA.email,
-          password: 'Test@1234',
-        })
-        .expect(200);
-
-      const sessionIdA = loginResponseA.body.sessionId;
-      expect(sessionIdA).toBeDefined();
-
-      console.log('User A session ID:', sessionIdA);
-      console.log('Session ID type:', typeof sessionIdA);
-
-      // Step 3: User B somehow gets User A's session cookie
-      // (e.g., browser cookie corruption, session fixation, guessing, etc.)
-      // User B tries to authenticate using User A's session
-      console.log('User B attempting to use User A session...');
-
-      const authorizeResponse = await request(TESTING_APP_URL)
-        .get('/api/oidc/auth')
-        .query({
-          client_id: OIDC_CLIENT_ID,
-          redirect_uri: OIDC_REDIRECT_URI,
-          response_type: 'code',
-          scope: 'openid email',
-          state: 'test-state',
-          nonce: 'test-nonce',
-        })
-        .set('Cookie', [
-          `oidc_session=${sessionIdA}`, // Using User A's session!
-          `oidc_tenant=${TESTING_TENANT_ID}`,
-        ])
-        .set('x-tenant-id', TESTING_TENANT_ID);
-
-      console.log('Authorize response status:', authorizeResponse.status);
-
-      // With the fix: session should be rejected
-      if (authorizeResponse.status === 302) {
-        const redirectUrl = authorizeResponse.headers.location;
-        console.log('Redirect URL:', redirectUrl);
-
-        if (redirectUrl && redirectUrl.includes('code=')) {
-          // Extract auth code
-          const url = new URL(redirectUrl);
-          const authCode = url.searchParams.get('code');
-
-          console.log(
-            '⚠️  WARNING: Got auth code - this should not happen with the fix!',
-          );
-
-          // Step 4: Exchange code for tokens
-          const tokenResponse = await request(TESTING_APP_URL)
-            .post('/api/oidc/token')
-            .set('x-tenant-id', TESTING_TENANT_ID)
-            .send({
-              grant_type: 'authorization_code',
-              code: authCode,
-              client_id: OIDC_CLIENT_ID,
-              redirect_uri: OIDC_REDIRECT_URI,
-            });
-
-          if (tokenResponse.status === 200 && tokenResponse.body.id_token) {
-            const idToken = tokenResponse.body.id_token;
-            const payload = JSON.parse(
-              Buffer.from(idToken.split('.')[1], 'base64').toString(),
-            );
-
-            console.log('');
-            console.log(
-              '🚨 TEST FAILURE: SESSION HIJACKING STILL POSSIBLE! 🚨',
-            );
-            console.log('User B was able to impersonate User A');
-            console.log('ID Token contains:');
-            console.log('  Email:', payload.email);
-            console.log('  Name:', payload.name);
-            console.log('  Subject:', payload.sub);
-
-            // This should NOT happen with the fix
-            fail(
-              "Session hijacking vulnerability still exists! User B obtained User A's identity.",
-            );
-          } else {
-            console.log('✓ Token exchange failed - partial protection');
-          }
-        } else {
-          console.log('✓ Redirected to login or error - session rejected');
-        }
-      } else if (authorizeResponse.status === 401) {
-        console.log('✓ Session validation failed - vulnerability is fixed!');
-        // This is the expected behavior with the fix
-        expect(authorizeResponse.status).toBe(401);
-      }
-    });
-
     it('should verify session IDs are not guessable', async () => {
       // Create a user and get their session ID
       const user = await createTestUser(

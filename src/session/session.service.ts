@@ -46,6 +46,7 @@ export class SessionService {
 
     return this.sessionRepository.findOne({
       where: { secureId },
+      relations: ['user'],
     });
   }
 
