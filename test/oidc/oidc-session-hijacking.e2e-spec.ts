@@ -13,7 +13,7 @@ jest.setTimeout(60000);
  * - Invalid/guessed session tokens are rejected
  */
 describe('OIDC Session Hijacking Vulnerability', () => {
-  const OIDC_CLIENT_ID = '01JAYS74TCG3BTWKADN5Q4518F';
+  const OIDC_CLIENT_ID = process.env.OAUTH_CLIENT_ID as string;
   const OIDC_REDIRECT_URI =
     'https://mas-dev.openmeet.net/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C';
 

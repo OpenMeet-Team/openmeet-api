@@ -14,11 +14,10 @@ jest.setTimeout(120000);
  * 4. Client secret validation
  */
 describe('OIDC Security Fixes', () => {
-  const OIDC_CLIENT_ID = '01JAYS74TCG3BTWKADN5Q4518F';
+  const OIDC_CLIENT_ID = process.env.OAUTH_CLIENT_ID as string;
   const OIDC_REDIRECT_URI =
     'https://mas-dev.openmeet.net/upstream/callback/01JAYS74TCG3BTWKADN5Q4518C';
-  const OIDC_CLIENT_SECRET =
-    process.env.OAUTH_CLIENT_SECRET || 'local-dev-shared-secret-with-synapse';
+  const OIDC_CLIENT_SECRET = process.env.OAUTH_CLIENT_SECRET as string;
 
   describe('Redirect URI Validation', () => {
     it('should reject token request with mismatched redirect_uri', async () => {
