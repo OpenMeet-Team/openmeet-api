@@ -592,7 +592,10 @@ export class AuthService {
     tenantId: string,
   ): Promise<Omit<LoginResponseDto, 'user'>> {
     this.logger.debug(`🔄 Starting refresh for sessionId: ${data.sessionId}`);
-    const session = await this.sessionService.findBySecureId(data.sessionId, tenantId);
+    const session = await this.sessionService.findBySecureId(
+      data.sessionId,
+      tenantId,
+    );
 
     if (!session) {
       this.logger.warn(`❌ Session not found for sessionId: ${data.sessionId}`);
