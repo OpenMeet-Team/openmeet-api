@@ -117,6 +117,7 @@ export class AuthService {
     const session = await this.sessionService.create({
       user,
       hash,
+      secureId: crypto.randomUUID(),
     });
 
     this.logger.debug(`✅ Created session ID: ${session.id}`);
@@ -202,6 +203,7 @@ export class AuthService {
       {
         user,
         hash,
+        secureId: crypto.randomUUID(),
       },
       tenantId,
     );
@@ -260,6 +262,7 @@ export class AuthService {
     const session = await this.sessionService.create({
       user,
       hash: sessionHash,
+      secureId: crypto.randomUUID(),
     });
 
     const { token, refreshToken, tokenExpires } = await this.getTokensData({
