@@ -1,6 +1,6 @@
 # Matrix Integration for OpenMeet
 
-This directory contains streamlined documentation for the Matrix chat integration in OpenMeet. The documentation is organized into three core documents:
+This directory contains streamlined documentation for the Matrix chat integration in OpenMeet.
 
 ## Documentation Overview
 
@@ -19,21 +19,12 @@ This directory contains streamlined documentation for the Matrix chat integratio
    - Key design decisions
    - Future enhancements
 
-3. [Matrix Operations](./matrix-operations.md)
-   - Local development setup
-   - Testing strategies and checklists
-   - Monitoring approaches
-   - Troubleshooting common issues
-   - Reset procedures
-   - Migration strategy
-
 ## Quick Start
 
 For developers new to the Matrix integration:
 
 1. Read [Matrix Architecture](./matrix-architecture.md) first to understand the overall design
 2. Review [Matrix Implementation](./matrix-implementation.md) for technical details
-3. Use [Matrix Operations](./matrix-operations.md) for practical setup and testing guidance
 
 ## Key Reference
 
@@ -81,11 +72,11 @@ docker-compose -f docker-compose-dev.yml logs matrix | grep -A 10 "Success! Matr
 ## Implementation Status
 
 - ✅ Core infrastructure and services
-- ✅ WebSocket real-time communication
+- ✅ Direct Matrix protocol real-time communication
+- ✅ MAS (Matrix Authentication Service) integration
 - ✅ User provisioning and authentication
 - ✅ Room creation and management
 - ✅ Service architecture optimization
-- ✅ Credential management improvements
 - ✅ Admin token regeneration
 - ✅ Robust room operation error handling
-- 🚧 Comprehensive testing in progress
+- ✅ E2E encryption support

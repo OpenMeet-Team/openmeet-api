@@ -10,7 +10,6 @@ The Matrix integration documentation has been organized into the following files
 - [**README.md**](./matrix/README.md) - Quick start guide and key reference
 - [**matrix-architecture.md**](./matrix/matrix-architecture.md) - High-level architecture overview with MAS + Application Service bot model
 - [**matrix-implementation.md**](./matrix/matrix-implementation.md) - Detailed service architecture and implementation patterns
-- [**matrix-operations.md**](./matrix/matrix-operations.md) - Local development setup, testing, monitoring, and troubleshooting
 - [**matrix-bot-architecture.md**](./matrix/matrix-bot-architecture.md) - Bot creation and configuration details
 - [**client-side-matrix-integration.md**](./matrix/client-side-matrix-integration.md) - Client-side architecture and integration design
 - [**mas-deployment-integration.md**](./matrix/mas-deployment-integration.md) - MAS deployment configurations for Docker Compose and CI
