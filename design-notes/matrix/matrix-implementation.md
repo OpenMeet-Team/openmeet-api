@@ -33,11 +33,7 @@ This document details the technical implementation of Matrix chat in OpenMeet, f
    - Handles timeline event processing
    - Formats messages for consistent display
 
-5. **MatrixGateway**
-   - Implements WebSocket communication via Socket.io
-   - Authenticates connections with JWT tokens
-   - Broadcasts room events to connected clients
-   - Manages tenant-aware connection lifecycle
+**Note**: The previous WebSocket-based MatrixGateway has been removed. Chat messaging now happens directly between the client and Matrix server via the Matrix JS SDK.
 
 ### Chat Module Adapters
 

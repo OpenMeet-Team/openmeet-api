@@ -40,10 +40,15 @@ For developers new to the Matrix integration:
 ### Important Methods
 
 - `MatrixUserService.provisionMatrixUser()`: User provisioning with credential management
-- `ChatRoomService.ensureUserHasMatrixCredentials()`: Credential validation and provisioning
-- `MatrixGateway.broadcastRoomEvent()`: Real-time event broadcasting
 - `MatrixCoreService.regenerateAdminAccessToken()`: Admin token regeneration when expired
 - `MatrixRoomService.ensureAdminInRoom()`: Ensures admin is in room before operations
+- `MatrixBotService.authenticateBotWithAppService()`: Bot authentication for room operations
+
+### Important Platform Components
+
+- `MatrixChatGateway.vue`: UI component that renders chat interface for events, groups, and direct messages
+- `MatrixClientManager.ts`: Manages Matrix JS SDK client lifecycle and authentication
+- `MatrixEncryptionManager.ts`: Handles E2E encryption setup and verification
 
 ### Error Handling Patterns
 

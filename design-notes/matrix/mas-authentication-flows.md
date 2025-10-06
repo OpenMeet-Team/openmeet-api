@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document explains how users and bots authenticate with Matrix through our MAS (Matrix Authentication Service) setup, reflecting the current implementation as of July 2025.
+This document explains how users and bots authenticate with Matrix through our MAS (Matrix Authentication Service) setup, reflecting the current implementation as of September 2025.
 
 ## Authentication Flow Diagrams
 

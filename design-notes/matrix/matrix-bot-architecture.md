@@ -2,139 +2,122 @@
 
 ## Overview
 
-The OpenMeet Matrix integration uses a dual-bot architecture that combines a main Application Service bot with tenant-specific bot users. This design ensures proper namespace isolation while maintaining centralized authentication privileges.
+The OpenMeet Matrix integration uses a single Application Service bot for all Matrix operations across all tenants. The bot uses AppService authentication and has namespace control to manage rooms and permissions.
 
 ## Architecture Components
 
-### 1. Main Application Service Bot (`@openmeet-bot`)
+### Application Service Bot
 
-**Purpose**: Provides Matrix Application Service authentication and serves as the default sender for the appservice.
+**Identity**: `@{MATRIX_APPSERVICE_ID}:{serverName}` (typically `@openmeet-bot:matrix.openmeet.net`)
+
+**Purpose**: Single bot that handles all Matrix operations for all tenants.
 
 **Configuration**:
-- Defined in `matrix-config/openmeet-appservice.gomplate.yaml`
+- Defined in `openmeet-appservice.gomplate.yaml` (used in both local dev and k8s)
 - Uses `MATRIX_APPSERVICE_ID` environment variable
+- Uses `MATRIX_APPSERVICE_TOKEN` for authentication
 - Serves as `sender_localpart` in appservice configuration
-- Has global namespace control over `@openmeet-bot-.*:.*` and `@openmeet-.*:.*`
+- Has namespace control over `@openmeet-bot-.*:.*` and `@openmeet-.*:.*`
 
 **Characteristics**:
-- Not a "real" user account in our database
-- Exists only in Matrix homeserver configuration
+- Single bot instance for entire platform
+- Not a database user - exists only in Matrix homeserver
 - Uses Application Service token authentication
 - Has elevated privileges across the entire Matrix system
+- Handles room creation, invitations, and permission management for all tenants
 
-### 2. Tenant-Specific Bot Users (`@openmeet-bot-{tenantId}`)
+### MatrixBotUserService
 
-**Purpose**: Provides isolated bot identities for each tenant while maintaining namespace compliance.
+**Purpose**: Generates consistent bot usernames for logging and tracking.
 
-**Creation Process**:
-- Created via `TenantBotSetupService.initializeBotForTenant()`
-- Stored as real user records in the database
-- Uses tenant-specific credentials and configuration
-- Follows format: `openmeet-bot-{tenantId}`
+**Implementation** (`src/matrix/services/matrix-bot-user.service.ts`):
+- `getOrCreateBotUser(tenantId)` returns slug and email info
+- Format: `openmeet-bot-{tenantId}`
+- **Does not create database records**
+- **Does not create separate Matrix users**
+- Used for consistent naming in logs and operations
 
-**Characteristics**:
-- Real user accounts in OpenMeet database
-- Have passwords (with rotation capabilities)
-- Use AppService authentication for Matrix operations
-- Maintain tenant isolation
+**Note**: Despite the namespace allowing `@openmeet-bot-{tenantId}` users, we use a single AppService bot for all operations.
 
-## Bot Creation Flow
+## Bot Authentication Flow
 
 ```mermaid
 sequenceDiagram
     participant API as OpenMeet API
-    participant TBS as TenantBotSetupService
+    participant MBS as MatrixBotService
     participant MBUS as MatrixBotUserService
-    participant DB as Database
     participant MHS as Matrix Homeserver
 
-    Note over API,MHS: Tenant Bot Creation Process
-    
-    API->>TBS: initializeBotForTenant(tenantId)
-    TBS->>MBUS: createBotUser(tenantId)
-    
-    MBUS->>MBUS: Generate bot email: bot-{tenantId}@domain
-    MBUS->>MBUS: Generate bot slug: openmeet-bot-{tenantId}
-    MBUS->>DB: Create user record with credentials
-    
-    DB-->>MBUS: User created successfully
-    MBUS-->>TBS: Bot user created
-    TBS-->>API: Bot initialized for tenant
-    
     Note over API,MHS: Bot Authentication for Operations
-    
-    API->>TBS: authenticateBotWithAppService(tenantId)
-    TBS->>MBUS: getOrCreateBotUser(tenantId)
-    MBUS-->>TBS: Return bot user details
-    
-    TBS->>MHS: Create Matrix client with AppService token
-    Note over TBS,MHS: Uses @openmeet-bot-{tenantId}:domain as userId
-    MHS-->>TBS: Authenticated Matrix client
-    TBS-->>API: Bot ready for operations
+
+    API->>MBS: authenticateBotWithAppService(tenantId)
+    MBS->>MBUS: getOrCreateBotUser(tenantId)
+
+    MBUS->>MBUS: Generate bot slug: openmeet-bot-{tenantId}
+    MBUS->>MBUS: Generate bot email: bot-{tenantId}@domain
+    Note over MBUS: No DB or Matrix user creation
+
+    MBUS-->>MBS: Return bot info (slug, email)
+
+    MBS->>MBS: Create Matrix client with AppService token
+    Note over MBS: Uses @{appServiceId}:{serverName}
+
+    MBS->>MHS: Authenticate with AppService token
+    MHS-->>MBS: Authenticated Matrix client
+    MBS-->>API: Bot ready for operations
 ```
 
-## Why Two Types of Bots?
+## Architecture Rationale
 
-### Matrix Application Service Requirements
+### Why Application Service?
 
-Matrix Application Services require a `sender_localpart` - this becomes the primary bot identity that Matrix associates with the appservice. This bot:
+Matrix Application Services provide the necessary privileges for bot operations:
 
-- **Must exist** for the appservice to function
-- **Cannot be deleted** without breaking the appservice
-- **Has global privileges** within the defined namespaces
-- **Serves as fallback** for operations when no specific user is provided
+- **Namespace control**: Can manage users matching `@openmeet-bot-.*:.*` pattern
+- **Elevated privileges**: Can create rooms, invite users, set power levels
+- **Token authentication**: No password management required
+- **Automatic user provisioning**: Matrix creates users on-demand within the namespace
 
-### Tenant Isolation Requirements
+### Why Single Bot for All Tenants?
 
-OpenMeet's multi-tenant architecture requires:
+Using a single Application Service bot simplifies the architecture:
 
-- **Separate bot identities** for each tenant
-- **Isolated permissions** per tenant
-- **Auditable actions** tied to specific tenants
-- **Scalable management** of bot credentials
+- **Simplified authentication**: One AppService token for all operations
+- **No credential management**: No passwords to rotate or manage
+- **Consistent operations**: All tenants use the same bot with the same privileges
+- **Tenant tracking**: `MatrixBotUserService` generates tenant-specific slugs for logging
 
-### The Solution: Dual Bot Architecture
+### Architecture Diagram
 
 ```mermaid
 graph TB
     subgraph "Matrix Application Service"
         AS[Application Service]
-        ASBOT[@openmeet-bot<br/>sender_localpart]
+        ASBOT[@openmeet-bot<br/>single bot for all tenants]
         TOKEN[AppService Token]
     end
-    
-    subgraph "Tenant A"
-        TBOT1[@openmeet-bot-tenantA<br/>Real User Account]
-        TCREDS1[Tenant A Credentials]
+
+    subgraph "OpenMeet API"
+        MBS[MatrixBotService]
+        MBUS[MatrixBotUserService]
     end
-    
-    subgraph "Tenant B"
-        TBOT2[@openmeet-bot-tenantB<br/>Real User Account]
-        TCREDS2[Tenant B Credentials]
-    end
-    
+
     subgraph "Matrix Operations"
         ROOM[Room Creation]
         INVITE[User Invitations]
         POWER[Power Level Management]
     end
-    
+
     AS --> ASBOT
     AS --> TOKEN
-    
-    TOKEN --> TBOT1
-    TOKEN --> TBOT2
-    
-    TBOT1 --> ROOM
-    TBOT1 --> INVITE
-    TBOT1 --> POWER
-    
-    TBOT2 --> ROOM
-    TBOT2 --> INVITE
-    TBOT2 --> POWER
-    
-    TCREDS1 --> TBOT1
-    TCREDS2 --> TBOT2
+
+    MBS --> TOKEN
+    MBS --> MBUS
+    MBUS -.generates slugs for logging.-> MBS
+
+    ASBOT --> ROOM
+    ASBOT --> INVITE
+    ASBOT --> POWER
 ```
 
 ## Configuration Details
@@ -159,31 +142,44 @@ namespaces:
       regex: "@openmeet-.*:.*"        # General openmeet users
 ```
 
-### Tenant Configuration
+### Tenant Matrix Configuration
 
 **File**: `tenant-service/tenants-{env}.yaml`
 
+**Current State (September 2025)**: All tenants use the same Matrix instance:
+
 ```yaml
 tenants:
-  - id: "tenantId"
+  - id: "lsdfaopkljdfs"
+    name: "OpenMeet"
     matrixConfig:
-      homeserverUrl: "http://localhost:8448"
+      homeserverUrl: "https://matrix.openmeet.net"
       serverName: "matrix.openmeet.net"
-      botUser:
-        email: "bot-tenantId@openmeet.net"
-        slug: "openmeet-bot-tenantId"
-        password: "secure-password"
-      appservice:
-        id: "openmeet-appservice-tenantId"
-        token: "as_token_tenantId"
-        hsToken: "hs_token_tenantId"
+
+  - id: "oiupsdknasfdf"
+    name: "Testing"
+    matrixConfig:
+      homeserverUrl: "https://matrix.openmeet.net"  # Same instance
+      serverName: "matrix.openmeet.net"              # Same instance
+```
+
+**Future Capability**: Architecture supports per-tenant Matrix instances by specifying different `homeserverUrl` per tenant:
+
+```yaml
+tenants:
+  - id: "enterprise-tenant"
+    name: "Enterprise Customer"
+    matrixConfig:
+      homeserverUrl: "https://matrix-enterprise.openmeet.net"  # Dedicated instance
+      serverName: "matrix-enterprise.openmeet.net"
+      # Would require separate AppService configuration on that instance
 ```
 
 ## Matrix Operations Flow
 
-### Critical Implementation Detail: Authentication vs. Identity
+### Bot Authentication Pattern
 
-**The Key Pattern**: The bot service authenticates as the AppService sender (`@openmeet-bot`) but can operate on behalf of any user in the controlled namespace (`@openmeet-bot-{tenantId}`).
+**Implementation**: The bot service authenticates as the single AppService sender (`@openmeet-bot`) and performs all operations using that identity. The `MatrixBotUserService` generates tenant-specific slugs for logging purposes, but all Matrix operations use the same AppService bot.
 
 ```mermaid
 sequenceDiagram
@@ -275,62 +271,63 @@ await botClient.sendStateEvent(roomId, 'm.room.power_levels', powerLevels);
 3. **Admin Fallback**: For protected rooms, the admin API can force join the bot
 4. **Proper Error Handling**: Distinguishes between different failure modes and handles each appropriately
 
-## Why Not Just Use the Main Bot?
+## Current Single Bot Architecture
 
-### The Problem with Single Bot Approach
+### Why Single Bot Works
 
-If we only used `@openmeet-bot` for all operations:
+The current implementation uses a single AppService bot for all operations:
 
-1. **No Tenant Isolation**: All actions would appear to come from the same bot
-2. **Audit Trail Issues**: Cannot distinguish which tenant performed actions
-3. **Permission Complexity**: Difficult to manage tenant-specific permissions
-4. **Scaling Problems**: Single bot becomes bottleneck for all tenants
-5. **Security Concerns**: One compromised bot affects all tenants
+1. **Simplified Authentication**: One AppService token, no credential management
+2. **Efficient Operations**: No per-tenant authentication overhead
+3. **Shared Infrastructure**: All tenants on same Matrix instance
+4. **Audit via Application**: Tenant context tracked in OpenMeet API, not Matrix
+5. **Matrix Isolation**: Users are tenant-isolated via naming (`username_tenantid`)
 
-### The Benefits of Dual Bot Architecture
+### Trade-offs
 
-1. **Clear Separation**: AppService authentication vs. operational identity
-2. **Tenant Isolation**: Each tenant has its own bot identity
-3. **Scalable Management**: Bot credentials can be rotated per tenant
-4. **Audit Trail**: Actions clearly attributed to specific tenants
-5. **Namespace Compliance**: Maintains Matrix's expected patterns
+**Advantages**:
+- Simpler configuration and deployment
+- No bot credential management or rotation
+- Faster bot operations (single authenticated client)
+- Works well for shared Matrix instance
+
+**Limitations**:
+- Bot actions in Matrix don't show tenant attribution
+- Audit trail requires application-level logging
+- All tenants share bot's rate limits
 
 ## Service Responsibilities
 
-### TenantBotSetupService (`src/matrix/services/tenant-bot-setup.service.ts`)
-- Initializes bots for new tenants
-- Manages bot lifecycle (creation, verification, cleanup)
-- Handles bot health monitoring
-- Coordinates with other services
+### MatrixBotService (`src/matrix/services/matrix-bot.service.ts`)
+- Authenticates with AppService token as single bot
+- Manages Matrix client instance
+- Performs room operations (create, invite, power levels)
+- Handles admin operations via Synapse admin API
+- Provides bot identity for all Matrix operations
 
 ### MatrixBotUserService (`src/matrix/services/matrix-bot-user.service.ts`)
-- Creates bot user records in database
-- Generates tenant-specific credentials
-- Manages password rotation
-- Handles bot user queries
-
-### MatrixBotService (`src/matrix/services/matrix-bot.service.ts`)
-- Performs actual Matrix operations
-- Authenticates bots with AppService
-- Manages Matrix client instances
-- Handles room operations (create, invite, power levels)
+- Generates consistent bot slugs and emails for logging
+- Returns `BotUserInfo` (slug, email) for tenant context
+- **Does not create database records**
+- **Does not create Matrix users**
+- Used for consistent naming in logs and operations
 
 ## Security Considerations
 
-### Authentication Flow
-1. **AppService Token**: Provides Matrix authentication privileges
-2. **Tenant Bot Identity**: Provides user context for operations
-3. **Database Credentials**: Secure tenant-specific bot passwords
-4. **Rotation Policy**: Regular password rotation (default 30 days)
+### Authentication
+1. **AppService Token**: Single token provides authentication for all operations
+2. **Token Storage**: Stored securely as environment variable
+3. **No Password Management**: AppService eliminates credential rotation needs
+4. **Namespace Control**: Bot has privileges only within `@openmeet-bot-.*` namespace
 
 ### Permission Model
-- **Main Bot**: Global namespace control, no operational use
-- **Tenant Bots**: Operational identity with tenant-scoped permissions
-- **Room Power Levels**: Both bots get admin (100) for redundancy
+- **AppService Bot**: Has admin privileges in all OpenMeet-created rooms
+- **Room Power Levels**: Bot automatically gets power level 100 for room management
+- **User Isolation**: Regular users scoped to their tenant via Matrix user ID format
 
 ## Smart Matrix Power Level Synchronization
 
-### Implementation Status: ✅ **COMPLETED** (July 2025)
+### Implementation Status: ✅ **COMPLETED** (September 2025)
 
 **Solution**: Implemented comprehensive Matrix AppService event handling with automatic power level synchronization triggered by user activity.
 
