@@ -942,7 +942,6 @@ export class EventQueryService {
 
   @Trace('event-query.findEventTopicsByEventId')
   findEventTopicsByEventId(): Promise<any[]> {
-    // Matrix-based discussions don't use Zulip topics
     return Promise.resolve([]);
   }
 

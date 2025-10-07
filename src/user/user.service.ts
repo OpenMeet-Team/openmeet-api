@@ -470,9 +470,6 @@ export class UserService {
     }
   }
 
-  // Method removed as part of Zulip removal
-  // This method is no longer needed as we've migrated to Matrix
-
   async update(
     id: User['id'],
     payload: any,

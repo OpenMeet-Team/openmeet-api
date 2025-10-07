@@ -5,7 +5,6 @@ import {
 import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
 import { mockUser } from './user-mocks';
-// Zulip mocks have been removed in favor of Matrix
 import { EventRoleEntity } from '../../event-role/infrastructure/persistence/relational/entities/event-role.entity';
 import { mockGroup } from './group-mocks';
 import { mockCategory } from './mocks';

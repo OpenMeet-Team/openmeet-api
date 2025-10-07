@@ -153,8 +153,6 @@ describe('UserService', () => {
     });
   });
 
-  // Removed Zulip credentials test - we've migrated to Matrix
-
   describe('update', () => {
     it('should update a user', async () => {
       jest.spyOn(userService, 'update').mockResolvedValue(mockUser);
