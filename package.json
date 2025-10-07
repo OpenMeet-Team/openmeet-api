@@ -83,7 +83,7 @@
     "@types/redlock": "^4.0.7",
     "@willsoto/nestjs-prometheus": "^6.0.1",
     "aws-sdk": "^2.1691.0",
-    "axios": "^1.8.2",
+    "axios": "^1.12.2",
     "axios-cookiejar-support": "^6.0.3",
     "bcryptjs": "2.4.3",
     "class-transformer": "0.5.1",
