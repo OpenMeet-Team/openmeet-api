@@ -149,18 +149,12 @@ export class UserEntity extends EntityRelationalHelper {
   @Column({ type: 'text', nullable: true })
   bio?: string;
 
-  // Zulip fields have been removed and replaced with Matrix integration
-
   @ManyToOne(() => RoleEntity, (role) => role.users)
   @JoinColumn({ name: 'roleId' })
   role: RoleEntity;
 
   @OneToMany(() => EventEntity, (event) => event.user)
   events: EventEntity[];
-
-  // Chat entity relation removed as part of Zulip -> Matrix migration
-  // Note: A migration will be needed to clean up the userChats table
-  // TODO: Create migration to remove userChats table and any other Zulip-related columns
 
   @OneToMany(() => GroupMemberEntity, (groupMember) => groupMember.user)
   groupMembers: GroupMemberEntity[];

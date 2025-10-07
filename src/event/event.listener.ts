@@ -46,9 +46,6 @@ export class EventListener {
       id: params.id,
     });
 
-    // Matrix rooms are handled via the Matrix service
-    // We no longer need to manually delete Zulip channels
-
     // For Matrix rooms, we don't delete them but could archive them if needed
     // The rooms will remain in the database but can be marked as inactive
   }

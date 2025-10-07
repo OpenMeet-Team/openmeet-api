@@ -5,7 +5,6 @@ import { GroupUserPermissionEntity } from '../../group/infrastructure/persistenc
 import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
 import { mockCategory } from './mocks';
 import { mockEvents } from './event-mocks';
-// Zulip mocks have been removed in favor of Matrix
 import { GroupRole } from '../../core/constants/constant';
 import { GroupRoleEntity } from '../../group-role/infrastructure/persistence/relational/entities/group-role.entity';
 

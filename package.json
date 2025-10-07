@@ -130,8 +130,7 @@
     "tough-cookie": "^5.1.2",
     "typeorm": "0.3.20",
     "ulid": "^2.3.0",
-    "undici": ">=6.21.2",
-    "zulip-js": "^2.1.0"
+    "undici": ">=6.21.2"
   },
   "devDependencies": {
     "@babel/runtime": ">=7.26.10",
