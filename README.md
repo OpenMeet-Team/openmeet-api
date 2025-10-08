@@ -50,7 +50,7 @@ In the env file you should set the `TEST_TENANT_ID` to the id of the tenant you 
 
 #### Oauth
 
-For testing bluesky locally with oauth logins, we need to run ngrok to expose our local server to the internet.
+For testing bluesky locally with oauth logins, we need to run `ngrok`, `frp` or something else to expose our local server to the internet.
 
     ngrok http 3000
 

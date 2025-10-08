@@ -337,16 +337,10 @@ export class OidcService {
       /^https?:\/\/localhost:8081\/upstream\/callback\/01JAYS74TCG3BTWKADN5Q4518C$/,
       /^https?:\/\/matrix-auth-service:8080\/upstream\/callback\/01JAYS74TCG3BTWKADN5Q4518C$/,
       /^https?:\/\/mas.*\.openmeet\.net\/upstream\/callback\/01JAYS74TCG3BTWKADN5Q4518C$/,
-      // MAS callback URLs for ngrok development
-      /^https?:\/\/.*-mas\.ngrok\.app\/upstream\/callback\/01JAYS74TCG3BTWKADN5Q4518C$/,
-      /^https?:\/\/om-mas\.ngrok\.app\/upstream\/callback\/01JAYS74TCG3BTWKADN5Q4518C$/,
       // Frontend callback URLs (for direct Matrix authentication)
       /^https?:\/\/localhost:9005\/.*$/,
       /^https?:\/\/platform.*\.openmeet\.net\/.*$/,
       /^https?:\/\/localdev\.openmeet\.net\/.*$/,
-      // Frontend callback URLs for ngrok development
-      /^https?:\/\/.*-platform\.ngrok\.app\/.*$/,
-      /^https?:\/\/om-platform\.ngrok\.app\/.*$/,
     ];
 
     const isValidRedirectUri = allowedRedirectUriPatterns.some((pattern) =>
