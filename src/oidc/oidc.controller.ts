@@ -963,7 +963,7 @@ export class OidcController {
               `🔑 OIDC Login Debug - Extracted tenant from JWT: ${tenantFromToken}`,
             );
           } catch (error) {
-            this.logger.debug(
+            this.logger.warn(
               '❌ OIDC Login Debug - Failed to extract tenant from JWT:',
               error.message,
             );
