@@ -88,9 +88,52 @@ If you see `Invalid server name '${MATRIX_SERVER_NAME}'`, this means:
 ### Database Connection Issues
 
 If Matrix can't connect to the database:
-- Check POSTGRES_* variables  
+- Check POSTGRES_* variables
 - Make sure postgres service is running
 - Verify network connectivity between containers
+
+### Orphaned Room Aliases (403 Forbidden - "You are not invited to this room")
+
+**Symptom**: Users get a 403 error when trying to join a specific room/group, but other rooms work fine. UI logs show:
+```
+POST /_matrix/client/v3/join/!ROOM_ID:matrix.openmeet.net
+Status: 403 M_FORBIDDEN
+Error: "You are not invited to this room."
+```
+
+**Root Cause**: A room alias exists in the database but points to a room ID that doesn't exist. This happens when:
+- A room was partially created but the transaction didn't complete
+- A room was deleted but the alias wasn't cleaned up
+- Database inconsistency between `room_aliases` and `rooms` tables
+
+**Diagnosis**:
+```sql
+-- Check if alias exists
+SELECT * FROM room_aliases WHERE room_alias = '#group-YOUR-GROUP:matrix.openmeet.net';
+
+-- Check if the room exists
+SELECT * FROM rooms WHERE room_id = '!ROOM_ID:matrix.openmeet.net';
+
+-- Find all orphaned aliases
+SELECT ra.room_alias, ra.room_id, ra.creator
+FROM room_aliases ra
+LEFT JOIN rooms r ON ra.room_id = r.room_id
+WHERE r.room_id IS NULL;
+```
+
+**Solution**:
+```sql
+-- Delete the orphaned alias (replace with your specific alias)
+DELETE FROM room_aliases WHERE room_alias = '#group-YOUR-GROUP:matrix.openmeet.net';
+```
+
+After deletion, the next time a user tries to access the room:
+1. Synapse won't find the alias in the database
+2. Synapse will query the appservice (if the alias matches the appservice namespace pattern)
+3. The appservice will create the room properly and invite the user
+4. The user will be able to join successfully
+
+**Prevention**: This is typically a transient issue. If it occurs frequently, investigate appservice transaction failures or database connection issues during room creation.
 
 ## Resetting User Credentials
 
