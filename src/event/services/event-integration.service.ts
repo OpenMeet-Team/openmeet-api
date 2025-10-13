@@ -579,8 +579,7 @@ export class EventIntegrationService {
     // For Bluesky events, create shadow accounts if needed
     if (
       eventData.source.type === EventSourceType.BLUESKY &&
-      eventData.source.id &&
-      eventData.source.handle
+      eventData.source.id
     ) {
       // The sourceId should be the full AT Protocol URI (at://{did}/{collection}/{rkey})
       // but we need to extract just the DID for shadow account creation
@@ -613,19 +612,23 @@ export class EventIntegrationService {
         did = eventData.source.metadata.did as string;
       }
 
+      // Handle is optional - per ATProtocol spec, we should store DIDs as canonical identifiers
+      // and resolve to handles at display time. Use DID as fallback display name if handle not provided.
+      const handle = eventData.source.handle || did;
+
       this.logger.debug(
-        `Creating shadow account for Bluesky user with DID ${did} and handle ${eventData.source.handle} for tenant ${tenantId}`,
+        `Creating shadow account for Bluesky user with DID ${did} and handle ${handle} for tenant ${tenantId}`,
       );
 
       return this.shadowAccountService.findOrCreateShadowAccount(
-        did, // Use the extracted DID
-        eventData.source.handle,
+        did, // Use the extracted DID - permanent identifier
+        handle, // Display name (can be DID if handle not provided)
         AuthProvidersEnum.bluesky,
         tenantId,
         {
           bluesky: {
             did: did, // Use the extracted DID
-            handle: eventData.source.handle,
+            handle: eventData.source.handle || did, // Store actual handle if available
             connected: false,
           },
         },
