@@ -161,3 +161,7 @@ MAS_MAIL_PORT=1025
 # MAS Token TTL configuration for CI environment (in seconds)
 MAS_ACCESS_TOKEN_TTL=300
 MAS_COMPAT_TOKEN_TTL=300
+
+# enable testing event ingestion
+SERVICE_API_KEYS=1234567890abcdef1234567890abcdef,second-key-abcdef1234567890abcdef1234567890
+SERVICE_API_KEY=1234567890abcdef1234567890abcdef

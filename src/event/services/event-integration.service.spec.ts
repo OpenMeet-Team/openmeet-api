@@ -223,7 +223,18 @@ describe('EventIntegrationService', () => {
           provide: BlueskyIdService,
           useValue: {
             createUri: jest.fn(),
-            parseUri: jest.fn(),
+            parseUri: jest.fn().mockImplementation((uri: string) => {
+              // Parse AT Protocol URIs in format: at://did:plc:xxx/collection/rkey
+              const match = uri.match(/^at:\/\/(did:[^\/]+)\/([^\/]+)\/(.+)$/);
+              if (match) {
+                return {
+                  did: match[1],
+                  collection: match[2],
+                  rkey: match[3],
+                };
+              }
+              throw new Error(`Invalid AT Protocol URI: ${uri}`);
+            }),
             isValidUri: jest.fn(),
           },
         },
@@ -751,6 +762,135 @@ describe('EventIntegrationService', () => {
       await expect(
         service.processExternalEvent(unsupportedEvent, 'tenant1'),
       ).rejects.toThrow(/Unsupported source type/);
+    });
+  });
+
+  describe('Bluesky event handling without handle', () => {
+    it('should create a new Bluesky event when handle is not provided', async () => {
+      // Arrange - Event from firehose without handle (only DID in metadata)
+      const eventWithoutHandle: ExternalEventDto = {
+        ...mockEventDto,
+        source: {
+          type: EventSourceType.BLUESKY,
+          id: 'at://did:plc:abc123/community.lexicon.calendar.event/xyz789',
+          // No handle provided - simulates firehose data
+          metadata: {
+            did: 'did:plc:abc123',
+            rkey: 'xyz789',
+            cid: 'bafyreiabc123',
+          },
+        },
+      };
+
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+
+      // Mock EventEntity methods
+      const entity = new EventEntity();
+      eventRepository.create.mockReturnValue(entity);
+
+      // Act
+      const result = await service.processExternalEvent(
+        eventWithoutHandle,
+        'tenant1',
+      );
+
+      // Assert - Should use DID as fallback for handle
+      expect(
+        shadowAccountService.findOrCreateShadowAccount,
+      ).toHaveBeenCalledWith(
+        'did:plc:abc123', // DID extracted from AT URI
+        'did:plc:abc123', // DID used as handle fallback
+        AuthProvidersEnum.bluesky,
+        'tenant1',
+        expect.objectContaining({
+          bluesky: expect.objectContaining({
+            did: 'did:plc:abc123',
+            handle: 'did:plc:abc123', // DID used as handle fallback
+            connected: false,
+          }),
+        }),
+      );
+
+      expect(EventEntity.prototype.generateUlid).toHaveBeenCalled();
+      expect(EventEntity.prototype.generateSlug).toHaveBeenCalled();
+      expect(eventRepository.save).toHaveBeenCalled();
+      expect(result.id).toBe(2);
+    });
+
+    it('should extract DID from AT Protocol URI when handle is missing', async () => {
+      // Arrange
+      const eventWithAtUri: ExternalEventDto = {
+        ...mockEventDto,
+        source: {
+          type: EventSourceType.BLUESKY,
+          id: 'at://did:plc:xyz789/community.lexicon.calendar.event/abc123',
+          // No handle
+          metadata: {
+            rkey: 'abc123',
+            cid: 'bafyreixyz789',
+          },
+        },
+      };
+
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+
+      const entity = new EventEntity();
+      eventRepository.create.mockReturnValue(entity);
+
+      // Act
+      await service.processExternalEvent(eventWithAtUri, 'tenant1');
+
+      // Assert - Should extract DID from URI and use it as handle fallback
+      expect(
+        shadowAccountService.findOrCreateShadowAccount,
+      ).toHaveBeenCalledWith(
+        'did:plc:xyz789',
+        'did:plc:xyz789',
+        AuthProvidersEnum.bluesky,
+        'tenant1',
+        expect.any(Object),
+      );
+    });
+
+    it('should use provided handle when available even if DID is in metadata', async () => {
+      // Arrange
+      const eventWithBothHandleAndDid: ExternalEventDto = {
+        ...mockEventDto,
+        source: {
+          type: EventSourceType.BLUESKY,
+          id: 'at://did:plc:abc123/community.lexicon.calendar.event/xyz789',
+          handle: 'user.bsky.social', // Handle provided
+          metadata: {
+            did: 'did:plc:abc123',
+            rkey: 'xyz789',
+          },
+        },
+      };
+
+      eventQueryService.findBySourceAttributes.mockResolvedValue([]);
+
+      const entity = new EventEntity();
+      eventRepository.create.mockReturnValue(entity);
+
+      // Act
+      await service.processExternalEvent(eventWithBothHandleAndDid, 'tenant1');
+
+      // Assert - Should use the provided handle, not the DID
+      expect(
+        shadowAccountService.findOrCreateShadowAccount,
+      ).toHaveBeenCalledWith(
+        'did:plc:abc123',
+        'user.bsky.social', // Uses provided handle
+        AuthProvidersEnum.bluesky,
+        'tenant1',
+        expect.objectContaining({
+          bluesky: expect.objectContaining({
+            did: 'did:plc:abc123',
+            handle: 'user.bsky.social',
+            connected: false,
+          }),
+        }),
+      );
     });
   });
 });
