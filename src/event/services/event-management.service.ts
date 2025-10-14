@@ -278,12 +278,24 @@ export class EventManagementService {
       );
     }
 
+    // Validate Bluesky event visibility - Bluesky only supports public events
+    if (
+      createEventDto.sourceType === 'bluesky' &&
+      eventData.visibility !== EventVisibility.Public
+    ) {
+      throw new BadRequestException(
+        'Bluesky events must be public. Private and authenticated events cannot be published to Bluesky.',
+      );
+    }
+
     let createdEvent;
 
     // If this is a Bluesky event and it's being published, create it in Bluesky first
+    // Only sync public events to Bluesky (defense in depth - validation above should catch this)
     if (
       createEventDto.sourceType === 'bluesky' &&
-      eventData.status === EventStatus.Published
+      eventData.status === EventStatus.Published &&
+      eventData.visibility === EventVisibility.Public
     ) {
       this.logger.debug('Attempting to create Bluesky event');
       try {

@@ -20,6 +20,7 @@ import { REQUEST } from '@nestjs/core';
 import { User } from './domain/user';
 import { Repository } from 'typeorm';
 import { UserEntity } from './infrastructure/persistence/relational/entities/user.entity';
+import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { UserPermissionEntity } from './infrastructure/persistence/relational/entities/user-permission.entity';
 import { RoleService } from '../role/role.service';
@@ -208,13 +209,27 @@ export class UserService {
         photo: true,
         interests: true,
         groups: true,
-        events: true,
         groupMembers: {
           group: true,
           groupRole: true,
         },
       },
     });
+
+    if (!user) {
+      return null;
+    }
+
+    // Load events with visibility filtering
+    // Only show public events on user profiles
+    const eventsQuery = this.usersRepository.manager
+      .createQueryBuilder(EventEntity, 'event')
+      .where('event.user_id = :userId', { userId: user.id })
+      .andWhere('event.visibility = :visibility', { visibility: 'public' })
+      .andWhere('event.status IN (:...statuses)', { statuses: ['published', 'cancelled'] });
+
+    const publicEvents = await eventsQuery.getMany();
+    user['events'] = publicEvents;
 
     // Transform the user object to include formatted Bluesky profile information
     if (user && user.preferences?.bluesky) {
