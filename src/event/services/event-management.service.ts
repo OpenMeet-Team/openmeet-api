@@ -256,34 +256,28 @@ export class EventManagementService {
     // Get user to check for Bluesky connectivity
     const user = await this.userService.getUserById(userId);
 
-    // If sourceType isn't specified but user has a connected Bluesky account,
-    // automatically set the source properties for Bluesky
+    // Note: Bluesky source properties are now set explicitly via the frontend toggle
+    // We no longer automatically set sourceType based on user's provider
+    // This allows users to create non-Bluesky events even if they have Bluesky connected
+
+    // Validate Bluesky event visibility - Bluesky only supports public events
     if (
-      !createEventDto.sourceType &&
-      user?.provider === 'bluesky' &&
-      user?.socialId &&
-      user?.preferences?.bluesky?.connected &&
-      eventData.status === EventStatus.Published
+      createEventDto.sourceType === 'bluesky' &&
+      eventData.visibility !== EventVisibility.Public
     ) {
-      this.logger.debug(
-        `User ${userId} has a connected Bluesky account. Setting source properties.`,
-      );
-      createEventDto.sourceType = EventSourceType.BLUESKY;
-      createEventDto.sourceId = user.socialId;
-      createEventDto.sourceData = {
-        handle: user.preferences?.bluesky?.handle,
-      };
-      this.logger.debug(
-        `Set source properties for Bluesky: sourceId=${createEventDto.sourceId}, handle=${createEventDto.sourceData.handle}`,
+      throw new BadRequestException(
+        'Bluesky events must be public. Private and authenticated events cannot be published to Bluesky.',
       );
     }
 
     let createdEvent;
 
     // If this is a Bluesky event and it's being published, create it in Bluesky first
+    // Only sync public events to Bluesky (defense in depth - validation above should catch this)
     if (
       createEventDto.sourceType === 'bluesky' &&
-      eventData.status === EventStatus.Published
+      eventData.status === EventStatus.Published &&
+      eventData.visibility === EventVisibility.Public
     ) {
       this.logger.debug('Attempting to create Bluesky event');
       try {

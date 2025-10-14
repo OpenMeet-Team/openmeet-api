@@ -49,7 +49,7 @@ export function getOidcCookieOptions(): CookieOptions {
   const isSecure = backendDomain.startsWith('https://');
   const cookieDomain = extractDomainFromUrl(backendDomain);
 
-   return {
+  return {
     domain: cookieDomain, // Dynamically determined from BACKEND_DOMAIN
     secure: isSecure, // Use HTTPS if backend domain uses HTTPS
     sameSite: 'lax',

@@ -15,11 +15,14 @@ import { Counter, Histogram } from 'prom-client';
 import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
 import { FileEntity } from '../../file/infrastructure/persistence/relational/entities/file.entity';
 import { FileService } from '../../file/file.service';
+import axios from 'axios';
 
 @Injectable()
 export class EventIntegrationService {
   private readonly logger = new Logger(EventIntegrationService.name);
   private readonly tracer = trace.getTracer('event-integration-service');
+  private lastGeocodingRequest = 0;
+  private readonly geocodingDelayMs = 1100; // Nominatim rate limit: 1 req/sec, so wait 1.1s to be safe
 
   constructor(
     private readonly tenantService: TenantConnectionService,
@@ -363,6 +366,86 @@ export class EventIntegrationService {
   }
 
   /**
+   * Geocode an address string to lat/lon coordinates using Nominatim
+   * If geocoding fails, progressively removes text before commas and retries
+   * Rate limited to respect Nominatim's 1 request per second policy
+   */
+  private async geocodeAddress(
+    address: string,
+  ): Promise<{ lat: number; lon: number } | null> {
+    let currentAddress = address.trim();
+
+    while (currentAddress) {
+      try {
+        // Rate limiting: ensure we wait at least geocodingDelayMs between requests
+        const now = Date.now();
+        const timeSinceLastRequest = now - this.lastGeocodingRequest;
+        if (timeSinceLastRequest < this.geocodingDelayMs) {
+          const waitTime = this.geocodingDelayMs - timeSinceLastRequest;
+          this.logger.debug(
+            `Rate limiting: waiting ${waitTime}ms before geocoding request`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, waitTime));
+        }
+
+        this.logger.debug(`Attempting to geocode: ${currentAddress}`);
+        this.lastGeocodingRequest = Date.now();
+
+        const response = await axios.get(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(currentAddress)}&format=json&limit=1`,
+          {
+            headers: {
+              'User-Agent': 'OpenMeet/1.0 (https://openmeet.net)',
+            },
+          },
+        );
+
+        if (response.data && response.data.length > 0) {
+          const result = {
+            lat: parseFloat(response.data[0].lat),
+            lon: parseFloat(response.data[0].lon),
+          };
+          this.logger.debug(
+            `Successfully geocoded "${currentAddress}" to lat: ${result.lat}, lon: ${result.lon}`,
+          );
+          return result;
+        }
+
+        // No results found, try with shorter address
+        const commaIndex = currentAddress.indexOf(',');
+        if (commaIndex === -1) {
+          // No more commas to try
+          this.logger.debug(
+            `No geocoding results found for any variation of address: ${address}`,
+          );
+          return null;
+        }
+
+        // Remove text up to and including the first comma, trim whitespace
+        currentAddress = currentAddress.substring(commaIndex + 1).trim();
+        this.logger.debug(
+          `Geocoding failed, retrying with shorter address: ${currentAddress}`,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Error geocoding "${currentAddress}": ${error.message}`,
+        );
+
+        // On error, also try with shorter address
+        const commaIndex = currentAddress.indexOf(',');
+        if (commaIndex === -1) {
+          // No more commas to try
+          return null;
+        }
+
+        currentAddress = currentAddress.substring(commaIndex + 1).trim();
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Create a new event from external data
    */
   private async createNewEvent(
@@ -396,6 +479,15 @@ export class EventIntegrationService {
       if (eventData.location.lat && eventData.location.lon) {
         newEvent.lat = eventData.location.lat;
         newEvent.lon = eventData.location.lon;
+      } else if (eventData.location.description) {
+        // Try to geocode the address if we have a description but no coordinates
+        const coords = await this.geocodeAddress(
+          eventData.location.description,
+        );
+        if (coords) {
+          newEvent.lat = coords.lat;
+          newEvent.lon = coords.lon;
+        }
       }
       if (eventData.location.url) {
         newEvent.locationOnline = eventData.location.url;
@@ -503,6 +595,15 @@ export class EventIntegrationService {
       if (eventData.location.lat && eventData.location.lon) {
         existingEvent.lat = eventData.location.lat;
         existingEvent.lon = eventData.location.lon;
+      } else if (eventData.location.description) {
+        // Try to geocode the address if we have a description but no coordinates
+        const coords = await this.geocodeAddress(
+          eventData.location.description,
+        );
+        if (coords) {
+          existingEvent.lat = coords.lat;
+          existingEvent.lon = coords.lon;
+        }
       }
       if (eventData.location.url) {
         existingEvent.locationOnline = eventData.location.url;
