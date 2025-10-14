@@ -256,27 +256,9 @@ export class EventManagementService {
     // Get user to check for Bluesky connectivity
     const user = await this.userService.getUserById(userId);
 
-    // If sourceType isn't specified but user has a connected Bluesky account,
-    // automatically set the source properties for Bluesky
-    if (
-      !createEventDto.sourceType &&
-      user?.provider === 'bluesky' &&
-      user?.socialId &&
-      user?.preferences?.bluesky?.connected &&
-      eventData.status === EventStatus.Published
-    ) {
-      this.logger.debug(
-        `User ${userId} has a connected Bluesky account. Setting source properties.`,
-      );
-      createEventDto.sourceType = EventSourceType.BLUESKY;
-      createEventDto.sourceId = user.socialId;
-      createEventDto.sourceData = {
-        handle: user.preferences?.bluesky?.handle,
-      };
-      this.logger.debug(
-        `Set source properties for Bluesky: sourceId=${createEventDto.sourceId}, handle=${createEventDto.sourceData.handle}`,
-      );
-    }
+    // Note: Bluesky source properties are now set explicitly via the frontend toggle
+    // We no longer automatically set sourceType based on user's provider
+    // This allows users to create non-Bluesky events even if they have Bluesky connected
 
     // Validate Bluesky event visibility - Bluesky only supports public events
     if (
