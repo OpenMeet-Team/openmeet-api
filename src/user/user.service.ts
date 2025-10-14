@@ -224,9 +224,11 @@ export class UserService {
     // Only show public events on user profiles
     const eventsQuery = this.usersRepository.manager
       .createQueryBuilder(EventEntity, 'event')
-      .where('event.user_id = :userId', { userId: user.id })
+      .where('event.userId = :userId', { userId: user.id })
       .andWhere('event.visibility = :visibility', { visibility: 'public' })
-      .andWhere('event.status IN (:...statuses)', { statuses: ['published', 'cancelled'] });
+      .andWhere('event.status IN (:...statuses)', {
+        statuses: ['published', 'cancelled'],
+      });
 
     const publicEvents = await eventsQuery.getMany();
     user['events'] = publicEvents;
