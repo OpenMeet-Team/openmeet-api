@@ -272,6 +272,66 @@ export class CategorySeedService {
           },
         ],
       },
+      {
+        category: 'Community & Environment',
+        subcategories: [],
+      },
+      {
+        category: 'Dancing',
+        subcategories: [],
+      },
+      {
+        category: 'Gaming',
+        subcategories: [],
+      },
+      {
+        category: 'Hobbies & Crafts',
+        subcategories: [],
+      },
+      {
+        category: 'Language & Culture',
+        subcategories: [],
+      },
+      {
+        category: 'Politics & Activism',
+        subcategories: [],
+      },
+      {
+        category: 'Music',
+        subcategories: [],
+      },
+      {
+        category: 'Family & Parenting',
+        subcategories: [],
+      },
+      {
+        category: 'Pets & Animals',
+        subcategories: [],
+      },
+      {
+        category: 'Spirituality & Religion',
+        subcategories: [],
+      },
+      {
+        category: 'Social Activities',
+        subcategories: [],
+      },
+      {
+        category: 'Sports & Recreation',
+        subcategories: [],
+      },
+      {
+        category: 'Support & Coaching',
+        subcategories: [],
+      },
+      {
+        category: 'Travel & Outdoors',
+        subcategories: [],
+      },
+      {
+        category: 'Writing',
+        subcategories: [],
+      },
     ];
 
     for (const categoryData of seedData) {
