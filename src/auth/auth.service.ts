@@ -38,6 +38,7 @@ import { StatusEntity } from 'src/status/infrastructure/persistence/relational/e
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventQueryService } from '../event/services/event-query.service';
 import { REQUEST } from '@nestjs/core';
+import { ShadowAccountService } from '../shadow-account/shadow-account.service';
 
 @Injectable()
 export class AuthService {
@@ -52,6 +53,7 @@ export class AuthService {
     private eventAttendeeService: EventAttendeeService,
     private mailService: MailService,
     private readonly roleService: RoleService,
+    private shadowAccountService: ShadowAccountService,
     private configService: ConfigService<AllConfigType>,
     @Inject(REQUEST) private readonly request?: any,
   ) {}
@@ -195,6 +197,33 @@ export class AuthService {
           user: 'userNotFound',
         },
       });
+    }
+
+    // Automatically claim shadow account if one exists for Bluesky users
+    if (
+      authProvider === AuthProvidersEnum.bluesky &&
+      socialData.id &&
+      !user.isShadowAccount
+    ) {
+      try {
+        const claimedUser = await this.shadowAccountService.claimShadowAccount(
+          user.id,
+          socialData.id,
+          AuthProvidersEnum.bluesky,
+          tenantId,
+        );
+
+        if (claimedUser) {
+          this.logger.log(
+            `Automatically claimed shadow account for Bluesky user ${socialData.id} in tenant ${tenantId}`,
+          );
+        }
+      } catch (error) {
+        // Log the error but don't fail the login if claiming fails
+        this.logger.warn(
+          `Failed to automatically claim shadow account for user ${user.id}: ${error.message}`,
+        );
+      }
     }
 
     const hash = crypto

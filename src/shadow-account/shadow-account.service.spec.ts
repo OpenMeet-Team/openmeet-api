@@ -96,11 +96,40 @@ describe('ShadowAccountService', () => {
         where: {
           socialId: 'did:plc:1234',
           provider: AuthProvidersEnum.bluesky,
-          isShadowAccount: true,
         },
       });
       expect(userRepository.save).not.toHaveBeenCalled();
       expect(result).toEqual(mockUser);
+    });
+
+    it('should return existing real user instead of creating shadow account', async () => {
+      // Arrange
+      const mockRealUser = {
+        ...mockUser,
+        id: 2,
+        email: 'real@user.com',
+        isShadowAccount: false,
+      } as UserEntity;
+      userRepository.findOne.mockResolvedValue(mockRealUser);
+
+      // Act
+      const result = await service.findOrCreateShadowAccount(
+        'did:plc:1234',
+        'testuser',
+        AuthProvidersEnum.bluesky,
+        'tenant1',
+      );
+
+      // Assert
+      expect(userRepository.findOne).toHaveBeenCalledWith({
+        where: {
+          socialId: 'did:plc:1234',
+          provider: AuthProvidersEnum.bluesky,
+        },
+      });
+      expect(userRepository.save).not.toHaveBeenCalled();
+      expect(result).toEqual(mockRealUser);
+      expect(result.isShadowAccount).toBe(false);
     });
 
     it('should create a new shadow account if not found', async () => {
@@ -136,7 +165,6 @@ describe('ShadowAccountService', () => {
         where: {
           socialId: 'did:plc:1234',
           provider: AuthProvidersEnum.bluesky,
-          isShadowAccount: true,
         },
       });
       expect(userRepository.save).toHaveBeenCalled();
