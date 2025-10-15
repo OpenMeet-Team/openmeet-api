@@ -31,19 +31,25 @@ export class AddNewCategories1760526653000 implements MigrationInterface {
     for (const categoryName of this.newCategories) {
       const slug = categoryName.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and');
 
-      // Insert category only if it doesn't exist
-      await queryRunner.query(
-        `
-        INSERT INTO "${schema}"."categories" (name, slug, "createdAt", "updatedAt")
-        SELECT $1, $2, NOW(), NOW()
-        WHERE NOT EXISTS (
-          SELECT 1 FROM "${schema}"."categories" WHERE name = $1
-        );
-        `,
-        [categoryName, slug],
+      // Check if category exists
+      const exists = await queryRunner.query(
+        `SELECT 1 FROM "${schema}"."categories" WHERE name = $1 LIMIT 1`,
+        [categoryName],
       );
 
-      console.log(`  ✓ Added category: ${categoryName}`);
+      // Insert category only if it doesn't exist
+      if (exists.length === 0) {
+        await queryRunner.query(
+          `
+          INSERT INTO "${schema}"."categories" (name, slug, "createdAt", "updatedAt")
+          VALUES ($1, $2, NOW(), NOW())
+          `,
+          [categoryName, slug],
+        );
+        console.log(`  ✓ Added category: ${categoryName}`);
+      } else {
+        console.log(`  ⊘ Category already exists: ${categoryName}`);
+      }
     }
 
     console.log(`✅ Successfully added new categories to ${schema}`);
