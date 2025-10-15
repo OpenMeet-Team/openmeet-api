@@ -51,25 +51,39 @@ export class ShadowAccountService {
 
           const userRepository = tenantConnection.getRepository(UserEntity);
 
-          // Check if shadow account already exists
-          let shadowUser = await userRepository.findOne({
+          // First check if ANY user (real or shadow) already exists with this external ID
+          // This prevents creating duplicate shadow accounts when a real user exists
+          const existingUser = await userRepository.findOne({
             where: {
               socialId: externalId,
               provider: provider,
-              isShadowAccount: true,
             },
           });
 
-          if (shadowUser) {
+          if (existingUser) {
             span.setAttribute('accountFound', true);
-            return shadowUser;
+            span.setAttribute('isRealUser', !existingUser.isShadowAccount);
+
+            // If it's a real user, return them directly (don't create shadow account)
+            if (!existingUser.isShadowAccount) {
+              this.logger.log(
+                `Found existing real user for ${provider} with external ID ${externalId} in tenant ${targetTenantId}, skipping shadow account creation`,
+              );
+              return existingUser;
+            }
+
+            // If it's already a shadow account, return it
+            this.logger.log(
+              `Found existing shadow account for ${provider} with external ID ${externalId} in tenant ${targetTenantId}`,
+            );
+            return existingUser;
           }
 
           span.setAttribute('accountFound', false);
           span.setAttribute('creating', true);
 
           // Create a new shadow account
-          shadowUser = new UserEntity();
+          const shadowUser = new UserEntity();
           shadowUser.socialId = externalId;
           shadowUser.provider = provider;
           shadowUser.isShadowAccount = true;
