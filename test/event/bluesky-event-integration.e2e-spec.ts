@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
+import { loginAsAdmin } from '../utils/functions';
 
 // Service API key from environment
 const SERVICE_API_KEY = process.env.SERVICE_API_KEYS?.split(',')[0];
@@ -193,6 +194,91 @@ describe('Bluesky Event Integration (e2e)', () => {
         .send(payload);
 
       expect(response.status).toBe(401);
+    });
+
+    it('should add event creator as host attendee', async () => {
+      const timestamp = Date.now();
+      const testDid = `did:plc:attendeetest${timestamp}`;
+      const testRkey = `testrkey${timestamp}`;
+      const sourceId = `at://${testDid}/community.lexicon.calendar.event/${testRkey}`;
+
+      // Create event via integration endpoint
+      const payload = {
+        name: `Test Event Creator Attendee ${timestamp}`,
+        description: 'Testing that event creator is added as host attendee',
+        startDate: new Date(Date.now() + 86400000).toISOString(),
+        endDate: new Date(Date.now() + 90000000).toISOString(),
+        type: 'in-person',
+        status: 'published',
+        visibility: 'public',
+        source: {
+          id: sourceId,
+          type: 'bluesky',
+          handle: 'attendeetest.bsky.social',
+          metadata: {
+            cid: `bafyreitestcid${timestamp}`,
+            rkey: testRkey,
+            collection: 'community.lexicon.calendar.event',
+            time_us: timestamp * 1000,
+            rev: '3m2z5loyhea23',
+            did: testDid,
+          },
+        },
+        location: {
+          description: 'Test Location',
+        },
+      };
+
+      const createResponse = await request(TESTING_APP_URL)
+        .post('/api/integration/events')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', `Bearer ${SERVICE_API_KEY}`)
+        .set('x-tenant-id', TESTING_TENANT_ID)
+        .send(payload);
+
+      expect(createResponse.status).toBe(202);
+      expect(createResponse.body.success).toBe(true);
+      expect(createResponse.body.eventId).toBeDefined();
+
+      // Get admin token to query events
+      const adminToken = await loginAsAdmin();
+
+      // Get all events and find our event by sourceId
+      const eventsResponse = await request(TESTING_APP_URL)
+        .get('/api/events')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(eventsResponse.status).toBe(200);
+      const createdEvent = eventsResponse.body.data.find(
+        (event: any) => event.sourceId === sourceId,
+      );
+
+      expect(createdEvent).toBeDefined();
+      expect(createdEvent.slug).toBeDefined();
+
+      // Query attendees for this event
+      const attendeesResponse = await request(TESTING_APP_URL)
+        .get(`/api/events/${createdEvent.slug}/attendees`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(attendeesResponse.status).toBe(200);
+      expect(attendeesResponse.body.data).toBeDefined();
+      expect(Array.isArray(attendeesResponse.body.data)).toBe(true);
+      expect(attendeesResponse.body.data.length).toBeGreaterThan(0);
+
+      // Find the host attendee (should be the shadow account/creator)
+      const hostAttendee = attendeesResponse.body.data.find(
+        (attendee: any) => attendee.role.name === 'host',
+      );
+
+      expect(hostAttendee).toBeDefined();
+      expect(hostAttendee.user).toBeDefined();
+      // Verify the host is the shadow account created for this event
+      // The user name should match the handle we provided
+      expect(hostAttendee.user.name).toBe('attendeetest.bsky.social');
+      expect(hostAttendee.status).toBe('confirmed');
     });
   });
 });
