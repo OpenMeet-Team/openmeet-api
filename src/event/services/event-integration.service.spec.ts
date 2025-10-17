@@ -18,6 +18,8 @@ import { BadRequestException } from '@nestjs/common';
 import { Counter, Histogram } from 'prom-client';
 import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
 import { FileService } from '../../file/file.service';
+import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
+import { EventRoleService } from '../../event-role/event-role.service';
 
 // Add constants for metrics tokens
 const PROM_METRIC_EVENT_INTEGRATION_PROCESSED_TOTAL =
@@ -218,6 +220,18 @@ describe('EventIntegrationService', () => {
         {
           provide: FileService,
           useValue: fileService,
+        },
+        {
+          provide: EventAttendeeService,
+          useValue: {
+            create: jest.fn(),
+          },
+        },
+        {
+          provide: EventRoleService,
+          useValue: {
+            getRoleByName: jest.fn(),
+          },
         },
         {
           provide: BlueskyIdService,

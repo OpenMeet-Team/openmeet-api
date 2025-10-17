@@ -90,7 +90,7 @@ export class EventIntegrationController {
       return {
         success: true,
         message: 'Event accepted for processing',
-        eventId: result.id,
+        slug: result.slug,
       };
     } catch (error) {
       this.logger.error(
