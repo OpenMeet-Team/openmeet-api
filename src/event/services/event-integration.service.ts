@@ -567,6 +567,7 @@ export class EventIntegrationService {
         status: EventAttendeeStatus.Confirmed,
         user,
         event: savedEvent,
+        skipBlueskySync: true, // Skip RSVP sync for shadow accounts
       });
 
       this.logger.debug(

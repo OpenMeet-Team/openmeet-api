@@ -61,7 +61,7 @@ describe('Bluesky Event Integration (e2e)', () => {
       // Should accept the event (202 Accepted)
       expect(response.status).toBe(202);
       expect(response.body.success).toBe(true);
-      expect(response.body.eventId).toBeDefined();
+      expect(response.body.slug).toBeDefined();
       expect(response.body.message).toContain('accepted');
     });
 
@@ -102,7 +102,7 @@ describe('Bluesky Event Integration (e2e)', () => {
 
       expect(response.status).toBe(202);
       expect(response.body.success).toBe(true);
-      expect(response.body.eventId).toBeDefined();
+      expect(response.body.slug).toBeDefined();
     });
 
     it('should extract DID from AT Protocol URI', async () => {
@@ -143,7 +143,7 @@ describe('Bluesky Event Integration (e2e)', () => {
 
       expect(response.status).toBe(202);
       expect(response.body.success).toBe(true);
-      expect(response.body.eventId).toBeDefined();
+      expect(response.body.slug).toBeDefined();
     });
 
     it('should reject request without service API key', async () => {
@@ -198,7 +198,11 @@ describe('Bluesky Event Integration (e2e)', () => {
 
     it('should add event creator as host attendee', async () => {
       const timestamp = Date.now();
-      const testDid = `did:plc:attendeetest${timestamp}`;
+      // DID must be exactly 32 characters (did:plc: + 24 char identifier)
+      // Use base32-safe characters (a-z, 2-7) to avoid validation errors
+      const base32Timestamp = timestamp.toString().replace(/[018]/g, '2').replace(/9/g, '7');
+      const testDidIdentifier = `attendeetest${base32Timestamp}`.substring(0, 24).padEnd(24, 'a');
+      const testDid = `did:plc:${testDidIdentifier}`;
       const testRkey = `testrkey${timestamp}`;
       const sourceId = `at://${testDid}/community.lexicon.calendar.event/${testRkey}`;
 
@@ -238,28 +242,16 @@ describe('Bluesky Event Integration (e2e)', () => {
 
       expect(createResponse.status).toBe(202);
       expect(createResponse.body.success).toBe(true);
-      expect(createResponse.body.eventId).toBeDefined();
+      expect(createResponse.body.slug).toBeDefined();
 
-      // Get admin token to query events
+      const eventSlug = createResponse.body.slug;
+
+      // Get admin token to query attendees
       const adminToken = await loginAsAdmin();
-
-      // Get all events and find our event by sourceId
-      const eventsResponse = await request(TESTING_APP_URL)
-        .get('/api/events')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .set('x-tenant-id', TESTING_TENANT_ID);
-
-      expect(eventsResponse.status).toBe(200);
-      const createdEvent = eventsResponse.body.data.find(
-        (event: any) => event.sourceId === sourceId,
-      );
-
-      expect(createdEvent).toBeDefined();
-      expect(createdEvent.slug).toBeDefined();
 
       // Query attendees for this event
       const attendeesResponse = await request(TESTING_APP_URL)
-        .get(`/api/events/${createdEvent.slug}/attendees`)
+        .get(`/api/events/${eventSlug}/attendees`)
         .set('Authorization', `Bearer ${adminToken}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
 
