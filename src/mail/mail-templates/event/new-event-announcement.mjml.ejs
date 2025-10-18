@@ -40,14 +40,15 @@
               const timeZoneDisplay = eventTimeZone && eventTimeZone !== 'UTC' ? eventTimeZone : 'UTC';
               
               const formatDateTime = (date) => {
-                return date.toLocaleDateString('en-US', { 
-                  weekday: 'long', 
-                  year: 'numeric', 
-                  month: 'long', 
-                  day: 'numeric' 
-                }) + ' at ' + date.toLocaleTimeString('en-US', { 
-                  hour: 'numeric', 
-                  minute: '2-digit', 
+                return date.toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  timeZone: eventTimeZone || 'UTC'
+                }) + ' at ' + date.toLocaleTimeString('en-US', {
+                  hour: 'numeric',
+                  minute: '2-digit',
                   hour12: true,
                   timeZone: eventTimeZone || 'UTC'
                 });
