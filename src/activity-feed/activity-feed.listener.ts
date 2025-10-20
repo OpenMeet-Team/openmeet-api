@@ -77,8 +77,9 @@ export class ActivityFeedListener {
         `Created group.created activity for ${group.slug} by ${user.slug}`,
       );
 
-      // For public groups, also create sitewide activity (discovery)
+      // Create sitewide activity for discovery
       if (group.visibility === GroupVisibility.Public) {
+        // Public groups: show full details for discovery
         await this.activityFeedService.create({
           activityType: 'group.created',
           feedScope: 'sitewide',
@@ -94,6 +95,23 @@ export class ActivityFeedListener {
 
         this.logger.log(
           `Created sitewide group.created activity for ${group.slug}`,
+        );
+      } else {
+        // Private/authenticated groups: anonymized activity for social proof
+        await this.activityFeedService.create({
+          activityType: 'group.activity',
+          feedScope: 'sitewide',
+          groupVisibility: GroupVisibility.Public, // Force public for sitewide
+          metadata: {
+            activityCount: 1,
+            activityDescription: 'A new group was created',
+          },
+          aggregationStrategy: 'time_window',
+          aggregationWindow: 60,
+        });
+
+        this.logger.log(
+          `Created anonymized sitewide activity for private group ${group.slug}`,
         );
       }
     } catch (error) {
