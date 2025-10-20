@@ -17,6 +17,7 @@ import { EventEntity } from '../event/infrastructure/persistence/relational/enti
 import { EventRoleEntity } from '../event-role/infrastructure/persistence/relational/entities/event-role.entity';
 import { NotFoundException } from '@nestjs/common';
 import { EventSourceType } from '../core/constants/source-type.constant';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 describe('EventAttendeeService', () => {
   let service: EventAttendeeService;
@@ -132,6 +133,13 @@ describe('EventAttendeeService', () => {
         {
           provide: REQUEST,
           useValue: { tenantId: 'test-tenant' },
+        },
+        {
+          provide: EventEmitter2,
+          useValue: {
+            emit: jest.fn(),
+            emitAsync: jest.fn(),
+          },
         },
       ],
     }).compile();
