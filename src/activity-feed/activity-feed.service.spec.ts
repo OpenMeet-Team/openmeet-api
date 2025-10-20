@@ -61,11 +61,16 @@ describe('ActivityFeedService', () => {
 
     // Use resolve() for REQUEST-scoped providers
     service = await module.resolve<ActivityFeedService>(ActivityFeedService);
-    tenantService = module.get(TenantConnectionService) as jest.Mocked<TenantConnectionService>;
+    tenantService = module.get(
+      TenantConnectionService,
+    ) as jest.Mocked<TenantConnectionService>;
 
     // Get the repository after tenant connection is established
-    const connection = await tenantService.getTenantConnection(TESTING_TENANT_ID);
-    repository = connection.getRepository(ActivityFeedEntity) as jest.Mocked<Repository<ActivityFeedEntity>>;
+    const connection =
+      await tenantService.getTenantConnection(TESTING_TENANT_ID);
+    repository = connection.getRepository(ActivityFeedEntity) as jest.Mocked<
+      Repository<ActivityFeedEntity>
+    >;
   });
 
   describe('create()', () => {
@@ -102,7 +107,7 @@ describe('ActivityFeedService', () => {
             actorSlug: 'sarah-chen',
             actorName: 'Sarah Chen',
           }),
-        })
+        }),
       );
       expect(repository.save).toHaveBeenCalled();
       expect(result.visibility).toBe('public');
@@ -126,7 +131,7 @@ describe('ActivityFeedService', () => {
       expect(repository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           visibility: 'members_only',
-        })
+        }),
       );
       expect(result.visibility).toBe('members_only');
     });
@@ -149,7 +154,7 @@ describe('ActivityFeedService', () => {
       expect(repository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           visibility: 'authenticated',
-        })
+        }),
       );
       expect(result.visibility).toBe('authenticated');
     });
@@ -170,7 +175,7 @@ describe('ActivityFeedService', () => {
       expect(repository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           actorIds: [100],
-        })
+        }),
       );
     });
 
@@ -205,7 +210,7 @@ describe('ActivityFeedService', () => {
             actorSlug: 'sarah-chen',
             actorName: 'Sarah Chen',
           }),
-        })
+        }),
       );
     });
 
@@ -236,7 +241,7 @@ describe('ActivityFeedService', () => {
             milestoneType: 'members',
             value: 50,
           }),
-        })
+        }),
       );
     });
   });
@@ -357,7 +362,7 @@ describe('ActivityFeedService', () => {
             visibility: expect.any(Object), // In(['public'])
           }),
           take: 20,
-        })
+        }),
       );
     });
 
@@ -371,7 +376,7 @@ describe('ActivityFeedService', () => {
           where: expect.objectContaining({
             visibility: expect.any(Object), // In(['public', 'members_only'])
           }),
-        })
+        }),
       );
     });
 
@@ -381,7 +386,7 @@ describe('ActivityFeedService', () => {
       expect(repository.find).toHaveBeenCalledWith(
         expect.objectContaining({
           take: 10,
-        })
+        }),
       );
     });
 
@@ -392,7 +397,7 @@ describe('ActivityFeedService', () => {
         expect.objectContaining({
           take: 10,
           skip: 20,
-        })
+        }),
       );
     });
   });

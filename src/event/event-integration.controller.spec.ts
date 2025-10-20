@@ -105,7 +105,7 @@ describe('EventIntegrationController', () => {
       expect(result).toEqual({
         success: true,
         message: 'Event accepted for processing',
-        slug: "test-event-abc123",
+        slug: 'test-event-abc123',
       });
     });
 

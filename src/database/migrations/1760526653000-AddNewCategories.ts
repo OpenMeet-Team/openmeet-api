@@ -26,10 +26,15 @@ export class AddNewCategories1760526653000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     const schema = queryRunner.connection.options.name || 'public';
 
-    console.log(`Adding ${this.newCategories.length} new categories to ${schema}...`);
+    console.log(
+      `Adding ${this.newCategories.length} new categories to ${schema}...`,
+    );
 
     for (const categoryName of this.newCategories) {
-      const slug = categoryName.toLowerCase().replace(/\s+/g, '-').replace(/&/g, 'and');
+      const slug = categoryName
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/&/g, 'and');
 
       // Check if category exists
       const exists = await queryRunner.query(
@@ -58,7 +63,9 @@ export class AddNewCategories1760526653000 implements MigrationInterface {
   public async down(queryRunner: QueryRunner): Promise<void> {
     const schema = queryRunner.connection.options.name || 'public';
 
-    console.log(`Removing ${this.newCategories.length} categories from ${schema}...`);
+    console.log(
+      `Removing ${this.newCategories.length} categories from ${schema}...`,
+    );
 
     for (const categoryName of this.newCategories) {
       // Delete the category (will cascade to subcategories if configured)

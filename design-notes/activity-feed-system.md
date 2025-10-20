@@ -7,10 +7,11 @@ The Activity Feed System provides real-time visibility into platform activity ac
 
 **Currently Implemented:**
 - ✅ Group activity feeds - `GET /api/groups/:slug/feed`
-- ✅ Activity aggregation with time windows (60-minute for member joins)
+- ✅ Activity aggregation with time windows (60-min for members, 30-min for RSVPs)
 - ✅ Visibility inheritance from parent entities
-- ✅ Event listeners for member joins and event creation
+- ✅ Comprehensive event listeners (member joins, group/event creation & updates, RSVPs, milestones)
 - ✅ Two-activity pattern for private groups (detailed + anonymized)
+- ✅ Activity types: `member.joined`, `event.created`, `event.rsvp`, `group.created`, `group.updated`, `event.updated`, `group.milestone`
 
 **Key Implementation Files:**
 - **Entity**: `src/activity-feed/infrastructure/persistence/relational/entities/activity-feed.entity.ts`
@@ -23,9 +24,9 @@ The Activity Feed System provides real-time visibility into platform activity ac
 **Not Yet Implemented:**
 - ⬜ Sitewide feed endpoint
 - ⬜ Event-specific feed endpoint
-- ⬜ Additional activity types (RSVPs, milestones, updates)
-- ⬜ Frontend components
+- ⬜ Additional activity types (milestones, updates, group creation)
 - ⬜ Retention cleanup job (60-day policy)
+- ⬜ RSVP cancellation activities
 
 ## Quick Reference: Key Architectural Decisions
 
@@ -927,27 +928,48 @@ const AGGREGATION_CONFIG = {
 ### Events and Activity Types (Implementation Status)
 
 **Activity Feed Listeners Implemented:**
-- ✅ `chat.group.member.add` → Creates `member.joined` activity (src/activity-feed/activity-feed.listener.ts:24-103)
+- ✅ `group.created` → Creates `group.created` activity (src/activity-feed/activity-feed.listener.ts:26-105)
+  - No aggregation
+  - Scoped to group feed + sitewide for public groups
+- ✅ `chat.group.member.add` → Creates `member.joined` activity (src/activity-feed/activity-feed.listener.ts:107-189)
   - Aggregated in 60-minute windows
   - Creates anonymized sitewide activity for private groups
-- ✅ `event.created` → Creates `event.created` activity (src/activity-feed/activity-feed.listener.ts:105-184)
+  - Checks for group milestones after each join
+- ✅ `event.created` → Creates `event.created` activity (src/activity-feed/activity-feed.listener.ts:191-270)
   - No aggregation
   - Scoped to group feed
+  - Skips standalone events
+- ✅ `event.rsvp.added` → Creates `event.rsvp` activity (src/activity-feed/activity-feed.listener.ts:272-356)
+  - Aggregated in 30-minute windows (shows momentum)
+  - Scoped to group feed
+  - Skips standalone events
+- ✅ `event.updated` → Creates `event.updated` activity (src/activity-feed/activity-feed.listener.ts:358-422)
+  - No aggregation
+  - Scoped to group feed
+  - Skips standalone events
+- ✅ `group.updated` → Creates `group.updated` activity (src/activity-feed/activity-feed.listener.ts:424-468)
+  - No aggregation
+  - Scoped to group feed
+- ✅ **Group Milestones** → Creates `group.milestone` activity (src/activity-feed/activity-feed.listener.ts:474-531)
+  - Triggered when member count hits 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000
+  - Scoped to group feed + sitewide for public groups
+  - Celebrates growth and creates FOMO
 
-**Events Already Emitted (Available for Listeners):**
-- ✅ `group.created` - Ready to add listener
-- ✅ `group.updated` - Ready to add listener
-- ✅ `group.deleted` - Ready to add listener
+**Events Being Emitted:**
+- ✅ `group.created` - Emitted from GroupService (src/group/group.service.ts:253-258)
+- ✅ `group.updated` - Emitted from GroupService (src/group/group.service.ts:601-605)
+- ✅ `group.deleted` - Emitted but not used (no activity for deletions)
+- ✅ `chat.group.member.add` - Already emitted (pre-existing)
+- ✅ `event.created` - Already emitted (pre-existing)
+- ✅ `event.updated` - Emitted from EventManagementService (src/event/services/event-management.service.ts:862-867)
+- ✅ `event.rsvp.added` - Emitted from EventAttendeeService (src/event-attendee/event-attendee.service.ts:181-188)
 
-**Events Need to Be Emitted:**
-- ⬜ `event.updated` - Need to emit from event service
-- ⬜ `event.rsvp.added` - Need to emit from RSVP service
-- ⬜ `event.rsvp.removed` - Need to emit from RSVP service
-- ⬜ `group.milestone.reached` - Need milestone tracking logic
-- ⬜ `event.attendance.confirmed` (future)
-- ⬜ `chat.message.sent` (aggregate to `chat.activity`)
-- ⬜ `poll.created` (future)
-- ⬜ `poll.completed` (future)
+**Future Events (Not Implemented):**
+- ⬜ `event.rsvp.removed` - Negative activity, intentionally not tracked
+- ⬜ `event.attendance.confirmed` - Post-event tracking (future)
+- ⬜ `chat.message.sent` - Could aggregate to `chat.activity` (future)
+- ⬜ `poll.created` - Polls feature (future)
+- ⬜ `poll.completed` - Polls feature (future)
 
 ### Key Implementation Concepts
 

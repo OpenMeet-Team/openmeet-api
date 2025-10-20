@@ -99,7 +99,9 @@ describe('ActivityFeedListener', () => {
     ) as jest.Mocked<ActivityFeedService>;
     groupService = module.get(GroupService) as jest.Mocked<GroupService>;
     userService = module.get(UserService) as jest.Mocked<UserService>;
-    eventQueryService = module.get(EventQueryService) as jest.Mocked<EventQueryService>;
+    eventQueryService = module.get(
+      EventQueryService,
+    ) as jest.Mocked<EventQueryService>;
 
     jest.clearAllMocks();
   });
@@ -377,8 +379,12 @@ describe('ActivityFeedListener', () => {
         tenantId: 'test-tenant',
       };
 
-      eventQueryService.findEventBySlug.mockResolvedValue(mockEvent as EventEntity);
-      groupService.getGroupBySlug.mockResolvedValue(mockPublicGroup as GroupEntity);
+      eventQueryService.findEventBySlug.mockResolvedValue(
+        mockEvent as EventEntity,
+      );
+      groupService.getGroupBySlug.mockResolvedValue(
+        mockPublicGroup as GroupEntity,
+      );
       userService.getUserById.mockResolvedValue(mockUser as UserEntity);
 
       // Act
@@ -437,7 +443,9 @@ describe('ActivityFeedListener', () => {
         group: null,
       };
 
-      eventQueryService.findEventBySlug.mockResolvedValue(eventWithoutGroup as EventEntity);
+      eventQueryService.findEventBySlug.mockResolvedValue(
+        eventWithoutGroup as EventEntity,
+      );
 
       // Act
       await listener.handleEventCreated(params);
@@ -455,7 +463,9 @@ describe('ActivityFeedListener', () => {
         tenantId: 'test-tenant',
       };
 
-      eventQueryService.findEventBySlug.mockResolvedValue(mockEvent as EventEntity);
+      eventQueryService.findEventBySlug.mockResolvedValue(
+        mockEvent as EventEntity,
+      );
       groupService.getGroupBySlug.mockResolvedValue(null);
 
       // Act
@@ -474,8 +484,12 @@ describe('ActivityFeedListener', () => {
         tenantId: 'test-tenant',
       };
 
-      eventQueryService.findEventBySlug.mockResolvedValue(mockEvent as EventEntity);
-      groupService.getGroupBySlug.mockResolvedValue(mockPublicGroup as GroupEntity);
+      eventQueryService.findEventBySlug.mockResolvedValue(
+        mockEvent as EventEntity,
+      );
+      groupService.getGroupBySlug.mockResolvedValue(
+        mockPublicGroup as GroupEntity,
+      );
       userService.getUserById.mockResolvedValue(null);
 
       // Act
@@ -498,9 +512,7 @@ describe('ActivityFeedListener', () => {
       eventQueryService.findEventBySlug.mockRejectedValue(error);
 
       // Act & Assert - Should not throw
-      await expect(
-        listener.handleEventCreated(params),
-      ).resolves.not.toThrow();
+      await expect(listener.handleEventCreated(params)).resolves.not.toThrow();
       expect(activityFeedService.create).not.toHaveBeenCalled();
     });
   });

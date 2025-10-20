@@ -28,6 +28,7 @@ import { EventSourceType } from '../core/constants/source-type.constant';
 import { BlueskyRsvpService } from '../bluesky/bluesky-rsvp.service';
 import { UserService } from '../user/user.service';
 import { EventAttendeeQueryService } from './event-attendee-query.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class EventAttendeeService {
@@ -45,6 +46,7 @@ export class EventAttendeeService {
     @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
     private readonly eventAttendeeQueryService: EventAttendeeQueryService,
+    private readonly eventEmitter: EventEmitter2,
   ) {
     this.logger.log('EventAttendeeService Constructed');
   }
@@ -174,6 +176,16 @@ export class EventAttendeeService {
             },
           );
         }
+
+        // Emit event for activity feed
+        this.eventEmitter.emit('event.rsvp.added', {
+          eventId: saved.event.id,
+          eventSlug: createEventAttendeeDto.event.slug,
+          userId: saved.user.id,
+          userSlug: createEventAttendeeDto.user.slug,
+          status: saved.status,
+          tenantId: this.request.tenantId,
+        });
 
         return saved;
       } catch (error) {

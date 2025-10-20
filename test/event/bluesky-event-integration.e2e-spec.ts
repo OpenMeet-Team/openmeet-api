@@ -200,8 +200,13 @@ describe('Bluesky Event Integration (e2e)', () => {
       const timestamp = Date.now();
       // DID must be exactly 32 characters (did:plc: + 24 char identifier)
       // Use base32-safe characters (a-z, 2-7) to avoid validation errors
-      const base32Timestamp = timestamp.toString().replace(/[018]/g, '2').replace(/9/g, '7');
-      const testDidIdentifier = `attendeetest${base32Timestamp}`.substring(0, 24).padEnd(24, 'a');
+      const base32Timestamp = timestamp
+        .toString()
+        .replace(/[018]/g, '2')
+        .replace(/9/g, '7');
+      const testDidIdentifier = `attendeetest${base32Timestamp}`
+        .substring(0, 24)
+        .padEnd(24, 'a');
       const testDid = `did:plc:${testDidIdentifier}`;
       const testRkey = `testrkey${timestamp}`;
       const sourceId = `at://${testDid}/community.lexicon.calendar.event/${testRkey}`;

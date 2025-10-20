@@ -136,7 +136,9 @@ describe('ActivityFeedEntity', () => {
       activity.aggregationKey = 'member.joined:group:42:2025-01-15T14';
       activity.aggregationStrategy = 'time_window';
 
-      expect(activity.aggregationKey).toBe('member.joined:group:42:2025-01-15T14');
+      expect(activity.aggregationKey).toBe(
+        'member.joined:group:42:2025-01-15T14',
+      );
       expect(activity.aggregationStrategy).toBe('time_window');
     });
 

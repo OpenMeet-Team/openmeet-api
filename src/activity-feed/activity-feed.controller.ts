@@ -66,13 +66,21 @@ export class ActivityFeedController {
         options.visibility = query.visibility;
       }
 
-      this.logger.debug(`Fetching feed with options: ${JSON.stringify(options)}`);
-      const result = await this.activityFeedService.getGroupFeed(group.id, options);
+      this.logger.debug(
+        `Fetching feed with options: ${JSON.stringify(options)}`,
+      );
+      const result = await this.activityFeedService.getGroupFeed(
+        group.id,
+        options,
+      );
       this.logger.log(`Feed result count: ${result.length} for group ${slug}`);
 
       return result;
     } catch (error) {
-      this.logger.error(`Error in getGroupFeed for slug ${slug}: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error in getGroupFeed for slug ${slug}: ${error.message}`,
+        error.stack,
+      );
       throw error;
     }
   }

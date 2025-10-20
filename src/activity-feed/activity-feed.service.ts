@@ -64,7 +64,10 @@ export class ActivityFeedService {
       });
 
       if (existingActivity) {
-        return await this.aggregateIntoExisting(existingActivity, params.actorId);
+        return await this.aggregateIntoExisting(
+          existingActivity,
+          params.actorId,
+        );
       }
 
       // Create new aggregated entry
