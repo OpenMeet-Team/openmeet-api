@@ -39,7 +39,8 @@ describe('ActivityFeedListener', () => {
   const mockUser: Partial<UserEntity> = {
     id: 100,
     slug: 'sarah-chen',
-    name: 'Sarah Chen',
+    firstName: 'Sarah',
+    lastName: 'Chen',
   };
 
   beforeEach(async () => {

@@ -50,6 +50,9 @@ export class ActivityFeedListener {
         return;
       }
 
+      // Construct full name from firstName and lastName (name is a virtual column)
+      const actorName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+
       // Create detailed activity (always created)
       await this.activityFeedService.create({
         activityType: 'member.joined',
@@ -59,7 +62,7 @@ export class ActivityFeedListener {
         groupName: group.name,
         actorId: user.id,
         actorSlug: user.slug,
-        actorName: user.name,
+        actorName: actorName,
         groupVisibility: group.visibility,
         aggregationStrategy: 'time_window',
         aggregationWindow: 60, // 1 hour window
