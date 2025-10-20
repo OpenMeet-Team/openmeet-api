@@ -35,25 +35,40 @@ export class ActivityFeedController {
     @Param('slug') slug: string,
     @Query() query: ActivityFeedQueryDto,
   ): Promise<ActivityFeedEntity[]> {
-    // Verify group exists
-    const group = await this.groupService.getGroupBySlug(slug);
-    if (!group) {
-      throw new NotFoundException(`Group with slug ${slug} not found`);
+    console.log('ActivityFeedController.getGroupFeed called for slug:', slug);
+    console.log('Query params:', query);
+
+    try {
+      // Verify group exists
+      const group = await this.groupService.getGroupBySlug(slug);
+      if (!group) {
+        console.log('Group not found for slug:', slug);
+        throw new NotFoundException(`Group with slug ${slug} not found`);
+      }
+
+      console.log('Group found:', group.id, group.name);
+
+      // Build query options
+      const options: {
+        limit?: number;
+        visibility?: string[];
+      } = {
+        limit: query.limit || 50,
+      };
+
+      // Include visibility filter if provided
+      if (query.visibility && query.visibility.length > 0) {
+        options.visibility = query.visibility;
+      }
+
+      console.log('Fetching feed with options:', options);
+      const result = await this.activityFeedService.getGroupFeed(group.id, options);
+      console.log('Feed result count:', result.length);
+
+      return result;
+    } catch (error) {
+      console.error('Error in getGroupFeed:', error);
+      throw error;
     }
-
-    // Build query options
-    const options: {
-      limit?: number;
-      visibility?: string[];
-    } = {
-      limit: query.limit || 50,
-    };
-
-    // Include visibility filter if provided
-    if (query.visibility && query.visibility.length > 0) {
-      options.visibility = query.visibility;
-    }
-
-    return await this.activityFeedService.getGroupFeed(group.id, options);
   }
 }

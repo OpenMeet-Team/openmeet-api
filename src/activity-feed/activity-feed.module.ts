@@ -6,10 +6,12 @@ import { ActivityFeedListener } from './activity-feed.listener';
 import { ActivityFeedController } from './activity-feed.controller';
 import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
+import { TenantModule } from '../tenant/tenant.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([ActivityFeedEntity]),
+    TenantModule,
     forwardRef(() => UserModule),
     forwardRef(() => GroupModule),
   ],

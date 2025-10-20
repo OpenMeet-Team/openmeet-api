@@ -79,7 +79,7 @@ describe('ActivityFeedService', () => {
         actorId: 100,
         actorSlug: 'sarah-chen',
         actorName: 'Sarah Chen',
-        groupVisibility: 'Public' as GroupVisibility,
+        groupVisibility: GroupVisibility.Public,
       };
 
       repository.create.mockReturnValue(mockActivity as ActivityFeedEntity);
@@ -114,7 +114,7 @@ describe('ActivityFeedService', () => {
         feedScope: 'group' as const,
         groupId: 42,
         actorId: 100,
-        groupVisibility: 'Private' as GroupVisibility,
+        groupVisibility: GroupVisibility.Private,
       };
 
       const privateActivity = { ...mockActivity, visibility: 'members_only' };
@@ -137,7 +137,7 @@ describe('ActivityFeedService', () => {
         feedScope: 'group' as const,
         groupId: 42,
         actorId: 100,
-        groupVisibility: 'Authenticated' as GroupVisibility,
+        groupVisibility: GroupVisibility.Authenticated,
       };
 
       const authActivity = { ...mockActivity, visibility: 'authenticated' };
@@ -159,7 +159,7 @@ describe('ActivityFeedService', () => {
         activityType: 'group.created',
         feedScope: 'sitewide' as const,
         actorId: 100,
-        groupVisibility: 'Public' as GroupVisibility,
+        groupVisibility: GroupVisibility.Public,
       };
 
       repository.create.mockReturnValue(mockActivity as ActivityFeedEntity);
@@ -187,7 +187,7 @@ describe('ActivityFeedService', () => {
         actorId: 100,
         actorSlug: 'sarah-chen',
         actorName: 'Sarah Chen',
-        groupVisibility: 'Public' as GroupVisibility,
+        groupVisibility: GroupVisibility.Public,
       };
 
       repository.create.mockReturnValue(mockActivity as ActivityFeedEntity);
@@ -216,7 +216,7 @@ describe('ActivityFeedService', () => {
         groupId: 42,
         groupSlug: 'tech-talks',
         groupName: 'Tech Talks',
-        groupVisibility: 'Public' as GroupVisibility,
+        groupVisibility: GroupVisibility.Public,
         metadata: {
           milestoneType: 'members',
           value: 50,
@@ -248,7 +248,7 @@ describe('ActivityFeedService', () => {
         feedScope: 'group' as const,
         groupId: 42,
         actorId: 101,
-        groupVisibility: 'Public' as GroupVisibility,
+        groupVisibility: GroupVisibility.Public,
         aggregationStrategy: 'time_window' as const,
         aggregationWindow: 60, // 1 hour
       };
@@ -285,7 +285,7 @@ describe('ActivityFeedService', () => {
         feedScope: 'group' as const,
         groupId: 42,
         actorId: 100,
-        groupVisibility: 'Public' as GroupVisibility,
+        groupVisibility: GroupVisibility.Public,
         aggregationStrategy: 'time_window' as const,
         aggregationWindow: 60,
       };
@@ -306,7 +306,7 @@ describe('ActivityFeedService', () => {
         feedScope: 'group' as const,
         groupId: 42,
         actorId: 100, // Same actor
-        groupVisibility: 'Public' as GroupVisibility,
+        groupVisibility: GroupVisibility.Public,
         aggregationStrategy: 'time_window' as const,
         aggregationWindow: 60,
       };
@@ -387,17 +387,17 @@ describe('ActivityFeedService', () => {
 
   describe('mapVisibility()', () => {
     it('should map Public to public', () => {
-      const result = service.mapVisibility('Public' as GroupVisibility);
+      const result = service.mapVisibility(GroupVisibility.Public);
       expect(result).toBe('public');
     });
 
     it('should map Authenticated to authenticated', () => {
-      const result = service.mapVisibility('Authenticated' as GroupVisibility);
+      const result = service.mapVisibility(GroupVisibility.Authenticated);
       expect(result).toBe('authenticated');
     });
 
     it('should map Private to members_only', () => {
-      const result = service.mapVisibility('Private' as GroupVisibility);
+      const result = service.mapVisibility(GroupVisibility.Private);
       expect(result).toBe('members_only');
     });
   });
