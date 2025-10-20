@@ -122,7 +122,8 @@ describe('ActivityFeedController', () => {
       // Assert
       expect(groupService.getGroupBySlug).toHaveBeenCalledWith('tech-talks');
       expect(activityFeedService.getGroupFeed).toHaveBeenCalledWith(42, {
-        limit: 50,
+        limit: 20,
+        offset: 0,
       });
       expect(result).toEqual(mockActivities);
     });
@@ -140,6 +141,7 @@ describe('ActivityFeedController', () => {
       // Assert
       expect(activityFeedService.getGroupFeed).toHaveBeenCalledWith(42, {
         limit: 20,
+        offset: 0,
       });
     });
 
@@ -157,7 +159,8 @@ describe('ActivityFeedController', () => {
 
       // Assert
       expect(activityFeedService.getGroupFeed).toHaveBeenCalledWith(42, {
-        limit: 50,
+        limit: 20,
+        offset: 0,
         visibility: ['public'],
       });
     });
@@ -176,7 +179,8 @@ describe('ActivityFeedController', () => {
 
       // Assert
       expect(activityFeedService.getGroupFeed).toHaveBeenCalledWith(43, {
-        limit: 50,
+        limit: 20,
+        offset: 0,
         visibility: ['public', 'members_only'],
       });
     });
@@ -205,8 +209,66 @@ describe('ActivityFeedController', () => {
 
       // Assert
       expect(activityFeedService.getGroupFeed).toHaveBeenCalledWith(42, {
-        limit: 50,
+        limit: 20,
+        offset: 0,
         visibility: ['public', 'authenticated'],
+      });
+    });
+
+    it('should respect offset parameter for pagination', async () => {
+      // Arrange
+      groupService.getGroupBySlug.mockResolvedValue(
+        mockPublicGroup as GroupEntity,
+      );
+      activityFeedService.getGroupFeed.mockResolvedValue([]);
+
+      // Act - Get second page (skip first 20 items)
+      await controller.getGroupFeed('tech-talks', { offset: 20 });
+
+      // Assert
+      expect(activityFeedService.getGroupFeed).toHaveBeenCalledWith(42, {
+        limit: 20,
+        offset: 20,
+      });
+    });
+
+    it('should handle offset and limit together for pagination', async () => {
+      // Arrange
+      groupService.getGroupBySlug.mockResolvedValue(
+        mockPublicGroup as GroupEntity,
+      );
+      activityFeedService.getGroupFeed.mockResolvedValue([]);
+
+      // Act - Get third page with custom page size (skip 40, take 10)
+      await controller.getGroupFeed('tech-talks', {
+        limit: 10,
+        offset: 40,
+      });
+
+      // Assert
+      expect(activityFeedService.getGroupFeed).toHaveBeenCalledWith(42, {
+        limit: 10,
+        offset: 40,
+      });
+    });
+
+    it('should handle large offset values', async () => {
+      // Arrange
+      groupService.getGroupBySlug.mockResolvedValue(
+        mockPublicGroup as GroupEntity,
+      );
+      activityFeedService.getGroupFeed.mockResolvedValue([]);
+
+      // Act - Request page far into results
+      await controller.getGroupFeed('tech-talks', {
+        limit: 20,
+        offset: 100,
+      });
+
+      // Assert
+      expect(activityFeedService.getGroupFeed).toHaveBeenCalledWith(42, {
+        limit: 20,
+        offset: 100,
       });
     });
   });
