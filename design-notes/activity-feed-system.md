@@ -3,6 +3,56 @@
 ## Overview
 The Activity Feed System provides real-time visibility into platform activity across groups, events, and the broader OpenMeet community. It serves three primary feed types: sitewide (public discovery and user personalization), group-specific (member engagement), and event-specific (attendee coordination). The system balances transparency for growth with privacy for sensitive content, showing that private groups/events exist without exposing their details.
 
+## Implementation Status
+
+**Currently Implemented:**
+- ✅ Group activity feeds - `GET /api/groups/:slug/feed`
+- ✅ Activity aggregation with time windows (60-minute for member joins)
+- ✅ Visibility inheritance from parent entities
+- ✅ Event listeners for member joins and event creation
+- ✅ Two-activity pattern for private groups (detailed + anonymized)
+
+**Key Implementation Files:**
+- **Entity**: `src/activity-feed/infrastructure/persistence/relational/entities/activity-feed.entity.ts`
+- **Service**: `src/activity-feed/activity-feed.service.ts`
+- **Controller**: `src/activity-feed/activity-feed.controller.ts`
+- **Listener**: `src/activity-feed/activity-feed.listener.ts`
+- **Migration**: `src/database/migrations/1760956752292-CreateActivityFeedTable.ts`
+- **Tests**: `src/activity-feed/*.spec.ts`
+
+**Not Yet Implemented:**
+- ⬜ Sitewide feed endpoint
+- ⬜ Event-specific feed endpoint
+- ⬜ Additional activity types (RSVPs, milestones, updates)
+- ⬜ Frontend components
+- ⬜ Retention cleanup job (60-day policy)
+
+## Quick Reference: Key Architectural Decisions
+
+**1. Visibility Inheritance**
+- Activities ALWAYS inherit visibility from parent entity (group/event)
+- See `ActivityFeedService.mapVisibility()` at line 123-136
+- Never set visibility manually
+
+**2. Two-Activity Pattern for Private Groups**
+- Detailed activity (members_only) → Group feed
+- Anonymized activity (public) → Sitewide feed
+- See `ActivityFeedListener.handleGroupMemberAdded()` at line 78-96
+
+**3. Smart Aggregation**
+- Time-window aggregation reduces write volume by 70-90%
+- Member joins: 60-minute windows
+- See `ActivityFeedService.create()` at line 54-68
+
+**4. Metadata for Frontend Display**
+- Store slugs/names in JSONB to avoid JOINs
+- See `buildMetadata()` at line 202-232
+
+**5. Event-Driven Architecture**
+- Services emit events, listeners create activities
+- Pattern: `@OnEvent('chat.group.member.add')`
+- See `ActivityFeedListener` at line 24-103
+
 ## Business Context
 
 ### Problem Statement
@@ -343,330 +393,103 @@ When private groups/events have activity, create TWO activities:
 
 #### Database Schema
 
-**Primary Table: `activity_feed`**
+**Implementation:** See migration file at `src/database/migrations/1760956752292-CreateActivityFeedTable.ts:12-113`
 
-```sql
-CREATE TABLE activity_feed (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+The `activityFeed` table includes:
+- **Activity identification**: `activityType`, `feedScope`
+- **Target references**: `groupId`, `eventId` (with CASCADE delete)
+- **Actor tracking**: `actorId` (primary actor), `actorIds[]` (for aggregation)
+- **Metadata**: JSONB field for flexible data (slugs, names, etc.)
+- **Privacy control**: `visibility` field (derived from parent entity)
+- **Aggregation**: `aggregationKey`, `aggregationStrategy`, `aggregatedCount`
+- **Timestamps**: `createdAt`, `updatedAt`
 
-  -- Activity identification
-  activity_type VARCHAR(50) NOT NULL,
-    -- Examples: 'group.created', 'member.joined', 'event.created',
-    --           'event.rsvp', 'group.milestone', 'chat.activity'
+**Key Indexes** (optimized for query patterns):
+- `idx_activityFeed_group_feed` - Group feed queries (groupId, updatedAt DESC)
+- `idx_activityFeed_event_feed` - Event feed queries (eventId, updatedAt DESC)
+- `idx_activityFeed_sitewide_feed` - Sitewide queries (feedScope, visibility, updatedAt DESC)
+- `idx_activityFeed_aggregation_key` - Fast aggregation lookups
+- `idx_activityFeed_created_at` - Retention cleanup queries
 
-  -- Scoping: which feed does this belong to?
-  feed_scope VARCHAR(20) NOT NULL,
-    -- Values: 'sitewide', 'group', 'event'
-
-  -- Target references (polymorphic)
-  group_id INTEGER REFERENCES groups(id) ON DELETE CASCADE,
-  event_id INTEGER REFERENCES events(id) ON DELETE CASCADE,
-
-  -- Actor tracking
-  actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    -- Primary actor (first person to perform action)
-  actor_ids INTEGER[] DEFAULT '{}',
-    -- All actors for aggregated entries
-    -- Example: [101, 102, 103, 104, 105]
-
-  -- Target information
-  target_type VARCHAR(50),
-    -- What was acted upon: 'group', 'event', 'user', 'poll', etc.
-  target_id INTEGER,
-    -- ID of the target entity
-
-  -- Flexible metadata
-  metadata JSONB DEFAULT '{}',
-    -- Activity-specific data:
-    -- { "groupSlug": "tech-talks", "eventName": "Coffee Meetup",
-    --   "milestoneType": "members", "value": 50,
-    --   "chatTopic": "TypeScript patterns" }
-
-  -- Privacy control (DERIVED from parent entity)
-  visibility VARCHAR(20) DEFAULT 'public',
-    -- IMPORTANT: This is ALWAYS computed from group.visibility or event.visibility
-    -- Never set manually - use mapVisibility() function
-    -- Values: 'public', 'authenticated', 'members_only', 'private'
-    -- This is a denormalized cache for query performance
-
-  -- Aggregation fields
-  aggregation_key VARCHAR(200),
-    -- Format: "{type}:{scope}:{targetId}:{timeWindow}"
-    -- Example: "member.joined:group:42:2025-01-15T14"
-  aggregation_strategy VARCHAR(20),
-    -- Values: 'time_window', 'daily', 'none'
-  aggregated_count INTEGER DEFAULT 1,
-    -- Number of activities aggregated
-
-  -- Timestamps
-  created_at TIMESTAMP DEFAULT NOW(),
-    -- When first activity occurred
-  updated_at TIMESTAMP DEFAULT NOW(),
-    -- When last activity was aggregated
-
-  -- Indexes for performance
-  INDEX idx_group_feed (group_id, created_at DESC)
-    WHERE feed_scope = 'group',
-  INDEX idx_event_feed (event_id, created_at DESC)
-    WHERE feed_scope = 'event',
-  INDEX idx_sitewide_feed (feed_scope, visibility, created_at DESC)
-    WHERE feed_scope = 'sitewide',
-  INDEX idx_aggregation_lookup (aggregation_key, created_at DESC),
-  INDEX idx_visibility_filter (group_id, visibility, created_at DESC),
-
-  -- Constraints
-  CHECK (feed_scope IN ('sitewide', 'group', 'event')),
-  CHECK (visibility IN ('public', 'authenticated', 'members_only', 'private')),
-  CHECK (aggregation_strategy IN ('time_window', 'daily', 'none', NULL))
-);
-```
-
-**Supporting Views (Optional Performance Optimization):**
-
-```sql
--- Materialized view for public sitewide feed (refresh every 60 seconds)
-CREATE MATERIALIZED VIEW sitewide_feed_public AS
-SELECT *
-FROM activity_feed
-WHERE feed_scope = 'sitewide'
-  AND visibility IN ('public', 'authenticated')
-ORDER BY created_at DESC
-LIMIT 100;
-
-CREATE INDEX ON sitewide_feed_public (created_at DESC);
-
--- Refresh strategy: pg_cron or app-level refresh every 60 seconds
-```
+**Entity Definition:** See `src/activity-feed/infrastructure/persistence/relational/entities/activity-feed.entity.ts:18-105`
 
 #### API Specifications
 
-**Endpoint 1: Sitewide Feed**
+**Implementation:** See controller at `src/activity-feed/activity-feed.controller.ts:22-79`
+
+**Endpoint 1: Group Activity Feed** (✅ Implemented)
 
 ```
-GET /api/feed
+GET /api/groups/:slug/feed
 ```
 
-**Query Parameters:**
-- `limit` (default: 50, max: 100) - Items per page
-- `before` (timestamp) - Pagination cursor (load older items)
-- `visibility` (default: auto-detect based on auth) - Filter visibility
-
-**Response:**
-```json
-{
-  "activities": [
-    {
-      "id": "abc-123-def",
-      "activityType": "member.joined",
-      "feedScope": "sitewide",
-      "aggregatedCount": 3,
-      "actors": [
-        { "id": 101, "name": "Sarah Chen", "avatar": "..." },
-        { "id": 102, "name": "Jordan Kim", "avatar": "..." },
-        { "id": 103, "name": "Alex Martinez", "avatar": "..." }
-      ],
-      "group": {
-        "id": 42,
-        "slug": "tech-talks",
-        "name": "Tech Talks",
-        "visibility": "Public"
-      },
-      "visibility": "public",
-      "createdAt": "2025-01-15T14:23:00Z",
-      "updatedAt": "2025-01-15T14:45:00Z"
-    },
-    {
-      "id": "def-456-ghi",
-      "activityType": "event.created",
-      "feedScope": "sitewide",
-      "aggregatedCount": 1,
-      "actor": {
-        "id": 104,
-        "name": "Mike Rodriguez",
-        "avatar": "..."
-      },
-      "event": {
-        "id": 78,
-        "slug": "coffee-meetup",
-        "name": "Coffee Meetup",
-        "startTime": "2025-01-20T10:00:00Z"
-      },
-      "group": {
-        "id": 42,
-        "slug": "tech-talks",
-        "name": "Tech Talks"
-      },
-      "visibility": "public",
-      "createdAt": "2025-01-15T13:10:00Z"
-    },
-    {
-      "id": "ghi-789-jkl",
-      "activityType": "group.milestone",
-      "feedScope": "sitewide",
-      "group": {
-        "id": 42,
-        "slug": "tech-talks",
-        "name": "Tech Talks"
-      },
-      "metadata": {
-        "milestoneType": "members",
-        "value": 50
-      },
-      "visibility": "public",
-      "createdAt": "2025-01-14T18:32:00Z"
-    }
-  ],
-  "pagination": {
-    "hasMore": true,
-    "nextCursor": "2025-01-14T18:32:00Z"
-  }
-}
-```
-
-**Endpoint 2: Group Activity Feed**
-
-```
-GET /api/groups/:slug/activity
-```
-
-**Query Parameters:**
-- `limit` (default: 50)
-- `before` (timestamp) - Pagination cursor
-- `visibility` (auto-determined by membership)
+**Query Parameters:** (See DTO at `src/activity-feed/dto/activity-feed-query.dto.ts`)
+- `limit` (default: 20) - Items per page
+- `offset` (default: 0) - Pagination offset
+- `visibility` (array) - Filter visibility levels
 
 **Authorization:**
-- Public preview: visibility='public' only
-- Members: visibility='public' OR 'members_only'
+- Public endpoint with optional auth
+- Visibility filtering based on membership (frontend responsibility)
 
-**Endpoint 3: Event Activity Feed**
+**Response:** Array of `ActivityFeedEntity` objects with:
+- Activity metadata (type, scope, timestamps)
+- Actor IDs and aggregation data
+- Group/event references (via metadata)
+- Visibility level
 
-```
-GET /api/events/:slug/activity
-```
-
-**Query Parameters:**
-- `limit` (default: 50)
-- `before` (timestamp)
-
-**Authorization:**
-- Public preview: visibility='public' only
-- Attendees: visibility='public' OR 'members_only'
-
-**Endpoint 4: Activity Stats (Optional)**
-
-```
-GET /api/feed/stats
-```
-
-**Response:**
-```json
-{
-  "last24Hours": {
-    "groupsCreated": 3,
-    "membersJoined": 47,
-    "eventsCreated": 12,
-    "rsvpsAdded": 89
-  },
-  "trending": [
-    { "groupId": 42, "activityScore": 234 },
-    { "groupId": 15, "activityScore": 189 }
-  ]
-}
-```
+**Endpoints Not Yet Implemented:**
+- ⬜ `GET /api/feed` - Sitewide feed (planned)
+- ⬜ `GET /api/events/:slug/feed` - Event feed (planned)
+- ⬜ `GET /api/feed/stats` - Activity stats (future enhancement)
 
 #### Key Processes
 
 **Process 1: Activity Creation with Aggregation**
 
-```
-Input: Activity event payload (groupId, eventId, actorId, activityType)
-1. Load parent entity (group or event)
-2. Compute visibility using mapVisibility() function:
-   - group.visibility='Public' → 'public'
-   - group.visibility='Authenticated' → 'authenticated'
-   - group.visibility='Private' → 'members_only'
-   (Same mapping for events)
-3. Determine if private entity needs two-activity pattern:
-   - If entity is Private AND feedScope includes 'sitewide':
-     a. Create detailed activity (members_only) for group/event feed
-     b. Create anonymized activity (public) for sitewide feed
-        - Use activityType prefix 'private.*' (e.g., 'private.member.joined')
-        - Set actorId=null, groupId=null (no identifying info)
-        - metadata: { entityType: 'private_group' } (for counting only)
-   - Else: Create single activity with computed visibility
-4. For each activity being created:
-   a. Determine aggregation strategy
-   b. If aggregation enabled:
-      - Build aggregation key
-      - Calculate time window cutoff
-      - Query for existing activity with same key
-      - If exists:
-        * Append actor to actor_ids[]
-        * Increment aggregated_count
-        * Update updated_at timestamp
-        * Return updated activity
-   c. If no existing activity:
-      - Create new activity entry
-      - Initialize actor_ids with first actor
-      - Save to database
-Output: One or two activity feed entries (depending on privacy)
-```
+**Implementation:** See `ActivityFeedService.create()` at `src/activity-feed/activity-feed.service.ts:27-87`
+
+Key steps:
+1. Compute visibility from parent entity using `mapVisibility()` method (line 47-49)
+2. Handle aggregation strategy:
+   - **Time window aggregation** (line 54-68): Check for existing activity within window, aggregate if found
+   - **No aggregation**: Create single entry (line 81-86)
+3. Build aggregation key using `buildTimeWindowKey()` (line 183-196)
+4. Aggregate into existing entry via `aggregateIntoExisting()` (line 162-178) or create new via `createNewEntry()` (line 141-157)
+5. Store slugs/names in metadata via `buildMetadata()` (line 202-232) for frontend display
 
 **Process 2: Visibility Mapping Function**
 
-```
-Function: mapVisibility(entityVisibility: GroupVisibility | EventVisibility)
-Input: Entity visibility from group or event
-Logic:
-  switch (entityVisibility) {
-    case 'Public':
-      return 'public'        // Anyone can see
-    case 'Authenticated':
-      return 'authenticated' // Logged-in users only
-    case 'Private':
-      return 'members_only'  // Members/attendees only
-  }
-Output: Activity visibility level
+**Implementation:** See `ActivityFeedService.mapVisibility()` at `src/activity-feed/activity-feed.service.ts:123-136`
 
-IMPORTANT: This is the ONLY way to set activity visibility.
-Never allow manual visibility assignment.
-```
+Maps entity visibility to activity visibility:
+- `GroupVisibility.Public` → `'public'`
+- `GroupVisibility.Authenticated` → `'authenticated'`
+- `GroupVisibility.Private` → `'members_only'`
 
-**Process 3: Visibility Refresh on Entity Update**
+This is the ONLY way to set activity visibility - never set manually.
 
-```
-Trigger: When group or event visibility changes
-Input: groupId or eventId, new visibility value
-1. Compute new activity visibility using mapVisibility()
-2. Batch update all activities for this entity:
-   UPDATE activity_feed
-   SET visibility = {newVisibility}
-   WHERE group_id = {groupId} OR event_id = {eventId}
-3. Handle transition cases:
-   - Public → Private: Remove from sitewide feed OR anonymize
-   - Private → Public: Create sitewide entries for existing activities
-4. Invalidate related caches
-Output: All activities updated with new visibility
-```
+**Process 3: Event Listeners**
+
+**Implementation:** See `ActivityFeedListener` at `src/activity-feed/activity-feed.listener.ts:11-185`
+
+Currently handles:
+- ✅ `chat.group.member.add` - Member joins group (line 24-103)
+  - Creates detailed activity for group feed
+  - Creates anonymized sitewide activity for private groups (line 78-96)
+- ✅ `event.created` - Event created (line 105-184)
+  - Creates activity in group feed scope
+  - No aggregation for event creations
 
 **Process 4: Feed Query with Privacy Filtering**
 
-```
-Input: Feed type (sitewide/group/event), user authentication status
-1. Determine allowed visibility levels:
-   - Guest: ['public']
-   - Authenticated: ['public', 'authenticated']
-   - Group member: ['public', 'authenticated', 'members_only']
-2. Query activity_feed with filters:
-   - WHERE feed_scope = {feedType}
-   - AND visibility IN ({allowedLevels})
-   - AND (group_id = X OR event_id = Y) -- if scoped
-   - ORDER BY updated_at DESC  -- Show most recent activity
-   - LIMIT {limit}
-3. Populate related entities (actors, groups, events)
-4. For aggregated entries, load actor details
-Output: Filtered activity list
-```
+**Implementation:** See `ActivityFeedService.getGroupFeed()` at `src/activity-feed/activity-feed.service.ts:92-117`
+
+Query strategy:
+1. Filter by `feedScope` and target ID (groupId/eventId)
+2. Apply visibility filter if provided
+3. Order by `updatedAt DESC` (shows most recent activity)
+4. Pagination via `take` and `skip`
 
 ### Security & Compliance
 
@@ -1101,20 +924,26 @@ const AGGREGATION_CONFIG = {
 - `idx_aggregation_lookup`: Enables fast aggregation checks
 - `idx_visibility_filter`: Speeds up privacy filtering
 
-### Events to Emit (Implementation Checklist)
+### Events and Activity Types (Implementation Status)
 
-**Already Emitting:**
-- ✅ `group.created`
-- ✅ `group.updated`
-- ✅ `group.deleted`
-- ✅ `chat.group.member.add`
+**Activity Feed Listeners Implemented:**
+- ✅ `chat.group.member.add` → Creates `member.joined` activity (src/activity-feed/activity-feed.listener.ts:24-103)
+  - Aggregated in 60-minute windows
+  - Creates anonymized sitewide activity for private groups
+- ✅ `event.created` → Creates `event.created` activity (src/activity-feed/activity-feed.listener.ts:105-184)
+  - No aggregation
+  - Scoped to group feed
 
-**Need to Add:**
-- ⬜ `event.created`
-- ⬜ `event.updated`
-- ⬜ `event.rsvp.added`
-- ⬜ `event.rsvp.removed`
-- ⬜ `group.milestone.reached`
+**Events Already Emitted (Available for Listeners):**
+- ✅ `group.created` - Ready to add listener
+- ✅ `group.updated` - Ready to add listener
+- ✅ `group.deleted` - Ready to add listener
+
+**Events Need to Be Emitted:**
+- ⬜ `event.updated` - Need to emit from event service
+- ⬜ `event.rsvp.added` - Need to emit from RSVP service
+- ⬜ `event.rsvp.removed` - Need to emit from RSVP service
+- ⬜ `group.milestone.reached` - Need milestone tracking logic
 - ⬜ `event.attendance.confirmed` (future)
 - ⬜ `chat.message.sent` (aggregate to `chat.activity`)
 - ⬜ `poll.created` (future)
