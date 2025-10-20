@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ActivityFeedEntity } from './infrastructure/persistence/relational/entities/activity-feed.entity';
 import { ActivityFeedService } from './activity-feed.service';
 import { ActivityFeedListener } from './activity-feed.listener';
+import { ActivityFeedController } from './activity-feed.controller';
 import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
 
@@ -12,6 +13,7 @@ import { GroupModule } from '../group/group.module';
     forwardRef(() => UserModule),
     forwardRef(() => GroupModule),
   ],
+  controllers: [ActivityFeedController],
   providers: [ActivityFeedService, ActivityFeedListener],
   exports: [ActivityFeedService],
 })
