@@ -7,6 +7,7 @@ import { ActivityFeedController } from './activity-feed.controller';
 import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
 import { TenantModule } from '../tenant/tenant.module';
+import { EventModule } from '../event/event.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { TenantModule } from '../tenant/tenant.module';
     TenantModule,
     forwardRef(() => UserModule),
     forwardRef(() => GroupModule),
+    forwardRef(() => EventModule),
   ],
   controllers: [ActivityFeedController],
   providers: [ActivityFeedService, ActivityFeedListener],

@@ -7,12 +7,15 @@ import { REQUEST } from '@nestjs/core';
 import { GroupVisibility } from '../core/constants/constant';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { EventQueryService } from '../event/services/event-query.service';
+import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 
 describe('ActivityFeedListener', () => {
   let listener: ActivityFeedListener;
   let activityFeedService: jest.Mocked<ActivityFeedService>;
   let groupService: jest.Mocked<GroupService>;
   let userService: jest.Mocked<UserService>;
+  let eventQueryService: jest.Mocked<EventQueryService>;
   let mockRequest: any;
 
   const mockPublicGroup: Partial<GroupEntity> = {
@@ -43,6 +46,13 @@ describe('ActivityFeedListener', () => {
     lastName: 'Chen',
   };
 
+  const mockEvent: Partial<EventEntity> = {
+    id: 200,
+    slug: 'typescript-workshop',
+    name: 'TypeScript Workshop',
+    group: mockPublicGroup as GroupEntity,
+  };
+
   beforeEach(async () => {
     mockRequest = {
       tenantId: 'test-tenant',
@@ -67,6 +77,13 @@ describe('ActivityFeedListener', () => {
           provide: UserService,
           useFactory: () => ({
             getUserBySlug: jest.fn(),
+            getUserById: jest.fn(),
+          }),
+        },
+        {
+          provide: EventQueryService,
+          useFactory: () => ({
+            findEventBySlug: jest.fn(),
           }),
         },
         {
@@ -82,6 +99,7 @@ describe('ActivityFeedListener', () => {
     ) as jest.Mocked<ActivityFeedService>;
     groupService = module.get(GroupService) as jest.Mocked<GroupService>;
     userService = module.get(UserService) as jest.Mocked<UserService>;
+    eventQueryService = module.get(EventQueryService) as jest.Mocked<EventQueryService>;
 
     jest.clearAllMocks();
   });
@@ -344,6 +362,144 @@ describe('ActivityFeedListener', () => {
       // Act & Assert - Should not throw
       await expect(
         listener.handleGroupMemberAdded(params),
+      ).resolves.not.toThrow();
+      expect(activityFeedService.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handleEventCreated', () => {
+    it('should create event.created activity when event is created in a group', async () => {
+      // Arrange
+      const params = {
+        eventId: 200,
+        slug: 'typescript-workshop',
+        userId: 100,
+        tenantId: 'test-tenant',
+      };
+
+      eventQueryService.findEventBySlug.mockResolvedValue(mockEvent as EventEntity);
+      groupService.getGroupBySlug.mockResolvedValue(mockPublicGroup as GroupEntity);
+      userService.getUserById.mockResolvedValue(mockUser as UserEntity);
+
+      // Act
+      await listener.handleEventCreated(params);
+
+      // Assert
+      expect(activityFeedService.create).toHaveBeenCalledTimes(1);
+      expect(activityFeedService.create).toHaveBeenCalledWith({
+        activityType: 'event.created',
+        feedScope: 'group',
+        groupId: 42,
+        groupSlug: 'tech-talks',
+        groupName: 'Tech Talks',
+        eventId: 200,
+        eventSlug: 'typescript-workshop',
+        eventName: 'TypeScript Workshop',
+        actorId: 100,
+        actorSlug: 'sarah-chen',
+        actorName: 'Sarah Chen',
+        groupVisibility: GroupVisibility.Public,
+        aggregationStrategy: 'none',
+      });
+    });
+
+    it('should not create activity when event is not found', async () => {
+      // Arrange
+      const params = {
+        eventId: 999,
+        slug: 'non-existent',
+        userId: 100,
+        tenantId: 'test-tenant',
+      };
+
+      eventQueryService.findEventBySlug.mockResolvedValue(null);
+
+      // Act
+      await listener.handleEventCreated(params);
+
+      // Assert
+      expect(activityFeedService.create).not.toHaveBeenCalled();
+    });
+
+    it('should not create activity when event does not belong to a group', async () => {
+      // Arrange
+      const params = {
+        eventId: 200,
+        slug: 'standalone-event',
+        userId: 100,
+        tenantId: 'test-tenant',
+      };
+
+      const eventWithoutGroup: Partial<EventEntity> = {
+        id: 200,
+        slug: 'standalone-event',
+        name: 'Standalone Event',
+        group: null,
+      };
+
+      eventQueryService.findEventBySlug.mockResolvedValue(eventWithoutGroup as EventEntity);
+
+      // Act
+      await listener.handleEventCreated(params);
+
+      // Assert
+      expect(activityFeedService.create).not.toHaveBeenCalled();
+    });
+
+    it('should not create activity when group is not found', async () => {
+      // Arrange
+      const params = {
+        eventId: 200,
+        slug: 'typescript-workshop',
+        userId: 100,
+        tenantId: 'test-tenant',
+      };
+
+      eventQueryService.findEventBySlug.mockResolvedValue(mockEvent as EventEntity);
+      groupService.getGroupBySlug.mockResolvedValue(null);
+
+      // Act
+      await listener.handleEventCreated(params);
+
+      // Assert
+      expect(activityFeedService.create).not.toHaveBeenCalled();
+    });
+
+    it('should not create activity when user is not found', async () => {
+      // Arrange
+      const params = {
+        eventId: 200,
+        slug: 'typescript-workshop',
+        userId: 999,
+        tenantId: 'test-tenant',
+      };
+
+      eventQueryService.findEventBySlug.mockResolvedValue(mockEvent as EventEntity);
+      groupService.getGroupBySlug.mockResolvedValue(mockPublicGroup as GroupEntity);
+      userService.getUserById.mockResolvedValue(null);
+
+      // Act
+      await listener.handleEventCreated(params);
+
+      // Assert
+      expect(activityFeedService.create).not.toHaveBeenCalled();
+    });
+
+    it('should handle errors gracefully and log them', async () => {
+      // Arrange
+      const params = {
+        eventId: 200,
+        slug: 'typescript-workshop',
+        userId: 100,
+        tenantId: 'test-tenant',
+      };
+
+      const error = new Error('Database connection failed');
+      eventQueryService.findEventBySlug.mockRejectedValue(error);
+
+      // Act & Assert - Should not throw
+      await expect(
+        listener.handleEventCreated(params),
       ).resolves.not.toThrow();
       expect(activityFeedService.create).not.toHaveBeenCalled();
     });

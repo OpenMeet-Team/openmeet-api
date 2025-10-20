@@ -5,6 +5,7 @@ import { GroupService } from '../group/group.service';
 import { UserService } from '../user/user.service';
 import { REQUEST } from '@nestjs/core';
 import { GroupVisibility } from '../core/constants/constant';
+import { EventQueryService } from '../event/services/event-query.service';
 
 @Injectable()
 export class ActivityFeedListener {
@@ -15,6 +16,7 @@ export class ActivityFeedListener {
     private readonly activityFeedService: ActivityFeedService,
     private readonly groupService: GroupService,
     private readonly userService: UserService,
+    private readonly eventQueryService: EventQueryService,
   ) {
     this.logger.log('ActivityFeedListener constructed and ready to handle events');
   }
@@ -95,6 +97,87 @@ export class ActivityFeedListener {
     } catch (error) {
       this.logger.error(
         `Failed to create activity for group ${params.groupSlug} and user ${params.userSlug}: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
+  @OnEvent('event.created')
+  async handleEventCreated(params: {
+    eventId: number;
+    slug: string;
+    userId: number;
+    tenantId: string;
+  }) {
+    try {
+      this.logger.log('event.created event received', {
+        eventId: params.eventId,
+        slug: params.slug,
+        userId: params.userId,
+        tenantId: params.tenantId,
+      });
+
+      // Fetch event entity to get name, groupId
+      const event = await this.eventQueryService.findEventBySlug(params.slug);
+      if (!event) {
+        this.logger.warn(
+          `Event not found for slug ${params.slug}, skipping activity creation`,
+        );
+        return;
+      }
+
+      // Skip if event doesn't belong to a group
+      if (!event.group) {
+        this.logger.debug(
+          `Event ${params.slug} doesn't belong to a group, skipping activity creation`,
+        );
+        return;
+      }
+
+      // Fetch group entity to get group details
+      const group = await this.groupService.getGroupBySlug(event.group.slug);
+      if (!group) {
+        this.logger.warn(
+          `Group not found for event ${params.slug}, skipping activity creation`,
+        );
+        return;
+      }
+
+      // Fetch user entity to get creator's name
+      const user = await this.userService.getUserById(params.userId);
+      if (!user) {
+        this.logger.warn(
+          `User not found for id ${params.userId}, skipping activity creation`,
+        );
+        return;
+      }
+
+      // Construct full name from firstName and lastName
+      const actorName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+
+      // Create event.created activity
+      await this.activityFeedService.create({
+        activityType: 'event.created',
+        feedScope: 'group',
+        groupId: group.id,
+        groupSlug: group.slug,
+        groupName: group.name,
+        eventId: event.id,
+        eventSlug: event.slug,
+        eventName: event.name,
+        actorId: user.id,
+        actorSlug: user.slug,
+        actorName: actorName,
+        groupVisibility: group.visibility,
+        aggregationStrategy: 'none', // Don't aggregate event creations
+      });
+
+      this.logger.log(
+        `Created event.created activity for ${event.slug} by ${user.slug}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to create activity for event ${params.slug}: ${error.message}`,
         error.stack,
       );
     }
