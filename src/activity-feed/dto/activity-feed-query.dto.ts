@@ -5,7 +5,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 export class ActivityFeedQueryDto {
   @ApiPropertyOptional({
     description: 'Number of activities to return',
-    default: 50,
+    default: 20,
     minimum: 1,
     maximum: 100,
   })
@@ -13,6 +13,16 @@ export class ActivityFeedQueryDto {
   @IsNumber()
   @Type(() => Number)
   limit?: number;
+
+  @ApiPropertyOptional({
+    description: 'Number of activities to skip (for pagination)',
+    default: 0,
+    minimum: 0,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  offset?: number;
 
   @ApiPropertyOptional({
     description: 'Visibility levels to include',

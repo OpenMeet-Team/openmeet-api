@@ -93,6 +93,7 @@ export class ActivityFeedService {
     groupId: number,
     options: {
       limit?: number;
+      offset?: number;
       visibility?: string[];
     } = {},
   ): Promise<ActivityFeedEntity[]> {
@@ -104,7 +105,8 @@ export class ActivityFeedService {
         groupId,
       },
       order: { updatedAt: 'DESC' },
-      take: options.limit || 50,
+      take: options.limit || 20,
+      skip: options.offset || 0,
     };
 
     if (options.visibility) {

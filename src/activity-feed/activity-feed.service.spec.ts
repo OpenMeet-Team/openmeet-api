@@ -339,7 +339,8 @@ describe('ActivityFeedService', () => {
           groupId: 42,
         },
         order: { updatedAt: 'DESC' },
-        take: 50,
+        take: 20,
+        skip: 0,
       });
       expect(result).toHaveLength(2);
     });
@@ -380,6 +381,17 @@ describe('ActivityFeedService', () => {
       expect(repository.find).toHaveBeenCalledWith(
         expect.objectContaining({
           take: 10,
+        })
+      );
+    });
+
+    it('should respect offset parameter for pagination', async () => {
+      await service.getGroupFeed(42, { limit: 10, offset: 20 });
+
+      expect(repository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          take: 10,
+          skip: 20,
         })
       );
     });

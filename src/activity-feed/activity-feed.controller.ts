@@ -54,9 +54,11 @@ export class ActivityFeedController {
       // Build query options
       const options: {
         limit?: number;
+        offset?: number;
         visibility?: string[];
       } = {
-        limit: query.limit || 50,
+        limit: query.limit || 20,
+        offset: query.offset || 0,
       };
 
       // Include visibility filter if provided
