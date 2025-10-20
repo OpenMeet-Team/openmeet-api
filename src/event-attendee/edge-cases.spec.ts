@@ -16,6 +16,7 @@ import { UserEntity } from '../user/infrastructure/persistence/relational/entiti
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { EventRoleEntity } from '../event-role/infrastructure/persistence/relational/entities/event-role.entity';
 import { EventSourceType } from '../core/constants/source-type.constant';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 /**
  * This file contains tests for complex edge cases in the EventAttendeeService
@@ -137,6 +138,13 @@ describe('EventAttendeeService Edge Cases', () => {
         {
           provide: REQUEST,
           useValue: { tenantId: 'test-tenant' },
+        },
+        {
+          provide: EventEmitter2,
+          useValue: {
+            emit: jest.fn(),
+            emitAsync: jest.fn(),
+          },
         },
       ],
     }).compile();
