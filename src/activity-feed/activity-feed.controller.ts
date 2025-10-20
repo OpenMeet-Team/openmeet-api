@@ -5,6 +5,7 @@ import {
   Query,
   UseGuards,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ActivityFeedService } from './activity-feed.service';
@@ -19,6 +20,8 @@ import { JWTAuthGuard } from '../auth/auth.guard';
 @ApiBearerAuth()
 @UseGuards(JWTAuthGuard)
 export class ActivityFeedController {
+  private readonly logger = new Logger(ActivityFeedController.name);
+
   constructor(
     private readonly activityFeedService: ActivityFeedService,
     private readonly groupService: GroupService,
@@ -35,18 +38,18 @@ export class ActivityFeedController {
     @Param('slug') slug: string,
     @Query() query: ActivityFeedQueryDto,
   ): Promise<ActivityFeedEntity[]> {
-    console.log('ActivityFeedController.getGroupFeed called for slug:', slug);
-    console.log('Query params:', query);
+    this.logger.log(`getGroupFeed called for slug: ${slug}`);
+    this.logger.debug(`Query params: ${JSON.stringify(query)}`);
 
     try {
       // Verify group exists
       const group = await this.groupService.getGroupBySlug(slug);
       if (!group) {
-        console.log('Group not found for slug:', slug);
+        this.logger.warn(`Group not found for slug: ${slug}`);
         throw new NotFoundException(`Group with slug ${slug} not found`);
       }
 
-      console.log('Group found:', group.id, group.name);
+      this.logger.debug(`Group found: ${group.id} - ${group.name}`);
 
       // Build query options
       const options: {
@@ -61,13 +64,13 @@ export class ActivityFeedController {
         options.visibility = query.visibility;
       }
 
-      console.log('Fetching feed with options:', options);
+      this.logger.debug(`Fetching feed with options: ${JSON.stringify(options)}`);
       const result = await this.activityFeedService.getGroupFeed(group.id, options);
-      console.log('Feed result count:', result.length);
+      this.logger.log(`Feed result count: ${result.length} for group ${slug}`);
 
       return result;
     } catch (error) {
-      console.error('Error in getGroupFeed:', error);
+      this.logger.error(`Error in getGroupFeed for slug ${slug}: ${error.message}`, error.stack);
       throw error;
     }
   }
