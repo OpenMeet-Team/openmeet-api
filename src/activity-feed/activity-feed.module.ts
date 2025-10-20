@@ -4,6 +4,7 @@ import { ActivityFeedEntity } from './infrastructure/persistence/relational/enti
 import { ActivityFeedService } from './activity-feed.service';
 import { ActivityFeedListener } from './activity-feed.listener';
 import { ActivityFeedController } from './activity-feed.controller';
+import { SitewideActivityFeedController } from './sitewide-activity-feed.controller';
 import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
 import { TenantModule } from '../tenant/tenant.module';
@@ -17,7 +18,7 @@ import { EventModule } from '../event/event.module';
     forwardRef(() => GroupModule),
     forwardRef(() => EventModule),
   ],
-  controllers: [ActivityFeedController],
+  controllers: [ActivityFeedController, SitewideActivityFeedController],
   providers: [ActivityFeedService, ActivityFeedListener],
   exports: [ActivityFeedService],
 })

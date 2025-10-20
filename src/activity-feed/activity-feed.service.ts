@@ -120,6 +120,35 @@ export class ActivityFeedService {
   }
 
   /**
+   * Get sitewide feed (discovery feed)
+   * Shows activities from public groups and anonymized activities from private groups
+   */
+  async getSitewideFeed(options: {
+    limit?: number;
+    offset?: number;
+    visibility?: string[];
+  } = {}): Promise<ActivityFeedEntity[]> {
+    await this.getTenantRepository();
+
+    const queryOptions: any = {
+      where: {
+        feedScope: 'sitewide',
+      },
+      order: { updatedAt: 'DESC' },
+      take: options.limit || 20,
+      skip: options.offset || 0,
+    };
+
+    // Apply visibility filtering
+    // Guests see only 'public', authenticated users see 'public' + 'authenticated'
+    if (options.visibility) {
+      queryOptions.where.visibility = In(options.visibility);
+    }
+
+    return await this.activityFeedRepository.find(queryOptions);
+  }
+
+  /**
    * Map entity visibility to activity visibility
    * This is the ONLY way to set activity visibility
    */
