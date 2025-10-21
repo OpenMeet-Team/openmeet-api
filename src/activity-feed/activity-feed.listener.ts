@@ -233,23 +233,6 @@ export class ActivityFeedListener {
         return;
       }
 
-      // Skip if event doesn't belong to a group
-      if (!event.group) {
-        this.logger.debug(
-          `Event ${params.slug} doesn't belong to a group, skipping activity creation`,
-        );
-        return;
-      }
-
-      // Fetch group entity to get group details
-      const group = await this.groupService.getGroupBySlug(event.group.slug);
-      if (!group) {
-        this.logger.warn(
-          `Group not found for event ${params.slug}, skipping activity creation`,
-        );
-        return;
-      }
-
       // Fetch user entity to get creator's name
       const user = await this.userService.getUserById(params.userId);
       if (!user) {
@@ -262,40 +245,22 @@ export class ActivityFeedListener {
       // Construct full name from firstName and lastName
       const actorName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
 
-      // Create event.created activity
-      await this.activityFeedService.create({
-        activityType: 'event.created',
-        feedScope: 'group',
-        groupId: group.id,
-        groupSlug: group.slug,
-        groupName: group.name,
-        eventId: event.id,
-        eventSlug: event.slug,
-        eventName: event.name,
-        actorId: user.id,
-        actorSlug: user.slug,
-        actorName: actorName,
-        groupVisibility: group.visibility,
-        aggregationStrategy: 'none', // Don't aggregate event creations
-      });
+      // Handle events that belong to a group
+      let group = null;
+      if (event.group) {
+        group = await this.groupService.getGroupBySlug(event.group.slug);
+        if (!group) {
+          this.logger.warn(
+            `Group not found for event ${params.slug}, treating as standalone`,
+          );
+        }
+      }
 
-      this.logger.log(
-        `Created event.created activity for ${event.slug} by ${user.slug}`,
-      );
-
-      // Create sitewide activity for discovery
-      // Show event if both event AND group are public
-      const eventVisibility = event.visibility;
-      const groupVisibility = group.visibility;
-
-      if (
-        eventVisibility === EventVisibility.Public &&
-        groupVisibility === GroupVisibility.Public
-      ) {
-        // Public event in public group: show full details for discovery
+      // Create group-scoped activity if event belongs to a group
+      if (group) {
         await this.activityFeedService.create({
           activityType: 'event.created',
-          feedScope: 'sitewide',
+          feedScope: 'group',
           groupId: group.id,
           groupSlug: group.slug,
           groupName: group.name,
@@ -306,14 +271,65 @@ export class ActivityFeedListener {
           actorSlug: user.slug,
           actorName: actorName,
           groupVisibility: group.visibility,
-          aggregationStrategy: 'none',
+          aggregationStrategy: 'none', // Don't aggregate event creations
         });
 
         this.logger.log(
-          `Created sitewide event.created activity for ${event.slug}`,
+          `Created group-scoped event.created activity for ${event.slug} by ${user.slug}`,
         );
+      }
+
+      // Create sitewide activity for discovery
+      const eventVisibility = event.visibility;
+
+      // For standalone events or public events
+      if (eventVisibility === EventVisibility.Public) {
+        // Check if this is a standalone event or if both event and group are public
+        const shouldShowFullDetails =
+          !group || // Standalone event
+          (group && group.visibility === GroupVisibility.Public); // Public event in public group
+
+        if (shouldShowFullDetails) {
+          // Show full details for discovery
+          await this.activityFeedService.create({
+            activityType: 'event.created',
+            feedScope: 'sitewide',
+            groupId: group?.id,
+            groupSlug: group?.slug,
+            groupName: group?.name,
+            eventId: event.id,
+            eventSlug: event.slug,
+            eventName: event.name,
+            actorId: user.id,
+            actorSlug: user.slug,
+            actorName: actorName,
+            groupVisibility: group?.visibility || GroupVisibility.Public,
+            aggregationStrategy: 'none',
+          });
+
+          this.logger.log(
+            `Created sitewide event.created activity for ${event.slug} (${group ? 'group event' : 'standalone event'})`,
+          );
+        } else {
+          // Public event in non-public group: anonymized activity for social proof
+          await this.activityFeedService.create({
+            activityType: 'group.activity',
+            feedScope: 'sitewide',
+            groupVisibility: GroupVisibility.Public, // Force public for sitewide
+            metadata: {
+              activityCount: 1,
+              activityDescription: 'A new event was created',
+            },
+            aggregationStrategy: 'time_window',
+            aggregationWindow: 60,
+          });
+
+          this.logger.log(
+            `Created anonymized sitewide activity for public event ${event.slug} in non-public group`,
+          );
+        }
       } else {
-        // Private/authenticated events or events in non-public groups: anonymized activity for social proof
+        // Private/authenticated events: anonymized activity for social proof
         await this.activityFeedService.create({
           activityType: 'group.activity',
           feedScope: 'sitewide',
@@ -327,7 +343,7 @@ export class ActivityFeedListener {
         });
 
         this.logger.log(
-          `Created anonymized sitewide activity for event ${event.slug}`,
+          `Created anonymized sitewide activity for private/authenticated event ${event.slug}`,
         );
       }
     } catch (error) {
