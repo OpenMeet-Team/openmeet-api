@@ -120,6 +120,36 @@ export class ActivityFeedService {
   }
 
   /**
+   * Get feed for a specific event
+   */
+  async getEventFeed(
+    eventId: number,
+    options: {
+      limit?: number;
+      offset?: number;
+      visibility?: string[];
+    } = {},
+  ): Promise<ActivityFeedEntity[]> {
+    await this.getTenantRepository();
+
+    const queryOptions: any = {
+      where: {
+        feedScope: 'event',
+        eventId,
+      },
+      order: { updatedAt: 'DESC' },
+      take: options.limit || 20,
+      skip: options.offset || 0,
+    };
+
+    if (options.visibility) {
+      queryOptions.where.visibility = In(options.visibility);
+    }
+
+    return await this.activityFeedRepository.find(queryOptions);
+  }
+
+  /**
    * Get sitewide feed (discovery feed)
    * Shows activities from public groups and anonymized activities from private groups
    */

@@ -5,6 +5,7 @@ import { ActivityFeedService } from './activity-feed.service';
 import { ActivityFeedListener } from './activity-feed.listener';
 import { ActivityFeedController } from './activity-feed.controller';
 import { SitewideActivityFeedController } from './sitewide-activity-feed.controller';
+import { EventActivityFeedController } from './event-activity-feed.controller';
 import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
 import { TenantModule } from '../tenant/tenant.module';
@@ -18,7 +19,11 @@ import { EventModule } from '../event/event.module';
     forwardRef(() => GroupModule),
     forwardRef(() => EventModule),
   ],
-  controllers: [ActivityFeedController, SitewideActivityFeedController],
+  controllers: [
+    ActivityFeedController,
+    SitewideActivityFeedController,
+    EventActivityFeedController,
+  ],
   providers: [ActivityFeedService, ActivityFeedListener],
   exports: [ActivityFeedService],
 })
