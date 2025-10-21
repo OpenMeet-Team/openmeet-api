@@ -4,7 +4,10 @@ import { ActivityFeedService } from './activity-feed.service';
 import { GroupService } from '../group/group.service';
 import { UserService } from '../user/user.service';
 import { REQUEST } from '@nestjs/core';
-import { GroupVisibility } from '../core/constants/constant';
+import {
+  GroupVisibility,
+  EventVisibility,
+} from '../core/constants/constant';
 import { EventQueryService } from '../event/services/event-query.service';
 
 @Injectable()
@@ -286,7 +289,7 @@ export class ActivityFeedListener {
       const groupVisibility = group.visibility;
 
       if (
-        eventVisibility === GroupVisibility.Public &&
+        eventVisibility === EventVisibility.Public &&
         groupVisibility === GroupVisibility.Public
       ) {
         // Public event in public group: show full details for discovery
