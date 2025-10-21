@@ -17,7 +17,7 @@ The Activity Feed System provides real-time visibility into platform activity ac
 - ✅ **Activity types implemented:**
   - `group.created` - New group creation (public groups in sitewide feed)
   - `member.joined` - Member joins group (60-min aggregation)
-  - `event.created` - Event creation (public events in sitewide feed + group feed)
+  - `event.created` - Event creation (public events in sitewide feed + group feed, **supports standalone events**)
   - `event.rsvp` - Event RSVPs (30-min aggregation in group feed)
   - `event.updated` - Event details changed (group feed)
   - `group.updated` - Group details changed (group feed)
@@ -968,10 +968,11 @@ const AGGREGATION_CONFIG = {
   - Aggregated in 60-minute windows
   - Creates anonymized sitewide activity for private groups
   - Checks for group milestones after each join
-- ✅ `event.created` → Creates `event.created` activity (src/activity-feed/activity-feed.listener.ts:191-270)
+- ✅ `event.created` → Creates `event.created` activity (src/activity-feed/activity-feed.listener.ts:212-355)
   - No aggregation
-  - Scoped to group feed
-  - Skips standalone events
+  - Scoped to: group feed (if event has group) + sitewide feed (if event is public)
+  - **Supports standalone events**: Public standalone events appear in sitewide feed
+  - Display format: "[Actor] created [Event]" (standalone) or "[Actor] created [Event] in [Group]"
 - ✅ `event.rsvp.added` → Creates `event.rsvp` activity (src/activity-feed/activity-feed.listener.ts:272-356)
   - Aggregated in 30-minute windows (shows momentum)
   - Scoped to group feed
