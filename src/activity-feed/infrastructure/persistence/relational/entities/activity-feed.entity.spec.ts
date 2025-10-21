@@ -1,5 +1,4 @@
 import { ActivityFeedEntity } from './activity-feed.entity';
-import { GroupVisibility } from '../../../../../core/constants/constant';
 
 describe('ActivityFeedEntity', () => {
   describe('Entity Creation', () => {

@@ -4,10 +4,7 @@ import { ActivityFeedService } from './activity-feed.service';
 import { GroupService } from '../group/group.service';
 import { UserService } from '../user/user.service';
 import { REQUEST } from '@nestjs/core';
-import {
-  GroupVisibility,
-  EventVisibility,
-} from '../core/constants/constant';
+import { GroupVisibility, EventVisibility } from '../core/constants/constant';
 import { EventQueryService } from '../event/services/event-query.service';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 
@@ -498,9 +495,7 @@ export class ActivityFeedListener {
         aggregationStrategy: 'none', // Don't aggregate updates
       });
 
-      this.logger.log(
-        `Created event.updated activity for ${event.slug}`,
-      );
+      this.logger.log(`Created event.updated activity for ${event.slug}`);
     } catch (error) {
       this.logger.error(
         `Failed to create event.updated activity for ${params.slug}: ${error.message}`,
@@ -542,9 +537,7 @@ export class ActivityFeedListener {
         aggregationStrategy: 'none', // Don't aggregate updates
       });
 
-      this.logger.log(
-        `Created group.updated activity for ${group.slug}`,
-      );
+      this.logger.log(`Created group.updated activity for ${group.slug}`);
     } catch (error) {
       this.logger.error(
         `Failed to create group.updated activity for ${params.slug}: ${error.message}`,

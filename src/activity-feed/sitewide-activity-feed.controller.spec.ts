@@ -162,10 +162,7 @@ describe('SitewideActivityFeedController', () => {
       activityFeedService.getSitewideFeed.mockResolvedValue([]);
 
       // Act - Get third page with custom page size (skip 40, take 10)
-      await controller.getSitewideFeed(
-        { limit: 10, offset: 40 },
-        mockRequest,
-      );
+      await controller.getSitewideFeed({ limit: 10, offset: 40 }, mockRequest);
 
       // Assert
       expect(activityFeedService.getSitewideFeed).toHaveBeenCalledWith({
@@ -181,10 +178,7 @@ describe('SitewideActivityFeedController', () => {
       activityFeedService.getSitewideFeed.mockResolvedValue([]);
 
       // Act - Request page far into results
-      await controller.getSitewideFeed(
-        { limit: 20, offset: 100 },
-        mockRequest,
-      );
+      await controller.getSitewideFeed({ limit: 20, offset: 100 }, mockRequest);
 
       // Assert
       expect(activityFeedService.getSitewideFeed).toHaveBeenCalledWith({

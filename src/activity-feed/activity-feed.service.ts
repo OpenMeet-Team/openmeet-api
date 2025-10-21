@@ -153,11 +153,13 @@ export class ActivityFeedService {
    * Get sitewide feed (discovery feed)
    * Shows activities from public groups and anonymized activities from private groups
    */
-  async getSitewideFeed(options: {
-    limit?: number;
-    offset?: number;
-    visibility?: string[];
-  } = {}): Promise<ActivityFeedEntity[]> {
+  async getSitewideFeed(
+    options: {
+      limit?: number;
+      offset?: number;
+      visibility?: string[];
+    } = {},
+  ): Promise<ActivityFeedEntity[]> {
     await this.getTenantRepository();
 
     const queryOptions: any = {

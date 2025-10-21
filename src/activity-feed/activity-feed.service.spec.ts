@@ -3,7 +3,7 @@ import { ActivityFeedService } from './activity-feed.service';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import { TESTING_TENANT_ID } from '../../test/utils/constants';
-import { Repository, MoreThan } from 'typeorm';
+import { Repository } from 'typeorm';
 import { ActivityFeedEntity } from './infrastructure/persistence/relational/entities/activity-feed.entity';
 import { GroupVisibility } from '../core/constants/constant';
 
@@ -351,7 +351,7 @@ describe('ActivityFeedService', () => {
     });
 
     it('should filter by visibility for guest users', async () => {
-      const result = await service.getGroupFeed(42, {
+      await service.getGroupFeed(42, {
         visibility: ['public'],
         limit: 20,
       });

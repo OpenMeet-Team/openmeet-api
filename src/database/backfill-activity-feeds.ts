@@ -1,6 +1,5 @@
 import { AppDataSource } from './data-source';
 import { fetchTenants } from '../utils/tenant-config';
-import { ActivityFeedEntity } from '../activity-feed/infrastructure/persistence/relational/entities/activity-feed.entity';
 import { ulid } from 'ulid';
 
 /**
@@ -46,7 +45,9 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
     try {
       await queryRunner.query(`SET search_path TO "${schemaName}"`);
 
-      console.log(`\n=== Backfilling activity feeds for tenant: ${tenantId} ===\n`);
+      console.log(
+        `\n=== Backfilling activity feeds for tenant: ${tenantId} ===\n`,
+      );
 
       // 1. Backfill group creations
       console.log('1. Backfilling group creations...');
@@ -69,10 +70,13 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
       for (const group of groups) {
         try {
           const visibility = mapVisibility(group.visibility);
-          const actorName = `${group.firstName || ''} ${group.lastName || ''}`.trim() || 'Unknown';
+          const actorName =
+            `${group.firstName || ''} ${group.lastName || ''}`.trim() ||
+            'Unknown';
 
           // Create group-scoped activity
-          await queryRunner.query(`
+          await queryRunner.query(
+            `
             INSERT INTO "activityFeed" (
               "ulid",
               "activityType",
@@ -88,30 +92,33 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
               "updatedAt"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             ON CONFLICT DO NOTHING
-          `, [
-            ulid(),
-            'group.created',
-            'group',
-            group.id,
-            group.userId,
-            [group.userId],
-            visibility,
-            JSON.stringify({
-              groupSlug: group.slug,
-              groupName: group.name,
-              actorSlug: group.userSlug,
-              actorName,
-            }),
-            'none',
-            1,
-            group.createdAt,
-            group.createdAt,
-          ]);
+          `,
+            [
+              ulid(),
+              'group.created',
+              'group',
+              group.id,
+              group.userId,
+              [group.userId],
+              visibility,
+              JSON.stringify({
+                groupSlug: group.slug,
+                groupName: group.name,
+                actorSlug: group.userSlug,
+                actorName,
+              }),
+              'none',
+              1,
+              group.createdAt,
+              group.createdAt,
+            ],
+          );
 
           // Create sitewide activity
           if (group.visibility?.toLowerCase() === 'public') {
             // Public groups: show full details
-            await queryRunner.query(`
+            await queryRunner.query(
+              `
               INSERT INTO "activityFeed" (
                 "ulid",
                 "activityType",
@@ -127,28 +134,31 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
                 "updatedAt"
               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
               ON CONFLICT DO NOTHING
-            `, [
-              ulid(),
-              'group.created',
-              'sitewide',
-              group.id,
-              group.userId,
-              [group.userId],
-              'public',
-              JSON.stringify({
-                groupSlug: group.slug,
-                groupName: group.name,
-                actorSlug: group.userSlug,
-                actorName,
-              }),
-              'none',
-              1,
-              group.createdAt,
-              group.createdAt,
-            ]);
+            `,
+              [
+                ulid(),
+                'group.created',
+                'sitewide',
+                group.id,
+                group.userId,
+                [group.userId],
+                'public',
+                JSON.stringify({
+                  groupSlug: group.slug,
+                  groupName: group.name,
+                  actorSlug: group.userSlug,
+                  actorName,
+                }),
+                'none',
+                1,
+                group.createdAt,
+                group.createdAt,
+              ],
+            );
           } else {
             // Non-public groups: anonymized activity
-            await queryRunner.query(`
+            await queryRunner.query(
+              `
               INSERT INTO "activityFeed" (
                 "ulid",
                 "activityType",
@@ -161,29 +171,36 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
                 "updatedAt"
               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
               ON CONFLICT DO NOTHING
-            `, [
-              ulid(),
-              'group.activity',
-              'sitewide',
-              'public',
-              JSON.stringify({
-                activityCount: 1,
-                activityDescription: 'A new group was created',
-              }),
-              'time_window',
-              1,
-              group.createdAt,
-              group.createdAt,
-            ]);
+            `,
+              [
+                ulid(),
+                'group.activity',
+                'sitewide',
+                'public',
+                JSON.stringify({
+                  activityCount: 1,
+                  activityDescription: 'A new group was created',
+                }),
+                'time_window',
+                1,
+                group.createdAt,
+                group.createdAt,
+              ],
+            );
           }
 
           stats.groupsCreated++;
         } catch (error) {
-          console.error(`Error creating activity for group ${group.id}:`, error);
+          console.error(
+            `Error creating activity for group ${group.id}:`,
+            error,
+          );
           stats.errors++;
         }
       }
-      console.log(`   ✓ Created ${stats.groupsCreated} group creation activities`);
+      console.log(
+        `   ✓ Created ${stats.groupsCreated} group creation activities`,
+      );
 
       // 2. Backfill member joins (with aggregation)
       console.log('2. Backfilling member joins...');
@@ -222,18 +239,20 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
       }
 
       // Create aggregated activities
-      for (const [key, groupMembers] of membersByGroupAndWindow.entries()) {
+      for (const [_key, groupMembers] of membersByGroupAndWindow.entries()) {
         try {
           const firstMember = groupMembers[0];
           const visibility = mapVisibility(firstMember.groupVisibility);
-          const actorIds = groupMembers.map(m => m.userId).filter(Boolean);
-          const actorNames = groupMembers.map(m =>
-            `${m.firstName || ''} ${m.lastName || ''}`.trim() || 'Unknown'
+          const actorIds = groupMembers.map((m) => m.userId).filter(Boolean);
+          const actorNames = groupMembers.map(
+            (m) =>
+              `${m.firstName || ''} ${m.lastName || ''}`.trim() || 'Unknown',
           );
 
           const aggregationKey = `member.joined:group:${firstMember.groupId}:${new Date(firstMember.createdAt).toISOString().slice(0, 13)}`;
 
-          await queryRunner.query(`
+          await queryRunner.query(
+            `
             INSERT INTO "activityFeed" (
               "ulid",
               "activityType",
@@ -250,27 +269,29 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
               "updatedAt"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             ON CONFLICT DO NOTHING
-          `, [
-            ulid(),
-            'member.joined',
-            'group',
-            firstMember.groupId,
-            firstMember.userId,
-            actorIds,
-            visibility,
-            JSON.stringify({
-              groupSlug: firstMember.groupSlug,
-              groupName: firstMember.groupName,
-              actorSlug: firstMember.userSlug,
-              actorName: actorNames[0],
-              actorNames: actorNames.slice(0, 10), // Limit to first 10
-            }),
-            'time_window',
-            aggregationKey,
-            groupMembers.length,
-            firstMember.createdAt,
-            groupMembers[groupMembers.length - 1].createdAt, // Last member's join time
-          ]);
+          `,
+            [
+              ulid(),
+              'member.joined',
+              'group',
+              firstMember.groupId,
+              firstMember.userId,
+              actorIds,
+              visibility,
+              JSON.stringify({
+                groupSlug: firstMember.groupSlug,
+                groupName: firstMember.groupName,
+                actorSlug: firstMember.userSlug,
+                actorName: actorNames[0],
+                actorNames: actorNames.slice(0, 10), // Limit to first 10
+              }),
+              'time_window',
+              aggregationKey,
+              groupMembers.length,
+              firstMember.createdAt,
+              groupMembers[groupMembers.length - 1].createdAt, // Last member's join time
+            ],
+          );
 
           stats.membersJoined += groupMembers.length;
         } catch (error) {
@@ -278,7 +299,9 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
           stats.errors++;
         }
       }
-      console.log(`   ✓ Created ${membersByGroupAndWindow.size} aggregated member join activities (${stats.membersJoined} members)`);
+      console.log(
+        `   ✓ Created ${membersByGroupAndWindow.size} aggregated member join activities (${stats.membersJoined} members)`,
+      );
 
       // 3. Backfill event creations
       console.log('3. Backfilling event creations...');
@@ -306,11 +329,14 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
       for (const event of events) {
         try {
           const visibility = mapVisibility(event.visibility);
-          const actorName = `${event.firstName || ''} ${event.lastName || ''}`.trim() || 'Unknown';
+          const actorName =
+            `${event.firstName || ''} ${event.lastName || ''}`.trim() ||
+            'Unknown';
           const feedScope = event.groupId ? 'group' : 'event';
 
           // Create group/event-scoped activity
-          await queryRunner.query(`
+          await queryRunner.query(
+            `
             INSERT INTO "activityFeed" (
               "ulid",
               "activityType",
@@ -327,37 +353,42 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
               "updatedAt"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             ON CONFLICT DO NOTHING
-          `, [
-            ulid(),
-            'event.created',
-            feedScope,
-            event.groupId,
-            event.id,
-            event.userId,
-            [event.userId],
-            visibility,
-            JSON.stringify({
-              eventSlug: event.slug,
-              eventName: event.name,
-              groupSlug: event.groupSlug,
-              groupName: event.groupName,
-              actorSlug: event.userSlug,
-              actorName,
-            }),
-            'none',
-            1,
-            event.createdAt,
-            event.createdAt,
-          ]);
+          `,
+            [
+              ulid(),
+              'event.created',
+              feedScope,
+              event.groupId,
+              event.id,
+              event.userId,
+              [event.userId],
+              visibility,
+              JSON.stringify({
+                eventSlug: event.slug,
+                eventName: event.name,
+                groupSlug: event.groupSlug,
+                groupName: event.groupName,
+                actorSlug: event.userSlug,
+                actorName,
+              }),
+              'none',
+              1,
+              event.createdAt,
+              event.createdAt,
+            ],
+          );
 
           // Create sitewide activity
           if (event.visibility?.toLowerCase() === 'public') {
             // Check if we should show full details (standalone event or public group)
-            const shouldShowFullDetails = !event.groupId || event.groupVisibility?.toLowerCase() === 'public';
+            const shouldShowFullDetails =
+              !event.groupId ||
+              event.groupVisibility?.toLowerCase() === 'public';
 
             if (shouldShowFullDetails) {
               // Public event (standalone or in public group): show full details
-              await queryRunner.query(`
+              await queryRunner.query(
+                `
                 INSERT INTO "activityFeed" (
                   "ulid",
                   "activityType",
@@ -374,31 +405,34 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
                   "updatedAt"
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 ON CONFLICT DO NOTHING
-              `, [
-                ulid(),
-                'event.created',
-                'sitewide',
-                event.groupId,
-                event.id,
-                event.userId,
-                [event.userId],
-                'public',
-                JSON.stringify({
-                  eventSlug: event.slug,
-                  eventName: event.name,
-                  groupSlug: event.groupSlug,
-                  groupName: event.groupName,
-                  actorSlug: event.userSlug,
-                  actorName,
-                }),
-                'none',
-                1,
-                event.createdAt,
-                event.createdAt,
-              ]);
+              `,
+                [
+                  ulid(),
+                  'event.created',
+                  'sitewide',
+                  event.groupId,
+                  event.id,
+                  event.userId,
+                  [event.userId],
+                  'public',
+                  JSON.stringify({
+                    eventSlug: event.slug,
+                    eventName: event.name,
+                    groupSlug: event.groupSlug,
+                    groupName: event.groupName,
+                    actorSlug: event.userSlug,
+                    actorName,
+                  }),
+                  'none',
+                  1,
+                  event.createdAt,
+                  event.createdAt,
+                ],
+              );
             } else {
               // Public event in non-public group: anonymized
-              await queryRunner.query(`
+              await queryRunner.query(
+                `
                 INSERT INTO "activityFeed" (
                   "ulid",
                   "activityType",
@@ -411,24 +445,27 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
                   "updatedAt"
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 ON CONFLICT DO NOTHING
-              `, [
-                ulid(),
-                'group.activity',
-                'sitewide',
-                'public',
-                JSON.stringify({
-                  activityCount: 1,
-                  activityDescription: 'A new event was created',
-                }),
-                'time_window',
-                1,
-                event.createdAt,
-                event.createdAt,
-              ]);
+              `,
+                [
+                  ulid(),
+                  'group.activity',
+                  'sitewide',
+                  'public',
+                  JSON.stringify({
+                    activityCount: 1,
+                    activityDescription: 'A new event was created',
+                  }),
+                  'time_window',
+                  1,
+                  event.createdAt,
+                  event.createdAt,
+                ],
+              );
             }
           } else {
             // Non-public event: anonymized activity
-            await queryRunner.query(`
+            await queryRunner.query(
+              `
               INSERT INTO "activityFeed" (
                 "ulid",
                 "activityType",
@@ -441,29 +478,36 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
                 "updatedAt"
               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
               ON CONFLICT DO NOTHING
-            `, [
-              ulid(),
-              'group.activity',
-              'sitewide',
-              'public',
-              JSON.stringify({
-                activityCount: 1,
-                activityDescription: 'A new event was created',
-              }),
-              'time_window',
-              1,
-              event.createdAt,
-              event.createdAt,
-            ]);
+            `,
+              [
+                ulid(),
+                'group.activity',
+                'sitewide',
+                'public',
+                JSON.stringify({
+                  activityCount: 1,
+                  activityDescription: 'A new event was created',
+                }),
+                'time_window',
+                1,
+                event.createdAt,
+                event.createdAt,
+              ],
+            );
           }
 
           stats.eventsCreated++;
         } catch (error) {
-          console.error(`Error creating activity for event ${event.id}:`, error);
+          console.error(
+            `Error creating activity for event ${event.id}:`,
+            error,
+          );
           stats.errors++;
         }
       }
-      console.log(`   ✓ Created ${stats.eventsCreated} event creation activities`);
+      console.log(
+        `   ✓ Created ${stats.eventsCreated} event creation activities`,
+      );
 
       // 4. Backfill RSVPs (with aggregation)
       console.log('4. Backfilling event RSVPs...');
@@ -497,7 +541,11 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
       for (const rsvp of rsvps) {
         const rsvpTime = new Date(rsvp.createdAt);
         const windowStart = new Date(rsvpTime);
-        windowStart.setMinutes(Math.floor(windowStart.getMinutes() / 30) * 30, 0, 0);
+        windowStart.setMinutes(
+          Math.floor(windowStart.getMinutes() / 30) * 30,
+          0,
+          0,
+        );
 
         const key = `${rsvp.eventId}-${windowStart.toISOString()}`;
 
@@ -508,17 +556,19 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
       }
 
       // Create aggregated RSVP activities
-      for (const [key, eventRsvps] of rsvpsByEventAndWindow.entries()) {
+      for (const [_key, eventRsvps] of rsvpsByEventAndWindow.entries()) {
         try {
           const firstRsvp = eventRsvps[0];
-          const actorIds = eventRsvps.map(r => r.userId).filter(Boolean);
-          const actorNames = eventRsvps.map(r =>
-            `${r.firstName || ''} ${r.lastName || ''}`.trim() || 'Unknown'
+          const actorIds = eventRsvps.map((r) => r.userId).filter(Boolean);
+          const actorNames = eventRsvps.map(
+            (r) =>
+              `${r.firstName || ''} ${r.lastName || ''}`.trim() || 'Unknown',
           );
 
           const aggregationKey = `event.rsvp:group:${firstRsvp.groupId}:event:${firstRsvp.eventId}:${new Date(firstRsvp.createdAt).toISOString().slice(0, 16)}`;
 
-          await queryRunner.query(`
+          await queryRunner.query(
+            `
             INSERT INTO "activityFeed" (
               "ulid",
               "activityType",
@@ -536,30 +586,32 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
               "updatedAt"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             ON CONFLICT DO NOTHING
-          `, [
-            ulid(),
-            'event.rsvp',
-            'group',
-            firstRsvp.groupId,
-            firstRsvp.eventId,
-            firstRsvp.userId,
-            actorIds,
-            'public', // RSVPs visibility based on event
-            JSON.stringify({
-              eventSlug: firstRsvp.eventSlug,
-              eventName: firstRsvp.eventName,
-              groupSlug: firstRsvp.groupSlug,
-              groupName: firstRsvp.groupName,
-              actorSlug: firstRsvp.userSlug,
-              actorName: actorNames[0],
-              actorNames: actorNames.slice(0, 10),
-            }),
-            'time_window',
-            aggregationKey,
-            eventRsvps.length,
-            firstRsvp.createdAt,
-            eventRsvps[eventRsvps.length - 1].createdAt,
-          ]);
+          `,
+            [
+              ulid(),
+              'event.rsvp',
+              'group',
+              firstRsvp.groupId,
+              firstRsvp.eventId,
+              firstRsvp.userId,
+              actorIds,
+              'public', // RSVPs visibility based on event
+              JSON.stringify({
+                eventSlug: firstRsvp.eventSlug,
+                eventName: firstRsvp.eventName,
+                groupSlug: firstRsvp.groupSlug,
+                groupName: firstRsvp.groupName,
+                actorSlug: firstRsvp.userSlug,
+                actorName: actorNames[0],
+                actorNames: actorNames.slice(0, 10),
+              }),
+              'time_window',
+              aggregationKey,
+              eventRsvps.length,
+              firstRsvp.createdAt,
+              eventRsvps[eventRsvps.length - 1].createdAt,
+            ],
+          );
 
           stats.rsvpsAdded += eventRsvps.length;
         } catch (error) {
@@ -567,7 +619,9 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
           stats.errors++;
         }
       }
-      console.log(`   ✓ Created ${rsvpsByEventAndWindow.size} aggregated RSVP activities (${stats.rsvpsAdded} RSVPs)`);
+      console.log(
+        `   ✓ Created ${rsvpsByEventAndWindow.size} aggregated RSVP activities (${stats.rsvpsAdded} RSVPs)`,
+      );
 
       await queryRunner.query(`SET search_path TO public`);
 
@@ -577,8 +631,9 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
       console.log(`Events created: ${stats.eventsCreated}`);
       console.log(`RSVPs added: ${stats.rsvpsAdded}`);
       console.log(`Errors: ${stats.errors}`);
-      console.log(`Total activities created: ${stats.groupsCreated + membersByGroupAndWindow.size + stats.eventsCreated + rsvpsByEventAndWindow.size}\n`);
-
+      console.log(
+        `Total activities created: ${stats.groupsCreated + membersByGroupAndWindow.size + stats.eventsCreated + rsvpsByEventAndWindow.size}\n`,
+      );
     } finally {
       await queryRunner.release();
     }
@@ -586,7 +641,10 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
     await dataSource.destroy();
     return stats;
   } catch (error) {
-    console.error(`Error backfilling activity feeds for tenant ${tenantId}:`, error);
+    console.error(
+      `Error backfilling activity feeds for tenant ${tenantId}:`,
+      error,
+    );
     if (dataSource?.isInitialized) {
       await dataSource.destroy();
     }
@@ -596,19 +654,21 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
 
 function mapVisibility(visibility: string): string {
   const map: Record<string, string> = {
-    'Public': 'public',
-    'public': 'public',
-    'Authenticated': 'authenticated',
-    'authenticated': 'authenticated',
-    'Private': 'members_only',
-    'private': 'members_only',
+    Public: 'public',
+    public: 'public',
+    Authenticated: 'authenticated',
+    authenticated: 'authenticated',
+    Private: 'members_only',
+    private: 'members_only',
   };
   return map[visibility] || 'public';
 }
 
 async function backfillAllTenants() {
   const tenants = fetchTenants();
-  console.log(`\n🚀 Starting activity feed backfill for ${tenants.length} tenant(s)\n`);
+  console.log(
+    `\n🚀 Starting activity feed backfill for ${tenants.length} tenant(s)\n`,
+  );
 
   const allStats: BackfillStats = {
     groupsCreated: 0,
