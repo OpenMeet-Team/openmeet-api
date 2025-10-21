@@ -6,27 +6,42 @@ The Activity Feed System provides real-time visibility into platform activity ac
 ## Implementation Status
 
 **Currently Implemented:**
-- ✅ Group activity feeds - `GET /api/groups/:slug/feed`
-- ✅ Activity aggregation with time windows (60-min for members, 30-min for RSVPs)
-- ✅ Visibility inheritance from parent entities
-- ✅ Comprehensive event listeners (member joins, group/event creation & updates, RSVPs, milestones)
-- ✅ Two-activity pattern for private groups (detailed + anonymized)
-- ✅ Activity types: `member.joined`, `event.created`, `event.rsvp`, `group.created`, `group.updated`, `event.updated`, `group.milestone`
+- ✅ **Sitewide activity feed** - `GET /api/feed` (shows platform-wide activity for discovery)
+- ✅ **Group activity feeds** - `GET /api/groups/:slug/feed` (shows group-specific activity)
+- ✅ **Activity aggregation** with time windows (60-min for members, 30-min for RSVPs)
+- ✅ **Visibility inheritance** from parent entities (groups/events)
+- ✅ **Two-activity pattern** for private groups (detailed + anonymized for privacy)
+- ✅ **Comprehensive event listeners** for all core MVP activity types
+- ✅ **Bluesky event ingestion** - Events synced from Bluesky appear in activity feeds
+- ✅ **Frontend components** - Sitewide feed and group feed display with navigation
+- ✅ **Activity types implemented:**
+  - `group.created` - New group creation (public groups in sitewide feed)
+  - `member.joined` - Member joins group (60-min aggregation)
+  - `event.created` - Event creation (public events in sitewide feed + group feed)
+  - `event.rsvp` - Event RSVPs (30-min aggregation in group feed)
+  - `event.updated` - Event details changed (group feed)
+  - `group.updated` - Group details changed (group feed)
+  - `group.milestone` - Membership milestones (10, 25, 50, 100, 250, 500, 1k, 2.5k, 5k, 10k)
+  - `group.activity` - Anonymized activities for private entities (sitewide social proof)
 
 **Key Implementation Files:**
-- **Entity**: `src/activity-feed/infrastructure/persistence/relational/entities/activity-feed.entity.ts`
-- **Service**: `src/activity-feed/activity-feed.service.ts`
-- **Controller**: `src/activity-feed/activity-feed.controller.ts`
-- **Listener**: `src/activity-feed/activity-feed.listener.ts`
-- **Migration**: `src/database/migrations/1760956752292-CreateActivityFeedTable.ts`
+- **Backend Entity**: `src/activity-feed/infrastructure/persistence/relational/entities/activity-feed.entity.ts`
+- **Backend Service**: `src/activity-feed/activity-feed.service.ts`
+- **Backend Controllers**:
+  - `src/activity-feed/activity-feed.controller.ts` (group feeds)
+  - `src/activity-feed/sitewide-activity-feed.controller.ts` (sitewide feed)
+- **Backend Listener**: `src/activity-feed/activity-feed.listener.ts`
+- **Database Migration**: `src/database/migrations/1760956752292-CreateActivityFeedTable.ts`
 - **Tests**: `src/activity-feed/*.spec.ts`
+- **Frontend Components**:
+  - `openmeet-platform/src/components/activity-feed/SitewideFeedComponent.vue`
+  - `openmeet-platform/src/components/group/GroupActivityFeedComponent.vue`
 
 **Not Yet Implemented:**
-- ⬜ Sitewide feed endpoint
-- ⬜ Event-specific feed endpoint
-- ⬜ Additional activity types (milestones, updates, group creation)
-- ⬜ Retention cleanup job (60-day policy)
-- ⬜ RSVP cancellation activities
+- ⬜ **Event-specific feed endpoint** - `GET /api/events/:slug/feed`
+- ⬜ **Retention cleanup job** - 60-day automatic deletion policy
+- ⬜ **RSVP cancellation activities** - Intentionally not tracked (negative activity)
+- ⬜ **Future activity types** - Chat summaries, polls, announcements, photos, anniversaries
 
 ## Quick Reference: Key Architectural Decisions
 
@@ -439,8 +454,26 @@ GET /api/groups/:slug/feed
 - Group/event references (via metadata)
 - Visibility level
 
+**Endpoint 2: Sitewide Activity Feed** (✅ Implemented)
+
+```
+GET /api/feed
+```
+
+**Implementation:** See controller at `src/activity-feed/sitewide-activity-feed.controller.ts`
+
+**Query Parameters:** Same as group feed
+- `limit` (default: 20) - Items per page
+- `offset` (default: 0) - Pagination offset
+
+**Authorization:**
+- Public endpoint with optional auth
+- Guests see only 'public' activities
+- Authenticated users see 'public' + 'authenticated' activities
+
+**Response:** Array of `ActivityFeedEntity` objects
+
 **Endpoints Not Yet Implemented:**
-- ⬜ `GET /api/feed` - Sitewide feed (planned)
 - ⬜ `GET /api/events/:slug/feed` - Event feed (planned)
 - ⬜ `GET /api/feed/stats` - Activity stats (future enhancement)
 
