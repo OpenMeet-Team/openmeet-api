@@ -13,7 +13,8 @@ The Activity Feed System provides real-time visibility into platform activity ac
 - ✅ **Two-activity pattern** for private groups (detailed + anonymized for privacy)
 - ✅ **Comprehensive event listeners** for all core MVP activity types
 - ✅ **Bluesky event ingestion** - Events synced from Bluesky appear in activity feeds
-- ✅ **Frontend components** - Sitewide feed and group feed display with navigation
+- ✅ **Backend: Event-specific feed endpoint** - `GET /api/events/:slug/feed` (controller and service implemented)
+- ✅ **Frontend components** - Sitewide feed, group feed, and event feed display with navigation
 - ✅ **Activity types implemented:**
   - `group.created` - New group creation (public groups in sitewide feed)
   - `member.joined` - Member joins group (60-min aggregation)
@@ -30,15 +31,18 @@ The Activity Feed System provides real-time visibility into platform activity ac
 - **Backend Controllers**:
   - `src/activity-feed/activity-feed.controller.ts` (group feeds)
   - `src/activity-feed/sitewide-activity-feed.controller.ts` (sitewide feed)
+  - `src/activity-feed/event-activity-feed.controller.ts` (event feeds)
 - **Backend Listener**: `src/activity-feed/activity-feed.listener.ts`
 - **Database Migration**: `src/database/migrations/1760956752292-CreateActivityFeedTable.ts`
 - **Tests**: `src/activity-feed/*.spec.ts`
 - **Frontend Components**:
-  - `openmeet-platform/src/components/activity-feed/SitewideFeedComponent.vue`
-  - `openmeet-platform/src/components/group/GroupActivityFeedComponent.vue`
+  - `openmeet-platform/src/components/activity-feed/SitewideFeedComponent.vue` (used on FeedPage and HomeUserPage)
+  - `openmeet-platform/src/components/group/GroupActivityFeedComponent.vue` (used on GroupPage)
+  - `openmeet-platform/src/components/event/EventActivityFeedComponent.vue` (used on EventPage)
+- **Frontend API Client**: `openmeet-platform/src/api/activity-feed.ts`
+- **Feature Flag**: `openmeet-platform/src/composables/useFeatureFlag.ts` (useShowActivityFeed composable)
 
 **Not Yet Implemented:**
-- ⬜ **Event-specific feed endpoint** - `GET /api/events/:slug/feed`
 - ⬜ **Retention cleanup job** - 60-day automatic deletion policy
 - ⬜ **RSVP cancellation activities** - Intentionally not tracked (negative activity)
 - ⬜ **Future activity types** - Chat summaries, polls, announcements, photos, anniversaries
@@ -473,8 +477,26 @@ GET /api/feed
 
 **Response:** Array of `ActivityFeedEntity` objects
 
+**Endpoint 3: Event Activity Feed** (✅ Backend Implemented)
+
+```
+GET /api/events/:slug/feed
+```
+
+**Implementation:** See controller at `src/activity-feed/event-activity-feed.controller.ts` and service method at `src/activity-feed/activity-feed.service.ts:124-149`
+
+**Query Parameters:**
+- `limit` (default: 20) - Items per page
+- `offset` (default: 0) - Pagination offset
+- `visibility` (array) - Filter visibility levels
+
+**Authorization:**
+- Public endpoint with optional auth
+- Visibility filtering based on event membership
+
+**Response:** Array of `ActivityFeedEntity` objects with event-scoped activities
+
 **Endpoints Not Yet Implemented:**
-- ⬜ `GET /api/events/:slug/feed` - Event feed (planned)
 - ⬜ `GET /api/feed/stats` - Activity stats (future enhancement)
 
 #### Key Processes

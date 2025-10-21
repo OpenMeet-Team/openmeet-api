@@ -4,7 +4,7 @@ import { ActivityFeedService } from './activity-feed.service';
 import { GroupService } from '../group/group.service';
 import { UserService } from '../user/user.service';
 import { REQUEST } from '@nestjs/core';
-import { GroupVisibility } from '../core/constants/constant';
+import { GroupVisibility, EventVisibility } from '../core/constants/constant';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventQueryService } from '../event/services/event-query.service';
@@ -50,6 +50,7 @@ describe('ActivityFeedListener', () => {
     id: 200,
     slug: 'typescript-workshop',
     name: 'TypeScript Workshop',
+    visibility: EventVisibility.Public,
     group: mockPublicGroup as GroupEntity,
   };
 
@@ -390,11 +391,30 @@ describe('ActivityFeedListener', () => {
       // Act
       await listener.handleEventCreated(params);
 
-      // Assert
-      expect(activityFeedService.create).toHaveBeenCalledTimes(1);
-      expect(activityFeedService.create).toHaveBeenCalledWith({
+      // Assert - Now creates 2 activities: group feed + sitewide feed
+      expect(activityFeedService.create).toHaveBeenCalledTimes(2);
+
+      // First call: group-scoped activity
+      expect(activityFeedService.create).toHaveBeenNthCalledWith(1, {
         activityType: 'event.created',
         feedScope: 'group',
+        groupId: 42,
+        groupSlug: 'tech-talks',
+        groupName: 'Tech Talks',
+        eventId: 200,
+        eventSlug: 'typescript-workshop',
+        eventName: 'TypeScript Workshop',
+        actorId: 100,
+        actorSlug: 'sarah-chen',
+        actorName: 'Sarah Chen',
+        groupVisibility: GroupVisibility.Public,
+        aggregationStrategy: 'none',
+      });
+
+      // Second call: sitewide activity (for public event in public group)
+      expect(activityFeedService.create).toHaveBeenNthCalledWith(2, {
+        activityType: 'event.created',
+        feedScope: 'sitewide',
         groupId: 42,
         groupSlug: 'tech-talks',
         groupName: 'Tech Talks',
@@ -427,7 +447,7 @@ describe('ActivityFeedListener', () => {
       expect(activityFeedService.create).not.toHaveBeenCalled();
     });
 
-    it('should not create activity when event does not belong to a group', async () => {
+    it('should create sitewide activity for standalone public events', async () => {
       // Arrange
       const params = {
         eventId: 200,
@@ -440,21 +460,38 @@ describe('ActivityFeedListener', () => {
         id: 200,
         slug: 'standalone-event',
         name: 'Standalone Event',
+        visibility: EventVisibility.Public,
         group: null,
       };
 
       eventQueryService.findEventBySlug.mockResolvedValue(
         eventWithoutGroup as EventEntity,
       );
+      userService.getUserById.mockResolvedValue(mockUser as UserEntity);
 
       // Act
       await listener.handleEventCreated(params);
 
-      // Assert
-      expect(activityFeedService.create).not.toHaveBeenCalled();
+      // Assert - Standalone events create sitewide activity (no group activity)
+      expect(activityFeedService.create).toHaveBeenCalledTimes(1);
+      expect(activityFeedService.create).toHaveBeenCalledWith({
+        activityType: 'event.created',
+        feedScope: 'sitewide',
+        groupId: undefined,
+        groupSlug: undefined,
+        groupName: undefined,
+        eventId: 200,
+        eventSlug: 'standalone-event',
+        eventName: 'Standalone Event',
+        actorId: 100,
+        actorSlug: 'sarah-chen',
+        actorName: 'Sarah Chen',
+        groupVisibility: GroupVisibility.Public,
+        aggregationStrategy: 'none',
+      });
     });
 
-    it('should not create activity when group is not found', async () => {
+    it('should treat event as standalone when group is not found', async () => {
       // Arrange
       const params = {
         eventId: 200,
@@ -467,12 +504,28 @@ describe('ActivityFeedListener', () => {
         mockEvent as EventEntity,
       );
       groupService.getGroupBySlug.mockResolvedValue(null);
+      userService.getUserById.mockResolvedValue(mockUser as UserEntity);
 
       // Act
       await listener.handleEventCreated(params);
 
-      // Assert
-      expect(activityFeedService.create).not.toHaveBeenCalled();
+      // Assert - Treated as standalone, creates sitewide activity
+      expect(activityFeedService.create).toHaveBeenCalledTimes(1);
+      expect(activityFeedService.create).toHaveBeenCalledWith({
+        activityType: 'event.created',
+        feedScope: 'sitewide',
+        groupId: undefined,
+        groupSlug: undefined,
+        groupName: undefined,
+        eventId: 200,
+        eventSlug: 'typescript-workshop',
+        eventName: 'TypeScript Workshop',
+        actorId: 100,
+        actorSlug: 'sarah-chen',
+        actorName: 'Sarah Chen',
+        groupVisibility: GroupVisibility.Public,
+        aggregationStrategy: 'none',
+      });
     });
 
     it('should not create activity when user is not found', async () => {

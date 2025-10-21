@@ -9,6 +9,7 @@ import {
   EventVisibility,
 } from '../core/constants/constant';
 import { EventQueryService } from '../event/services/event-query.service';
+import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 
 @Injectable()
 export class ActivityFeedListener {
@@ -246,7 +247,7 @@ export class ActivityFeedListener {
       const actorName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
 
       // Handle events that belong to a group
-      let group = null;
+      let group: GroupEntity | null = null;
       if (event.group) {
         group = await this.groupService.getGroupBySlug(event.group.slug);
         if (!group) {
