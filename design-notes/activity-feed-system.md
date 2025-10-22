@@ -40,12 +40,26 @@ The Activity Feed System provides real-time visibility into platform activity ac
   - `openmeet-platform/src/components/group/GroupActivityFeedComponent.vue` (used on GroupPage)
   - `openmeet-platform/src/components/event/EventActivityFeedComponent.vue` (used on EventPage)
 - **Frontend API Client**: `openmeet-platform/src/api/activity-feed.ts`
-- **Feature Flag**: `openmeet-platform/src/composables/useFeatureFlag.ts` (useShowActivityFeed composable)
+- **Feature Flag**: `openmeet-platform/src/composables/useFeatureFlag.ts` ('show-activity-feed')
+- **Historical Data Backfill**: `src/database/backfill-activity-feeds.ts` (`npm run backfill:activity-feeds`)
 
-**Not Yet Implemented:**
-- ⬜ **Retention cleanup job** - 60-day automatic deletion policy
-- ⬜ **RSVP cancellation activities** - Intentionally not tracked (negative activity)
-- ⬜ **Future activity types** - Chat summaries, polls, announcements, photos, anniversaries
+**Implementation Status:**
+- [x] Database schema with optimized indexes
+- [x] Backend services (ActivityFeedService, controllers, listeners)
+- [x] All 7 core activity types implemented
+- [x] Frontend components (sitewide, group, event feeds)
+- [x] PostHog feature flag integration
+- [x] Historical data backfill script
+- [x] All tests passing (81 suites, 832 tests)
+- [x] Sitewide feed default limit set to 10 items
+- [ ] Feature flag enabled in production
+
+**Next Steps:**
+1. Enable feature flag in production (gradual rollout)
+2. Monitor performance and user feedback
+
+**Deferred:**
+- Retention cleanup job (60-day deletion policy) - holding off for now
 
 ## Quick Reference: Key Architectural Decisions
 
