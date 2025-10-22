@@ -3,9 +3,11 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ActivityFeedEntity } from './infrastructure/persistence/relational/entities/activity-feed.entity';
 import { ActivityFeedService } from './activity-feed.service';
 import { ActivityFeedListener } from './activity-feed.listener';
-import { ActivityFeedController } from './activity-feed.controller';
-import { SitewideActivityFeedController } from './sitewide-activity-feed.controller';
-import { EventActivityFeedController } from './event-activity-feed.controller';
+import {
+  SitewideActivityFeedController,
+  GroupActivityFeedController,
+  EventActivityFeedController,
+} from './activity-feed.controller';
 import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
 import { TenantModule } from '../tenant/tenant.module';
@@ -20,8 +22,8 @@ import { EventModule } from '../event/event.module';
     forwardRef(() => EventModule),
   ],
   controllers: [
-    ActivityFeedController,
     SitewideActivityFeedController,
+    GroupActivityFeedController,
     EventActivityFeedController,
   ],
   providers: [ActivityFeedService, ActivityFeedListener],

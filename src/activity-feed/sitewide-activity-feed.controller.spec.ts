@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { SitewideActivityFeedController } from './sitewide-activity-feed.controller';
+import { SitewideActivityFeedController } from './activity-feed.controller';
 import { ActivityFeedService } from './activity-feed.service';
 import { REQUEST } from '@nestjs/core';
 import { ActivityFeedEntity } from './infrastructure/persistence/relational/entities/activity-feed.entity';
@@ -92,7 +92,7 @@ describe('SitewideActivityFeedController', () => {
 
       // Assert
       expect(activityFeedService.getSitewideFeed).toHaveBeenCalledWith({
-        limit: 20,
+        limit: 10,
         offset: 0,
         visibility: ['public'],
       });
@@ -114,7 +114,7 @@ describe('SitewideActivityFeedController', () => {
 
       // Assert
       expect(activityFeedService.getSitewideFeed).toHaveBeenCalledWith({
-        limit: 20,
+        limit: 10,
         offset: 0,
         visibility: ['public', 'authenticated'],
       });
@@ -142,13 +142,13 @@ describe('SitewideActivityFeedController', () => {
       const mockRequest = { tenantId: 'test-tenant' };
       activityFeedService.getSitewideFeed.mockResolvedValue([]);
 
-      // Act - Get second page (skip first 20 items)
-      await controller.getSitewideFeed({ offset: 20 }, mockRequest);
+      // Act - Get second page (skip first 10 items)
+      await controller.getSitewideFeed({ offset: 10 }, mockRequest);
 
       // Assert
       expect(activityFeedService.getSitewideFeed).toHaveBeenCalledWith({
-        limit: 20,
-        offset: 20,
+        limit: 10,
+        offset: 10,
         visibility: ['public'],
       });
     });

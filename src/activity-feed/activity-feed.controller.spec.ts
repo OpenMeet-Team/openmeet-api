@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ActivityFeedController } from './activity-feed.controller';
+import { GroupActivityFeedController } from './activity-feed.controller';
 import { ActivityFeedService } from './activity-feed.service';
 import { GroupService } from '../group/group.service';
 import { REQUEST } from '@nestjs/core';
@@ -7,8 +7,8 @@ import { GroupVisibility } from '../core/constants/constant';
 import { ActivityFeedEntity } from './infrastructure/persistence/relational/entities/activity-feed.entity';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 
-describe('ActivityFeedController', () => {
-  let controller: ActivityFeedController;
+describe('GroupActivityFeedController', () => {
+  let controller: GroupActivityFeedController;
   let activityFeedService: jest.Mocked<ActivityFeedService>;
   let groupService: jest.Mocked<GroupService>;
 
@@ -76,7 +76,7 @@ describe('ActivityFeedController', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [ActivityFeedController],
+      controllers: [GroupActivityFeedController],
       providers: [
         {
           provide: ActivityFeedService,
@@ -97,7 +97,7 @@ describe('ActivityFeedController', () => {
       ],
     }).compile();
 
-    controller = module.get<ActivityFeedController>(ActivityFeedController);
+    controller = module.get<GroupActivityFeedController>(GroupActivityFeedController);
     activityFeedService = module.get(
       ActivityFeedService,
     ) as jest.Mocked<ActivityFeedService>;
@@ -122,7 +122,7 @@ describe('ActivityFeedController', () => {
       // Assert
       expect(groupService.getGroupBySlug).toHaveBeenCalledWith('tech-talks');
       expect(activityFeedService.getGroupFeed).toHaveBeenCalledWith(42, {
-        limit: 20,
+        limit: 10,
         offset: 0,
       });
       expect(result).toEqual(mockActivities);
@@ -159,7 +159,7 @@ describe('ActivityFeedController', () => {
 
       // Assert
       expect(activityFeedService.getGroupFeed).toHaveBeenCalledWith(42, {
-        limit: 20,
+        limit: 10,
         offset: 0,
         visibility: ['public'],
       });
@@ -179,7 +179,7 @@ describe('ActivityFeedController', () => {
 
       // Assert
       expect(activityFeedService.getGroupFeed).toHaveBeenCalledWith(43, {
-        limit: 20,
+        limit: 10,
         offset: 0,
         visibility: ['public', 'members_only'],
       });
@@ -209,7 +209,7 @@ describe('ActivityFeedController', () => {
 
       // Assert
       expect(activityFeedService.getGroupFeed).toHaveBeenCalledWith(42, {
-        limit: 20,
+        limit: 10,
         offset: 0,
         visibility: ['public', 'authenticated'],
       });
@@ -222,13 +222,13 @@ describe('ActivityFeedController', () => {
       );
       activityFeedService.getGroupFeed.mockResolvedValue([]);
 
-      // Act - Get second page (skip first 20 items)
-      await controller.getGroupFeed('tech-talks', { offset: 20 });
+      // Act - Get second page (skip first 10 items)
+      await controller.getGroupFeed('tech-talks', { offset: 10 });
 
       // Assert
       expect(activityFeedService.getGroupFeed).toHaveBeenCalledWith(42, {
-        limit: 20,
-        offset: 20,
+        limit: 10,
+        offset: 10,
       });
     });
 
