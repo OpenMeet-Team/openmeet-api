@@ -598,7 +598,11 @@ export class GroupService {
     this.auditLogger.log('group updated', {
       savedGroup,
     });
-    this.eventEmitter.emit('group.updated', savedGroup);
+    this.eventEmitter.emit('group.updated', {
+      groupId: savedGroup.id,
+      slug: savedGroup.slug,
+      tenantId: this.request.tenantId,
+    });
     return savedGroup;
   }
 

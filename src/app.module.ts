@@ -57,6 +57,7 @@ import { CalendarFeedModule } from './calendar-feed/calendar-feed.module';
 import { ExternalCalendarModule } from './external-calendar/external-calendar.module';
 import { SitemapModule } from './sitemap/sitemap.module';
 import { OidcModule } from './oidc/oidc.module';
+import { ActivityFeedModule } from './activity-feed/activity-feed.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -135,6 +136,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     EventModule,
     CategoryModule,
     GroupModule,
+    ActivityFeedModule,
     SubCategoryModule,
     GroupMemberModule,
     EventAttendeeModule,

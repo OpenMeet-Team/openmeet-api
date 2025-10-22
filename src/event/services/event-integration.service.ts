@@ -5,7 +5,12 @@ import { Repository } from 'typeorm';
 import { ShadowAccountService } from '../../shadow-account/shadow-account.service';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { EventSourceType } from '../../core/constants/source-type.constant';
-import { EventStatus, EventVisibility, EventAttendeeRole, EventAttendeeStatus } from '../../core/constants/constant';
+import {
+  EventStatus,
+  EventVisibility,
+  EventAttendeeRole,
+  EventAttendeeStatus,
+} from '../../core/constants/constant';
 import { EventQueryService } from './event-query.service';
 import { AuthProvidersEnum } from '../../auth/auth-providers.enum';
 import { Trace } from '../../utils/trace.decorator';
@@ -17,6 +22,7 @@ import { FileEntity } from '../../file/infrastructure/persistence/relational/ent
 import { FileService } from '../../file/file.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { EventRoleService } from '../../event-role/event-role.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import axios from 'axios';
 
 @Injectable()
@@ -34,6 +40,7 @@ export class EventIntegrationService {
     private readonly fileService: FileService,
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly eventRoleService: EventRoleService,
+    private readonly eventEmitter: EventEmitter2,
     @InjectMetric('event_integration_processed_total')
     private readonly processedCounter: Counter<string>,
     @InjectMetric('event_integration_deduplication_matches_total')
@@ -556,6 +563,18 @@ export class EventIntegrationService {
       `Created new event with ID ${savedEvent.id} for tenant ${tenantId}, image: ${savedEvent.image ? savedEvent.image.id : 'none'}`,
     );
 
+    // Emit event.created for activity feed and other listeners
+    this.eventEmitter.emit('event.created', {
+      eventId: savedEvent.id,
+      slug: savedEvent.slug,
+      userId: user.id,
+      tenantId: tenantId,
+    });
+
+    this.logger.debug(
+      `Emitted event.created for ingested event ${savedEvent.slug}`,
+    );
+
     // Add the event creator as a host attendee
     try {
       const hostRole = await this.eventRoleService.getRoleByName(
@@ -687,6 +706,18 @@ export class EventIntegrationService {
     const updatedEvent = await eventRepository.save(existingEvent);
     this.logger.debug(
       `Updated event with ID ${updatedEvent.id} for tenant ${tenantId}, image: ${updatedEvent.image ? updatedEvent.image.id : 'none'}`,
+    );
+
+    // Emit event.updated for activity feed and other listeners
+    this.eventEmitter.emit('event.updated', {
+      eventId: updatedEvent.id,
+      slug: updatedEvent.slug,
+      userId: updatedEvent.user?.id,
+      tenantId: tenantId,
+    });
+
+    this.logger.debug(
+      `Emitted event.updated for ingested event ${updatedEvent.slug}`,
     );
 
     return updatedEvent;

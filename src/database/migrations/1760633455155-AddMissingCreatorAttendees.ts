@@ -1,6 +1,8 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddMissingCreatorAttendees1760633455155 implements MigrationInterface {
+export class AddMissingCreatorAttendees1760633455155
+  implements MigrationInterface
+{
   public async up(queryRunner: QueryRunner): Promise<void> {
     const schema = queryRunner.connection.options.name || 'public';
 
@@ -44,7 +46,6 @@ export class AddMissingCreatorAttendees1760633455155 implements MigrationInterfa
     // We don't want to remove attendee records in the down migration
     // as it could remove legitimate attendees that were added after the migration
     // This is a data fix migration, not a schema change
-
     // If you really need to rollback, you would need to track which records
     // were added by this migration specifically, which is complex and risky
   }

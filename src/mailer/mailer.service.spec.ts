@@ -64,7 +64,8 @@ describe('MailerService', () => {
       const context = {
         recipientName: 'Test User',
         eventTitle: 'Chuck Stories',
-        eventDescription: 'Meet at the Port Moody Legion and share Chuck stories',
+        eventDescription:
+          'Meet at the Port Moody Legion and share Chuck stories',
         eventDateTime: eventDate,
         eventEndDateTime: null,
         eventTimeZone: 'America/Vancouver',
@@ -100,7 +101,8 @@ describe('MailerService', () => {
       const context = {
         recipientName: 'Test User',
         eventTitle: 'Chuck Stories',
-        eventDescription: 'Meet at the Port Moody Legion and share Chuck stories',
+        eventDescription:
+          'Meet at the Port Moody Legion and share Chuck stories',
         eventDateTime: eventDate,
         eventEndDateTime: null,
         eventTimeZone: 'America/Vancouver',
@@ -132,7 +134,8 @@ describe('MailerService', () => {
       const context = {
         recipientName: 'Test User',
         eventTitle: 'Chuck Stories',
-        eventDescription: 'Meet at the Port Moody Legion and share Chuck stories',
+        eventDescription:
+          'Meet at the Port Moody Legion and share Chuck stories',
         eventDateTime: eventDate,
         eventEndDateTime: null,
         eventTimeZone: 'America/Vancouver',
