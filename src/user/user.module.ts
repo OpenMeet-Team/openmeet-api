@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { UserController } from './user.controller';
 import { UserService } from './user.service';
 import { FileModule } from '../file/file.module';
@@ -10,7 +10,7 @@ import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-pres
 import { UserListener } from './user.listener';
 import { ConfigModule } from '@nestjs/config';
 import { MatrixModule } from '../matrix/matrix.module';
-import { forwardRef } from '@nestjs/common';
+import { BlueskyModule } from '../bluesky/bluesky.module';
 
 const infrastructurePersistenceModule = RelationalUserPersistenceModule;
 
@@ -22,6 +22,7 @@ const infrastructurePersistenceModule = RelationalUserPersistenceModule;
     TenantModule,
     RoleModule,
     forwardRef(() => MatrixModule),
+    BlueskyModule, // No forwardRef needed - BlueskyIdentityService has no circular dependency
   ],
   controllers: [UserController],
   providers: [

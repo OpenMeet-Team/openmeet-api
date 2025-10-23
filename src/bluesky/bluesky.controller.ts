@@ -47,7 +47,7 @@ export class BlueskyController {
 
   @Get('status')
   @ApiOperation({ summary: 'Get Bluesky connection status' })
-  getStatus(@AuthUser() user: UserEntity) {
+  async getStatus(@AuthUser() user: UserEntity) {
     return this.blueskyService.getConnectionStatus(user);
   }
 

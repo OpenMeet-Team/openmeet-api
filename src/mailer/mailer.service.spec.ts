@@ -5,7 +5,6 @@ import { REQUEST } from '@nestjs/core';
 
 describe('MailerService', () => {
   let service: MailerService;
-  let configService: ConfigService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -31,7 +30,6 @@ describe('MailerService', () => {
     }).compile();
 
     service = await module.resolve<MailerService>(MailerService);
-    configService = module.get<ConfigService>(ConfigService);
   });
 
   it('should be defined', () => {

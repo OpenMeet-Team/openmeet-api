@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { BlueskyService } from './bluesky.service';
 import { BlueskyIdService } from './bluesky-id.service';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
@@ -17,6 +17,7 @@ export class BlueskyRsvpService {
   private readonly logger = new Logger(BlueskyRsvpService.name);
 
   constructor(
+    @Inject(forwardRef(() => BlueskyService))
     private readonly blueskyService: BlueskyService,
     private readonly blueskyIdService: BlueskyIdService,
     @InjectMetric('bluesky_rsvp_operations_total')

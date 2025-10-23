@@ -11,6 +11,7 @@ import { EventType, EventStatus } from '../core/constants/constant';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import { BlueskyIdService } from './bluesky-id.service';
+import { BlueskyIdentityService } from './bluesky-identity.service';
 
 // Mock modules first before creating mock implementations
 jest.mock('@atproto/api', () => ({
@@ -27,7 +28,39 @@ jest.mock('@atproto/identity', () => ({
   HandleResolver: jest.fn().mockImplementation(() => ({
     resolve: jest.fn().mockResolvedValue('did:plc:test-resolved'),
   })),
-  getPds: jest.fn().mockResolvedValue('https://test-pds.example.com'),
+  DidResolver: jest.fn().mockImplementation(() => ({
+    resolveNoCheck: jest.fn().mockResolvedValue({
+      id: 'did:plc:test-resolved',
+      alsoKnownAs: ['at://test.user'],
+      service: [
+        {
+          id: '#atproto_pds',
+          type: 'AtprotoPersonalDataServer',
+          serviceEndpoint: 'https://test-pds.example.com',
+        },
+      ],
+    }),
+  })),
+  IdResolver: jest.fn().mockImplementation(() => ({
+    handle: {
+      resolve: jest.fn().mockResolvedValue('did:plc:test-resolved'),
+    },
+    did: {
+      resolveNoCheck: jest.fn().mockResolvedValue({
+        id: 'did:plc:test-resolved',
+        alsoKnownAs: ['at://test.user'],
+        service: [
+          {
+            id: '#atproto_pds',
+            type: 'AtprotoPersonalDataServer',
+            serviceEndpoint: 'https://test-pds.example.com',
+          },
+        ],
+      }),
+    },
+  })),
+  getPds: jest.fn().mockReturnValue('https://test-pds.example.com'),
+  getHandle: jest.fn().mockReturnValue('test.user'),
 }));
 
 // Create mock service implementations
@@ -53,6 +86,21 @@ const mockEventQueryService = {
 
 const mockBlueskyIdService = {
   parseUri: jest.fn(),
+};
+
+const mockBlueskyIdentityService = {
+  resolveProfile: jest.fn().mockResolvedValue({
+    did: 'did:plc:test-resolved',
+    handle: 'test.user',
+    displayName: 'Test User',
+    avatar: 'https://example.com/avatar.jpg',
+    followersCount: 100,
+    followingCount: 50,
+    postsCount: 20,
+    description: 'Test description',
+    source: 'atprotocol-public',
+  }),
+  extractHandleFromDid: jest.fn().mockResolvedValue('test.user'),
 };
 
 const mockConfigService = {
@@ -127,6 +175,10 @@ describe('BlueskyService', () => {
         },
         { provide: REQUEST, useValue: mockRequest },
         { provide: BlueskyIdService, useValue: mockBlueskyIdService },
+        {
+          provide: BlueskyIdentityService,
+          useValue: mockBlueskyIdentityService,
+        },
       ],
     }).compile();
 
@@ -362,7 +414,6 @@ describe('BlueskyService', () => {
       expect(result).toBeDefined();
       expect(result.did).toBe('did:plc:test-resolved');
       expect(result.handle).toBe('test.user');
-      expect(result.pdsEndpoint).toBe('https://test-pds.example.com');
     });
 
     it('should use the provided DID directly if available', async () => {
@@ -380,11 +431,10 @@ describe('BlueskyService', () => {
       // Arrange
       const handle = 'error.user';
 
-      // Mock HandleResolver to throw an error
-      const { HandleResolver } = jest.requireMock('@atproto/identity');
-      HandleResolver.mockImplementationOnce(() => ({
-        resolve: jest.fn().mockRejectedValue(new Error('Handle not found')),
-      }));
+      // Mock BlueskyIdentityService to throw an error
+      mockBlueskyIdentityService.resolveProfile.mockRejectedValueOnce(
+        new Error('Unable to resolve profile for error.user: Handle not found'),
+      );
 
       // Act & Assert
       await expect(service.getPublicProfile(handle)).rejects.toThrow();
@@ -420,7 +470,6 @@ describe('BlueskyService', () => {
         followersCount: 100,
         followingCount: 50,
         description: 'Updated bio',
-        pdsEndpoint: 'https://test-pds.example.com',
       });
 
       // Act

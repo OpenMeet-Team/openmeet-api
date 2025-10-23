@@ -239,7 +239,7 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
       }
 
       // Create aggregated activities
-      for (const [_key, groupMembers] of membersByGroupAndWindow.entries()) {
+      for (const [, groupMembers] of membersByGroupAndWindow.entries()) {
         try {
           const firstMember = groupMembers[0];
           const visibility = mapVisibility(firstMember.groupVisibility);
@@ -556,7 +556,7 @@ async function backfillActivityFeedsForTenant(tenantId: string) {
       }
 
       // Create aggregated RSVP activities
-      for (const [_key, eventRsvps] of rsvpsByEventAndWindow.entries()) {
+      for (const [, eventRsvps] of rsvpsByEventAndWindow.entries()) {
         try {
           const firstRsvp = eventRsvps[0];
           const actorIds = eventRsvps.map((r) => r.userId).filter(Boolean);

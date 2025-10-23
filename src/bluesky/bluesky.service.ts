@@ -18,6 +18,7 @@ import { EventQueryService } from '../event/services/event-query.service';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { BlueskyIdService } from './bluesky-id.service';
+import { BlueskyIdentityService } from './bluesky-identity.service';
 
 @Injectable()
 export class BlueskyService {
@@ -28,6 +29,7 @@ export class BlueskyService {
 
   constructor(
     private readonly configService: ConfigService,
+    @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
     private readonly elasticacheService: ElastiCacheService,
     @Inject(forwardRef(() => EventManagementService))
@@ -38,6 +40,7 @@ export class BlueskyService {
     @Inject(REQUEST) private readonly request: any,
     @Inject(forwardRef(() => BlueskyIdService))
     private readonly blueskyIdService: BlueskyIdService,
+    private readonly blueskyIdentityService: BlueskyIdentityService,
   ) {}
 
   private async getOAuthClient(tenantId: string): Promise<NodeOAuthClient> {
@@ -287,10 +290,29 @@ export class BlueskyService {
     };
   }
 
-  getConnectionStatus(user: UserEntity) {
+  async getConnectionStatus(user: UserEntity) {
+    const did = user.preferences?.bluesky?.did;
+    let handle: string | undefined;
+
+    // Resolve handle from DID if available (uses public API)
+    if (did) {
+      try {
+        const profile = await this.blueskyIdentityService.resolveProfile(did);
+        // Fallback to DID if handle is empty
+        handle = profile.handle || did;
+      } catch (error) {
+        this.logger.warn(
+          `Failed to resolve Bluesky handle for DID ${did}`,
+          error.message,
+        );
+        // Fallback to DID if resolution fails
+        handle = did;
+      }
+    }
+
     return {
       connected: !!user.preferences?.bluesky?.connected,
-      handle: user.preferences?.bluesky?.handle,
+      handle,
     };
   }
 
@@ -721,71 +743,8 @@ export class BlueskyService {
    * @returns Profile information
    */
   async getPublicProfile(handleOrDid: string): Promise<any> {
-    try {
-      this.logger.debug(
-        'Looking up public ATProtocol profile for: ${handleOrDid}',
-      );
-
-      // Import the proper classes for resolution
-      const { HandleResolver, getPds } = await import('@atproto/identity');
-
-      // Create resolvers
-      const handleResolver = new HandleResolver();
-
-      // Resolve the DID and determine the proper PDS service endpoint
-      let did = handleOrDid;
-
-      if (!handleOrDid.startsWith('did:')) {
-        // If a handle was provided, resolve it to a DID first
-        this.logger.debug(`Resolving handle ${handleOrDid} to DID`);
-        const resolvedDid = await handleResolver.resolve(handleOrDid);
-        if (!resolvedDid) {
-          throw new Error(`Could not resolve handle ${handleOrDid} to a DID`);
-        }
-        did = resolvedDid;
-        this.logger.debug(`Resolved ${handleOrDid} to ${did}`);
-      }
-
-      // Now get the PDS endpoint for this DID
-      const didDoc = { id: did }; // Create minimal DID document
-      const pdsEndpoint = await getPds(didDoc);
-      if (!pdsEndpoint) {
-        throw new Error(`Could not get PDS endpoint for DID ${did}`);
-      }
-      this.logger.debug(`PDS endpoint for ${did}: ${pdsEndpoint}`);
-
-      // Create agent with the proper PDS endpoint as a string
-      const agent = new Agent(pdsEndpoint);
-
-      // Fetch profile data
-      const response = await agent.getProfile({ actor: did });
-
-      // Format the response
-      return {
-        did: response.data.did,
-        handle: response.data.handle,
-        displayName: response.data.displayName,
-        avatar: response.data.avatar,
-        followersCount: response.data.followersCount || 0,
-        followingCount: response.data.followingCount || 0,
-        postsCount: response.data.postsCount || 0,
-        description: response.data.description,
-        indexedAt: response.data.indexedAt,
-        labels: response.data.labels || [],
-        source: 'atprotocol-public',
-        pdsEndpoint: pdsEndpoint,
-      };
-    } catch (error) {
-      this.logger.error('Failed to fetch public ATProtocol profile', {
-        error: error.message,
-        stack: error.stack,
-        handleOrDid,
-      });
-
-      throw new Error(
-        `Unable to resolve profile for ${handleOrDid}: ${error.message}`,
-      );
-    }
+    // Delegate to BlueskyIdentityService to avoid circular dependencies
+    return this.blueskyIdentityService.resolveProfile(handleOrDid);
   }
 
   /**

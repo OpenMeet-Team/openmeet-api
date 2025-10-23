@@ -17,6 +17,7 @@ export class EventMailService {
     private readonly mailService: MailService,
     @Inject(forwardRef(() => EventAttendeeService))
     private readonly eventAttendeeService: EventAttendeeService,
+    @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
   ) {}
 

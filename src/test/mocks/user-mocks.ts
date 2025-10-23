@@ -34,4 +34,5 @@ export const mockAuthService = {
 
 export const mockRoleService = {
   findOne: jest.fn().mockResolvedValue(mockRole),
+  findByName: jest.fn().mockResolvedValue(mockRole),
 };

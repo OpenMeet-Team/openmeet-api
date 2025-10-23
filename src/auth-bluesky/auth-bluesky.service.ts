@@ -4,6 +4,7 @@ import {
   Injectable,
   Scope,
   Logger,
+  forwardRef,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
@@ -31,6 +32,7 @@ export class AuthBlueskyService {
     private authService: AuthService,
     private elasticacheService: ElastiCacheService,
     private blueskyService: BlueskyService,
+    @Inject(forwardRef(() => UserService))
     private userService: UserService,
     private eventSeriesOccurrenceService: EventSeriesOccurrenceService,
   ) {
@@ -148,7 +150,7 @@ export class AuthBlueskyService {
           did: profileData.did,
         });
 
-        // Update preferences to include DID
+        // Update preferences to include DID (handle is resolved from DID when needed)
         await this.userService.update(
           existingUser.id,
           {
@@ -157,7 +159,6 @@ export class AuthBlueskyService {
               bluesky: {
                 ...(existingUser.preferences?.bluesky || {}),
                 did: profileData.did,
-                handle: profileData.handle,
                 avatar: profileData.avatar,
                 connected: true,
                 connectedAt: new Date(),
@@ -177,6 +178,7 @@ export class AuthBlueskyService {
         email: existingUser?.email || '',
         firstName: profileData.displayName || profileData.handle,
         lastName: '',
+        // Handle is not stored - it's resolved from DID when needed
       },
       tenantId,
     );

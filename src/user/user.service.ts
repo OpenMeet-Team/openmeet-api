@@ -30,6 +30,7 @@ import { AuditLoggerService } from '../logger/audit-logger.provider';
 import { SocialInterface } from '../social/interfaces/social.interface';
 import { StatusDto } from '../status/dto/status.dto';
 import { GlobalMatrixValidationService } from '../matrix/services/global-matrix-validation.service';
+import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UserService {
@@ -47,6 +48,7 @@ export class UserService {
     private eventEmitter: EventEmitter2,
     private readonly fileService: FilesS3PresignedService,
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
+    private readonly blueskyIdentityService: BlueskyIdentityService,
   ) {}
 
   async getTenantSpecificRepository(tenantId?: string) {
@@ -233,7 +235,44 @@ export class UserService {
     const publicEvents = await eventsQuery.getMany();
     user['events'] = publicEvents;
 
-    // Transform the user object to include formatted Bluesky profile information
+    // Resolve and update Bluesky handle from DID (for any Bluesky user)
+    if (user?.preferences?.bluesky?.did) {
+      try {
+        const profile = await this.blueskyIdentityService.resolveProfile(
+          user.preferences.bluesky.did,
+        );
+        this.logger.debug(
+          `Resolved Bluesky profile for ${user.preferences.bluesky.did}: handle=${profile.handle}, did=${profile.did}`,
+        );
+        // Replace stored handle with current resolved handle, fallback to DID if empty
+        user.preferences.bluesky.handle =
+          profile.handle || user.preferences.bluesky.did;
+        this.logger.debug(
+          `Set user.preferences.bluesky.handle to: ${user.preferences.bluesky.handle}`,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Failed to fetch full Bluesky profile for DID ${user.preferences.bluesky.did}: ${error.message}`,
+        );
+        // Fallback: Extract handle directly from DID document (lightweight, always works)
+        try {
+          user.preferences.bluesky.handle =
+            await this.blueskyIdentityService.extractHandleFromDid(
+              user.preferences.bluesky.did,
+            );
+          this.logger.debug(
+            `Extracted handle from DID document: ${user.preferences.bluesky.handle}`,
+          );
+        } catch {
+          this.logger.warn(
+            `Failed to extract handle from DID document, using DID as fallback`,
+          );
+          user.preferences.bluesky.handle = user.preferences.bluesky.did;
+        }
+      }
+    }
+
+    // Keep existing socialProfiles and profileEndpoints code for backward compatibility
     if (user && user.preferences?.bluesky) {
       const { bluesky } = user.preferences;
 
@@ -242,7 +281,7 @@ export class UserService {
         ...user['socialProfiles'], // Preserve any existing social profiles
         atprotocol: {
           did: bluesky.did,
-          handle: bluesky.handle,
+          handle: bluesky.handle, // Now using resolved handle from above
           avatarUrl: bluesky.avatar,
           connected: bluesky.connected === true,
           connectedAt: bluesky.connectedAt,
@@ -440,7 +479,7 @@ export class UserService {
       createUserData.preferences = {
         bluesky: {
           did: profile.id,
-          handle: profile.firstName,
+          // Note: We don't store the handle here - it's resolved from DID when needed
           connected: true,
           autoPost: false,
           connectedAt: new Date(),
