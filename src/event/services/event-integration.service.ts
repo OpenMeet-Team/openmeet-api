@@ -101,7 +101,12 @@ export class EventIntegrationService {
         );
 
         // Stop the timer with is_duplicate = true
-        timer({ is_duplicate: 'true' });
+        timer({
+          tenant: tenantId,
+          source_type: eventData.source.type,
+          operation: 'process',
+          is_duplicate: 'true',
+        });
 
         return this.updateExistingEvent(
           existingEvent,
@@ -115,7 +120,12 @@ export class EventIntegrationService {
       this.logger.debug('No existing event found, creating a new one');
 
       // Stop the timer with is_duplicate = false
-      timer({ is_duplicate: 'false' });
+      timer({
+        tenant: tenantId,
+        source_type: eventData.source.type,
+        operation: 'process',
+        is_duplicate: 'false',
+      });
 
       return this.createNewEvent(eventData, eventRepository, tenantId);
     } catch (error) {
@@ -127,7 +137,12 @@ export class EventIntegrationService {
       });
 
       // Stop the timer for error case
-      timer({ is_duplicate: 'error' });
+      timer({
+        tenant: tenantId,
+        source_type: eventData.source.type,
+        operation: 'process',
+        is_duplicate: 'error',
+      });
 
       throw error;
     }
@@ -900,7 +915,12 @@ export class EventIntegrationService {
         });
 
         // End the timing
-        timer();
+        timer({
+          tenant: tenantId,
+          source_type: sourceType,
+          operation: 'delete',
+          is_duplicate: 'n/a',
+        });
 
         return {
           success: false,
@@ -940,7 +960,12 @@ export class EventIntegrationService {
       });
 
       // End the timing
-      timer();
+      timer({
+        tenant: tenantId,
+        source_type: sourceType,
+        operation: 'delete',
+        is_duplicate: 'n/a',
+      });
 
       return {
         success: true,
@@ -955,7 +980,12 @@ export class EventIntegrationService {
       });
 
       // End the timing
-      timer();
+      timer({
+        tenant: tenantId,
+        source_type: sourceType,
+        operation: 'delete',
+        is_duplicate: 'n/a',
+      });
 
       throw error;
     }
