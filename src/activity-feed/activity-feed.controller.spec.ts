@@ -97,7 +97,9 @@ describe('GroupActivityFeedController', () => {
       ],
     }).compile();
 
-    controller = module.get<GroupActivityFeedController>(GroupActivityFeedController);
+    controller = module.get<GroupActivityFeedController>(
+      GroupActivityFeedController,
+    );
     activityFeedService = module.get(
       ActivityFeedService,
     ) as jest.Mocked<ActivityFeedService>;

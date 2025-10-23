@@ -7,6 +7,7 @@ import {
   NotFoundException,
   Logger,
   BadRequestException,
+  forwardRef,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { NullableType } from '../utils/types/nullable.type';
@@ -30,6 +31,7 @@ import { AuditLoggerService } from '../logger/audit-logger.provider';
 import { SocialInterface } from '../social/interfaces/social.interface';
 import { StatusDto } from '../status/dto/status.dto';
 import { GlobalMatrixValidationService } from '../matrix/services/global-matrix-validation.service';
+import { BlueskyService } from '../bluesky/bluesky.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UserService {
@@ -47,6 +49,8 @@ export class UserService {
     private eventEmitter: EventEmitter2,
     private readonly fileService: FilesS3PresignedService,
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
+    @Inject(forwardRef(() => BlueskyService))
+    private readonly blueskyService: BlueskyService,
   ) {}
 
   async getTenantSpecificRepository(tenantId?: string) {
@@ -233,7 +237,24 @@ export class UserService {
     const publicEvents = await eventsQuery.getMany();
     user['events'] = publicEvents;
 
-    // Transform the user object to include formatted Bluesky profile information
+    // Resolve and update Bluesky handle from DID (don't use stale stored handle)
+    if (user && user.preferences?.bluesky?.did) {
+      try {
+        const profile = await this.blueskyService.getPublicProfile(
+          user.preferences.bluesky.did,
+        );
+        // Replace stored handle with current resolved handle
+        user.preferences.bluesky.handle = profile.handle;
+      } catch (error) {
+        this.logger.warn(
+          `Failed to resolve handle for DID ${user.preferences.bluesky.did}:`,
+          error.message,
+        );
+        // Keep existing stored handle if resolution fails
+      }
+    }
+
+    // Keep existing socialProfiles and profileEndpoints code for backward compatibility
     if (user && user.preferences?.bluesky) {
       const { bluesky } = user.preferences;
 
@@ -242,7 +263,7 @@ export class UserService {
         ...user['socialProfiles'], // Preserve any existing social profiles
         atprotocol: {
           did: bluesky.did,
-          handle: bluesky.handle,
+          handle: bluesky.handle, // Now using resolved handle from above
           avatarUrl: bluesky.avatar,
           connected: bluesky.connected === true,
           connectedAt: bluesky.connectedAt,
@@ -440,7 +461,7 @@ export class UserService {
       createUserData.preferences = {
         bluesky: {
           did: profile.id,
-          handle: profile.firstName,
+          // Note: We don't store the handle here - it's resolved from DID when needed
           connected: true,
           autoPost: false,
           connectedAt: new Date(),

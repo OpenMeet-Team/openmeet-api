@@ -362,7 +362,6 @@ describe('BlueskyService', () => {
       expect(result).toBeDefined();
       expect(result.did).toBe('did:plc:test-resolved');
       expect(result.handle).toBe('test.user');
-      expect(result.pdsEndpoint).toBe('https://test-pds.example.com');
     });
 
     it('should use the provided DID directly if available', async () => {
@@ -420,7 +419,6 @@ describe('BlueskyService', () => {
         followersCount: 100,
         followingCount: 50,
         description: 'Updated bio',
-        pdsEndpoint: 'https://test-pds.example.com',
       });
 
       // Act

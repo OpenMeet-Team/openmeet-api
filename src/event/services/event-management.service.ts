@@ -65,6 +65,7 @@ export class EventManagementService {
     private readonly eventEmitter: EventEmitter2,
     private readonly fileService: FilesS3PresignedService,
     private readonly eventRoleService: EventRoleService,
+    @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
     private readonly eventMailService: EventMailService,
     @Inject(forwardRef(() => BlueskyService))

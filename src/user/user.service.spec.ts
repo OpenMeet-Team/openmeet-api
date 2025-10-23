@@ -22,6 +22,7 @@ import { REQUEST } from '@nestjs/core';
 import { Repository } from 'typeorm';
 import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import { GlobalMatrixValidationService } from '../matrix/services/global-matrix-validation.service';
+import { BlueskyService } from '../bluesky/bluesky.service';
 
 describe('UserService', () => {
   let userService: UserService;
@@ -74,6 +75,15 @@ describe('UserService', () => {
             registerMatrixHandle: jest.fn(),
             unregisterMatrixHandle: jest.fn(),
             suggestAvailableHandles: jest.fn(),
+          },
+        },
+        {
+          provide: BlueskyService,
+          useValue: {
+            getPublicProfile: jest.fn().mockResolvedValue({
+              handle: 'vlad.sitalo.org',
+              did: 'did:plc:tbhegjbdy7fabqewbby5nbf3',
+            }),
           },
         },
       ],
@@ -250,6 +260,66 @@ describe('UserService', () => {
 
     it('should throw an error if the user is not found', async () => {
       await expect(userService.getUserById(mockUser.id)).rejects.toThrow();
+    });
+  });
+
+  describe('findOrCreateUser - Bluesky DID Storage', () => {
+    it('should store only the DID, not the handle (handle is resolved from DID)', async () => {
+      // Arrange: Profile data from Bluesky auth
+      const blueskyProfile = {
+        id: 'did:plc:tbhegjbdy7fabqewbby5nbf3',
+        firstName: 'Vlad Sitalo', // This is the display name
+        lastName: '',
+        email: 'vlad@sitalo.org',
+        handle: 'vlad.sitalo.org', // This is the actual Bluesky handle
+      };
+
+      const expectedUser = {
+        ...mockUser,
+        id: 262,
+        socialId: 'did:plc:tbhegjbdy7fabqewbby5nbf3',
+        provider: 'bluesky',
+        firstName: 'Vlad Sitalo',
+        email: 'vlad@sitalo.org',
+        preferences: {
+          bluesky: {
+            did: 'did:plc:tbhegjbdy7fabqewbby5nbf3',
+            // No handle stored - it's resolved from DID when needed
+            connected: true,
+            autoPost: false,
+            connectedAt: expect.any(Date),
+          },
+        },
+      };
+
+      // Mock findBySocialIdAndProvider to return null (new user)
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(null);
+
+      // Spy on create to capture what data is passed
+      const createSpy = jest
+        .spyOn(userService, 'create')
+        .mockResolvedValue(expectedUser as any);
+
+      // Act
+      await userService.findOrCreateUser(
+        blueskyProfile,
+        'bluesky',
+        TESTING_TENANT_ID,
+      );
+
+      // Assert - verify create was called with correct Bluesky preferences
+      expect(createSpy).toHaveBeenCalled();
+      const createCallArgs = createSpy.mock.calls[0][0];
+
+      // Verify DID is stored
+      expect(createCallArgs.preferences.bluesky.did).toBe(
+        'did:plc:tbhegjbdy7fabqewbby5nbf3',
+      );
+
+      // Verify handle is NOT stored (should be undefined)
+      expect(createCallArgs.preferences.bluesky.handle).toBeUndefined();
     });
   });
 });

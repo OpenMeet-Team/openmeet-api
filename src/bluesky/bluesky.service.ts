@@ -28,6 +28,7 @@ export class BlueskyService {
 
   constructor(
     private readonly configService: ConfigService,
+    @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
     private readonly elasticacheService: ElastiCacheService,
     @Inject(forwardRef(() => EventManagementService))
@@ -287,10 +288,27 @@ export class BlueskyService {
     };
   }
 
-  getConnectionStatus(user: UserEntity) {
+  async getConnectionStatus(user: UserEntity) {
+    const did = user.preferences?.bluesky?.did;
+    let handle: string | undefined;
+
+    // Resolve handle from DID if available
+    if (did) {
+      try {
+        const profile = await this.getPublicProfile(did);
+        handle = profile.handle;
+      } catch (error) {
+        this.logger.warn(
+          `Failed to resolve handle from DID ${did}:`,
+          error.message,
+        );
+        // Handle will remain undefined
+      }
+    }
+
     return {
       connected: !!user.preferences?.bluesky?.connected,
-      handle: user.preferences?.bluesky?.handle,
+      handle,
     };
   }
 
@@ -727,12 +745,12 @@ export class BlueskyService {
       );
 
       // Import the proper classes for resolution
-      const { HandleResolver, getPds } = await import('@atproto/identity');
+      const { HandleResolver } = await import('@atproto/identity');
 
-      // Create resolvers
+      // Create resolver
       const handleResolver = new HandleResolver();
 
-      // Resolve the DID and determine the proper PDS service endpoint
+      // Resolve handle to DID if needed
       let did = handleOrDid;
 
       if (!handleOrDid.startsWith('did:')) {
@@ -746,18 +764,13 @@ export class BlueskyService {
         this.logger.debug(`Resolved ${handleOrDid} to ${did}`);
       }
 
-      // Now get the PDS endpoint for this DID
-      const didDoc = { id: did }; // Create minimal DID document
-      const pdsEndpoint = await getPds(didDoc);
-      if (!pdsEndpoint) {
-        throw new Error(`Could not get PDS endpoint for DID ${did}`);
-      }
-      this.logger.debug(`PDS endpoint for ${did}: ${pdsEndpoint}`);
+      // Use the public Bluesky API for unauthenticated profile lookups
+      const publicApiEndpoint = 'https://public.api.bsky.app';
 
-      // Create agent with the proper PDS endpoint as a string
-      const agent = new Agent(pdsEndpoint);
+      // Create agent pointing to the public API (no authentication needed)
+      const agent = new Agent(publicApiEndpoint);
 
-      // Fetch profile data
+      // Fetch profile data using DID or handle
       const response = await agent.getProfile({ actor: did });
 
       // Format the response
@@ -773,7 +786,6 @@ export class BlueskyService {
         indexedAt: response.data.indexedAt,
         labels: response.data.labels || [],
         source: 'atprotocol-public',
-        pdsEndpoint: pdsEndpoint,
       };
     } catch (error) {
       this.logger.error('Failed to fetch public ATProtocol profile', {
