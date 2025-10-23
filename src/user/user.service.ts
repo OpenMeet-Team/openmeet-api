@@ -7,7 +7,6 @@ import {
   NotFoundException,
   Logger,
   BadRequestException,
-  forwardRef,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { NullableType } from '../utils/types/nullable.type';
@@ -31,7 +30,7 @@ import { AuditLoggerService } from '../logger/audit-logger.provider';
 import { SocialInterface } from '../social/interfaces/social.interface';
 import { StatusDto } from '../status/dto/status.dto';
 import { GlobalMatrixValidationService } from '../matrix/services/global-matrix-validation.service';
-import { BlueskyService } from '../bluesky/bluesky.service';
+import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UserService {
@@ -49,8 +48,7 @@ export class UserService {
     private eventEmitter: EventEmitter2,
     private readonly fileService: FilesS3PresignedService,
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
-    @Inject(forwardRef(() => BlueskyService))
-    private readonly blueskyService: BlueskyService,
+    private readonly blueskyIdentityService: BlueskyIdentityService,
   ) {}
 
   async getTenantSpecificRepository(tenantId?: string) {
@@ -240,7 +238,7 @@ export class UserService {
     // Resolve and update Bluesky handle from DID (for any Bluesky user)
     if (user?.preferences?.bluesky?.did) {
       try {
-        const profile = await this.blueskyService.getPublicProfile(
+        const profile = await this.blueskyIdentityService.resolveProfile(
           user.preferences.bluesky.did,
         );
         this.logger.debug(
@@ -258,15 +256,10 @@ export class UserService {
         );
         // Fallback: Extract handle directly from DID document (lightweight, always works)
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const { IdResolver, getHandle } = require('@atproto/identity');
-          const idResolver = new IdResolver();
-          const didDoc = await idResolver.did.resolveNoCheck(
-            user.preferences.bluesky.did,
-          );
-          const handle = getHandle(didDoc);
           user.preferences.bluesky.handle =
-            handle || user.preferences.bluesky.did;
+            await this.blueskyIdentityService.extractHandleFromDid(
+              user.preferences.bluesky.did,
+            );
           this.logger.debug(
             `Extracted handle from DID document: ${user.preferences.bluesky.handle}`,
           );

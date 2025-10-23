@@ -22,7 +22,7 @@ const infrastructurePersistenceModule = RelationalUserPersistenceModule;
     TenantModule,
     RoleModule,
     forwardRef(() => MatrixModule),
-    forwardRef(() => BlueskyModule),
+    BlueskyModule, // No forwardRef needed - BlueskyIdentityService has no circular dependency
   ],
   controllers: [UserController],
   providers: [

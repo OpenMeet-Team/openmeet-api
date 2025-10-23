@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { BlueskyController } from './bluesky.controller';
 import { BlueskyService } from './bluesky.service';
 import { BlueskyIdService } from './bluesky-id.service';
+import { BlueskyIdentityService } from './bluesky-identity.service';
 import { BlueskyRsvpService } from './bluesky-rsvp.service';
 import { UserModule } from '../user/user.module';
 import { ElastiCacheModule } from '../elasticache/elasticache.module';
@@ -22,7 +23,17 @@ import { MetricsModule } from '../metrics/metrics.module';
     forwardRef(() => EventModule),
   ],
   controllers: [BlueskyController],
-  providers: [BlueskyService, BlueskyIdService, BlueskyRsvpService],
-  exports: [BlueskyService, BlueskyIdService, BlueskyRsvpService],
+  providers: [
+    BlueskyService,
+    BlueskyIdService,
+    BlueskyIdentityService,
+    BlueskyRsvpService,
+  ],
+  exports: [
+    BlueskyService,
+    BlueskyIdService,
+    BlueskyIdentityService,
+    BlueskyRsvpService,
+  ],
 })
 export class BlueskyModule {}

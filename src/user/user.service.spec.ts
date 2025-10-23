@@ -22,7 +22,7 @@ import { REQUEST } from '@nestjs/core';
 import { Repository } from 'typeorm';
 import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import { GlobalMatrixValidationService } from '../matrix/services/global-matrix-validation.service';
-import { BlueskyService } from '../bluesky/bluesky.service';
+import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 
 describe('UserService', () => {
   let userService: UserService;
@@ -78,12 +78,15 @@ describe('UserService', () => {
           },
         },
         {
-          provide: BlueskyService,
+          provide: BlueskyIdentityService,
           useValue: {
-            getPublicProfile: jest.fn().mockResolvedValue({
+            resolveProfile: jest.fn().mockResolvedValue({
               handle: 'vlad.sitalo.org',
               did: 'did:plc:tbhegjbdy7fabqewbby5nbf3',
             }),
+            extractHandleFromDid: jest
+              .fn()
+              .mockResolvedValue('vlad.sitalo.org'),
           },
         },
       ],

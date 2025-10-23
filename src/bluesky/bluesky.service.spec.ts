@@ -11,6 +11,7 @@ import { EventType, EventStatus } from '../core/constants/constant';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { REQUEST } from '@nestjs/core';
 import { BlueskyIdService } from './bluesky-id.service';
+import { BlueskyIdentityService } from './bluesky-identity.service';
 
 // Mock modules first before creating mock implementations
 jest.mock('@atproto/api', () => ({
@@ -87,6 +88,21 @@ const mockBlueskyIdService = {
   parseUri: jest.fn(),
 };
 
+const mockBlueskyIdentityService = {
+  resolveProfile: jest.fn().mockResolvedValue({
+    did: 'did:plc:test-resolved',
+    handle: 'test.user',
+    displayName: 'Test User',
+    avatar: 'https://example.com/avatar.jpg',
+    followersCount: 100,
+    followingCount: 50,
+    postsCount: 20,
+    description: 'Test description',
+    source: 'atprotocol-public',
+  }),
+  extractHandleFromDid: jest.fn().mockResolvedValue('test.user'),
+};
+
 const mockConfigService = {
   get: jest.fn(),
 };
@@ -159,6 +175,10 @@ describe('BlueskyService', () => {
         },
         { provide: REQUEST, useValue: mockRequest },
         { provide: BlueskyIdService, useValue: mockBlueskyIdService },
+        {
+          provide: BlueskyIdentityService,
+          useValue: mockBlueskyIdentityService,
+        },
       ],
     }).compile();
 
@@ -411,16 +431,10 @@ describe('BlueskyService', () => {
       // Arrange
       const handle = 'error.user';
 
-      // Mock IdResolver to throw an error
-      const { IdResolver } = jest.requireMock('@atproto/identity');
-      IdResolver.mockImplementationOnce(() => ({
-        handle: {
-          resolve: jest.fn().mockRejectedValue(new Error('Handle not found')),
-        },
-        did: {
-          resolveNoCheck: jest.fn(),
-        },
-      }));
+      // Mock BlueskyIdentityService to throw an error
+      mockBlueskyIdentityService.resolveProfile.mockRejectedValueOnce(
+        new Error('Unable to resolve profile for error.user: Handle not found'),
+      );
 
       // Act & Assert
       await expect(service.getPublicProfile(handle)).rejects.toThrow();
