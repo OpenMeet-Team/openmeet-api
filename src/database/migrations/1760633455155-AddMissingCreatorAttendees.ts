@@ -42,7 +42,7 @@ export class AddMissingCreatorAttendees1760633455155
     `);
   }
 
-  public async down(queryRunner: QueryRunner): Promise<void> {
+  public async down(_queryRunner: QueryRunner): Promise<void> {
     // We don't want to remove attendee records in the down migration
     // as it could remove legitimate attendees that were added after the migration
     // This is a data fix migration, not a schema change

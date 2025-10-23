@@ -27,7 +27,39 @@ jest.mock('@atproto/identity', () => ({
   HandleResolver: jest.fn().mockImplementation(() => ({
     resolve: jest.fn().mockResolvedValue('did:plc:test-resolved'),
   })),
-  getPds: jest.fn().mockResolvedValue('https://test-pds.example.com'),
+  DidResolver: jest.fn().mockImplementation(() => ({
+    resolveNoCheck: jest.fn().mockResolvedValue({
+      id: 'did:plc:test-resolved',
+      alsoKnownAs: ['at://test.user'],
+      service: [
+        {
+          id: '#atproto_pds',
+          type: 'AtprotoPersonalDataServer',
+          serviceEndpoint: 'https://test-pds.example.com',
+        },
+      ],
+    }),
+  })),
+  IdResolver: jest.fn().mockImplementation(() => ({
+    handle: {
+      resolve: jest.fn().mockResolvedValue('did:plc:test-resolved'),
+    },
+    did: {
+      resolveNoCheck: jest.fn().mockResolvedValue({
+        id: 'did:plc:test-resolved',
+        alsoKnownAs: ['at://test.user'],
+        service: [
+          {
+            id: '#atproto_pds',
+            type: 'AtprotoPersonalDataServer',
+            serviceEndpoint: 'https://test-pds.example.com',
+          },
+        ],
+      }),
+    },
+  })),
+  getPds: jest.fn().mockReturnValue('https://test-pds.example.com'),
+  getHandle: jest.fn().mockReturnValue('test.user'),
 }));
 
 // Create mock service implementations
@@ -379,10 +411,15 @@ describe('BlueskyService', () => {
       // Arrange
       const handle = 'error.user';
 
-      // Mock HandleResolver to throw an error
-      const { HandleResolver } = jest.requireMock('@atproto/identity');
-      HandleResolver.mockImplementationOnce(() => ({
-        resolve: jest.fn().mockRejectedValue(new Error('Handle not found')),
+      // Mock IdResolver to throw an error
+      const { IdResolver } = jest.requireMock('@atproto/identity');
+      IdResolver.mockImplementationOnce(() => ({
+        handle: {
+          resolve: jest.fn().mockRejectedValue(new Error('Handle not found')),
+        },
+        did: {
+          resolveNoCheck: jest.fn(),
+        },
       }));
 
       // Act & Assert

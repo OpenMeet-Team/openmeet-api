@@ -292,17 +292,19 @@ export class BlueskyService {
     const did = user.preferences?.bluesky?.did;
     let handle: string | undefined;
 
-    // Resolve handle from DID if available
+    // Resolve handle from DID if available (uses public API)
     if (did) {
       try {
         const profile = await this.getPublicProfile(did);
-        handle = profile.handle;
+        // Fallback to DID if handle is empty
+        handle = profile.handle || did;
       } catch (error) {
         this.logger.warn(
-          `Failed to resolve handle from DID ${did}:`,
+          `Failed to resolve Bluesky handle for DID ${did}`,
           error.message,
         );
-        // Handle will remain undefined
+        // Fallback to DID if resolution fails
+        handle = did;
       }
     }
 
@@ -744,11 +746,12 @@ export class BlueskyService {
         'Looking up public ATProtocol profile for: ${handleOrDid}',
       );
 
-      // Import the proper classes for resolution
-      const { HandleResolver } = await import('@atproto/identity');
+      // Use require() to workaround ts-jest module resolution issues
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { IdResolver, getPds, getHandle } = require('@atproto/identity');
 
-      // Create resolver
-      const handleResolver = new HandleResolver();
+      // Create identity resolver (contains both handle and did resolvers)
+      const idResolver = new IdResolver();
 
       // Resolve handle to DID if needed
       let did = handleOrDid;
@@ -756,7 +759,7 @@ export class BlueskyService {
       if (!handleOrDid.startsWith('did:')) {
         // If a handle was provided, resolve it to a DID first
         this.logger.debug(`Resolving handle ${handleOrDid} to DID`);
-        const resolvedDid = await handleResolver.resolve(handleOrDid);
+        const resolvedDid = await idResolver.handle.resolve(handleOrDid);
         if (!resolvedDid) {
           throw new Error(`Could not resolve handle ${handleOrDid} to a DID`);
         }
@@ -764,19 +767,42 @@ export class BlueskyService {
         this.logger.debug(`Resolved ${handleOrDid} to ${did}`);
       }
 
-      // Use the public Bluesky API for unauthenticated profile lookups
-      const publicApiEndpoint = 'https://public.api.bsky.app';
+      // Resolve DID to get the full DID document
+      this.logger.debug(`Resolving DID ${did} to DID document`);
+      const didDoc = await idResolver.did.resolveNoCheck(did);
 
-      // Create agent pointing to the public API (no authentication needed)
-      const agent = new Agent(publicApiEndpoint);
+      if (!didDoc) {
+        throw new Error(`Could not resolve DID document for ${did}`);
+      }
+
+      // Extract PDS endpoint and handle from DID document
+      const pdsEndpoint = getPds(didDoc);
+      const handle = getHandle(didDoc);
+
+      if (!pdsEndpoint) {
+        throw new Error(`No PDS endpoint found for DID ${did}`);
+      }
+
+      this.logger.debug(`PDS endpoint for ${did}: ${pdsEndpoint}`);
+      this.logger.debug(`Handle for ${did}: ${handle}`);
+
+      // Create agent pointing to the user's PDS
+      const agent = new Agent(pdsEndpoint);
 
       // Fetch profile data using DID or handle
       const response = await agent.getProfile({ actor: did });
 
-      // Format the response
+      this.logger.debug(
+        `Profile API response - did: ${response.data.did}, handle: ${response.data.handle}, handleFromDoc: ${handle}`,
+      );
+
+      // Format the response, using handle from DID document as fallback
+      const resolvedHandle = response.data.handle || handle || did;
+      this.logger.debug(`Final resolved handle: ${resolvedHandle}`);
+
       return {
         did: response.data.did,
-        handle: response.data.handle,
+        handle: resolvedHandle,
         displayName: response.data.displayName,
         avatar: response.data.avatar,
         followersCount: response.data.followersCount || 0,

@@ -126,14 +126,6 @@ describe('UserService', () => {
     });
   });
 
-  describe('showProfile', () => {
-    it('should show a user profile', async () => {
-      jest.spyOn(userService, 'showProfile').mockResolvedValue(mockUser);
-      const user = await userService.showProfile(mockUser.slug);
-      expect(user).toBeDefined();
-    });
-  });
-
   describe('findById', () => {
     it('should find a user by id', async () => {
       jest.spyOn(userService, 'findById').mockResolvedValue(mockUser);

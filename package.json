@@ -214,7 +214,7 @@
       "<rootDir>/../test/jest-setup.ts"
     ],
     "transformIgnorePatterns": [
-      "node_modules/(?!matrix-js-sdk)"
+      "node_modules/(?!matrix-js-sdk|@atproto/identity)"
     ],
     "maxWorkers": "75%",
     "workerIdleMemoryLimit": "512MB",

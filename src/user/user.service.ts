@@ -237,20 +237,45 @@ export class UserService {
     const publicEvents = await eventsQuery.getMany();
     user['events'] = publicEvents;
 
-    // Resolve and update Bluesky handle from DID (don't use stale stored handle)
-    if (user && user.preferences?.bluesky?.did) {
+    // Resolve and update Bluesky handle from DID (for any Bluesky user)
+    if (user?.preferences?.bluesky?.did) {
       try {
         const profile = await this.blueskyService.getPublicProfile(
           user.preferences.bluesky.did,
         );
-        // Replace stored handle with current resolved handle
-        user.preferences.bluesky.handle = profile.handle;
+        this.logger.debug(
+          `Resolved Bluesky profile for ${user.preferences.bluesky.did}: handle=${profile.handle}, did=${profile.did}`,
+        );
+        // Replace stored handle with current resolved handle, fallback to DID if empty
+        user.preferences.bluesky.handle =
+          profile.handle || user.preferences.bluesky.did;
+        this.logger.debug(
+          `Set user.preferences.bluesky.handle to: ${user.preferences.bluesky.handle}`,
+        );
       } catch (error) {
         this.logger.warn(
-          `Failed to resolve handle for DID ${user.preferences.bluesky.did}:`,
-          error.message,
+          `Failed to fetch full Bluesky profile for DID ${user.preferences.bluesky.did}: ${error.message}`,
         );
-        // Keep existing stored handle if resolution fails
+        // Fallback: Extract handle directly from DID document (lightweight, always works)
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const { IdResolver, getHandle } = require('@atproto/identity');
+          const idResolver = new IdResolver();
+          const didDoc = await idResolver.did.resolveNoCheck(
+            user.preferences.bluesky.did,
+          );
+          const handle = getHandle(didDoc);
+          user.preferences.bluesky.handle =
+            handle || user.preferences.bluesky.did;
+          this.logger.debug(
+            `Extracted handle from DID document: ${user.preferences.bluesky.handle}`,
+          );
+        } catch {
+          this.logger.warn(
+            `Failed to extract handle from DID document, using DID as fallback`,
+          );
+          user.preferences.bluesky.handle = user.preferences.bluesky.did;
+        }
       }
     }
 
