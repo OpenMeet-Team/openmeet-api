@@ -1009,6 +1009,9 @@ export class EventSeriesService {
         const [events] =
           await this.eventQueryService.findEventsBySeriesSlug(slug);
 
+        // Track deletion failures to ensure data consistency
+        const deletionErrors: Array<{ slug: string; error: Error }> = [];
+
         // Use proper event deletion through the event management service
         // which handles proper chat room cleanup
         for (const event of events) {
@@ -1022,8 +1025,19 @@ export class EventSeriesService {
               `Error deleting event ${event.slug}: ${eventDeleteError.message}`,
               eventDeleteError.stack,
             );
-            // Continue with other events despite error
+            deletionErrors.push({
+              slug: event.slug,
+              error: eventDeleteError,
+            });
           }
+        }
+
+        // If any events failed to delete, throw an error to prevent series deletion
+        if (deletionErrors.length > 0) {
+          const failedSlugs = deletionErrors.map((e) => e.slug).join(', ');
+          throw new Error(
+            `Failed to delete ${deletionErrors.length} event(s) from series: ${failedSlugs}. Series deletion aborted to maintain data consistency.`,
+          );
         }
       } else {
         // Remove series association from events
