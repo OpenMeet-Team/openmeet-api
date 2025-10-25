@@ -63,7 +63,7 @@ describe('QuickRsvpDto', () => {
       expect(emailError).toBeDefined();
     });
 
-    it('should transform email to lowercase', async () => {
+    it('should transform email to lowercase', () => {
       const dto = plainToInstance(QuickRsvpDto, {
         name: 'John Doe',
         email: 'JOHN@EXAMPLE.COM',
