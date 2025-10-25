@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { EmailVerificationCodeService } from './email-verification-code.service';
 import { ElastiCacheService } from '../../elasticache/elasticache.service';
 
@@ -27,6 +28,19 @@ describe('EmailVerificationCodeService', () => {
     }),
   };
 
+  const mockConfigService = {
+    get: jest.fn((key: string) => {
+      if (key === 'auth.emailVerification') {
+        return {
+          codeLength: 6,
+          expirySeconds: 7 * 24 * 60 * 60,
+          maxCollisionRetries: 5,
+        };
+      }
+      return null;
+    }),
+  };
+
   beforeEach(async () => {
     cacheStore = new Map();
     jest.clearAllMocks();
@@ -37,6 +51,10 @@ describe('EmailVerificationCodeService', () => {
         {
           provide: ElastiCacheService,
           useValue: mockElastiCacheService,
+        },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
         },
       ],
     }).compile();
@@ -77,8 +95,16 @@ describe('EmailVerificationCodeService', () => {
     });
 
     it('should handle code collisions by regenerating', async () => {
-      const code1 = await service.generateCode(1, 'tenant-1', 'user1@example.com');
-      const code2 = await service.generateCode(2, 'tenant-2', 'user2@example.com');
+      const code1 = await service.generateCode(
+        1,
+        'tenant-1',
+        'user1@example.com',
+      );
+      const code2 = await service.generateCode(
+        2,
+        'tenant-2',
+        'user2@example.com',
+      );
 
       // Both should be valid with their respective emails
       const result1 = await service.validateCode(code1, 'user1@example.com');
@@ -119,7 +145,11 @@ describe('EmailVerificationCodeService', () => {
     });
 
     it('should reject code with wrong email (security check)', async () => {
-      const code = await service.generateCode(1, 'tenant', 'correct@example.com');
+      const code = await service.generateCode(
+        1,
+        'tenant',
+        'correct@example.com',
+      );
       const result = await service.validateCode(code, 'wrong@example.com');
 
       expect(result).toBeNull();
@@ -151,12 +181,12 @@ describe('EmailVerificationCodeService', () => {
 
     it('should reject invalid code formats', async () => {
       const invalidCodes = [
-        '12345',    // Too short
-        '1234567',  // Too long
-        'abcdef',   // Not numeric
+        '12345', // Too short
+        '1234567', // Too long
+        'abcdef', // Not numeric
         '12-34-56', // Invalid chars
-        '',         // Empty
-        '00000a',   // Contains letter
+        '', // Empty
+        '00000a', // Contains letter
       ];
 
       for (const code of invalidCodes) {
@@ -166,7 +196,7 @@ describe('EmailVerificationCodeService', () => {
     });
 
     it('should use 7-day expiration', async () => {
-      const code = await service.generateCode(1, 'tenant', 'test@example.com');
+      await service.generateCode(1, 'tenant', 'test@example.com');
 
       // Check TTL was set to 7 days (7 * 24 * 60 * 60 seconds)
       const expectedTTL = 7 * 24 * 60 * 60;
@@ -183,7 +213,11 @@ describe('EmailVerificationCodeService', () => {
   describe('security', () => {
     it('should prevent guessing attacks - code useless without email', async () => {
       // Generate code for user A
-      const codeA = await service.generateCode(1, 'tenant', 'usera@example.com');
+      const codeA = await service.generateCode(
+        1,
+        'tenant',
+        'usera@example.com',
+      );
 
       // User B tries to use the code with their email
       const resultB = await service.validateCode(codeA, 'userb@example.com');

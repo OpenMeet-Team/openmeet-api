@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ElastiCacheService } from '../../elasticache/elasticache.service';
+import { AllConfigType } from '../../config/config.type';
 
 interface EmailVerificationData {
   userId: number;
@@ -11,11 +13,26 @@ interface EmailVerificationData {
 @Injectable()
 export class EmailVerificationCodeService {
   private readonly logger = new Logger(EmailVerificationCodeService.name);
-  private readonly CODE_EXPIRY_SECONDS = 7 * 24 * 60 * 60; // 7 days
-  private readonly CODE_LENGTH = 6;
-  private readonly MAX_COLLISION_RETRIES = 5;
+  private readonly codeExpirySeconds: number;
+  private readonly codeLength: number;
+  private readonly maxCollisionRetries: number;
 
-  constructor(private readonly elastiCacheService: ElastiCacheService) {}
+  constructor(
+    private readonly elastiCacheService: ElastiCacheService,
+    private readonly configService: ConfigService<AllConfigType>,
+  ) {
+    const config = this.configService.get('auth.emailVerification', {
+      infer: true,
+    });
+
+    this.codeExpirySeconds = config?.expirySeconds ?? 7 * 24 * 60 * 60; // 7 days default
+    this.codeLength = config?.codeLength ?? 6;
+    this.maxCollisionRetries = config?.maxCollisionRetries ?? 5;
+
+    this.logger.log(
+      `Email verification configured: ${this.codeLength}-digit codes, ${this.codeExpirySeconds}s expiry, ${this.maxCollisionRetries} max retries`,
+    );
+  }
 
   /**
    * Generate a 6-digit email verification code
@@ -30,8 +47,8 @@ export class EmailVerificationCodeService {
   ): Promise<string> {
     let attempts = 0;
 
-    while (attempts < this.MAX_COLLISION_RETRIES) {
-      const code = this.generateNumericCode(this.CODE_LENGTH);
+    while (attempts < this.maxCollisionRetries) {
+      const code = this.generateNumericCode(this.codeLength);
       const key = this.getRedisKey(code);
 
       // Check for collision
@@ -45,11 +62,7 @@ export class EmailVerificationCodeService {
           createdAt: Date.now(),
         };
 
-        await this.elastiCacheService.set(
-          key,
-          data,
-          this.CODE_EXPIRY_SECONDS,
-        );
+        await this.elastiCacheService.set(key, data, this.codeExpirySeconds);
 
         this.logger.log(
           `Generated email verification code for user ${userId} (${email}), tenant ${tenantId}`,
@@ -59,7 +72,7 @@ export class EmailVerificationCodeService {
 
       attempts++;
       this.logger.warn(
-        `Email code collision detected (attempt ${attempts}/${this.MAX_COLLISION_RETRIES})`,
+        `Email code collision detected (attempt ${attempts}/${this.maxCollisionRetries})`,
       );
     }
 
@@ -78,8 +91,9 @@ export class EmailVerificationCodeService {
     code: string,
     email: string,
   ): Promise<EmailVerificationData | null> {
-    // Validate code format
-    if (!/^\d{6}$/.test(code)) {
+    // Validate code format (must match configured length)
+    const codeRegex = new RegExp(`^\\d{${this.codeLength}}$`);
+    if (!codeRegex.test(code)) {
       this.logger.debug(`Invalid email verification code format: ${code}`);
       return null;
     }
@@ -87,9 +101,8 @@ export class EmailVerificationCodeService {
     const key = this.getRedisKey(code);
 
     try {
-      const data = await this.elastiCacheService.get<EmailVerificationData>(
-        key,
-      );
+      const data =
+        await this.elastiCacheService.get<EmailVerificationData>(key);
 
       if (!data) {
         this.logger.debug(`Email verification code not found or expired`);
@@ -105,7 +118,7 @@ export class EmailVerificationCodeService {
       }
 
       // Check if expired (redundant with Redis TTL, but good for logging)
-      if (Date.now() - data.createdAt > this.CODE_EXPIRY_SECONDS * 1000) {
+      if (Date.now() - data.createdAt > this.codeExpirySeconds * 1000) {
         this.logger.warn(
           `Email verification code expired for user ${data.userId}`,
         );

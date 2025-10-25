@@ -7,4 +7,9 @@ export type AuthConfig = {
   forgotExpires?: string;
   confirmEmailSecret?: string;
   confirmEmailExpires?: string;
+  emailVerification?: {
+    codeLength: number;
+    expirySeconds: number;
+    maxCollisionRetries: number;
+  };
 };

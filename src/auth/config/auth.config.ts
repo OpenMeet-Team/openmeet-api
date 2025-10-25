@@ -1,6 +1,6 @@
 import { registerAs } from '@nestjs/config';
 
-import { IsString } from 'class-validator';
+import { IsString, IsOptional, IsNumberString } from 'class-validator';
 import validateConfig from '../../utils/validate-config';
 import { AuthConfig } from './auth-config.type';
 
@@ -28,6 +28,18 @@ class EnvironmentVariablesValidator {
 
   @IsString()
   AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN: string;
+
+  @IsOptional()
+  @IsNumberString()
+  AUTH_EMAIL_VERIFICATION_CODE_LENGTH?: string;
+
+  @IsOptional()
+  @IsNumberString()
+  AUTH_EMAIL_VERIFICATION_EXPIRY_SECONDS?: string;
+
+  @IsOptional()
+  @IsNumberString()
+  AUTH_EMAIL_VERIFICATION_MAX_RETRIES?: string;
 }
 
 export default registerAs<AuthConfig>('auth', () => {
@@ -42,5 +54,20 @@ export default registerAs<AuthConfig>('auth', () => {
     forgotExpires: process.env.AUTH_FORGOT_TOKEN_EXPIRES_IN,
     confirmEmailSecret: process.env.AUTH_CONFIRM_EMAIL_SECRET,
     confirmEmailExpires: process.env.AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN,
+    emailVerification: {
+      codeLength: parseInt(
+        process.env.AUTH_EMAIL_VERIFICATION_CODE_LENGTH || '6',
+        10,
+      ),
+      expirySeconds: parseInt(
+        process.env.AUTH_EMAIL_VERIFICATION_EXPIRY_SECONDS ||
+          String(7 * 24 * 60 * 60), // 7 days default
+        10,
+      ),
+      maxCollisionRetries: parseInt(
+        process.env.AUTH_EMAIL_VERIFICATION_MAX_RETRIES || '5',
+        10,
+      ),
+    },
   };
 });
