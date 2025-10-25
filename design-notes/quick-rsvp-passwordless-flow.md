@@ -565,8 +565,43 @@ Split on first space: `firstName = name.split(' ')[0]`, `lastName = name.split('
 ### 6. **Social auth merging**
 Silent auto-merge when email matches (same email = same person)
 
+## Limitations (V1)
+
+### Group/Member-Only Events
+
+**Current Behavior:** Quick RSVP is **blocked** for events that require group membership.
+
+**Reasoning:**
+- V1 focuses on public events to reduce complexity
+- Group membership requires additional approval workflows
+- Keeps initial scope manageable
+
+**Error Response:**
+```json
+{
+  "statusCode": 403,
+  "message": "This event requires group membership. Please register and join the group to RSVP."
+}
+```
+
+**Implementation:**
+- Check if event has associated group requirement
+- Reject quick RSVP requests for group events
+- Return clear error message directing user to full registration
+
+**Future Enhancement (V2):**
+Add automatic group membership request during quick RSVP:
+1. User quick RSVPs to group event
+2. System creates user + pending group membership request
+3. Group admin receives notification to approve
+4. RSVP becomes active when membership approved
+5. User receives email when approved
+
+This would enable the same low-friction experience for group events while maintaining group admin control.
+
 ## Future Enhancements
 
+- **Group membership auto-join:** Allow quick RSVP for group events with pending approval (see above)
 - **Phone verification:** Alternative to email for some regions
 - **Magic links:** Passwordless login for existing users
 - **Account linking UI:** Explicit UI for linking multiple auth methods
