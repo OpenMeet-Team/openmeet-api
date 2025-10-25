@@ -14,10 +14,12 @@ import { GroupMemberModule } from '../group-member/group-member.module';
 import { RoleModule } from '../role/role.module';
 import { EventModule } from '../event/event.module';
 import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
+import { EventRoleModule } from '../event-role/event-role.module';
 import { CategoryModule } from '../category/category.module';
 import { AuthBlueskyModule } from '../auth-bluesky/auth-bluesky.module';
 import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
 import { TempAuthCodeService } from './services/temp-auth-code.service';
+import { EmailVerificationCodeService } from './services/email-verification-code.service';
 import { ElastiCacheModule } from '../elasticache/elasticache.module';
 
 @Module({
@@ -28,6 +30,7 @@ import { ElastiCacheModule } from '../elasticache/elasticache.module';
     forwardRef(() => EventModule),
     forwardRef(() => CategoryModule),
     EventAttendeeModule,
+    EventRoleModule,
     SessionModule,
     PassportModule,
     MailModule,
@@ -44,7 +47,8 @@ import { ElastiCacheModule } from '../elasticache/elasticache.module';
     JwtRefreshStrategy,
     AnonymousStrategy,
     TempAuthCodeService,
+    EmailVerificationCodeService,
   ],
-  exports: [AuthService, TempAuthCodeService],
+  exports: [AuthService, TempAuthCodeService, EmailVerificationCodeService],
 })
 export class AuthModule {}
