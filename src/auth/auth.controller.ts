@@ -20,6 +20,7 @@ import {
   ApiTags,
   ApiResponse,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthEmailLoginDto } from './dto/auth-email-login.dto';
 import { AuthForgotPasswordDto } from './dto/auth-forgot-password.dto';
 import { AuthConfirmEmailDto } from './dto/auth-confirm-email.dto';
@@ -241,6 +242,7 @@ export class AuthController {
   }
 
   @Post('quick-rsvp')
+  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 attempts per minute to prevent spam RSVPs
   @HttpCode(HttpStatus.CREATED)
   @ApiResponse({
     status: HttpStatus.CREATED,
@@ -262,6 +264,7 @@ export class AuthController {
   }
 
   @Post('verify-email-code')
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 attempts per minute to prevent brute force
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({
     type: LoginResponseDto,
@@ -273,8 +276,23 @@ export class AuthController {
   })
   public async verifyEmailCode(
     @Body() verifyEmailCodeDto: VerifyEmailCodeDto,
+    @Res({ passthrough: true }) response: Response,
     @Request() request,
   ): Promise<LoginResponseDto> {
-    return this.service.verifyEmailCode(verifyEmailCodeDto, request.tenantId);
+    const loginResult = await this.service.verifyEmailCode(
+      verifyEmailCodeDto,
+      request.tenantId,
+    );
+
+    // Set oidc_session cookie for cross-domain OIDC authentication (Matrix, etc.)
+    // This was missing and prevented Matrix login after Quick RSVP
+    if (loginResult.sessionId) {
+      const cookieOptions = getOidcCookieOptions();
+
+      response.cookie('oidc_session', loginResult.sessionId, cookieOptions);
+      response.cookie('oidc_tenant', request.tenantId, cookieOptions);
+    }
+
+    return loginResult;
   }
 }

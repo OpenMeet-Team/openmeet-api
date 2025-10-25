@@ -958,7 +958,23 @@ export class AuthService {
       );
     }
 
-    // 3. Parse name into firstName and lastName
+    // 3. Validate event status and date
+    if (event.status === 'cancelled') {
+      throw new ForbiddenException('This event has been cancelled.');
+    }
+
+    if (event.status !== 'published') {
+      throw new ForbiddenException(
+        'This event is not published yet. Please check back later.',
+      );
+    }
+
+    // Check if event has already passed
+    if (event.startDate && new Date(event.startDate) < new Date()) {
+      throw new ForbiddenException('This event has already passed.');
+    }
+
+    // 4. Parse name into firstName and lastName
     const nameParts = name.trim().split(/\s+/);
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ') || '';
@@ -1000,19 +1016,48 @@ export class AuthService {
     });
 
     if (!existingRsvp) {
+      // Check event capacity before creating new RSVP (only for confirmed status)
+      if (status === EventAttendeeStatus.Confirmed && event.maxAttendees) {
+        const confirmedCount =
+          await this.eventAttendeeService.showEventAttendeesCount(
+            event.id,
+            EventAttendeeStatus.Confirmed,
+          );
+
+        if (confirmedCount >= event.maxAttendees) {
+          // Event is full - check if waitlist is supported
+          // Note: Currently no waitlistEnabled field, so we reject
+          throw new ForbiddenException(
+            `This event is full (${event.maxAttendees} attendees). No waitlist available.`,
+          );
+        }
+      }
+
       // Get the participant role for the event attendee
       const participantRole = await this.eventRoleService.findByName(
         EventAttendeeRole.Participant,
       );
 
+      // Determine final status based on event settings
+      let finalStatus = status; // From DTO: Confirmed or Cancelled
+
+      // If user is trying to confirm attendance AND event requires approval,
+      // set status to Pending instead of Confirmed
+      if (status === EventAttendeeStatus.Confirmed && event.requireApproval) {
+        finalStatus = EventAttendeeStatus.Pending;
+        this.logger.log(
+          `Event ${event.id} requires approval - setting RSVP status to Pending`,
+        );
+      }
+
       await this.eventAttendeeService.create({
         event,
         user: user as any, // User domain type to UserEntity - safe cast
         role: participantRole,
-        status, // Use status from DTO (Confirmed or Cancelled)
+        status: finalStatus,
       });
       this.logger.log(
-        `Created RSVP with status ${status} for user ${user.id} to event ${event.id}`,
+        `Created RSVP with status ${finalStatus} for user ${user.id} to event ${event.id}`,
       );
     } else {
       this.logger.log(
@@ -1113,6 +1158,7 @@ export class AuthService {
       refreshToken,
       tokenExpires,
       user,
+      sessionId: session.secureId, // ← CRITICAL: Required for OIDC cookie (Matrix login)
     };
   }
 }
