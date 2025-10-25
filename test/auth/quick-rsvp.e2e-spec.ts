@@ -119,6 +119,28 @@ describe('Quick RSVP (e2e)', () => {
         // ).toBe(true);
       });
 
+      it('should create user with "Can\'t go" status when status is cancelled', async () => {
+        const timestamp = Date.now();
+        const quickRsvpData = {
+          name: 'Declining User',
+          email: `declining.${timestamp}@example.com`,
+          eventSlug: publicEvent.slug,
+          status: 'cancelled',
+        };
+
+        const response = await request(app)
+          .post('/api/v1/auth/quick-rsvp')
+          .set('x-tenant-id', TESTING_TENANT_ID)
+          .send(quickRsvpData)
+          .expect(201);
+
+        expect(response.body).toMatchObject({
+          success: true,
+          message: expect.stringContaining('email'),
+        });
+        expect(response.body.verificationCode).toMatch(/^\d{6}$/);
+      });
+
       it('should normalize email to lowercase', async () => {
         const timestamp = Date.now();
         const quickRsvpData = {

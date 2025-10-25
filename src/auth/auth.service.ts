@@ -938,7 +938,12 @@ export class AuthService {
    * @returns Success message with verification code (for testing)
    */
   async quickRsvp(dto: QuickRsvpDto, tenantId: string) {
-    const { name, email, eventSlug } = dto;
+    const {
+      name,
+      email,
+      eventSlug,
+      status = EventAttendeeStatus.Confirmed,
+    } = dto;
 
     // 1. Find the event
     const event = await this.eventQueryService.findEventBySlug(eventSlug);
@@ -1004,9 +1009,11 @@ export class AuthService {
         event,
         user: user as any, // User domain type to UserEntity - safe cast
         role: participantRole,
-        status: EventAttendeeStatus.Confirmed,
+        status, // Use status from DTO (Confirmed or Cancelled)
       });
-      this.logger.log(`Created RSVP for user ${user.id} to event ${event.id}`);
+      this.logger.log(
+        `Created RSVP with status ${status} for user ${user.id} to event ${event.id}`,
+      );
     } else {
       this.logger.log(
         `RSVP already exists for user ${user.id} to event ${event.id}`,
