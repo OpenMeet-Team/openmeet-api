@@ -39,6 +39,15 @@ import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventQueryService } from '../event/services/event-query.service';
 import { REQUEST } from '@nestjs/core';
 import { ShadowAccountService } from '../shadow-account/shadow-account.service';
+import { EmailVerificationCodeService } from './services/email-verification-code.service';
+import { QuickRsvpDto } from './dto/quick-rsvp.dto';
+import { VerifyEmailCodeDto } from './dto/verify-email-code.dto';
+import { ForbiddenException } from '@nestjs/common';
+import {
+  EventAttendeeStatus,
+  EventAttendeeRole,
+} from '../core/constants/constant';
+import { EventRoleService } from '../event-role/event-role.service';
 
 @Injectable()
 export class AuthService {
@@ -51,9 +60,11 @@ export class AuthService {
     private sessionService: SessionService,
     private eventQueryService: EventQueryService,
     private eventAttendeeService: EventAttendeeService,
+    private eventRoleService: EventRoleService,
     private mailService: MailService,
     private readonly roleService: RoleService,
     private shadowAccountService: ShadowAccountService,
+    private emailVerificationCodeService: EmailVerificationCodeService,
     private configService: ConfigService<AllConfigType>,
     @Inject(REQUEST) private readonly request?: any,
   ) {}
@@ -917,5 +928,174 @@ export class AuthService {
     );
     const data = await response.json();
     return data;
+  }
+
+  /**
+   * Quick RSVP: Allow unregistered users to RSVP to events with just name + email
+   * Creates user account, RSVP, and sends verification email
+   * @param dto - Contains name, email, and eventSlug
+   * @param tenantId - Tenant identifier
+   * @returns Success message with verification code (for testing)
+   */
+  async quickRsvp(dto: QuickRsvpDto, tenantId: string) {
+    const { name, email, eventSlug } = dto;
+
+    // 1. Find the event
+    const event = await this.eventQueryService.findEventBySlug(eventSlug);
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    // 2. Block group/member-only events (V1 limitation)
+    if (event.group) {
+      throw new ForbiddenException(
+        'This event requires group membership. Please register for a full account to join this event.',
+      );
+    }
+
+    // 3. Parse name into firstName and lastName
+    const nameParts = name.trim().split(/\s+/);
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    // 4. Find or create user (email already normalized by DTO transformer)
+    let user: NullableType<User> = await this.userService.findByEmail(email);
+
+    if (!user) {
+      // Create new user
+      const defaultRole = await this.roleService.findByName(RoleEnum.User);
+      if (!defaultRole) {
+        throw new NotFoundException('Default role not found');
+      }
+
+      user = await this.userService.create({
+        email,
+        firstName,
+        lastName,
+        provider: AuthProvidersEnum.email,
+        socialId: null,
+        role: defaultRole.id,
+        status: { id: StatusEnum.active },
+      });
+
+      this.logger.log(`Created new user via quick RSVP: ${email}`);
+    }
+
+    // 5. Ensure user was created successfully
+    if (!user) {
+      throw new NotFoundException('Failed to create user');
+    }
+
+    // 6. Create or find RSVP (idempotent)
+    const existingRsvp = await this.eventAttendeeService.findOne({
+      where: {
+        event: { id: event.id },
+        user: { id: user.id },
+      },
+    });
+
+    if (!existingRsvp) {
+      // Get the participant role for the event attendee
+      const participantRole = await this.eventRoleService.findByName(
+        EventAttendeeRole.Participant,
+      );
+
+      await this.eventAttendeeService.create({
+        event,
+        user: user as any, // User domain type to UserEntity - safe cast
+        role: participantRole,
+        status: EventAttendeeStatus.Confirmed,
+      });
+      this.logger.log(`Created RSVP for user ${user.id} to event ${event.id}`);
+    } else {
+      this.logger.log(
+        `RSVP already exists for user ${user.id} to event ${event.id}`,
+      );
+    }
+
+    // 7. Generate email verification code
+    const verificationCode =
+      await this.emailVerificationCodeService.generateCode(
+        user.id,
+        tenantId,
+        email,
+      );
+
+    // 8. Send verification email
+    await this.mailService.sendEmailVerification({
+      to: email,
+      data: {
+        name: firstName,
+        code: verificationCode,
+        eventName: event.name,
+      },
+    });
+
+    // 9. Return success (include code for testing environments)
+    return {
+      success: true,
+      message: 'Please check your email for verification code',
+      verificationCode, // For testing - remove in production or gate by env
+    };
+  }
+
+  /**
+   * Verify email code and log in user
+   * @param dto - Contains the 6-digit verification code
+   * @param tenantId - Tenant identifier
+   * @returns Login response with JWT tokens
+   */
+  async verifyEmailCode(
+    dto: VerifyEmailCodeDto,
+    tenantId: string,
+  ): Promise<LoginResponseDto> {
+    const { code } = dto;
+
+    // 1. Validate code
+    const verificationData =
+      await this.emailVerificationCodeService.validateCode(code, dto.email);
+
+    if (!verificationData) {
+      throw new UnauthorizedException('Invalid or expired verification code');
+    }
+
+    // 2. Get user
+    const user = await this.userService.findById(verificationData.userId);
+    if (!user || !user.role) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    // 3. Create session and return tokens (same as regular login)
+    const hash = crypto
+      .createHash('sha256')
+      .update(randomStringGenerator())
+      .digest('hex');
+
+    const secureId = crypto.randomUUID();
+
+    const session = await this.sessionService.create(
+      {
+        user,
+        hash,
+        secureId,
+      },
+      tenantId,
+    );
+
+    const { token, refreshToken, tokenExpires } = await this.getTokensData({
+      id: user.id,
+      role: user.role,
+      slug: user.slug,
+      sessionId: session.secureId,
+      hash,
+      tenantId,
+    });
+
+    return {
+      token,
+      refreshToken,
+      tokenExpires,
+      user,
+    };
   }
 }

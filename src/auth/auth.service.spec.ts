@@ -17,6 +17,7 @@ import { GroupMemberService } from '../group-member/group-member.service';
 import { ShadowAccountService } from '../shadow-account/shadow-account.service';
 import { AuthProvidersEnum } from './auth-providers.enum';
 import { TempAuthCodeService } from './services/temp-auth-code.service';
+import { EmailVerificationCodeService } from './services/email-verification-code.service';
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -81,6 +82,11 @@ describe('AuthService', () => {
     validateEmailVerificationCode: jest.fn(),
   };
 
+  const mockEmailVerificationCodeService = {
+    generateCode: jest.fn(),
+    validateCode: jest.fn(),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -103,6 +109,10 @@ describe('AuthService', () => {
         },
         { provide: ShadowAccountService, useValue: mockShadowAccountService },
         { provide: TempAuthCodeService, useValue: mockTempAuthCodeService },
+        {
+          provide: EmailVerificationCodeService,
+          useValue: mockEmailVerificationCodeService,
+        },
         { provide: REQUEST, useValue: mockRequest },
       ],
     }).compile();

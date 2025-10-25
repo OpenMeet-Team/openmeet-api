@@ -37,6 +37,8 @@ import { Roles } from './decorators/roles.decorator';
 import { RoleEnum } from '../role/role.enum';
 import { RolesGuard } from '../role/role.guard';
 import { getOidcCookieOptions } from '../utils/cookie-config';
+import { QuickRsvpDto } from './dto/quick-rsvp.dto';
+import { VerifyEmailCodeDto } from './dto/verify-email-code.dto';
 
 @ApiTags('Auth')
 @Controller({
@@ -236,5 +238,43 @@ export class AuthController {
         : 'No shadow account found to claim',
       userId: claimDto.userId,
     };
+  }
+
+  @Post('quick-rsvp')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiResponse({
+    status: HttpStatus.CREATED,
+    description: 'User created and RSVP registered. Verification email sent.',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Event not found',
+  })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'Event requires group membership',
+  })
+  public async quickRsvp(
+    @Body() quickRsvpDto: QuickRsvpDto,
+    @Request() request,
+  ) {
+    return this.service.quickRsvp(quickRsvpDto, request.tenantId);
+  }
+
+  @Post('verify-email-code')
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({
+    type: LoginResponseDto,
+    description: 'Email verified successfully, user logged in',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Invalid or expired verification code',
+  })
+  public async verifyEmailCode(
+    @Body() verifyEmailCodeDto: VerifyEmailCodeDto,
+    @Request() request,
+  ): Promise<LoginResponseDto> {
+    return this.service.verifyEmailCode(verifyEmailCodeDto, request.tenantId);
   }
 }
