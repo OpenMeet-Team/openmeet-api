@@ -946,8 +946,8 @@ export class AuthService {
       throw new NotFoundException('Event not found');
     }
 
-    // 2. Block group/member-only events (V1 limitation)
-    if (event.group) {
+    // 2. Block events that explicitly require group membership (V1 limitation)
+    if (event.group && event.requireGroupMembership) {
       throw new ForbiddenException(
         'This event requires group membership. Please register for a full account to join this event.',
       );
@@ -1031,12 +1031,22 @@ export class AuthService {
       },
     });
 
-    // 9. Return success (include code for testing environments)
-    return {
+    // 9. Return success (include code only in development/test environments)
+    const response: {
+      success: boolean;
+      message: string;
+      verificationCode?: string;
+    } = {
       success: true,
       message: 'Please check your email for verification code',
-      verificationCode, // For testing - remove in production or gate by env
     };
+
+    // Only include verification code in non-production environments for testing
+    if (process.env.NODE_ENV !== 'production') {
+      response.verificationCode = verificationCode;
+    }
+
+    return response;
   }
 
   /**

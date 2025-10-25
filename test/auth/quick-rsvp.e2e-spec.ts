@@ -1,7 +1,11 @@
 import request from 'supertest';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import { loginAsTester, createEvent } from '../utils/functions';
-import { EventType } from '../../src/core/constants/constant';
+import {
+  EventType,
+  EventStatus,
+  GroupStatus,
+} from '../../src/core/constants/constant';
 
 jest.setTimeout(60000);
 
@@ -9,16 +13,21 @@ describe('Quick RSVP (e2e)', () => {
   const app = TESTING_APP_URL;
   let token: string;
   let publicEvent: any;
+  let groupEventWithMembershipRequired: any;
+  let groupEventNoMembershipRequired: any;
+  let testGroup: any;
 
   beforeAll(async () => {
     token = await loginAsTester();
+
+    const timestamp = Date.now();
 
     // Create a public event for testing
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + 7);
 
     publicEvent = await createEvent(app, token, {
-      name: `Quick RSVP Test Event ${Date.now()}`,
+      name: `Quick RSVP Test Event ${timestamp}`,
       description: 'Public event for quick RSVP testing',
       type: EventType.InPerson,
       location: 'Test Location',
@@ -29,8 +38,51 @@ describe('Quick RSVP (e2e)', () => {
       requireApproval: false,
     });
 
-    // TODO: Create a group event when we implement group blocking
-    // groupEvent = await createGroupEvent(...)
+    // Create a group for testing group membership logic
+    const groupResponse = await request(app)
+      .post('/api/groups')
+      .set('x-tenant-id', TESTING_TENANT_ID)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: `Quick RSVP Test Group ${timestamp}`,
+        description: 'Test group for Quick RSVP functionality',
+        status: GroupStatus.Published,
+      });
+    testGroup = groupResponse.body;
+
+    // Create group event requiring membership
+    groupEventWithMembershipRequired = await createEvent(app, token, {
+      name: `Group Event Membership Required ${timestamp}`,
+      slug: `group-event-req-${timestamp}`,
+      description: 'Event requiring group membership',
+      type: EventType.Hybrid,
+      startDate: new Date(new Date().getTime() + 24 * 60 * 60 * 1000),
+      endDate: new Date(new Date().getTime() + 48 * 60 * 60 * 1000),
+      maxAttendees: 100,
+      locationOnline: 'https://example.com/meeting',
+      status: EventStatus.Published,
+      group: testGroup.id,
+      requireGroupMembership: true, // This is the key setting
+      timeZone: 'UTC',
+      categories: [],
+    });
+
+    // Create group event NOT requiring membership (should allow Quick RSVP)
+    groupEventNoMembershipRequired = await createEvent(app, token, {
+      name: `Group Event No Membership Required ${timestamp}`,
+      slug: `group-event-no-req-${timestamp}`,
+      description: 'Group event not requiring membership',
+      type: EventType.Hybrid,
+      startDate: new Date(new Date().getTime() + 24 * 60 * 60 * 1000),
+      endDate: new Date(new Date().getTime() + 48 * 60 * 60 * 1000),
+      maxAttendees: 100,
+      locationOnline: 'https://example.com/meeting',
+      status: EventStatus.Published,
+      group: testGroup.id,
+      requireGroupMembership: false, // This allows anyone to join
+      timeZone: 'UTC',
+      categories: [],
+    });
   });
 
   describe('POST /api/v1/auth/quick-rsvp', () => {
@@ -207,12 +259,57 @@ describe('Quick RSVP (e2e)', () => {
       });
     });
 
-    describe.skip('Group event restrictions (V1 limitation)', () => {
-      // Skip until we create group events in beforeAll
-      it.todo('should reject quick RSVP for events requiring group membership');
-      it.todo(
-        'should return clear error message directing to full registration',
-      );
+    describe('Group event restrictions', () => {
+      it('should reject quick RSVP for events requiring group membership', async () => {
+        const timestamp = Date.now();
+        const response = await request(app)
+          .post('/api/v1/auth/quick-rsvp')
+          .set('x-tenant-id', TESTING_TENANT_ID)
+          .send({
+            name: 'Group Test User',
+            email: `grouptest.${timestamp}@example.com`,
+            eventSlug: groupEventWithMembershipRequired.slug,
+          })
+          .expect(403);
+
+        expect(response.body.message).toMatch(/group membership/i);
+      });
+
+      it('should return clear error message directing to full registration', async () => {
+        const timestamp = Date.now();
+        const response = await request(app)
+          .post('/api/v1/auth/quick-rsvp')
+          .set('x-tenant-id', TESTING_TENANT_ID)
+          .send({
+            name: 'Group Test User',
+            email: `grouptest2.${timestamp}@example.com`,
+            eventSlug: groupEventWithMembershipRequired.slug,
+          })
+          .expect(403);
+
+        expect(response.body.message).toContain(
+          'Please register for a full account',
+        );
+      });
+
+      it('should ALLOW quick RSVP for group events NOT requiring membership', async () => {
+        const timestamp = Date.now();
+        const response = await request(app)
+          .post('/api/v1/auth/quick-rsvp')
+          .set('x-tenant-id', TESTING_TENANT_ID)
+          .send({
+            name: 'Group Event No Membership Test',
+            email: `groupnomembership.${timestamp}@example.com`,
+            eventSlug: groupEventNoMembershipRequired.slug,
+          })
+          .expect(201);
+
+        expect(response.body).toMatchObject({
+          success: true,
+          message: expect.stringContaining('email'),
+        });
+        expect(response.body.verificationCode).toMatch(/^\d{6}$/);
+      });
     });
   });
 
