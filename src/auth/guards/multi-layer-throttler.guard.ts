@@ -1,6 +1,11 @@
 import { Injectable, ExecutionContext, SetMetadata } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ThrottlerGuard, ThrottlerException } from '@nestjs/throttler';
+import {
+  ThrottlerGuard,
+  ThrottlerException,
+  ThrottlerStorage,
+  ThrottlerModuleOptions,
+} from '@nestjs/throttler';
 import { ElastiCacheService } from '../../elasticache/elasticache.service';
 
 /**
@@ -97,16 +102,12 @@ export const RateLimit = (config: RateLimitConfig) =>
 @Injectable()
 export class MultiLayerThrottlerGuard extends ThrottlerGuard {
   constructor(
-    private readonly reflector: Reflector,
+    options: ThrottlerModuleOptions,
+    storageService: ThrottlerStorage,
+    protected readonly reflector: Reflector,
     private readonly cacheService: ElastiCacheService,
   ) {
-    super({
-      throttlers: [],
-      errorMessage: '',
-      getTracker: () => '',
-      generateKey: () => '',
-      storage: {} as any,
-    });
+    super(options, storageService, reflector);
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

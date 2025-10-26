@@ -248,7 +248,12 @@ export class AuthController {
   @RateLimit({
     email: { limit: 5, ttl: 3600 }, // 5 per hour per email
     resource: { limit: 100, ttl: 3600, field: 'eventSlug', keyPrefix: 'event' }, // 100 per hour per event
-    composite: { limit: 3, ttl: 3600, fields: ['email', 'eventSlug'], keyPrefix: 'user_event' }, // 3 per hour per user per event
+    composite: {
+      limit: 3,
+      ttl: 3600,
+      fields: ['email', 'eventSlug'],
+      keyPrefix: 'user_event',
+    }, // 3 per hour per user per event
   })
   @HttpCode(HttpStatus.CREATED)
   @ApiResponse({
@@ -278,7 +283,12 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 attempts per minute per IP
   @RateLimit({
     email: { limit: 10, ttl: 3600 }, // 10 per hour per email (allows multiple retries)
-    composite: { limit: 5, ttl: 3600, fields: ['email', 'code'], keyPrefix: 'email_code' }, // 5 per hour per email+code combo (prevents brute force on specific code)
+    composite: {
+      limit: 5,
+      ttl: 3600,
+      fields: ['email', 'code'],
+      keyPrefix: 'email_code',
+    }, // 5 per hour per email+code combo (prevents brute force on specific code)
   })
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({

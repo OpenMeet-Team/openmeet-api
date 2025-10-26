@@ -26,9 +26,9 @@ export class EmailVerificationCodeService {
     });
 
     // Get values from config (which handles env vars and defaults)
-    this.codeExpirySeconds = config.expirySeconds;
-    this.codeLength = config.codeLength;
-    this.maxCollisionRetries = config.maxCollisionRetries;
+    this.codeExpirySeconds = config?.expirySeconds ?? 15 * 60; // Default 15 minutes
+    this.codeLength = config?.codeLength ?? 6; // Default 6 digits
+    this.maxCollisionRetries = config?.maxCollisionRetries ?? 5; // Default 5 retries
 
     this.logger.log(
       `Email verification configured: ${this.codeLength}-digit codes, ${this.codeExpirySeconds}s expiry (${Math.floor(this.codeExpirySeconds / 60)} minutes), ${this.maxCollisionRetries} max retries`,
