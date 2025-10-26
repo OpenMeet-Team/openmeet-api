@@ -383,6 +383,8 @@ export class MailService {
       name: string;
       code: string;
       eventName: string;
+      email: string;
+      eventSlug?: string;
     }>,
   ): Promise<void> {
     this.getTenantConfig();
@@ -397,6 +399,8 @@ export class MailService {
         name: mailData.data.name,
         code: mailData.data.code,
         eventName: mailData.data.eventName,
+        email: mailData.data.email,
+        eventSlug: mailData.data.eventSlug,
       },
     });
   }

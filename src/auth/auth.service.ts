@@ -1080,6 +1080,8 @@ export class AuthService {
         name: firstName,
         code: verificationCode,
         eventName: event.name,
+        email, // Pass email for verification link
+        eventSlug: event.slug, // Pass event slug for redirect after verification
       },
     });
 

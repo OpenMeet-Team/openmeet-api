@@ -32,7 +32,7 @@
       <mj-section>
         <mj-column>
           <mj-text>
-            Enter this code on the verification page to complete your sign-in.
+            Click the button below to verify your email and sign in automatically, or enter the code manually on the verification page.
           </mj-text>
 
           <mj-text color="#666666" font-size="14px">
@@ -41,12 +41,24 @@
         </mj-column>
       </mj-section>
 
-      <!-- Button -->
+      <!-- Verify Button -->
       <mj-section padding="20px">
         <mj-column>
-          <mj-button href="<%= tenantConfig?.frontendDomain %>" background-color="#7B71DA" color="#FFFFFF" font-size="16px">
-            Visit <%= tenantConfig?.name %>
+          <mj-button href="<%= tenantConfig?.frontendDomain %>/auth/verify-email?code=<%= code %>&email=<%= encodeURIComponent(email) %><% if (eventSlug) { %>&event=<%= eventSlug %><% } %>" background-color="#7B71DA" color="#FFFFFF" font-size="16px" padding="15px 30px">
+            Verify Email & Sign In
           </mj-button>
+        </mj-column>
+      </mj-section>
+
+      <!-- Alternative Link -->
+      <mj-section>
+        <mj-column>
+          <mj-text align="center" color="#666666" font-size="12px">
+            Or copy and paste this link into your browser:<br/>
+            <a href="<%= tenantConfig?.frontendDomain %>/auth/verify-email?code=<%= code %>&email=<%= encodeURIComponent(email) %><% if (eventSlug) { %>&event=<%= eventSlug %><% } %>" style="color: #7B71DA; word-break: break-all;">
+              <%= tenantConfig?.frontendDomain %>/auth/verify-email?code=<%= code %>&email=<%= encodeURIComponent(email) %><% if (eventSlug) { %>&event=<%= eventSlug %><% } %>
+            </a>
+          </mj-text>
         </mj-column>
       </mj-section>
 
