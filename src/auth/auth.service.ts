@@ -546,37 +546,45 @@ export class AuthService {
     }
 
     if (userDto.password) {
-      if (!userDto.oldPassword) {
-        throw new UnprocessableEntityException({
-          status: HttpStatus.UNPROCESSABLE_ENTITY,
-          errors: {
-            oldPassword: 'missingOldPassword',
-          },
+      // Case 1: User has existing password - require old password verification
+      if (currentUser.password) {
+        if (!userDto.oldPassword) {
+          throw new UnprocessableEntityException({
+            status: HttpStatus.UNPROCESSABLE_ENTITY,
+            errors: {
+              oldPassword: 'missingOldPassword',
+            },
+          });
+        }
+
+        const isValidOldPassword = await bcrypt.compare(
+          userDto.oldPassword,
+          currentUser.password,
+        );
+
+        if (!isValidOldPassword) {
+          throw new UnprocessableEntityException({
+            status: HttpStatus.UNPROCESSABLE_ENTITY,
+            errors: {
+              oldPassword: 'Incorrect current password',
+            },
+          });
+        }
+
+        // Valid password change - invalidate other sessions
+        await this.sessionService.deleteByUserIdWithExcludeSecureId({
+          userId: currentUser.id,
+          excludeSecureId: userJwtPayload.sessionId,
         });
       }
+      // Case 2: Passwordless user setting initial password
+      // No old password required, just validate new password is provided
+      else {
+        this.logger.log(
+          `User ${currentUser.id} (${currentUser.email}) setting initial password`,
+        );
 
-      if (!currentUser.password) {
-        throw new UnprocessableEntityException({
-          status: HttpStatus.UNPROCESSABLE_ENTITY,
-          errors: {
-            oldPassword: 'Incorrect current password',
-          },
-        });
-      }
-
-      const isValidOldPassword = await bcrypt.compare(
-        userDto.oldPassword,
-        currentUser.password,
-      );
-
-      if (!isValidOldPassword) {
-        throw new UnprocessableEntityException({
-          status: HttpStatus.UNPROCESSABLE_ENTITY,
-          errors: {
-            oldPassword: 'Incorrect current password',
-          },
-        });
-      } else {
+        // Still invalidate other sessions for security
         await this.sessionService.deleteByUserIdWithExcludeSecureId({
           userId: currentUser.id,
           excludeSecureId: userJwtPayload.sessionId,

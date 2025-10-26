@@ -599,6 +599,20 @@ Add automatic group membership request during quick RSVP:
 
 This would enable the same low-friction experience for group events while maintaining group admin control.
 
+## Password Management for Passwordless Users
+
+**Goal:** Enable passwordless users to optionally set a password without friction or confusion.
+
+### Issue
+Passwordless users couldn't set passwords - profile page required "Current Password" which they didn't have.
+
+### Solution
+- **Backend:** Allow setting password without old password if user has `password: null`
+- **Frontend:** Profile page shows "Set Account Password" (not "Change") for passwordless users, hides current password field
+- **Discovery:** Hint on email verification success page links to profile settings
+
+**Why:** Maintains low-friction onboarding while giving users password option if they want it. Passwordless auth remains valid path.
+
 ## Future Enhancements
 
 - **Group membership auto-join:** Allow quick RSVP for group events with pending approval (see above)
