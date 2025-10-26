@@ -1182,30 +1182,70 @@ export class AuthService {
     email: string,
     tenantId: string,
   ): Promise<{ success: boolean; message: string }> {
-    // Security: Don't reveal if email exists or not
-    // Always return success to prevent email enumeration attacks
-    const user = await this.userService.findByEmail(email);
+    // Normalize email
+    const normalizedEmail = email.toLowerCase().trim();
 
-    if (!user || user.status?.id !== StatusEnum.active) {
+    // Find or create user
+    let user: NullableType<User> = await this.userService.findByEmail(
+      normalizedEmail,
+      tenantId,
+    );
+
+    if (!user) {
+      // Create passwordless account (similar to Quick RSVP)
+      this.logger.log(
+        `Creating passwordless account for new user via login code: ${normalizedEmail}`,
+      );
+
+      const defaultRole = await this.roleService.findByName(RoleEnum.User);
+      if (!defaultRole) {
+        throw new NotFoundException('Default role not found');
+      }
+
+      user = await this.userService.create(
+        {
+          email: normalizedEmail,
+          provider: AuthProvidersEnum.email,
+          socialId: null,
+          firstName: null,
+          lastName: null,
+          role: defaultRole.id,
+          status: { id: StatusEnum.active },
+        },
+        tenantId,
+      );
+
+      this.logger.log(
+        `Created passwordless user ${user.id} for ${normalizedEmail}`,
+      );
+    }
+
+    // Ensure user was created successfully
+    if (!user) {
+      throw new NotFoundException('Failed to create user');
+    }
+
+    // Check if user is inactive
+    if (user.status?.id !== StatusEnum.active) {
       this.logger.debug(
-        `Login code requested for non-existent or inactive user: ${email}`,
+        `Login code requested for inactive user: ${normalizedEmail}`,
       );
       return {
         success: true,
-        message: 'If an account exists, we sent a login code to your email.',
+        message: 'We sent a login code to your email.',
       };
     }
 
-    // Generate 6-digit verification code (7 days expiry, same as Quick RSVP)
+    // Generate 6-digit verification code
     const code = await this.emailVerificationCodeService.generateCode(
       user.id,
       tenantId,
-      email,
+      normalizedEmail,
     );
 
     // Send login code email
     await this.mailService.sendLoginCode({
-      to: email,
+      to: normalizedEmail,
       data: {
         name: user.firstName || 'there',
         code,
@@ -1213,12 +1253,12 @@ export class AuthService {
     });
 
     this.logger.log(
-      `Login code sent to ${email} (user ${user.id}, tenant ${tenantId})`,
+      `Login code sent to ${normalizedEmail} (user ${user.id}, tenant ${tenantId})`,
     );
 
     return {
       success: true,
-      message: 'If an account exists, we sent a login code to your email.',
+      message: 'We sent a login code to your email.',
     };
   }
 }

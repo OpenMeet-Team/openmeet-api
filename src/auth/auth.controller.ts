@@ -244,16 +244,29 @@ export class AuthController {
   }
 
   @Post('quick-rsvp')
-  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 attempts per minute per IP
+  @Throttle({
+    default: {
+      limit: process.env.NODE_ENV === 'production' ? 3 : 10000,
+      ttl: 60000,
+    },
+  })
   @RateLimit({
-    email: { limit: 5, ttl: 3600 }, // 5 per hour per email
-    resource: { limit: 100, ttl: 3600, field: 'eventSlug', keyPrefix: 'event' }, // 100 per hour per event
+    email: {
+      limit: process.env.NODE_ENV === 'production' ? 5 : 10000,
+      ttl: 3600,
+    },
+    resource: {
+      limit: process.env.NODE_ENV === 'production' ? 100 : 10000,
+      ttl: 3600,
+      field: 'eventSlug',
+      keyPrefix: 'event',
+    },
     composite: {
-      limit: 3,
+      limit: process.env.NODE_ENV === 'production' ? 3 : 10000,
       ttl: 3600,
       fields: ['email', 'eventSlug'],
       keyPrefix: 'user_event',
-    }, // 3 per hour per user per event
+    },
   })
   @HttpCode(HttpStatus.CREATED)
   @ApiResponse({
@@ -280,15 +293,23 @@ export class AuthController {
   }
 
   @Post('verify-email-code')
-  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 attempts per minute per IP
+  @Throttle({
+    default: {
+      limit: process.env.NODE_ENV === 'production' ? 5 : 10000,
+      ttl: 60000,
+    },
+  })
   @RateLimit({
-    email: { limit: 10, ttl: 3600 }, // 10 per hour per email (allows multiple retries)
+    email: {
+      limit: process.env.NODE_ENV === 'production' ? 10 : 10000,
+      ttl: 3600,
+    },
     composite: {
-      limit: 5,
+      limit: process.env.NODE_ENV === 'production' ? 5 : 10000,
       ttl: 3600,
       fields: ['email', 'code'],
       keyPrefix: 'email_code',
-    }, // 5 per hour per email+code combo (prevents brute force on specific code)
+    },
   })
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({
@@ -326,9 +347,17 @@ export class AuthController {
   }
 
   @Post('request-login-code')
-  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 attempts per minute per IP
+  @Throttle({
+    default: {
+      limit: process.env.NODE_ENV === 'production' ? 3 : 10000,
+      ttl: 60000,
+    },
+  })
   @RateLimit({
-    email: { limit: 5, ttl: 3600 }, // 5 per hour per email (prevents email bombing)
+    email: {
+      limit: process.env.NODE_ENV === 'production' ? 5 : 10000,
+      ttl: 3600,
+    },
   })
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({
