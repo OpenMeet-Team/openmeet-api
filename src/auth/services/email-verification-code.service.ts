@@ -25,12 +25,13 @@ export class EmailVerificationCodeService {
       infer: true,
     });
 
-    this.codeExpirySeconds = config?.expirySeconds ?? 7 * 24 * 60 * 60; // 7 days default
-    this.codeLength = config?.codeLength ?? 6;
-    this.maxCollisionRetries = config?.maxCollisionRetries ?? 5;
+    // Get values from config (which handles env vars and defaults)
+    this.codeExpirySeconds = config.expirySeconds;
+    this.codeLength = config.codeLength;
+    this.maxCollisionRetries = config.maxCollisionRetries;
 
     this.logger.log(
-      `Email verification configured: ${this.codeLength}-digit codes, ${this.codeExpirySeconds}s expiry, ${this.maxCollisionRetries} max retries`,
+      `Email verification configured: ${this.codeLength}-digit codes, ${this.codeExpirySeconds}s expiry (${Math.floor(this.codeExpirySeconds / 60)} minutes), ${this.maxCollisionRetries} max retries`,
     );
   }
 

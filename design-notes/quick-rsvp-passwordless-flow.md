@@ -175,7 +175,7 @@ No schema changes required! Existing `users` table supports this:
 3. Check if RSVP already exists:
    - **Exists**: Return success (idempotent)
    - **Not exists**: Create EventAttendee
-4. Generate verification code (24hr expiry)
+4. Generate verification code (15min expiry)
 5. Send verification email
 6. Return success
 
@@ -286,7 +286,7 @@ Click below to verify your email and manage your RSVP:
 
 [Verify Email Button] → https://platform.openmeet.net/verify-email?code=abc123
 
-This link expires in 24 hours.
+This link expires in 15 minutes.
 
 ---
 See you there!
@@ -397,11 +397,11 @@ This would allow one user to have multiple linked auth methods. **Not in scope f
 ## Security Considerations
 
 ### Email Verification Codes
-- ✓ 32-byte random hex (strong entropy)
-- ✓ 24-hour expiration
+- ✓ 6-digit numeric codes (1M possibilities)
+- ✓ 15-minute expiration (secure for 6-digit codes)
 - ✓ One-time use (deleted after validation)
 - ✓ Stored in Redis (auto-expiry)
-- ✓ Rate limiting on generation (TODO: add after v1)
+- ✓ Multi-layer rate limiting (per-IP, per-email, per-email+code)
 
 ### Account Security
 - ✓ Users with `password=null` can only login via email codes or social auth
@@ -513,45 +513,28 @@ This would allow one user to have multiple linked auth methods. **Not in scope f
 - Tablet: Bottom sheet (easier thumb reach)
 - Mobile: Maximized sheet (full-screen form)
 
-### Returning User Experience - Cookie-based Auto-Login ✅
+### Returning User Experience - Cookie-based Auto-Login ⏸️ NOT IMPLEMENTED
 
-**Flow:**
-1. User quick RSVPs → Backend creates 7-day verification code
-2. Backend sets cookie: `openmeet_pending_verification=<code>`
-3. Next visit → Frontend auto-verifies and logs in
-4. User clicks "Going" → Immediate RSVP (already logged in!)
+**Status**: Deferred to V2
 
-**Implementation:**
-```typescript
-// Backend: After quick RSVP
-const code = await tempAuthCodeService.generateEmailVerificationCode(
-  user.id,
-  tenantId,
-  7 * 24 * 60 * 60 // 7 days TTL (matches cookie expiry)
-);
+**Reasoning**:
+- 15-minute code expiry is too short for cookie-based auto-login
+- Would require separate long-lived token system
+- Email verification link is sufficient for V1
 
-response.cookie('openmeet_pending_verification', code, {
-  domain: cookieDomain,     // .openmeet.net (cross-subdomain)
-  secure: isSecure,         // HTTPS only
-  sameSite: 'lax',          // CSRF protection
-  httpOnly: false,          // ← JS can read (different from OIDC cookies)
-  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-});
-```
-
-**Security considerations validated:**
-- ✓ XSS risk acceptable (one-time code, 7-day expiry)
-- ✓ Per-device (good security practice)
-- ✓ Graceful fallback if code expired/invalid
-- ✓ Email verification link works cross-device
+**Future Enhancement**:
+If implementing, would need:
+- Separate "remember me" token (30-day expiry)
+- Different security model than verification codes
+- Device fingerprinting for added security
 
 ## Design Decisions - FINALIZED ✅
 
 ### 1. **Returning user flow**
-Cookie-based auto-login with 7-day verification code
+Email verification required (15-minute expiry). No auto-login in V1.
 
 ### 2. **Rate limiting**
-None in v1. Add if abused.
+Multi-layer throttling (per-IP, per-email, per-resource, per-combination)
 
 ### 3. **CAPTCHA**
 None in v1. Add if abused.

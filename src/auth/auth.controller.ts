@@ -41,6 +41,7 @@ import { getOidcCookieOptions } from '../utils/cookie-config';
 import { QuickRsvpDto } from './dto/quick-rsvp.dto';
 import { VerifyEmailCodeDto } from './dto/verify-email-code.dto';
 import { RequestLoginCodeDto } from './dto/request-login-code.dto';
+import { RateLimit } from './guards/multi-layer-throttler.guard';
 
 @ApiTags('Auth')
 @Controller({
@@ -243,7 +244,12 @@ export class AuthController {
   }
 
   @Post('quick-rsvp')
-  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 attempts per minute to prevent spam RSVPs
+  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 attempts per minute per IP
+  @RateLimit({
+    email: { limit: 5, ttl: 3600 }, // 5 per hour per email
+    resource: { limit: 100, ttl: 3600, field: 'eventSlug', keyPrefix: 'event' }, // 100 per hour per event
+    composite: { limit: 3, ttl: 3600, fields: ['email', 'eventSlug'], keyPrefix: 'user_event' }, // 3 per hour per user per event
+  })
   @HttpCode(HttpStatus.CREATED)
   @ApiResponse({
     status: HttpStatus.CREATED,
@@ -257,6 +263,10 @@ export class AuthController {
     status: HttpStatus.FORBIDDEN,
     description: 'Event requires group membership',
   })
+  @ApiResponse({
+    status: HttpStatus.TOO_MANY_REQUESTS,
+    description: 'Rate limit exceeded',
+  })
   public async quickRsvp(
     @Body() quickRsvpDto: QuickRsvpDto,
     @Request() request,
@@ -265,7 +275,11 @@ export class AuthController {
   }
 
   @Post('verify-email-code')
-  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 attempts per minute to prevent brute force
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 attempts per minute per IP
+  @RateLimit({
+    email: { limit: 10, ttl: 3600 }, // 10 per hour per email (allows multiple retries)
+    composite: { limit: 5, ttl: 3600, fields: ['email', 'code'], keyPrefix: 'email_code' }, // 5 per hour per email+code combo (prevents brute force on specific code)
+  })
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({
     type: LoginResponseDto,
@@ -274,6 +288,10 @@ export class AuthController {
   @ApiResponse({
     status: HttpStatus.UNAUTHORIZED,
     description: 'Invalid or expired verification code',
+  })
+  @ApiResponse({
+    status: HttpStatus.TOO_MANY_REQUESTS,
+    description: 'Too many verification attempts',
   })
   public async verifyEmailCode(
     @Body() verifyEmailCodeDto: VerifyEmailCodeDto,
@@ -298,7 +316,10 @@ export class AuthController {
   }
 
   @Post('request-login-code')
-  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 attempts per minute to prevent spam
+  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 attempts per minute per IP
+  @RateLimit({
+    email: { limit: 5, ttl: 3600 }, // 5 per hour per email (prevents email bombing)
+  })
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({
     description: 'Login code request processed (email sent if account exists)',

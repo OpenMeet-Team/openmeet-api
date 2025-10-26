@@ -33,7 +33,7 @@ describe('EmailVerificationCodeService', () => {
       if (key === 'auth.emailVerification') {
         return {
           codeLength: 6,
-          expirySeconds: 7 * 24 * 60 * 60,
+          expirySeconds: 15 * 60, // 15 minutes
           maxCollisionRetries: 5,
         };
       }
@@ -195,11 +195,11 @@ describe('EmailVerificationCodeService', () => {
       }
     });
 
-    it('should use 7-day expiration', async () => {
+    it('should use 15-minute expiration', async () => {
       await service.generateCode(1, 'tenant', 'test@example.com');
 
-      // Check TTL was set to 7 days (7 * 24 * 60 * 60 seconds)
-      const expectedTTL = 7 * 24 * 60 * 60;
+      // Check TTL was set to 15 minutes (15 * 60 seconds)
+      const expectedTTL = 15 * 60;
       const setCalls = mockElastiCacheService.set.mock.calls;
       const emailCodeCall = setCalls.find((call) =>
         call[0].startsWith('email_verification:'),

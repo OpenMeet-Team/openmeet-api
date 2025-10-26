@@ -61,7 +61,7 @@ export default registerAs<AuthConfig>('auth', () => {
       ),
       expirySeconds: parseInt(
         process.env.AUTH_EMAIL_VERIFICATION_EXPIRY_SECONDS ||
-          String(7 * 24 * 60 * 60), // 7 days default
+          String(15 * 60), // 15 minutes default (was 7 days - reduced for security with 6-digit codes)
         10,
       ),
       maxCollisionRetries: parseInt(
