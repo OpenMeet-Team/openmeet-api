@@ -21,9 +21,6 @@ import { ShadowAccountModule } from '../shadow-account/shadow-account.module';
 import { TempAuthCodeService } from './services/temp-auth-code.service';
 import { EmailVerificationCodeService } from './services/email-verification-code.service';
 import { ElastiCacheModule } from '../elasticache/elasticache.module';
-import { MultiLayerThrottlerGuard } from './guards/multi-layer-throttler.guard';
-import { APP_GUARD } from '@nestjs/core';
-
 @Module({
   imports: [
     forwardRef(() => UserModule),
@@ -50,10 +47,6 @@ import { APP_GUARD } from '@nestjs/core';
     AnonymousStrategy,
     TempAuthCodeService,
     EmailVerificationCodeService,
-    {
-      provide: APP_GUARD,
-      useClass: MultiLayerThrottlerGuard,
-    },
   ],
   exports: [AuthService, TempAuthCodeService, EmailVerificationCodeService],
 })

@@ -31,6 +31,8 @@ import { EventModule } from './event/event.module';
 import { APP_GUARD } from '@nestjs/core';
 import { TenantGuard } from './tenant/tenant.guard';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { MultiLayerThrottlerGuard } from './auth/guards/multi-layer-throttler.guard';
+import { ElastiCacheModule } from './elasticache/elasticache.module';
 import { CategoryModule } from './category/category.module';
 import { GroupModule } from './group/group.module';
 import { SubCategoryModule } from './sub-category/sub-category.module';
@@ -117,6 +119,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
             : 10000, // Very high limit in dev/test to avoid hitting limits
       },
     ]),
+    ElastiCacheModule,
     HealthModule,
     TracingModule,
     MetricsModule,
@@ -161,6 +164,10 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     {
       provide: APP_GUARD,
       useClass: TenantGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: MultiLayerThrottlerGuard,
     },
     {
       provide: 'AUDIT_LOGGER',
