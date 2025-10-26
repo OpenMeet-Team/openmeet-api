@@ -1171,4 +1171,54 @@ export class AuthService {
       sessionId: session.secureId, // ← CRITICAL: Required for OIDC cookie (Matrix login)
     };
   }
+
+  /**
+   * Request a login code for passwordless authentication
+   * Sends a 6-digit code to the user's email
+   * @param email - User's email address
+   * @param tenantId - Tenant ID
+   */
+  async requestLoginCode(
+    email: string,
+    tenantId: string,
+  ): Promise<{ success: boolean; message: string }> {
+    // Security: Don't reveal if email exists or not
+    // Always return success to prevent email enumeration attacks
+    const user = await this.userService.findByEmail(email);
+
+    if (!user || user.status?.id !== StatusEnum.active) {
+      this.logger.debug(
+        `Login code requested for non-existent or inactive user: ${email}`,
+      );
+      return {
+        success: true,
+        message: 'If an account exists, we sent a login code to your email.',
+      };
+    }
+
+    // Generate 6-digit verification code (7 days expiry, same as Quick RSVP)
+    const code = await this.emailVerificationCodeService.generateCode(
+      user.id,
+      tenantId,
+      email,
+    );
+
+    // Send login code email
+    await this.mailService.sendLoginCode({
+      to: email,
+      data: {
+        name: user.firstName || 'there',
+        code,
+      },
+    });
+
+    this.logger.log(
+      `Login code sent to ${email} (user ${user.id}, tenant ${tenantId})`,
+    );
+
+    return {
+      success: true,
+      message: 'If an account exists, we sent a login code to your email.',
+    };
+  }
 }

@@ -40,6 +40,7 @@ import { RolesGuard } from '../role/role.guard';
 import { getOidcCookieOptions } from '../utils/cookie-config';
 import { QuickRsvpDto } from './dto/quick-rsvp.dto';
 import { VerifyEmailCodeDto } from './dto/verify-email-code.dto';
+import { RequestLoginCodeDto } from './dto/request-login-code.dto';
 
 @ApiTags('Auth')
 @Controller({
@@ -294,5 +295,25 @@ export class AuthController {
     }
 
     return loginResult;
+  }
+
+  @Post('request-login-code')
+  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 attempts per minute to prevent spam
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({
+    description: 'Login code request processed (email sent if account exists)',
+  })
+  @ApiResponse({
+    status: HttpStatus.TOO_MANY_REQUESTS,
+    description: 'Too many requests',
+  })
+  public async requestLoginCode(
+    @Body() requestLoginCodeDto: RequestLoginCodeDto,
+    @Request() request,
+  ): Promise<{ success: boolean; message: string }> {
+    return this.service.requestLoginCode(
+      requestLoginCodeDto.email,
+      request.tenantId,
+    );
   }
 }

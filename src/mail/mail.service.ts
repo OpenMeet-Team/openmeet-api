@@ -404,4 +404,26 @@ export class MailService {
       },
     });
   }
+
+  async sendLoginCode(
+    mailData: MailData<{
+      name: string;
+      code: string;
+    }>,
+  ): Promise<void> {
+    this.getTenantConfig();
+
+    await this.mailerService.sendMjmlMail({
+      tenantConfig: this.tenantConfig,
+      to: mailData.to,
+      subject: `Your ${this.tenantConfig.name} Login Code`,
+      templateName: 'auth/login-code',
+      context: {
+        tenantConfig: this.tenantConfig,
+        name: mailData.data.name,
+        code: mailData.data.code,
+        app_name: this.tenantConfig.name,
+      },
+    });
+  }
 }
