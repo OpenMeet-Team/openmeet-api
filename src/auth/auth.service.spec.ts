@@ -16,6 +16,9 @@ import { REQUEST } from '@nestjs/core';
 import { GroupMemberService } from '../group-member/group-member.service';
 import { ShadowAccountService } from '../shadow-account/shadow-account.service';
 import { AuthProvidersEnum } from './auth-providers.enum';
+import { TempAuthCodeService } from './services/temp-auth-code.service';
+import { EmailVerificationCodeService } from './services/email-verification-code.service';
+import { EventRoleService } from '../event-role/event-role.service';
 
 describe('AuthService', () => {
   let authService: AuthService;
@@ -75,6 +78,20 @@ describe('AuthService', () => {
     claimShadowAccount: jest.fn(),
   };
 
+  const mockTempAuthCodeService = {
+    generateEmailVerificationCode: jest.fn(),
+    validateEmailVerificationCode: jest.fn(),
+  };
+
+  const mockEmailVerificationCodeService = {
+    generateCode: jest.fn(),
+    validateCode: jest.fn(),
+  };
+
+  const mockEventRoleService = {
+    findByName: jest.fn(),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -91,11 +108,17 @@ describe('AuthService', () => {
         { provide: RoleService, useValue: mockRoleService },
         { provide: EventQueryService, useValue: mockEventQueryService },
         { provide: EventAttendeeService, useValue: mockEventAttendeeService },
+        { provide: EventRoleService, useValue: mockEventRoleService },
         {
           provide: TenantConnectionService,
           useValue: mockTenantConnectionService,
         },
         { provide: ShadowAccountService, useValue: mockShadowAccountService },
+        { provide: TempAuthCodeService, useValue: mockTempAuthCodeService },
+        {
+          provide: EmailVerificationCodeService,
+          useValue: mockEmailVerificationCodeService,
+        },
         { provide: REQUEST, useValue: mockRequest },
       ],
     }).compile();

@@ -31,6 +31,7 @@ import { SocialInterface } from '../social/interfaces/social.interface';
 import { StatusDto } from '../status/dto/status.dto';
 import { GlobalMatrixValidationService } from '../matrix/services/global-matrix-validation.service';
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
+import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UserService {
@@ -451,6 +452,31 @@ export class UserService {
       return existingUser as UserEntity;
     }
 
+    // Check for Quick RSVP account (passwordless email account) that can be merged
+    if (profile.email) {
+      const quickRsvpAccount = await this.findByEmail(profile.email, tenantId);
+
+      if (
+        quickRsvpAccount &&
+        quickRsvpAccount.provider === AuthProvidersEnum.email &&
+        !quickRsvpAccount.password
+      ) {
+        this.logger.log(
+          `Found Quick RSVP account for ${profile.email}, merging into ${authProvider} account`,
+        );
+
+        // Merge: Upgrade the Quick RSVP account to social login
+        const mergedUser = await this.mergeQuickRsvpAccount(
+          quickRsvpAccount,
+          profile,
+          authProvider,
+          tenantId,
+        );
+
+        return mergedUser;
+      }
+    }
+
     // If user doesn't exist, create a new one
     const roleEntity = await this.roleService.findByName(
       RoleEnum.User,
@@ -524,6 +550,65 @@ export class UserService {
       // Re-throw any other errors
       throw error;
     }
+  }
+
+  /**
+   * Merge a Quick RSVP (passwordless email) account into a social login account
+   * This upgrades the account from email-based passwordless to full social login
+   * while preserving all RSVPs, event attendances, and other data
+   */
+  private async mergeQuickRsvpAccount(
+    quickRsvpAccount: UserEntity,
+    socialProfile: SocialInterface,
+    authProvider: string,
+    tenantId: string,
+  ): Promise<UserEntity> {
+    this.logger.log(
+      `Merging Quick RSVP account ${quickRsvpAccount.id} (${quickRsvpAccount.email}) into ${authProvider} account`,
+    );
+
+    await this.getTenantSpecificRepository(tenantId);
+
+    // Update the Quick RSVP account to become a social login account
+    const updateData: any = {
+      provider: authProvider,
+      socialId: socialProfile.id,
+      // Update name if social profile has better data
+      firstName: socialProfile.firstName || quickRsvpAccount.firstName,
+      lastName: socialProfile.lastName || quickRsvpAccount.lastName,
+    };
+
+    // Set provider-specific preferences
+    if (authProvider === 'bluesky') {
+      updateData.preferences = {
+        ...quickRsvpAccount.preferences,
+        bluesky: {
+          did: socialProfile.id,
+          connected: true,
+          autoPost: false,
+          connectedAt: new Date(),
+        },
+      };
+    }
+
+    // Update the user
+    const updatedUser = await this.update(
+      quickRsvpAccount.id,
+      updateData,
+      tenantId,
+    );
+
+    if (!updatedUser) {
+      throw new Error(
+        `Failed to merge Quick RSVP account ${quickRsvpAccount.id}`,
+      );
+    }
+
+    this.logger.log(
+      `Successfully merged Quick RSVP account ${quickRsvpAccount.id} into ${authProvider} account. User can now login with ${authProvider}.`,
+    );
+
+    return updatedUser as UserEntity;
   }
 
   async update(

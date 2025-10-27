@@ -20,6 +20,7 @@ import {
   ApiTags,
   ApiResponse,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthEmailLoginDto } from './dto/auth-email-login.dto';
 import { AuthForgotPasswordDto } from './dto/auth-forgot-password.dto';
 import { AuthConfirmEmailDto } from './dto/auth-confirm-email.dto';
@@ -37,6 +38,10 @@ import { Roles } from './decorators/roles.decorator';
 import { RoleEnum } from '../role/role.enum';
 import { RolesGuard } from '../role/role.guard';
 import { getOidcCookieOptions } from '../utils/cookie-config';
+import { QuickRsvpDto } from './dto/quick-rsvp.dto';
+import { VerifyEmailCodeDto } from './dto/verify-email-code.dto';
+import { RequestLoginCodeDto } from './dto/request-login-code.dto';
+import { RateLimit } from './guards/multi-layer-throttler.guard';
 
 @ApiTags('Auth')
 @Controller({
@@ -236,5 +241,139 @@ export class AuthController {
         : 'No shadow account found to claim',
       userId: claimDto.userId,
     };
+  }
+
+  @Post('quick-rsvp')
+  @Throttle({
+    default: {
+      limit: process.env.NODE_ENV === 'production' ? 3 : 10000,
+      ttl: 60000,
+    },
+  })
+  @RateLimit({
+    email: {
+      limit: process.env.NODE_ENV === 'production' ? 5 : 10000,
+      ttl: 3600,
+    },
+    resource: {
+      limit: process.env.NODE_ENV === 'production' ? 100 : 10000,
+      ttl: 3600,
+      field: 'eventSlug',
+      keyPrefix: 'event',
+    },
+    composite: {
+      limit: process.env.NODE_ENV === 'production' ? 3 : 10000,
+      ttl: 3600,
+      fields: ['email', 'eventSlug'],
+      keyPrefix: 'user_event',
+    },
+  })
+  @HttpCode(HttpStatus.CREATED)
+  @ApiResponse({
+    status: HttpStatus.CREATED,
+    description: 'User created and RSVP registered. Verification email sent.',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Event not found',
+  })
+  @ApiResponse({
+    status: HttpStatus.FORBIDDEN,
+    description: 'Event requires group membership',
+  })
+  @ApiResponse({
+    status: HttpStatus.TOO_MANY_REQUESTS,
+    description: 'Rate limit exceeded',
+  })
+  public async quickRsvp(
+    @Body() quickRsvpDto: QuickRsvpDto,
+    @Request() request,
+  ) {
+    return this.service.quickRsvp(quickRsvpDto, request.tenantId);
+  }
+
+  @Post('verify-email-code')
+  @Throttle({
+    default: {
+      limit: process.env.NODE_ENV === 'production' ? 5 : 10000,
+      ttl: 60000,
+    },
+  })
+  @RateLimit({
+    email: {
+      limit: process.env.NODE_ENV === 'production' ? 10 : 10000,
+      ttl: 3600,
+    },
+    composite: {
+      limit: process.env.NODE_ENV === 'production' ? 5 : 10000,
+      ttl: 3600,
+      fields: ['email', 'code'],
+      keyPrefix: 'email_code',
+    },
+  })
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({
+    type: LoginResponseDto,
+    description: 'Email verified successfully, user logged in',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Invalid or expired verification code',
+  })
+  @ApiResponse({
+    status: HttpStatus.TOO_MANY_REQUESTS,
+    description: 'Too many verification attempts',
+  })
+  public async verifyEmailCode(
+    @Body() verifyEmailCodeDto: VerifyEmailCodeDto,
+    @Res({ passthrough: true }) response: Response,
+    @Request() request,
+  ): Promise<LoginResponseDto> {
+    const loginResult = await this.service.verifyEmailCode(
+      verifyEmailCodeDto,
+      request.tenantId,
+    );
+
+    // Set oidc_session cookie for cross-domain OIDC authentication (Matrix, etc.)
+    // This was missing and prevented Matrix login after Quick RSVP
+    if (loginResult.sessionId) {
+      const cookieOptions = getOidcCookieOptions();
+
+      response.cookie('oidc_session', loginResult.sessionId, cookieOptions);
+      response.cookie('oidc_tenant', request.tenantId, cookieOptions);
+    }
+
+    return loginResult;
+  }
+
+  @Post('request-login-code')
+  @Throttle({
+    default: {
+      limit: process.env.NODE_ENV === 'production' ? 3 : 10000,
+      ttl: 60000,
+    },
+  })
+  @RateLimit({
+    email: {
+      limit: process.env.NODE_ENV === 'production' ? 5 : 10000,
+      ttl: 3600,
+    },
+  })
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({
+    description: 'Login code request processed (email sent if account exists)',
+  })
+  @ApiResponse({
+    status: HttpStatus.TOO_MANY_REQUESTS,
+    description: 'Too many requests',
+  })
+  public async requestLoginCode(
+    @Body() requestLoginCodeDto: RequestLoginCodeDto,
+    @Request() request,
+  ): Promise<{ success: boolean; message: string }> {
+    return this.service.requestLoginCode(
+      requestLoginCodeDto.email,
+      request.tenantId,
+    );
   }
 }

@@ -39,6 +39,15 @@ import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { EventQueryService } from '../event/services/event-query.service';
 import { REQUEST } from '@nestjs/core';
 import { ShadowAccountService } from '../shadow-account/shadow-account.service';
+import { EmailVerificationCodeService } from './services/email-verification-code.service';
+import { QuickRsvpDto } from './dto/quick-rsvp.dto';
+import { VerifyEmailCodeDto } from './dto/verify-email-code.dto';
+import { ForbiddenException } from '@nestjs/common';
+import {
+  EventAttendeeStatus,
+  EventAttendeeRole,
+} from '../core/constants/constant';
+import { EventRoleService } from '../event-role/event-role.service';
 
 @Injectable()
 export class AuthService {
@@ -51,9 +60,11 @@ export class AuthService {
     private sessionService: SessionService,
     private eventQueryService: EventQueryService,
     private eventAttendeeService: EventAttendeeService,
+    private eventRoleService: EventRoleService,
     private mailService: MailService,
     private readonly roleService: RoleService,
     private shadowAccountService: ShadowAccountService,
+    private emailVerificationCodeService: EmailVerificationCodeService,
     private configService: ConfigService<AllConfigType>,
     @Inject(REQUEST) private readonly request?: any,
   ) {}
@@ -535,37 +546,45 @@ export class AuthService {
     }
 
     if (userDto.password) {
-      if (!userDto.oldPassword) {
-        throw new UnprocessableEntityException({
-          status: HttpStatus.UNPROCESSABLE_ENTITY,
-          errors: {
-            oldPassword: 'missingOldPassword',
-          },
+      // Case 1: User has existing password - require old password verification
+      if (currentUser.password) {
+        if (!userDto.oldPassword) {
+          throw new UnprocessableEntityException({
+            status: HttpStatus.UNPROCESSABLE_ENTITY,
+            errors: {
+              oldPassword: 'missingOldPassword',
+            },
+          });
+        }
+
+        const isValidOldPassword = await bcrypt.compare(
+          userDto.oldPassword,
+          currentUser.password,
+        );
+
+        if (!isValidOldPassword) {
+          throw new UnprocessableEntityException({
+            status: HttpStatus.UNPROCESSABLE_ENTITY,
+            errors: {
+              oldPassword: 'Incorrect current password',
+            },
+          });
+        }
+
+        // Valid password change - invalidate other sessions
+        await this.sessionService.deleteByUserIdWithExcludeSecureId({
+          userId: currentUser.id,
+          excludeSecureId: userJwtPayload.sessionId,
         });
       }
+      // Case 2: Passwordless user setting initial password
+      // No old password required, just validate new password is provided
+      else {
+        this.logger.log(
+          `User ${currentUser.id} (${currentUser.email}) setting initial password`,
+        );
 
-      if (!currentUser.password) {
-        throw new UnprocessableEntityException({
-          status: HttpStatus.UNPROCESSABLE_ENTITY,
-          errors: {
-            oldPassword: 'Incorrect current password',
-          },
-        });
-      }
-
-      const isValidOldPassword = await bcrypt.compare(
-        userDto.oldPassword,
-        currentUser.password,
-      );
-
-      if (!isValidOldPassword) {
-        throw new UnprocessableEntityException({
-          status: HttpStatus.UNPROCESSABLE_ENTITY,
-          errors: {
-            oldPassword: 'Incorrect current password',
-          },
-        });
-      } else {
+        // Still invalidate other sessions for security
         await this.sessionService.deleteByUserIdWithExcludeSecureId({
           userId: currentUser.id,
           excludeSecureId: userJwtPayload.sessionId,
@@ -917,5 +936,329 @@ export class AuthService {
     );
     const data = await response.json();
     return data;
+  }
+
+  /**
+   * Quick RSVP: Allow unregistered users to RSVP to events with just name + email
+   * Creates user account, RSVP, and sends verification email
+   * @param dto - Contains name, email, and eventSlug
+   * @param tenantId - Tenant identifier
+   * @returns Success message with verification code (for testing)
+   */
+  async quickRsvp(dto: QuickRsvpDto, tenantId: string) {
+    const {
+      name,
+      email,
+      eventSlug,
+      status = EventAttendeeStatus.Confirmed,
+    } = dto;
+
+    // 1. Find the event
+    const event = await this.eventQueryService.findEventBySlug(eventSlug);
+    if (!event) {
+      throw new NotFoundException('Event not found');
+    }
+
+    // 2. Block events that explicitly require group membership (V1 limitation)
+    if (event.group && event.requireGroupMembership) {
+      throw new ForbiddenException(
+        'This event requires group membership. Please register for a full account to join this event.',
+      );
+    }
+
+    // 3. Validate event status and date
+    if (event.status === 'cancelled') {
+      throw new ForbiddenException('This event has been cancelled.');
+    }
+
+    if (event.status !== 'published') {
+      throw new ForbiddenException(
+        'This event is not published yet. Please check back later.',
+      );
+    }
+
+    // Check if event has already passed
+    if (event.startDate && new Date(event.startDate) < new Date()) {
+      throw new ForbiddenException('This event has already passed.');
+    }
+
+    // 4. Parse name into firstName and lastName
+    const nameParts = name.trim().split(/\s+/);
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    // 4. Find or create user (email already normalized by DTO transformer)
+    let user: NullableType<User> = await this.userService.findByEmail(email);
+
+    if (!user) {
+      // Create new user
+      const defaultRole = await this.roleService.findByName(RoleEnum.User);
+      if (!defaultRole) {
+        throw new NotFoundException('Default role not found');
+      }
+
+      user = await this.userService.create({
+        email,
+        firstName,
+        lastName,
+        provider: AuthProvidersEnum.email,
+        socialId: null,
+        role: defaultRole.id,
+        status: { id: StatusEnum.active },
+      });
+
+      this.logger.log(`Created new user via quick RSVP: ${email}`);
+    }
+
+    // 5. Ensure user was created successfully
+    if (!user) {
+      throw new NotFoundException('Failed to create user');
+    }
+
+    // 6. Create or find RSVP (idempotent)
+    const existingRsvp = await this.eventAttendeeService.findOne({
+      where: {
+        event: { id: event.id },
+        user: { id: user.id },
+      },
+    });
+
+    if (!existingRsvp) {
+      // Check event capacity before creating new RSVP (only for confirmed status)
+      if (status === EventAttendeeStatus.Confirmed && event.maxAttendees) {
+        const confirmedCount =
+          await this.eventAttendeeService.showEventAttendeesCount(
+            event.id,
+            EventAttendeeStatus.Confirmed,
+          );
+
+        if (confirmedCount >= event.maxAttendees) {
+          // Event is full - check if waitlist is supported
+          // Note: Currently no waitlistEnabled field, so we reject
+          throw new ForbiddenException(
+            `This event is full (${event.maxAttendees} attendees). No waitlist available.`,
+          );
+        }
+      }
+
+      // Get the participant role for the event attendee
+      const participantRole = await this.eventRoleService.findByName(
+        EventAttendeeRole.Participant,
+      );
+
+      // Determine final status based on event settings
+      let finalStatus = status; // From DTO: Confirmed or Cancelled
+
+      // If user is trying to confirm attendance AND event requires approval,
+      // set status to Pending instead of Confirmed
+      if (status === EventAttendeeStatus.Confirmed && event.requireApproval) {
+        finalStatus = EventAttendeeStatus.Pending;
+        this.logger.log(
+          `Event ${event.id} requires approval - setting RSVP status to Pending`,
+        );
+      }
+
+      await this.eventAttendeeService.create({
+        event,
+        user: user as any, // User domain type to UserEntity - safe cast
+        role: participantRole,
+        status: finalStatus,
+      });
+      this.logger.log(
+        `Created RSVP with status ${finalStatus} for user ${user.id} to event ${event.id}`,
+      );
+    } else {
+      this.logger.log(
+        `RSVP already exists for user ${user.id} to event ${event.id}`,
+      );
+    }
+
+    // 7. Generate email verification code
+    const verificationCode =
+      await this.emailVerificationCodeService.generateCode(
+        user.id,
+        tenantId,
+        email,
+      );
+
+    // 8. Send verification email
+    await this.mailService.sendEmailVerification({
+      to: email,
+      data: {
+        name: firstName,
+        code: verificationCode,
+        eventName: event.name,
+        email, // Pass email for verification link
+        eventSlug: event.slug, // Pass event slug for redirect after verification
+      },
+    });
+
+    // 9. Return success (include code only in development/test environments)
+    const response: {
+      success: boolean;
+      message: string;
+      verificationCode?: string;
+    } = {
+      success: true,
+      message: 'Please check your email for verification code',
+    };
+
+    // Only include verification code in non-production environments for testing
+    if (process.env.NODE_ENV !== 'production') {
+      response.verificationCode = verificationCode;
+    }
+
+    return response;
+  }
+
+  /**
+   * Verify email code and log in user
+   * @param dto - Contains the 6-digit verification code
+   * @param tenantId - Tenant identifier
+   * @returns Login response with JWT tokens
+   */
+  async verifyEmailCode(
+    dto: VerifyEmailCodeDto,
+    tenantId: string,
+  ): Promise<LoginResponseDto> {
+    const { code } = dto;
+
+    // 1. Validate code
+    const verificationData =
+      await this.emailVerificationCodeService.validateCode(code, dto.email);
+
+    if (!verificationData) {
+      throw new UnauthorizedException('Invalid or expired verification code');
+    }
+
+    // 2. Get user
+    const user = await this.userService.findById(verificationData.userId);
+    if (!user || !user.role) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    // 3. Create session and return tokens (same as regular login)
+    const hash = crypto
+      .createHash('sha256')
+      .update(randomStringGenerator())
+      .digest('hex');
+
+    const secureId = crypto.randomUUID();
+
+    const session = await this.sessionService.create(
+      {
+        user,
+        hash,
+        secureId,
+      },
+      tenantId,
+    );
+
+    const { token, refreshToken, tokenExpires } = await this.getTokensData({
+      id: user.id,
+      role: user.role,
+      slug: user.slug,
+      sessionId: session.secureId,
+      hash,
+      tenantId,
+    });
+
+    return {
+      token,
+      refreshToken,
+      tokenExpires,
+      user,
+      sessionId: session.secureId, // ← CRITICAL: Required for OIDC cookie (Matrix login)
+    };
+  }
+
+  /**
+   * Request a login code for passwordless authentication
+   * Sends a 6-digit code to the user's email
+   * @param email - User's email address
+   * @param tenantId - Tenant ID
+   */
+  async requestLoginCode(
+    email: string,
+    tenantId: string,
+  ): Promise<{ success: boolean; message: string }> {
+    // Normalize email
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Find or create user
+    let user: NullableType<User> = await this.userService.findByEmail(
+      normalizedEmail,
+      tenantId,
+    );
+
+    if (!user) {
+      // Create passwordless account (similar to Quick RSVP)
+      this.logger.log(
+        `Creating passwordless account for new user via login code: ${normalizedEmail}`,
+      );
+
+      const defaultRole = await this.roleService.findByName(RoleEnum.User);
+      if (!defaultRole) {
+        throw new NotFoundException('Default role not found');
+      }
+
+      user = await this.userService.create(
+        {
+          email: normalizedEmail,
+          provider: AuthProvidersEnum.email,
+          socialId: null,
+          firstName: null,
+          lastName: null,
+          role: defaultRole.id,
+          status: { id: StatusEnum.active },
+        },
+        tenantId,
+      );
+
+      this.logger.log(
+        `Created passwordless user ${user.id} for ${normalizedEmail}`,
+      );
+    }
+
+    // Ensure user was created successfully
+    if (!user) {
+      throw new NotFoundException('Failed to create user');
+    }
+
+    // Check if user is inactive
+    if (user.status?.id !== StatusEnum.active) {
+      this.logger.debug(
+        `Login code requested for inactive user: ${normalizedEmail}`,
+      );
+      return {
+        success: true,
+        message: 'We sent a login code to your email.',
+      };
+    }
+
+    // Generate 6-digit verification code
+    const code = await this.emailVerificationCodeService.generateCode(
+      user.id,
+      tenantId,
+      normalizedEmail,
+    );
+
+    // Send login code email
+    await this.mailService.sendLoginCode({
+      to: normalizedEmail,
+      data: {
+        name: user.firstName || 'there',
+        code,
+      },
+    });
+
+    this.logger.log(
+      `Login code sent to ${normalizedEmail} (user ${user.id}, tenant ${tenantId})`,
+    );
+
+    return {
+      success: true,
+      message: 'We sent a login code to your email.',
+    };
   }
 }

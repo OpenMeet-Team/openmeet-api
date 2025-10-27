@@ -377,4 +377,53 @@ export class MailService {
       },
     });
   }
+
+  async sendEmailVerification(
+    mailData: MailData<{
+      name: string;
+      code: string;
+      eventName: string;
+      email: string;
+      eventSlug?: string;
+    }>,
+  ): Promise<void> {
+    this.getTenantConfig();
+
+    await this.mailerService.sendMjmlMail({
+      tenantConfig: this.tenantConfig,
+      to: mailData.to,
+      subject: 'Verify your email to complete RSVP',
+      templateName: 'auth/email-verification',
+      context: {
+        tenantConfig: this.tenantConfig,
+        name: mailData.data.name,
+        code: mailData.data.code,
+        eventName: mailData.data.eventName,
+        email: mailData.data.email,
+        eventSlug: mailData.data.eventSlug,
+      },
+    });
+  }
+
+  async sendLoginCode(
+    mailData: MailData<{
+      name: string;
+      code: string;
+    }>,
+  ): Promise<void> {
+    this.getTenantConfig();
+
+    await this.mailerService.sendMjmlMail({
+      tenantConfig: this.tenantConfig,
+      to: mailData.to,
+      subject: `Your ${this.tenantConfig.name} Login Code`,
+      templateName: 'auth/login-code',
+      context: {
+        tenantConfig: this.tenantConfig,
+        name: mailData.data.name,
+        code: mailData.data.code,
+        app_name: this.tenantConfig.name,
+      },
+    });
+  }
 }

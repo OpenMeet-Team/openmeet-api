@@ -1,0 +1,65 @@
+<%- include('./../layouts/header.mjml.ejs') %>
+
+      <!-- Main Content -->
+      <mj-section>
+        <mj-column>
+
+          <mj-text>
+            Hi <%= name %>,
+          </mj-text>
+
+          <mj-text>
+            You've registered to attend <strong><%= eventName %></strong>!
+          </mj-text>
+
+          <mj-text>
+            Here's your sign-in code:
+          </mj-text>
+
+        </mj-column>
+      </mj-section>
+
+      <!-- Verification Code -->
+      <mj-section padding="20px" background-color="#F5F5FA" border-radius="8px">
+        <mj-column>
+          <mj-text align="center" font-size="36px" font-weight="700" color="#7B71DA" letter-spacing="8px" padding="20px">
+            <%= code %>
+          </mj-text>
+        </mj-column>
+      </mj-section>
+
+      <!-- Instructions -->
+      <mj-section>
+        <mj-column>
+          <mj-text>
+            Click the button below to verify your email and sign in automatically, or enter the code manually on the verification page.
+          </mj-text>
+
+          <mj-text color="#666666" font-size="14px">
+            This code will expire in 7 days.
+          </mj-text>
+        </mj-column>
+      </mj-section>
+
+      <!-- Verify Button -->
+      <mj-section padding="20px">
+        <mj-column>
+          <mj-button href="<%= tenantConfig?.frontendDomain %>/auth/verify-email?code=<%= code %>&email=<%= encodeURIComponent(email) %><% if (eventSlug) { %>&event=<%= eventSlug %><% } %>" background-color="#7B71DA" color="#FFFFFF" font-size="16px" padding="15px 30px">
+            Verify Email & Sign In
+          </mj-button>
+        </mj-column>
+      </mj-section>
+
+      <!-- Alternative Link -->
+      <mj-section>
+        <mj-column>
+          <mj-text align="center" color="#666666" font-size="12px">
+            Or copy and paste this link into your browser:<br/>
+            <a href="<%= tenantConfig?.frontendDomain %>/auth/verify-email?code=<%= code %>&email=<%= encodeURIComponent(email) %><% if (eventSlug) { %>&event=<%= eventSlug %><% } %>" style="color: #7B71DA; word-break: break-all;">
+              <%= tenantConfig?.frontendDomain %>/auth/verify-email?code=<%= code %>&email=<%= encodeURIComponent(email) %><% if (eventSlug) { %>&event=<%= eventSlug %><% } %>
+            </a>
+          </mj-text>
+        </mj-column>
+      </mj-section>
+
+<%- include('./../layouts/footer.mjml.ejs') %>

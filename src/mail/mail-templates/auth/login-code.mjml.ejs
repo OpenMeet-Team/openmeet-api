@@ -1,0 +1,53 @@
+<%- include('./../layouts/header.mjml.ejs') %>
+
+      <!-- Main Content -->
+      <mj-section>
+        <mj-column>
+
+          <mj-text>
+            Hi <%= name %>,
+          </mj-text>
+
+          <mj-text>
+            You requested a login code for your <%= app_name %> account.
+          </mj-text>
+
+          <mj-text>
+            Here's your sign-in code:
+          </mj-text>
+
+        </mj-column>
+      </mj-section>
+
+      <!-- Verification Code -->
+      <mj-section padding="20px" background-color="#F5F5FA" border-radius="8px">
+        <mj-column>
+          <mj-text align="center" font-size="36px" font-weight="700" color="#7B71DA" letter-spacing="8px" padding="20px">
+            <%= code %>
+          </mj-text>
+        </mj-column>
+      </mj-section>
+
+      <!-- Instructions -->
+      <mj-section>
+        <mj-column>
+          <mj-text>
+            Enter this code on the login page to access your account.
+          </mj-text>
+
+          <mj-text color="#666666" font-size="14px">
+            This code will expire in 7 days. If you didn't request this code, you can safely ignore this email.
+          </mj-text>
+        </mj-column>
+      </mj-section>
+
+      <!-- Login Button -->
+      <mj-section padding="20px">
+        <mj-column>
+          <mj-button href="<%= tenantConfig?.frontendDomain %>/auth/login" background-color="#7B71DA" color="#FFFFFF" font-size="16px" padding="15px 30px">
+            Go to Login Page
+          </mj-button>
+        </mj-column>
+      </mj-section>
+
+<%- include('./../layouts/footer.mjml.ejs') %>
