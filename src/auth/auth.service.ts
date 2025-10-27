@@ -1090,6 +1090,7 @@ export class AuthService {
         eventName: event.name,
         email, // Pass email for verification link
         eventSlug: event.slug, // Pass event slug for redirect after verification
+        expiryMinutes: this.emailVerificationCodeService.getExpiryMinutes(),
       },
     });
 

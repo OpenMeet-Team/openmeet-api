@@ -385,6 +385,7 @@ export class MailService {
       eventName: string;
       email: string;
       eventSlug?: string;
+      expiryMinutes: number;
     }>,
   ): Promise<void> {
     this.getTenantConfig();
@@ -401,6 +402,7 @@ export class MailService {
         eventName: mailData.data.eventName,
         email: mailData.data.email,
         eventSlug: mailData.data.eventSlug,
+        expiryMinutes: mailData.data.expiryMinutes,
       },
     });
   }

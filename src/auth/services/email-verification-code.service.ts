@@ -143,6 +143,13 @@ export class EmailVerificationCodeService {
   }
 
   /**
+   * Get expiry time in minutes
+   */
+  getExpiryMinutes(): number {
+    return Math.floor(this.codeExpirySeconds / 60);
+  }
+
+  /**
    * Get Redis key for email verification code
    */
   private getRedisKey(code: string): string {
