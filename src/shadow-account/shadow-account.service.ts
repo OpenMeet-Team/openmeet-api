@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { StatusEntity } from '../status/infrastructure/persistence/relational/entities/status.entity';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { AuthProvidersEnum } from '../auth/auth-providers.enum';
+import { StatusEnum } from '../status/status.enum';
 import { ulid } from 'ulid';
 import slugify from 'slugify';
 import { generateShortCode } from '../utils/short-code';
@@ -92,6 +94,12 @@ export class ShadowAccountService {
           shadowUser.lastName = null;
           // Use empty string instead of null for password
           shadowUser.password = '';
+
+          // Set status to active
+          const status = new StatusEntity();
+          status.id = StatusEnum.active;
+          shadowUser.status = status;
+
           shadowUser.ulid = ulid().toLowerCase();
           shadowUser.slug = `${slugify(
             (displayName || 'shadow-user').trim().toLowerCase(),
