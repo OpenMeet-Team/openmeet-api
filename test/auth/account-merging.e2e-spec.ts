@@ -141,15 +141,15 @@ describe('Account Merging (E2E)', () => {
               email: testEmail,
               eventSlug: testEvent.slug,
               status: EventAttendeeStatus.Confirmed,
-            })
+            }),
         );
       }
 
       const responses = await Promise.all(promises);
 
       // At least one should be rate limited (429) or rejected
-      const rateLimitedCount = responses.filter(r => r.status === 429).length;
-      const successCount = responses.filter(r => r.status === 201).length;
+      const rateLimitedCount = responses.filter((r) => r.status === 429).length;
+      const successCount = responses.filter((r) => r.status === 201).length;
 
       // Should have some successful and some rate limited
       expect(successCount).toBeGreaterThan(0);
