@@ -148,9 +148,7 @@ describe('Calendar Invite E2E', () => {
       const recipientEmails = recentEmails.filter((email: any) =>
         email.to?.some((recipient: any) => recipient.address === testEmail),
       );
-      console.log(
-        `Found ${recipientEmails.length} email(s) to ${testEmail}`,
-      );
+      console.log(`Found ${recipientEmails.length} email(s) to ${testEmail}`);
 
       // Debug: Print all emails
       recipientEmails.forEach((email: any, index: number) => {

@@ -271,7 +271,12 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   @ApiResponse({
     status: HttpStatus.CREATED,
-    description: 'User created and RSVP registered. Verification email sent.',
+    description:
+      'User created and RSVP registered. Calendar invite email sent.',
+  })
+  @ApiResponse({
+    status: HttpStatus.CONFLICT,
+    description: 'User with this email already exists. Please log in to RSVP.',
   })
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,

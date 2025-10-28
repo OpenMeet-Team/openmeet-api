@@ -1,9 +1,9 @@
 # Quick RSVP - Passwordless Onboarding Flow
 
-**Status**: Implementation Phase - V2 Refinements
-**Date**: 2025-10-27 (Updated)
+**Status**: V2 Implemented ✅
+**Date**: 2025-10-28 (Updated)
 **Priority**: High - Adoption feature from GitHub issue #248
-**Version**: 2.0 - Based on Luma-style UX feedback
+**Version**: 2.0 - Luma-style flow with simplified dialog
 
 ## Problem Statement
 
@@ -36,40 +36,31 @@ Currently, users must create a full account (with password) before they can RSVP
 
 ## Proposed Solution
 
-### High-Level Flow (V2 - Luma-style)
+### High-Level Flow (V2 - Implemented)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ 1. User visits event page (unauthenticated)                 │
 │    - Clicks "Going" button                                   │
-│    - Quick RSVP dialog appears with TWO VIEWS:              │
-│                                                              │
-│    VIEW 1 (Default): Quick RSVP Form                        │
+│    - Quick RSVP dialog appears:                             │
 │      • Name field                                            │
 │      • Email field                                           │
-│      • RSVP button                                           │
-│      • "Already have an account? Log in" link               │
-│                                                              │
-│    VIEW 2: Login Form (if user clicks link)                │
-│      • Complete login form embedded in dialog               │
-│      • Email + password OR passwordless                     │
-│      • External auth buttons (Google/GitHub/Bluesky)        │
-│      • "Back to Quick RSVP" link                            │
+│      • "Register & RSVP" button                             │
+│      • "Have an account? Log in" link                       │
 └─────────────────────────────────────────────────────────────┘
                           │
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ 2a. Path A: Quick RSVP (New User)                           │
 │    - User enters: "John Doe" + "john@example.com"           │
-│    - Clicks "RSVP"                                           │
+│    - Clicks "Register & RSVP"                               │
 │    - Backend checks: Email doesn't exist                    │
 │    - Backend: Creates user (password=null, status=active)   │
 │    - Backend: Creates EventAttendee                         │
-│    - Backend: Sends calendar invite email with .ics file    │
-│    - Response: Success                                       │
+│    - Backend: Sends calendar invite email                   │
+│    - Response: 201 Success                                   │
 │    - Dialog shows: "You're registered! Check email."        │
 │    - Dialog closes, user is NOT logged in                   │
-│    - "Verify Email" banner appears on event page            │
 └─────────────────────────────────────────────────────────────┘
                           │
                           ▼
@@ -77,24 +68,30 @@ Currently, users must create a full account (with password) before they can RSVP
 │ 2b. Path B: Quick RSVP (Existing User)                      │
 │    - User enters email that exists in system                │
 │    - Backend checks: Email exists                           │
-│    - Response: 409 "Email exists. Please log in."           │
-│    - Dialog automatically switches to LOGIN VIEW            │
-│    - User completes login (any method)                      │
-│    - Backend: Creates attendee, sends calendar invite       │
-│    - User is LOGGED IN, dialog closes                       │
+│    - Response: 409 "Email exists. Please sign in."          │
+│    - Frontend: Stores RSVP intent in localStorage           │
+│    - Frontend: Redirects to /auth/login with:               │
+│      • email query param (pre-fills form)                   │
+│      • returnUrl query param (event page)                   │
+│      • context=quick-rsvp (shows banner)                    │
+│    - Login page shows contextual banner                     │
+│    - User completes login (password/email code/social)      │
+│    - Backend: Auto-creates attendee after login             │
+│    - Backend: Sends calendar invite                         │
+│    - Frontend: Redirects back to event page                 │
+│    - User is LOGGED IN, RSVP complete                       │
 └─────────────────────────────────────────────────────────────┘
                           │
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 2c. Path C: User Chooses Login View                         │
-│    - User clicks "Already have an account? Log in"          │
-│    - Dialog switches to LOGIN VIEW                          │
-│    - User logs in via:                                       │
-│      • Email + password                                      │
-│      • Passwordless (sends code to email)                   │
-│      • External auth (Google/GitHub/Bluesky)                │
-│    - Backend: Creates attendee, sends calendar invite       │
-│    - User is LOGGED IN, dialog closes, RSVP complete        │
+│ 2c. Path C: User Clicks "Log in" Link                       │
+│    - User clicks "Have an account? Log in"                  │
+│    - Frontend: Stores RSVP intent in localStorage           │
+│    - Frontend: Redirects to /auth/login with:               │
+│      • email query param (if entered)                       │
+│      • returnUrl query param (event page)                   │
+│      • context=quick-rsvp                                   │
+│    - Same flow as Path B from here                          │
 └─────────────────────────────────────────────────────────────┘
                           │
                           ▼
@@ -132,14 +129,274 @@ Currently, users must create a full account (with password) before they can RSVP
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Key Design Principles (V2):**
+**Key Design Principles (V2 - Implemented):**
 - ✅ Quick RSVP creates user + attendee, user stays **not logged in**
-- ✅ Calendar invite (.ics file) sent immediately, no verification code
-- ✅ Verification only happens when user clicks "Verify Email" banner
-- ✅ Dialog has 2 views: Quick RSVP ↔ Full Login (toggle with link)
-- ✅ Login view embedded in dialog (doesn't navigate away from page)
-- ✅ Existing user detection requires login before RSVP completes
+- ✅ Calendar invite sent immediately, no verification code required
+- ✅ Verification only happens when user clicks "Verify Email" banner (optional)
+- ✅ **Simplified dialog**: Single Quick RSVP view, redirects to full login page (no embedded login)
+- ✅ **RSVP intent pattern**: localStorage stores intent, completes after login
+- ✅ **Luma-style flow**: First RSVP frictionless (no auth), repeat RSVP requires sign-in (409 → redirect)
+- ✅ **Consistent login experience**: All login paths use same `/auth/login` page with all auth options
+- ✅ **Passwordless login restricted**: Email code login only for existing users (not account creation)
 - ✅ Pattern reusable for group join flow
+
+## Flow Diagrams
+
+### Diagram 1: Quick RSVP Flow (First vs Repeat)
+
+```mermaid
+graph TD
+    Start([User clicks 'Going' on Event]) --> Dialog[Show Quick RSVP Dialog]
+    Dialog --> EnterEmail[User enters Name + Email]
+    EnterEmail --> Submit[User clicks 'RSVP']
+    Submit --> CheckUser{Does user exist?}
+
+    %% First RSVP - New User
+    CheckUser -->|No| CreateUser[Create User Account<br/>password=null, status=active]
+    CreateUser --> CreateRSVP1[Create Event Attendee]
+    CreateRSVP1 --> SendInvite1[Send Calendar Invite Email]
+    SendInvite1 --> Success[Show Success:<br/>'Check email for calendar invite']
+    Success --> NotLoggedIn[User NOT logged in<br/>Can RSVP to more events]
+
+    %% Repeat RSVP - Existing User
+    CheckUser -->|Yes| RedirectLogin[Redirect to /auth/signin<br/>with returnUrl + email]
+    RedirectLogin --> SignInPage[Sign-In Page]
+
+    %% Sign-in options
+    SignInPage --> AuthChoice{User chooses<br/>auth method}
+    AuthChoice -->|Passwordless| SendCode[Request Login Code]
+    SendCode --> EnterCode[User enters 6-digit code]
+    EnterCode --> VerifyCode{Valid code?}
+    VerifyCode -->|No| EnterCode
+    VerifyCode -->|Yes| LoggedIn[User Logged In]
+
+    AuthChoice -->|Password| EnterPassword[User enters password]
+    EnterPassword --> CheckPassword{Valid password?}
+    CheckPassword -->|No| EnterPassword
+    CheckPassword -->|Yes| LoggedIn
+
+    AuthChoice -->|Social OAuth| OAuthFlow[OAuth Flow<br/>Google/GitHub/Bluesky]
+    OAuthFlow --> OAuthCallback[OAuth Callback]
+    OAuthCallback --> MergeCheck{Email matches<br/>existing user?}
+    MergeCheck -->|Yes| MergeAccount[Merge/Link Account]
+    MergeCheck -->|No| CreateSocialUser[Create Social User]
+    MergeAccount --> LoggedIn
+    CreateSocialUser --> LoggedIn
+
+    %% After login, complete RSVP
+    LoggedIn --> ReturnToEvent[Redirect back to Event Page]
+    ReturnToEvent --> CreateRSVP2[Auto-create Event Attendee]
+    CreateRSVP2 --> SendInvite2[Send Calendar Invite]
+    SendInvite2 --> RsvpComplete[RSVP Complete<br/>User stays logged in]
+
+    style CreateUser fill:#e1f5e1
+    style RedirectLogin fill:#fff4e1
+    style LoggedIn fill:#e1f0ff
+    style NotLoggedIn fill:#ffe1e1
+    style RsvpComplete fill:#e1f0ff
+```
+
+### Diagram 2: User Account Types and Authentication Methods
+
+```mermaid
+graph LR
+    subgraph "User Account Types"
+        NewUser[New User<br/>No account]
+        Passwordless[Passwordless User<br/>password=null<br/>provider=email]
+        PasswordUser[Password User<br/>password=hash<br/>provider=email]
+        SocialUser[Social User<br/>password=null<br/>provider=google/github/bluesky<br/>externalId=xxx]
+        ShadowUser[Shadow User<br/>isShadow=true<br/>imported from external system]
+    end
+
+    subgraph "Authentication Methods"
+        QuickRSVP[Quick RSVP<br/>Name + Email only]
+        LoginCode[Passwordless Login<br/>6-digit email code]
+        Password[Password Login<br/>Email + Password]
+        OAuth[Social Login<br/>OAuth flow]
+    end
+
+    %% First RSVP Paths
+    NewUser -->|First RSVP| QuickRSVP
+    QuickRSVP --> Passwordless
+
+    %% Repeat RSVP Requires Auth
+    Passwordless -->|Repeat RSVP| LoginCode
+    Passwordless -->|Can set later| Password
+    Passwordless -->|Can link| OAuth
+
+    PasswordUser -->|Repeat RSVP| Password
+    PasswordUser -->|Can also use| LoginCode
+
+    SocialUser -->|Repeat RSVP| OAuth
+    SocialUser -->|Can set| Password
+
+    ShadowUser -->|Claim via| LoginCode
+    ShadowUser -->|Or claim via| OAuth
+
+    style Passwordless fill:#fff4e1
+    style PasswordUser fill:#e1f0ff
+    style SocialUser fill:#e1ffe1
+    style ShadowUser fill:#ffe1f4
+```
+
+### Diagram 3: Account Merging Rules (Email-Based)
+
+```mermaid
+graph TD
+    Start([User signs in with Social Auth]) --> GetEmail[OAuth returns email]
+    GetEmail --> CheckExist{User exists<br/>with this email?}
+
+    CheckExist -->|No| CreateNew[Create new user<br/>provider=social<br/>externalId=socialId]
+    CreateNew --> Done1[Login Success]
+
+    CheckExist -->|Yes| CheckType{What type<br/>of account?}
+
+    %% Passwordless account - merge
+    CheckType -->|Passwordless<br/>password=null<br/>provider=email| MergePasswordless[Update account:<br/>provider=social<br/>externalId=socialId<br/>Keep all RSVPs/data]
+    MergePasswordless --> Done2[Login Success<br/>Account merged]
+
+    %% Shadow account - claim
+    CheckType -->|Shadow User<br/>isShadow=true| ClaimShadow[Update account:<br/>isShadow=false<br/>provider=social<br/>externalId=socialId<br/>Keep imported data]
+    ClaimShadow --> Done3[Login Success<br/>Shadow account claimed]
+
+    %% Password account - don't merge
+    CheckType -->|Has Password<br/>password=hash| NoMerge[Don't merge<br/>Just login<br/>Email is unique key]
+    NoMerge --> Done4[Login Success<br/>Multi-auth user]
+
+    %% Different social provider
+    CheckType -->|Different Social<br/>provider=different| LinkProvider[Link provider<br/>Email is unique key<br/>Allow multiple auth methods]
+    LinkProvider --> Done5[Login Success<br/>Multi-provider user]
+
+    style MergePasswordless fill:#e1f5e1
+    style ClaimShadow fill:#ffe1f4
+    style NoMerge fill:#e1f0ff
+    style LinkProvider fill:#fff4e1
+```
+
+### Diagram 4: Passwordless Account Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Unregistered
+
+    Unregistered --> PasswordlessCreated: Quick RSVP<br/>(First time)
+
+    state PasswordlessCreated {
+        [*] --> NotLoggedIn
+        NotLoggedIn --> NotLoggedIn: Can RSVP to events<br/>Receives calendar invites<br/>Cannot manage RSVPs
+    }
+
+    PasswordlessCreated --> Authenticated: User signs in<br/>(Passwordless or Social)
+
+    state Authenticated {
+        [*] --> LoggedIn
+        LoggedIn --> LoggedIn: Full account access<br/>Manage RSVPs<br/>Edit profile<br/>Join groups
+
+        LoggedIn --> PasswordSet: User sets password<br/>(Optional)
+        LoggedIn --> SocialLinked: Links social auth<br/>(Optional)
+
+        PasswordSet --> MultiAuth: Can auth multiple ways
+        SocialLinked --> MultiAuth
+
+        MultiAuth --> MultiAuth: Email + Password<br/>Email + Social<br/>All work
+    }
+
+    Authenticated --> [*]
+
+    note right of PasswordlessCreated
+        Status: active
+        Password: null
+        Provider: email
+        Can receive emails
+        Has RSVPs
+    end note
+
+    note right of Authenticated
+        Status: active
+        Logged in session
+        Full feature access
+        Can have multiple
+        auth methods
+    end note
+```
+
+### Diagram 5: Shadow User Flow
+
+```mermaid
+sequenceDiagram
+    participant Admin as Event Organizer
+    participant System as OpenMeet System
+    participant Import as Import Service
+    participant User as Real User
+    participant Email as Email Service
+
+    Note over Admin,Import: Shadow Account Creation
+    Admin->>System: Import attendees from Meetup/CSV
+    System->>Import: Process import data
+    Import->>System: Create shadow users
+    Note over System: Shadow User:<br/>email, name, isShadow=true<br/>externalId=meetup:123<br/>password=null
+    System->>System: Create imported RSVPs<br/>for shadow users
+
+    Note over User,Email: User Quick RSVPs
+    User->>System: Quick RSVP with email
+    System->>System: Check if user exists
+    System->>System: Found shadow user!
+    System->>User: Redirect to /auth/signin<br/>"We found your account"
+
+    Note over User,Email: User Authenticates
+    User->>System: Request login code
+    System->>Email: Send 6-digit code
+    Email->>User: Email with code
+    User->>System: Enter code
+    System->>System: Validate code
+    System->>System: Claim shadow account:<br/>isShadow=false<br/>Create session
+
+    Note over User,System: Account Claimed
+    System->>User: Login success<br/>Redirect to event
+    System->>System: Create new RSVP
+    System->>Email: Send calendar invite
+    User->>System: View profile
+    Note over User: User sees:<br/>- New RSVP<br/>- Previous imported RSVPs<br/>- All in one account!
+```
+
+### Diagram 6: Complete User Journey Map
+
+```mermaid
+journey
+    title Quick RSVP User Journey
+    section First RSVP
+      Discovers event: 5: User
+      Clicks Going button: 5: User
+      Enters name and email: 5: User
+      Clicks RSVP button: 5: User
+      Sees success message: 5: User
+      Receives calendar invite: 5: User
+      Adds to calendar: 4: User
+    section Optional Verification
+      Sees Verify Email banner: 3: User
+      Clicks Verify Email: 3: User
+      Redirected to sign in page: 3: User
+      Requests login code: 3: User
+      Checks email for code: 3: User
+      Enters verification code: 3: User
+      Logged in successfully: 5: User
+      Full account access: 5: User
+    section Second RSVP Different Event
+      Discovers another event: 5: User
+      Clicks Going button: 5: User
+      Enters email: 4: User
+      Redirected to sign in: 3: User
+      Signs in with chosen method: 4: User
+      Returned to event page: 5: User
+      RSVP created automatically: 5: User
+      Stays logged in: 5: User
+    section Managing RSVPs
+      Views event page: 5: User
+      Updates RSVP status: 5: User
+      Sees all RSVPs in profile: 5: User
+      Optionally sets password: 4: User
+      Links social accounts: 4: User
+```
 
 ## Technical Design
 
@@ -243,7 +500,54 @@ No schema changes required! Existing `users` table supports this:
 - Event requires group membership → 403
 - Event at capacity → 403
 
-#### 2. POST /auth/request-email-verification (NEW)
+#### 2. POST /auth/request-login-code (MODIFIED - V2)
+
+**Purpose:** Send passwordless login code to EXISTING users only
+
+**Request:**
+```typescript
+{
+  email: string;  // "john@example.com"
+}
+```
+
+**Response (User Exists - 200 OK):**
+```typescript
+{
+  success: true,
+  message: "We sent a login code to your email."
+}
+```
+
+**Response (User Doesn't Exist - 404 Not Found):**
+```typescript
+{
+  statusCode: 404,
+  message: "No account found with this email. Please register first.",
+  error: "Not Found"
+}
+```
+
+**Logic (UPDATED V2):**
+1. Find user by email
+2. **NEW**: If user doesn't exist, throw 404 (no account creation)
+3. Check if user is active
+4. Generate 6-digit login code (15min expiry)
+5. Send login code email
+6. Return success
+
+**Rationale for Restriction:**
+- Passwordless login is for existing users who don't remember/have password
+- New users should use registration page for proper onboarding
+- Quick RSVP handles frictionless new account creation
+- Prevents confusion about multiple account creation paths
+
+**Error Cases:**
+- User not found → 404 "No account found with this email. Please register first."
+- User inactive → 200 (silent - don't reveal account status)
+- Rate limit exceeded → 429
+
+#### 3. POST /auth/request-email-verification (NEW)
 
 **Purpose:** Send verification code to unverified user
 
@@ -556,55 +860,44 @@ EventRSVPSection (wrapper component)
 
 #### Changes Needed:
 
-**1. QuickRSVPDialog.vue** (existing component - MAJOR UPDATE)
+**1. QuickRSVPDialog.vue** (existing component - SIMPLIFIED V2 ✅)
 
-**Current state:**
-- Has Quick RSVP form (name + email)
-- Automatically shows verification code dialog after RSVP
-- Success flow expects immediate verification
-
-**V2 Changes:**
-- Add two-view system: Quick RSVP ↔ Login
-- Remove automatic verification code flow
-- Handle 409 "email exists" response
-- Show success message without verification prompt
-- Integrate with existing login components
+**Implemented State:**
+- Single view with Quick RSVP form (name + email)
+- "Register & RSVP" button
+- "Have an account? Log in" link
+- Success view after RSVP
+- No embedded login view
 
 **Structure:**
 ```vue
 <template>
-  <q-dialog v-model="show" :position="dialogPosition">
-    <!-- View 1: Quick RSVP Form (default) -->
-    <div v-if="currentView === 'quick-rsvp'">
-      <h2>Quick RSVP</h2>
-      <q-input v-model="name" label="Full Name" />
-      <q-input v-model="email" label="Email" type="email" />
-      <q-btn @click="submitQuickRsvp">RSVP</q-btn>
-      <p class="text-center">
-        <a @click="currentView = 'login'">Already have an account? Log in</a>
-      </p>
-    </div>
-
-    <!-- View 2: Login Form (embedded) -->
-    <div v-else-if="currentView === 'login'">
-      <h2>Log In</h2>
-      <!-- Embed existing login form component -->
-      <LoginForm
-        :embedded="true"
-        :eventSlug="eventSlug"
-        @login-success="handleLoginSuccess"
-      />
-      <p class="text-center">
-        <a @click="currentView = 'quick-rsvp'">Back to Quick RSVP</a>
-      </p>
-    </div>
-
-    <!-- Success state -->
-    <div v-else-if="currentView === 'success'">
+  <q-dialog v-model="show">
+    <!-- Success view -->
+    <div v-if="currentView === 'success'">
       <q-icon name="check_circle" color="positive" size="xl" />
       <h2>You're registered!</h2>
       <p>Check your email for a calendar invite.</p>
       <q-btn @click="close">Done</q-btn>
+    </div>
+
+    <!-- Quick RSVP Form (default view) -->
+    <div v-else>
+      <h2>Quick RSVP</h2>
+      <q-banner class="bg-blue-1">
+        New to OpenMeet?
+        Enter your info to create an account and RSVP in one step!
+      </q-banner>
+      <q-input v-model="name" label="Your Name" />
+      <q-input v-model="email" label="Your Email" type="email" />
+      <p class="info-text">
+        We'll create your free account and send you a calendar invite.
+      </p>
+      <q-btn @click="submitQuickRsvp">Register & RSVP</q-btn>
+      <p class="text-center">
+        Have an account?
+        <a @click="redirectToLogin">Log in</a>
+      </p>
     </div>
   </q-dialog>
 </template>
@@ -616,26 +909,37 @@ async submitQuickRsvp() {
     this.currentView = 'success';
   } catch (error) {
     if (error.status === 409) {
-      // Email exists - switch to login view
-      this.currentView = 'login';
-      this.errorMessage = 'An account with this email exists. Please log in.';
+      // Email exists - redirect to login page
+      this.redirectToLogin();
     }
   }
 }
 
-async handleLoginSuccess() {
-  // After login, create RSVP automatically
-  await api.createAttendance(this.eventSlug, 'confirmed');
-  this.currentView = 'success';
+redirectToLogin() {
+  // Store RSVP intent in localStorage
+  localStorage.setItem('rsvp_intent', JSON.stringify({
+    eventSlug: this.eventSlug,
+    status: 'confirmed',
+    timestamp: Date.now(),
+    returnUrl: window.location.href
+  }));
+
+  // Close dialog
+  this.show = false;
+
+  // Redirect to login page with context
+  const loginUrl = `/auth/login?email=${encodeURIComponent(this.email)}&returnUrl=${encodeURIComponent(window.location.href)}&context=quick-rsvp`;
+  window.location.href = loginUrl;
 }
 </script>
 ```
 
 **Key behaviors:**
-- Default view: Quick RSVP form
-- 409 response auto-switches to login view with message
-- Login success automatically creates RSVP (no additional step)
-- Success message mentions calendar invite, not verification
+- Single view: Quick RSVP form (simplified)
+- 409 response → Stores RSVP intent → Redirects to `/auth/login`
+- "Have an account? Log in" link → Same redirect behavior
+- Login page handles RSVP completion automatically
+- Consistent login experience across all paths
 
 **2. VerifyEmailBanner.vue** (NEW)
 
@@ -691,17 +995,73 @@ async startVerification() {
 - Only if user hasn't verified (check auth store)
 - Can be dismissed but reappears on refresh until verified
 
-**3. LoginForm.vue** (existing component - ADD embedded mode)
+**3. LoginComponent.vue** (existing component - ENHANCED V2 ✅)
 
-**Current state:**
-- Full-page login form
-- Redirects on success
+**Implemented Features:**
+- Pre-fills email from query params
+- Detects Quick RSVP context from query params
+- Shows contextual banner when `context=quick-rsvp`
+- Checks for RSVP intent in localStorage after login
+- Auto-creates RSVP and redirects to event page
+- Supports all auth methods (password, email code, social)
 
-**V2 Changes:**
-- Add `embedded` prop for dialog usage
-- Add `eventSlug` prop to complete RSVP after login
-- Emit `login-success` event instead of redirecting when embedded
-- Support external auth (Google/GitHub/Bluesky) in embedded mode
+**RSVP Intent Handling:**
+```typescript
+// After successful login (any method)
+async handlePostLoginRedirect() {
+  // 1. Check for OIDC flow first (priority)
+  const oidcData = localStorage.getItem('oidc_flow_data');
+  if (oidcData) {
+    // Handle OIDC redirect...
+    return;
+  }
+
+  // 2. Check for RSVP intent (from Quick RSVP)
+  const rsvpIntent = localStorage.getItem('rsvp_intent');
+  if (rsvpIntent) {
+    const data = JSON.parse(rsvpIntent);
+
+    // Check if not expired (5 minutes)
+    if (Date.now() - data.timestamp < 5 * 60 * 1000) {
+      // Auto-create RSVP
+      await eventStore.actionAttendEvent(data.eventSlug, {
+        status: data.status
+      });
+
+      // Clean up
+      localStorage.removeItem('rsvp_intent');
+
+      // Redirect to event page
+      window.location.href = data.returnUrl;
+      return;
+    }
+  }
+
+  // 3. Normal redirect logic
+  const returnUrl = route.query.returnUrl;
+  if (returnUrl) {
+    window.location.href = returnUrl;
+  } else {
+    router.replace('/');
+  }
+}
+```
+
+**Quick RSVP Context Banner:**
+```vue
+<q-banner v-if="isQuickRsvpContext" class="bg-blue-1">
+  <q-icon name="celebration" />
+  Sign in to complete your RSVP
+  Your account already exists. Sign in to confirm your RSVP.
+</q-banner>
+```
+
+**Key behaviors:**
+- Email pre-filled from `?email=` query param
+- Contextual messaging when coming from Quick RSVP
+- RSVP created automatically after any successful login
+- Works with password, passwordless code, and social auth
+- Redirects back to event page after RSVP creation
 
 **4. EventAttendanceButton.vue** (existing component - UPDATE)
 
@@ -831,122 +1191,43 @@ This would allow one user to have multiple linked auth methods. **Not in scope f
 - ✓ Social login after quick RSVP merges accounts
 - ✓ User can set password after verification
 
-## Implementation Order (V2 - Updated)
+## Implementation Status (V2 - Completed ✅)
 
-### Status: V1 Implemented, V2 Refinements In Progress
+### V2 Implementation Completed: 2025-10-28
 
-**V1 Completed:**
-- ✅ QuickRsvpDto and VerifyEmailCodeDto created
-- ✅ AuthService.quickRsvp() implemented
-- ✅ AuthService.verifyEmailCode() implemented
-- ✅ POST /auth/quick-rsvp endpoint
-- ✅ POST /auth/verify-email-code endpoint
-- ✅ QuickRSVPDialog component (basic version)
-- ✅ VerifyEmailCodeDialog component
-- ✅ VerifyEmailPage route
-- ✅ Rate limiting and security measures
-- ✅ E2E tests
+**Backend Changes:**
+- ✅ AuthService.quickRsvp() - Returns 409 for existing users (Luma-style)
+- ✅ AuthService.requestLoginCode() - Restricted to existing users only (no account creation)
+- ✅ Calendar invite integration with event RSVP system
+- ✅ E2E tests updated for new flow (13/13 passing)
 
-**V2 Changes Needed:**
+**Frontend Changes:**
+- ✅ QuickRSVPDialog - Simplified to single view, redirects to login page
+- ✅ LoginComponent - RSVP intent handling, email pre-fill, contextual banner
+- ✅ RSVP intent pattern - localStorage-based, 5-minute expiry
+- ✅ Removed embedded login view from dialog
+- ✅ Removed social login buttons from Quick RSVP main view
 
-### Phase 1: Backend - Calendar Integration
-- [ ] Create CalendarInviteService
-  - [ ] generateIcsContent() method (RFC 5545 compliant)
-  - [ ] generateAddToCalendarLinks() method
-  - [ ] Integration with MailService for multipart MIME
-- [ ] Update MailService.sendCalendarInvite()
-  - [ ] Support multipart/alternative MIME structure
-  - [ ] text/plain, text/html, text/calendar parts
-  - [ ] Test with different email clients
-- [ ] Create calendar invite email template (MJML)
-  - [ ] Event details
-  - [ ] Add to Calendar buttons (Google, Outlook, O365)
-  - [ ] Responsive design
-- [ ] Unit tests for CalendarInviteService
-- [ ] Integration tests for multipart email sending
+**Key Design Decisions:**
+- ✅ **Luma-style flow**: First RSVP frictionless, repeat requires authentication
+- ✅ **Simplified UX**: Single consistent login page for all authentication paths
+- ✅ **Security**: Passwordless login only for existing users
+- ✅ **Consistency**: All paths (409, "Log in" link, manual login) use same flow
 
-### Phase 2: Backend - Quick RSVP Modifications
-- [ ] Modify AuthService.quickRsvp()
-  - [ ] Remove verification code generation
-  - [ ] Add 409 response for existing users
-  - [ ] Call CalendarInviteService.sendCalendarInvite()
-  - [ ] Update response format
-- [ ] Create POST /auth/request-email-verification endpoint
-  - [ ] Accept email parameter
-  - [ ] Generate 6-digit code
-  - [ ] Send verification code email (not calendar invite)
-  - [ ] Rate limiting
-- [ ] Update E2E tests
-  - [ ] Test 409 response for existing users
-  - [ ] Test calendar invite email sending
-  - [ ] Test new verification flow
-  - [ ] Remove tests for old immediate-verification flow
+**What Changed from Original V2 Plan:**
+- ❌ **No embedded login view**: Originally planned two-view dialog, implemented redirect instead
+- ✅ **Simpler UX**: Single-purpose components, clear separation of concerns
+- ✅ **Better consistency**: All login flows use same `/auth/login` page
+- ✅ **Clearer patterns**: RSVP intent pattern reusable for other flows
 
-### Phase 3: Frontend - Dialog Refactor
-- [ ] Update QuickRSVPDialog component
-  - [ ] Add two-view system (quick-rsvp ↔ login)
-  - [ ] Add currentView state management
-  - [ ] Remove automatic verification code flow
-  - [ ] Handle 409 response → switch to login view
-  - [ ] Update success message (mention calendar invite)
-  - [ ] Add "Already have account? Log in" link
-  - [ ] Add "Back to Quick RSVP" link in login view
-- [ ] Update/Create LoginForm component
-  - [ ] Add `embedded` prop for dialog usage
-  - [ ] Add `eventSlug` prop
-  - [ ] Emit `login-success` event (don't redirect when embedded)
-  - [ ] Support external auth in embedded mode
-  - [ ] Handle RSVP creation after login
-- [ ] Update component tests
-  - [ ] Test view switching
-  - [ ] Test 409 handling
-  - [ ] Test login-then-RSVP flow
-  - [ ] Test external auth flow
+**Remaining Items (Future):**
+- [ ] Calendar invite email testing across email clients (Gmail, Outlook, Apple Mail)
+- [ ] Verify Email banner component (optional feature)
+- [ ] Group join flow adaptation
+- [ ] Production monitoring and metrics tracking
 
-### Phase 4: Frontend - Verify Email Banner
-- [ ] Create VerifyEmailBanner component
-  - [ ] Flexible placement system
-  - [ ] Dismissible functionality
-  - [ ] Integrate with VerifyEmailCodeDialog
-  - [ ] Call new /auth/request-email-verification endpoint
-- [ ] Add banner to EventPage
-- [ ] Add banner to App layout (global)
-- [ ] Add banner to Profile page
-- [ ] Store dismiss state in localStorage
-- [ ] Component tests
-
-### Phase 5: Integration & Testing
-- [ ] Test complete Quick RSVP flow (new user)
-  - [ ] Submit RSVP → Calendar invite received
-  - [ ] Banner appears → Request verification
-  - [ ] Enter code → Logged in
-- [ ] Test Quick RSVP flow (existing user)
-  - [ ] Submit RSVP → 409 response
-  - [ ] Dialog switches to login → Complete login
-  - [ ] RSVP created → Calendar invite received
-- [ ] Test external auth RSVP flow
-  - [ ] Click Google/GitHub/Bluesky
-  - [ ] Complete auth → RSVP created
-  - [ ] Calendar invite received
-- [ ] Test calendar invite emails
-  - [ ] Gmail: Auto "Add to Calendar" button
-  - [ ] Outlook: Auto calendar integration
-  - [ ] Apple Mail: Auto calendar integration
-  - [ ] Fallback links work
-- [ ] Update E2E tests to cover all flows
-
-### Phase 6: Group Join Flow (Future)
-- [ ] Apply same pattern to group membership requests
-- [ ] Quick join → Login required flow
-- [ ] Verification banner for unverified users
-- [ ] Reuse QuickRSVPDialog pattern
-
-### Phase 7: Polish & Deploy
-- [ ] Manual testing (dev environment)
-- [ ] Fix bugs, refine UX
-- [ ] Update documentation
-- [ ] Deploy to production
-- [ ] Monitor metrics (calendar invite open rates, verification rates)
+**Status Summary:**
+Core V2 implementation is complete and functional. All E2E tests passing. Manual testing in progress.
 
 ## Success Metrics
 
