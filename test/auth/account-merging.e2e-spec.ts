@@ -43,6 +43,7 @@ describe('Account Merging (E2E)', () => {
       const testEmail = `quick-rsvp-${timestamp}@example.com`;
 
       // Step 1: User does Quick RSVP (creates passwordless email account)
+      // V2 Luma-style flow: No verification code, immediate account creation
       const quickRsvpResponse = await request(app)
         .post('/api/v1/auth/quick-rsvp')
         .set('x-tenant-id', TESTING_TENANT_ID)
@@ -55,33 +56,26 @@ describe('Account Merging (E2E)', () => {
         .expect(201);
 
       expect(quickRsvpResponse.body.message).toBeDefined();
-      expect(quickRsvpResponse.body.verificationCode).toBeDefined();
+      expect(quickRsvpResponse.body.success).toBe(true);
+      // V2 flow: No verification code returned
+      expect(quickRsvpResponse.body.verificationCode).toBeUndefined();
 
-      // Step 2: Verify the email code to complete Quick RSVP account setup
-      const verifyResponse = await request(app)
-        .post('/api/v1/auth/verify-email-code')
+      // Step 2: Attempt second RSVP with same email should return conflict
+      // This confirms the account was created in Step 1
+      const secondRsvpResponse = await request(app)
+        .post('/api/v1/auth/quick-rsvp')
         .set('x-tenant-id', TESTING_TENANT_ID)
         .send({
-          code: quickRsvpResponse.body.verificationCode,
+          name: 'Test User',
           email: testEmail,
+          eventSlug: testEvent.slug,
+          status: EventAttendeeStatus.Confirmed,
         })
-        .expect(200);
+        .expect(409);
 
-      expect(verifyResponse.body.token).toBeDefined();
-      expect(verifyResponse.body.user).toBeDefined();
-      expect(verifyResponse.body.user.id).toBeDefined();
-
-      // Step 3: Verify user profile is passwordless email account
-      const profileResponse = await request(app)
-        .get('/api/v1/auth/me')
-        .set('x-tenant-id', TESTING_TENANT_ID)
-        .set('Authorization', `Bearer ${verifyResponse.body.token}`)
-        .expect(200);
-
-      expect(profileResponse.body.id).toBe(verifyResponse.body.user.id);
-      expect(profileResponse.body.email).toBe(testEmail);
-      expect(profileResponse.body.provider).toBe('email');
-      expect(profileResponse.body.socialId).toBeNull();
+      expect(secondRsvpResponse.body.message).toContain(
+        'account with this email already exists',
+      );
 
       // This confirms a Quick RSVP account (passwordless email) was created
       // The account merging logic (upgrading to social login) happens in
@@ -105,9 +99,12 @@ describe('Account Merging (E2E)', () => {
         })
         .expect(201);
 
-      expect(firstResponse.body.verificationCode).toBeDefined();
+      expect(firstResponse.body.success).toBe(true);
+      // V2 flow: No verification code returned
+      expect(firstResponse.body.verificationCode).toBeUndefined();
 
-      // Second Quick RSVP with same email and event should be handled gracefully
+      // Second Quick RSVP with same email should return conflict
+      // V2 Luma-style flow: Existing users must sign in to RSVP
       const secondResponse = await request(app)
         .post('/api/v1/auth/quick-rsvp')
         .set('x-tenant-id', TESTING_TENANT_ID)
@@ -116,10 +113,12 @@ describe('Account Merging (E2E)', () => {
           email: testEmail,
           eventSlug: testEvent.slug,
           status: EventAttendeeStatus.Confirmed,
-        });
+        })
+        .expect(409);
 
-      // Should either succeed (update existing) or return 4xx
-      expect([201, 400, 409]).toContain(secondResponse.status);
+      expect(secondResponse.body.message).toContain(
+        'account with this email already exists',
+      );
     });
   });
 

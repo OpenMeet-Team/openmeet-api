@@ -612,6 +612,98 @@ describe('EventAttendeeService', () => {
     });
   });
 
+  describe('Calendar invite integration', () => {
+    it('should emit event.rsvp.added event when confirmed attendee is created', async () => {
+      const mockEventRole: Partial<EventRoleEntity> = {
+        id: 1,
+        name: 'attendee',
+      };
+
+      // Create fresh mock for this test to avoid pollution
+      const freshConfirmedAttendee: Partial<EventAttendeesEntity> = {
+        id: 1,
+        user: mockUser as UserEntity,
+        event: mockEvent as EventEntity,
+        status: EventAttendeeStatus.Confirmed,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const eventEmitter = module.get(EventEmitter2);
+      const emitSpy = jest.spyOn(eventEmitter, 'emit');
+
+      // Setup mocks
+      mockUserService.findBySlug = jest.fn().mockResolvedValue({
+        ...mockUser,
+        provider: 'local', // Not a Bluesky user, skip Bluesky sync
+      });
+      mockRepository.create.mockReturnValue(freshConfirmedAttendee);
+      mockRepository.save.mockResolvedValue(freshConfirmedAttendee);
+
+      // Create confirmed attendee
+      const createDto = {
+        event: mockEvent as EventEntity,
+        user: mockUser as UserEntity,
+        role: mockEventRole as EventRoleEntity,
+        status: EventAttendeeStatus.Confirmed,
+      };
+
+      await service.create(createDto);
+
+      // Verify event.rsvp.added was emitted with correct payload
+      expect(emitSpy).toHaveBeenCalledWith(
+        'event.rsvp.added',
+        expect.objectContaining({
+          eventId: mockEvent.id,
+          eventSlug: mockEvent.slug,
+          userId: mockUser.id,
+          userSlug: mockUser.slug,
+          status: EventAttendeeStatus.Confirmed,
+          tenantId: 'test-tenant',
+        }),
+      );
+    });
+
+    it('should NOT emit event.rsvp.added for pending attendees', async () => {
+      const mockEventRole: Partial<EventRoleEntity> = {
+        id: 1,
+        name: 'attendee',
+      };
+
+      const pendingAttendee = {
+        ...mockConfirmedAttendee,
+        status: EventAttendeeStatus.Pending,
+      };
+
+      const eventEmitter = module.get(EventEmitter2);
+      const emitSpy = jest.spyOn(eventEmitter, 'emit');
+
+      mockUserService.findBySlug = jest.fn().mockResolvedValue({
+        ...mockUser,
+        provider: 'local',
+      });
+      mockRepository.create.mockReturnValue(pendingAttendee);
+      mockRepository.save.mockResolvedValue(pendingAttendee);
+
+      const createDto = {
+        event: mockEvent as EventEntity,
+        user: mockUser as UserEntity,
+        role: mockEventRole as EventRoleEntity,
+        status: EventAttendeeStatus.Pending,
+      };
+
+      await service.create(createDto);
+
+      // event.rsvp.added should still be emitted for activity feed, but listener filters by status
+      expect(emitSpy).toHaveBeenCalledWith(
+        'event.rsvp.added',
+        expect.objectContaining({
+          status: EventAttendeeStatus.Pending,
+        }),
+      );
+    });
+  });
+
   afterEach(async () => {
     await module.close();
     jest.clearAllMocks();

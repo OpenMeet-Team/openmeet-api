@@ -216,4 +216,66 @@ export class MailerService {
 
     return html;
   }
+
+  /**
+   * Send email with calendar invite attachment
+   * Creates multipart MIME with text/calendar for automatic calendar integration
+   */
+  async sendCalendarInviteMail({
+    to,
+    subject,
+    templateName,
+    context,
+    tenantConfig,
+    icsContent,
+  }: {
+    to: string;
+    subject: string;
+    templateName: string;
+    context: Record<string, any>;
+    tenantConfig: any;
+    icsContent: string;
+  }) {
+    try {
+      // Render MJML template to HTML
+      const html = await this.renderTemplate(templateName, {
+        ...context,
+        tenantConfig,
+        currentYear: new Date().getFullYear(),
+      });
+
+      // Generate plain text version from HTML
+      const text = htmlToText(html, {
+        wordwrap: 80,
+        selectors: [
+          { selector: 'a', options: { ignoreHref: false } },
+          { selector: 'img', format: 'skip' },
+        ],
+      });
+
+      // Send email with calendar attachment
+      // Nodemailer automatically creates multipart MIME with text/calendar
+      await this.transporter.sendMail({
+        from: {
+          name:
+            tenantConfig.mailDefaultName ||
+            this.configService.get('mail.defaultName', { infer: true }),
+          address:
+            tenantConfig.mailDefaultEmail ||
+            this.configService.get('mail.defaultEmail', { infer: true }),
+        },
+        to,
+        subject,
+        html,
+        text,
+        icalEvent: {
+          method: 'REQUEST',
+          content: icsContent,
+        },
+      });
+    } catch (error) {
+      console.error('Failed to send calendar invite email:', error);
+      throw error;
+    }
+  }
 }

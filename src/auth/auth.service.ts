@@ -4,6 +4,7 @@ import {
   NotFoundException,
   UnauthorizedException,
   UnprocessableEntityException,
+  ConflictException,
   Logger,
   Inject,
 } from '@nestjs/common';
@@ -948,10 +949,12 @@ export class AuthService {
   async quickRsvp(dto: QuickRsvpDto, tenantId: string) {
     const {
       name,
-      email,
       eventSlug,
       status = EventAttendeeStatus.Confirmed,
     } = dto;
+
+    // Normalize email to lowercase for consistency
+    const email = dto.email.toLowerCase().trim();
 
     // 1. Find the event
     const event = await this.eventQueryService.findEventBySlug(eventSlug);
@@ -987,17 +990,29 @@ export class AuthService {
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ') || '';
 
-    // 4. Find or create user (email already normalized by DTO transformer)
-    let user: NullableType<User> = await this.userService.findByEmail(email);
+    // 4. Check if user already exists - Luma-style flow
+    // If user exists (any type), they must sign in to RSVP
+    let user: NullableType<User> = await this.userService.findByEmail(
+      email,
+      tenantId,
+    );
 
-    if (!user) {
-      // Create new user
-      const defaultRole = await this.roleService.findByName(RoleEnum.User);
-      if (!defaultRole) {
-        throw new NotFoundException('Default role not found');
-      }
+    if (user) {
+      // User exists - they need to sign in to complete RSVP
+      // Frontend will redirect to /auth/signin, then auto-create RSVP after login
+      throw new ConflictException(
+        'An account with this email already exists. Please sign in to RSVP.',
+      );
+    }
 
-      user = await this.userService.create({
+    // 5. Create new user
+    const defaultRole = await this.roleService.findByName(RoleEnum.User);
+    if (!defaultRole) {
+      throw new NotFoundException('Default role not found');
+    }
+
+    user = await this.userService.create(
+      {
         email,
         firstName,
         lastName,
@@ -1005,10 +1020,11 @@ export class AuthService {
         socialId: null,
         role: defaultRole.id,
         status: { id: StatusEnum.active },
-      });
+      },
+      tenantId,
+    );
 
-      this.logger.log(`Created new user via quick RSVP: ${email}`);
-    }
+    this.logger.log(`Created new user via quick RSVP: ${email}`);
 
     // 5. Ensure user was created successfully
     if (!user) {
@@ -1073,43 +1089,13 @@ export class AuthService {
       );
     }
 
-    // 7. Generate email verification code
-    const verificationCode =
-      await this.emailVerificationCodeService.generateCode(
-        user.id,
-        tenantId,
-        email,
-      );
-
-    // 8. Send verification email
-    await this.mailService.sendEmailVerification({
-      to: email,
-      data: {
-        name: firstName,
-        code: verificationCode,
-        eventName: event.name,
-        email, // Pass email for verification link
-        eventSlug: event.slug, // Pass event slug for redirect after verification
-        expiryMinutes: this.emailVerificationCodeService.getExpiryMinutes(),
-      },
-    });
-
-    // 9. Return success (include code only in development/test environments)
-    const response: {
-      success: boolean;
-      message: string;
-      verificationCode?: string;
-    } = {
+    // 7. Return success - calendar invite will be sent via CalendarInviteListener
+    // which listens for the 'event.rsvp.added' event emitted by eventAttendeeService
+    return {
       success: true,
-      message: 'Please check your email for verification code',
+      message:
+        'RSVP registered successfully. Check your email for a calendar invite.',
     };
-
-    // Only include verification code in non-production environments for testing
-    if (process.env.NODE_ENV !== 'production') {
-      response.verificationCode = verificationCode;
-    }
-
-    return response;
   }
 
   /**
@@ -1187,43 +1173,20 @@ export class AuthService {
     const normalizedEmail = email.toLowerCase().trim();
 
     // Find or create user
-    let user: NullableType<User> = await this.userService.findByEmail(
+    const user: NullableType<User> = await this.userService.findByEmail(
       normalizedEmail,
       tenantId,
     );
 
     if (!user) {
-      // Create passwordless account (similar to Quick RSVP)
+      // Don't create new accounts via passwordless login
+      // Users should use the registration page to create accounts
       this.logger.log(
-        `Creating passwordless account for new user via login code: ${normalizedEmail}`,
+        `Login code requested for non-existent user: ${normalizedEmail}`,
       );
-
-      const defaultRole = await this.roleService.findByName(RoleEnum.User);
-      if (!defaultRole) {
-        throw new NotFoundException('Default role not found');
-      }
-
-      user = await this.userService.create(
-        {
-          email: normalizedEmail,
-          provider: AuthProvidersEnum.email,
-          socialId: null,
-          firstName: null,
-          lastName: null,
-          role: defaultRole.id,
-          status: { id: StatusEnum.active },
-        },
-        tenantId,
+      throw new NotFoundException(
+        'No account found with this email. Please register first.',
       );
-
-      this.logger.log(
-        `Created passwordless user ${user.id} for ${normalizedEmail}`,
-      );
-    }
-
-    // Ensure user was created successfully
-    if (!user) {
-      throw new NotFoundException('Failed to create user');
     }
 
     // Check if user is inactive

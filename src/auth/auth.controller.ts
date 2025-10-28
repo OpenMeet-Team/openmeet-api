@@ -42,6 +42,11 @@ import { QuickRsvpDto } from './dto/quick-rsvp.dto';
 import { VerifyEmailCodeDto } from './dto/verify-email-code.dto';
 import { RequestLoginCodeDto } from './dto/request-login-code.dto';
 import { RateLimit } from './guards/multi-layer-throttler.guard';
+import {
+  QUICK_RSVP_RATE_LIMITS,
+  EMAIL_VERIFICATION_RATE_LIMITS,
+  REQUEST_LOGIN_CODE_RATE_LIMITS,
+} from './config/rate-limits.config';
 
 @ApiTags('Auth')
 @Controller({
@@ -245,25 +250,22 @@ export class AuthController {
 
   @Post('quick-rsvp')
   @Throttle({
-    default: {
-      limit: process.env.NODE_ENV === 'production' ? 3 : 10000,
-      ttl: 60000,
-    },
+    default: QUICK_RSVP_RATE_LIMITS.perIp,
   })
   @RateLimit({
     email: {
-      limit: process.env.NODE_ENV === 'production' ? 5 : 10000,
-      ttl: 3600,
+      limit: QUICK_RSVP_RATE_LIMITS.perEmail.limit,
+      ttl: QUICK_RSVP_RATE_LIMITS.perEmail.ttl / 1000, // Convert ms to seconds
     },
     resource: {
-      limit: process.env.NODE_ENV === 'production' ? 100 : 10000,
-      ttl: 3600,
+      limit: QUICK_RSVP_RATE_LIMITS.perEvent.limit,
+      ttl: QUICK_RSVP_RATE_LIMITS.perEvent.ttl / 1000, // Convert ms to seconds
       field: 'eventSlug',
       keyPrefix: 'event',
     },
     composite: {
-      limit: process.env.NODE_ENV === 'production' ? 3 : 10000,
-      ttl: 3600,
+      limit: QUICK_RSVP_RATE_LIMITS.composite.limit,
+      ttl: QUICK_RSVP_RATE_LIMITS.composite.ttl / 1000, // Convert ms to seconds
       fields: ['email', 'eventSlug'],
       keyPrefix: 'user_event',
     },
@@ -271,7 +273,12 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   @ApiResponse({
     status: HttpStatus.CREATED,
-    description: 'User created and RSVP registered. Verification email sent.',
+    description:
+      'User created and RSVP registered. Calendar invite email sent.',
+  })
+  @ApiResponse({
+    status: HttpStatus.CONFLICT,
+    description: 'User with this email already exists. Please log in to RSVP.',
   })
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,
@@ -294,19 +301,16 @@ export class AuthController {
 
   @Post('verify-email-code')
   @Throttle({
-    default: {
-      limit: process.env.NODE_ENV === 'production' ? 5 : 10000,
-      ttl: 60000,
-    },
+    default: EMAIL_VERIFICATION_RATE_LIMITS.perIp,
   })
   @RateLimit({
     email: {
-      limit: process.env.NODE_ENV === 'production' ? 10 : 10000,
-      ttl: 3600,
+      limit: EMAIL_VERIFICATION_RATE_LIMITS.perEmail.limit,
+      ttl: EMAIL_VERIFICATION_RATE_LIMITS.perEmail.ttl / 1000, // Convert ms to seconds
     },
     composite: {
-      limit: process.env.NODE_ENV === 'production' ? 5 : 10000,
-      ttl: 3600,
+      limit: EMAIL_VERIFICATION_RATE_LIMITS.composite.limit,
+      ttl: EMAIL_VERIFICATION_RATE_LIMITS.composite.ttl / 1000, // Convert ms to seconds
       fields: ['email', 'code'],
       keyPrefix: 'email_code',
     },
@@ -348,15 +352,12 @@ export class AuthController {
 
   @Post('request-login-code')
   @Throttle({
-    default: {
-      limit: process.env.NODE_ENV === 'production' ? 3 : 10000,
-      ttl: 60000,
-    },
+    default: REQUEST_LOGIN_CODE_RATE_LIMITS.perIp,
   })
   @RateLimit({
     email: {
-      limit: process.env.NODE_ENV === 'production' ? 5 : 10000,
-      ttl: 3600,
+      limit: REQUEST_LOGIN_CODE_RATE_LIMITS.perEmail.limit,
+      ttl: REQUEST_LOGIN_CODE_RATE_LIMITS.perEmail.ttl / 1000, // Convert ms to seconds
     },
   })
   @HttpCode(HttpStatus.OK)

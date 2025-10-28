@@ -13,6 +13,8 @@ import { EventModule } from '../event/event.module';
 import { GroupMemberModule } from '../group-member/group-member.module';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
+import { CalendarInviteListener } from '../mail/listeners/calendar-invite.listener';
+import { CalendarInviteService } from '../mail/services/calendar-invite.service';
 
 @Module({
   imports: [
@@ -26,7 +28,13 @@ import { GroupMemberEntity } from '../group-member/infrastructure/persistence/re
     forwardRef(() => EventModule),
     forwardRef(() => GroupMemberModule),
   ],
-  providers: [EventMailService, EventAnnouncementService, MailService],
+  providers: [
+    EventMailService,
+    EventAnnouncementService,
+    MailService,
+    CalendarInviteService,
+    CalendarInviteListener,
+  ],
   exports: [EventMailService, EventAnnouncementService],
 })
 export class EventMailModule {}

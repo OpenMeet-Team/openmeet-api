@@ -87,7 +87,7 @@ describe('Quick RSVP (e2e)', () => {
 
   describe('POST /api/v1/auth/quick-rsvp', () => {
     describe('Happy path: New user RSVPs to public event', () => {
-      it('should create user, RSVP, and return verification code', async () => {
+      it('should create user, RSVP, and send calendar invite', async () => {
         const timestamp = Date.now();
         const quickRsvpData = {
           name: 'New User',
@@ -103,20 +103,11 @@ describe('Quick RSVP (e2e)', () => {
 
         expect(response.body).toMatchObject({
           success: true,
-          message: expect.stringContaining('email'),
+          message: expect.stringContaining('calendar invite'),
         });
 
-        // Verification code should be returned for testing
-        expect(response.body.verificationCode).toMatch(/^\d{6}$/);
-
-        // TODO: Cookie should be set for auto-login (future enhancement)
-        // const cookies = response.headers['set-cookie'];
-        // expect(cookies).toBeDefined();
-        // expect(
-        //   cookies.some((c: string) =>
-        //     c.includes('openmeet_pending_verification'),
-        //   ),
-        // ).toBe(true);
+        // No verification code - calendar invite sent immediately
+        expect(response.body.verificationCode).toBeUndefined();
       });
 
       it('should create user with "Can\'t go" status when status is cancelled', async () => {
@@ -136,9 +127,9 @@ describe('Quick RSVP (e2e)', () => {
 
         expect(response.body).toMatchObject({
           success: true,
-          message: expect.stringContaining('email'),
+          message: expect.stringContaining('calendar invite'),
         });
-        expect(response.body.verificationCode).toMatch(/^\d{6}$/);
+        expect(response.body.verificationCode).toBeUndefined();
       });
 
       it('should normalize email to lowercase', async () => {
@@ -160,7 +151,7 @@ describe('Quick RSVP (e2e)', () => {
     });
 
     describe('Existing user RSVPs', () => {
-      it('should use existing user and create RSVP', async () => {
+      it('should return 409 conflict for existing users', async () => {
         const timestamp = Date.now();
         const email = `existing.${timestamp}@example.com`;
 
@@ -189,7 +180,7 @@ describe('Quick RSVP (e2e)', () => {
           categories: [],
         });
 
-        // Second RSVP should reuse existing user
+        // Second RSVP should return 409 for existing user (Luma-style)
         const response = await request(app)
           .post('/api/v1/auth/quick-rsvp')
           .set('x-tenant-id', TESTING_TENANT_ID)
@@ -198,14 +189,15 @@ describe('Quick RSVP (e2e)', () => {
             email,
             eventSlug: secondEvent.slug,
           })
-          .expect(201);
+          .expect(409);
 
-        expect(response.body.success).toBe(true);
+        expect(response.body.message).toContain('already exists');
+        expect(response.body.message).toContain('sign in');
       });
     });
 
     describe('Idempotency', () => {
-      it('should return success if user already has RSVP', async () => {
+      it('should return 409 for duplicate Quick RSVP attempts', async () => {
         const timestamp = Date.now();
         const quickRsvpData = {
           name: 'Duplicate Test',
@@ -220,14 +212,14 @@ describe('Quick RSVP (e2e)', () => {
           .send(quickRsvpData)
           .expect(201);
 
-        // Second RSVP to same event - should be idempotent
+        // Second RSVP to same event - should return 409 (user exists, use login)
         const response = await request(app)
           .post('/api/v1/auth/quick-rsvp')
           .set('x-tenant-id', TESTING_TENANT_ID)
           .send(quickRsvpData)
-          .expect(201);
+          .expect(409);
 
-        expect(response.body.success).toBe(true);
+        expect(response.body.message).toContain('already exists');
       });
     });
 
@@ -328,102 +320,20 @@ describe('Quick RSVP (e2e)', () => {
 
         expect(response.body).toMatchObject({
           success: true,
-          message: expect.stringContaining('email'),
+          message: expect.stringContaining('calendar invite'),
         });
-        expect(response.body.verificationCode).toMatch(/^\d{6}$/);
+        expect(response.body.verificationCode).toBeUndefined();
       });
     });
   });
 
-  describe('POST /api/v1/auth/verify-email-code', () => {
-    it('should verify code and log in user', async () => {
-      const timestamp = Date.now();
-      const email = `verify.test.${timestamp}@example.com`;
-
-      // Step 1: Quick RSVP
-      const rsvpResponse = await request(app)
-        .post('/api/v1/auth/quick-rsvp')
-        .set('x-tenant-id', TESTING_TENANT_ID)
-        .send({
-          name: 'Verify Test',
-          email,
-          eventSlug: publicEvent.slug,
-        })
-        .expect(201);
-
-      const { verificationCode } = rsvpResponse.body;
-
-      // Step 2: Verify email with code
-      const verifyResponse = await request(app)
-        .post('/api/v1/auth/verify-email-code')
-        .set('x-tenant-id', TESTING_TENANT_ID)
-        .send({ code: verificationCode, email })
-        .expect(200);
-
-      // Should return JWT tokens
-      expect(verifyResponse.body).toMatchObject({
-        token: expect.any(String),
-        refreshToken: expect.any(String),
-        tokenExpires: expect.any(Number),
-      });
-      expect(verifyResponse.body.user).toBeDefined();
-      expect(verifyResponse.body.user.id).toBeDefined();
-      expect(verifyResponse.body.user.firstName).toBe('Verify');
-      expect(verifyResponse.body.user.lastName).toBe('Test');
-
-      // Should be able to access protected routes
-      const meResponse = await request(app)
-        .get('/api/v1/auth/me')
-        .set('Authorization', `Bearer ${verifyResponse.body.token}`)
-        .set('x-tenant-id', TESTING_TENANT_ID)
-        .expect(200);
-
-      expect(meResponse.body.email).toBe(email);
-    });
-
-    it('should reject invalid code', async () => {
-      await request(app)
-        .post('/api/v1/auth/verify-email-code')
-        .set('x-tenant-id', TESTING_TENANT_ID)
-        .send({ code: '999999', email: 'test@example.com' })
-        .expect(401);
-    });
-
-    it('should reject code after one use', async () => {
-      const timestamp = Date.now();
-      const email = `onetime.${timestamp}@example.com`;
-
-      // Quick RSVP
-      const rsvpResponse = await request(app)
-        .post('/api/v1/auth/quick-rsvp')
-        .set('x-tenant-id', TESTING_TENANT_ID)
-        .send({
-          name: 'One Time Test',
-          email,
-          eventSlug: publicEvent.slug,
-        })
-        .expect(201);
-
-      const { verificationCode } = rsvpResponse.body;
-
-      // First use - should succeed
-      await request(app)
-        .post('/api/v1/auth/verify-email-code')
-        .set('x-tenant-id', TESTING_TENANT_ID)
-        .send({ code: verificationCode, email })
-        .expect(200);
-
-      // Second use - should fail
-      await request(app)
-        .post('/api/v1/auth/verify-email-code')
-        .set('x-tenant-id', TESTING_TENANT_ID)
-        .send({ code: verificationCode, email })
-        .expect(401);
-    });
-  });
+  // NOTE: verify-email-code tests have been removed from this file
+  // because Quick RSVP no longer uses verification codes.
+  // The verify-email-code endpoint is still used for passwordless login
+  // and should be tested in a separate passwordless-login.e2e-spec.ts file.
 
   describe('Integration: Complete quick RSVP flow', () => {
-    it('should complete full flow: RSVP → verify → access event', async () => {
+    it('should complete full flow: RSVP → calendar invite sent → RSVP created', async () => {
       const timestamp = Date.now();
       const email = `fullflow.${timestamp}@example.com`;
       const name = 'Full Flow Test';
@@ -440,39 +350,24 @@ describe('Quick RSVP (e2e)', () => {
         .expect(201);
 
       expect(rsvpResponse.body.success).toBe(true);
-      const { verificationCode } = rsvpResponse.body;
+      expect(rsvpResponse.body.message).toContain('calendar invite');
+      expect(rsvpResponse.body.verificationCode).toBeUndefined();
 
-      // Step 2: Verify email
-      const verifyResponse = await request(app)
-        .post('/api/v1/auth/verify-email-code')
-        .set('x-tenant-id', TESTING_TENANT_ID)
-        .send({ code: verificationCode, email })
-        .expect(200);
-
-      const { token } = verifyResponse.body;
-
-      // Step 3: Check user is logged in
-      const meResponse = await request(app)
-        .get('/api/v1/auth/me')
-        .set('Authorization', `Bearer ${token}`)
-        .set('x-tenant-id', TESTING_TENANT_ID)
-        .expect(200);
-
-      expect(meResponse.body.email).toBe(email);
-
-      // Step 4: Verify RSVP exists by checking attendees endpoint
+      // Step 2: Verify RSVP was created by checking attendees endpoint
       const attendeesResponse = await request(app)
         .get(`/api/events/${publicEvent.slug}/attendees`)
         .set('Authorization', `Bearer ${token}`)
         .set('x-tenant-id', TESTING_TENANT_ID)
         .expect(200);
 
-      // User should be in the attendees list
+      // User should be in the attendees list with confirmed status
       const userAttendee = attendeesResponse.body.data.find(
         (a: any) => a.user.name === 'Full Flow Test',
       );
       expect(userAttendee).toBeDefined();
       expect(userAttendee.status).toBe('confirmed');
+      expect(userAttendee.user).toBeDefined();
+      expect(userAttendee.user.name).toBe('Full Flow Test');
     });
   });
 });

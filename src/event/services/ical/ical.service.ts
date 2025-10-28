@@ -78,6 +78,72 @@ export class ICalendarService {
   }
 
   /**
+   * Generate a calendar invite for a specific attendee
+   * Uses METHOD:REQUEST for email invitations
+   * @param event - The event entity
+   * @param attendee - Attendee information
+   * @param organizer - Organizer information
+   * @param eventUrl - Optional custom event URL (defaults to openmeet.io if not provided)
+   */
+  public generateCalendarInvite(
+    event: EventEntity,
+    attendee: { email: string; firstName?: string; lastName?: string },
+    organizer: { email: string; firstName?: string; lastName?: string },
+    eventUrl?: string,
+  ): string {
+    const calendar = icalGenerator({
+      prodId: { company: 'OpenMeet', product: 'Calendar', language: 'EN' },
+      timezone: event.timeZone || 'UTC',
+    });
+
+    // Set method to REQUEST for calendar invites
+    calendar.method('REQUEST' as any);
+
+    // Create the event using existing method
+    const calEvent = this.createCalendarEvent(event);
+
+    // Override URL if custom one provided
+    if (eventUrl) {
+      calEvent.url(eventUrl);
+    }
+
+    // Override organizer with provided organizer info
+    const organizerName =
+      `${organizer.firstName || ''} ${organizer.lastName || ''}`.trim() ||
+      organizer.email.split('@')[0];
+
+    calEvent.organizer({
+      name: organizerName,
+      email: organizer.email,
+    });
+
+    // Add the specific attendee with ACCEPTED status
+    const attendeeName =
+      `${attendee.firstName || ''} ${attendee.lastName || ''}`.trim() ||
+      attendee.email.split('@')[0];
+
+    calEvent.createAttendee({
+      name: attendeeName,
+      email: attendee.email,
+      rsvp: true,
+      status: 'ACCEPTED' as any,
+      role: 'REQ-PARTICIPANT' as any,
+    });
+
+    // Add 24-hour reminder
+    calEvent.createAlarm({
+      type: 'display' as any,
+      trigger: 60 * 60 * 24, // 24 hours before (in seconds)
+      description: `Reminder: ${event.name} tomorrow`,
+    });
+
+    // Add the event to the calendar
+    calendar.events([calEvent]);
+
+    return calendar.toString();
+  }
+
+  /**
    * Create a full iCalendar document from an EventEntity
    */
   public createICalendar(event: EventEntity): string {
