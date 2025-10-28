@@ -482,15 +482,16 @@ No schema changes required! Existing `users` table supports this:
 **Logic (V2 - UPDATED):**
 1. Validate event exists (throw 404 if not)
 2. Validate event is published and hasn't ended
-3. **Check if user with email exists:**
+3. **Normalize email to lowercase** (prevents duplicate accounts from case sensitivity)
+4. **Check if user with email exists:**
    - **Exists**: Return 409 Conflict (frontend switches to login view)
-   - **Not exists**: Continue to step 4
-4. Parse name into firstName + lastName
-5. Create new user (status=active, password=null, provider='email')
-6. Create EventAttendee record
-7. **Generate calendar invite (.ics file)**
-8. **Send calendar invite email (NOT verification code)**
-9. Return success
+   - **Not exists**: Continue to step 5
+5. Parse name into firstName + lastName
+6. Create new user (status=active, password=null, provider='email')
+7. Create EventAttendee record
+8. **Generate calendar invite (.ics file) with tenant-specific event URL**
+9. **Send calendar invite email with timezone information**
+10. Return success
 
 **Error Cases:**
 - Event not found → 404
@@ -663,13 +664,21 @@ const code = await tempAuthCodeService.generateAuthCode(
 
 **Testing:** Add unit tests before extending (currently has none)
 
-### Calendar Invite Generation (NEW - V2)
+### Calendar Invite Generation (NEW - V2) ✅ IMPLEMENTED
 
 **Purpose:** Generate calendar invites that automatically integrate with all major calendar providers
 
-**Service:** Create `CalendarInviteService` (new)
+**Service:** `CalendarInviteService` (implemented)
 
 **Approach:** Multipart MIME email with text/calendar for automatic integration
+
+**Key Features (Implemented):**
+- ✅ Multipart MIME email structure
+- ✅ Tenant-specific event URLs in ICS files (uses `tenantConfig.frontendDomain`)
+- ✅ Timezone-aware date/time formatting in emails
+- ✅ Event timezone displayed in email body (e.g., "America/New_York" or "UTC")
+- ✅ Date/time formatted in event's timezone (not server timezone)
+- ✅ Automatic calendar integration across providers
 
 **Why multipart MIME:**
 - Single email reaches all users
@@ -677,6 +686,12 @@ const code = await tempAuthCodeService.generateAuthCode(
 - Shows "Add to Calendar" button automatically in email clients
 - Includes HTML body with fallback "Add to Calendar" links
 - Maximum compatibility across providers
+
+**Timezone Handling:**
+- Email shows: Date, Time, and Timezone separately
+- Date/time formatted using event's timezone (via `toLocaleDateString`/`toLocaleTimeString`)
+- Defaults to UTC if event has no timezone specified
+- ICS file contains proper timezone data for calendar apps
 
 **MIME Structure:**
 ```
@@ -812,10 +827,16 @@ class CalendarInviteService {
 - Automatically parsed by email clients
 
 **Variables:**
-- eventTitle, eventDate, eventTime, eventLocation
-- eventDescription, eventUrl
+- eventTitle, eventDate, eventTime, **eventTimeZone**, eventLocation
+- eventDescription, eventUrl (tenant-specific)
 - attendeeName, organizerName
 - googleCalendarLink, outlookCalendarLink, office365CalendarLink
+
+**Implementation Notes:**
+- `eventDate` formatted via `toLocaleDateString('en-US', { timeZone: event.timeZone })`
+- `eventTime` formatted via `toLocaleTimeString('en-US', { timeZone: event.timeZone, timeZoneName: 'short' })`
+- `eventTimeZone` displays timezone identifier (e.g., "America/New_York", "UTC")
+- All calendar URLs use tenant domain from `tenantConfig.frontendDomain`
 
 #### 2. Email Verification Code Email (UPDATED)
 
@@ -1157,10 +1178,15 @@ This would allow one user to have multiple linked auth methods. **Not in scope f
 - ✓ JWT tokens follow existing security model
 - ✓ Sessions use same security as current auth
 
-### Spam/Abuse Prevention
-- ⚠ **V1**: No rate limiting on quick RSVPs
-- ⚠ **Future**: Add rate limiting (e.g., max 5 RSVPs per email per hour)
-- ⚠ **Future**: Add CAPTCHA for suspicious activity
+### Spam/Abuse Prevention ✅ IMPLEMENTED
+- ✅ **Multi-layer rate limiting** on quick RSVPs:
+  - Per-IP: 3 requests/minute (prevents mass signups from single IP)
+  - Per-email: 5 requests/hour (prevents spam to single email)
+  - Per-event: 100 requests/hour (prevents mass fake RSVPs)
+  - Per email+event: 3 requests/hour (prevents repeated RSVP attempts)
+- ✅ **Centralized configuration**: Rate limits defined in `src/auth/config/rate-limits.config.ts`
+- ✅ **Same pattern** applied to email verification and login code endpoints
+- ⚠ **Future**: Add CAPTCHA for suspicious activity if needed
 
 ## Testing Strategy
 
@@ -1220,7 +1246,15 @@ This would allow one user to have multiple linked auth methods. **Not in scope f
 - ✅ **Better consistency**: All login flows use same `/auth/login` page
 - ✅ **Clearer patterns**: RSVP intent pattern reusable for other flows
 
+**Post-V2 Improvements (2025-10-28):**
+- ✅ Timezone handling in calendar invites (date/time formatted in event timezone)
+- ✅ Email normalization to lowercase (prevents duplicate accounts)
+- ✅ Tenant-specific URLs in calendar invite ICS files
+- ✅ Centralized rate limit configuration
+- ✅ Updated tests for all changes
+
 **Remaining Items (Future):**
+- [ ] Tenant-specific URLs in calendar feeds and ICS downloads (see [Issue #334](https://github.com/OpenMeet-Team/openmeet-api/issues/334))
 - [ ] Calendar invite email testing across email clients (Gmail, Outlook, Apple Mail)
 - [ ] Verify Email banner component (optional feature)
 - [ ] Group join flow adaptation
@@ -1282,8 +1316,8 @@ If implementing, would need:
 ### 1. **Returning user flow**
 Email verification required (15-minute expiry). No auto-login in V1.
 
-### 2. **Rate limiting**
-Multi-layer throttling (per-IP, per-email, per-resource, per-combination)
+### 2. **Rate limiting** ✅ IMPLEMENTED
+Multi-layer throttling (per-IP, per-email, per-resource, per-combination) with centralized configuration in `src/auth/config/rate-limits.config.ts`
 
 ### 3. **CAPTCHA**
 None in v1. Add if abused.
