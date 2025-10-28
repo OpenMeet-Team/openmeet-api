@@ -4,12 +4,11 @@ import { MailService } from './mail.service';
 import { MailerModule } from '../mailer/mailer.module';
 import { TenantModule } from '../tenant/tenant.module';
 import { MailController } from './mail.controller';
-import { CalendarInviteService } from './services/calendar-invite.service';
 
 @Module({
   imports: [ConfigModule, MailerModule, TenantModule],
-  providers: [MailService, MailController, CalendarInviteService],
-  exports: [MailService, CalendarInviteService],
+  providers: [MailService, MailController],
+  exports: [MailService],
   controllers: [MailController],
 })
 export class MailModule {}

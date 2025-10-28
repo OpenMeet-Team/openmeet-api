@@ -14,6 +14,7 @@ import { GroupMemberModule } from '../group-member/group-member.module';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { CalendarInviteListener } from '../mail/listeners/calendar-invite.listener';
+import { CalendarInviteService } from '../mail/services/calendar-invite.service';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { CalendarInviteListener } from '../mail/listeners/calendar-invite.listen
     EventMailService,
     EventAnnouncementService,
     MailService,
+    CalendarInviteService,
     CalendarInviteListener,
   ],
   exports: [EventMailService, EventAnnouncementService],

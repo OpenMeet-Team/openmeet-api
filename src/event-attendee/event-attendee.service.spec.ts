@@ -619,6 +619,16 @@ describe('EventAttendeeService', () => {
         name: 'attendee',
       };
 
+      // Create fresh mock for this test to avoid pollution
+      const freshConfirmedAttendee: Partial<EventAttendeesEntity> = {
+        id: 1,
+        user: mockUser as UserEntity,
+        event: mockEvent as EventEntity,
+        status: EventAttendeeStatus.Confirmed,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
       const eventEmitter = module.get(EventEmitter2);
       const emitSpy = jest.spyOn(eventEmitter, 'emit');
 
@@ -627,8 +637,8 @@ describe('EventAttendeeService', () => {
         ...mockUser,
         provider: 'local', // Not a Bluesky user, skip Bluesky sync
       });
-      mockRepository.create.mockReturnValue(mockConfirmedAttendee);
-      mockRepository.save.mockResolvedValue(mockConfirmedAttendee);
+      mockRepository.create.mockReturnValue(freshConfirmedAttendee);
+      mockRepository.save.mockResolvedValue(freshConfirmedAttendee);
 
       // Create confirmed attendee
       const createDto = {

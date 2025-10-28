@@ -121,8 +121,16 @@ describe('CalendarInviteService', () => {
 
       expect(icalService.generateCalendarInvite).toHaveBeenCalledWith(
         mockEvent,
-        mockAttendee,
-        mockOrganizer,
+        {
+          email: 'attendee@example.com',
+          firstName: 'John',
+          lastName: 'Doe',
+        },
+        {
+          email: 'organizer@example.com',
+          firstName: 'Jane',
+          lastName: 'Smith',
+        },
       );
     });
 
