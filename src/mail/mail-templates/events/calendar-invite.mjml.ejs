@@ -28,52 +28,40 @@
           </mj-text>
           <% } %>
 
-          <!-- Event Details Card -->
-          <mj-wrapper background-color="#f8f9fa" border-radius="8px" padding="20px">
+        </mj-column>
+      </mj-section>
 
-            <!-- Date & Time -->
-            <mj-section background-color="#f8f9fa">
-              <mj-column>
-                <mj-text font-weight="bold" color="#333333" padding-bottom="5px">
-                  📅 When
-                </mj-text>
-                <mj-text padding-bottom="15px" line-height="1.5">
-                  <%= eventDate %><br/>
-                  <%= eventTime %>
-                </mj-text>
-              </mj-column>
-            </mj-section>
+      <!-- Event Details Card -->
+      <mj-section background-color="#f8f9fa" border-radius="8px" padding="20px">
+        <mj-column>
+          <!-- Date & Time -->
+          <mj-text font-weight="bold" color="#333333" padding-bottom="5px">
+            📅 When
+          </mj-text>
+          <mj-text padding-bottom="15px" line-height="1.5">
+            <%= eventDate %><br/>
+            <%= eventTime %>
+          </mj-text>
 
-            <!-- Location -->
-            <% if (eventLocation) { %>
-            <mj-section background-color="#f8f9fa">
-              <mj-column>
-                <mj-text font-weight="bold" color="#333333" padding-bottom="5px">
-                  📍 Where
-                </mj-text>
-                <mj-text padding-bottom="15px" line-height="1.5">
-                  <%= eventLocation %>
-                </mj-text>
-              </mj-column>
-            </mj-section>
-            <% } %>
+          <!-- Location -->
+          <% if (eventLocation) { %>
+          <mj-text font-weight="bold" color="#333333" padding-bottom="5px" padding-top="10px">
+            📍 Where
+          </mj-text>
+          <mj-text padding-bottom="15px" line-height="1.5">
+            <%= eventLocation %>
+          </mj-text>
+          <% } %>
 
-            <!-- Organizer -->
-            <% if (organizerName) { %>
-            <mj-section background-color="#f8f9fa">
-              <mj-column>
-                <mj-text font-weight="bold" color="#333333" padding-bottom="5px">
-                  👤 Organized by
-                </mj-text>
-                <mj-text line-height="1.5">
-                  <%= organizerName %>
-                </mj-text>
-              </mj-column>
-            </mj-section>
-            <% } %>
-
-          </mj-wrapper>
-
+          <!-- Organizer -->
+          <% if (organizerName) { %>
+          <mj-text font-weight="bold" color="#333333" padding-bottom="5px" padding-top="10px">
+            👤 Organized by
+          </mj-text>
+          <mj-text line-height="1.5">
+            <%= organizerName %>
+          </mj-text>
+          <% } %>
         </mj-column>
       </mj-section>
 

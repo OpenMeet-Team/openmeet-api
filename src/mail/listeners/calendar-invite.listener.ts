@@ -2,10 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { CalendarInviteService } from '../services/calendar-invite.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
-import {
-  EventAttendeeStatus,
-  TenantConfig,
-} from '../../core/constants/constant';
+import { EventAttendeeStatus } from '../../core/constants/constant';
+import { TenantConnectionService } from '../../tenant/tenant.service';
 
 @Injectable()
 export class CalendarInviteListener {
@@ -14,20 +12,22 @@ export class CalendarInviteListener {
   constructor(
     private readonly calendarInviteService: CalendarInviteService,
     private readonly eventAttendeeService: EventAttendeeService,
+    private readonly tenantConnectionService: TenantConnectionService,
   ) {}
 
   @OnEvent('event.rsvp.added')
-  async handleEventRsvpAdded(
-    params: {
-      eventId: number;
-      userId: number;
-      status: EventAttendeeStatus;
-      eventSlug?: string;
-      userSlug?: string;
-      tenantId: string;
-    },
-    tenantConfig: TenantConfig,
-  ): Promise<void> {
+  async handleEventRsvpAdded(params: {
+    eventId: number;
+    userId: number;
+    status: EventAttendeeStatus;
+    eventSlug?: string;
+    userSlug?: string;
+    tenantId: string;
+  }): Promise<void> {
+    this.logger.log(
+      `🎫 Calendar invite listener triggered for event ${params.eventId}, user ${params.userId}, status: ${params.status}`,
+    );
+
     // Business rule: Only send calendar invites for confirmed RSVPs
     if (params.status !== EventAttendeeStatus.Confirmed) {
       this.logger.debug(
@@ -73,6 +73,11 @@ export class CalendarInviteListener {
         );
         return;
       }
+
+      // Get tenant config
+      const tenantConfig = this.tenantConnectionService.getTenantConfig(
+        params.tenantId,
+      );
 
       // Send calendar invite
       await this.calendarInviteService.sendCalendarInvite(

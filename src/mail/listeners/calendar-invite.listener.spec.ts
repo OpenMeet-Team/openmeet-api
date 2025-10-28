@@ -3,10 +3,17 @@ import { CalendarInviteListener } from './calendar-invite.listener';
 import { CalendarInviteService } from '../services/calendar-invite.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { EventAttendeeStatus } from '../../core/constants/constant';
+import { TenantConnectionService } from '../../tenant/tenant.service';
 
 describe('CalendarInviteListener - Behavior Tests', () => {
   let listener: CalendarInviteListener;
   let sendInviteSpy: jest.SpyInstance;
+
+  const mockTenantConfig = {
+    tenantId: 'test',
+    appUrl: 'https://test.openmeet.net',
+    appName: 'Test OpenMeet',
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -31,6 +38,12 @@ describe('CalendarInviteListener - Behavior Tests', () => {
             }),
           },
         },
+        {
+          provide: TenantConnectionService,
+          useValue: {
+            getTenantConfig: jest.fn().mockReturnValue(mockTenantConfig),
+          },
+        },
       ],
     }).compile();
 
@@ -41,57 +54,45 @@ describe('CalendarInviteListener - Behavior Tests', () => {
 
   describe('Status-based filtering (core business logic)', () => {
     it('should send invite when status is Confirmed', async () => {
-      await listener.handleEventRsvpAdded(
-        {
-          eventId: 1,
-          userId: 1,
-          status: EventAttendeeStatus.Confirmed,
-          tenantId: 'test',
-        },
-        { tenantId: 'test' } as any,
-      );
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Confirmed,
+        tenantId: 'test',
+      });
 
       expect(sendInviteSpy).toHaveBeenCalled();
     });
 
     it('should NOT send invite when status is Pending', async () => {
-      await listener.handleEventRsvpAdded(
-        {
-          eventId: 1,
-          userId: 1,
-          status: EventAttendeeStatus.Pending,
-          tenantId: 'test',
-        },
-        { tenantId: 'test' } as any,
-      );
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Pending,
+        tenantId: 'test',
+      });
 
       expect(sendInviteSpy).not.toHaveBeenCalled();
     });
 
     it('should NOT send invite when status is Waitlisted', async () => {
-      await listener.handleEventRsvpAdded(
-        {
-          eventId: 1,
-          userId: 1,
-          status: EventAttendeeStatus.Waitlisted,
-          tenantId: 'test',
-        },
-        { tenantId: 'test' } as any,
-      );
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Waitlisted,
+        tenantId: 'test',
+      });
 
       expect(sendInviteSpy).not.toHaveBeenCalled();
     });
 
     it('should NOT send invite when status is Declined', async () => {
-      await listener.handleEventRsvpAdded(
-        {
-          eventId: 1,
-          userId: 1,
-          status: EventAttendeeStatus.Declined,
-          tenantId: 'test',
-        },
-        { tenantId: 'test' } as any,
-      );
+      await listener.handleEventRsvpAdded({
+        eventId: 1,
+        userId: 1,
+        status: EventAttendeeStatus.Declined,
+        tenantId: 'test',
+      });
 
       expect(sendInviteSpy).not.toHaveBeenCalled();
     });
@@ -112,21 +113,24 @@ describe('CalendarInviteListener - Behavior Tests', () => {
               findOne: jest.fn().mockRejectedValue(new Error('DB error')),
             },
           },
+          {
+            provide: TenantConnectionService,
+            useValue: {
+              getTenantConfig: jest.fn().mockReturnValue(mockTenantConfig),
+            },
+          },
         ],
       }).compile();
 
       const errorListener = module.get(CalendarInviteListener);
 
       await expect(
-        errorListener.handleEventRsvpAdded(
-          {
-            eventId: 1,
-            userId: 1,
-            status: EventAttendeeStatus.Confirmed,
-            tenantId: 'test',
-          },
-          { tenantId: 'test' } as any,
-        ),
+        errorListener.handleEventRsvpAdded({
+          eventId: 1,
+          userId: 1,
+          status: EventAttendeeStatus.Confirmed,
+          tenantId: 'test',
+        }),
       ).resolves.not.toThrow();
     });
 
@@ -134,15 +138,12 @@ describe('CalendarInviteListener - Behavior Tests', () => {
       sendInviteSpy.mockRejectedValue(new Error('SMTP error'));
 
       await expect(
-        listener.handleEventRsvpAdded(
-          {
-            eventId: 1,
-            userId: 1,
-            status: EventAttendeeStatus.Confirmed,
-            tenantId: 'test',
-          },
-          { tenantId: 'test' } as any,
-        ),
+        listener.handleEventRsvpAdded({
+          eventId: 1,
+          userId: 1,
+          status: EventAttendeeStatus.Confirmed,
+          tenantId: 'test',
+        }),
       ).resolves.not.toThrow();
     });
   });
