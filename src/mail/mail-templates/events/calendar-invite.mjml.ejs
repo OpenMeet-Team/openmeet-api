@@ -1,0 +1,142 @@
+<%- include('./../layouts/header.mjml.ejs') %>
+
+      <!-- Main Content -->
+      <mj-section>
+        <mj-column>
+
+          <mj-text font-size="18px" color="#666666">
+            Hello <%= attendeeName %>,
+          </mj-text>
+
+          <mj-text font-size="24px" font-weight="bold" padding-top="10px" color="#7B71DA">
+            You're registered! 🎉
+          </mj-text>
+
+          <mj-text padding-top="10px" line-height="1.6">
+            We're excited to have you join us for <strong><%= eventTitle %></strong>.
+          </mj-text>
+
+          <!-- Event Title as Link -->
+          <mj-text font-size="20px" font-weight="600" padding-top="20px" padding-bottom="10px">
+            <a href="<%= eventUrl %>" style="color: #7B71DA; text-decoration: none;"><%= eventTitle %></a>
+          </mj-text>
+
+          <!-- Event Description -->
+          <% if (eventDescription) { %>
+          <mj-text padding-top="5px" padding-bottom="15px" line-height="1.5" color="#555555">
+            <%- eventDescription.substring(0, 200) %><%= eventDescription.length > 200 ? '...' : '' %>
+          </mj-text>
+          <% } %>
+
+          <!-- Event Details Card -->
+          <mj-wrapper background-color="#f8f9fa" border-radius="8px" padding="20px">
+
+            <!-- Date & Time -->
+            <mj-section background-color="#f8f9fa">
+              <mj-column>
+                <mj-text font-weight="bold" color="#333333" padding-bottom="5px">
+                  📅 When
+                </mj-text>
+                <mj-text padding-bottom="15px" line-height="1.5">
+                  <%= eventDate %><br/>
+                  <%= eventTime %>
+                </mj-text>
+              </mj-column>
+            </mj-section>
+
+            <!-- Location -->
+            <% if (eventLocation) { %>
+            <mj-section background-color="#f8f9fa">
+              <mj-column>
+                <mj-text font-weight="bold" color="#333333" padding-bottom="5px">
+                  📍 Where
+                </mj-text>
+                <mj-text padding-bottom="15px" line-height="1.5">
+                  <%= eventLocation %>
+                </mj-text>
+              </mj-column>
+            </mj-section>
+            <% } %>
+
+            <!-- Organizer -->
+            <% if (organizerName) { %>
+            <mj-section background-color="#f8f9fa">
+              <mj-column>
+                <mj-text font-weight="bold" color="#333333" padding-bottom="5px">
+                  👤 Organized by
+                </mj-text>
+                <mj-text line-height="1.5">
+                  <%= organizerName %>
+                </mj-text>
+              </mj-column>
+            </mj-section>
+            <% } %>
+
+          </mj-wrapper>
+
+        </mj-column>
+      </mj-section>
+
+      <!-- Add to Calendar Section -->
+      <mj-section padding="30px 20px 10px 20px">
+        <mj-column>
+          <mj-text align="center" font-size="16px" font-weight="bold" color="#333333" padding-bottom="15px">
+            Add to Your Calendar
+          </mj-text>
+          <mj-text align="center" font-size="13px" color="#666666" padding-bottom="20px">
+            Your email client may have automatically added this event. If not, use one of these options:
+          </mj-text>
+        </mj-column>
+      </mj-section>
+
+      <!-- Calendar Buttons -->
+      <mj-section padding="0 20px 10px 20px">
+        <mj-column>
+          <mj-button href="<%= googleCalendarLink %>" background-color="#4285F4" color="#FFFFFF" font-size="14px" border-radius="6px">
+            📅 Google Calendar
+          </mj-button>
+        </mj-column>
+      </mj-section>
+
+      <mj-section padding="0 20px 10px 20px">
+        <mj-column>
+          <mj-button href="<%= outlookCalendarLink %>" background-color="#0078D4" color="#FFFFFF" font-size="14px" border-radius="6px">
+            📅 Outlook.com
+          </mj-button>
+        </mj-column>
+      </mj-section>
+
+      <mj-section padding="0 20px 20px 20px">
+        <mj-column>
+          <mj-button href="<%= office365CalendarLink %>" background-color="#D83B01" color="#FFFFFF" font-size="14px" border-radius="6px">
+            📅 Office 365
+          </mj-button>
+        </mj-column>
+      </mj-section>
+
+      <!-- Primary CTA -->
+      <mj-section padding="20px">
+        <mj-column>
+          <mj-button href="<%= eventUrl %>" background-color="#7B71DA" color="#FFFFFF" font-size="16px" border-radius="8px" padding="15px 30px">
+            View Event Details
+          </mj-button>
+        </mj-column>
+      </mj-section>
+
+      <!-- Footer Info -->
+      <mj-section padding="20px">
+        <mj-column>
+          <mj-divider border-color="#E0E0E0" padding="20px 0"></mj-divider>
+
+          <mj-text font-size="13px" color="#666666" line-height="1.5" align="center">
+            You're receiving this because you registered for this event on OpenMeet.
+          </mj-text>
+
+          <mj-text font-size="12px" color="#999999" padding-top="10px" align="center">
+            To manage your RSVP or event notifications, visit
+            <a href="<%= eventUrl %>" style="color: #7B71DA; text-decoration: none;">the event page</a>.
+          </mj-text>
+        </mj-column>
+      </mj-section>
+
+<%- include('./../layouts/footer.mjml.ejs') %>
