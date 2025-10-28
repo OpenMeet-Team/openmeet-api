@@ -80,11 +80,16 @@ export class ICalendarService {
   /**
    * Generate a calendar invite for a specific attendee
    * Uses METHOD:REQUEST for email invitations
+   * @param event - The event entity
+   * @param attendee - Attendee information
+   * @param organizer - Organizer information
+   * @param eventUrl - Optional custom event URL (defaults to openmeet.io if not provided)
    */
   public generateCalendarInvite(
     event: EventEntity,
     attendee: { email: string; firstName?: string; lastName?: string },
     organizer: { email: string; firstName?: string; lastName?: string },
+    eventUrl?: string,
   ): string {
     const calendar = icalGenerator({
       prodId: { company: 'OpenMeet', product: 'Calendar', language: 'EN' },
@@ -96,6 +101,11 @@ export class ICalendarService {
 
     // Create the event using existing method
     const calEvent = this.createCalendarEvent(event);
+
+    // Override URL if custom one provided
+    if (eventUrl) {
+      calEvent.url(eventUrl);
+    }
 
     // Override organizer with provided organizer info
     const organizerName =

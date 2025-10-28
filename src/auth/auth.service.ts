@@ -949,10 +949,12 @@ export class AuthService {
   async quickRsvp(dto: QuickRsvpDto, tenantId: string) {
     const {
       name,
-      email,
       eventSlug,
       status = EventAttendeeStatus.Confirmed,
     } = dto;
+
+    // Normalize email to lowercase for consistency
+    const email = dto.email.toLowerCase().trim();
 
     // 1. Find the event
     const event = await this.eventQueryService.findEventBySlug(eventSlug);

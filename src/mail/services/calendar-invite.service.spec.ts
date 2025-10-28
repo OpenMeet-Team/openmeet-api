@@ -131,6 +131,7 @@ describe('CalendarInviteService', () => {
           firstName: 'Jane',
           lastName: 'Smith',
         },
+        'https://platform.openmeet.net/events/tech-meetup', // Event URL from tenant config
       );
     });
 
@@ -162,6 +163,37 @@ describe('CalendarInviteService', () => {
       const call = (mailerService.sendCalendarInviteMail as jest.Mock).mock
         .calls[0][0];
       expect(call.icsContent).toContain('BEGIN:VCALENDAR');
+    });
+
+    it('should include timezone in email context', async () => {
+      const eventWithTimezone = {
+        ...mockEvent,
+        timeZone: 'America/New_York',
+      };
+
+      await service.sendCalendarInvite(
+        eventWithTimezone as EventEntity,
+        mockAttendee as UserEntity,
+        mockOrganizer as UserEntity,
+        mockTenantConfig as TenantConfig,
+      );
+
+      const call = (mailerService.sendCalendarInviteMail as jest.Mock).mock
+        .calls[0][0];
+      expect(call.context.eventTimeZone).toBe('America/New_York');
+    });
+
+    it('should default to UTC timezone if not specified', async () => {
+      await service.sendCalendarInvite(
+        mockEvent as EventEntity,
+        mockAttendee as UserEntity,
+        mockOrganizer as UserEntity,
+        mockTenantConfig as TenantConfig,
+      );
+
+      const call = (mailerService.sendCalendarInviteMail as jest.Mock).mock
+        .calls[0][0];
+      expect(call.context.eventTimeZone).toBe('UTC');
     });
   });
 });
