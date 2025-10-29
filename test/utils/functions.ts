@@ -262,6 +262,9 @@ async function createTestUser(
   lastName,
   password = 'Test@1234',
 ) {
+  const { mailDevService } = await import('./maildev-service');
+  const { EmailVerificationTestHelpers } = await import('./email-verification-helpers');
+
   // Handle both Express app instances and URL strings
   const response = await request(app)
     .post('/api/v1/auth/email/register')
@@ -278,12 +281,34 @@ async function createTestUser(
     throw new Error(`Failed to create test user: ${response.status}`);
   }
 
+  // Get verification code from email
+  const verificationEmail = await mailDevService.getMostRecentEmailByRecipient(email);
+  if (!verificationEmail) {
+    throw new Error(`No verification email found for ${email}`);
+  }
+
+  const code = EmailVerificationTestHelpers.extractVerificationCode(verificationEmail);
+  if (!code) {
+    throw new Error(`No verification code found in email for ${email}`);
+  }
+
+  // Verify email and get login tokens
+  const verifyResponse = await request(app)
+    .post('/api/v1/auth/verify-email-code')
+    .set('x-tenant-id', tenantId)
+    .send({ email, code });
+
+  if (verifyResponse.status !== 200) {
+    console.error('Failed to verify email:', verifyResponse.body);
+    throw new Error(`Failed to verify email: ${verifyResponse.status}`);
+  }
+
   return {
-    id: response.body.user.id,
-    token: response.body.token,
-    slug: response.body.user.slug,
-    user: response.body.user,
-    email: response.body.user.email || email, // fallback to the email we used to register
+    id: verifyResponse.body.user.id,
+    token: verifyResponse.body.token,
+    slug: verifyResponse.body.user.slug,
+    user: verifyResponse.body.user,
+    email: verifyResponse.body.user.email || email.toLowerCase(), // fallback to the email we used to register
   };
 }
 

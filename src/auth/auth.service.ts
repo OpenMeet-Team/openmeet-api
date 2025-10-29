@@ -97,6 +97,16 @@ export class AuthService {
       });
     }
 
+    // Check if user has verified their email
+    if (user.status?.id === StatusEnum.inactive) {
+      throw new UnprocessableEntityException({
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+        errors: {
+          email: 'Please verify your email address before logging in',
+        },
+      });
+    }
+
     if (!user.password) {
       throw new UnprocessableEntityException({
         status: HttpStatus.UNPROCESSABLE_ENTITY,
@@ -277,70 +287,40 @@ export class AuthService {
     if (!role) {
       throw new Error(`Role not found: ${RoleEnum.User}`);
     }
+
+    // Create user as INACTIVE - requires email verification
     const user = await this.userService.create({
       ...dto,
       email: dto.email,
       role: role.id,
       status: {
-        id: StatusEnum.active, // TODO implement tenant config check for tenant.confirmEmail
+        id: StatusEnum.inactive,
       },
     });
 
-    const hash = await this.jwtService.signAsync(
-      {
-        confirmEmailUserId: user.id,
-      },
-      {
-        secret: this.configService.getOrThrow('auth.confirmEmailSecret', {
-          infer: true,
-        }),
-        expiresIn: this.configService.getOrThrow('auth.confirmEmailExpires', {
-          infer: true,
-        }),
-      },
+    // Generate 6-digit verification code
+    const code = await this.emailVerificationCodeService.generateCode(
+      user.id,
+      tenantId,
+      dto.email,
     );
 
-    const sessionHash = crypto
-      .createHash('sha256')
-      .update(randomStringGenerator())
-      .digest('hex');
-
-    const secureId = crypto.randomUUID();
-
-    const session = await this.sessionService.create({
-      user,
-      hash: sessionHash,
-      secureId,
+    // Send verification email with 6-digit code
+    await this.mailService.sendLoginCode({
+      to: dto.email,
+      data: {
+        name: dto.firstName || 'User',
+        code,
+      },
     });
 
-    const { token, refreshToken, tokenExpires } = await this.getTokensData({
-      id: user.id,
-      role: user.role,
-      slug: user.slug,
-      sessionId: session.secureId,
-      hash,
-      tenantId,
-    });
-
-    const createdUser = await this.userService.findById(user.id);
-
-    this.mailService
-      .userSignUp({
-        to: dto.email,
-        data: {
-          hash,
-        },
-      })
-      .catch((err) => {
-        this.logger.error('Error in login process:', err);
-      });
+    this.logger.log(
+      `Verification email sent to ${dto.email} (user ${user.id}, tenant ${tenantId})`,
+    );
 
     return {
-      refreshToken,
-      token,
-      tokenExpires,
-      user: createdUser,
-      sessionId: session.secureId,
+      message: 'Registration successful. Please check your email to verify your account.',
+      email: dto.email,
     };
   }
 
@@ -1115,16 +1095,43 @@ export class AuthService {
       await this.emailVerificationCodeService.validateCode(code, dto.email);
 
     if (!verificationData) {
-      throw new UnauthorizedException('Invalid or expired verification code');
+      throw new UnprocessableEntityException({
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+        errors: {
+          code: 'Invalid or expired verification code',
+        },
+      });
     }
 
     // 2. Get user
-    const user = await this.userService.findById(verificationData.userId);
+    let user = await this.userService.findById(verificationData.userId);
     if (!user || !user.role) {
-      throw new UnauthorizedException('User not found');
+      throw new UnprocessableEntityException({
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+        errors: {
+          email: 'User not found',
+        },
+      });
     }
 
-    // 3. Create session and return tokens (same as regular login)
+    // 3. If user is inactive, activate them (email verification complete)
+    if (user.status?.id === StatusEnum.inactive) {
+      await this.userService.update(user.id, {
+        status: { id: StatusEnum.active },
+      });
+      // Reload user to get updated data with all fields
+      user = await this.userService.findByEmail(dto.email);
+      if (!user) {
+        throw new UnprocessableEntityException({
+          status: HttpStatus.UNPROCESSABLE_ENTITY,
+          errors: {
+            email: 'User not found after activation',
+          },
+        });
+      }
+    }
+
+    // 4. Create session and return tokens (same as regular login)
     const hash = crypto
       .createHash('sha256')
       .update(randomStringGenerator())

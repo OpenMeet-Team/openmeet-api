@@ -299,6 +299,9 @@ export class AuthController {
     return this.service.quickRsvp(quickRsvpDto, request.tenantId);
   }
 
+  @SerializeOptions({
+    groups: ['me'],
+  })
   @Post('verify-email-code')
   @Throttle({
     default: EMAIL_VERIFICATION_RATE_LIMITS.perIp,

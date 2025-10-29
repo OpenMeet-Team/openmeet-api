@@ -8,6 +8,8 @@ import {
   TESTING_TENANT_ID,
 } from '../utils/constants';
 import { getAuthToken } from '../utils/functions';
+import { mailDevService } from '../utils/maildev-service';
+import { EmailVerificationTestHelpers } from '../utils/email-verification-helpers';
 
 // Set a global timeout for this entire test file
 jest.setTimeout(60000);
@@ -75,14 +77,36 @@ describe('Auth Module', () => {
     });
 
     describe('Login', () => {
-      it('should successfully with unconfirmed email: /api/v1/auth/email/login (POST)', () => {
+      it('should fail with unverified email: /api/v1/auth/email/login (POST)', () => {
         return serverApp
           .post('/api/v1/auth/email/login')
           .send({ email: newUserEmail, password: newUserPassword })
-          .expect(200)
+          .expect(422)
           .expect(({ body }) => {
-            expect(body.token).toBeDefined();
+            expect(body.errors.email).toMatch(/verify/i);
           });
+      });
+    });
+
+    describe('Email Verification', () => {
+      it('should verify email and allow login: /api/v1/auth/verify-email-code (POST)', async () => {
+        // Get verification code from email
+        const verificationEmail = await mailDevService.getMostRecentEmailByRecipient(newUserEmail);
+        expect(verificationEmail).not.toBeNull();
+
+        const code = EmailVerificationTestHelpers.extractVerificationCode(verificationEmail!);
+        expect(code).not.toBeNull();
+
+        // Verify email with code
+        const verifyResponse = await serverApp
+          .post('/api/v1/auth/verify-email-code')
+          .send({ email: newUserEmail, code })
+          .expect(200);
+
+        // User should be logged in after verification
+        expect(verifyResponse.body.token).toBeDefined();
+        expect(verifyResponse.body.refreshToken).toBeDefined();
+        expect(verifyResponse.body.user.email).toBe(newUserEmail.toLowerCase());
       });
     });
 
@@ -317,6 +341,14 @@ describe('Auth Module', () => {
           lastName: newUserLastName,
         })
         .expect(201);
+
+      // Verify email before login
+      const verificationEmail = await mailDevService.getMostRecentEmailByRecipient(newUserEmail);
+      const code = EmailVerificationTestHelpers.extractVerificationCode(verificationEmail!);
+      await serverApp
+        .post('/api/v1/auth/verify-email-code')
+        .send({ email: newUserEmail, code })
+        .expect(200);
 
       const newUserApiToken = await serverApp
         .post('/api/v1/auth/email/login')
