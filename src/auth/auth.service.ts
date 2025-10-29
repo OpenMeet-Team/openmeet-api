@@ -991,6 +991,7 @@ export class AuthService {
       throw new NotFoundException('Default role not found');
     }
 
+    // Create user as INACTIVE - requires email verification
     user = await this.userService.create(
       {
         email,
@@ -999,12 +1000,12 @@ export class AuthService {
         provider: AuthProvidersEnum.email,
         socialId: null,
         role: defaultRole.id,
-        status: { id: StatusEnum.active },
+        status: { id: StatusEnum.inactive },
       },
       tenantId,
     );
 
-    this.logger.log(`Created new user via quick RSVP: ${email}`);
+    this.logger.log(`Created new INACTIVE user via quick RSVP: ${email}`);
 
     // 5. Ensure user was created successfully
     if (!user) {
