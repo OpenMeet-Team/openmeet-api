@@ -97,6 +97,16 @@ export class AuthService {
       });
     }
 
+    // Check if user has verified their email
+    if (user.status?.id === StatusEnum.inactive) {
+      throw new UnprocessableEntityException({
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+        errors: {
+          email: 'Please verify your email address before logging in',
+        },
+      });
+    }
+
     if (!user.password) {
       throw new UnprocessableEntityException({
         status: HttpStatus.UNPROCESSABLE_ENTITY,
@@ -277,70 +287,42 @@ export class AuthService {
     if (!role) {
       throw new Error(`Role not found: ${RoleEnum.User}`);
     }
+
+    // Create user as INACTIVE - requires email verification before login
+    // A 6-digit verification code will be sent to their email
     const user = await this.userService.create({
       ...dto,
       email: dto.email,
       role: role.id,
       status: {
-        id: StatusEnum.active, // TODO implement tenant config check for tenant.confirmEmail
+        id: StatusEnum.inactive,
       },
     });
 
-    const hash = await this.jwtService.signAsync(
-      {
-        confirmEmailUserId: user.id,
-      },
-      {
-        secret: this.configService.getOrThrow('auth.confirmEmailSecret', {
-          infer: true,
-        }),
-        expiresIn: this.configService.getOrThrow('auth.confirmEmailExpires', {
-          infer: true,
-        }),
-      },
+    // Generate 6-digit verification code
+    const code = await this.emailVerificationCodeService.generateCode(
+      user.id,
+      tenantId,
+      dto.email,
     );
 
-    const sessionHash = crypto
-      .createHash('sha256')
-      .update(randomStringGenerator())
-      .digest('hex');
-
-    const secureId = crypto.randomUUID();
-
-    const session = await this.sessionService.create({
-      user,
-      hash: sessionHash,
-      secureId,
+    // Send verification email with 6-digit code
+    await this.mailService.sendLoginCode({
+      to: dto.email,
+      data: {
+        name: dto.firstName || 'User',
+        code,
+      },
     });
 
-    const { token, refreshToken, tokenExpires } = await this.getTokensData({
-      id: user.id,
-      role: user.role,
-      slug: user.slug,
-      sessionId: session.secureId,
-      hash,
-      tenantId,
-    });
-
-    const createdUser = await this.userService.findById(user.id);
-
-    this.mailService
-      .userSignUp({
-        to: dto.email,
-        data: {
-          hash,
-        },
-      })
-      .catch((err) => {
-        this.logger.error('Error in login process:', err);
-      });
+    this.logger.log(
+      `Verification email sent to ${dto.email} (user ${user.id}, tenant ${tenantId})`,
+    );
 
     return {
-      refreshToken,
-      token,
-      tokenExpires,
-      user: createdUser,
-      sessionId: session.secureId,
+      message:
+        'Registration successful. Please check your email to verify your account.',
+      email: dto.email,
     };
   }
 
@@ -947,11 +929,7 @@ export class AuthService {
    * @returns Success message with verification code (for testing)
    */
   async quickRsvp(dto: QuickRsvpDto, tenantId: string) {
-    const {
-      name,
-      eventSlug,
-      status = EventAttendeeStatus.Confirmed,
-    } = dto;
+    const { name, eventSlug, status = EventAttendeeStatus.Confirmed } = dto;
 
     // Normalize email to lowercase for consistency
     const email = dto.email.toLowerCase().trim();
@@ -1011,6 +989,11 @@ export class AuthService {
       throw new NotFoundException('Default role not found');
     }
 
+    // Create user as INACTIVE (passwordless account)
+    // User can verify later via:
+    //   1. Passwordless login (request email code via /auth/request-login-code)
+    //   2. Social login (automatic account merge if email matches)
+    // No verification email sent at this time - frictionless Quick RSVP
     user = await this.userService.create(
       {
         email,
@@ -1019,12 +1002,12 @@ export class AuthService {
         provider: AuthProvidersEnum.email,
         socialId: null,
         role: defaultRole.id,
-        status: { id: StatusEnum.active },
+        status: { id: StatusEnum.inactive },
       },
       tenantId,
     );
 
-    this.logger.log(`Created new user via quick RSVP: ${email}`);
+    this.logger.log(`Created new INACTIVE user via quick RSVP: ${email}`);
 
     // 5. Ensure user was created successfully
     if (!user) {
@@ -1110,21 +1093,47 @@ export class AuthService {
   ): Promise<LoginResponseDto> {
     const { code } = dto;
 
+    // Use consistent error message to prevent information leakage
+    const VERIFICATION_ERROR = {
+      status: HttpStatus.UNPROCESSABLE_ENTITY,
+      errors: {
+        code: 'Invalid or expired verification code',
+      },
+    };
+
     // 1. Validate code
     const verificationData =
       await this.emailVerificationCodeService.validateCode(code, dto.email);
 
     if (!verificationData) {
-      throw new UnauthorizedException('Invalid or expired verification code');
+      throw new UnprocessableEntityException(VERIFICATION_ERROR);
     }
 
     // 2. Get user
-    const user = await this.userService.findById(verificationData.userId);
+    let user = await this.userService.findById(verificationData.userId);
     if (!user || !user.role) {
-      throw new UnauthorizedException('User not found');
+      // Log for debugging but show same error to user
+      this.logger.error(
+        `Verification code valid but user not found: ${verificationData.userId}`,
+      );
+      throw new UnprocessableEntityException(VERIFICATION_ERROR);
     }
 
-    // 3. Create session and return tokens (same as regular login)
+    // 3. If user is inactive, activate them (email verification complete)
+    if (user.status?.id === StatusEnum.inactive) {
+      await this.userService.update(user.id, {
+        status: { id: StatusEnum.active },
+      });
+      // Reload user to get updated data with all fields
+      user = await this.userService.findByEmail(dto.email);
+      if (!user) {
+        // Log for debugging but show same error to user
+        this.logger.error(`User disappeared during activation: ${dto.email}`);
+        throw new UnprocessableEntityException(VERIFICATION_ERROR);
+      }
+    }
+
+    // 4. Create session and return tokens (same as regular login)
     const hash = crypto
       .createHash('sha256')
       .update(randomStringGenerator())
@@ -1189,18 +1198,7 @@ export class AuthService {
       );
     }
 
-    // Check if user is inactive
-    if (user.status?.id !== StatusEnum.active) {
-      this.logger.debug(
-        `Login code requested for inactive user: ${normalizedEmail}`,
-      );
-      return {
-        success: true,
-        message: 'We sent a login code to your email.',
-      };
-    }
-
-    // Generate 6-digit verification code
+    // Generate 6-digit verification code (for both active and inactive users)
     const code = await this.emailVerificationCodeService.generateCode(
       user.id,
       tenantId,
@@ -1215,6 +1213,15 @@ export class AuthService {
         code,
       },
     });
+
+    // Log whether this is for verification or passwordless login
+    if (user.status?.id !== StatusEnum.active) {
+      this.logger.log(
+        `Verification code sent to inactive user: ${normalizedEmail}`,
+      );
+    } else {
+      this.logger.log(`Login code sent to active user: ${normalizedEmail}`);
+    }
 
     this.logger.log(
       `Login code sent to ${normalizedEmail} (user ${user.id}, tenant ${tenantId})`,

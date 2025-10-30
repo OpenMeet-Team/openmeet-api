@@ -5,6 +5,7 @@ import {
   TESTING_MAIL_HOST,
   TESTING_MAIL_PORT,
 } from '../utils/constants';
+import { createTestUser } from '../utils/functions';
 
 describe('Group Admin Messaging Foundation (e2e)', () => {
   let mailDevService: any;
@@ -69,18 +70,17 @@ describe('Group Admin Messaging Foundation (e2e)', () => {
 
       // Create admin user
       const adminEmail = `admin-foundation-test-${timestamp}@example.com`;
-      const adminResponse = await serverApp
-        .post('/api/v1/auth/email/register')
-        .send({
-          email: adminEmail,
-          password: 'password123',
-          firstName: 'Admin',
-          lastName: 'User',
-        })
-        .expect(201);
+      const adminData = await createTestUser(
+        TESTING_APP_URL,
+        testTenantId,
+        adminEmail,
+        'Admin',
+        'User',
+        'password123',
+      );
 
-      const adminToken = adminResponse.body.token;
-      const adminUser = adminResponse.body.user;
+      const adminToken = adminData.token;
+      const adminUser = adminData.user;
 
       console.log('Admin user created:', {
         id: adminUser.id,
@@ -117,18 +117,17 @@ describe('Group Admin Messaging Foundation (e2e)', () => {
         const memberEmail = `member${i}-foundation-${timestamp}@example.com`;
         memberEmails.push(memberEmail);
 
-        const memberResponse = await serverApp
-          .post('/api/v1/auth/email/register')
-          .send({
-            email: memberEmail,
-            password: 'password123',
-            firstName: `Member${i}`,
-            lastName: 'User',
-          })
-          .expect(201);
+        const memberData = await createTestUser(
+          TESTING_APP_URL,
+          testTenantId,
+          memberEmail,
+          `Member${i}`,
+          'User',
+          'password123',
+        );
 
-        const memberToken = memberResponse.body.token;
-        const memberUser = memberResponse.body.user;
+        const memberToken = memberData.token;
+        const memberUser = memberData.user;
         memberUsers.push(memberUser);
 
         // Member joins the group
@@ -180,17 +179,16 @@ describe('Group Admin Messaging Foundation (e2e)', () => {
 
       // Create admin and group
       const adminEmail = `admin-email-test-${timestamp}@example.com`;
-      const adminResponse = await serverApp
-        .post('/api/v1/auth/email/register')
-        .send({
-          email: adminEmail,
-          password: 'password123',
-          firstName: 'EmailTest',
-          lastName: 'Admin',
-        })
-        .expect(201);
+      const adminData = await createTestUser(
+        TESTING_APP_URL,
+        testTenantId,
+        adminEmail,
+        'EmailTest',
+        'Admin',
+        'password123',
+      );
 
-      const adminToken = adminResponse.body.token;
+      const adminToken = adminData.token;
 
       const groupData = {
         name: 'Email Infrastructure Test Group',
@@ -209,17 +207,16 @@ describe('Group Admin Messaging Foundation (e2e)', () => {
 
       // Create a member who will join
       const memberEmail = `member-email-test-${timestamp}@example.com`;
-      const memberResponse = await serverApp
-        .post('/api/v1/auth/email/register')
-        .send({
-          email: memberEmail,
-          password: 'password123',
-          firstName: 'EmailTest',
-          lastName: 'Member',
-        })
-        .expect(201);
+      const memberData = await createTestUser(
+        TESTING_APP_URL,
+        testTenantId,
+        memberEmail,
+        'EmailTest',
+        'Member',
+        'password123',
+      );
 
-      const memberToken = memberResponse.body.token;
+      const memberToken = memberData.token;
 
       // Record timestamp before the action that might trigger emails
       const emailCheckStartTime = Date.now();
