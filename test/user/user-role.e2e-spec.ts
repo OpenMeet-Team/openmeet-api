@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import { RoleEnum } from '../../src/role/role.enum';
+import { createTestUser } from '../utils/functions';
 
 // Set a global timeout for this test file
 jest.setTimeout(60000);
@@ -14,46 +15,41 @@ describe('User role', () => {
   });
 
   it('should refresh tokens for users with and without roles', async () => {
+    const timestamp = Date.now();
+
     // Create a user with a role
-    const userWithRole = {
-      email: `user.with.role.${Date.now()}@openmeet.net`,
-      password: 'password123',
-      firstName: 'User',
-      lastName: 'WithRole',
-      role: 'user', // Assuming 'user' is a valid role
-    };
+    const userWithRoleEmail = `user.with.role.${timestamp}@openmeet.net`;
+    const userWithRolePassword = 'password123';
+    await createTestUser(
+      app,
+      TESTING_TENANT_ID,
+      userWithRoleEmail,
+      'User',
+      'WithRole',
+      userWithRolePassword,
+    );
 
-    // Create a user without a role
-    const userWithoutRole = {
-      email: `user.without.role.${Date.now()}@openmeet.net`,
-      password: 'password123',
-      firstName: 'User',
-      lastName: 'WithoutRole',
-    };
+    // Create a user without a role (createTestUser always creates with User role, but both are equivalent for this test)
+    const userWithoutRoleEmail = `user.without.role.${timestamp + 1}@openmeet.net`;
+    const userWithoutRolePassword = 'password123';
+    await createTestUser(
+      app,
+      TESTING_TENANT_ID,
+      userWithoutRoleEmail,
+      'User',
+      'WithoutRole',
+      userWithoutRolePassword,
+    );
 
-    // Register users
-    await serverApp
-      .post('/api/v1/auth/email/register')
-      .send(userWithRole)
-      .expect(201);
-
-    await serverApp
-      .post('/api/v1/auth/email/register')
-      .send(userWithoutRole)
-      .expect(201);
-
-    // Login and get refresh tokens for both users
+    // Login to get refresh tokens
     const loginWithRole = await serverApp
       .post('/api/v1/auth/email/login')
-      .send({ email: userWithRole.email, password: userWithRole.password })
+      .send({ email: userWithRoleEmail, password: userWithRolePassword })
       .expect(200);
 
     const loginWithoutRole = await serverApp
       .post('/api/v1/auth/email/login')
-      .send({
-        email: userWithoutRole.email,
-        password: userWithoutRole.password,
-      })
+      .send({ email: userWithoutRoleEmail, password: userWithoutRolePassword })
       .expect(200);
 
     const refreshTokenWithRole = loginWithRole.body.refreshToken;

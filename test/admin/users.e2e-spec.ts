@@ -7,6 +7,7 @@ import {
 import request from 'supertest';
 import { RoleEnum } from '../../src/role/role.enum';
 import { StatusEnum } from '../../src/status/status.enum';
+import { createTestUser } from '../utils/functions';
 
 describe('Users Module', () => {
   const app = TESTING_APP_URL;
@@ -32,19 +33,16 @@ describe('Users Module', () => {
     const newUserChangedPassword = `new-secret`;
 
     beforeAll(async () => {
-      await server.post('/api/v1/auth/email/register').send({
-        email: newUserEmail,
-        password: newUserPassword,
-        firstName: `First${Date.now()}`,
-        lastName: 'E2E',
-      });
+      const userData = await createTestUser(
+        app,
+        TESTING_TENANT_ID,
+        newUserEmail,
+        `First${Date.now()}`,
+        'E2E',
+        newUserPassword,
+      );
 
-      await server
-        .post('/api/v1/auth/email/login')
-        .send({ email: newUserEmail, password: newUserPassword })
-        .then(({ body }) => {
-          newUser = body.user;
-        });
+      newUser = userData.user;
     });
 
     describe('User with "Admin" role', () => {
@@ -57,6 +55,9 @@ describe('Users Module', () => {
           .send({
             email: newUserChangedEmail,
             password: newUserChangedPassword,
+            status: {
+              id: StatusEnum.active,
+            },
           });
 
         if (response.status !== 200) {

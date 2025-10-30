@@ -10,6 +10,7 @@ import {
   EventStatus,
   EventAttendeeStatus,
 } from '../../src/core/constants/constant';
+import { createTestUser } from '../utils/functions';
 
 jest.setTimeout(60000);
 
@@ -28,17 +29,16 @@ describe('Calendar Invite E2E', () => {
     const timestamp = Date.now();
     const organizerEmail = `organizer-calendar-${timestamp}@example.com`;
 
-    const organizerResponse = await serverApp
-      .post('/api/v1/auth/email/register')
-      .send({
-        email: organizerEmail,
-        password: 'password123',
-        firstName: 'Event',
-        lastName: 'Organizer',
-      })
-      .expect(201);
+    const organizerData = await createTestUser(
+      TESTING_APP_URL,
+      testTenantId,
+      organizerEmail,
+      'Event',
+      'Organizer',
+      'password123',
+    );
 
-    organizerToken = organizerResponse.body.token;
+    organizerToken = organizerData.token;
 
     // Create a test event for calendar invite testing
     const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
@@ -256,17 +256,16 @@ describe('Calendar Invite E2E', () => {
       console.log('\n=== Testing Authenticated RSVP Calendar Invite ===');
 
       // Create authenticated user
-      const userResponse = await serverApp
-        .post('/api/v1/auth/email/register')
-        .send({
-          email: userEmail,
-          password: 'password123',
-          firstName: 'Auth',
-          lastName: 'User',
-        })
-        .expect(201);
+      const userData = await createTestUser(
+        TESTING_APP_URL,
+        testTenantId,
+        userEmail,
+        'Auth',
+        'User',
+        'password123',
+      );
 
-      const userToken = userResponse.body.token;
+      const userToken = userData.token;
 
       // RSVP to event as authenticated user
       await serverApp

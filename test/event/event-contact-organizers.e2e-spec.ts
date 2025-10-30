@@ -5,6 +5,7 @@ import {
   TESTING_MAIL_HOST,
   TESTING_MAIL_PORT,
 } from '../utils/constants';
+import { createTestUser } from '../utils/functions';
 
 describe('Event Contact Organizers (e2e)', () => {
   let mailDevService: any;
@@ -21,17 +22,16 @@ describe('Event Contact Organizers (e2e)', () => {
     const timestamp = Date.now();
     const userEmail = `test-user-contact-${timestamp}@example.com`;
 
-    const userResponse = await serverApp
-      .post('/api/v1/auth/email/register')
-      .send({
-        email: userEmail,
-        password: 'password123',
-        firstName: 'Test',
-        lastName: 'User',
-      })
-      .expect(201);
+    const userData = await createTestUser(
+      TESTING_APP_URL,
+      testTenantId,
+      userEmail,
+      'Test',
+      'User',
+      'password123',
+    );
 
-    userToken = userResponse.body.token;
+    userToken = userData.token;
 
     // Create a test event for the contact tests
     const eventResponse = await serverApp

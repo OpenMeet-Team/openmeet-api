@@ -32,7 +32,7 @@ export const mailDevService = {
       );
       if (!response.ok) return [];
       return response.json();
-    } catch (error) {
+    } catch {
       console.log('MailDev not available, returning empty emails');
       return [];
     }
@@ -58,9 +58,7 @@ export const mailDevService = {
    * Get all emails sent to a specific recipient
    * @param emailAddress - Recipient email address
    */
-  async getEmailsByRecipient(
-    emailAddress: string,
-  ): Promise<MailDevEmail[]> {
+  async getEmailsByRecipient(emailAddress: string): Promise<MailDevEmail[]> {
     const emails = await mailDevService.getEmails();
     return emails.filter((email) =>
       email.to?.some(
@@ -106,9 +104,12 @@ export const mailDevService = {
    */
   async clearEmails(): Promise<void> {
     try {
-      await fetch(`http://${TESTING_MAIL_HOST}:${TESTING_MAIL_PORT}/email/all`, {
-        method: 'DELETE',
-      });
+      await fetch(
+        `http://${TESTING_MAIL_HOST}:${TESTING_MAIL_PORT}/email/all`,
+        {
+          method: 'DELETE',
+        },
+      );
     } catch (error) {
       console.log('Failed to clear MailDev emails:', error);
     }
