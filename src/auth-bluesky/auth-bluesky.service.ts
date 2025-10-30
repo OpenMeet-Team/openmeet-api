@@ -108,6 +108,16 @@ export class AuthBlueskyService {
       avatar: profile.data.avatar,
     };
 
+    // Fetch email using getSession with transition:email scope
+    let email: string | undefined;
+    try {
+      const sessionData = await agent.com.atproto.server.getSession();
+      email = sessionData.data.email;
+      this.logger.debug('Retrieved email from getSession:', { email });
+    } catch (error) {
+      this.logger.warn('Failed to retrieve email from getSession:', error);
+    }
+
     this.logger.debug('Finding existing user:', {
       socialId: profileData.did,
       provider: 'bluesky',
@@ -129,6 +139,7 @@ export class AuthBlueskyService {
       handle: profileData.handle,
       tenantId,
       existingUserEmail: existingUser?.email,
+      oauthEmail: email,
     });
 
     if (existingUser) {
@@ -175,7 +186,7 @@ export class AuthBlueskyService {
       'bluesky',
       {
         id: profileData.did,
-        email: existingUser?.email || '',
+        email: email || existingUser?.email || '',
         firstName: profileData.displayName || profileData.handle,
         lastName: '',
         // Handle is not stored - it's resolved from DID when needed

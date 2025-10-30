@@ -63,7 +63,7 @@ export async function initializeOAuthClient(
       ],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
-      scope: 'atproto transition:generic',
+      scope: 'atproto transition:generic transition:email',
       application_type: 'web',
       token_endpoint_auth_method: 'private_key_jwt',
       token_endpoint_auth_signing_alg: 'ES256',
