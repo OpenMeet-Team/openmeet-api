@@ -114,15 +114,17 @@ describe('EmailVerificationCodeService', () => {
       expect(result2?.userId).toBe(2);
     });
 
-    it('should allow multiple active codes for the same user', async () => {
+    it('should invalidate old code when generating new code for same user', async () => {
       const email = 'user@example.com';
       const code1 = await service.generateCode(1, 'tenant', email);
       const code2 = await service.generateCode(1, 'tenant', email);
 
+      // Old code should be invalid
       const result1 = await service.validateCode(code1, email);
-      const result2 = await service.validateCode(code2, email);
+      expect(result1).toBeNull();
 
-      expect(result1).not.toBeNull();
+      // New code should be valid
+      const result2 = await service.validateCode(code2, email);
       expect(result2).not.toBeNull();
     });
   });

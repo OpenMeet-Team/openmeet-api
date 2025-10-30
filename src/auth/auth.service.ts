@@ -1088,28 +1088,30 @@ export class AuthService {
   ): Promise<LoginResponseDto> {
     const { code } = dto;
 
+    // Use consistent error message to prevent information leakage
+    const VERIFICATION_ERROR = {
+      status: HttpStatus.UNPROCESSABLE_ENTITY,
+      errors: {
+        code: 'Invalid or expired verification code',
+      },
+    };
+
     // 1. Validate code
     const verificationData =
       await this.emailVerificationCodeService.validateCode(code, dto.email);
 
     if (!verificationData) {
-      throw new UnprocessableEntityException({
-        status: HttpStatus.UNPROCESSABLE_ENTITY,
-        errors: {
-          code: 'Invalid or expired verification code',
-        },
-      });
+      throw new UnprocessableEntityException(VERIFICATION_ERROR);
     }
 
     // 2. Get user
     let user = await this.userService.findById(verificationData.userId);
     if (!user || !user.role) {
-      throw new UnprocessableEntityException({
-        status: HttpStatus.UNPROCESSABLE_ENTITY,
-        errors: {
-          email: 'User not found',
-        },
-      });
+      // Log for debugging but show same error to user
+      this.logger.error(
+        `Verification code valid but user not found: ${verificationData.userId}`,
+      );
+      throw new UnprocessableEntityException(VERIFICATION_ERROR);
     }
 
     // 3. If user is inactive, activate them (email verification complete)
@@ -1120,12 +1122,9 @@ export class AuthService {
       // Reload user to get updated data with all fields
       user = await this.userService.findByEmail(dto.email);
       if (!user) {
-        throw new UnprocessableEntityException({
-          status: HttpStatus.UNPROCESSABLE_ENTITY,
-          errors: {
-            email: 'User not found after activation',
-          },
-        });
+        // Log for debugging but show same error to user
+        this.logger.error(`User disappeared during activation: ${dto.email}`);
+        throw new UnprocessableEntityException(VERIFICATION_ERROR);
       }
     }
 

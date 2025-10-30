@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import crypto from 'crypto';
 import { ElastiCacheService } from '../../elasticache/elasticache.service';
 import { AllConfigType } from '../../config/config.type';
 
@@ -46,6 +47,9 @@ export class EmailVerificationCodeService {
     tenantId: string,
     email: string,
   ): Promise<string> {
+    // Invalidate any existing codes for this user before generating a new one
+    await this.invalidateExistingCodes(userId, tenantId);
+
     let attempts = 0;
 
     while (attempts < this.maxCollisionRetries) {
@@ -65,8 +69,11 @@ export class EmailVerificationCodeService {
 
         await this.elastiCacheService.set(key, data, this.codeExpirySeconds);
 
+        // Store reverse mapping for invalidation
+        await this.storeUserCodeMapping(userId, tenantId, code);
+
         this.logger.log(
-          `Generated email verification code for user ${userId} (${email}), tenant ${tenantId}`,
+          `Generated email verification code for user ${userId}, tenant ${tenantId}`,
         );
         return code;
       }
@@ -110,11 +117,24 @@ export class EmailVerificationCodeService {
         return null;
       }
 
-      // Security check: email must match
-      if (data.email.toLowerCase() !== email.toLowerCase()) {
-        this.logger.warn(
-          `Email verification code email mismatch. Expected: ${data.email}, Got: ${email}`,
-        );
+      // Security check: email must match (using constant-time comparison to prevent timing attacks)
+      const expectedEmail = Buffer.from(data.email.toLowerCase(), 'utf8');
+      const providedEmail = Buffer.from(email.toLowerCase(), 'utf8');
+
+      // Ensure same length to prevent length-based timing attacks
+      if (expectedEmail.length !== providedEmail.length) {
+        this.logger.debug('Email verification code validation failed');
+        return null;
+      }
+
+      try {
+        const emailsMatch = crypto.timingSafeEqual(expectedEmail, providedEmail);
+        if (!emailsMatch) {
+          this.logger.debug('Email verification code validation failed');
+          return null;
+        }
+      } catch {
+        this.logger.debug('Email verification code validation failed');
         return null;
       }
 
@@ -130,7 +150,7 @@ export class EmailVerificationCodeService {
       // Consume the code (one-time use)
       await this.elastiCacheService.del(key);
       this.logger.log(
-        `Email verification code validated and consumed for user ${data.userId} (${email})`,
+        `Email verification code validated and consumed for user ${data.userId}`,
       );
 
       return data;
@@ -157,12 +177,52 @@ export class EmailVerificationCodeService {
   }
 
   /**
-   * Generate a random numeric code of specified length
+   * Generate a cryptographically secure random numeric code of specified length
    */
   private generateNumericCode(length: number): string {
     const min = Math.pow(10, length - 1);
     const max = Math.pow(10, length) - 1;
-    const code = Math.floor(Math.random() * (max - min + 1)) + min;
+    const range = max - min + 1;
+
+    // Use cryptographically secure random number generation
+    const randomValue = crypto.randomInt(range);
+    const code = min + randomValue;
+
     return code.toString().padStart(length, '0');
+  }
+
+  /**
+   * Store reverse mapping from userId to code for invalidation
+   */
+  private async storeUserCodeMapping(
+    userId: number,
+    tenantId: string,
+    code: string,
+  ): Promise<void> {
+    const mappingKey = `email_verification_user:${tenantId}:${userId}`;
+    await this.elastiCacheService.set(
+      mappingKey,
+      code,
+      this.codeExpirySeconds,
+    );
+  }
+
+  /**
+   * Invalidate any existing codes for this user
+   */
+  private async invalidateExistingCodes(
+    userId: number,
+    tenantId: string,
+  ): Promise<void> {
+    const mappingKey = `email_verification_user:${tenantId}:${userId}`;
+    const existingCode = await this.elastiCacheService.get<string>(mappingKey);
+
+    if (existingCode) {
+      const codeKey = this.getRedisKey(existingCode);
+      await this.elastiCacheService.del(codeKey);
+      this.logger.log(
+        `Invalidated previous verification code for user ${userId}, tenant ${tenantId}`,
+      );
+    }
   }
 }
