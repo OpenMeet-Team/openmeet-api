@@ -23,7 +23,7 @@ describe('ICalendarService', () => {
     getTenantConfig: jest.fn().mockReturnValue({
       id: 'test-tenant',
       name: 'Test Tenant',
-      frontendDomain: 'platform.example.com',
+      frontendDomain: 'https://platform.example.com',
       logoUrl: 'https://example.com/logo.png',
       companyDomain: 'example.com',
     }),
