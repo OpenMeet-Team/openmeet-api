@@ -35,11 +35,14 @@ describe('Email Registration Verification (e2e)', () => {
       const emails = await mailDevService.getEmailsByRecipient(email);
       expect(emails.length).toBeGreaterThan(0);
 
-      const verificationEmail = await mailDevService.getMostRecentEmailByRecipient(email);
+      const verificationEmail =
+        await mailDevService.getMostRecentEmailByRecipient(email);
       expect(verificationEmail).not.toBeNull();
 
       // ASSERT: Email contains 6-digit verification code
-      EmailVerificationTestHelpers.assertHasVerificationCode(verificationEmail!);
+      EmailVerificationTestHelpers.assertHasVerificationCode(
+        verificationEmail!,
+      );
       EmailVerificationTestHelpers.assertSentTo(verificationEmail!, email);
     });
 
@@ -83,10 +86,13 @@ describe('Email Registration Verification (e2e)', () => {
         .expect(201);
 
       // Get verification code from email
-      const verificationEmail = await mailDevService.getMostRecentEmailByRecipient(email);
+      const verificationEmail =
+        await mailDevService.getMostRecentEmailByRecipient(email);
       expect(verificationEmail).not.toBeNull();
 
-      const code = EmailVerificationTestHelpers.extractVerificationCode(verificationEmail!);
+      const code = EmailVerificationTestHelpers.extractVerificationCode(
+        verificationEmail!,
+      );
       expect(code).not.toBeNull();
 
       // Verify email with code
@@ -152,8 +158,11 @@ describe('Email Registration Verification (e2e)', () => {
         .expect(201);
 
       // Get code for first user
-      const verificationEmail = await mailDevService.getMostRecentEmailByRecipient(email1);
-      const code = EmailVerificationTestHelpers.extractVerificationCode(verificationEmail!);
+      const verificationEmail =
+        await mailDevService.getMostRecentEmailByRecipient(email1);
+      const code = EmailVerificationTestHelpers.extractVerificationCode(
+        verificationEmail!,
+      );
 
       // Try to use code with different email
       const email2 = `other-${Date.now()}@example.com`;

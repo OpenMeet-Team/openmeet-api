@@ -263,7 +263,9 @@ async function createTestUser(
   password = 'Test@1234',
 ) {
   const { mailDevService } = await import('./maildev-service');
-  const { EmailVerificationTestHelpers } = await import('./email-verification-helpers');
+  const { EmailVerificationTestHelpers } = await import(
+    './email-verification-helpers'
+  );
 
   // Handle both Express app instances and URL strings
   const response = await request(app)
@@ -282,12 +284,14 @@ async function createTestUser(
   }
 
   // Get verification code from email
-  const verificationEmail = await mailDevService.getMostRecentEmailByRecipient(email);
+  const verificationEmail =
+    await mailDevService.getMostRecentEmailByRecipient(email);
   if (!verificationEmail) {
     throw new Error(`No verification email found for ${email}`);
   }
 
-  const code = EmailVerificationTestHelpers.extractVerificationCode(verificationEmail);
+  const code =
+    EmailVerificationTestHelpers.extractVerificationCode(verificationEmail);
   if (!code) {
     throw new Error(`No verification code found in email for ${email}`);
   }

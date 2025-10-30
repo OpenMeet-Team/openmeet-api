@@ -301,9 +301,9 @@ describe('EmailVerificationTestHelpers', () => {
 
   describe('waitForEmail', () => {
     it('should return email when predicate matches', async () => {
-      const mockGetEmails = jest.fn().mockResolvedValue([
-        createMockEmail({ subject: 'Test Email' }),
-      ]);
+      const mockGetEmails = jest
+        .fn()
+        .mockResolvedValue([createMockEmail({ subject: 'Test Email' })]);
 
       const email = await EmailVerificationTestHelpers.waitForEmail(
         mockGetEmails,

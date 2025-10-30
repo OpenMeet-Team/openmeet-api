@@ -319,7 +319,8 @@ export class AuthService {
     );
 
     return {
-      message: 'Registration successful. Please check your email to verify your account.',
+      message:
+        'Registration successful. Please check your email to verify your account.',
       email: dto.email,
     };
   }
@@ -927,11 +928,7 @@ export class AuthService {
    * @returns Success message with verification code (for testing)
    */
   async quickRsvp(dto: QuickRsvpDto, tenantId: string) {
-    const {
-      name,
-      eventSlug,
-      status = EventAttendeeStatus.Confirmed,
-    } = dto;
+    const { name, eventSlug, status = EventAttendeeStatus.Confirmed } = dto;
 
     // Normalize email to lowercase for consistency
     const email = dto.email.toLowerCase().trim();

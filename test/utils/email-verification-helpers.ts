@@ -42,9 +42,7 @@ export class EmailVerificationTestHelpers {
           (to) => to.address.toLowerCase() === recipient.toLowerCase(),
         ),
       )
-      .sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-      );
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     return recipientEmails[0] || null;
   }

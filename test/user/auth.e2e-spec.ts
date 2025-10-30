@@ -91,10 +91,13 @@ describe('Auth Module', () => {
     describe('Email Verification', () => {
       it('should verify email and allow login: /api/v1/auth/verify-email-code (POST)', async () => {
         // Get verification code from email
-        const verificationEmail = await mailDevService.getMostRecentEmailByRecipient(newUserEmail);
+        const verificationEmail =
+          await mailDevService.getMostRecentEmailByRecipient(newUserEmail);
         expect(verificationEmail).not.toBeNull();
 
-        const code = EmailVerificationTestHelpers.extractVerificationCode(verificationEmail!);
+        const code = EmailVerificationTestHelpers.extractVerificationCode(
+          verificationEmail!,
+        );
         expect(code).not.toBeNull();
 
         // Verify email with code
@@ -343,8 +346,11 @@ describe('Auth Module', () => {
         .expect(201);
 
       // Verify email before login
-      const verificationEmail = await mailDevService.getMostRecentEmailByRecipient(newUserEmail);
-      const code = EmailVerificationTestHelpers.extractVerificationCode(verificationEmail!);
+      const verificationEmail =
+        await mailDevService.getMostRecentEmailByRecipient(newUserEmail);
+      const code = EmailVerificationTestHelpers.extractVerificationCode(
+        verificationEmail!,
+      );
       await serverApp
         .post('/api/v1/auth/verify-email-code')
         .send({ email: newUserEmail, code })
