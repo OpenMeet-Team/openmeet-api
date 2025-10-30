@@ -23,6 +23,8 @@ import { Repository } from 'typeorm';
 import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import { GlobalMatrixValidationService } from '../matrix/services/global-matrix-validation.service';
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
+import { AuthProvidersEnum } from '../auth/auth-providers.enum';
+import { StatusEnum } from '../status/status.enum';
 
 describe('UserService', () => {
   let userService: UserService;
@@ -315,6 +317,287 @@ describe('UserService', () => {
 
       // Verify handle is NOT stored (should be undefined)
       expect(createCallArgs.preferences.bluesky.handle).toBeUndefined();
+    });
+  });
+
+  describe('findOrCreateUser - Quick RSVP Account Merge', () => {
+    it('should merge Quick RSVP account when Google user logs in with matching email', async () => {
+      const email = 'john@example.com';
+
+      // Arrange: Existing Quick RSVP user (passwordless, INACTIVE)
+      const existingQuickRsvpUser = {
+        id: 123,
+        email,
+        firstName: 'John',
+        lastName: 'Doe',
+        provider: AuthProvidersEnum.email,
+        socialId: null,
+        password: null, // No password = Quick RSVP account
+        status: { id: StatusEnum.inactive },
+        role: mockRole,
+        preferences: {},
+      };
+
+      // Arrange: Google OAuth profile with same email
+      const googleProfile = {
+        id: 'google-oauth-id-123',
+        email,
+        firstName: 'John',
+        lastName: 'Doe',
+      };
+
+      // Mock: findBySocialIdAndProvider returns null (no Google account yet)
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(null);
+
+      // Mock: findByEmail returns existing Quick RSVP account
+      jest
+        .spyOn(userService, 'findByEmail')
+        .mockResolvedValue(existingQuickRsvpUser as any);
+
+      // Mock: update method to simulate the merge
+      const mergedUser = {
+        ...existingQuickRsvpUser,
+        provider: AuthProvidersEnum.google,
+        socialId: 'google-oauth-id-123',
+        status: { id: StatusEnum.active }, // Activated during merge
+      };
+
+      const updateSpy = jest
+        .spyOn(userService, 'update')
+        .mockResolvedValue(mergedUser as any);
+
+      // Mock: getTenantSpecificRepository (required by the method)
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      // Act: User logs in with Google OAuth
+      const result = await userService.findOrCreateUser(
+        googleProfile,
+        AuthProvidersEnum.google,
+        TESTING_TENANT_ID,
+      );
+
+      // Assert: Account was merged (updated, not created)
+      expect(updateSpy).toHaveBeenCalledWith(
+        123, // Quick RSVP user ID
+        expect.objectContaining({
+          provider: AuthProvidersEnum.google,
+          socialId: 'google-oauth-id-123',
+        }),
+        TESTING_TENANT_ID,
+      );
+
+      // Assert: User is now a Google account
+      expect(result.provider).toBe(AuthProvidersEnum.google);
+      expect(result.socialId).toBe('google-oauth-id-123');
+
+      // Assert: Original user ID preserved (RSVPs intact)
+      expect(result.id).toBe(123);
+    });
+
+    it('should merge Quick RSVP account when Bluesky user logs in with matching email', async () => {
+      const email = 'jane@example.com';
+
+      // Arrange: Existing Quick RSVP user (passwordless, INACTIVE)
+      const existingQuickRsvpUser = {
+        id: 456,
+        email,
+        firstName: 'Jane',
+        lastName: 'Smith',
+        provider: AuthProvidersEnum.email,
+        socialId: null,
+        password: null, // No password = Quick RSVP account
+        status: { id: StatusEnum.inactive },
+        role: mockRole,
+        preferences: {},
+      };
+
+      // Arrange: Bluesky OAuth profile with same email
+      const blueskyProfile = {
+        id: 'did:plc:abc123def456',
+        email,
+        firstName: 'Jane',
+        lastName: 'Smith',
+      };
+
+      // Mock: findBySocialIdAndProvider returns null (no Bluesky account yet)
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(null);
+
+      // Mock: findByEmail returns existing Quick RSVP account
+      jest
+        .spyOn(userService, 'findByEmail')
+        .mockResolvedValue(existingQuickRsvpUser as any);
+
+      // Mock: update method to simulate the merge with Bluesky preferences
+      const mergedUser = {
+        ...existingQuickRsvpUser,
+        provider: AuthProvidersEnum.bluesky,
+        socialId: 'did:plc:abc123def456',
+        status: { id: StatusEnum.active },
+        preferences: {
+          bluesky: {
+            did: 'did:plc:abc123def456',
+            connected: true,
+            autoPost: false,
+            connectedAt: expect.any(Date),
+          },
+        },
+      };
+
+      const updateSpy = jest
+        .spyOn(userService, 'update')
+        .mockResolvedValue(mergedUser as any);
+
+      // Mock: getTenantSpecificRepository
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      // Act: User logs in with Bluesky OAuth
+      const result = await userService.findOrCreateUser(
+        blueskyProfile,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      // Assert: Account was merged with Bluesky preferences
+      expect(updateSpy).toHaveBeenCalledWith(
+        456,
+        expect.objectContaining({
+          provider: AuthProvidersEnum.bluesky,
+          socialId: 'did:plc:abc123def456',
+          preferences: expect.objectContaining({
+            bluesky: expect.objectContaining({
+              did: 'did:plc:abc123def456',
+              connected: true,
+              autoPost: false,
+            }),
+          }),
+        }),
+        TESTING_TENANT_ID,
+      );
+
+      // Assert: User is now a Bluesky account
+      expect(result.provider).toBe(AuthProvidersEnum.bluesky);
+      expect(result.socialId).toBe('did:plc:abc123def456');
+    });
+
+    it('should NOT merge Quick RSVP account that has a password', async () => {
+      const email = 'user@example.com';
+
+      // Arrange: Existing user with PASSWORD (regular registration, not Quick RSVP)
+      const existingPasswordUser = {
+        id: 789,
+        email,
+        firstName: 'User',
+        lastName: 'WithPassword',
+        provider: AuthProvidersEnum.email,
+        socialId: null,
+        password: 'hashed-password-here', // HAS password = NOT Quick RSVP
+        status: { id: StatusEnum.active },
+        role: mockRole,
+      };
+
+      const googleProfile = {
+        id: 'google-oauth-id-789',
+        email,
+        firstName: 'User',
+        lastName: 'WithPassword',
+      };
+
+      // Mock: findBySocialIdAndProvider returns null
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(null);
+
+      // Mock: findByEmail returns existing user WITH password
+      jest
+        .spyOn(userService, 'findByEmail')
+        .mockResolvedValue(existingPasswordUser as any);
+
+      const updateSpy = jest.spyOn(userService, 'update');
+
+      // Mock: getTenantSpecificRepository
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      // Act & Assert: Should throw error (email already exists with password)
+      await expect(
+        userService.findOrCreateUser(
+          googleProfile,
+          AuthProvidersEnum.google,
+          TESTING_TENANT_ID,
+        ),
+      ).rejects.toThrow();
+
+      // Assert: No merge attempted (user has password, so it's a regular account)
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+
+    it('should create new social account if no Quick RSVP account exists', async () => {
+      const email = 'newuser@example.com';
+
+      const googleProfile = {
+        id: 'google-oauth-new-123',
+        email,
+        firstName: 'New',
+        lastName: 'User',
+      };
+
+      // Mock: No existing user found
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(null);
+      jest.spyOn(userService, 'findByEmail').mockResolvedValue(null);
+
+      // Mock: create method
+      const newUser = {
+        id: 999,
+        email,
+        firstName: 'New',
+        lastName: 'User',
+        provider: AuthProvidersEnum.google,
+        socialId: 'google-oauth-new-123',
+        status: { id: StatusEnum.active },
+        role: mockRole,
+      };
+
+      const createSpy = jest
+        .spyOn(userService, 'create')
+        .mockResolvedValue(newUser as any);
+
+      // Mock: getTenantSpecificRepository
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      // Act: New user logs in with Google
+      const result = await userService.findOrCreateUser(
+        googleProfile,
+        AuthProvidersEnum.google,
+        TESTING_TENANT_ID,
+      );
+
+      // Assert: New account created (not merged)
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: AuthProvidersEnum.google,
+          socialId: 'google-oauth-new-123',
+          email,
+          status: expect.objectContaining({
+            id: StatusEnum.active,
+          }),
+        }),
+        TESTING_TENANT_ID,
+      );
+
+      expect(result.provider).toBe(AuthProvidersEnum.google);
     });
   });
 });

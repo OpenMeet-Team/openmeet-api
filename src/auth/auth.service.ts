@@ -288,7 +288,8 @@ export class AuthService {
       throw new Error(`Role not found: ${RoleEnum.User}`);
     }
 
-    // Create user as INACTIVE - requires email verification
+    // Create user as INACTIVE - requires email verification before login
+    // A 6-digit verification code will be sent to their email
     const user = await this.userService.create({
       ...dto,
       email: dto.email,
@@ -988,7 +989,11 @@ export class AuthService {
       throw new NotFoundException('Default role not found');
     }
 
-    // Create user as INACTIVE - requires email verification
+    // Create user as INACTIVE (passwordless account)
+    // User can verify later via:
+    //   1. Passwordless login (request email code via /auth/request-login-code)
+    //   2. Social login (automatic account merge if email matches)
+    // No verification email sent at this time - frictionless Quick RSVP
     user = await this.userService.create(
       {
         email,
