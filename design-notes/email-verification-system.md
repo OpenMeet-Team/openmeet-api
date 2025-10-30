@@ -53,34 +53,42 @@ We're using the existing 6-digit code system (same as passwordless login):
 **John sees an event, wants to RSVP quickly:**
 
 1. John enters name + email, clicks "Yes, I'm going"
-2. System creates account as **INACTIVE** + records his RSVP
-3. **Calendar invite sent immediately** (even though unverified)
-4. Verification code sent: "Verify your email to manage your RSVP"
-5. John sees: "Check your email to confirm"
+2. System creates account as **INACTIVE** (passwordless) + records his RSVP
+3. **Calendar invite sent immediately** - John has everything he needs
+4. **No verification email sent at this time** - frictionless RSVP experience
+5. John sees: "RSVP confirmed! Check your email for the calendar invite."
 
-**If John verifies:**
-- He enters the code
-- Account becomes **ACTIVE** and he's logged in
-- He can now view/manage his RSVP and see event details
+**If John returns to the website later:**
+- Website shows: "Verify your email" banner (for INACTIVE users)
+- John has two options to access his account:
+  - **Option A - Passwordless Login:**
+    - Click "Verify Email" → system sends 6-digit code
+    - Enter code → account becomes **ACTIVE**
+    - Can continue using passwordless login (email codes) forever
+  - **Option B - Social Login:**
+    - Click "Sign in with Google/GitHub/Bluesky" (using same email)
+    - System automatically merges Quick RSVP account into social account
+    - Account becomes **ACTIVE** with provider = google/github/bluesky
+    - All RSVPs preserved during merge
 
 **If John tries to RSVP to another event (before verifying):**
-- **First RSVP:** Allowed (creates account, sends code)
-- **Second RSVP attempt:** Blocked - "Please verify your email to continue RSVPing"
-- We allow a small number of RSVPs (1-2) before requiring verification
+- System detects existing account for that email
+- Returns 409: "An account with this email already exists. Please sign in to RSVP."
+- This prompts John to verify via passwordless or social login
 
 **If John never verifies:**
 - ✅ He already got the calendar invite (has event info)
 - ✅ His RSVP shows in organizer's attendee list
-- ✅ Organizer can email him
-- ❌ He cannot log in to manage his RSVP
-- ❌ He won't receive other system emails (notifications, updates) until verified
-- Follow-up: We'll send a reminder to verify a few days later
+- ✅ Organizer can email him directly
+- ❌ He cannot log in to view/manage his RSVP on the website
+- ❌ He won't receive system notifications (event updates) until verified
+- Note: No password needed - John can use passwordless or social login anytime
 
 ---
 
 ### Flow 3: Social Login (Google/GitHub)
 
-**Maria clicks "Sign in with Google":**
+**Maria clicks "Sign in with Google" (new user):**
 
 1. OAuth flow happens
 2. Google returns her profile + **verified email**
@@ -92,9 +100,18 @@ We're using the existing 6-digit code system (same as passwordless login):
 - No point in us verifying again
 - Better user experience
 
+**Account Merge Scenario:**
+If Maria previously did a Quick RSVP with maria@gmail.com (created passwordless INACTIVE account), then later clicks "Sign in with Google" using the same email:
+1. System detects existing Quick RSVP account (email provider, no password)
+2. Automatically merges: Upgrades account to Google OAuth
+3. Preserves all RSVPs, event data, and preferences
+4. Account becomes ACTIVE with provider = google
+5. Maria logs in with her Google account going forward
+
 **Bluesky OAuth:**
 - Currently asks for email in a separate step after OAuth
-- If we can get email directly from Bluesky OAuth (see separate issue), treat it as verified
+- Same merge logic applies if email matches existing Quick RSVP account
+- Future work: Get email directly from Bluesky OAuth (tracked in GitHub issue #336)
 
 ---
 
@@ -296,7 +313,7 @@ We're using the existing 6-digit code system (same as passwordless login):
 ## Related Documentation
 
 - [Quick RSVP Passwordless Flow](./quick-rsvp-passwordless-flow.md)
-- [Bluesky Email Retrieval Issue](../docs/bluesky-email-retrieval-issue.md)
+- Bluesky Email Retrieval: See GitHub issue #336
 
 ---
 
