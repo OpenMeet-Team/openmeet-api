@@ -4,6 +4,8 @@ import { RecurrencePatternService } from '../../../event-series/services/recurre
 import { ConfigService } from '@nestjs/config';
 import { EventEntity } from '../../infrastructure/persistence/relational/entities/event.entity';
 import { UserEntity } from '../../../user/infrastructure/persistence/relational/entities/user.entity';
+import { REQUEST } from '@nestjs/core';
+import { TenantConnectionService } from '../../../tenant/tenant.service';
 
 describe('ICalendarService', () => {
   let service: ICalendarService;
@@ -15,6 +17,20 @@ describe('ICalendarService', () => {
   const mockConfigService = {
     get: jest.fn(),
     getOrThrow: jest.fn(),
+  };
+
+  const mockTenantConnectionService = {
+    getTenantConfig: jest.fn().mockReturnValue({
+      id: 'test-tenant',
+      name: 'Test Tenant',
+      frontendDomain: 'https://platform.example.com',
+      logoUrl: 'https://example.com/logo.png',
+      companyDomain: 'example.com',
+    }),
+  };
+
+  const mockRequest = {
+    tenantId: 'test-tenant',
   };
 
   beforeEach(async () => {
@@ -29,14 +45,84 @@ describe('ICalendarService', () => {
           provide: ConfigService,
           useValue: mockConfigService,
         },
+        {
+          provide: TenantConnectionService,
+          useValue: mockTenantConnectionService,
+        },
+        {
+          provide: REQUEST,
+          useValue: mockRequest,
+        },
       ],
     }).compile();
 
-    service = module.get<ICalendarService>(ICalendarService);
+    // Use resolve() for request-scoped providers
+    service = await module.resolve<ICalendarService>(ICalendarService);
   });
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('tenant-aware URL generation', () => {
+    const mockEvent: Partial<EventEntity> = {
+      id: 1,
+      ulid: 'event-ulid-123',
+      name: 'Tech Meetup',
+      description: 'A great tech meetup event',
+      location: '123 Main St, San Francisco, CA',
+      slug: 'tech-meetup',
+      startDate: new Date('2025-12-01T18:00:00Z'),
+      endDate: new Date('2025-12-01T20:00:00Z'),
+      timeZone: 'America/Los_Angeles',
+      isAllDay: false,
+      status: 'published' as any,
+    };
+
+    it('should use tenant frontend domain in calendar event URL', () => {
+      const calEvent = service.createCalendarEvent(mockEvent as EventEntity);
+      const eventString = calEvent.toString();
+
+      expect(eventString).toContain('https://platform.example.com/events/tech-meetup');
+      expect(eventString).not.toContain('openmeet.io');
+    });
+
+    it('should use tenant frontend domain in generateICalendar', () => {
+      const icsContent = service.generateICalendar(mockEvent as EventEntity);
+
+      expect(icsContent).toContain('https://platform.example.com/events/tech-meetup');
+      expect(icsContent).not.toContain('openmeet.io');
+    });
+
+    it('should use tenant frontend domain in generateICalendarForEvents', () => {
+      const icsContent = service.generateICalendarForEvents([mockEvent as EventEntity]);
+
+      expect(icsContent).toContain('https://platform.example.com/events/tech-meetup');
+      expect(icsContent).not.toContain('openmeet.io');
+    });
+
+    it('should use tenant frontend domain in generateCalendarInvite', () => {
+      const mockAttendee = {
+        email: 'attendee@example.com',
+        firstName: 'John',
+        lastName: 'Doe',
+      };
+
+      const mockOrganizer = {
+        email: 'organizer@example.com',
+        firstName: 'Jane',
+        lastName: 'Smith',
+      };
+
+      const icsContent = service.generateCalendarInvite(
+        mockEvent as EventEntity,
+        mockAttendee,
+        mockOrganizer,
+      );
+
+      expect(icsContent).toContain('https://platform.example.com/events/tech-meetup');
+      expect(icsContent).not.toContain('openmeet.io');
+    });
   });
 
   describe('generateCalendarInvite', () => {

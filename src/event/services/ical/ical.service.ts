@@ -1,12 +1,14 @@
-import { Injectable, Inject, forwardRef, Logger } from '@nestjs/common';
+import { Injectable, Inject, forwardRef, Logger, Scope } from '@nestjs/common';
 import { EventEntity } from '../../infrastructure/persistence/relational/entities/event.entity';
 import icalGenerator from 'ical-generator';
 import { ConfigService } from '@nestjs/config';
 import { RecurrenceRule } from '../../../event-series/interfaces/recurrence.interface';
 import { RecurrencePatternService } from '../../../event-series/services/recurrence-pattern.service';
 import { EventStatus } from '../../../core/constants/constant';
+import { REQUEST } from '@nestjs/core';
+import { TenantConnectionService } from '../../../tenant/tenant.service';
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class ICalendarService {
   private readonly logger = new Logger(ICalendarService.name);
 
@@ -14,7 +16,22 @@ export class ICalendarService {
     @Inject(forwardRef(() => RecurrencePatternService))
     private readonly recurrencePatternService: RecurrencePatternService,
     private readonly configService: ConfigService,
+    @Inject(REQUEST) private readonly request: any,
+    private readonly tenantService: TenantConnectionService,
   ) {}
+
+  /**
+   * Get the frontend domain for the current tenant
+   */
+  private getFrontendDomain(): string {
+    const tenantId = this.request.tenantId;
+    if (!tenantId) {
+      // Fallback to default domain if no tenant context
+      return 'openmeet.io';
+    }
+    const tenantConfig = this.tenantService.getTenantConfig(tenantId);
+    return tenantConfig.frontendDomain;
+  }
 
   /**
    * Create an iCalendar event from an EventEntity
@@ -39,8 +56,9 @@ export class ICalendarService {
     // Set the UID
     calEvent.uid(event.ulid);
 
-    // Set URL
-    calEvent.url(`https://openmeet.io/events/${event.slug}`);
+    // Set URL using tenant's frontend domain
+    const frontendDomain = this.getFrontendDomain();
+    calEvent.url(`${frontendDomain}/events/${event.slug}`);
 
     // Set status
     calEvent.status(this.mapNestStatusToICalStatus(event.status) as any);
