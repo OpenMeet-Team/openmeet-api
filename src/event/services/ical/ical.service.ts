@@ -58,7 +58,7 @@ export class ICalendarService {
 
     // Set URL using tenant's frontend domain
     const frontendDomain = this.getFrontendDomain();
-    calEvent.url(`https://${frontendDomain}/events/${event.slug}`);
+    calEvent.url(`${frontendDomain}/events/${event.slug}`);
 
     // Set status
     calEvent.status(this.mapNestStatusToICalStatus(event.status) as any);
