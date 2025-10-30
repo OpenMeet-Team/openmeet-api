@@ -210,21 +210,21 @@ export class MultiLayerThrottlerGuard extends ThrottlerGuard {
     const fullKey = `ratelimit:${key}`;
 
     try {
-      const current = await this.cacheService.get<number>(fullKey);
+      const redis = this.cacheService.getRedis();
 
-      if (current === null) {
-        // First request in this time window
-        await this.cacheService.set(fullKey, 1, ttl);
-        return true;
+      // Use atomic INCR to increment counter
+      const current = await redis.incr(fullKey);
+
+      if (current === 1) {
+        // First request - set expiration
+        await redis.expire(fullKey, ttl);
       }
 
-      if (current >= limit) {
-        // Rate limit exceeded
+      // Check if limit exceeded
+      if (current > limit) {
         return false;
       }
 
-      // Increment counter (keep original TTL)
-      await this.cacheService.set(fullKey, current + 1, ttl);
       return true;
     } catch (error) {
       // If Redis is down, fail open (allow request) to avoid blocking all traffic
