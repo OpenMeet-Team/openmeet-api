@@ -1197,18 +1197,7 @@ export class AuthService {
       );
     }
 
-    // Check if user is inactive
-    if (user.status?.id !== StatusEnum.active) {
-      this.logger.debug(
-        `Login code requested for inactive user: ${normalizedEmail}`,
-      );
-      return {
-        success: true,
-        message: 'We sent a login code to your email.',
-      };
-    }
-
-    // Generate 6-digit verification code
+    // Generate 6-digit verification code (for both active and inactive users)
     const code = await this.emailVerificationCodeService.generateCode(
       user.id,
       tenantId,
@@ -1223,6 +1212,15 @@ export class AuthService {
         code,
       },
     });
+
+    // Log whether this is for verification or passwordless login
+    if (user.status?.id !== StatusEnum.active) {
+      this.logger.log(
+        `Verification code sent to inactive user: ${normalizedEmail}`,
+      );
+    } else {
+      this.logger.log(`Login code sent to active user: ${normalizedEmail}`);
+    }
 
     this.logger.log(
       `Login code sent to ${normalizedEmail} (user ${user.id}, tenant ${tenantId})`,
