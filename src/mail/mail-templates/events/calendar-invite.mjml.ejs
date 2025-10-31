@@ -39,9 +39,15 @@
             📅 When
           </mj-text>
           <mj-text padding-bottom="15px" line-height="1.5">
-            <%= eventDate %><br/>
-            <%= eventTime %><br/>
-            <em><%= eventTimeZone %></em>
+            <% if (isMultiDay) { %>
+              <%= eventDate %> at <%= eventTime %><br/>
+              to <%= eventEndDate %> at <%= eventEndTime %><br/>
+              <em><%= eventTimeZone %></em>
+            <% } else { %>
+              <%= eventDate %><br/>
+              <%= eventTime %><% if (eventEndTime) { %> - <%= eventEndTime %><% } %><br/>
+              <em><%= eventTimeZone %></em>
+            <% } %>
           </mj-text>
 
           <!-- Location -->

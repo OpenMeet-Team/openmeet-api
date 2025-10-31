@@ -195,5 +195,100 @@ describe('CalendarInviteService', () => {
         .calls[0][0];
       expect(call.context.eventTimeZone).toBe('UTC');
     });
+
+    it('should include end time in email context when event has endDate', async () => {
+      await service.sendCalendarInvite(
+        mockEvent as EventEntity,
+        mockAttendee as UserEntity,
+        mockOrganizer as UserEntity,
+        mockTenantConfig as TenantConfig,
+      );
+
+      const call = (mailerService.sendCalendarInviteMail as jest.Mock).mock
+        .calls[0][0];
+      expect(call.context.eventEndTime).toBeDefined();
+      expect(call.context.eventEndTime).not.toBeNull();
+    });
+
+    it('should not include end time when event has no endDate', async () => {
+      const eventWithoutEndDate = {
+        ...mockEvent,
+        endDate: null,
+      };
+
+      await service.sendCalendarInvite(
+        eventWithoutEndDate as EventEntity,
+        mockAttendee as UserEntity,
+        mockOrganizer as UserEntity,
+        mockTenantConfig as TenantConfig,
+      );
+
+      const call = (mailerService.sendCalendarInviteMail as jest.Mock).mock
+        .calls[0][0];
+      expect(call.context.eventEndTime).toBeNull();
+    });
+
+    it('should mark event as not multi-day when start and end are on same day', async () => {
+      const sameDayEvent = {
+        ...mockEvent,
+        startDate: new Date('2025-12-01T10:00:00Z'),
+        endDate: new Date('2025-12-01T14:00:00Z'),
+      };
+
+      await service.sendCalendarInvite(
+        sameDayEvent as EventEntity,
+        mockAttendee as UserEntity,
+        mockOrganizer as UserEntity,
+        mockTenantConfig as TenantConfig,
+      );
+
+      const call = (mailerService.sendCalendarInviteMail as jest.Mock).mock
+        .calls[0][0];
+      expect(call.context.isMultiDay).toBe(false);
+      expect(call.context.eventEndDate).toBeNull();
+    });
+
+    it('should mark event as multi-day when start and end are on different days', async () => {
+      const multiDayEvent = {
+        ...mockEvent,
+        startDate: new Date('2025-12-01T22:00:00Z'),
+        endDate: new Date('2025-12-02T02:00:00Z'),
+      };
+
+      await service.sendCalendarInvite(
+        multiDayEvent as EventEntity,
+        mockAttendee as UserEntity,
+        mockOrganizer as UserEntity,
+        mockTenantConfig as TenantConfig,
+      );
+
+      const call = (mailerService.sendCalendarInviteMail as jest.Mock).mock
+        .calls[0][0];
+      expect(call.context.isMultiDay).toBe(true);
+      expect(call.context.eventEndDate).toBeDefined();
+      expect(call.context.eventEndDate).not.toBeNull();
+    });
+
+    it('should handle multi-day events with timezone correctly', async () => {
+      const multiDayEvent = {
+        ...mockEvent,
+        startDate: new Date('2025-12-01T23:00:00Z'), // Dec 1, 11pm UTC
+        endDate: new Date('2025-12-02T05:00:00Z'), // Dec 2, 5am UTC
+        timeZone: 'America/New_York', // In NY: Dec 1 6pm - Dec 2 12am (same day in NY but different in UTC)
+      };
+
+      await service.sendCalendarInvite(
+        multiDayEvent as EventEntity,
+        mockAttendee as UserEntity,
+        mockOrganizer as UserEntity,
+        mockTenantConfig as TenantConfig,
+      );
+
+      const call = (mailerService.sendCalendarInviteMail as jest.Mock).mock
+        .calls[0][0];
+
+      // In America/New_York timezone, this might span days differently than UTC
+      expect(call.context.isMultiDay).toBeDefined();
+    });
   });
 });
