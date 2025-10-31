@@ -109,6 +109,11 @@ export class CalendarInviteService {
     const timeZoneDisplay =
       eventTimeZone && eventTimeZone !== 'UTC' ? eventTimeZone : 'UTC';
 
+    // Check if event spans multiple days
+    const isMultiDay = event.endDate
+      ? this.isDifferentDay(event.startDate, event.endDate, eventTimeZone)
+      : false;
+
     // Send email with calendar invite
     await this.mailerService.sendCalendarInviteMail({
       to: attendee.email,
@@ -120,6 +125,14 @@ export class CalendarInviteService {
         eventLocation: event.location || '',
         eventDate: this.formatDateHumanReadable(event.startDate, eventTimeZone),
         eventTime: this.formatTimeHumanReadable(event.startDate, eventTimeZone),
+        eventEndDate:
+          event.endDate && isMultiDay
+            ? this.formatDateHumanReadable(event.endDate, eventTimeZone)
+            : null,
+        eventEndTime: event.endDate
+          ? this.formatTimeHumanReadable(event.endDate, eventTimeZone)
+          : null,
+        isMultiDay,
         eventTimeZone: timeZoneDisplay,
         eventUrl,
         attendeeName:
@@ -178,5 +191,21 @@ export class CalendarInviteService {
       timeZoneName: 'short',
       timeZone,
     });
+  }
+
+  /**
+   * Check if two dates are on different days in the given timezone
+   * @param startDate - Start date
+   * @param endDate - End date
+   * @param timeZone - IANA timezone identifier (e.g., 'America/New_York', 'UTC')
+   */
+  private isDifferentDay(
+    startDate: Date,
+    endDate: Date,
+    timeZone: string,
+  ): boolean {
+    const startDay = startDate.toLocaleDateString('en-US', { timeZone });
+    const endDay = endDate.toLocaleDateString('en-US', { timeZone });
+    return startDay !== endDay;
   }
 }
