@@ -7,6 +7,7 @@ import { RecurrencePatternService } from '../../../event-series/services/recurre
 import { EventStatus } from '../../../core/constants/constant';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../../../tenant/tenant.service';
+import { toZonedTime } from 'date-fns-tz';
 
 @Injectable({ scope: Scope.REQUEST })
 export class ICalendarService {
@@ -42,13 +43,20 @@ export class ICalendarService {
     // Use event's timezone or fallback to UTC
     const timezone = event.timeZone || 'UTC';
 
+    // Convert UTC dates to the event's timezone
+    // This ensures the ICS file contains correct local times with TZID
+    const startDate = toZonedTime(new Date(event.startDate), timezone);
+    const endDate = event.endDate
+      ? toZonedTime(new Date(event.endDate), timezone)
+      : undefined;
+
     // Create the basic event
     const calEvent = icalGenerator().createEvent({
       summary: event.name,
       description: event.description,
       location: event.location,
-      start: new Date(event.startDate),
-      end: event.endDate ? new Date(event.endDate) : undefined,
+      start: startDate,
+      end: endDate,
       timezone: timezone,
       allDay: event.isAllDay || false,
     });
