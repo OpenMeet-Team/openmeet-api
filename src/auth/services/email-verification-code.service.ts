@@ -128,7 +128,10 @@ export class EmailVerificationCodeService {
       }
 
       try {
-        const emailsMatch = crypto.timingSafeEqual(expectedEmail, providedEmail);
+        const emailsMatch = crypto.timingSafeEqual(
+          expectedEmail,
+          providedEmail,
+        );
         if (!emailsMatch) {
           this.logger.debug('Email verification code validation failed');
           return null;
@@ -200,11 +203,7 @@ export class EmailVerificationCodeService {
     code: string,
   ): Promise<void> {
     const mappingKey = `email_verification_user:${tenantId}:${userId}`;
-    await this.elastiCacheService.set(
-      mappingKey,
-      code,
-      this.codeExpirySeconds,
-    );
+    await this.elastiCacheService.set(mappingKey, code, this.codeExpirySeconds);
   }
 
   /**

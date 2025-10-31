@@ -23,9 +23,7 @@ import { getOidcCookieOptions } from '../utils/cookie-config';
 export class AuthBlueskyController {
   private readonly logger = new Logger(AuthBlueskyController.name);
 
-  constructor(
-    private readonly authBlueskyService: AuthBlueskyService,
-  ) {}
+  constructor(private readonly authBlueskyService: AuthBlueskyService) {}
 
   @Get('authorize')
   @Public()

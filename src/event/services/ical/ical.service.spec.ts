@@ -83,21 +83,29 @@ describe('ICalendarService', () => {
       const calEvent = service.createCalendarEvent(mockEvent as EventEntity);
       const eventString = calEvent.toString();
 
-      expect(eventString).toContain('https://platform.example.com/events/tech-meetup');
+      expect(eventString).toContain(
+        'https://platform.example.com/events/tech-meetup',
+      );
       expect(eventString).not.toContain('openmeet.io');
     });
 
     it('should use tenant frontend domain in generateICalendar', () => {
       const icsContent = service.generateICalendar(mockEvent as EventEntity);
 
-      expect(icsContent).toContain('https://platform.example.com/events/tech-meetup');
+      expect(icsContent).toContain(
+        'https://platform.example.com/events/tech-meetup',
+      );
       expect(icsContent).not.toContain('openmeet.io');
     });
 
     it('should use tenant frontend domain in generateICalendarForEvents', () => {
-      const icsContent = service.generateICalendarForEvents([mockEvent as EventEntity]);
+      const icsContent = service.generateICalendarForEvents([
+        mockEvent as EventEntity,
+      ]);
 
-      expect(icsContent).toContain('https://platform.example.com/events/tech-meetup');
+      expect(icsContent).toContain(
+        'https://platform.example.com/events/tech-meetup',
+      );
       expect(icsContent).not.toContain('openmeet.io');
     });
 
@@ -120,7 +128,9 @@ describe('ICalendarService', () => {
         mockOrganizer,
       );
 
-      expect(icsContent).toContain('https://platform.example.com/events/tech-meetup');
+      expect(icsContent).toContain(
+        'https://platform.example.com/events/tech-meetup',
+      );
       expect(icsContent).not.toContain('openmeet.io');
     });
   });

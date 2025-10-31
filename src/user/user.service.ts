@@ -441,17 +441,24 @@ export class UserService {
       });
 
       // Check if we need to update the existing user's email
-      const hasNoEmail = !existingUser.email || existingUser.email === '' || existingUser.email === 'null';
-      const profileHasEmail = profile.email && profile.email !== '' && profile.email !== 'null';
+      const hasNoEmail =
+        !existingUser.email ||
+        existingUser.email === '' ||
+        existingUser.email === 'null';
+      const profileHasEmail =
+        profile.email && profile.email !== '' && profile.email !== 'null';
 
       if (hasNoEmail && profileHasEmail) {
         // Update existing user with email from OAuth profile
-        this.logger.log('Updating existing user with email from OAuth profile', {
-          userId: existingUser.id,
-          email: profile.email,
-          emailConfirmed: profile.emailConfirmed,
-          provider: authProvider,
-        });
+        this.logger.log(
+          'Updating existing user with email from OAuth profile',
+          {
+            userId: existingUser.id,
+            email: profile.email,
+            emailConfirmed: profile.emailConfirmed,
+            provider: authProvider,
+          },
+        );
 
         // Determine status based on email verification
         // If email is not confirmed, user must verify it before becoming ACTIVE
@@ -464,7 +471,10 @@ export class UserService {
           this.logger.log(
             `Setting user ${existingUser.id} to INACTIVE due to unverified email`,
           );
-        } else if (profile.emailConfirmed === true && existingUser.status?.id === getStatusEnumValue('inactive')) {
+        } else if (
+          profile.emailConfirmed === true &&
+          existingUser.status?.id === getStatusEnumValue('inactive')
+        ) {
           // Email is verified and user was INACTIVE - activate them
           updateData.status = { id: getStatusEnumValue('active') };
           this.logger.log(
@@ -482,8 +492,12 @@ export class UserService {
       }
 
       // Check if existing user has a different email and OAuth provides verified email
-      const hasExistingEmail = existingUser.email && existingUser.email !== '' && existingUser.email !== 'null';
-      const profileHasVerifiedEmail = profileHasEmail && profile.emailConfirmed === true;
+      const hasExistingEmail =
+        existingUser.email &&
+        existingUser.email !== '' &&
+        existingUser.email !== 'null';
+      const profileHasVerifiedEmail =
+        profileHasEmail && profile.emailConfirmed === true;
       const emailsAreDifferent = existingUser.email !== profile.email;
 
       if (hasExistingEmail && profileHasVerifiedEmail && emailsAreDifferent) {
@@ -556,7 +570,8 @@ export class UserService {
     // 2. They have an unverified email (emailConfirmed === false)
     // This follows the Quick RSVP pattern where email verification is required for ACTIVE status
     const statusDto = new StatusDto();
-    const hasNoEmail = !profile.email || profile.email === '' || profile.email === 'null';
+    const hasNoEmail =
+      !profile.email || profile.email === '' || profile.email === 'null';
 
     if (hasNoEmail) {
       statusDto.id = getStatusEnumValue('inactive');

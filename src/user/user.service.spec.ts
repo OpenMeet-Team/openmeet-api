@@ -659,11 +659,7 @@ describe('UserService', () => {
       );
 
       // Assert: Email was updated
-      expect(updateSpy).toHaveBeenCalledWith(
-        111,
-        { email },
-        TESTING_TENANT_ID,
-      );
+      expect(updateSpy).toHaveBeenCalledWith(111, { email }, TESTING_TENANT_ID);
 
       // Assert: User now has email
       expect(result.email).toBe(email);
@@ -722,11 +718,7 @@ describe('UserService', () => {
       );
 
       // Assert: Email was updated
-      expect(updateSpy).toHaveBeenCalledWith(
-        222,
-        { email },
-        TESTING_TENANT_ID,
-      );
+      expect(updateSpy).toHaveBeenCalledWith(222, { email }, TESTING_TENANT_ID);
       expect(result.email).toBe(email);
     });
 
@@ -783,11 +775,7 @@ describe('UserService', () => {
       );
 
       // Assert: Email was updated
-      expect(updateSpy).toHaveBeenCalledWith(
-        333,
-        { email },
-        TESTING_TENANT_ID,
-      );
+      expect(updateSpy).toHaveBeenCalledWith(333, { email }, TESTING_TENANT_ID);
       expect(result.email).toBe(email);
     });
 
