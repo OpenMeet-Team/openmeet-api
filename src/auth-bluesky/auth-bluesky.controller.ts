@@ -7,14 +7,12 @@ import {
   HttpStatus,
   HttpCode,
   Logger,
-  Inject,
 } from '@nestjs/common';
 import { AuthBlueskyService } from './auth-bluesky.service';
 import { Response } from 'express';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { Public } from '../core/decorators/public.decorator';
 import { TenantPublic } from '../tenant/tenant-public.decorator';
-import { REQUEST } from '@nestjs/core';
 import { getOidcCookieOptions } from '../utils/cookie-config';
 
 @ApiTags('Auth')
@@ -27,7 +25,6 @@ export class AuthBlueskyController {
 
   constructor(
     private readonly authBlueskyService: AuthBlueskyService,
-    @Inject(REQUEST) private readonly request: any,
   ) {}
 
   @Get('authorize')
@@ -46,10 +43,10 @@ export class AuthBlueskyController {
   @TenantPublic()
   @Get('callback')
   async callback(@Query() query: any, @Res() res: Response) {
-    const effectiveTenantId = query.tenantId || this.request?.tenantId;
+    const effectiveTenantId = query.tenantId;
     if (!effectiveTenantId) {
-      this.logger.error('Missing tenant ID in callback');
-      throw new Error('Tenant ID is required');
+      this.logger.error('Missing tenant ID in callback query');
+      throw new Error('Tenant ID is required in query parameters');
     }
 
     this.logger.debug('Handling Bluesky callback:', {

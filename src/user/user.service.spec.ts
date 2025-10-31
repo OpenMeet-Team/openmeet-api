@@ -600,4 +600,902 @@ describe('UserService', () => {
       expect(result.provider).toBe(AuthProvidersEnum.google);
     });
   });
+
+  describe('findOrCreateUser - Email Handling from OAuth', () => {
+    it('should update existing Bluesky user email when OAuth provides email but user has none', async () => {
+      const did = 'did:plc:test123';
+      const email = 'newlyretrieved@example.com';
+
+      // Arrange: Existing Bluesky user WITHOUT email
+      const existingUserNoEmail = {
+        id: 111,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: null, // No email previously
+        firstName: 'Test',
+        lastName: 'User',
+        role: mockRole,
+        preferences: {
+          bluesky: {
+            did,
+            connected: true,
+          },
+        },
+      };
+
+      // Arrange: Bluesky OAuth profile WITH email
+      const blueskyProfileWithEmail = {
+        id: did,
+        email, // Email now provided by OAuth
+        firstName: 'Test',
+        lastName: 'User',
+      };
+
+      // Mock: findBySocialIdAndProvider returns existing user without email
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingUserNoEmail as any);
+
+      // Mock: update method to simulate email update
+      const updatedUser = {
+        ...existingUserNoEmail,
+        email,
+      };
+
+      const updateSpy = jest
+        .spyOn(userService, 'update')
+        .mockResolvedValue(updatedUser as any);
+
+      // Mock: getTenantSpecificRepository
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      // Act: User logs in with Bluesky OAuth that now provides email
+      const result = await userService.findOrCreateUser(
+        blueskyProfileWithEmail,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      // Assert: Email was updated
+      expect(updateSpy).toHaveBeenCalledWith(
+        111,
+        { email },
+        TESTING_TENANT_ID,
+      );
+
+      // Assert: User now has email
+      expect(result.email).toBe(email);
+    });
+
+    it('should update existing Bluesky user when they had empty string email', async () => {
+      const did = 'did:plc:test456';
+      const email = 'fresh@example.com';
+
+      // Arrange: Existing user with EMPTY STRING email
+      const existingUserEmptyEmail = {
+        id: 222,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: '', // Empty string (common for old Bluesky users)
+        firstName: 'Another',
+        lastName: 'User',
+        role: mockRole,
+        preferences: {
+          bluesky: {
+            did,
+            connected: true,
+          },
+        },
+      };
+
+      const blueskyProfileWithEmail = {
+        id: did,
+        email,
+        firstName: 'Another',
+        lastName: 'User',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingUserEmptyEmail as any);
+
+      const updatedUser = {
+        ...existingUserEmptyEmail,
+        email,
+      };
+
+      const updateSpy = jest
+        .spyOn(userService, 'update')
+        .mockResolvedValue(updatedUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      // Act
+      const result = await userService.findOrCreateUser(
+        blueskyProfileWithEmail,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      // Assert: Email was updated
+      expect(updateSpy).toHaveBeenCalledWith(
+        222,
+        { email },
+        TESTING_TENANT_ID,
+      );
+      expect(result.email).toBe(email);
+    });
+
+    it('should update existing Bluesky user when they had "null" string email', async () => {
+      const did = 'did:plc:test789';
+      const email = 'reallyreal@example.com';
+
+      // Arrange: Existing user with "null" STRING (literal string "null")
+      const existingUserNullString = {
+        id: 333,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: 'null', // String "null" (possible from API serialization)
+        firstName: 'Third',
+        lastName: 'User',
+        role: mockRole,
+        preferences: {
+          bluesky: {
+            did,
+            connected: true,
+          },
+        },
+      };
+
+      const blueskyProfileWithEmail = {
+        id: did,
+        email,
+        firstName: 'Third',
+        lastName: 'User',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingUserNullString as any);
+
+      const updatedUser = {
+        ...existingUserNullString,
+        email,
+      };
+
+      const updateSpy = jest
+        .spyOn(userService, 'update')
+        .mockResolvedValue(updatedUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      // Act
+      const result = await userService.findOrCreateUser(
+        blueskyProfileWithEmail,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      // Assert: Email was updated
+      expect(updateSpy).toHaveBeenCalledWith(
+        333,
+        { email },
+        TESTING_TENANT_ID,
+      );
+      expect(result.email).toBe(email);
+    });
+
+    it('should NOT update email when existing user already has valid email', async () => {
+      const did = 'did:plc:test999';
+      const existingEmail = 'already@example.com';
+      const newEmail = 'different@example.com';
+
+      // Arrange: User with EXISTING valid email
+      const existingUserWithEmail = {
+        id: 444,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: existingEmail, // Already has email
+        firstName: 'Existing',
+        lastName: 'User',
+        role: mockRole,
+        preferences: {
+          bluesky: {
+            did,
+            connected: true,
+          },
+        },
+      };
+
+      const blueskyProfileWithDifferentEmail = {
+        id: did,
+        email: newEmail, // Different email from OAuth
+        firstName: 'Existing',
+        lastName: 'User',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingUserWithEmail as any);
+
+      const updateSpy = jest.spyOn(userService, 'update');
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      // Act
+      const result = await userService.findOrCreateUser(
+        blueskyProfileWithDifferentEmail,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      // Assert: Email was NOT updated (existing email preserved)
+      expect(updateSpy).not.toHaveBeenCalled();
+      expect(result.email).toBe(existingEmail);
+    });
+
+    it('should handle case when OAuth does not provide email for existing user', async () => {
+      const did = 'did:plc:test000';
+      const existingEmail = 'existing@example.com';
+
+      // Arrange: User with existing email
+      const existingUserWithEmail = {
+        id: 555,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: existingEmail,
+        firstName: 'User',
+        lastName: 'Five',
+        role: mockRole,
+        preferences: {
+          bluesky: {
+            did,
+            connected: true,
+          },
+        },
+      };
+
+      // Arrange: OAuth profile WITHOUT email (permissions not granted)
+      const blueskyProfileNoEmail = {
+        id: did,
+        email: undefined, // No email from OAuth
+        firstName: 'User',
+        lastName: 'Five',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingUserWithEmail as any);
+
+      const updateSpy = jest.spyOn(userService, 'update');
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      // Act
+      const result = await userService.findOrCreateUser(
+        blueskyProfileNoEmail,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      // Assert: No update attempted
+      expect(updateSpy).not.toHaveBeenCalled();
+
+      // Assert: Existing email preserved
+      expect(result.email).toBe(existingEmail);
+    });
+
+    it('should create new user without email when OAuth does not provide email', async () => {
+      const did = 'did:plc:newuser123';
+
+      // Arrange: OAuth profile WITHOUT email
+      const blueskyProfileNoEmail = {
+        id: did,
+        email: undefined, // No email permission granted
+        firstName: 'New',
+        lastName: 'NoEmail',
+      };
+
+      // Mock: No existing user
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(null);
+      jest.spyOn(userService, 'findByEmail').mockResolvedValue(null);
+
+      // Mock: create method
+      const newUser = {
+        id: 666,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: null, // Created without email
+        firstName: 'New',
+        lastName: 'NoEmail',
+        role: mockRole,
+        preferences: {
+          bluesky: {
+            did,
+            connected: true,
+            autoPost: false,
+          },
+        },
+      };
+
+      const createSpy = jest
+        .spyOn(userService, 'create')
+        .mockResolvedValue(newUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      // Act
+      const result = await userService.findOrCreateUser(
+        blueskyProfileNoEmail,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      // Assert: User created with null email
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: null,
+          socialId: did,
+          provider: AuthProvidersEnum.bluesky,
+        }),
+        TESTING_TENANT_ID,
+      );
+
+      expect(result.email).toBeNull();
+    });
+
+    it('should create new user with email when OAuth provides email', async () => {
+      const did = 'did:plc:newuser456';
+      const email = 'brandnew@example.com';
+
+      // Arrange: OAuth profile WITH email
+      const blueskyProfileWithEmail = {
+        id: did,
+        email,
+        firstName: 'Brand',
+        lastName: 'New',
+      };
+
+      // Mock: No existing user
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(null);
+      jest.spyOn(userService, 'findByEmail').mockResolvedValue(null);
+
+      // Mock: create method
+      const newUser = {
+        id: 777,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email,
+        firstName: 'Brand',
+        lastName: 'New',
+        role: mockRole,
+        preferences: {
+          bluesky: {
+            did,
+            connected: true,
+            autoPost: false,
+          },
+        },
+      };
+
+      const createSpy = jest
+        .spyOn(userService, 'create')
+        .mockResolvedValue(newUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      // Act
+      const result = await userService.findOrCreateUser(
+        blueskyProfileWithEmail,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      // Assert: User created with email
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email,
+          socialId: did,
+          provider: AuthProvidersEnum.bluesky,
+        }),
+        TESTING_TENANT_ID,
+      );
+
+      expect(result.email).toBe(email);
+    });
+  });
+
+  describe('findOrCreateUser - Email Verification Status (emailConfirmed)', () => {
+    it('should create new user as INACTIVE when email is unverified (emailConfirmed=false)', async () => {
+      const did = 'did:plc:newuser-unverified';
+      const email = 'unverified@example.com';
+
+      const blueskyProfile = {
+        id: did,
+        email,
+        emailConfirmed: false, // Email not verified by Bluesky
+        firstName: 'New',
+        lastName: 'User',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(null);
+      jest.spyOn(userService, 'findByEmail').mockResolvedValue(null);
+
+      const newUser = {
+        id: 888,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email,
+        firstName: 'New',
+        lastName: 'User',
+        role: mockRole,
+        status: { id: StatusEnum.inactive }, // INACTIVE due to unverified email
+        preferences: {
+          bluesky: {
+            did,
+            connected: true,
+            autoPost: false,
+          },
+        },
+      };
+
+      const createSpy = jest
+        .spyOn(userService, 'create')
+        .mockResolvedValue(newUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      const result = await userService.findOrCreateUser(
+        blueskyProfile,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email,
+          status: { id: StatusEnum.inactive },
+        }),
+        TESTING_TENANT_ID,
+      );
+
+      expect(result.status.id).toBe(StatusEnum.inactive);
+    });
+
+    it('should create new user as ACTIVE when email is verified (emailConfirmed=true)', async () => {
+      const did = 'did:plc:newuser-verified';
+      const email = 'verified@example.com';
+
+      const blueskyProfile = {
+        id: did,
+        email,
+        emailConfirmed: true, // Email verified by Bluesky
+        firstName: 'Verified',
+        lastName: 'User',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(null);
+      jest.spyOn(userService, 'findByEmail').mockResolvedValue(null);
+
+      const newUser = {
+        id: 999,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email,
+        firstName: 'Verified',
+        lastName: 'User',
+        role: mockRole,
+        status: { id: StatusEnum.active }, // ACTIVE due to verified email
+        preferences: {
+          bluesky: {
+            did,
+            connected: true,
+            autoPost: false,
+          },
+        },
+      };
+
+      const createSpy = jest
+        .spyOn(userService, 'create')
+        .mockResolvedValue(newUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      const result = await userService.findOrCreateUser(
+        blueskyProfile,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email,
+          status: { id: StatusEnum.active },
+        }),
+        TESTING_TENANT_ID,
+      );
+
+      expect(result.status.id).toBe(StatusEnum.active);
+    });
+
+    it('should create user as INACTIVE when no email provided', async () => {
+      const did = 'did:plc:no-email';
+
+      const blueskyProfileNoEmail = {
+        id: did,
+        email: undefined, // No email
+        emailConfirmed: undefined, // No email confirmation status
+        firstName: 'No',
+        lastName: 'Email',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(null);
+      jest.spyOn(userService, 'findByEmail').mockResolvedValue(null);
+
+      const newUser = {
+        id: 111,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: null,
+        firstName: 'No',
+        lastName: 'Email',
+        role: mockRole,
+        status: { id: StatusEnum.inactive }, // INACTIVE (no email for notifications)
+        preferences: {
+          bluesky: {
+            did,
+            connected: true,
+            autoPost: false,
+          },
+        },
+      };
+
+      const createSpy = jest
+        .spyOn(userService, 'create')
+        .mockResolvedValue(newUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      const result = await userService.findOrCreateUser(
+        blueskyProfileNoEmail,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: null,
+          status: { id: StatusEnum.inactive },
+        }),
+        TESTING_TENANT_ID,
+      );
+
+      expect(result.status.id).toBe(StatusEnum.inactive);
+    });
+
+    it('should set existing ACTIVE user to INACTIVE when updating with unverified email', async () => {
+      const did = 'did:plc:existing-active';
+      const email = 'unverified-new@example.com';
+
+      const existingActiveUser = {
+        id: 123,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: null, // No email initially
+        firstName: 'Existing',
+        lastName: 'User',
+        role: mockRole,
+        status: { id: StatusEnum.active }, // Currently ACTIVE
+        preferences: {
+          bluesky: {
+            did,
+            connected: true,
+          },
+        },
+      };
+
+      const blueskyProfileUnverified = {
+        id: did,
+        email,
+        emailConfirmed: false, // Unverified email
+        firstName: 'Existing',
+        lastName: 'User',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingActiveUser as any);
+
+      const updatedUser = {
+        ...existingActiveUser,
+        email,
+        status: { id: StatusEnum.inactive }, // Now INACTIVE
+      };
+
+      const updateSpy = jest
+        .spyOn(userService, 'update')
+        .mockResolvedValue(updatedUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      const result = await userService.findOrCreateUser(
+        blueskyProfileUnverified,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      expect(updateSpy).toHaveBeenCalledWith(
+        123,
+        expect.objectContaining({
+          email,
+          status: { id: StatusEnum.inactive },
+        }),
+        TESTING_TENANT_ID,
+      );
+
+      expect(result.status.id).toBe(StatusEnum.inactive);
+    });
+
+    it('should set existing INACTIVE user to ACTIVE when updating with verified email', async () => {
+      const did = 'did:plc:inactive-to-active';
+      const email = 'now-verified@example.com';
+
+      const existingInactiveUser = {
+        id: 789,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: null,
+        firstName: 'Upgrading',
+        lastName: 'User',
+        role: mockRole,
+        status: { id: StatusEnum.inactive }, // Currently INACTIVE
+        preferences: {
+          bluesky: {
+            did,
+            connected: true,
+          },
+        },
+      };
+
+      const blueskyProfileVerified = {
+        id: did,
+        email,
+        emailConfirmed: true, // Verified email
+        firstName: 'Upgrading',
+        lastName: 'User',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingInactiveUser as any);
+
+      const updatedUser = {
+        ...existingInactiveUser,
+        email,
+        status: { id: StatusEnum.active }, // Now ACTIVE
+      };
+
+      const updateSpy = jest
+        .spyOn(userService, 'update')
+        .mockResolvedValue(updatedUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      const result = await userService.findOrCreateUser(
+        blueskyProfileVerified,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      expect(updateSpy).toHaveBeenCalledWith(
+        789,
+        expect.objectContaining({
+          email,
+          status: { id: StatusEnum.active },
+        }),
+        TESTING_TENANT_ID,
+      );
+
+      expect(result.status.id).toBe(StatusEnum.active);
+    });
+
+    it('should replace existing email with new verified email from OAuth', async () => {
+      const did = 'did:plc:email-change';
+      const oldEmail = 'old@example.com';
+      const newEmail = 'new-verified@example.com';
+
+      const existingUserWithEmail = {
+        id: 555,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: oldEmail, // Has existing email
+        firstName: 'User',
+        lastName: 'WithEmail',
+        role: mockRole,
+        status: { id: StatusEnum.active },
+        preferences: {
+          bluesky: {
+            did,
+            connected: true,
+          },
+        },
+      };
+
+      const blueskyProfileNewVerifiedEmail = {
+        id: did,
+        email: newEmail, // Different verified email from OAuth
+        emailConfirmed: true,
+        firstName: 'User',
+        lastName: 'WithEmail',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingUserWithEmail as any);
+
+      const updatedUser = {
+        ...existingUserWithEmail,
+        email: newEmail, // Email replaced
+      };
+
+      const updateSpy = jest
+        .spyOn(userService, 'update')
+        .mockResolvedValue(updatedUser as any);
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      const result = await userService.findOrCreateUser(
+        blueskyProfileNewVerifiedEmail,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      expect(updateSpy).toHaveBeenCalledWith(
+        555,
+        { email: newEmail },
+        TESTING_TENANT_ID,
+      );
+
+      expect(result.email).toBe(newEmail);
+    });
+
+    it('should NOT replace existing email with unverified email from OAuth', async () => {
+      const did = 'did:plc:keep-old-email';
+      const oldEmail = 'old@example.com';
+      const newUnverifiedEmail = 'new-unverified@example.com';
+
+      const existingUserWithEmail = {
+        id: 666,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: oldEmail, // Has existing email
+        firstName: 'User',
+        lastName: 'KeepEmail',
+        role: mockRole,
+        status: { id: StatusEnum.active },
+        preferences: {
+          bluesky: {
+            did,
+            connected: true,
+          },
+        },
+      };
+
+      const blueskyProfileUnverifiedEmail = {
+        id: did,
+        email: newUnverifiedEmail, // Different but unverified email
+        emailConfirmed: false,
+        firstName: 'User',
+        lastName: 'KeepEmail',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingUserWithEmail as any);
+
+      const updateSpy = jest.spyOn(userService, 'update');
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      const result = await userService.findOrCreateUser(
+        blueskyProfileUnverifiedEmail,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      // Should NOT update email (unverified)
+      expect(updateSpy).not.toHaveBeenCalled();
+
+      // Old email preserved
+      expect(result.email).toBe(oldEmail);
+    });
+
+    it('should not update when OAuth provides same email', async () => {
+      const did = 'did:plc:same-email';
+      const email = 'same@example.com';
+
+      const existingUserWithEmail = {
+        id: 777,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email, // Same email
+        firstName: 'User',
+        lastName: 'SameEmail',
+        role: mockRole,
+        status: { id: StatusEnum.active },
+        preferences: {
+          bluesky: {
+            did,
+            connected: true,
+          },
+        },
+      };
+
+      const blueskyProfileSameEmail = {
+        id: did,
+        email, // Same email
+        emailConfirmed: true,
+        firstName: 'User',
+        lastName: 'SameEmail',
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingUserWithEmail as any);
+
+      const updateSpy = jest.spyOn(userService, 'update');
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      const result = await userService.findOrCreateUser(
+        blueskyProfileSameEmail,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      // Should NOT update (email is the same)
+      expect(updateSpy).not.toHaveBeenCalled();
+      expect(result.email).toBe(email);
+    });
+  });
 });

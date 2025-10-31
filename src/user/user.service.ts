@@ -440,6 +440,70 @@ export class UserService {
         existingUser,
       });
 
+      // Check if we need to update the existing user's email
+      const hasNoEmail = !existingUser.email || existingUser.email === '' || existingUser.email === 'null';
+      const profileHasEmail = profile.email && profile.email !== '' && profile.email !== 'null';
+
+      if (hasNoEmail && profileHasEmail) {
+        // Update existing user with email from OAuth profile
+        this.logger.log('Updating existing user with email from OAuth profile', {
+          userId: existingUser.id,
+          email: profile.email,
+          emailConfirmed: profile.emailConfirmed,
+          provider: authProvider,
+        });
+
+        // Determine status based on email verification
+        // If email is not confirmed, user must verify it before becoming ACTIVE
+        const updateData: any = { email: profile.email };
+
+        if (profile.emailConfirmed === false) {
+          // Email is not verified by OAuth provider - set user to INACTIVE
+          // This follows the Quick RSVP pattern where unverified emails require verification
+          updateData.status = { id: getStatusEnumValue('inactive') };
+          this.logger.log(
+            `Setting user ${existingUser.id} to INACTIVE due to unverified email`,
+          );
+        } else if (profile.emailConfirmed === true && existingUser.status?.id === getStatusEnumValue('inactive')) {
+          // Email is verified and user was INACTIVE - activate them
+          updateData.status = { id: getStatusEnumValue('active') };
+          this.logger.log(
+            `Setting user ${existingUser.id} to ACTIVE due to verified email`,
+          );
+        }
+
+        const updatedUser = await this.update(
+          existingUser.id,
+          updateData,
+          tenantId,
+        );
+
+        return updatedUser as UserEntity;
+      }
+
+      // Check if existing user has a different email and OAuth provides verified email
+      const hasExistingEmail = existingUser.email && existingUser.email !== '' && existingUser.email !== 'null';
+      const profileHasVerifiedEmail = profileHasEmail && profile.emailConfirmed === true;
+      const emailsAreDifferent = existingUser.email !== profile.email;
+
+      if (hasExistingEmail && profileHasVerifiedEmail && emailsAreDifferent) {
+        // OAuth provider has a different verified email - update it (OAuth is source of truth)
+        this.logger.log('Updating user with new verified email from OAuth', {
+          userId: existingUser.id,
+          oldEmail: existingUser.email,
+          newEmail: profile.email,
+          provider: authProvider,
+        });
+
+        const updatedUser = await this.update(
+          existingUser.id,
+          { email: profile.email },
+          tenantId,
+        );
+
+        return updatedUser as UserEntity;
+      }
+
       // If the existing user has an email but the profile doesn't, update the profile
       if (existingUser.email && !profile.email) {
         this.logger.debug('Using existing email from database for user', {
@@ -486,8 +550,28 @@ export class UserService {
       throw new NotFoundException('Role not found');
     }
 
+    // Determine initial status based on email verification
+    // Users are INACTIVE if:
+    // 1. They have no email at all (can't send notifications)
+    // 2. They have an unverified email (emailConfirmed === false)
+    // This follows the Quick RSVP pattern where email verification is required for ACTIVE status
     const statusDto = new StatusDto();
-    statusDto.id = getStatusEnumValue('active');
+    const hasNoEmail = !profile.email || profile.email === '' || profile.email === 'null';
+
+    if (hasNoEmail) {
+      statusDto.id = getStatusEnumValue('inactive');
+      this.logger.log(
+        `Creating new user with INACTIVE status: no email provided`,
+      );
+    } else if (profile.emailConfirmed === false) {
+      statusDto.id = getStatusEnumValue('inactive');
+      this.logger.log(
+        `Creating new user with INACTIVE status due to unverified email: ${profile.email}`,
+      );
+    } else {
+      // Email is provided and verified (or emailConfirmed is undefined/true)
+      statusDto.id = getStatusEnumValue('active');
+    }
 
     // Create new user with Bluesky preferences if applicable
     const createUserData: any = {

@@ -120,18 +120,77 @@ The Bluesky login flow follows these steps:
 
 2. **PDS Authentication**
    - User authenticates with their PDS
-   - PDS returns accessJwt, refreshJwt, DID, and handle
+   - OAuth requests `transition:email` scope for email access
+   - PDS returns accessJwt, refreshJwt, DID, handle, and email (if granted)
 
-3. **Account Linking**
+3. **Email Handling and Verification from OAuth**
+   - System retrieves email and `emailConfirmed` flag from OAuth session
+   - OAuth provider (Bluesky) is the source of truth for email verification
+   - **Account status is determined by email verification state**
+
+   **For new users:**
+   - **Verified email** (`emailConfirmed: true`): User created as **ACTIVE**
+   - **Unverified email** (`emailConfirmed: false`): User created as **INACTIVE**
+     - Must verify email to become ACTIVE
+     - Follows Quick RSVP pattern for consistency
+   - **No email provided**: User created as **INACTIVE**
+     - Cannot send notifications without email
+     - Must add and verify email to become ACTIVE
+
+   **For existing users without email:**
+   - OAuth provides **verified email** (`emailConfirmed: true`):
+     - Email saved to database
+     - If INACTIVE → set to ACTIVE
+     - If ACTIVE → stays ACTIVE
+   - OAuth provides **unverified email** (`emailConfirmed: false`):
+     - Email saved to database
+     - User set to INACTIVE (even if previously ACTIVE)
+     - Must complete email verification to regain ACTIVE status
+
+   **For existing users with email:**
+   - OAuth provides **different verified email**:
+     - Old email replaced with new verified email
+     - OAuth provider is source of truth
+     - Status unchanged
+   - OAuth provides **different unverified email**:
+     - Old email preserved (not replaced)
+     - Unverified emails don't override existing verified emails
+   - OAuth provides **same email**:
+     - No update needed
+     - Status unchanged
+
+   **Email Verification Flow (for unverified emails):**
+   - System sends 6-digit verification code via email
+   - Code expires after 15 minutes
+   - Upon successful verification:
+     - User status: INACTIVE → ACTIVE
+     - Full account access granted
+   - Uses existing `EmailVerificationCodeService`
+   - Follows Quick RSVP verification pattern
+
+   **Account Status Rules:**
+   - **INACTIVE**: No email OR unverified email
+   - **ACTIVE**: Verified email (from OAuth or manual verification)
+
+4. **Account Linking**
    - System checks if a user with the DID exists
-   - If exists: Links the existing OpenMeet account
-   - If not: Creates a new OpenMeet account
+   - If exists: Links the existing OpenMeet account (and updates email if needed)
+   - If not: Creates a new OpenMeet account (with email if provided)
    - Checks for shadow accounts to claim
 
-4. **Token Storage**
+5. **Token Storage**
    - Tokens stored in Redis with proper expiration
    - Key pattern: `bluesky:session:${did}`
    - Automatic refresh mechanism for expired tokens
+
+**Implementation Details:**
+- Email and emailConfirmed retrieval: `auth-bluesky.service.ts:94-119`
+- Email verification status handling: `user.service.ts:438-551`
+- Account status determination: `user.service.ts:530-551`
+- Unit tests for email handling: `user.service.spec.ts:604-1023`
+- Unit tests for emailConfirmed: `user.service.spec.ts:1026-1500`
+- SocialInterface with emailConfirmed: `social/interfaces/social.interface.ts`
+- Related issue: #336 (Email retrieval and verification from Bluesky OAuth)
 
 Reference: [Bluesky Login Flow Redesign](/design-notes/matrix/bluesky-login-flow.md)
 
@@ -255,8 +314,9 @@ The shadow account process follows these steps:
      - handle stored as firstName
      - provider set to 'bluesky'
      - isShadowAccount flag set to true
-     - email set to null
+     - email set to null (shadow accounts don't have email)
    - Event is attributed to this new shadow account
+   - Note: When shadow accounts are claimed, email is retrieved from OAuth (see User Authentication Flow)
 
 3. **Account Claiming**
    - When a user logs in with Bluesky, system checks DIDs
@@ -313,18 +373,28 @@ The existing data model is extended to support ATProtocol integration:
 Current implementation:
 ```typescript
 // In UserEntity
+email?: string;               // User's email address (may be null for users without email permission)
+provider: string;             // 'bluesky', 'google', 'github', 'email'
+socialId?: string;            // DID for Bluesky users
+
 preferences: {
   bluesky?: {
     avatar?: string;
-    did?: string;
-    handle?: string;
-    connected?: boolean;
-    autoPost?: boolean;
+    did?: string;             // Bluesky DID (Decentralized Identifier)
+    handle?: string;          // Bluesky handle (deprecated, resolved from DID)
+    connected?: boolean;      // Whether Bluesky integration is active
+    autoPost?: boolean;       // Auto-publish events to Bluesky
     disconnectedAt?: Date;
     connectedAt?: Date;
   };
 }
 ```
+
+**Email Handling:**
+- Email may be `null`, empty string `''`, or literal string `'null'` for users created before email OAuth scope
+- Email is automatically populated from OAuth when available during login
+- Existing users without email get updated on subsequent logins (see User Authentication Flow)
+- Email can be manually added via `/auth/collect-email` if OAuth doesn't provide it
 
 Planned additions:
 ```typescript
@@ -378,6 +448,12 @@ interface BlueskyEnhancedProfile extends BlueskyPublicProfile {
    - Bluesky OAuth login implementation
    - Token storage in Redis
    - Session management for API calls
+   - Email retrieval from OAuth with `transition:email` scope
+   - Email verification status handling (`emailConfirmed` flag)
+   - Account status based on email verification (ACTIVE/INACTIVE)
+   - Automatic email update for existing users
+   - Email replacement when OAuth provides different verified email
+   - Graceful handling when email permission not granted or unverified
 
 2. **Event Publication**
    - Basic event publishing to Bluesky

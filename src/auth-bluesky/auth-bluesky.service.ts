@@ -2,13 +2,10 @@ import {
   BadRequestException,
   Inject,
   Injectable,
-  Scope,
   Logger,
   forwardRef,
 } from '@nestjs/common';
-import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
-import { TenantConfig } from '../core/constants/constant';
 import { ConfigService } from '@nestjs/config';
 import { Agent } from '@atproto/api';
 import * as crypto from 'crypto';
@@ -20,13 +17,11 @@ import { initializeOAuthClient } from '../utils/bluesky';
 import { EventSeriesOccurrenceService } from '../event-series/services/event-series-occurrence.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 
-@Injectable({ scope: Scope.REQUEST, durable: true })
+@Injectable()
 export class AuthBlueskyService {
   private readonly logger = new Logger(AuthBlueskyService.name);
-  private tenantConfig: TenantConfig;
 
   constructor(
-    @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
     private configService: ConfigService,
     private authService: AuthService,
@@ -77,14 +72,8 @@ export class AuthBlueskyService {
   ): Promise<{ redirectUrl: string; sessionId: string | undefined }> {
     this.logger.debug('handleAuthCallback', { query, tenantId });
     if (!tenantId) {
-      // Check if tenantId is in the request object
-      const requestTenantId = this.request?.tenantId;
-      if (!requestTenantId) {
-        this.logger.error('No tenant ID found in request or parameters');
-        throw new BadRequestException('Tenant ID is required');
-      }
-      tenantId = requestTenantId;
-      this.logger.debug('Using tenant ID from request:', { tenantId });
+      this.logger.error('No tenant ID found in parameters');
+      throw new BadRequestException('Tenant ID is required');
     }
 
     const client = await this.initializeClient(tenantId);
@@ -101,11 +90,32 @@ export class AuthBlueskyService {
     const agent = new Agent(restoredSession);
 
     const profile = await agent.getProfile({ actor: oauthSession.did });
+
+    // Get email from session using transition:email scope
+    let email: string | undefined;
+    let emailConfirmed: boolean = false;
+
+    try {
+      const sessionData = await agent.com.atproto.server.getSession();
+      email = sessionData.data.email;
+      emailConfirmed = sessionData.data.emailConfirmed || false;
+
+      this.logger.debug('Retrieved email from Bluesky session:', {
+        hasEmail: !!email,
+        emailConfirmed,
+      });
+    } catch (error) {
+      this.logger.warn('Failed to retrieve email from Bluesky session:', error);
+      // Continue without email - user can add it later
+    }
+
     const profileData = {
       did: profile.data.did, // Important: This will be stored as socialId
       handle: profile.data.handle,
       displayName: profile.data.displayName,
       avatar: profile.data.avatar,
+      email: email,
+      emailConfirmed: emailConfirmed,
     };
 
     this.logger.debug('Finding existing user:', {
@@ -175,7 +185,8 @@ export class AuthBlueskyService {
       'bluesky',
       {
         id: profileData.did,
-        email: existingUser?.email || '',
+        email: profileData.email || existingUser?.email || '',
+        emailConfirmed: profileData.emailConfirmed,
         firstName: profileData.displayName || profileData.handle,
         lastName: '',
         // Handle is not stored - it's resolved from DID when needed
