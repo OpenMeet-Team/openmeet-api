@@ -373,6 +373,76 @@ describe('ICalendarService', () => {
     });
   });
 
+  describe('timezone conversion', () => {
+    const mockEvent: Partial<EventEntity> = {
+      id: 1,
+      ulid: 'event-ulid-123',
+      name: 'Tech Meetup',
+      description: 'A great tech meetup event',
+      location: '123 Main St, San Francisco, CA',
+      slug: 'tech-meetup',
+      startDate: new Date('2025-12-01T18:00:00Z'),
+      endDate: new Date('2025-12-01T20:00:00Z'),
+      timeZone: 'America/Los_Angeles',
+      isAllDay: false,
+      status: 'published' as any,
+    };
+
+    const mockAttendee = {
+      email: 'attendee@example.com',
+      firstName: 'John',
+      lastName: 'Doe',
+    };
+
+    const mockOrganizer = {
+      email: 'organizer@example.com',
+      firstName: 'Jane',
+      lastName: 'Smith',
+    };
+
+    it('should correctly convert UTC times to America/Los_Angeles timezone', () => {
+      // Event stored in DB as UTC: Nov 5, 2025 1:00 AM UTC (which is Nov 4, 5:00 PM PST)
+      const eventInPST = {
+        ...mockEvent,
+        startDate: new Date('2025-11-05T01:00:00Z'), // Nov 4, 5pm PST stored as UTC
+        endDate: new Date('2025-11-05T03:00:00Z'), // Nov 4, 7pm PST stored as UTC
+        timeZone: 'America/Los_Angeles',
+      };
+
+      const icsContent = service.generateCalendarInvite(
+        eventInPST as EventEntity,
+        mockAttendee as UserEntity,
+        mockOrganizer as UserEntity,
+      );
+
+      // The ICS should contain DTSTART with TZID for America/Los_Angeles
+      expect(icsContent).toContain('TZID=America/Los_Angeles');
+      // Should NOT show Nov 5 (UTC date) but should show Nov 4 (local PST date)
+      expect(icsContent).toContain('20251104'); // Nov 4 in YYYYMMDD format
+    });
+
+    it('should correctly convert UTC times to America/New_York timezone', () => {
+      // Event stored as UTC: Nov 5, 2025 2:00 AM UTC (which is Nov 4, 9:00 PM EST)
+      const eventInEST = {
+        ...mockEvent,
+        startDate: new Date('2025-11-05T02:00:00Z'), // Nov 4, 9pm EST stored as UTC
+        endDate: new Date('2025-11-05T04:00:00Z'), // Nov 4, 11pm EST stored as UTC
+        timeZone: 'America/New_York',
+      };
+
+      const icsContent = service.generateCalendarInvite(
+        eventInEST as EventEntity,
+        mockAttendee as UserEntity,
+        mockOrganizer as UserEntity,
+      );
+
+      // The ICS should contain TZID for America/New_York
+      expect(icsContent).toContain('TZID=America/New_York');
+      // Should show Nov 4 (local EST date), not Nov 5 (UTC date)
+      expect(icsContent).toContain('20251104'); // Nov 4 in YYYYMMDD format
+    });
+  });
+
   describe('existing methods', () => {
     it('should have generateICalendar method', () => {
       expect(service.generateICalendar).toBeDefined();
