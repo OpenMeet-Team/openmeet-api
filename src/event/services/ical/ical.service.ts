@@ -8,6 +8,7 @@ import { EventStatus } from '../../../core/constants/constant';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../../../tenant/tenant.service';
 import { getVtimezoneComponent } from '@touch4it/ical-timezones';
+import { toZonedTime } from 'date-fns-tz';
 
 @Injectable({ scope: Scope.REQUEST })
 export class ICalendarService {
@@ -44,9 +45,13 @@ export class ICalendarService {
     const timezone = event.timeZone || 'UTC';
 
     // Event dates are stored as UTC in the database
-    // ical-generator handles timezone conversion automatically when timezone is set
-    const startDate = new Date(event.startDate);
-    const endDate = event.endDate ? new Date(event.endDate) : undefined;
+    // Convert UTC dates to the event's timezone using toZonedTime
+    // This is necessary because ical-generator does NOT automatically convert UTC to local timezone
+    // (known issue: https://github.com/sebbo2002/ical-generator/issues/49)
+    const startDate = toZonedTime(new Date(event.startDate), timezone);
+    const endDate = event.endDate
+      ? toZonedTime(new Date(event.endDate), timezone)
+      : undefined;
 
     // Create the basic event
     const calEvent = icalGenerator().createEvent({
