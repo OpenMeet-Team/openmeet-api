@@ -414,4 +414,197 @@ describe('Calendar Invite E2E', () => {
       console.log('✅ Email contains fallback calendar links');
     }, 20000);
   });
+
+  describe('VTIMEZONE Component in ICS (Issue #257)', () => {
+    it('should include VTIMEZONE component in calendar invite for non-UTC timezones', async () => {
+      console.log('\n=== Testing VTIMEZONE Component (Issue #257) ===');
+
+      const timestamp = Date.now();
+      const testEmail = `vtimezone-test-${timestamp}@example.com`;
+
+      // Create event with specific timezone
+      const pstEvent = await serverApp
+        .post('/api/events')
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          name: `PST Event ${timestamp}`,
+          description: 'Testing VTIMEZONE component',
+          startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000 + 3600000).toISOString(),
+          timeZone: 'America/Los_Angeles',
+          type: EventType.InPerson,
+          location: 'Los Angeles, CA',
+          maxAttendees: 50,
+          categories: [],
+          visibility: 'public',
+          status: EventStatus.Published,
+        })
+        .expect(201);
+
+      console.log('PST Event created:', pstEvent.body.slug);
+
+      // Do Quick RSVP to trigger calendar invite
+      const quickRsvpResponse = await serverApp
+        .post('/api/v1/auth/quick-rsvp')
+        .send({
+          name: 'VTIMEZONE Test',
+          email: testEmail,
+          eventSlug: pstEvent.body.slug,
+          status: EventAttendeeStatus.Confirmed,
+        })
+        .expect(201);
+
+      console.log('Quick RSVP successful');
+
+      // Wait for email processing
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Get emails sent to this recipient
+      const emails = await mailDevService.getEmailsByRecipient(testEmail);
+      console.log(`Found ${emails.length} email(s) to ${testEmail}`);
+
+      const calendarEmail = emails.find((email: any) =>
+        email.subject?.includes('registered'),
+      );
+
+      expect(calendarEmail).toBeDefined();
+      console.log('Calendar invite email found');
+
+      // Get ICS attachment
+      const icsAttachment = mailDevService.getIcsAttachment(calendarEmail);
+      expect(icsAttachment).toBeDefined();
+      console.log('ICS attachment found');
+      console.log('ICS attachment keys:', Object.keys(icsAttachment || {}));
+
+      // Decode ICS content
+      let icsContent: string;
+      if (icsAttachment.content) {
+        icsContent = Buffer.from(
+          icsAttachment.content,
+          'base64',
+        ).toString('utf-8');
+      } else {
+        // Fallback: try to fetch the content from MailDev API
+        const response = await fetch(
+          `http://${TESTING_MAIL_HOST}:${TESTING_MAIL_PORT}/email/${calendarEmail.id}/attachment/${icsAttachment.generatedFileName}`,
+        );
+        icsContent = await response.text();
+      }
+      expect(icsContent).toBeDefined();
+      console.log('ICS content length:', icsContent.length);
+
+      // Verify VTIMEZONE component is present
+      console.log('\n=== Verifying VTIMEZONE Component ===');
+
+      // Check for VTIMEZONE block
+      expect(icsContent).toContain('BEGIN:VTIMEZONE');
+      expect(icsContent).toContain('END:VTIMEZONE');
+      console.log('✅ VTIMEZONE block present');
+
+      // Check for timezone ID
+      expect(icsContent).toContain('TZID:America/Los_Angeles');
+      console.log('✅ TZID matches event timezone');
+
+      // Check for timezone offset information
+      expect(icsContent).toContain('TZOFFSETFROM:');
+      expect(icsContent).toContain('TZOFFSETTO:');
+      console.log('✅ Timezone offset information present');
+
+      // Verify DTSTART uses TZID parameter (not UTC)
+      const dtstartMatch = icsContent.match(/DTSTART[^:]*:([^\r\n]+)/);
+      expect(dtstartMatch).toBeDefined();
+      console.log('DTSTART line:', dtstartMatch?.[0]);
+
+      // Should have TZID parameter, not end with 'Z' (UTC)
+      expect(icsContent).toMatch(/DTSTART;TZID=America\/Los_Angeles:/);
+      expect(dtstartMatch?.[1]).not.toMatch(/Z$/);
+      console.log('✅ DTSTART uses TZID parameter (not UTC)');
+
+      // Check for standard and daylight time definitions (PST/PDT)
+      expect(
+        icsContent.includes('BEGIN:STANDARD') ||
+          icsContent.includes('BEGIN:DAYLIGHT'),
+      ).toBeTruthy();
+      console.log('✅ Standard/Daylight time definitions present');
+
+      console.log('\n✅ All VTIMEZONE validations passed!');
+      console.log('Issue #257 fix verified: VTIMEZONE component correctly included');
+    }, 20000);
+
+    it('should NOT include VTIMEZONE component for UTC timezone', async () => {
+      console.log('\n=== Testing UTC Event (No VTIMEZONE) ===');
+
+      const timestamp = Date.now();
+      const testEmail = `utc-test-${timestamp}@example.com`;
+
+      // Create event with UTC timezone
+      const utcEvent = await serverApp
+        .post('/api/events')
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          name: `UTC Event ${timestamp}`,
+          description: 'Testing UTC event without VTIMEZONE',
+          startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000 + 3600000).toISOString(),
+          timeZone: 'UTC',
+          type: EventType.Online,
+          locationOnline: 'https://meet.example.com',
+          maxAttendees: 50,
+          categories: [],
+          visibility: 'public',
+          status: EventStatus.Published,
+        })
+        .expect(201);
+
+      console.log('UTC Event created:', utcEvent.body.slug);
+
+      // Do Quick RSVP
+      await serverApp
+        .post('/api/v1/auth/quick-rsvp')
+        .send({
+          name: 'UTC Test',
+          email: testEmail,
+          eventSlug: utcEvent.body.slug,
+          status: EventAttendeeStatus.Confirmed,
+        })
+        .expect(201);
+
+      // Wait for email
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      const emails = await mailDevService.getEmailsByRecipient(testEmail);
+      const calendarEmail = emails.find((email: any) =>
+        email.subject?.includes('registered'),
+      );
+
+      expect(calendarEmail).toBeDefined();
+
+      const icsAttachment = mailDevService.getIcsAttachment(calendarEmail);
+      expect(icsAttachment).toBeDefined();
+
+      // Decode ICS content
+      let icsContent: string;
+      if (icsAttachment.content) {
+        icsContent = Buffer.from(
+          icsAttachment.content,
+          'base64',
+        ).toString('utf-8');
+      } else {
+        // Fallback: fetch content from MailDev API
+        const response = await fetch(
+          `http://${TESTING_MAIL_HOST}:${TESTING_MAIL_PORT}/email/${calendarEmail.id}/attachment/${icsAttachment.generatedFileName}`,
+        );
+        icsContent = await response.text();
+      }
+
+      // UTC events should NOT have VTIMEZONE block
+      expect(icsContent).not.toContain('BEGIN:VTIMEZONE');
+      console.log('✅ Correctly omitted VTIMEZONE for UTC timezone');
+
+      // Should use UTC times (ending with Z)
+      const dtstartMatch = icsContent.match(/DTSTART[^:]*:([^\r\n]+)/);
+      expect(dtstartMatch?.[1]).toMatch(/Z$/);
+      console.log('✅ DTSTART uses UTC format (ends with Z)');
+    }, 20000);
+  });
 });

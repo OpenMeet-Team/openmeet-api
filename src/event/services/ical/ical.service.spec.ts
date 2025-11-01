@@ -441,6 +441,122 @@ describe('ICalendarService', () => {
       // Should show Nov 4 (local EST date), not Nov 5 (UTC date)
       expect(icsContent).toContain('20251104'); // Nov 4 in YYYYMMDD format
     });
+
+    it('should correctly convert UTC times to Asia/Tokyo timezone', () => {
+      // Event stored as UTC: Nov 4, 2025 3:00 PM UTC (which is Nov 5, 12:00 AM JST)
+      const eventInJST = {
+        ...mockEvent,
+        startDate: new Date('2025-11-04T15:00:00Z'), // Nov 5, 12am JST stored as UTC
+        endDate: new Date('2025-11-04T17:00:00Z'), // Nov 5, 2am JST stored as UTC
+        timeZone: 'Asia/Tokyo',
+      };
+
+      const icsContent = service.generateCalendarInvite(
+        eventInJST as EventEntity,
+        mockAttendee as UserEntity,
+        mockOrganizer as UserEntity,
+      );
+
+      // The ICS should contain TZID for Asia/Tokyo
+      expect(icsContent).toContain('TZID=Asia/Tokyo');
+      // Should show Nov 5 (local JST date), not Nov 4 (UTC date)
+      expect(icsContent).toContain('20251105'); // Nov 5 in YYYYMMDD format
+      // Should show midnight (00:00) in local time
+      expect(icsContent).toContain('20251105T000000');
+    });
+
+    it('should correctly convert UTC times to Europe/London timezone', () => {
+      // Event stored as UTC: Nov 4, 2025 11:00 PM UTC (which is Nov 4, 11:00 PM GMT)
+      const eventInGMT = {
+        ...mockEvent,
+        startDate: new Date('2025-11-04T23:00:00Z'), // Nov 4, 11pm GMT stored as UTC
+        endDate: new Date('2025-11-05T01:00:00Z'), // Nov 5, 1am GMT stored as UTC
+        timeZone: 'Europe/London',
+      };
+
+      const icsContent = service.generateCalendarInvite(
+        eventInGMT as EventEntity,
+        mockAttendee as UserEntity,
+        mockOrganizer as UserEntity,
+      );
+
+      // The ICS should contain TZID for Europe/London
+      expect(icsContent).toContain('TZID=Europe/London');
+      // Should show Nov 4 (local GMT date)
+      expect(icsContent).toContain('20251104');
+      // Should show 11pm (23:00) in local time
+      expect(icsContent).toContain('20251104T230000');
+    });
+
+    it('should correctly convert UTC times to Australia/Sydney timezone', () => {
+      // Event stored as UTC: Nov 4, 2025 1:00 PM UTC (which is Nov 5, 12:00 AM AEDT)
+      const eventInAEDT = {
+        ...mockEvent,
+        startDate: new Date('2025-11-04T13:00:00Z'), // Nov 5, 12am AEDT stored as UTC
+        endDate: new Date('2025-11-04T15:00:00Z'), // Nov 5, 2am AEDT stored as UTC
+        timeZone: 'Australia/Sydney',
+      };
+
+      const icsContent = service.generateCalendarInvite(
+        eventInAEDT as EventEntity,
+        mockAttendee as UserEntity,
+        mockOrganizer as UserEntity,
+      );
+
+      // The ICS should contain TZID for Australia/Sydney
+      expect(icsContent).toContain('TZID=Australia/Sydney');
+      // Should show Nov 5 (local AEDT date), not Nov 4 (UTC date)
+      expect(icsContent).toContain('20251105'); // Nov 5 in YYYYMMDD format
+      // Should show midnight (00:00) in local time
+      expect(icsContent).toContain('20251105T000000');
+    });
+
+    it('should correctly convert UTC times to Europe/Berlin timezone', () => {
+      // Event stored as UTC: Nov 4, 2025 10:00 PM UTC (which is Nov 4, 11:00 PM CET)
+      const eventInCET = {
+        ...mockEvent,
+        startDate: new Date('2025-11-04T22:00:00Z'), // Nov 4, 11pm CET stored as UTC
+        endDate: new Date('2025-11-05T00:00:00Z'), // Nov 5, 1am CET stored as UTC
+        timeZone: 'Europe/Berlin',
+      };
+
+      const icsContent = service.generateCalendarInvite(
+        eventInCET as EventEntity,
+        mockAttendee as UserEntity,
+        mockOrganizer as UserEntity,
+      );
+
+      // The ICS should contain TZID for Europe/Berlin
+      expect(icsContent).toContain('TZID=Europe/Berlin');
+      // Should show Nov 4 (local CET date)
+      expect(icsContent).toContain('20251104');
+      // Should show 11pm (23:00) in local time
+      expect(icsContent).toContain('20251104T230000');
+    });
+
+    it('should correctly handle timezone for events spanning multiple days', () => {
+      // Event stored as UTC: Nov 4, 2025 10:00 PM UTC → Nov 5, 2025 2:00 AM UTC
+      // In Asia/Tokyo: Nov 5, 7:00 AM JST → Nov 5, 11:00 AM JST
+      const multiDayEvent = {
+        ...mockEvent,
+        startDate: new Date('2025-11-04T22:00:00Z'), // Nov 5, 7am JST
+        endDate: new Date('2025-11-05T02:00:00Z'), // Nov 5, 11am JST
+        timeZone: 'Asia/Tokyo',
+      };
+
+      const icsContent = service.generateCalendarInvite(
+        multiDayEvent as EventEntity,
+        mockAttendee as UserEntity,
+        mockOrganizer as UserEntity,
+      );
+
+      // Both start and end should be on Nov 5 in JST
+      const veventMatch = icsContent.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/);
+      const vevent = veventMatch ? veventMatch[0] : '';
+
+      expect(vevent).toContain('DTSTART;TZID=Asia/Tokyo:20251105T070000');
+      expect(vevent).toContain('DTEND;TZID=Asia/Tokyo:20251105T110000');
+    });
   });
 
   describe('existing methods', () => {

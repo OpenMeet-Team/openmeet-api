@@ -79,6 +79,7 @@
     "@opentelemetry/auto-instrumentations-node": "^0.55.2",
     "@opentelemetry/exporter-trace-otlp-http": "^0.57.1",
     "@opentelemetry/sdk-node": "^0.57.1",
+    "@touch4it/ical-timezones": "^1.9.0",
     "@types/ioredis": "^4.28.10",
     "@types/multer-s3": "3.0.3",
     "@types/redlock": "^4.0.7",
