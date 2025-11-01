@@ -67,6 +67,15 @@ export class ICalendarService {
     // Set the UID
     calEvent.uid(event.ulid);
 
+    // Set SEQUENCE number using updatedAt timestamp (seconds since epoch)
+    // This ensures each update gets a higher sequence number
+    if (event.updatedAt) {
+      const sequenceNumber = Math.floor(
+        new Date(event.updatedAt).getTime() / 1000,
+      );
+      calEvent.sequence(sequenceNumber);
+    }
+
     // Set URL using tenant's frontend domain
     const frontendDomain = this.getFrontendDomain();
     calEvent.url(`${frontendDomain}/events/${event.slug}`);

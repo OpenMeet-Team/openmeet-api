@@ -607,4 +607,111 @@ describe('Calendar Invite E2E', () => {
       console.log('✅ DTSTART uses UTC format (ends with Z)');
     }, 20000);
   });
+
+  describe('Event Update Calendar Invites', () => {
+    it('should send updated calendar invite when event details change', async () => {
+      console.log('\n=== Testing Event Update Calendar Invite ===');
+
+      // First, create an attendee and RSVP
+      const timestamp = Date.now();
+      const attendeeEmail = `attendee-update-${timestamp}@example.com`;
+
+      const attendeeData = await createTestUser(
+        TESTING_APP_URL,
+        testTenantId,
+        attendeeEmail,
+        'Test',
+        'Attendee',
+        'password123',
+      );
+
+      // RSVP to the event
+      await serverApp
+        .post(`/api/events/${testEvent.slug}/attend`)
+        .set('Authorization', `Bearer ${attendeeData.token}`)
+        .send({})
+        .expect(201);
+
+      console.log('Attendee RSVPed to event');
+
+      // Wait for initial calendar invite to be processed
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Clear timestamp for update test
+      const timestampBeforeUpdate = Date.now();
+
+      // Update the event (change time and location) - use organizer token!
+      const newStartDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 days from now
+      await serverApp
+        .patch(`/api/events/${testEvent.slug}`)
+        .set('Authorization', `Bearer ${organizerToken}`)
+        .send({
+          startDate: newStartDate.toISOString(),
+          endDate: new Date(newStartDate.getTime() + 7200000).toISOString(), // +2 hours
+          location: 'Updated Venue, 456 New St',
+        })
+        .expect(200);
+
+      console.log('Event updated with new time and location');
+
+      // Wait for event processing and email delivery
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      // Check for update email with calendar invite
+      const recentEmails = await mailDevService.getEmailsSince(
+        timestampBeforeUpdate,
+      );
+      const updateEmails = recentEmails.filter(
+        (email: any) =>
+          email.to?.some((recipient: any) => recipient.address === attendeeEmail) &&
+          email.subject?.includes('Updated Event'),
+      );
+
+      expect(updateEmails.length).toBeGreaterThan(0);
+      console.log(`Found ${updateEmails.length} update email(s)`);
+
+      const updateEmail = updateEmails[0];
+
+      // Fetch full email to get attachment info
+      const fullEmailResponse = await fetch(
+        `http://${TESTING_MAIL_HOST}:${TESTING_MAIL_PORT}/email/${updateEmail.id}`,
+      );
+      const fullEmail = await fullEmailResponse.json();
+
+      // Verify ICS attachment is present
+      const icsAttachment = mailDevService.getIcsAttachment(fullEmail);
+      expect(icsAttachment).toBeDefined();
+      console.log('✅ Update email has ICS attachment');
+
+      // Download the ICS file content using MailDev's attachment endpoint
+      const icsResponse = await fetch(
+        `http://${TESTING_MAIL_HOST}:${TESTING_MAIL_PORT}/email/${updateEmail.id}/attachment/${icsAttachment.generatedFileName}`,
+      );
+      const icsContent = await icsResponse.text();
+
+      // Should have METHOD:REQUEST for calendar updates
+      expect(icsContent).toContain('METHOD:REQUEST');
+      console.log('✅ ICS uses METHOD:REQUEST for update');
+
+      // Should contain the same event UID (so it updates rather than creates new)
+      expect(icsContent).toContain(`UID:${testEvent.ulid}`);
+      console.log('✅ ICS contains same UID for update');
+
+      // Should contain updated location
+      expect(icsContent).toContain('Updated Venue');
+      console.log('✅ ICS contains updated location');
+
+      // Check SEQUENCE number (should be > 0 for updates, using updatedAt timestamp)
+      const sequenceMatch = icsContent.match(/SEQUENCE:(\d+)/);
+      expect(sequenceMatch).toBeDefined();
+      const sequence = parseInt(sequenceMatch![1]);
+      console.log(`SEQUENCE number: ${sequence}`);
+
+      // SEQUENCE should be a Unix timestamp (10+ digits for years 2001+)
+      expect(sequence).toBeGreaterThan(1000000000);
+      console.log('✅ SEQUENCE number is timestamp-based and will increment with updates');
+
+      console.log('✅ Event update calendar invite verified!');
+    }, 30000);
+  });
 });
