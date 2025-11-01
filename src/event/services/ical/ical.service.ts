@@ -7,6 +7,7 @@ import { RecurrencePatternService } from '../../../event-series/services/recurre
 import { EventStatus } from '../../../core/constants/constant';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../../../tenant/tenant.service';
+import { getVtimezoneComponent } from '@touch4it/ical-timezones';
 
 @Injectable({ scope: Scope.REQUEST })
 export class ICalendarService {
@@ -114,10 +115,21 @@ export class ICalendarService {
     organizer: { email: string; firstName?: string; lastName?: string },
     eventUrl?: string,
   ): string {
+    const timezone = event.timeZone || 'UTC';
+
     const calendar = icalGenerator({
       prodId: { company: 'OpenMeet', product: 'Calendar', language: 'EN' },
-      timezone: event.timeZone || 'UTC',
+      timezone: timezone,
     });
+
+    // Add VTIMEZONE component for RFC 5545 compliance
+    // This ensures calendar apps correctly interpret the timezone
+    if (timezone !== 'UTC') {
+      calendar.timezone({
+        name: timezone,
+        generator: getVtimezoneComponent,
+      });
+    }
 
     // Set method to REQUEST for calendar invites
     calendar.method('REQUEST' as any);
@@ -170,10 +182,20 @@ export class ICalendarService {
    * Create a full iCalendar document from an EventEntity
    */
   public createICalendar(event: EventEntity): string {
+    const timezone = event.timeZone || 'UTC';
+
     const calendar = icalGenerator({
       prodId: { company: 'OpenMeet', product: 'Calendar', language: 'EN' },
-      timezone: 'UTC',
+      timezone: timezone,
     });
+
+    // Add VTIMEZONE component for RFC 5545 compliance
+    if (timezone !== 'UTC') {
+      calendar.timezone({
+        name: timezone,
+        generator: getVtimezoneComponent,
+      });
+    }
 
     // Set method if needed
     if (event.status === EventStatus.Cancelled) {
@@ -295,15 +317,25 @@ export class ICalendarService {
    * Generate an iCalendar file for an event
    */
   generateICalendar(event: EventEntity): string {
+    const timezone = event.timeZone || 'UTC';
+
     const calendar = icalGenerator({
       name: 'OpenMeet Calendar',
-      timezone: 'UTC',
+      timezone: timezone,
       prodId: {
         company: 'OpenMeet',
         product: 'Calendar',
         language: 'EN',
       },
     });
+
+    // Add VTIMEZONE component for RFC 5545 compliance
+    if (timezone !== 'UTC') {
+      calendar.timezone({
+        name: timezone,
+        generator: getVtimezoneComponent,
+      });
+    }
 
     // Add the event to the calendar
     const calEvent = this.createCalendarEvent(event);
@@ -378,6 +410,23 @@ export class ICalendarService {
         product: 'Calendar',
         language: 'EN',
       },
+    });
+
+    // Collect all unique timezones from events and add VTIMEZONE components
+    const uniqueTimezones = new Set<string>();
+    events.forEach((event) => {
+      const timezone = event.timeZone || 'UTC';
+      if (timezone !== 'UTC') {
+        uniqueTimezones.add(timezone);
+      }
+    });
+
+    // Add VTIMEZONE component for each unique timezone
+    uniqueTimezones.forEach((timezone) => {
+      calendar.timezone({
+        name: timezone,
+        generator: getVtimezoneComponent,
+      });
     });
 
     // Set calendar method
