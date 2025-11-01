@@ -9,6 +9,7 @@ import { TenantConnectionService } from '../../tenant/tenant.service';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
+import { ICalendarService } from '../../event/services/ical/ical.service';
 
 describe('EventAnnouncementService', () => {
   let service: EventAnnouncementService;
@@ -106,6 +107,11 @@ describe('EventAnnouncementService', () => {
     const mockMailerService = {
       sendMail: jest.fn(),
       sendMjmlMail: jest.fn(),
+      sendCalendarInviteMail: jest.fn(),
+    };
+
+    const mockICalendarService = {
+      generateCalendarInvite: jest.fn().mockReturnValue('BEGIN:VCALENDAR\nEND:VCALENDAR'),
     };
 
     const mockUserService = {
@@ -183,6 +189,10 @@ describe('EventAnnouncementService', () => {
         {
           provide: EventAttendeeService,
           useValue: mockEventAttendeeService,
+        },
+        {
+          provide: ICalendarService,
+          useValue: mockICalendarService,
         },
         {
           provide: REQUEST,
