@@ -215,7 +215,7 @@ describe('EventAnnouncementService', () => {
 
   describe('handleEventCreated', () => {
     beforeEach(() => {
-      mailerService.sendMjmlMail.mockResolvedValue(undefined);
+      mailerService.sendCalendarInviteMail.mockResolvedValue(undefined);
     });
 
     it('should send announcement emails to group members and event attendees when a new event is created', async () => {
@@ -230,9 +230,9 @@ describe('EventAnnouncementService', () => {
       // Assert - emails should be sent to group members + event attendees
 
       // Should send emails to group members (Alice, Bob, Carol) + event attendees (David, Emma) = 5 total, excluding organizer
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(5);
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(5);
 
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledWith({
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledWith({
         to: 'alice@example.com',
         subject: 'New Event: Test Event in Test Group',
         templateName: 'event/new-event-announcement',
@@ -252,9 +252,10 @@ describe('EventAnnouncementService', () => {
           organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
+        icsContent: expect.any(String),
       });
 
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledWith({
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledWith({
         to: 'bob@example.com',
         subject: 'New Event: Test Event in Test Group',
         templateName: 'event/new-event-announcement',
@@ -274,9 +275,10 @@ describe('EventAnnouncementService', () => {
           organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
+        icsContent: expect.any(String),
       });
 
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledWith({
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledWith({
         to: 'carol@example.com',
         subject: 'New Event: Test Event in Test Group',
         templateName: 'event/new-event-announcement',
@@ -296,6 +298,7 @@ describe('EventAnnouncementService', () => {
           organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
+        icsContent: expect.any(String),
       });
     });
 
@@ -315,7 +318,7 @@ describe('EventAnnouncementService', () => {
       });
 
       // Assert - Should send emails to event attendees (David, Emma) even without a group
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(2);
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(2);
     });
 
     it('should send emails to event attendees even if group has no members', async () => {
@@ -331,7 +334,7 @@ describe('EventAnnouncementService', () => {
       });
 
       // Assert - Should send emails to event attendees (David, Emma) even if group has no members
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(2);
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(2);
     });
 
     it('should not send emails if there are no group members and no event attendees', async () => {
@@ -348,7 +351,7 @@ describe('EventAnnouncementService', () => {
       });
 
       // Assert
-      expect(mailerService.sendMjmlMail).not.toHaveBeenCalled();
+      expect(mailerService.sendCalendarInviteMail).not.toHaveBeenCalled();
     });
 
     it('should send email to the event organizer if they are also a group member', async () => {
@@ -375,17 +378,17 @@ describe('EventAnnouncementService', () => {
 
       // Assert
       // Should send 6 emails (Alice, Bob, Carol, David, Emma, John the organizer)
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(6);
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(6);
 
       // Verify organizer received an email
-      const emailCalls = mailerService.sendMjmlMail.mock.calls;
+      const emailCalls = mailerService.sendCalendarInviteMail.mock.calls;
       const emailAddresses = emailCalls.map((call) => call[0].to);
       expect(emailAddresses).toContain('organizer@example.com');
     });
 
     it('should handle email sending failures gracefully', async () => {
       // Arrange
-      mailerService.sendMjmlMail.mockRejectedValueOnce(
+      mailerService.sendCalendarInviteMail.mockRejectedValueOnce(
         new Error('SMTP server down'),
       );
 
@@ -399,7 +402,7 @@ describe('EventAnnouncementService', () => {
         }),
       ).resolves.not.toThrow();
 
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(5);
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(5);
     });
 
     it('should not send emails if event is not found', async () => {
@@ -415,7 +418,7 @@ describe('EventAnnouncementService', () => {
       });
 
       // Assert
-      expect(mailerService.sendMjmlMail).not.toHaveBeenCalled();
+      expect(mailerService.sendCalendarInviteMail).not.toHaveBeenCalled();
     });
   });
 
