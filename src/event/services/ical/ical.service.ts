@@ -67,6 +67,15 @@ export class ICalendarService {
     // Set the UID
     calEvent.uid(event.ulid);
 
+    // Set SEQUENCE number using updatedAt timestamp (seconds since epoch)
+    // This ensures each update gets a higher sequence number
+    if (event.updatedAt) {
+      const sequenceNumber = Math.floor(
+        new Date(event.updatedAt).getTime() / 1000,
+      );
+      calEvent.sequence(sequenceNumber);
+    }
+
     // Set URL using tenant's frontend domain
     const frontendDomain = this.getFrontendDomain();
     calEvent.url(`${frontendDomain}/events/${event.slug}`);
@@ -104,6 +113,78 @@ export class ICalendarService {
     }
 
     return calEvent;
+  }
+
+  /**
+   * Generate a cancellation calendar invite for a specific attendee
+   * Uses METHOD:CANCEL for event cancellations
+   * @param event - The event entity
+   * @param attendee - Attendee information
+   * @param organizer - Organizer information
+   * @param eventUrl - Optional custom event URL
+   */
+  public generateCancellationInvite(
+    event: EventEntity,
+    attendee: { email: string; firstName?: string; lastName?: string },
+    organizer: { email: string; firstName?: string; lastName?: string },
+    eventUrl?: string,
+  ): string {
+    const timezone = event.timeZone || 'UTC';
+
+    const calendar = icalGenerator({
+      prodId: { company: 'OpenMeet', product: 'Calendar', language: 'EN' },
+      timezone: timezone,
+    });
+
+    // Add VTIMEZONE component for RFC 5545 compliance
+    if (timezone !== 'UTC') {
+      calendar.timezone({
+        name: timezone,
+        generator: getVtimezoneComponent,
+      });
+    }
+
+    // Set method to CANCEL for event cancellations
+    calendar.method('CANCEL' as any);
+
+    // Create the event using existing method
+    const calEvent = this.createCalendarEvent(event);
+
+    // Override URL if custom one provided
+    if (eventUrl) {
+      calEvent.url(eventUrl);
+    }
+
+    // Override organizer with provided organizer info
+    const organizerName =
+      `${organizer.firstName || ''} ${organizer.lastName || ''}`.trim() ||
+      organizer.email.split('@')[0];
+
+    calEvent.organizer({
+      name: organizerName,
+      email: organizer.email,
+    });
+
+    // Add the specific attendee
+    const attendeeName =
+      `${attendee.firstName || ''} ${attendee.lastName || ''}`.trim() ||
+      attendee.email.split('@')[0];
+
+    calEvent.createAttendee({
+      name: attendeeName,
+      email: attendee.email,
+      rsvp: true,
+      status: 'ACCEPTED' as any,
+      role: 'REQ-PARTICIPANT' as any,
+    });
+
+    // Set status to CANCELLED
+    calEvent.status('CANCELLED' as any);
+
+    // Add the event to the calendar
+    calendar.events([calEvent]);
+
+    return calendar.toString();
   }
 
   /**

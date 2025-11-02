@@ -12,6 +12,7 @@ import { UserEntity } from '../../user/infrastructure/persistence/relational/ent
 import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
+import { ICalendarService } from '../../event/services/ical/ical.service';
 
 @Injectable()
 export class EventAnnouncementService {
@@ -25,6 +26,7 @@ export class EventAnnouncementService {
     private readonly eventQueryService: EventQueryService,
     private readonly groupMemberService: GroupMemberService,
     private readonly eventAttendeeService: EventAttendeeService,
+    private readonly icalService: ICalendarService,
     @Inject(REQUEST) private readonly request: any,
   ) {}
 
@@ -269,10 +271,36 @@ export class EventAnnouncementService {
       // Get tenant configuration for emails
       const tenantConfig = this.getTenantConfig();
 
+      // Get event organizer info
+      const organizer = event.user || null;
+      if (!organizer) {
+        this.logger.warn(
+          `Event ${params.slug} has no organizer, skipping update announcement`,
+        );
+        return;
+      }
+
       // Send emails to each recipient
       const emailPromises = recipientsToNotify.map(async (user) => {
         try {
-          await this.mailerService.sendMjmlMail({
+          // Generate updated calendar invite for this recipient
+          const eventUrl = `${tenantConfig?.frontendDomain}/events/${event.slug}`;
+          const icsContent = this.icalService.generateCalendarInvite(
+            event,
+            {
+              email: user.email!,
+              firstName: user.firstName || undefined,
+              lastName: user.lastName || undefined,
+            },
+            {
+              email: organizer.email || '',
+              firstName: organizer.firstName || undefined,
+              lastName: organizer.lastName || undefined,
+            },
+            eventUrl,
+          );
+
+          await this.mailerService.sendCalendarInviteMail({
             to: user.email!,
             subject: event.group?.name
               ? `Updated Event: ${event.name} in ${event.group.name}`
@@ -290,7 +318,7 @@ export class EventAnnouncementService {
               organizerName:
                 `${event.user?.firstName || ''} ${event.user?.lastName || ''}`.trim(),
               organizerSlug: event.user?.slug,
-              eventUrl: `${tenantConfig?.frontendDomain}/events/${event.slug}`,
+              eventUrl,
               groupUrl: event.group?.slug
                 ? `${tenantConfig?.frontendDomain}/groups/${event.group.slug}`
                 : null,
@@ -299,9 +327,12 @@ export class EventAnnouncementService {
                 : null,
             },
             tenantConfig,
+            icsContent,
           });
 
-          this.logger.debug(`Sent update announcement email to ${user.email}`);
+          this.logger.debug(
+            `Sent update announcement with calendar invite to ${user.email}`,
+          );
         } catch (error) {
           this.logger.error(
             `Failed to send update announcement email to ${user.email}: ${error.message}`,
@@ -370,10 +401,36 @@ export class EventAnnouncementService {
       // Get tenant configuration for emails
       const tenantConfig = this.getTenantConfig();
 
+      // Get event organizer info
+      const organizer = event.user || null;
+      if (!organizer) {
+        this.logger.warn(
+          `Event ${event.slug} has no organizer, skipping cancellation announcement`,
+        );
+        return;
+      }
+
       // Send emails to each recipient
       const emailPromises = recipientsToNotify.map(async (user) => {
         try {
-          await this.mailerService.sendMjmlMail({
+          // Generate cancellation calendar invite for this recipient
+          const eventUrl = `${tenantConfig?.frontendDomain}/events/${event.slug}`;
+          const icsContent = this.icalService.generateCancellationInvite(
+            event,
+            {
+              email: user.email!,
+              firstName: user.firstName || undefined,
+              lastName: user.lastName || undefined,
+            },
+            {
+              email: organizer.email || '',
+              firstName: organizer.firstName || undefined,
+              lastName: organizer.lastName || undefined,
+            },
+            eventUrl,
+          );
+
+          await this.mailerService.sendCalendarInviteMail({
             to: user.email!,
             subject: event.group?.name
               ? `Cancelled Event: ${event.name} in ${event.group.name}`
@@ -391,7 +448,7 @@ export class EventAnnouncementService {
               organizerName:
                 `${event.user?.firstName || ''} ${event.user?.lastName || ''}`.trim(),
               organizerSlug: event.user?.slug,
-              eventUrl: `${tenantConfig?.frontendDomain}/events/${event.slug}`,
+              eventUrl,
               groupUrl: event.group?.slug
                 ? `${tenantConfig?.frontendDomain}/groups/${event.group.slug}`
                 : null,
@@ -400,10 +457,11 @@ export class EventAnnouncementService {
                 : null,
             },
             tenantConfig,
+            icsContent,
           });
 
           this.logger.debug(
-            `Sent cancellation announcement email to ${user.email}`,
+            `Sent cancellation announcement with calendar invite to ${user.email}`,
           );
         } catch (error) {
           this.logger.error(

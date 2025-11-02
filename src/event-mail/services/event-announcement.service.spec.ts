@@ -9,6 +9,7 @@ import { TenantConnectionService } from '../../tenant/tenant.service';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { GroupMemberService } from '../../group-member/group-member.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
+import { ICalendarService } from '../../event/services/ical/ical.service';
 
 describe('EventAnnouncementService', () => {
   let service: EventAnnouncementService;
@@ -106,6 +107,12 @@ describe('EventAnnouncementService', () => {
     const mockMailerService = {
       sendMail: jest.fn(),
       sendMjmlMail: jest.fn(),
+      sendCalendarInviteMail: jest.fn(),
+    };
+
+    const mockICalendarService = {
+      generateCalendarInvite: jest.fn().mockReturnValue('BEGIN:VCALENDAR\nEND:VCALENDAR'),
+      generateCancellationInvite: jest.fn().mockReturnValue('BEGIN:VCALENDAR\nMETHOD:CANCEL\nEND:VCALENDAR'),
     };
 
     const mockUserService = {
@@ -183,6 +190,10 @@ describe('EventAnnouncementService', () => {
         {
           provide: EventAttendeeService,
           useValue: mockEventAttendeeService,
+        },
+        {
+          provide: ICalendarService,
+          useValue: mockICalendarService,
         },
         {
           provide: REQUEST,
@@ -410,6 +421,7 @@ describe('EventAnnouncementService', () => {
 
   describe('handleEventUpdated', () => {
     beforeEach(() => {
+      mailerService.sendCalendarInviteMail.mockResolvedValue(undefined);
       mailerService.sendMjmlMail.mockResolvedValue(undefined);
     });
 
@@ -424,9 +436,9 @@ describe('EventAnnouncementService', () => {
 
       // Assert - emails should be sent to group members
       // Should send emails to all members except the organizer (Alice, Bob, and Carol)
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(5);
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(5);
 
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledWith({
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledWith({
         to: 'alice@example.com',
         subject: 'Updated Event: Test Event in Test Group',
         templateName: 'event/event-update-announcement',
@@ -446,9 +458,10 @@ describe('EventAnnouncementService', () => {
           organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
+        icsContent: expect.any(String),
       });
 
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledWith({
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledWith({
         to: 'bob@example.com',
         subject: 'Updated Event: Test Event in Test Group',
         templateName: 'event/event-update-announcement',
@@ -468,9 +481,10 @@ describe('EventAnnouncementService', () => {
           organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
+        icsContent: expect.any(String),
       });
 
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledWith({
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledWith({
         to: 'carol@example.com',
         subject: 'Updated Event: Test Event in Test Group',
         templateName: 'event/event-update-announcement',
@@ -490,6 +504,7 @@ describe('EventAnnouncementService', () => {
           organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
+        icsContent: expect.any(String),
       });
     });
 
@@ -509,7 +524,7 @@ describe('EventAnnouncementService', () => {
       });
 
       // Assert - Should send emails to event attendees (David, Emma) even without a group
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(2);
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(2);
     });
 
     it('should send emails to event attendees even if updated event group has no members', async () => {
@@ -525,7 +540,7 @@ describe('EventAnnouncementService', () => {
       });
 
       // Assert - Should send emails to event attendees (David, Emma) even if group has no members
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(2);
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(2);
     });
 
     it('should not send emails if updated event has no group members and no event attendees', async () => {
@@ -542,7 +557,7 @@ describe('EventAnnouncementService', () => {
       });
 
       // Assert
-      expect(mailerService.sendMjmlMail).not.toHaveBeenCalled();
+      expect(mailerService.sendCalendarInviteMail).not.toHaveBeenCalled();
     });
 
     it('should send update email to the event organizer if they are also a group member', async () => {
@@ -569,17 +584,17 @@ describe('EventAnnouncementService', () => {
 
       // Assert
       // Should send 6 emails (Alice, Bob, Carol, David, Emma, John the organizer)
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(6);
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(6);
 
       // Verify organizer received an email
-      const emailCalls = mailerService.sendMjmlMail.mock.calls;
+      const emailCalls = mailerService.sendCalendarInviteMail.mock.calls;
       const emailAddresses = emailCalls.map((call) => call[0].to);
       expect(emailAddresses).toContain('organizer@example.com');
     });
 
     it('should handle email sending failures gracefully for updates', async () => {
       // Arrange
-      mailerService.sendMjmlMail.mockRejectedValueOnce(
+      mailerService.sendCalendarInviteMail.mockRejectedValueOnce(
         new Error('SMTP server down'),
       );
 
@@ -593,7 +608,7 @@ describe('EventAnnouncementService', () => {
         }),
       ).resolves.not.toThrow();
 
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(5);
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(5);
     });
 
     it('should not send emails if updated event is not found', async () => {
@@ -609,7 +624,7 @@ describe('EventAnnouncementService', () => {
       });
 
       // Assert
-      expect(mailerService.sendMjmlMail).not.toHaveBeenCalled();
+      expect(mailerService.sendCalendarInviteMail).not.toHaveBeenCalled();
     });
 
     it('should send cancellation emails when event status is cancelled', async () => {
@@ -629,10 +644,10 @@ describe('EventAnnouncementService', () => {
       });
 
       // Assert - should send cancellation emails, not update emails
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(5);
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(5);
 
       // Verify the emails use cancellation template and subject
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledWith({
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledWith({
         to: 'alice@example.com',
         subject: 'Cancelled Event: Test Event in Test Group',
         templateName: 'event/event-cancellation-announcement',
@@ -652,13 +667,14 @@ describe('EventAnnouncementService', () => {
           organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
+        icsContent: expect.any(String),
       });
     });
   });
 
   describe('handleEventDeleted', () => {
     beforeEach(() => {
-      mailerService.sendMjmlMail.mockResolvedValue(undefined);
+      mailerService.sendCalendarInviteMail.mockResolvedValue(undefined);
     });
 
     it('should send deletion announcement emails to group members when an event is deleted', async () => {
@@ -667,9 +683,9 @@ describe('EventAnnouncementService', () => {
 
       // Assert - emails should be sent to group members
       // Should send emails to all members except the organizer (Alice, Bob, and Carol)
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(5);
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(5);
 
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledWith({
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledWith({
         to: 'alice@example.com',
         subject: 'Cancelled Event: Test Event in Test Group',
         templateName: 'event/event-cancellation-announcement',
@@ -689,9 +705,10 @@ describe('EventAnnouncementService', () => {
           organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
+        icsContent: expect.any(String),
       });
 
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledWith({
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledWith({
         to: 'bob@example.com',
         subject: 'Cancelled Event: Test Event in Test Group',
         templateName: 'event/event-cancellation-announcement',
@@ -711,9 +728,10 @@ describe('EventAnnouncementService', () => {
           organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
+        icsContent: expect.any(String),
       });
 
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledWith({
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledWith({
         to: 'carol@example.com',
         subject: 'Cancelled Event: Test Event in Test Group',
         templateName: 'event/event-cancellation-announcement',
@@ -733,6 +751,7 @@ describe('EventAnnouncementService', () => {
           organizerUrl: expect.stringContaining('/members/organizer-user'),
         },
         tenantConfig: expect.any(Object),
+        icsContent: expect.any(String),
       });
     });
 
@@ -744,7 +763,7 @@ describe('EventAnnouncementService', () => {
       await service.handleEventDeleted(eventWithoutGroup);
 
       // Assert - Should send emails to event attendees (David, Emma) even without a group
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(2);
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(2);
     });
 
     it('should send emails to event attendees even if deleted event group has no members', async () => {
@@ -755,7 +774,7 @@ describe('EventAnnouncementService', () => {
       await service.handleEventDeleted(mockEvent);
 
       // Assert - Should send emails to event attendees (David, Emma) even if group has no members
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(2);
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(2);
     });
 
     it('should not send emails if deleted event has no group members and no event attendees', async () => {
@@ -767,7 +786,7 @@ describe('EventAnnouncementService', () => {
       await service.handleEventDeleted(mockEvent);
 
       // Assert
-      expect(mailerService.sendMjmlMail).not.toHaveBeenCalled();
+      expect(mailerService.sendCalendarInviteMail).not.toHaveBeenCalled();
     });
 
     it('should send cancellation email to the event organizer if they are also a group member', async () => {
@@ -789,17 +808,17 @@ describe('EventAnnouncementService', () => {
 
       // Assert
       // Should send 6 emails (Alice, Bob, Carol, David, Emma, John the organizer)
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(6);
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(6);
 
       // Verify organizer received an email
-      const emailCalls = mailerService.sendMjmlMail.mock.calls;
+      const emailCalls = mailerService.sendCalendarInviteMail.mock.calls;
       const emailAddresses = emailCalls.map((call) => call[0].to);
       expect(emailAddresses).toContain('organizer@example.com');
     });
 
     it('should handle email sending failures gracefully for cancellations', async () => {
       // Arrange
-      mailerService.sendMjmlMail.mockRejectedValueOnce(
+      mailerService.sendCalendarInviteMail.mockRejectedValueOnce(
         new Error('SMTP server down'),
       );
 
@@ -808,7 +827,7 @@ describe('EventAnnouncementService', () => {
         service.handleEventDeleted(mockEvent),
       ).resolves.not.toThrow();
 
-      expect(mailerService.sendMjmlMail).toHaveBeenCalledTimes(5);
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(5);
     });
   });
 });
