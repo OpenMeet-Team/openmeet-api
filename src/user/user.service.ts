@@ -502,7 +502,11 @@ export class UserService {
 
       if (hasExistingEmail && profileHasVerifiedEmail && emailsAreDifferent) {
         // Check if new email is already in use by another account
-        const emailConflict = await this.findByEmail(profile.email, tenantId);
+        // Note: profile.email is guaranteed to exist here due to profileHasVerifiedEmail check
+        const emailConflict = await this.findByEmail(
+          profile.email!,
+          tenantId,
+        );
 
         if (emailConflict && emailConflict.id !== existingUser.id) {
           // Email already exists - cannot auto-update
