@@ -1355,6 +1355,9 @@ describe('UserService', () => {
         .spyOn(userService, 'findBySocialIdAndProvider')
         .mockResolvedValue(existingUserWithEmail as any);
 
+      // Mock findByEmail to return null (no conflict with new email)
+      jest.spyOn(userService, 'findByEmail').mockResolvedValue(null);
+
       const updatedUser = {
         ...existingUserWithEmail,
         email: newEmail, // Email replaced
@@ -1381,6 +1384,71 @@ describe('UserService', () => {
       );
 
       expect(result.email).toBe(newEmail);
+    });
+
+    it('should NOT replace email when new email conflicts with another account', async () => {
+      const did = 'did:plc:email-conflict';
+      const oldEmail = 'old@example.com';
+      const conflictingEmail = 'conflict@example.com';
+
+      const existingUserWithEmail = {
+        id: 777,
+        socialId: did,
+        provider: AuthProvidersEnum.bluesky,
+        email: oldEmail,
+        firstName: 'User',
+        lastName: 'Conflict',
+        role: mockRole,
+        status: { id: StatusEnum.active },
+        preferences: {
+          bluesky: {
+            did,
+            connected: true,
+          },
+        },
+      };
+
+      const blueskyProfileConflictingEmail = {
+        id: did,
+        email: conflictingEmail, // This email belongs to another account
+        emailConfirmed: true,
+        firstName: 'User',
+        lastName: 'Conflict',
+      };
+
+      const conflictingUser = {
+        id: 888, // Different user
+        email: conflictingEmail,
+        provider: AuthProvidersEnum.email,
+      };
+
+      jest
+        .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(existingUserWithEmail as any);
+
+      // Mock findByEmail to return conflicting user
+      jest
+        .spyOn(userService, 'findByEmail')
+        .mockResolvedValue(conflictingUser as any);
+
+      const updateSpy = jest.spyOn(userService, 'update');
+
+      jest
+        .spyOn(userService as any, 'getTenantSpecificRepository')
+        .mockResolvedValue(undefined);
+
+      const result = await userService.findOrCreateUser(
+        blueskyProfileConflictingEmail,
+        AuthProvidersEnum.bluesky,
+        TESTING_TENANT_ID,
+      );
+
+      // Should NOT call update when email conflicts
+      expect(updateSpy).not.toHaveBeenCalled();
+
+      // Should return existing user with old email (not blocked)
+      expect(result.email).toBe(oldEmail);
+      expect(result.id).toBe(777);
     });
 
     it('should NOT replace existing email with unverified email from OAuth', async () => {

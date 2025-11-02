@@ -501,7 +501,35 @@ export class UserService {
       const emailsAreDifferent = existingUser.email !== profile.email;
 
       if (hasExistingEmail && profileHasVerifiedEmail && emailsAreDifferent) {
-        // OAuth provider has a different verified email - update it (OAuth is source of truth)
+        // Check if new email is already in use by another account
+        // Note: profile.email is guaranteed to exist here due to profileHasVerifiedEmail check
+        const emailConflict = await this.findByEmail(
+          profile.email!,
+          tenantId,
+        );
+
+        if (emailConflict && emailConflict.id !== existingUser.id) {
+          // Email already exists - cannot auto-update
+          // This prevents blocking user login when OAuth email changes to existing email
+          this.logger.warn(
+            'Cannot update email from OAuth - already in use by another account',
+            {
+              userId: existingUser.id,
+              oldEmail: existingUser.email,
+              attemptedNewEmail: profile.email,
+              conflictingUserId: emailConflict.id,
+              conflictingUserProvider: emailConflict.provider,
+              provider: authProvider,
+              message:
+                'User can still login but email not updated. See Issue #348 for account linking solution.',
+            },
+          );
+
+          // Return existing user with old email - allows login to proceed
+          return existingUser as UserEntity;
+        }
+
+        // OAuth provider has a different verified email - safe to update
         this.logger.log('Updating user with new verified email from OAuth', {
           userId: existingUser.id,
           oldEmail: existingUser.email,
