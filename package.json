@@ -1,6 +1,6 @@
 {
   "name": "openmeet-api",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "OpenMeet API server providing authentication, events, groups, and chat integration",
   "productName": "OpenMeet",
   "author": "OpenMeet Team <openmeet@openmeet.net>",
