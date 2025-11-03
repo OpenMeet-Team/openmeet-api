@@ -394,6 +394,19 @@ export class ActivityFeedListener {
       // Construct full name from firstName and lastName
       const actorName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
 
+      // Prepare base activity data common to all RSVP activities
+      const baseActivity = {
+        activityType: 'event.rsvp' as const,
+        eventId: event.id,
+        eventSlug: event.slug,
+        eventName: event.name,
+        actorId: user.id,
+        actorSlug: user.slug,
+        actorName: actorName,
+        aggregationStrategy: 'time_window' as const,
+        aggregationWindow: 30, // 30-minute window for RSVPs (shows momentum)
+      };
+
       // Handle group events and standalone events differently
       if (event.group) {
         // Fetch group entity to get group details
@@ -407,20 +420,12 @@ export class ActivityFeedListener {
 
         // Create event.rsvp activity in group feed
         await this.activityFeedService.create({
-          activityType: 'event.rsvp',
+          ...baseActivity,
           feedScope: 'group',
           groupId: group.id,
           groupSlug: group.slug,
           groupName: group.name,
-          eventId: event.id,
-          eventSlug: event.slug,
-          eventName: event.name,
-          actorId: user.id,
-          actorSlug: user.slug,
-          actorName: actorName,
           groupVisibility: group.visibility,
-          aggregationStrategy: 'time_window',
-          aggregationWindow: 30, // 30-minute window for RSVPs (shows momentum)
         });
 
         this.logger.log(
@@ -429,16 +434,8 @@ export class ActivityFeedListener {
       } else {
         // Create event.rsvp activity for standalone events in event feed
         await this.activityFeedService.create({
-          activityType: 'event.rsvp',
+          ...baseActivity,
           feedScope: 'event',
-          eventId: event.id,
-          eventSlug: event.slug,
-          eventName: event.name,
-          actorId: user.id,
-          actorSlug: user.slug,
-          actorName: actorName,
-          aggregationStrategy: 'time_window',
-          aggregationWindow: 30, // 30-minute window for RSVPs (shows momentum)
         });
 
         this.logger.log(
