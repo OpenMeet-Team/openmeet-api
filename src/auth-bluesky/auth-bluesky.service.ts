@@ -247,16 +247,27 @@ export class AuthBlueskyService {
   }
 
   async createAuthUrl(handle: string, tenantId: string): Promise<string> {
-    const client = await this.initializeClient(tenantId);
-    const url = await client.authorize(handle, {
-      state: crypto.randomBytes(16).toString('base64url'),
-    });
+    try {
+      this.logger.debug(`Creating auth URL for handle: ${handle}, tenantId: ${tenantId}`);
+      const client = await this.initializeClient(tenantId);
 
-    if (!url) {
-      throw new Error(`Failed to create authorization URL ${url}`);
+      this.logger.debug(`Calling client.authorize for handle: ${handle}`);
+      const url = await client.authorize(handle, {
+        state: crypto.randomBytes(16).toString('base64url'),
+      });
+
+      if (!url) {
+        throw new Error(`Failed to create authorization URL ${url}`);
+      }
+
+      this.logger.debug(`Successfully created auth URL: ${url.toString()}`);
+      return url.toString();
+    } catch (error) {
+      this.logger.error(`Failed to create auth URL for handle ${handle}:`, error);
+      throw new BadRequestException(
+        `Unable to start Bluesky authentication. Please try again or contact support if the problem persists.`
+      );
     }
-
-    return url.toString();
   }
 
   async resumeSession(tenantId: string, did: string) {
