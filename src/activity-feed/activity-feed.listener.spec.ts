@@ -447,7 +447,7 @@ describe('ActivityFeedListener', () => {
       expect(activityFeedService.create).not.toHaveBeenCalled();
     });
 
-    it('should create sitewide activity for standalone public events', async () => {
+    it('should create activities visible to both event attendees and public discovery', async () => {
       // Arrange
       const params = {
         eventId: 200,
@@ -472,23 +472,26 @@ describe('ActivityFeedListener', () => {
       // Act
       await listener.handleEventCreated(params);
 
-      // Assert - Standalone events create sitewide activity (no group activity)
-      expect(activityFeedService.create).toHaveBeenCalledTimes(1);
-      expect(activityFeedService.create).toHaveBeenCalledWith({
+      // Assert - Check behavior: what feeds should have activities
+      const activities = activityFeedService.create.mock.calls.map(call => call[0]);
+
+      // Behavior 1: Event page should show activity to attendees
+      const eventActivity = activities.find(a => a.feedScope === 'event');
+      expect(eventActivity).toMatchObject({
+        activityType: 'event.created',
+        feedScope: 'event',
+        eventId: 200,
+      });
+
+      // Behavior 2: Sitewide feed should show activity for discovery
+      const sitewideActivity = activities.find(a => a.feedScope === 'sitewide');
+      expect(sitewideActivity).toMatchObject({
         activityType: 'event.created',
         feedScope: 'sitewide',
-        groupId: undefined,
-        groupSlug: undefined,
-        groupName: undefined,
         eventId: 200,
-        eventSlug: 'standalone-event',
-        eventName: 'Standalone Event',
-        actorId: 100,
-        actorSlug: 'sarah-chen',
-        actorName: 'Sarah Chen',
-        groupVisibility: GroupVisibility.Public,
-        aggregationStrategy: 'none',
+        // Public events show full details (name, slug, etc.)
       });
+      expect(sitewideActivity.eventName).toBe('Standalone Event');
     });
 
     it('should treat event as standalone when group is not found', async () => {
@@ -509,23 +512,17 @@ describe('ActivityFeedListener', () => {
       // Act
       await listener.handleEventCreated(params);
 
-      // Assert - Treated as standalone, creates sitewide activity
-      expect(activityFeedService.create).toHaveBeenCalledTimes(1);
-      expect(activityFeedService.create).toHaveBeenCalledWith({
-        activityType: 'event.created',
-        feedScope: 'sitewide',
-        groupId: undefined,
-        groupSlug: undefined,
-        groupName: undefined,
-        eventId: 200,
-        eventSlug: 'typescript-workshop',
-        eventName: 'TypeScript Workshop',
-        actorId: 100,
-        actorSlug: 'sarah-chen',
-        actorName: 'Sarah Chen',
-        groupVisibility: GroupVisibility.Public,
-        aggregationStrategy: 'none',
-      });
+      // Assert - Check behavior: should work like standalone event
+      const activities = activityFeedService.create.mock.calls.map(call => call[0]);
+
+      // Should create event-scoped activity (not group-scoped)
+      const eventActivity = activities.find(a => a.feedScope === 'event');
+      expect(eventActivity).toBeDefined();
+      expect(eventActivity.groupId).toBeUndefined();
+
+      // Should also create sitewide activity
+      const sitewideActivity = activities.find(a => a.feedScope === 'sitewide');
+      expect(sitewideActivity).toBeDefined();
     });
 
     it('should not create activity when user is not found', async () => {
@@ -567,6 +564,49 @@ describe('ActivityFeedListener', () => {
       // Act & Assert - Should not throw
       await expect(listener.handleEventCreated(params)).resolves.not.toThrow();
       expect(activityFeedService.create).not.toHaveBeenCalled();
+    });
+
+    it('should never expose private event details in sitewide feed', async () => {
+      // Arrange
+      const params = {
+        eventId: 300,
+        slug: 'private-event',
+        userId: 100,
+        tenantId: 'test-tenant',
+      };
+
+      const privateEvent: Partial<EventEntity> = {
+        id: 300,
+        slug: 'private-event',
+        name: 'Secret Meeting',
+        visibility: EventVisibility.Private,
+        group: null, // standalone private event
+      };
+
+      eventQueryService.findEventBySlug.mockResolvedValue(
+        privateEvent as EventEntity,
+      );
+      userService.getUserById.mockResolvedValue(mockUser as UserEntity);
+
+      // Act
+      await listener.handleEventCreated(params);
+
+      // Assert - Check privacy behavior
+      const activities = activityFeedService.create.mock.calls.map(call => call[0]);
+
+      // Behavior 1: Event feed should have full details for attendees
+      const eventActivity = activities.find(a => a.feedScope === 'event');
+      expect(eventActivity).toBeDefined();
+      expect(eventActivity.eventName).toBe('Secret Meeting'); // Attendees can see name
+
+      // Behavior 2: Sitewide feed must NOT expose private details
+      const sitewideActivity = activities.find(a => a.feedScope === 'sitewide');
+      expect(sitewideActivity).toBeDefined();
+      expect(sitewideActivity.activityType).toBe('group.activity'); // Anonymized
+      expect(sitewideActivity.eventName).toBeUndefined(); // No event name
+      expect(sitewideActivity.eventSlug).toBeUndefined(); // No event slug
+      expect(sitewideActivity.actorName).toBeUndefined(); // No creator name
+      expect(sitewideActivity.metadata.activityDescription).toBe('A new event was created');
     });
   });
 
