@@ -382,23 +382,6 @@ export class ActivityFeedListener {
         return;
       }
 
-      // Skip if event doesn't belong to a group (consistent with event.created)
-      if (!event.group) {
-        this.logger.debug(
-          `Event ${params.eventSlug} doesn't belong to a group, skipping RSVP activity`,
-        );
-        return;
-      }
-
-      // Fetch group entity to get group details
-      const group = await this.groupService.getGroupBySlug(event.group.slug);
-      if (!group) {
-        this.logger.warn(
-          `Group not found for event ${params.eventSlug}, skipping activity creation`,
-        );
-        return;
-      }
-
       // Fetch user entity to get actor's name
       const user = await this.userService.getUserById(params.userId);
       if (!user) {
@@ -411,27 +394,54 @@ export class ActivityFeedListener {
       // Construct full name from firstName and lastName
       const actorName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
 
-      // Create event.rsvp activity with aggregation
-      await this.activityFeedService.create({
-        activityType: 'event.rsvp',
-        feedScope: 'group',
-        groupId: group.id,
-        groupSlug: group.slug,
-        groupName: group.name,
+      // Prepare base activity data common to all RSVP activities
+      const baseActivity = {
+        activityType: 'event.rsvp' as const,
         eventId: event.id,
         eventSlug: event.slug,
         eventName: event.name,
         actorId: user.id,
         actorSlug: user.slug,
         actorName: actorName,
-        groupVisibility: group.visibility,
-        aggregationStrategy: 'time_window',
+        aggregationStrategy: 'time_window' as const,
         aggregationWindow: 30, // 30-minute window for RSVPs (shows momentum)
-      });
+      };
 
-      this.logger.log(
-        `Created event.rsvp activity for ${event.slug} by ${user.slug}`,
-      );
+      // Handle group events and standalone events differently
+      if (event.group) {
+        // Fetch group entity to get group details
+        const group = await this.groupService.getGroupBySlug(event.group.slug);
+        if (!group) {
+          this.logger.warn(
+            `Group not found for event ${params.eventSlug}, skipping activity creation`,
+          );
+          return;
+        }
+
+        // Create event.rsvp activity in group feed
+        await this.activityFeedService.create({
+          ...baseActivity,
+          feedScope: 'group',
+          groupId: group.id,
+          groupSlug: group.slug,
+          groupName: group.name,
+          groupVisibility: group.visibility,
+        });
+
+        this.logger.log(
+          `Created event.rsvp activity for group event ${event.slug} by ${user.slug}`,
+        );
+      } else {
+        // Create event.rsvp activity for standalone events in event feed
+        await this.activityFeedService.create({
+          ...baseActivity,
+          feedScope: 'event',
+        });
+
+        this.logger.log(
+          `Created event.rsvp activity for standalone event ${event.slug} by ${user.slug}`,
+        );
+      }
     } catch (error) {
       this.logger.error(
         `Failed to create RSVP activity for event ${params.eventSlug}: ${error.message}`,
