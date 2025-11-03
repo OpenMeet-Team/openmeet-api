@@ -121,6 +121,8 @@ export class ActivityFeedService {
 
   /**
    * Get feed for a specific event
+   * Returns activities from both standalone events (feedScope='event')
+   * and group events (feedScope='group')
    */
   async getEventFeed(
     eventId: number,
@@ -132,19 +134,24 @@ export class ActivityFeedService {
   ): Promise<ActivityFeedEntity[]> {
     await this.getTenantRepository();
 
+    // Build where conditions for both standalone and group events
+    const whereConditions: any[] = [
+      { feedScope: 'event', eventId },  // Standalone events
+      { feedScope: 'group', eventId },  // Group events
+    ];
+
+    // Add visibility filter if provided
+    if (options.visibility) {
+      whereConditions[0].visibility = In(options.visibility);
+      whereConditions[1].visibility = In(options.visibility);
+    }
+
     const queryOptions: any = {
-      where: {
-        feedScope: 'event',
-        eventId,
-      },
+      where: whereConditions,
       order: { updatedAt: 'DESC' },
       take: options.limit || 20,
       skip: options.offset || 0,
     };
-
-    if (options.visibility) {
-      queryOptions.where.visibility = In(options.visibility);
-    }
 
     return await this.activityFeedRepository.find(queryOptions);
   }
