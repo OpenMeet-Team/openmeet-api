@@ -958,8 +958,10 @@ export class AuthService {
       );
     }
 
-    // Check if event has already passed
-    if (event.startDate && new Date(event.startDate) < new Date()) {
+    // Check if event has already passed (use end date to allow RSVPs during the event)
+    // Fall back to startDate if endDate is not set
+    const cutoffDate = event.endDate || event.startDate;
+    if (cutoffDate && new Date(cutoffDate) < new Date()) {
       throw new ForbiddenException('This event has already passed.');
     }
 
