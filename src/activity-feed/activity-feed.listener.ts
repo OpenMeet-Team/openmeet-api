@@ -275,6 +275,23 @@ export class ActivityFeedListener {
         this.logger.log(
           `Created group-scoped event.created activity for ${event.slug} by ${user.slug}`,
         );
+      } else {
+        // Create event-scoped activity for standalone events
+        await this.activityFeedService.create({
+          activityType: 'event.created',
+          feedScope: 'event',
+          eventId: event.id,
+          eventSlug: event.slug,
+          eventName: event.name,
+          actorId: user.id,
+          actorSlug: user.slug,
+          actorName: actorName,
+          aggregationStrategy: 'none', // Don't aggregate event creations
+        });
+
+        this.logger.log(
+          `Created event-scoped event.created activity for standalone event ${event.slug} by ${user.slug}`,
+        );
       }
 
       // Create sitewide activity for discovery
@@ -474,38 +491,49 @@ export class ActivityFeedListener {
         return;
       }
 
-      // Skip if event doesn't belong to a group
-      if (!event.group) {
-        this.logger.debug(
-          `Event ${params.slug} doesn't belong to a group, skipping event.updated activity`,
+      // Handle group events and standalone events differently
+      if (event.group) {
+        // Fetch group entity to get group details
+        const group = await this.groupService.getGroupBySlug(event.group.slug);
+        if (!group) {
+          this.logger.warn(
+            `Group not found for event ${params.slug}, skipping activity creation`,
+          );
+          return;
+        }
+
+        // Create event.updated activity in group feed
+        await this.activityFeedService.create({
+          activityType: 'event.updated',
+          feedScope: 'group',
+          groupId: group.id,
+          groupSlug: group.slug,
+          groupName: group.name,
+          eventId: event.id,
+          eventSlug: event.slug,
+          eventName: event.name,
+          groupVisibility: group.visibility,
+          aggregationStrategy: 'none', // Don't aggregate updates
+        });
+
+        this.logger.log(
+          `Created group-scoped event.updated activity for ${event.slug}`,
         );
-        return;
-      }
+      } else {
+        // Create event.updated activity for standalone events
+        await this.activityFeedService.create({
+          activityType: 'event.updated',
+          feedScope: 'event',
+          eventId: event.id,
+          eventSlug: event.slug,
+          eventName: event.name,
+          aggregationStrategy: 'none', // Don't aggregate updates
+        });
 
-      // Fetch group entity to get group details
-      const group = await this.groupService.getGroupBySlug(event.group.slug);
-      if (!group) {
-        this.logger.warn(
-          `Group not found for event ${params.slug}, skipping activity creation`,
+        this.logger.log(
+          `Created event-scoped event.updated activity for standalone event ${event.slug}`,
         );
-        return;
       }
-
-      // Create event.updated activity (no aggregation - each update is separate)
-      await this.activityFeedService.create({
-        activityType: 'event.updated',
-        feedScope: 'group',
-        groupId: group.id,
-        groupSlug: group.slug,
-        groupName: group.name,
-        eventId: event.id,
-        eventSlug: event.slug,
-        eventName: event.name,
-        groupVisibility: group.visibility,
-        aggregationStrategy: 'none', // Don't aggregate updates
-      });
-
-      this.logger.log(`Created event.updated activity for ${event.slug}`);
     } catch (error) {
       this.logger.error(
         `Failed to create event.updated activity for ${params.slug}: ${error.message}`,
