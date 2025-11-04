@@ -77,8 +77,11 @@ describe('Auth Module', () => {
     });
 
     describe('Login', () => {
-      it('should fail with unverified email: /api/v1/auth/email/login (POST)', () => {
-        return serverApp
+      it('should fail with unverified email: /api/v1/auth/email/login (POST)', async () => {
+        // Capture timestamp before the failed login attempt
+        const beforeLoginAttempt = Date.now();
+
+        await serverApp
           .post('/api/v1/auth/email/login')
           .send({ email: newUserEmail, password: newUserPassword })
           .expect(422)
@@ -86,6 +89,9 @@ describe('Auth Module', () => {
             expect(body.errors.email).toMatch(/Email not verified/i);
             expect(body.errors.email_not_verified).toBe(true);
           });
+
+        // Store timestamp for use in verification test
+        (global as any).loginAttemptTimestamp = beforeLoginAttempt;
       });
     });
 
@@ -94,9 +100,22 @@ describe('Auth Module', () => {
         // Note: The failed login attempt above triggered a new verification code to be sent
         // We need to get the LATEST email (from the failed login), not the original registration email
 
-        // Get the most recent verification code from email (sent during failed login)
-        const verificationEmail =
-          await mailDevService.getMostRecentEmailByRecipient(newUserEmail);
+        // Get emails sent after the login attempt
+        const loginAttemptTime = (global as any).loginAttemptTimestamp || Date.now() - 10000;
+        const recentEmails = await mailDevService.getEmailsSince(loginAttemptTime);
+        const userEmails = recentEmails.filter(email =>
+          email.to?.some(
+            (recipient) =>
+              recipient.address.toLowerCase() === newUserEmail.toLowerCase(),
+          ),
+        );
+
+        expect(userEmails.length).toBeGreaterThan(0);
+
+        // Get the most recent email (should be from the login attempt)
+        const verificationEmail = userEmails.sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+        )[0];
         expect(verificationEmail).not.toBeNull();
 
         const code = EmailVerificationTestHelpers.extractVerificationCode(
