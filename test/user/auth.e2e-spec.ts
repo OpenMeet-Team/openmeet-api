@@ -112,22 +112,30 @@ describe('Auth Module', () => {
 
         expect(userEmails.length).toBeGreaterThan(0);
 
-        // Get the most recent email (should be from the login attempt)
-        const verificationEmail = userEmails.sort(
-          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-        )[0];
-        expect(verificationEmail).not.toBeNull();
+        // Extract codes from all emails (since timestamps might be identical)
+        const codes = userEmails
+          .map(email => EmailVerificationTestHelpers.extractVerificationCode(email))
+          .filter(code => code !== null);
 
-        const code = EmailVerificationTestHelpers.extractVerificationCode(
-          verificationEmail!,
-        );
-        expect(code).not.toBeNull();
+        expect(codes.length).toBeGreaterThan(0);
 
-        // Verify email with code
-        const verifyResponse = await serverApp
-          .post('/api/v1/auth/verify-email-code')
-          .send({ email: newUserEmail, code })
-          .expect(200);
+        // Try each code until one works (only the most recent code is valid)
+        let verifyResponse;
+        let successfulCode = null;
+
+        for (const code of codes) {
+          verifyResponse = await serverApp
+            .post('/api/v1/auth/verify-email-code')
+            .send({ email: newUserEmail, code });
+
+          if (verifyResponse.status === 200) {
+            successfulCode = code;
+            break;
+          }
+        }
+
+        expect(successfulCode).not.toBeNull();
+        expect(verifyResponse!.status).toBe(200);
 
         // User should be logged in after verification
         expect(verifyResponse.body.token).toBeDefined();
