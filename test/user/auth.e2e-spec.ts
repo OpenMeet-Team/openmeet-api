@@ -83,14 +83,18 @@ describe('Auth Module', () => {
           .send({ email: newUserEmail, password: newUserPassword })
           .expect(422)
           .expect(({ body }) => {
-            expect(body.errors.email).toMatch(/verify/i);
+            expect(body.errors.email).toMatch(/Email not verified/i);
+            expect(body.errors.email_not_verified).toBe(true);
           });
       });
     });
 
     describe('Email Verification', () => {
       it('should verify email and allow login: /api/v1/auth/verify-email-code (POST)', async () => {
-        // Get verification code from email
+        // Note: The failed login attempt above triggered a new verification code to be sent
+        // We need to get the LATEST email (from the failed login), not the original registration email
+
+        // Get the most recent verification code from email (sent during failed login)
         const verificationEmail =
           await mailDevService.getMostRecentEmailByRecipient(newUserEmail);
         expect(verificationEmail).not.toBeNull();
