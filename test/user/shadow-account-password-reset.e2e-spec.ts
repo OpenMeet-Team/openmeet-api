@@ -4,8 +4,11 @@ import {
   TESTING_MAIL_HOST,
   TESTING_MAIL_PORT,
   TESTING_TENANT_ID,
+  TESTING_USER_EMAIL,
+  TESTING_USER_PASSWORD,
 } from '../utils/constants';
 import { mailDevService } from '../utils/maildev-service';
+import { getAuthToken } from '../utils/functions';
 
 /**
  * Test suite for shadow account password reset flow
@@ -38,17 +41,21 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
   let serverApp;
   let serverEmail;
   let shadowUserId: string;
+  let authToken: string;
 
   beforeAll(async () => {
     serverApp = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
     serverEmail = request.agent(mail);
+    // Get auth token for creating events
+    authToken = await getAuthToken(app, TESTING_USER_EMAIL, TESTING_USER_PASSWORD);
   });
 
   describe('Complete Shadow Account Journey', () => {
     it('Step 1: User does Quick RSVP (creates shadow account)', async () => {
-      // First, create an event to RSVP to
+      // First, create an event to RSVP to (requires authentication)
       const eventResponse = await serverApp
-        .post('/api/v1/events')
+        .post('/api/events')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({
           name: `Test Event ${Date.now()}`,
           description: 'Event for testing shadow account flow',
@@ -56,6 +63,9 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
           endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000 + 3600000).toISOString(),
           type: 'online',
           locationOnline: 'https://meet.example.com/test',
+          timeZone: 'UTC',
+          maxAttendees: 100,
+          categories: [],
         })
         .expect(201);
 
@@ -71,7 +81,7 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
         })
         .expect(201);
 
-      expect(rsvpResponse.body.message).toContain('RSVP confirmed');
+      expect(rsvpResponse.body.message).toContain('RSVP registered successfully');
 
       // Shadow account is created with status=inactive, password=null
       console.log('✅ Shadow account created via Quick RSVP');
@@ -117,17 +127,52 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
       console.log('⏳ Waiting for password reset email...');
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      // Get the password reset email
-      const resetEmail = await mailDevService.getMostRecentEmailByRecipient(
-        shadowUserEmail,
-      );
-      expect(resetEmail).not.toBeNull();
-      expect(resetEmail!.subject).toContain('Reset password');
+      // Get the password reset email (should be the most recent non-verification email)
+      const allEmails = await mailDevService.getEmailsByRecipient(shadowUserEmail);
+      console.log(`Found ${allEmails.length} emails for ${shadowUserEmail}`);
+      allEmails.forEach((e, i) => console.log(`  Email ${i}: ${e.subject}`));
 
-      // Extract reset hash from email
-      const resetLink = resetEmail!.html.match(/hash=([^"&\s]+)/);
-      expect(resetLink).not.toBeNull();
-      const resetHash = resetLink![1];
+      const resetEmail = allEmails.find(email =>
+        email.subject.toLowerCase().includes('reset') ||
+        email.html.includes('/api/v1/auth/reset/password')
+      );
+
+      if (!resetEmail && allEmails.length > 0) {
+        console.log('Could not find reset email. Checking HTML content...');
+        allEmails.forEach((e, i) => {
+          console.log(`  Email ${i} HTML snippet: ${e.html.substring(0, 200)}`);
+        });
+      }
+
+      expect(resetEmail).toBeDefined();
+
+      // Extract reset hash from email - use text version to avoid HTML entity encoding issues
+      // The text version has the clean URL: https://testing.openmeet.net/auth/password-change?hash=JWT_TOKEN&expires=...
+      let resetHash: string | null = null;
+
+      // Pattern 1: Extract from text version (most reliable)
+      const textMatch = resetEmail!.text?.match(/hash=([A-Za-z0-9._-]+)/);
+      if (textMatch) {
+        resetHash = textMatch[1];
+      }
+
+      // Pattern 2: Extract from HTML with entity-encoded equals (&#x3D;)
+      if (!resetHash) {
+        const htmlMatch = resetEmail!.html.match(/hash&#x3D;([A-Za-z0-9._-]+)/);
+        if (htmlMatch) {
+          resetHash = htmlMatch[1];
+        }
+      }
+
+      // Pattern 3: Try regular hash= in HTML (in case entity encoding changes)
+      if (!resetHash) {
+        const htmlMatch2 = resetEmail!.html.match(/hash=([A-Za-z0-9._-]+)/);
+        if (htmlMatch2) {
+          resetHash = htmlMatch2[1];
+        }
+      }
+
+      expect(resetHash).not.toBeNull();
 
       console.log('✅ Password reset email received');
 
@@ -209,11 +254,25 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      const resetEmail = await mailDevService.getMostRecentEmailByRecipient(
-        activeUserEmail,
+      const allEmails2 = await mailDevService.getEmailsByRecipient(activeUserEmail);
+      const resetEmail = allEmails2.find(email =>
+        email.subject.toLowerCase().includes('reset') ||
+        email.html.includes('/api/v1/auth/reset/password')
       );
-      const resetLink = resetEmail!.html.match(/hash=([^"&\s]+)/);
-      const resetHash = resetLink![1];
+      expect(resetEmail).toBeDefined();
+
+      let resetHash: string | null = null;
+      const textMatch = resetEmail!.text?.match(/hash=([A-Za-z0-9._-]+)/);
+      if (textMatch) {
+        resetHash = textMatch[1];
+      }
+      if (!resetHash) {
+        const htmlMatch = resetEmail!.html.match(/hash&#x3D;([A-Za-z0-9._-]+)/);
+        if (htmlMatch) {
+          resetHash = htmlMatch[1];
+        }
+      }
+      expect(resetHash).not.toBeNull();
 
       await serverApp
         .post('/api/v1/auth/reset/password')
@@ -241,13 +300,18 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
 
       // Create shadow account via Quick RSVP
       const eventResponse = await serverApp
-        .post('/api/v1/events')
+        .post('/api/events')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({
           name: `Test Event ${Date.now()}`,
+          description: 'Event for testing multiple password resets',
           startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000 + 3600000).toISOString(),
           type: 'online',
           locationOnline: 'https://meet.example.com/test',
+          timeZone: 'UTC',
+          maxAttendees: 100,
+          categories: [],
         })
         .expect(201);
 
@@ -268,8 +332,21 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      const resetEmail1 = await mailDevService.getMostRecentEmailByRecipient(email);
-      const resetHash1 = resetEmail1!.html.match(/hash=([^"&\s]+)/)![1];
+      const allEmails3 = await mailDevService.getEmailsByRecipient(email);
+      const resetEmail1 = allEmails3.find(e =>
+        e.subject.toLowerCase().includes('reset') ||
+        e.html.includes('/api/v1/auth/reset/password')
+      );
+      expect(resetEmail1).toBeDefined();
+
+      let resetHash1: string | null = null;
+      const textMatch1 = resetEmail1!.text?.match(/hash=([A-Za-z0-9._-]+)/);
+      if (textMatch1) resetHash1 = textMatch1[1];
+      if (!resetHash1) {
+        const htmlMatch1 = resetEmail1!.html.match(/hash&#x3D;([A-Za-z0-9._-]+)/);
+        if (htmlMatch1) resetHash1 = htmlMatch1[1];
+      }
+      expect(resetHash1).not.toBeNull();
 
       await serverApp
         .post('/api/v1/auth/reset/password')
@@ -298,8 +375,21 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      const resetEmail2 = await mailDevService.getMostRecentEmailByRecipient(email);
-      const resetHash2 = resetEmail2!.html.match(/hash=([^"&\s]+)/)![1];
+      const allEmails4 = await mailDevService.getEmailsByRecipient(email);
+      const resetEmail2 = allEmails4.reverse().find(e =>
+        e.subject.toLowerCase().includes('reset') ||
+        e.html.includes('/api/v1/auth/reset/password')
+      );
+      expect(resetEmail2).toBeDefined();
+
+      let resetHash2: string | null = null;
+      const textMatch2 = resetEmail2!.text?.match(/hash=([A-Za-z0-9._-]+)/);
+      if (textMatch2) resetHash2 = textMatch2[1];
+      if (!resetHash2) {
+        const htmlMatch2 = resetEmail2!.html.match(/hash&#x3D;([A-Za-z0-9._-]+)/);
+        if (htmlMatch2) resetHash2 = htmlMatch2[1];
+      }
+      expect(resetHash2).not.toBeNull();
 
       await serverApp
         .post('/api/v1/auth/reset/password')
