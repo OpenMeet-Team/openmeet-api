@@ -99,10 +99,53 @@ export class AuthService {
 
     // Check if user has verified their email
     if (user.status?.id === StatusEnum.inactive) {
+      // Ensure email is not null
+      if (!user.email) {
+        throw new UnprocessableEntityException({
+          status: HttpStatus.UNPROCESSABLE_ENTITY,
+          errors: {
+            email: 'User email is missing',
+          },
+        });
+      }
+
+      // Automatically send verification code
+      this.logger.log(
+        `User ${user.email} attempting login with unverified email. Sending verification code.`,
+      );
+
+      try {
+        // Generate and send verification code
+        const code = await this.emailVerificationCodeService.generateCode(
+          user.id,
+          tenantId,
+          user.email,
+        );
+
+        await this.mailService.sendLoginCode({
+          to: user.email,
+          data: {
+            name: user.firstName || 'there',
+            code,
+          },
+        });
+
+        this.logger.log(
+          `Verification code sent to unverified user: ${user.email}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to send verification code to ${user.email}:`,
+          error,
+        );
+      }
+
+      // Return special error that includes email_not_verified flag
       throw new UnprocessableEntityException({
         status: HttpStatus.UNPROCESSABLE_ENTITY,
         errors: {
-          email: 'Please verify your email address before logging in',
+          email: 'Email not verified. A verification code has been sent to your email.',
+          email_not_verified: true,
         },
       });
     }
