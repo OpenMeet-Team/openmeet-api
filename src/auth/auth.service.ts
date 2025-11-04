@@ -144,7 +144,8 @@ export class AuthService {
       throw new UnprocessableEntityException({
         status: HttpStatus.UNPROCESSABLE_ENTITY,
         errors: {
-          email: 'Email not verified. A verification code has been sent to your email.',
+          email:
+            'Email not verified. A verification code has been sent to your email.',
           email_not_verified: true,
         },
       });

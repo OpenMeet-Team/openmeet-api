@@ -11,8 +11,6 @@ import { BadRequestException } from '@nestjs/common';
 
 describe('AuthBlueskyService - Error Handling', () => {
   let service: AuthBlueskyService;
-  let configService: ConfigService;
-  let elasticacheService: ElastiCacheService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -52,8 +50,6 @@ describe('AuthBlueskyService - Error Handling', () => {
     }).compile();
 
     service = module.get<AuthBlueskyService>(AuthBlueskyService);
-    configService = module.get<ConfigService>(ConfigService);
-    elasticacheService = module.get<ElastiCacheService>(ElastiCacheService);
   });
 
   describe('createAuthUrl', () => {

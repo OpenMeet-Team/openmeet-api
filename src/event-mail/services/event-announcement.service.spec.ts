@@ -111,8 +111,12 @@ describe('EventAnnouncementService', () => {
     };
 
     const mockICalendarService = {
-      generateCalendarInvite: jest.fn().mockReturnValue('BEGIN:VCALENDAR\nEND:VCALENDAR'),
-      generateCancellationInvite: jest.fn().mockReturnValue('BEGIN:VCALENDAR\nMETHOD:CANCEL\nEND:VCALENDAR'),
+      generateCalendarInvite: jest
+        .fn()
+        .mockReturnValue('BEGIN:VCALENDAR\nEND:VCALENDAR'),
+      generateCancellationInvite: jest
+        .fn()
+        .mockReturnValue('BEGIN:VCALENDAR\nMETHOD:CANCEL\nEND:VCALENDAR'),
     };
 
     const mockUserService = {

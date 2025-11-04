@@ -429,8 +429,12 @@ describe('Calendar Invite E2E', () => {
         .send({
           name: `PST Event ${timestamp}`,
           description: 'Testing VTIMEZONE component',
-          startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000 + 3600000).toISOString(),
+          startDate: new Date(
+            Date.now() + 7 * 24 * 60 * 60 * 1000,
+          ).toISOString(),
+          endDate: new Date(
+            Date.now() + 7 * 24 * 60 * 60 * 1000 + 3600000,
+          ).toISOString(),
           timeZone: 'America/Los_Angeles',
           type: EventType.InPerson,
           location: 'Los Angeles, CA',
@@ -444,7 +448,7 @@ describe('Calendar Invite E2E', () => {
       console.log('PST Event created:', pstEvent.body.slug);
 
       // Do Quick RSVP to trigger calendar invite
-      const quickRsvpResponse = await serverApp
+      await serverApp
         .post('/api/v1/auth/quick-rsvp')
         .send({
           name: 'VTIMEZONE Test',
@@ -479,10 +483,9 @@ describe('Calendar Invite E2E', () => {
       // Decode ICS content
       let icsContent: string;
       if (icsAttachment.content) {
-        icsContent = Buffer.from(
-          icsAttachment.content,
-          'base64',
-        ).toString('utf-8');
+        icsContent = Buffer.from(icsAttachment.content, 'base64').toString(
+          'utf-8',
+        );
       } else {
         // Fallback: try to fetch the content from MailDev API
         const response = await fetch(
@@ -528,7 +531,9 @@ describe('Calendar Invite E2E', () => {
       console.log('✅ Standard/Daylight time definitions present');
 
       console.log('\n✅ All VTIMEZONE validations passed!');
-      console.log('Issue #257 fix verified: VTIMEZONE component correctly included');
+      console.log(
+        'Issue #257 fix verified: VTIMEZONE component correctly included',
+      );
     }, 20000);
 
     it('should NOT include VTIMEZONE component for UTC timezone', async () => {
@@ -544,8 +549,12 @@ describe('Calendar Invite E2E', () => {
         .send({
           name: `UTC Event ${timestamp}`,
           description: 'Testing UTC event without VTIMEZONE',
-          startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000 + 3600000).toISOString(),
+          startDate: new Date(
+            Date.now() + 7 * 24 * 60 * 60 * 1000,
+          ).toISOString(),
+          endDate: new Date(
+            Date.now() + 7 * 24 * 60 * 60 * 1000 + 3600000,
+          ).toISOString(),
           timeZone: 'UTC',
           type: EventType.Online,
           locationOnline: 'https://meet.example.com',
@@ -585,10 +594,9 @@ describe('Calendar Invite E2E', () => {
       // Decode ICS content
       let icsContent: string;
       if (icsAttachment.content) {
-        icsContent = Buffer.from(
-          icsAttachment.content,
-          'base64',
-        ).toString('utf-8');
+        icsContent = Buffer.from(icsAttachment.content, 'base64').toString(
+          'utf-8',
+        );
       } else {
         // Fallback: fetch content from MailDev API
         const response = await fetch(
@@ -663,8 +671,9 @@ describe('Calendar Invite E2E', () => {
       );
       const updateEmails = recentEmails.filter(
         (email: any) =>
-          email.to?.some((recipient: any) => recipient.address === attendeeEmail) &&
-          email.subject?.includes('Updated Event'),
+          email.to?.some(
+            (recipient: any) => recipient.address === attendeeEmail,
+          ) && email.subject?.includes('Updated Event'),
       );
 
       expect(updateEmails.length).toBeGreaterThan(0);
@@ -709,7 +718,9 @@ describe('Calendar Invite E2E', () => {
 
       // SEQUENCE should be a Unix timestamp (10+ digits for years 2001+)
       expect(sequence).toBeGreaterThan(1000000000);
-      console.log('✅ SEQUENCE number is timestamp-based and will increment with updates');
+      console.log(
+        '✅ SEQUENCE number is timestamp-based and will increment with updates',
+      );
 
       console.log('✅ Event update calendar invite verified!');
     }, 30000);

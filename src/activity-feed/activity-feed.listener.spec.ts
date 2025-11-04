@@ -473,10 +473,12 @@ describe('ActivityFeedListener', () => {
       await listener.handleEventCreated(params);
 
       // Assert - Check behavior: what feeds should have activities
-      const activities = activityFeedService.create.mock.calls.map(call => call[0]);
+      const activities = activityFeedService.create.mock.calls.map(
+        (call) => call[0],
+      );
 
       // Behavior 1: Event page should show activity to attendees
-      const eventActivity = activities.find(a => a.feedScope === 'event');
+      const eventActivity = activities.find((a) => a.feedScope === 'event');
       expect(eventActivity).toMatchObject({
         activityType: 'event.created',
         feedScope: 'event',
@@ -484,7 +486,9 @@ describe('ActivityFeedListener', () => {
       });
 
       // Behavior 2: Sitewide feed should show activity for discovery
-      const sitewideActivity = activities.find(a => a.feedScope === 'sitewide');
+      const sitewideActivity = activities.find(
+        (a) => a.feedScope === 'sitewide',
+      );
       expect(sitewideActivity).toMatchObject({
         activityType: 'event.created',
         feedScope: 'sitewide',
@@ -513,15 +517,19 @@ describe('ActivityFeedListener', () => {
       await listener.handleEventCreated(params);
 
       // Assert - Check behavior: should work like standalone event
-      const activities = activityFeedService.create.mock.calls.map(call => call[0]);
+      const activities = activityFeedService.create.mock.calls.map(
+        (call) => call[0],
+      );
 
       // Should create event-scoped activity (not group-scoped)
-      const eventActivity = activities.find(a => a.feedScope === 'event');
+      const eventActivity = activities.find((a) => a.feedScope === 'event');
       expect(eventActivity).toBeDefined();
       expect(eventActivity.groupId).toBeUndefined();
 
       // Should also create sitewide activity
-      const sitewideActivity = activities.find(a => a.feedScope === 'sitewide');
+      const sitewideActivity = activities.find(
+        (a) => a.feedScope === 'sitewide',
+      );
       expect(sitewideActivity).toBeDefined();
     });
 
@@ -592,21 +600,27 @@ describe('ActivityFeedListener', () => {
       await listener.handleEventCreated(params);
 
       // Assert - Check privacy behavior
-      const activities = activityFeedService.create.mock.calls.map(call => call[0]);
+      const activities = activityFeedService.create.mock.calls.map(
+        (call) => call[0],
+      );
 
       // Behavior 1: Event feed should have full details for attendees
-      const eventActivity = activities.find(a => a.feedScope === 'event');
+      const eventActivity = activities.find((a) => a.feedScope === 'event');
       expect(eventActivity).toBeDefined();
       expect(eventActivity.eventName).toBe('Secret Meeting'); // Attendees can see name
 
       // Behavior 2: Sitewide feed must NOT expose private details
-      const sitewideActivity = activities.find(a => a.feedScope === 'sitewide');
+      const sitewideActivity = activities.find(
+        (a) => a.feedScope === 'sitewide',
+      );
       expect(sitewideActivity).toBeDefined();
       expect(sitewideActivity.activityType).toBe('group.activity'); // Anonymized
       expect(sitewideActivity.eventName).toBeUndefined(); // No event name
       expect(sitewideActivity.eventSlug).toBeUndefined(); // No event slug
       expect(sitewideActivity.actorName).toBeUndefined(); // No creator name
-      expect(sitewideActivity.metadata.activityDescription).toBe('A new event was created');
+      expect(sitewideActivity.metadata.activityDescription).toBe(
+        'A new event was created',
+      );
     });
   });
 

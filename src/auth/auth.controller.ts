@@ -92,28 +92,13 @@ export class AuthController {
   @ApiResponse({
     status: 201,
     description: 'User successfully registered',
-    type: LoginResponseDto,
   })
   @HttpCode(HttpStatus.CREATED)
   public async register(
     @Body() createUserDto: AuthRegisterLoginDto,
-    @Res({ passthrough: true }) response: Response,
     @Request() request,
-  ): Promise<LoginResponseDto> {
-    const loginResult = await this.service.register(
-      createUserDto,
-      request.tenantId,
-    );
-
-    // Set oidc_session cookie for cross-domain OIDC authentication
-    if (loginResult.sessionId) {
-      const cookieOptions = getOidcCookieOptions();
-
-      response.cookie('oidc_session', loginResult.sessionId, cookieOptions);
-      response.cookie('oidc_tenant', request.tenantId, cookieOptions);
-    }
-
-    return loginResult;
+  ): Promise<{ message: string; email: string }> {
+    return await this.service.register(createUserDto, request.tenantId);
   }
 
   @Post('email/confirm')
