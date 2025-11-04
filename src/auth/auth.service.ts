@@ -526,6 +526,15 @@ export class AuthService {
 
     user.password = password;
 
+    // If user is inactive (shadow account from Quick RSVP), activate them
+    // Password reset via email link proves email ownership and verification
+    if (user.status?.id === StatusEnum.inactive) {
+      user.status = { id: StatusEnum.active } as StatusEntity;
+      this.logger.log(
+        `Activating previously inactive user ${user.id} via password reset`,
+      );
+    }
+
     await this.sessionService.deleteByUserId({
       userId: user.id,
     });
