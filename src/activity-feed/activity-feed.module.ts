@@ -12,11 +12,13 @@ import { UserModule } from '../user/user.module';
 import { GroupModule } from '../group/group.module';
 import { TenantModule } from '../tenant/tenant.module';
 import { EventModule } from '../event/event.module';
+import { BlueskyModule } from '../bluesky/bluesky.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([ActivityFeedEntity]),
     TenantModule,
+    BlueskyModule,
     forwardRef(() => UserModule),
     forwardRef(() => GroupModule),
     forwardRef(() => EventModule),

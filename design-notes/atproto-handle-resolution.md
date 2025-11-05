@@ -162,9 +162,57 @@ ATProto (AT Protocol) users are identified by DIDs (Decentralized Identifiers) b
 4. **Error handling** - Graceful null returns on resolution failures (no exceptions thrown)
 5. **Manual testing essential** - E2E tests would require complex Bluesky test data setup
 
-### Phase 4: Activity Feed Handle Resolution ⏳ PENDING
-**Status:** Not started
-**Estimated effort:** 4-6 hours
+### Phase 4: Activity Feed Handle Resolution ✅ COMPLETE
+**Commit:** `<pending>` - feat(activity-feed): resolve ATProto DIDs to handles in feed display
+**Date:** 2025-11-04
+**Branch:** `feat/fix-bluesky-did-display`
+
+**What was implemented:**
+- Created `ActivityFeedService.resolveDisplayNames()` method for batch handle resolution
+- Updated feed methods (`getGroupFeed`, `getEventFeed`, `getSitewideFeed`) to:
+  - Load `actor` relation when querying activities
+  - Call `resolveDisplayNames()` to enrich activities with display names
+- Batch resolution for performance (collects unique DIDs, resolves in single call)
+- Graceful handling of mixed Bluesky/regular users
+- 7 new behavioral tests in `activity-feed.service.spec.ts`
+
+**Files modified:**
+- `src/activity-feed/activity-feed.service.ts` - Added resolveDisplayNames() method, updated feed methods
+- `src/activity-feed/activity-feed.module.ts` - Imported BlueskyModule for AtprotoHandleCacheService
+- `src/activity-feed/activity-feed.service.spec.ts` - 24 tests total (7 new for handle resolution)
+
+**Test coverage:**
+- ✅ 24/24 unit tests passing
+- ✅ Bluesky user DID → handle resolution
+- ✅ Regular user firstName display
+- ✅ Batch resolution for multiple unique users
+- ✅ Mixed Bluesky/regular users
+- ✅ Fallback to DID on resolution failures
+- ✅ Edge cases (missing actors, empty feeds)
+
+**API changes:**
+- Feed endpoints now return `Array<ActivityFeedEntity & { displayName?: string }>`
+- Backwards compatible: `displayName` is an optional additional field
+- All feed endpoints updated: sitewide, group, and event feeds
+- Frontend can use `displayName` if present, fall back to metadata.actorName if needed
+
+**Handle resolution strategy:**
+1. **Bluesky users**: `provider === 'bluesky'` && `socialId` starts with `did:` → Resolve via AtprotoHandleCacheService
+2. **Regular users**: Use `firstName` directly
+3. **Batch optimization**: Collect all unique DIDs, resolve in single `resolveHandles()` call
+4. **Caching**: Leverages Phase 2's AtprotoHandleCacheService (15min TTL, >95% hit rate)
+
+**Integration with Phase 2:**
+- Uses `AtprotoHandleCacheService.resolveHandles()` for batch resolution
+- Cache hit rate >95% means most resolutions complete in <50ms
+- Graceful degradation: returns DID if ATProto resolution fails
+
+**Learnings:**
+1. **Batch resolution critical** - Single `resolveHandles()` call for entire feed (~20 items) vs. 20 individual calls
+2. **Behavioral tests superior** - TDD approach caught edge cases early (empty feeds, missing actors)
+3. **TypeScript return types** - Used `Object.assign()` instead of spread to maintain type compatibility
+4. **Relation loading** - `relations: ['actor']` must be added to all feed queries
+5. **Backwards compatibility** - Adding optional `displayName` field doesn't break existing consumers
 
 ### Phase 5: Data Migration ⏳ PENDING
 **Status:** Not started
