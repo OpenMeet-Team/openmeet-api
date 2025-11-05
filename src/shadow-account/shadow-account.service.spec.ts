@@ -4,11 +4,13 @@ import { TenantConnectionService } from '../tenant/tenant.service';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { Repository } from 'typeorm';
+import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 
 describe('ShadowAccountService', () => {
   let service: ShadowAccountService;
   let tenantService: jest.Mocked<TenantConnectionService>;
   let userRepository: jest.Mocked<Repository<UserEntity>>;
+  let blueskyIdentityService: jest.Mocked<BlueskyIdentityService>;
 
   const mockTenantConnection = {
     getRepository: jest.fn(),
@@ -58,6 +60,11 @@ describe('ShadowAccountService', () => {
       getTenantConnection: jest.fn().mockResolvedValue(mockTenantConnection),
     } as any;
 
+    blueskyIdentityService = {
+      extractHandleFromDid: jest.fn(),
+      resolveProfile: jest.fn(),
+    } as any;
+
     mockTenantConnection.getRepository.mockReturnValue(userRepository);
     mockTenantConnection.createQueryRunner.mockReturnValue(mockQueryRunner);
 
@@ -67,6 +74,10 @@ describe('ShadowAccountService', () => {
         {
           provide: TenantConnectionService,
           useValue: tenantService,
+        },
+        {
+          provide: BlueskyIdentityService,
+          useValue: blueskyIdentityService,
         },
       ],
     }).compile();
@@ -179,6 +190,120 @@ describe('ShadowAccountService', () => {
           connected: false,
         },
       });
+    });
+
+    it('should resolve DID to handle when creating Bluesky shadow account with DID as displayName', async () => {
+      // Arrange
+      userRepository.findOne.mockResolvedValue(null);
+      userRepository.save.mockImplementation((entity) =>
+        Promise.resolve({
+          ...entity,
+          id: 1,
+        } as UserEntity),
+      );
+      blueskyIdentityService.extractHandleFromDid.mockResolvedValue(
+        'alice.bsky.social',
+      );
+
+      // Act
+      const result = await service.findOrCreateShadowAccount(
+        'did:plc:abc123xyz',
+        'did:plc:abc123xyz', // displayName is also a DID (needs resolution)
+        AuthProvidersEnum.bluesky,
+        'tenant1',
+      );
+
+      // Assert
+      expect(blueskyIdentityService.extractHandleFromDid).toHaveBeenCalledWith(
+        'did:plc:abc123xyz',
+      );
+      expect(result.firstName).toEqual('alice.bsky.social'); // ✅ Should be handle, not DID
+      expect(result.socialId).toEqual('did:plc:abc123xyz'); // ✅ DID stored in socialId
+      expect(result.provider).toEqual(AuthProvidersEnum.bluesky);
+      expect(result.isShadowAccount).toBe(true);
+    });
+
+    it('should use displayName if it is already a handle (not a DID)', async () => {
+      // Arrange
+      userRepository.findOne.mockResolvedValue(null);
+      userRepository.save.mockImplementation((entity) =>
+        Promise.resolve({
+          ...entity,
+          id: 1,
+        } as UserEntity),
+      );
+
+      // Act
+      const result = await service.findOrCreateShadowAccount(
+        'did:plc:abc123xyz',
+        'alice.bsky.social', // displayName is already a handle
+        AuthProvidersEnum.bluesky,
+        'tenant1',
+      );
+
+      // Assert
+      expect(
+        blueskyIdentityService.extractHandleFromDid,
+      ).not.toHaveBeenCalled(); // ✅ No need to resolve
+      expect(result.firstName).toEqual('alice.bsky.social');
+      expect(result.socialId).toEqual('did:plc:abc123xyz');
+    });
+
+    it('should fallback to DID if handle resolution fails', async () => {
+      // Arrange
+      userRepository.findOne.mockResolvedValue(null);
+      userRepository.save.mockImplementation((entity) =>
+        Promise.resolve({
+          ...entity,
+          id: 1,
+        } as UserEntity),
+      );
+      blueskyIdentityService.extractHandleFromDid.mockRejectedValue(
+        new Error('Network timeout'),
+      );
+
+      // Act
+      const result = await service.findOrCreateShadowAccount(
+        'did:plc:abc123xyz',
+        'did:plc:abc123xyz', // displayName is a DID
+        AuthProvidersEnum.bluesky,
+        'tenant1',
+      );
+
+      // Assert
+      expect(blueskyIdentityService.extractHandleFromDid).toHaveBeenCalledWith(
+        'did:plc:abc123xyz',
+      );
+      expect(result.firstName).toEqual('did:plc:abc123xyz'); // ✅ Fallback to DID
+      expect(result.socialId).toEqual('did:plc:abc123xyz');
+      expect(result.isShadowAccount).toBe(true);
+    });
+
+    it('should not attempt handle resolution for non-Bluesky providers', async () => {
+      // Arrange
+      userRepository.findOne.mockResolvedValue(null);
+      userRepository.save.mockImplementation((entity) =>
+        Promise.resolve({
+          ...entity,
+          id: 1,
+        } as UserEntity),
+      );
+
+      // Act
+      const result = await service.findOrCreateShadowAccount(
+        'matrix-user-id-123',
+        'matrixuser',
+        AuthProvidersEnum.email, // Non-Bluesky provider
+        'tenant1',
+      );
+
+      // Assert
+      expect(
+        blueskyIdentityService.extractHandleFromDid,
+      ).not.toHaveBeenCalled(); // ✅ No resolution for non-Bluesky
+      expect(result.firstName).toEqual('matrixuser');
+      expect(result.socialId).toEqual('matrix-user-id-123');
+      expect(result.provider).toEqual(AuthProvidersEnum.email);
     });
   });
 
