@@ -47,7 +47,11 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
     serverApp = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
     serverEmail = request.agent(mail);
     // Get auth token for creating events
-    authToken = await getAuthToken(app, TESTING_USER_EMAIL, TESTING_USER_PASSWORD);
+    authToken = await getAuthToken(
+      app,
+      TESTING_USER_EMAIL,
+      TESTING_USER_PASSWORD,
+    );
   });
 
   describe('Complete Shadow Account Journey', () => {
@@ -59,8 +63,12 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
         .send({
           name: `Test Event ${Date.now()}`,
           description: 'Event for testing shadow account flow',
-          startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000 + 3600000).toISOString(),
+          startDate: new Date(
+            Date.now() + 7 * 24 * 60 * 60 * 1000,
+          ).toISOString(),
+          endDate: new Date(
+            Date.now() + 7 * 24 * 60 * 60 * 1000 + 3600000,
+          ).toISOString(),
           type: 'online',
           locationOnline: 'https://meet.example.com/test',
           timeZone: 'UTC',
@@ -81,7 +89,9 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
         })
         .expect(201);
 
-      expect(rsvpResponse.body.message).toContain('RSVP registered successfully');
+      expect(rsvpResponse.body.message).toContain(
+        'RSVP registered successfully',
+      );
 
       // Shadow account is created with status=inactive, password=null
       console.log('✅ Shadow account created via Quick RSVP');
@@ -114,7 +124,9 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
       // With the new PR, this should auto-send verification code
       expect(response.body.errors.email).toMatch(/Email not verified/i);
       expect(response.body.errors.email_not_verified).toBe(true);
-      console.log('✅ Login fails with unverified email (verification code sent)');
+      console.log(
+        '✅ Login fails with unverified email (verification code sent)',
+      );
     });
 
     it('Step 4: User uses "Forgot Password" to set password', async () => {
@@ -128,13 +140,15 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
       // Get the password reset email (should be the most recent non-verification email)
-      const allEmails = await mailDevService.getEmailsByRecipient(shadowUserEmail);
+      const allEmails =
+        await mailDevService.getEmailsByRecipient(shadowUserEmail);
       console.log(`Found ${allEmails.length} emails for ${shadowUserEmail}`);
       allEmails.forEach((e, i) => console.log(`  Email ${i}: ${e.subject}`));
 
-      const resetEmail = allEmails.find(email =>
-        email.subject.toLowerCase().includes('reset') ||
-        email.html.includes('/api/v1/auth/reset/password')
+      const resetEmail = allEmails.find(
+        (email) =>
+          email.subject.toLowerCase().includes('reset') ||
+          email.html.includes('/api/v1/auth/reset/password'),
       );
 
       if (!resetEmail && allEmails.length > 0) {
@@ -189,17 +203,17 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
     });
 
     it('Step 5: BUG - User tries to login with new password, but fails because account is still inactive', async () => {
-      const response = await serverApp
-        .post('/api/v1/auth/email/login')
-        .send({
-          email: shadowUserEmail,
-          password: newPassword,
-        });
+      const response = await serverApp.post('/api/v1/auth/email/login').send({
+        email: shadowUserEmail,
+        password: newPassword,
+      });
 
       // CURRENT BEHAVIOR (BUG): Login fails with "Email not verified"
       // User is confused because they just used "Forgot Password" flow
       if (response.status === 422) {
-        console.log('❌ BUG REPRODUCED: Account still inactive after password reset');
+        console.log(
+          '❌ BUG REPRODUCED: Account still inactive after password reset',
+        );
         expect(response.body.errors.email).toMatch(/Email not verified/i);
         expect(response.body.errors.email_not_verified).toBe(true);
       } else if (response.status === 200) {
@@ -232,9 +246,8 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
 
       // Verify email (simulate)
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      const verifyEmail = await mailDevService.getMostRecentEmailByRecipient(
-        activeUserEmail,
-      );
+      const verifyEmail =
+        await mailDevService.getMostRecentEmailByRecipient(activeUserEmail);
       const codeMatch = verifyEmail!.text.match(/\b\d{6}\b/);
       const code = codeMatch![0];
 
@@ -254,10 +267,12 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      const allEmails2 = await mailDevService.getEmailsByRecipient(activeUserEmail);
-      const resetEmail = allEmails2.find(email =>
-        email.subject.toLowerCase().includes('reset') ||
-        email.html.includes('/api/v1/auth/reset/password')
+      const allEmails2 =
+        await mailDevService.getEmailsByRecipient(activeUserEmail);
+      const resetEmail = allEmails2.find(
+        (email) =>
+          email.subject.toLowerCase().includes('reset') ||
+          email.html.includes('/api/v1/auth/reset/password'),
       );
       expect(resetEmail).toBeDefined();
 
@@ -305,8 +320,12 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
         .send({
           name: `Test Event ${Date.now()}`,
           description: 'Event for testing multiple password resets',
-          startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000 + 3600000).toISOString(),
+          startDate: new Date(
+            Date.now() + 7 * 24 * 60 * 60 * 1000,
+          ).toISOString(),
+          endDate: new Date(
+            Date.now() + 7 * 24 * 60 * 60 * 1000 + 3600000,
+          ).toISOString(),
           type: 'online',
           locationOnline: 'https://meet.example.com/test',
           timeZone: 'UTC',
@@ -333,9 +352,10 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
       const allEmails3 = await mailDevService.getEmailsByRecipient(email);
-      const resetEmail1 = allEmails3.find(e =>
-        e.subject.toLowerCase().includes('reset') ||
-        e.html.includes('/api/v1/auth/reset/password')
+      const resetEmail1 = allEmails3.find(
+        (e) =>
+          e.subject.toLowerCase().includes('reset') ||
+          e.html.includes('/api/v1/auth/reset/password'),
       );
       expect(resetEmail1).toBeDefined();
 
@@ -343,7 +363,9 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
       const textMatch1 = resetEmail1!.text?.match(/hash=([A-Za-z0-9._-]+)/);
       if (textMatch1) resetHash1 = textMatch1[1];
       if (!resetHash1) {
-        const htmlMatch1 = resetEmail1!.html.match(/hash&#x3D;([A-Za-z0-9._-]+)/);
+        const htmlMatch1 = resetEmail1!.html.match(
+          /hash&#x3D;([A-Za-z0-9._-]+)/,
+        );
         if (htmlMatch1) resetHash1 = htmlMatch1[1];
       }
       expect(resetHash1).not.toBeNull();
@@ -376,17 +398,22 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
       const allEmails4 = await mailDevService.getEmailsByRecipient(email);
-      const resetEmail2 = allEmails4.reverse().find(e =>
-        e.subject.toLowerCase().includes('reset') ||
-        e.html.includes('/api/v1/auth/reset/password')
-      );
+      const resetEmail2 = allEmails4
+        .reverse()
+        .find(
+          (e) =>
+            e.subject.toLowerCase().includes('reset') ||
+            e.html.includes('/api/v1/auth/reset/password'),
+        );
       expect(resetEmail2).toBeDefined();
 
       let resetHash2: string | null = null;
       const textMatch2 = resetEmail2!.text?.match(/hash=([A-Za-z0-9._-]+)/);
       if (textMatch2) resetHash2 = textMatch2[1];
       if (!resetHash2) {
-        const htmlMatch2 = resetEmail2!.html.match(/hash&#x3D;([A-Za-z0-9._-]+)/);
+        const htmlMatch2 = resetEmail2!.html.match(
+          /hash&#x3D;([A-Za-z0-9._-]+)/,
+        );
         if (htmlMatch2) resetHash2 = htmlMatch2[1];
       }
       expect(resetHash2).not.toBeNull();
