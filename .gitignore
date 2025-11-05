@@ -19,6 +19,10 @@ lerna-debug.log*
 /coverage
 /.nyc_output
 
+# Performance test results
+k6-tests/results/*.json
+!k6-tests/results/.gitkeep
+
 # IDEs and editors
 /.idea
 .project

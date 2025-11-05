@@ -52,6 +52,11 @@
     "test:ci:e2e:relational": "docker compose -f docker-compose.relational.ci.yaml --env-file env-example-relational-ci -p ci-relational up --build --exit-code-from api",
     "test:ci:e2e:relational:debug": "docker compose -f docker-compose.relational.ci.yaml --env-file env-example-relational-ci -p ci-relational up --build --exit-code-from api && docker cp ci-relational-api-1:/usr/src/app/prod.log . && echo 'prod.log file is in the root directory'",
     "test:ci:e2e:relational:down": "docker compose -f docker-compose.relational.ci.yaml -p ci-relational down && docker compose -p ci-relational rm -svf",
+    "perf:test": "k6 run k6-tests/profile-lookup.js && k6 run k6-tests/activity-feed.js",
+    "perf:test:profile": "k6 run k6-tests/profile-lookup.js",
+    "perf:test:feed": "k6 run k6-tests/activity-feed.js",
+    "perf:baseline": "mkdir -p k6-tests/results && MODE=baseline k6 run k6-tests/compare-index-impact.js --out json=k6-tests/results/baseline.json",
+    "perf:compare": "mkdir -p k6-tests/results && MODE=comparison k6 run k6-tests/compare-index-impact.js --out json=k6-tests/results/latest.json",
     "release": "release-it"
   },
   "dependencies": {
