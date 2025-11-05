@@ -77,34 +77,65 @@ describe('Auth Module', () => {
     });
 
     describe('Login', () => {
-      it('should fail with unverified email: /api/v1/auth/email/login (POST)', () => {
-        return serverApp
+      it('should fail with unverified email: /api/v1/auth/email/login (POST)', async () => {
+        // Capture timestamp before the failed login attempt
+        const beforeLoginAttempt = Date.now();
+
+        await serverApp
           .post('/api/v1/auth/email/login')
           .send({ email: newUserEmail, password: newUserPassword })
           .expect(422)
           .expect(({ body }) => {
-            expect(body.errors.email).toMatch(/verify/i);
+            expect(body.errors.email).toMatch(/Email not verified/i);
+            expect(body.errors.email_not_verified).toBe(true);
           });
+
+        // Store timestamp for use in verification test
+        (global as any).loginAttemptTimestamp = beforeLoginAttempt;
       });
     });
 
     describe('Email Verification', () => {
       it('should verify email and allow login: /api/v1/auth/verify-email-code (POST)', async () => {
-        // Get verification code from email
-        const verificationEmail =
-          await mailDevService.getMostRecentEmailByRecipient(newUserEmail);
-        expect(verificationEmail).not.toBeNull();
+        // Note: The failed login attempt above triggered a new verification code to be sent
+        // We need to get the LATEST email (from the failed login), not the original registration email
 
-        const code = EmailVerificationTestHelpers.extractVerificationCode(
-          verificationEmail!,
+        // Get emails sent after the login attempt
+        const loginAttemptTime = (global as any).loginAttemptTimestamp || Date.now() - 10000;
+        const recentEmails = await mailDevService.getEmailsSince(loginAttemptTime);
+        const userEmails = recentEmails.filter(email =>
+          email.to?.some(
+            (recipient) =>
+              recipient.address.toLowerCase() === newUserEmail.toLowerCase(),
+          ),
         );
-        expect(code).not.toBeNull();
 
-        // Verify email with code
-        const verifyResponse = await serverApp
-          .post('/api/v1/auth/verify-email-code')
-          .send({ email: newUserEmail, code })
-          .expect(200);
+        expect(userEmails.length).toBeGreaterThan(0);
+
+        // Extract codes from all emails (since timestamps might be identical)
+        const codes = userEmails
+          .map(email => EmailVerificationTestHelpers.extractVerificationCode(email))
+          .filter(code => code !== null);
+
+        expect(codes.length).toBeGreaterThan(0);
+
+        // Try each code until one works (only the most recent code is valid)
+        let verifyResponse;
+        let successfulCode = null;
+
+        for (const code of codes) {
+          verifyResponse = await serverApp
+            .post('/api/v1/auth/verify-email-code')
+            .send({ email: newUserEmail, code });
+
+          if (verifyResponse.status === 200) {
+            successfulCode = code;
+            break;
+          }
+        }
+
+        expect(successfulCode).not.toBeNull();
+        expect(verifyResponse!.status).toBe(200);
 
         // User should be logged in after verification
         expect(verifyResponse.body.token).toBeDefined();

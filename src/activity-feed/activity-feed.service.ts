@@ -136,8 +136,8 @@ export class ActivityFeedService {
 
     // Build where conditions for both standalone and group events
     const whereConditions: any[] = [
-      { feedScope: 'event', eventId },  // Standalone events
-      { feedScope: 'group', eventId },  // Group events
+      { feedScope: 'event', eventId }, // Standalone events
+      { feedScope: 'group', eventId }, // Group events
     ];
 
     // Add visibility filter if provided

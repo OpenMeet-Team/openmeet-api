@@ -115,7 +115,6 @@ describe('AuthService - Event Date Validation for RSVP', () => {
   describe('quickRsvp - event date validation', () => {
     const futureDate = new Date(Date.now() + 86400000); // Tomorrow
     const pastDate = new Date(Date.now() - 86400000); // Yesterday
-    const now = new Date();
 
     beforeEach(() => {
       // Mock user doesn't exist (required for quick RSVP)

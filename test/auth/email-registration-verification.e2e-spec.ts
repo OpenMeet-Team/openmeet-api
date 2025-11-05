@@ -68,7 +68,8 @@ describe('Email Registration Verification (e2e)', () => {
         .expect(422);
 
       // ASSERT: Error message mentions verification
-      expect(response.body.errors.email).toMatch(/verify/i);
+      expect(response.body.errors.email).toMatch(/Email not verified/i);
+      expect(response.body.errors.email_not_verified).toBe(true);
     });
 
     it('should verify email and activate user account', async () => {
