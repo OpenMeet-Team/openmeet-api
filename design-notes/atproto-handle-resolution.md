@@ -71,9 +71,47 @@ ATProto (AT Protocol) users are identified by DIDs (Decentralized Identifiers) b
 3. Test environment may not have real DIDs - graceful fallback is essential
 4. Controller returns `displayName` (mapped from `firstName`) - important for e2e tests
 
-### Phase 2: ATProto Handle Cache Service ⏳ PENDING
-**Status:** Not started
-**Estimated effort:** 4-6 hours
+### Phase 2: ATProto Handle Cache Service ✅ COMPLETE
+**Commit:** `e88b4da` - feat(atproto): add handle cache service with ElastiCache and Prometheus metrics
+**Date:** 2025-11-04
+**Branch:** `feat/fix-bluesky-did-display`
+
+**What was implemented:**
+- Created `AtprotoHandleCacheService` with tenant-agnostic design
+- Integrated ElastiCache for shared caching across all API nodes
+- 15-minute TTL for cache entries (900 seconds)
+- Prometheus metrics for monitoring cache performance
+- Exported service from BlueskyModule for use in other modules
+
+**Files changed:**
+- `src/bluesky/atproto-handle-cache.service.ts` - New service implementation
+- `src/bluesky/atproto-handle-cache.service.spec.ts` - Behavioral tests (12 passing)
+- `src/bluesky/bluesky.module.ts` - Added service provider and export
+- `src/metrics/metrics.module.ts` - Added ATProto handle metrics
+
+**Test coverage:**
+- ✅ 12/12 behavioral tests passing
+- Tests verify caching behavior, error handling, pass-through, batch resolution, and invalidation
+
+**Key implementation details:**
+- `resolveHandle(did)` - Single DID resolution with automatic caching
+- `resolveHandles(dids[])` - Batch resolution for activity feeds
+- `invalidate(did)` - Manual cache invalidation when handles change
+- Cache key format: `atproto:handle:{did}`
+- Graceful fallback to DID if ATProto resolution fails
+
+**Metrics added:**
+- `atproto_handle_cache_hits_total` - Counter (no labels)
+- `atproto_handle_cache_misses_total` - Counter (no labels)
+- `atproto_handle_resolution_errors_total` - Counter with `error_type` label
+- `atproto_handle_resolution_duration_seconds` - Histogram with `cache_status` label (hit/miss/error)
+
+**Learnings:**
+1. **Tenant-agnostic design** - DIDs are globally unique, so no tenant tracking needed in cache
+2. **Behavior-focused tests** - Tests verify actual caching behavior, not mock calls
+3. **Shared cache is essential** - ElastiCache ensures all API pods see same cached handles
+4. **Mock store pattern** - Created a Map-based mock for ElastiCache in tests to verify real caching behavior
+5. **Error handling is critical** - Must gracefully return DID if resolution fails (no crashes)
 
 ### Phase 3: Multi-Identifier Profile Lookup ⏳ PENDING
 **Status:** Not started
@@ -91,7 +129,7 @@ ATProto (AT Protocol) users are identified by DIDs (Decentralized Identifiers) b
 **Status:** Not started
 **Estimated effort:** 2-3 hours
 
-**Total estimated remaining effort:** 15-22 hours
+**Total estimated remaining effort:** 11-16 hours (Phase 2 complete: -4 hours)
 
 ## System Requirements
 
@@ -1443,14 +1481,14 @@ async function backfillShadowUserHandles() {
 
 ---
 
-**Document Status:** In Progress (Phase 1 Complete)
+**Document Status:** In Progress (Phases 1-2 Complete)
 **Last Updated:** 2025-11-04
 **Author:** AI Assistant + Tom Scanlan
 **Reviewers:** Pending
 
 **Implementation Progress:**
 - ✅ Phase 1: Shadow Account Handle Resolution (commit: ba472cf)
-- ⏳ Phase 2: ATProto Handle Cache Service
+- ✅ Phase 2: ATProto Handle Cache Service (commit: e88b4da)
 - ⏳ Phase 3: Multi-Identifier Profile Lookup
 - ⏳ Phase 4: Activity Feed Handle Resolution
 - ⏳ Phase 5: Data Migration
@@ -1466,3 +1504,5 @@ async function backfillShadowUserHandles() {
 - ✅ Composite index on (socialId, provider) for performance
 - ✅ Zero breaking changes, backward compatible
 - ✅ Used `forwardRef()` to avoid circular dependencies (Phase 1 learning)
+- ✅ Tenant-agnostic cache design - DIDs are globally unique (Phase 2 learning)
+- ✅ Behavior-focused tests over mock verification (Phase 2 learning)
