@@ -142,68 +142,24 @@ export function handleSummary(data) {
     outputs[`${resultsDir}/baseline.json`] = JSON.stringify(summary, null, 2);
     console.log('');
     console.log('✅ Baseline results saved to k6-tests/results/baseline.json');
+    console.log('');
+    console.log('Next steps:');
+    console.log('1. Add composite index to database');
+    console.log('2. Run: npm run perf:compare');
+    console.log('3. Compare results manually using the saved JSON files');
   } else if (mode === 'comparison') {
     outputs[`${resultsDir}/latest.json`] = JSON.stringify(summary, null, 2);
-
-    // Try to load baseline and compare
-    try {
-      const fs = require('fs');
-      const baselinePath = `${resultsDir}/baseline.json`;
-
-      if (fs.existsSync(baselinePath)) {
-        const baseline = JSON.parse(fs.readFileSync(baselinePath, 'utf8'));
-
-        const comparison = {
-          baseline: baseline.metrics,
-          withIndex: summary.metrics,
-          improvement: {
-            p50_ms: baseline.metrics.did_lookup_p50 - summary.metrics.did_lookup_p50,
-            p50_percent: ((baseline.metrics.did_lookup_p50 - summary.metrics.did_lookup_p50) / baseline.metrics.did_lookup_p50 * 100),
-            p95_ms: baseline.metrics.did_lookup_p95 - summary.metrics.did_lookup_p95,
-            p95_percent: ((baseline.metrics.did_lookup_p95 - summary.metrics.did_lookup_p95) / baseline.metrics.did_lookup_p95 * 100),
-            p99_ms: baseline.metrics.did_lookup_p99 - summary.metrics.did_lookup_p99,
-            p99_percent: ((baseline.metrics.did_lookup_p99 - summary.metrics.did_lookup_p99) / baseline.metrics.did_lookup_p99 * 100),
-          },
-          recommendation: '',
-        };
-
-        // Generate recommendation
-        const p95Improvement = comparison.improvement.p95_percent;
-        if (p95Improvement > 50) {
-          comparison.recommendation = '✅ RECOMMENDED: Add the composite index. Significant performance improvement (>50%).';
-        } else if (p95Improvement > 20) {
-          comparison.recommendation = '⚠️  CONSIDER: Moderate improvement (20-50%). Evaluate based on DID lookup frequency.';
-        } else if (p95Improvement > 0) {
-          comparison.recommendation = '❌ NOT RECOMMENDED: Minimal improvement (<20%). Index overhead not worth it.';
-        } else {
-          comparison.recommendation = '❌ NOT RECOMMENDED: Performance degraded with index. Do not add.';
-        }
-
-        outputs[`${resultsDir}/comparison.json`] = JSON.stringify(comparison, null, 2);
-
-        console.log('');
-        console.log('='.repeat(80));
-        console.log('PERFORMANCE COMPARISON');
-        console.log('='.repeat(80));
-        console.log('');
-        console.log('DID Lookup Performance:');
-        console.log('');
-        console.log('                  BASELINE    WITH INDEX    IMPROVEMENT');
-        console.log('                  --------    ----------    -----------');
-        console.log(`p50 (median):     ${baseline.metrics.did_lookup_p50.toFixed(2)}ms      ${summary.metrics.did_lookup_p50.toFixed(2)}ms        ${comparison.improvement.p50_percent.toFixed(1)}%`);
-        console.log(`p95:              ${baseline.metrics.did_lookup_p95.toFixed(2)}ms      ${summary.metrics.did_lookup_p95.toFixed(2)}ms        ${comparison.improvement.p95_percent.toFixed(1)}%`);
-        console.log(`p99:              ${baseline.metrics.did_lookup_p99.toFixed(2)}ms      ${summary.metrics.did_lookup_p99.toFixed(2)}ms        ${comparison.improvement.p99_percent.toFixed(1)}%`);
-        console.log('');
-        console.log(comparison.recommendation);
-        console.log('');
-        console.log('Full comparison saved to k6-tests/results/comparison.json');
-      } else {
-        console.log('');
-        console.log('⚠️  No baseline found. Run with MODE=baseline first.');
-      }
-    } catch (error) {
-      console.log(`Error comparing with baseline: ${error.message}`);
-    }
+    console.log('');
+    console.log('✅ Comparison results saved to k6-tests/results/latest.json');
+    console.log('');
+    console.log('To compare performance:');
+    console.log('  Baseline: cat k6-tests/results/baseline.json');
+    console.log('  Latest:   cat k6-tests/results/latest.json');
+    console.log('');
+    console.log('Key metrics to compare:');
+    console.log(`  Current p50: ${summary.metrics.did_lookup_p50.toFixed(2)}ms`);
+    console.log(`  Current p95: ${summary.metrics.did_lookup_p95.toFixed(2)}ms`);
+    console.log(`  Current p99: ${summary.metrics.did_lookup_p99.toFixed(2)}ms`);
   }
 
   return outputs;

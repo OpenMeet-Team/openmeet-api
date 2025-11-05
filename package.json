@@ -57,6 +57,7 @@
     "perf:test:feed": "k6 run k6-tests/activity-feed.js",
     "perf:baseline": "mkdir -p k6-tests/results && MODE=baseline k6 run k6-tests/compare-index-impact.js --out json=k6-tests/results/baseline.json",
     "perf:compare": "mkdir -p k6-tests/results && MODE=comparison k6 run k6-tests/compare-index-impact.js --out json=k6-tests/results/latest.json",
+    "perf:report": "node k6-tests/compare-results.js",
     "release": "release-it"
   },
   "dependencies": {
