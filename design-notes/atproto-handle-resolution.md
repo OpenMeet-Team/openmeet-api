@@ -113,9 +113,54 @@ ATProto (AT Protocol) users are identified by DIDs (Decentralized Identifiers) b
 4. **Mock store pattern** - Created a Map-based mock for ElastiCache in tests to verify real caching behavior
 5. **Error handling is critical** - Must gracefully return DID if resolution fails (no crashes)
 
-### Phase 3: Multi-Identifier Profile Lookup ⏳ PENDING
-**Status:** Not started
-**Estimated effort:** 3-4 hours
+### Phase 3: Multi-Identifier Profile Lookup ✅ COMPLETE
+**Commit:** `540b781` - feat(user): add multi-identifier profile lookup (slug/DID/handle)
+**Date:** 2025-11-04
+**Branch:** `feat/fix-bluesky-did-display`
+
+**What was implemented:**
+- Created `UserService.findByIdentifier()` method supporting slug, DID, and ATProto handle
+- Updated `UserController` endpoint to use multi-identifier lookup
+- Automatic identifier type detection with priority: DID > Handle > Slug
+- Handle resolution integrates with Phase 2 cache (AtprotoHandleCacheService)
+- Comprehensive OpenAPI documentation with examples
+
+**Files changed:**
+- `src/user/user.service.ts` - Added findByIdentifier() method
+- `src/user/user.service.find-by-identifier.spec.ts` - 16 behavioral tests
+- `src/user/user.controller.ts` - Updated endpoint documentation
+- `design-notes/atproto-handle-resolution-manual-tests.md` - Manual testing guide
+
+**Test coverage:**
+- ✅ 16/16 unit tests passing
+- ✅ Slug lookup (backwards compatibility verified)
+- ✅ DID lookup (new functionality)
+- ✅ Handle lookup with @ prefix support (new functionality)
+- ✅ Edge cases (null, empty, whitespace)
+- ⏭️ E2E tests deferred (manual testing guide created)
+
+**API changes:**
+- Endpoint: `GET /api/v1/users/:identifier/profile`
+- Accepts: slug (`alice-abc123`), DID (`did:plc:abc123`), or handle (`alice.bsky.social`)
+- Backwards compatible: existing slug lookups continue to work
+- OpenAPI docs updated with examples for all identifier types
+
+**Identifier detection logic:**
+1. **DID**: Starts with `did:` → Direct database lookup by socialId
+2. **Handle**: Contains `.` (domain pattern) → Resolve to DID via BlueskyIdentityService → Database lookup
+3. **Slug**: Default → Call existing showProfile() method
+
+**Integration with Phase 2:**
+- Handle lookups use `BlueskyIdentityService.resolveProfile()`
+- Phase 2 cache (AtprotoHandleCacheService) automatically used by BlueskyIdentityService
+- Cache reduces handle resolution from ~500ms to ~10ms on subsequent requests
+
+**Learnings:**
+1. **Identifier detection is simple** - Priority-based detection (DID > Handle > Slug) works well
+2. **@ prefix handling** - Users often prefix handles with @, need to strip it
+3. **Backwards compatibility** - Existing slug lookups preserved by making slug the default case
+4. **Error handling** - Graceful null returns on resolution failures (no exceptions thrown)
+5. **Manual testing essential** - E2E tests would require complex Bluesky test data setup
 
 ### Phase 4: Activity Feed Handle Resolution ⏳ PENDING
 **Status:** Not started
@@ -129,7 +174,7 @@ ATProto (AT Protocol) users are identified by DIDs (Decentralized Identifiers) b
 **Status:** Not started
 **Estimated effort:** 2-3 hours
 
-**Total estimated remaining effort:** 11-16 hours (Phase 2 complete: -4 hours)
+**Total estimated remaining effort:** 8-12 hours (Phases 2-3 complete: -7 hours)
 
 ## System Requirements
 
@@ -1481,7 +1526,7 @@ async function backfillShadowUserHandles() {
 
 ---
 
-**Document Status:** In Progress (Phases 1-2 Complete)
+**Document Status:** In Progress (Phases 1-3 Complete)
 **Last Updated:** 2025-11-04
 **Author:** AI Assistant + Tom Scanlan
 **Reviewers:** Pending
@@ -1489,7 +1534,7 @@ async function backfillShadowUserHandles() {
 **Implementation Progress:**
 - ✅ Phase 1: Shadow Account Handle Resolution (commit: ba472cf)
 - ✅ Phase 2: ATProto Handle Cache Service (commit: e88b4da)
-- ⏳ Phase 3: Multi-Identifier Profile Lookup
+- ✅ Phase 3: Multi-Identifier Profile Lookup (commit: 540b781)
 - ⏳ Phase 4: Activity Feed Handle Resolution
 - ⏳ Phase 5: Data Migration
 - ⏳ Phase 6: Frontend Display Composable
