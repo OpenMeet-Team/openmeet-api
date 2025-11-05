@@ -566,8 +566,18 @@ describe('ActivityFeedService', () => {
       };
 
       const activities = [
-        { ...mockActivity, id: 1, actorId: 100, actor: blueskyUser as UserEntity },
-        { ...mockActivity, id: 2, actorId: 101, actor: regularUser as UserEntity },
+        {
+          ...mockActivity,
+          id: 1,
+          actorId: 100,
+          actor: blueskyUser as UserEntity,
+        },
+        {
+          ...mockActivity,
+          id: 2,
+          actorId: 101,
+          actor: regularUser as UserEntity,
+        },
       ];
 
       handleCacheService.resolveHandles.mockResolvedValue(

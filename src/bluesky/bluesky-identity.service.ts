@@ -121,6 +121,38 @@ export class BlueskyIdentityService {
   }
 
   /**
+   * Lightweight handle-to-DID resolution without fetching full profile
+   * Use this for profile lookups where you just need the DID
+   *
+   * @param handle The ATProto handle to resolve
+   * @returns The DID or null if resolution fails
+   */
+  async resolveHandleToDid(handle: string): Promise<string | null> {
+    try {
+      this.logger.debug(`Resolving handle ${handle} to DID (lightweight)`);
+
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { IdResolver } = require('@atproto/identity');
+      const idResolver = new IdResolver();
+
+      const did = await idResolver.handle.resolve(handle);
+
+      if (!did) {
+        this.logger.warn(`Could not resolve handle ${handle} to a DID`);
+        return null;
+      }
+
+      this.logger.debug(`Resolved ${handle} to ${did}`);
+      return did;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to resolve handle ${handle} to DID: ${error.message}`,
+      );
+      return null;
+    }
+  }
+
+  /**
    * Lightweight handle extraction from DID document
    * Fallback method when full profile fetch fails
    *

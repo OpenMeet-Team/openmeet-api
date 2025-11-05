@@ -45,6 +45,7 @@ describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () =>
   beforeEach(async () => {
     blueskyIdentityService = {
       resolveProfile: jest.fn(),
+      resolveHandleToDid: jest.fn(),
       extractHandleFromDid: jest.fn(),
     } as unknown as jest.Mocked<BlueskyIdentityService>;
 
@@ -142,10 +143,13 @@ describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () =>
     it('should find user by DID when identifier starts with "did:"', async () => {
       // Arrange
       const did = 'did:plc:abc123';
+      const mockUserWithSlug = { ...mockBlueskyUser, slug: 'alice-abc123' };
       jest
         .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(mockUserWithSlug);
+      const showProfileSpy = jest
+        .spyOn(userService, 'showProfile')
         .mockResolvedValue(mockBlueskyUser);
-      const showProfileSpy = jest.spyOn(userService, 'showProfile');
 
       // Act
       const result = await userService.findByIdentifier(did);
@@ -159,7 +163,7 @@ describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () =>
         },
         undefined,
       );
-      expect(showProfileSpy).not.toHaveBeenCalled();
+      expect(showProfileSpy).toHaveBeenCalledWith('alice-abc123');
     });
 
     it('should return null when DID not found', async () => {
@@ -179,9 +183,11 @@ describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () =>
     it('should handle different DID methods (did:web, did:key, etc)', async () => {
       // Arrange - DID Web
       const didWeb = 'did:web:example.com';
+      const mockUserWithSlug = { ...mockBlueskyUser, slug: 'alice-abc123' };
       jest
         .spyOn(userService, 'findBySocialIdAndProvider')
-        .mockResolvedValue(mockBlueskyUser);
+        .mockResolvedValue(mockUserWithSlug);
+      jest.spyOn(userService, 'showProfile').mockResolvedValue(mockBlueskyUser);
 
       // Act
       const result = await userService.findByIdentifier(didWeb);
@@ -195,6 +201,7 @@ describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () =>
         },
         undefined,
       );
+      expect(userService.showProfile).toHaveBeenCalledWith('alice-abc123');
     });
   });
 
@@ -204,22 +211,22 @@ describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () =>
       const handle = 'alice.bsky.social';
       const did = 'did:plc:abc123';
 
-      blueskyIdentityService.resolveProfile.mockResolvedValue({
-        did,
-        handle,
-      });
+      blueskyIdentityService.resolveHandleToDid.mockResolvedValue(did);
 
+      const mockUserWithSlug = { ...mockBlueskyUser, slug: 'alice-abc123' };
       jest
         .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(mockUserWithSlug);
+      const showProfileSpy = jest
+        .spyOn(userService, 'showProfile')
         .mockResolvedValue(mockBlueskyUser);
-      const showProfileSpy = jest.spyOn(userService, 'showProfile');
 
       // Act
       const result = await userService.findByIdentifier(handle);
 
       // Assert
       expect(result).toEqual(mockBlueskyUser);
-      expect(blueskyIdentityService.resolveProfile).toHaveBeenCalledWith(
+      expect(blueskyIdentityService.resolveHandleToDid).toHaveBeenCalledWith(
         handle,
       );
       expect(userService.findBySocialIdAndProvider).toHaveBeenCalledWith(
@@ -229,22 +236,20 @@ describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () =>
         },
         undefined,
       );
-      expect(showProfileSpy).not.toHaveBeenCalled();
+      expect(showProfileSpy).toHaveBeenCalledWith('alice-abc123');
     });
 
     it('should return null when handle resolution fails', async () => {
       // Arrange
       const handle = 'nonexistent.bsky.social';
-      blueskyIdentityService.resolveProfile.mockRejectedValue(
-        new Error('Handle not found'),
-      );
+      blueskyIdentityService.resolveHandleToDid.mockResolvedValue(null);
 
       // Act
       const result = await userService.findByIdentifier(handle);
 
       // Assert
       expect(result).toBeNull();
-      expect(blueskyIdentityService.resolveProfile).toHaveBeenCalledWith(
+      expect(blueskyIdentityService.resolveHandleToDid).toHaveBeenCalledWith(
         handle,
       );
     });
@@ -254,10 +259,7 @@ describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () =>
       const handle = 'orphan.bsky.social';
       const did = 'did:plc:orphan123';
 
-      blueskyIdentityService.resolveProfile.mockResolvedValue({
-        did,
-        handle,
-      });
+      blueskyIdentityService.resolveHandleToDid.mockResolvedValue(did);
 
       jest
         .spyOn(userService, 'findBySocialIdAndProvider')
@@ -268,7 +270,7 @@ describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () =>
 
       // Assert
       expect(result).toBeNull();
-      expect(blueskyIdentityService.resolveProfile).toHaveBeenCalledWith(
+      expect(blueskyIdentityService.resolveHandleToDid).toHaveBeenCalledWith(
         handle,
       );
     });
@@ -278,23 +280,23 @@ describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () =>
       const customHandle = 'alice.custom-domain.com';
       const did = 'did:plc:abc123';
 
-      blueskyIdentityService.resolveProfile.mockResolvedValue({
-        did,
-        handle: customHandle,
-      });
+      blueskyIdentityService.resolveHandleToDid.mockResolvedValue(did);
 
+      const mockUserWithSlug = { ...mockBlueskyUser, slug: 'alice-abc123' };
       jest
         .spyOn(userService, 'findBySocialIdAndProvider')
-        .mockResolvedValue(mockBlueskyUser);
+        .mockResolvedValue(mockUserWithSlug);
+      jest.spyOn(userService, 'showProfile').mockResolvedValue(mockBlueskyUser);
 
       // Act
       const result = await userService.findByIdentifier(customHandle);
 
       // Assert
       expect(result).toEqual(mockBlueskyUser);
-      expect(blueskyIdentityService.resolveProfile).toHaveBeenCalledWith(
+      expect(blueskyIdentityService.resolveHandleToDid).toHaveBeenCalledWith(
         customHandle,
       );
+      expect(userService.showProfile).toHaveBeenCalledWith('alice-abc123');
     });
   });
 
@@ -309,68 +311,72 @@ describe('UserService.findByIdentifier - Multi-Identifier Profile Lookup', () =>
 
       // Assert - treated as slug
       expect(userService.showProfile).toHaveBeenCalledWith(slug);
-      expect(blueskyIdentityService.resolveProfile).not.toHaveBeenCalled();
+      expect(blueskyIdentityService.resolveHandleToDid).not.toHaveBeenCalled();
 
       jest.clearAllMocks();
 
       // Arrange - handle pattern: domain.tld
       const handle = 'alice.bsky.social';
-      blueskyIdentityService.resolveProfile.mockResolvedValue({
-        did: 'did:plc:abc123',
-        handle,
-      });
+      const did = 'did:plc:abc123';
+      blueskyIdentityService.resolveHandleToDid.mockResolvedValue(did);
+      const mockUserWithSlug = { ...mockBlueskyUser, slug: 'alice-abc123' };
       jest
         .spyOn(userService, 'findBySocialIdAndProvider')
-        .mockResolvedValue(mockBlueskyUser);
+        .mockResolvedValue(mockUserWithSlug);
+      jest.spyOn(userService, 'showProfile').mockResolvedValue(mockBlueskyUser);
 
       // Act
       await userService.findByIdentifier(handle);
 
       // Assert - treated as handle
-      expect(blueskyIdentityService.resolveProfile).toHaveBeenCalledWith(
+      expect(blueskyIdentityService.resolveHandleToDid).toHaveBeenCalledWith(
         handle,
       );
-      expect(userService.showProfile).not.toHaveBeenCalled();
+      expect(userService.showProfile).toHaveBeenCalledWith('alice-abc123');
     });
 
     it('should treat identifier with @ prefix as handle', async () => {
       // Arrange - @handle format
       const handleWithAt = '@alice.bsky.social';
       const handleWithoutAt = 'alice.bsky.social';
+      const did = 'did:plc:abc123';
 
-      blueskyIdentityService.resolveProfile.mockResolvedValue({
-        did: 'did:plc:abc123',
-        handle: handleWithoutAt,
-      });
+      blueskyIdentityService.resolveHandleToDid.mockResolvedValue(did);
 
+      const mockUserWithSlug = { ...mockBlueskyUser, slug: 'alice-abc123' };
       jest
         .spyOn(userService, 'findBySocialIdAndProvider')
-        .mockResolvedValue(mockBlueskyUser);
+        .mockResolvedValue(mockUserWithSlug);
+      jest.spyOn(userService, 'showProfile').mockResolvedValue(mockBlueskyUser);
 
       // Act
       await userService.findByIdentifier(handleWithAt);
 
       // Assert - @ stripped and treated as handle
-      expect(blueskyIdentityService.resolveProfile).toHaveBeenCalledWith(
+      expect(blueskyIdentityService.resolveHandleToDid).toHaveBeenCalledWith(
         handleWithoutAt,
       );
+      expect(userService.showProfile).toHaveBeenCalledWith('alice-abc123');
     });
 
     it('should prioritize DID detection over other patterns', async () => {
       // Arrange - starts with "did:" should always be treated as DID
       const did = 'did:plc:abc123';
+      const mockUserWithSlug = { ...mockBlueskyUser, slug: 'alice-abc123' };
       jest
         .spyOn(userService, 'findBySocialIdAndProvider')
+        .mockResolvedValue(mockUserWithSlug);
+      const showProfileSpy = jest
+        .spyOn(userService, 'showProfile')
         .mockResolvedValue(mockBlueskyUser);
-      const showProfileSpy = jest.spyOn(userService, 'showProfile');
 
       // Act
       await userService.findByIdentifier(did);
 
       // Assert
       expect(userService.findBySocialIdAndProvider).toHaveBeenCalled();
-      expect(blueskyIdentityService.resolveProfile).not.toHaveBeenCalled();
-      expect(showProfileSpy).not.toHaveBeenCalled();
+      expect(blueskyIdentityService.resolveHandleToDid).not.toHaveBeenCalled();
+      expect(showProfileSpy).toHaveBeenCalledWith('alice-abc123');
     });
   });
 

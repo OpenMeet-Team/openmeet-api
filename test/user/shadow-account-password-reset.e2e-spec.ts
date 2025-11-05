@@ -1,8 +1,8 @@
 import request from 'supertest';
 import {
   TESTING_APP_URL,
-  TESTING_MAIL_HOST,
-  TESTING_MAIL_PORT,
+  // TESTING_MAIL_HOST,
+  // TESTING_MAIL_PORT,
   TESTING_TENANT_ID,
   TESTING_USER_EMAIL,
   TESTING_USER_PASSWORD,
@@ -33,19 +33,19 @@ jest.setTimeout(60000);
 
 describe('Shadow Account Password Reset Flow (e2e)', () => {
   const app = TESTING_APP_URL;
-  const mail = `http://${TESTING_MAIL_HOST}:${TESTING_MAIL_PORT}`;
+  // const mail = `http://${TESTING_MAIL_HOST}:${TESTING_MAIL_PORT}`;
   const shadowUserEmail = `shadow.user.${Date.now()}.${Math.random().toString(36).substring(7)}@openmeet.net`;
   const shadowUserName = `Shadow User ${Date.now()}`;
   const newPassword = 'MyNewPassword123!';
 
   let serverApp;
-  let serverEmail;
-  let shadowUserId: string;
+  // let serverEmail;
+  // let shadowUserId: string;
   let authToken: string;
 
   beforeAll(async () => {
     serverApp = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
-    serverEmail = request.agent(mail);
+    // serverEmail = request.agent(mail);
     // Get auth token for creating events
     authToken = await getAuthToken(
       app,
@@ -55,7 +55,7 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
   });
 
   describe('Complete Shadow Account Journey', () => {
-    it('Step 1: User does Quick RSVP (creates shadow account)', async () => {
+    it('should create shadow account when user does Quick RSVP', async () => {
       // First, create an event to RSVP to (requires authentication)
       const eventResponse = await serverApp
         .post('/api/events')
@@ -97,7 +97,7 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
       console.log('✅ Shadow account created via Quick RSVP');
     });
 
-    it('Step 2: User tries to register - should fail with emailAlreadyExists', async () => {
+    it('should fail registration with emailAlreadyExists when user tries to register', async () => {
       const response = await serverApp
         .post('/api/v1/auth/email/register')
         .send({
@@ -112,7 +112,7 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
       console.log('✅ Registration blocked (emailAlreadyExists)');
     });
 
-    it('Step 3: User tries to login - should fail with "please verify email"', async () => {
+    it('should fail login with "please verify email" when user tries to login', async () => {
       const response = await serverApp
         .post('/api/v1/auth/email/login')
         .send({
@@ -129,7 +129,7 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
       );
     });
 
-    it('Step 4: User uses "Forgot Password" to set password', async () => {
+    it('should allow user to set password using "Forgot Password"', async () => {
       // Request password reset
       await serverApp
         .post('/api/v1/auth/forgot/password')
@@ -202,7 +202,7 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
       console.log('✅ Password reset successful');
     });
 
-    it('Step 5: BUG - User tries to login with new password, but fails because account is still inactive', async () => {
+    it('should fail login with new password because account is still inactive (BUG)', async () => {
       const response = await serverApp.post('/api/v1/auth/email/login').send({
         email: shadowUserEmail,
         password: newPassword,
@@ -229,7 +229,7 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
   });
 
   describe('Edge Cases to Test', () => {
-    it('Should handle password reset for already-active users (normal flow)', async () => {
+    it('should handle password reset for already-active users (normal flow)', async () => {
       // Create a normal active user first
       const activeUserEmail = `active.user.${Date.now()}@openmeet.net`;
       const activeUserPassword = 'InitialPassword123';
@@ -310,7 +310,7 @@ describe('Shadow Account Password Reset Flow (e2e)', () => {
       console.log('✅ Password reset works normally for active users');
     });
 
-    it('Should handle multiple password resets for shadow accounts', async () => {
+    it('should handle multiple password resets for shadow accounts', async () => {
       const email = `multi.reset.${Date.now()}@openmeet.net`;
 
       // Create shadow account via Quick RSVP

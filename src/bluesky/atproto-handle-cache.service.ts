@@ -69,7 +69,9 @@ export class AtprotoHandleCacheService {
       // Store in ElastiCache (shared across all API nodes)
       await this.cache.set(cacheKey, handle, this.CACHE_TTL);
       timer({ cache_status: 'miss' });
-      this.logger.log(`Cached handle for ${did}: ${handle} (TTL: ${this.CACHE_TTL}s)`);
+      this.logger.log(
+        `Cached handle for ${did}: ${handle} (TTL: ${this.CACHE_TTL}s)`,
+      );
 
       return handle;
     } catch (error) {
@@ -97,7 +99,7 @@ export class AtprotoHandleCacheService {
       dids.map(async (did) => {
         const handle = await this.resolveHandle(did);
         results.set(did, handle);
-      })
+      }),
     );
 
     return results;

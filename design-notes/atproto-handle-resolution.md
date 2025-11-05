@@ -214,15 +214,253 @@ ATProto (AT Protocol) users are identified by DIDs (Decentralized Identifiers) b
 4. **Relation loading** - `relations: ['actor']` must be added to all feed queries
 5. **Backwards compatibility** - Adding optional `displayName` field doesn't break existing consumers
 
-### Phase 5: Data Migration ⏳ PENDING
-**Status:** Not started
-**Estimated effort:** 2-3 hours
+### Phase 5: Data Migration ✅ COMPLETE
+**Commit:** `<pending>` - feat(migration): backfill shadow user handles from DIDs
+**Date:** 2025-11-05
+**Branch:** `feat/fix-bluesky-did-display`
 
-### Phase 6: Frontend Display Composable ⏳ PENDING
-**Status:** Not started
-**Estimated effort:** 2-3 hours
+**Status:**
+- ✅ **Part A Complete:** Users table migration
+- ✅ **Part B Complete:** Activity feed metadata migration
 
-**Total estimated remaining effort:** 8-12 hours (Phases 2-3 complete: -7 hours)
+**Part A: Users Table Migration (COMPLETE)**
+
+**What was implemented:**
+- Created TypeORM migration `1762347421000-BackfillShadowUserHandles.ts`
+- Resolves DIDs → handles for existing shadow users (41 users in local DB)
+- Uses `@atproto/identity` with `IdResolver` + `getHandle` pattern
+- Per-tenant execution (runs on each tenant schema independently)
+- Graceful error handling with detailed statistics
+
+**Files modified:**
+- `src/database/migrations/1762347421000-BackfillShadowUserHandles.ts` - New migration
+
+**Migration behavior:**
+- Finds shadow Bluesky users with `firstName LIKE 'did:%'`
+- Resolves each DID using `IdResolver.did.resolveNoCheck()` + `getHandle()`
+- Updates `firstName` with resolved handle
+- Continues on failures (reports stats at end)
+- No automatic rollback (handles are correct values)
+
+**Data impact:**
+- Updates `firstName` field only for affected shadow users
+- Non-destructive: Resolution failures leave DID unchanged
+- Fixes historical data created before Phase 1
+
+**Testing:**
+- ✅ Migration compiles successfully
+- ✅ Runs on public schema (0 affected users)
+- ✅ Will run on tenant schemas automatically
+- 📊 Local DB: 41 shadow users identified for backfill
+
+**Part B: Activity Feed Metadata Migration (COMPLETE)**
+
+**What was implemented:**
+- Created TypeORM migration `1762347422000-BackfillActivityFeedMetadataHandles.ts`
+- Updates `activityFeed.metadata->>'actorName'` from DID → handle using resolved handles from users table
+- Uses `jsonb_set()` to update JSONB metadata field efficiently
+- Per-tenant execution (runs on each tenant schema independently)
+- Includes verification step to confirm all DIDs have been replaced
+
+**Files created:**
+- `src/database/migrations/1762347422000-BackfillActivityFeedMetadataHandles.ts` - New migration
+
+**Migration behavior:**
+- Finds activity feed entries where `metadata->>'actorName' LIKE 'did:%'`
+- Joins with users table to get resolved handles from `firstName`
+- Updates JSONB metadata using `jsonb_set(metadata, '{actorName}', to_jsonb(u."firstName"))`
+- Only processes Bluesky shadow user activities (where user is not deleted)
+- Includes count statistics and verification of successful updates
+
+**Data impact:**
+- Updates `metadata.actorName` field in activity feed entries
+- Non-destructive: Only updates entries with DIDs in actorName
+- Fixes historical data to match Phase 4's runtime resolution behavior
+
+**Testing:**
+- ✅ Migration compiles successfully
+- ✅ Bug fix: Corrected `deletedAt` column reference (activityFeed table doesn't have soft delete)
+- ✅ Migration ran successfully across all tenant schemas
+- ✅ Verification query confirmed no DIDs remaining in actorName
+
+**Bug fix during implementation:**
+- Initial version incorrectly referenced `af."deletedAt"`
+- ActivityFeed entity doesn't have soft delete support (no deletedAt column)
+- Fixed to only check `u."deletedAt"` on users table
+- This allows all activity feed entries while filtering out deleted users
+
+**Learnings:**
+1. **Use require() for migrations** - TypeORM migrations need runtime imports
+2. **Follow existing patterns** - Simple schema handling like other migrations
+3. **Graceful degradation** - Individual failures don't block migration
+4. **Two-part migration needed** - Users table first, then activity feed metadata
+5. **Schema awareness critical** - Must verify column existence before referencing in queries
+6. **Soft delete varies by entity** - Not all entities have deletedAt (check entity definition first)
+
+### Phase 6: Frontend Display Composable ✅ COMPLETE
+**Date:** 2025-11-05
+**Branch:** `feat/fix-bluesky-did-display`
+
+**What was implemented:**
+- Created `useDisplayName` composable for consistent display name resolution
+- Updated TypeScript types to include optional `displayName` field
+- Updated all activity feed components to use the composable
+- Backwards compatible with legacy `metadata.actorName` field
+
+**Files created:**
+- `openmeet-platform/src/composables/useDisplayName.ts` - New composable
+
+**Files modified:**
+- `openmeet-platform/src/types/activity-feed.ts` - Added displayName field to interface
+- `openmeet-platform/src/components/activity-feed/SitewideFeedComponent.vue` - Uses composable
+- `openmeet-platform/src/components/event/EventActivityFeedComponent.vue` - Uses composable
+- `openmeet-platform/src/components/group/GroupActivityFeedComponent.vue` - Uses composable
+
+**Composable API:**
+```typescript
+const { getDisplayName } = useDisplayName()
+const displayName = getDisplayName(activity)
+```
+
+**Priority order:**
+1. `activity.displayName` (backend-resolved, always fresh)
+2. `activity.metadata.actorName` (legacy fallback)
+3. `"Someone"` (graceful degradation)
+
+**Benefits:**
+- Consistent display name resolution across all activity feeds
+- Automatic fallback to legacy field for backwards compatibility
+- Graceful degradation if no name is available
+- Helper function to detect DID format (for debugging)
+
+**Testing:**
+- ✅ Composable compiles successfully
+- ✅ All three activity feed components updated
+- ✅ TypeScript types include displayName with documentation
+- ⏳ Manual testing required after backend deployment
+
+### Phase 7: Production Bug Fixes ✅ COMPLETE
+**Date:** 2025-11-05
+**Branch:** `feat/fix-bluesky-did-display`
+
+**Status:** All fixes deployed and verified
+
+**Bug Fix 1: Profile Lookups Not Loading Full Relations**
+
+**Problem:**
+- Shadow user profiles looked up by DID or handle showed 0 events/groups despite having data in database
+- Example: hamburgerz.bsky.social profile showed 0 events but database had 206 events
+
+**Root Cause:**
+- `findByIdentifier()` method called `findBySocialIdAndProvider()` which only loaded `relations: ['role', 'role.permissions']`
+- Did not load events, groups, and other profile data
+- Only slug lookups (via `showProfile()`) loaded full relations
+
+**Fix:**
+- Modified `findByIdentifier()` to call `showProfile(user.slug)` after finding user by DID/handle
+- Ensures all relations are loaded consistently regardless of lookup method
+
+**Files modified:**
+- `src/user/user.service.ts` - Updated findByIdentifier() method (lines ~285-320)
+
+**Impact:**
+- Shadow user profiles now correctly display all public, published events when looked up by any identifier type
+- User confirmed: "I see events now on the profile page. looking good."
+
+**Bug Fix 2: Frontend 404 on DID URLs**
+
+**Problem:**
+- Visiting URLs like `/members/did:plc:vsnj4aaxyatiht4spdht2q2t` returned 404 not found error
+- Vue Router couldn't match route pattern due to colons in DIDs
+
+**Root Cause:**
+- Route pattern `:slug` doesn't match identifiers containing colons
+- Vue Router treats colons as special characters for parameter boundaries
+
+**Fix:**
+- Changed route pattern from `:slug` to `:slug([^/]+)`
+- Regex `[^/]+` matches one or more non-slash characters, allowing colons
+
+**Files modified:**
+- `openmeet-platform/src/router/routes.ts` - Line 61
+
+**Impact:**
+- DIDs with colons now work in URLs
+- Profile lookups by DID, handle, or slug all function correctly
+
+**Bug Fix 3: Authentication Errors for Shadow Users**
+
+**Problem:**
+- Logs showed repeated "Authentication Required" errors when loading shadow user profiles
+- Error: `Failed to fetch public ATProtocol profile - Authentication Required`
+
+**Root Cause:**
+- `showProfile()` method called `blueskyIdentityService.resolveProfile()` for ALL Bluesky users
+- This API call requires authentication to the user's PDS
+- Shadow accounts don't have authentication credentials
+- Unnecessary since shadow users already have resolved handles in `firstName` field
+
+**Fix:**
+- Added condition `!user.isShadowAccount` to skip profile resolution for shadow accounts
+- Shadow users already have handles in `firstName` from Phase 1 implementation
+
+**Files modified:**
+- `src/user/user.service.ts` - showProfile() method (line 241)
+
+**Code change:**
+```typescript
+// Before:
+if (user?.preferences?.bluesky?.did) {
+  const profile = await this.blueskyIdentityService.resolveProfile(...)
+}
+
+// After:
+if (user?.preferences?.bluesky?.did && !user.isShadowAccount) {
+  const profile = await this.blueskyIdentityService.resolveProfile(...)
+}
+```
+
+**Impact:**
+- Eliminated authentication errors in logs
+- Improved performance by skipping unnecessary API calls
+- Shadow user profiles load faster
+
+**Bug Fix 4: Unit Test Updates**
+
+**Problem:**
+- All 16 unit tests in `user.service.find-by-identifier.spec.ts` failed after Bug Fix 1
+- Tests expected old behavior where `showProfile()` was not called
+
+**Root Cause:**
+- Tests used `resolveProfile` mock but new code uses `resolveHandleToDid`
+- Tests expected `showProfile()` NOT to be called, but new behavior calls it for full profile loading
+
+**Fix:**
+- Updated all 16 tests to expect new behavior
+- Changed mocks from `resolveProfile` to `resolveHandleToDid`
+- Added expectations for `showProfile()` to be called with user slug
+- All tests now verify that full profiles are loaded
+
+**Files modified:**
+- `src/user/user.service.find-by-identifier.spec.ts` - All test cases updated
+
+**Impact:**
+- ✅ All 16 tests passing
+- Test coverage verified for new profile loading behavior
+
+**Testing:**
+- ✅ Verified hamburgerz.bsky.social profile shows 206 events
+- ✅ Verified DID URLs work in frontend
+- ✅ Verified no authentication errors in logs
+- ✅ Verified all unit tests passing
+- ✅ Verified draft events are correctly hidden (expected behavior)
+
+**Learnings:**
+1. **Relation loading is critical** - Different code paths must load same relations for consistency
+2. **Vue Router regex patterns** - Special characters in route params need regex patterns
+3. **Shadow user optimization** - Skip unnecessary API calls for accounts that already have data
+4. **Test maintenance** - Behavior changes require test updates to maintain coverage
+5. **Database verification** - Always verify data exists before debugging display issues
 
 ## System Requirements
 
@@ -1574,8 +1812,8 @@ async function backfillShadowUserHandles() {
 
 ---
 
-**Document Status:** In Progress (Phases 1-3 Complete)
-**Last Updated:** 2025-11-04
+**Document Status:** Complete (All 7 Phases)
+**Last Updated:** 2025-11-05
 **Author:** AI Assistant + Tom Scanlan
 **Reviewers:** Pending
 
@@ -1583,9 +1821,10 @@ async function backfillShadowUserHandles() {
 - ✅ Phase 1: Shadow Account Handle Resolution (commit: ba472cf)
 - ✅ Phase 2: ATProto Handle Cache Service (commit: e88b4da)
 - ✅ Phase 3: Multi-Identifier Profile Lookup (commit: 540b781)
-- ⏳ Phase 4: Activity Feed Handle Resolution
-- ⏳ Phase 5: Data Migration
-- ⏳ Phase 6: Frontend Display Composable
+- ✅ Phase 4: Activity Feed Handle Resolution (commit: d1eec96)
+- ✅ Phase 5: Data Migration (migrations: 1762347421000, 1762347422000)
+- ✅ Phase 6: Frontend Display Composable (2025-11-05)
+- ✅ Phase 7: Production Bug Fixes (2025-11-05)
 
 **Key Decisions:**
 - ✅ Backend resolves handles (not frontend)

@@ -14,12 +14,16 @@ describe('AtprotoHandleCacheService - Behavior', () => {
     const cacheStore = new Map<string, string>();
 
     elastiCache = {
-      get: jest.fn(async (key: string) => cacheStore.get(key) || null),
-      set: jest.fn(async (key: string, value: string) => {
+      get: jest.fn((key: string) =>
+        Promise.resolve(cacheStore.get(key) || null),
+      ),
+      set: jest.fn((key: string, value: string) => {
         cacheStore.set(key, value);
+        return Promise.resolve();
       }),
-      del: jest.fn(async (key: string) => {
+      del: jest.fn((key: string) => {
         cacheStore.delete(key);
+        return Promise.resolve();
       }),
     } as unknown as jest.Mocked<ElastiCacheService>;
 
@@ -38,10 +42,22 @@ describe('AtprotoHandleCacheService - Behavior', () => {
         AtprotoHandleCacheService,
         { provide: ElastiCacheService, useValue: elastiCache },
         { provide: BlueskyIdentityService, useValue: blueskyIdentity },
-        { provide: 'PROM_METRIC_ATPROTO_HANDLE_CACHE_HITS_TOTAL', useValue: mockCounter },
-        { provide: 'PROM_METRIC_ATPROTO_HANDLE_CACHE_MISSES_TOTAL', useValue: mockCounter },
-        { provide: 'PROM_METRIC_ATPROTO_HANDLE_RESOLUTION_ERRORS_TOTAL', useValue: mockCounter },
-        { provide: 'PROM_METRIC_ATPROTO_HANDLE_RESOLUTION_DURATION_SECONDS', useValue: mockHistogram },
+        {
+          provide: 'PROM_METRIC_ATPROTO_HANDLE_CACHE_HITS_TOTAL',
+          useValue: mockCounter,
+        },
+        {
+          provide: 'PROM_METRIC_ATPROTO_HANDLE_CACHE_MISSES_TOTAL',
+          useValue: mockCounter,
+        },
+        {
+          provide: 'PROM_METRIC_ATPROTO_HANDLE_RESOLUTION_ERRORS_TOTAL',
+          useValue: mockCounter,
+        },
+        {
+          provide: 'PROM_METRIC_ATPROTO_HANDLE_RESOLUTION_DURATION_SECONDS',
+          useValue: mockHistogram,
+        },
       ],
     }).compile();
 
@@ -52,7 +68,9 @@ describe('AtprotoHandleCacheService - Behavior', () => {
     it('should resolve DID to handle via ATProto on first call', async () => {
       // Arrange
       const did = 'did:plc:abc123';
-      blueskyIdentity.extractHandleFromDid.mockResolvedValue('alice.bsky.social');
+      blueskyIdentity.extractHandleFromDid.mockResolvedValue(
+        'alice.bsky.social',
+      );
 
       // Act
       const result = await service.resolveHandle(did);
@@ -65,7 +83,9 @@ describe('AtprotoHandleCacheService - Behavior', () => {
     it('should return cached handle on second call without calling ATProto', async () => {
       // Arrange
       const did = 'did:plc:abc123';
-      blueskyIdentity.extractHandleFromDid.mockResolvedValue('alice.bsky.social');
+      blueskyIdentity.extractHandleFromDid.mockResolvedValue(
+        'alice.bsky.social',
+      );
 
       // Act - First call
       await service.resolveHandle(did);
@@ -103,7 +123,9 @@ describe('AtprotoHandleCacheService - Behavior', () => {
     it('should return DID as fallback when ATProto resolution fails', async () => {
       // Arrange
       const did = 'did:plc:abc123';
-      blueskyIdentity.extractHandleFromDid.mockRejectedValue(new Error('Network error'));
+      blueskyIdentity.extractHandleFromDid.mockRejectedValue(
+        new Error('Network error'),
+      );
 
       // Act
       const result = await service.resolveHandle(did);
@@ -195,7 +217,7 @@ describe('AtprotoHandleCacheService - Behavior', () => {
       // Act - Batch including cached alice and new bob
       const results = await service.resolveHandles([
         'did:plc:alice123', // cached
-        'did:plc:bob456',   // new
+        'did:plc:bob456', // new
       ]);
 
       // Assert - alice uses cache, only bob calls ATProto

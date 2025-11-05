@@ -236,8 +236,9 @@ export class UserService {
     const publicEvents = await eventsQuery.getMany();
     user['events'] = publicEvents;
 
-    // Resolve and update Bluesky handle from DID (for any Bluesky user)
-    if (user?.preferences?.bluesky?.did) {
+    // Resolve and update Bluesky handle from DID (only for authenticated Bluesky users, not shadow accounts)
+    // Shadow accounts already have their handle in firstName field
+    if (user?.preferences?.bluesky?.did && !user.isShadowAccount) {
       try {
         const profile = await this.blueskyIdentityService.resolveProfile(
           user.preferences.bluesky.did,
@@ -1152,13 +1153,20 @@ export class UserService {
     // 1. DID detection (highest priority)
     if (trimmedIdentifier.startsWith('did:')) {
       this.logger.debug(`Identifier is DID: ${trimmedIdentifier}`);
-      return this.findBySocialIdAndProvider(
+      const user = await this.findBySocialIdAndProvider(
         {
           socialId: trimmedIdentifier,
           provider: AuthProvidersEnum.bluesky,
         },
         tenantId,
       );
+
+      // If user found, load full profile with all relations
+      if (user?.slug) {
+        return this.showProfile(user.slug);
+      }
+
+      return user;
     }
 
     // 2. Handle detection (contains domain pattern or starts with @)
@@ -1171,26 +1179,30 @@ export class UserService {
     if (handle.includes('.')) {
       this.logger.debug(`Identifier appears to be ATProto handle: ${handle}`);
       try {
-        // Resolve handle to DID via ATProto
-        const profile = await this.blueskyIdentityService.resolveProfile(
-          handle,
-        );
+        // Resolve handle to DID via ATProto (lightweight, no profile fetch)
+        const did =
+          await this.blueskyIdentityService.resolveHandleToDid(handle);
 
-        if (!profile?.did) {
-          this.logger.warn(
-            `Handle ${handle} resolved but no DID returned`,
-          );
+        if (!did) {
+          this.logger.warn(`Handle ${handle} could not be resolved to a DID`);
           return null;
         }
 
-        // Look up user by DID
-        return this.findBySocialIdAndProvider(
+        // Look up user in our database by DID
+        const user = await this.findBySocialIdAndProvider(
           {
-            socialId: profile.did,
+            socialId: did,
             provider: AuthProvidersEnum.bluesky,
           },
           tenantId,
         );
+
+        // If user found, load full profile with all relations
+        if (user?.slug) {
+          return this.showProfile(user.slug);
+        }
+
+        return user;
       } catch (error) {
         this.logger.warn(
           `Failed to resolve handle ${handle}: ${error.message}`,
