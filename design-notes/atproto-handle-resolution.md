@@ -1011,16 +1011,33 @@ export class AddCompositeIndexSocialIdProvider1234567890 implements MigrationInt
 }
 ```
 
-**Performance Impact:**
-```
-Before index:
-  DID lookup: ~5-10ms (full table scan on socialId, filter by provider)
+**Performance Testing Results (Nov 2025):**
 
-After index:
-  DID lookup: ~1-2ms (B-tree index lookup, same as slug)
+Testing with k6 load testing infrastructure (see `k6-tests/` directory):
 
-Index size: ~50KB per 10,000 users (negligible)
 ```
+Baseline (without composite index):
+  p95: 370ms
+  Average: 116ms
+  Iterations: 2,401
+
+With composite index:
+  p95: 354ms (4.3% improvement)
+  Average: 114ms (1.8% improvement)
+```
+
+**Decision: DO NOT ADD COMPOSITE INDEX**
+
+Reasoning:
+- Only 4.3% improvement (16ms at p95) - not significant
+- Existing single-column index on `socialId` already provides good performance
+- Query `WHERE socialId = ? AND provider = ?` can use the `socialId` index effectively
+- Composite index would add unnecessary overhead:
+  - Extra storage space
+  - Slower INSERT/UPDATE operations
+  - Additional index maintenance cost
+
+The minimal improvement does not justify the overhead. The existing `socialId` index is sufficient for production use.
 
 ### ElastiCache Configuration
 
