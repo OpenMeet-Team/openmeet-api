@@ -123,6 +123,29 @@ const blueskyRsvpMetrics = [
   }),
 ];
 
+// Define ATProto handle resolution metrics (tenant-agnostic)
+const atprotoHandleMetrics = [
+  makeCounterProvider({
+    name: 'atproto_handle_cache_hits_total',
+    help: 'Total number of ATProto handle cache hits',
+  }),
+  makeCounterProvider({
+    name: 'atproto_handle_cache_misses_total',
+    help: 'Total number of ATProto handle cache misses',
+  }),
+  makeCounterProvider({
+    name: 'atproto_handle_resolution_errors_total',
+    help: 'Total number of ATProto handle resolution errors',
+    labelNames: ['error_type'],
+  }),
+  makeHistogramProvider({
+    name: 'atproto_handle_resolution_duration_seconds',
+    help: 'Duration of ATProto handle resolution in seconds',
+    labelNames: ['cache_status'], // cache_status: hit, miss, error
+    buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5], // Cached should be <50ms, uncached <500ms
+  }),
+];
+
 @Module({
   imports: [
     ScheduleModule.forRoot(),
@@ -140,6 +163,7 @@ const blueskyRsvpMetrics = [
     ...eventIntegrationMetrics,
     ...rsvpIntegrationMetrics,
     ...blueskyRsvpMetrics,
+    ...atprotoHandleMetrics,
   ],
   exports: [
     MetricsService,
@@ -151,6 +175,8 @@ const blueskyRsvpMetrics = [
     ...rsvpIntegrationMetrics,
     // Export Bluesky RSVP metrics for use in BlueskyRsvpService
     ...blueskyRsvpMetrics,
+    // Export ATProto handle metrics for use in AtprotoHandleCacheService
+    ...atprotoHandleMetrics,
   ],
 })
 export class MetricsModule implements OnModuleInit {

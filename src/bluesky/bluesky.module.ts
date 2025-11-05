@@ -4,6 +4,7 @@ import { BlueskyService } from './bluesky.service';
 import { BlueskyIdService } from './bluesky-id.service';
 import { BlueskyIdentityService } from './bluesky-identity.service';
 import { BlueskyRsvpService } from './bluesky-rsvp.service';
+import { AtprotoHandleCacheService } from './atproto-handle-cache.service';
 import { UserModule } from '../user/user.module';
 import { ElastiCacheModule } from '../elasticache/elasticache.module';
 import { EventModule } from '../event/event.module';
@@ -28,12 +29,14 @@ import { MetricsModule } from '../metrics/metrics.module';
     BlueskyIdService,
     BlueskyIdentityService,
     BlueskyRsvpService,
+    AtprotoHandleCacheService,
   ],
   exports: [
     BlueskyService,
     BlueskyIdService,
     BlueskyIdentityService,
     BlueskyRsvpService,
+    AtprotoHandleCacheService,
   ],
 })
 export class BlueskyModule {}
