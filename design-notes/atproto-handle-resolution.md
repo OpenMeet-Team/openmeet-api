@@ -163,7 +163,7 @@ ATProto (AT Protocol) users are identified by DIDs (Decentralized Identifiers) b
 5. **Manual testing essential** - E2E tests would require complex Bluesky test data setup
 
 ### Phase 4: Activity Feed Handle Resolution ✅ COMPLETE
-**Commit:** `<pending>` - feat(activity-feed): resolve ATProto DIDs to handles in feed display
+**Commit:** `d1eec96` - feat(activity-feed): resolve ATProto DIDs to handles in feed display
 **Date:** 2025-11-04
 **Branch:** `feat/fix-bluesky-did-display`
 
