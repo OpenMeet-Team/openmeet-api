@@ -1126,4 +1126,81 @@ export class UserService {
       relations: ['role', 'role.permissions'],
     });
   }
+
+  /**
+   * Find user by multiple identifier types: slug, DID, or ATProto handle
+   * Implements Phase 3 of ATProto handle resolution
+   *
+   * @param identifier Can be:
+   *   - Slug: "alice-abc123" (most common)
+   *   - DID: "did:plc:abc123" or "did:web:example.com"
+   *   - ATProto handle: "alice.bsky.social" or "@alice.bsky.social"
+   * @param tenantId Optional tenant ID
+   * @returns User with full profile data or null if not found
+   */
+  async findByIdentifier(
+    identifier: string,
+    tenantId?: string,
+  ): Promise<NullableType<User>> {
+    // Handle edge cases
+    if (!identifier || identifier.trim() === '') {
+      return null;
+    }
+
+    const trimmedIdentifier = identifier.trim();
+
+    // 1. DID detection (highest priority)
+    if (trimmedIdentifier.startsWith('did:')) {
+      this.logger.debug(`Identifier is DID: ${trimmedIdentifier}`);
+      return this.findBySocialIdAndProvider(
+        {
+          socialId: trimmedIdentifier,
+          provider: AuthProvidersEnum.bluesky,
+        },
+        tenantId,
+      );
+    }
+
+    // 2. Handle detection (contains domain pattern or starts with @)
+    let handle = trimmedIdentifier;
+    if (handle.startsWith('@')) {
+      handle = handle.substring(1);
+    }
+
+    // Check if it looks like a handle (contains a dot for domain)
+    if (handle.includes('.')) {
+      this.logger.debug(`Identifier appears to be ATProto handle: ${handle}`);
+      try {
+        // Resolve handle to DID via ATProto
+        const profile = await this.blueskyIdentityService.resolveProfile(
+          handle,
+        );
+
+        if (!profile?.did) {
+          this.logger.warn(
+            `Handle ${handle} resolved but no DID returned`,
+          );
+          return null;
+        }
+
+        // Look up user by DID
+        return this.findBySocialIdAndProvider(
+          {
+            socialId: profile.did,
+            provider: AuthProvidersEnum.bluesky,
+          },
+          tenantId,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Failed to resolve handle ${handle}: ${error.message}`,
+        );
+        return null;
+      }
+    }
+
+    // 3. Default: treat as slug
+    this.logger.debug(`Identifier treated as slug: ${trimmedIdentifier}`);
+    return this.showProfile(trimmedIdentifier);
+  }
 }

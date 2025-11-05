@@ -129,13 +129,33 @@ export class UserController {
   }
 
   @Public()
-  @Get(':slug/profile')
-  @ApiOperation({ summary: 'Get user profile' })
+  @Get(':identifier/profile')
+  @ApiOperation({
+    summary: 'Get user profile by identifier',
+    description:
+      'Retrieve user profile using multiple identifier types: slug (alice-abc123), ATProto DID (did:plc:abc123), or ATProto handle (alice.bsky.social or @alice.bsky.social)',
+  })
+  @ApiParam({
+    name: 'identifier',
+    description:
+      'User identifier - can be slug, ATProto DID, or ATProto handle',
+    examples: {
+      slug: { value: 'alice-abc123', summary: 'User slug (most common)' },
+      did: { value: 'did:plc:abc123', summary: 'ATProto DID' },
+      handle: { value: 'alice.bsky.social', summary: 'ATProto handle' },
+      handleWithAt: {
+        value: '@alice.bsky.social',
+        summary: 'ATProto handle with @ prefix',
+      },
+    },
+  })
   @SerializeOptions({
     groups: ['me', 'admin', 'user', '*'],
   })
-  showProfile(@Param('slug') slug: User['slug']): Promise<NullableType<User>> {
-    return this.userService.showProfile(slug);
+  showProfile(
+    @Param('identifier') identifier: string,
+  ): Promise<NullableType<User>> {
+    return this.userService.findByIdentifier(identifier);
   }
 
   @Delete(':id')
