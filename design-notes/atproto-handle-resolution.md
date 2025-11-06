@@ -186,6 +186,23 @@ Shadow users from ATProto platforms (Bluesky) now display with human-readable ha
 - Added rate limiting and API timeouts
 - Documented migration transaction strategies
 
+### Phase 8: Stable URL Identifiers (PR #360, PR #267)
+- **Problem:** Activity feeds used display names (handles) in URLs, which could break if handles changed
+- **Solution:** All user profile links now use stable identifiers (DIDs for Bluesky, slugs for others)
+- **Architecture:**
+  - URLs: Use stable identifiers (never change)
+  - Display: Show friendly names (handles/names)
+  - Separation of concerns: identity vs. presentation
+- **Changes:**
+  - API exposes `provider`, `socialId`, `isShadowAccount` fields publicly
+  - Frontend `useUserIdentifier` composable determines URL strategy
+  - All activity feed components updated for consistency
+  - Event "Hosted by" and attendee links use stable identifiers
+- **Display Name Strategy:**
+  - Shadow accounts: Show handle (e.g., "smokesignal.events")
+  - Connected Bluesky users: Show custom name (e.g., "Tom Scanlan") - respects user choice
+  - Regular users: Show firstName + lastName
+
 ## Configuration
 
 ### Environment Variables
@@ -251,12 +268,36 @@ Examples:
 - /api/v1/users/@alice.bsky.social/profile (handle with @)
 ```
 
+### User Entity Fields (Phase 8)
+
+**Before:** provider/socialId/isShadowAccount restricted to 'me'/'admin' serialization groups
+```json
+{
+  "slug": "alice-abc123",
+  "name": "Alice Smith"
+}
+```
+
+**After:** Fields exposed publicly for stable URL generation
+```json
+{
+  "slug": "alice-abc123",
+  "name": "Alice Smith",
+  "provider": "bluesky",
+  "socialId": "did:plc:abc123",
+  "isShadowAccount": true
+}
+```
+
+**Rationale:** These fields are not sensitive (just auth method + public DID) and needed by frontend to determine URL strategy.
+
 ### Activity Feed Response
 
 **Added optional field:**
 ```typescript
 {
   displayName?: string  // Resolved handle (e.g., "alice.bsky.social")
+  actor?: UserEntity    // Full user object with provider/socialId fields
 }
 ```
 
@@ -332,8 +373,14 @@ See `design-notes/atproto-handle-resolution-manual-tests.md` for manual test sce
 
 ### Frontend (openmeet-platform)
 - `src/composables/useDisplayName.ts` - Display name resolution composable
+- `src/composables/useUserIdentifier.ts` - Stable URL identifier resolution (Phase 8)
 - `src/types/activity-feed.ts` - Activity feed type definitions
 - `src/router/routes.ts` - DID-compatible route patterns
+- `src/components/activity-feed/SitewideFeedComponent.vue` - Updated for stable URLs
+- `src/components/group/GroupActivityFeedComponent.vue` - Updated for stable URLs
+- `src/components/event/EventActivityFeedComponent.vue` - Updated for stable URLs
+- `src/components/event/EventLeadComponent.vue` - Uses stable identifiers
+- `src/components/event/EventAttendeesComponent.vue` - Uses stable identifiers
 
 ## Lessons Learned
 
@@ -368,10 +415,10 @@ See `design-notes/atproto-handle-resolution-manual-tests.md` for manual test sce
 - **2025-11-04:** Initial implementation (Phases 1-4)
 - **2025-11-05:** Data migrations and bug fixes (Phases 5-7)
 - **2025-11-05:** Security hardening and production readiness
-- **2025-11-05:** Final documentation update (this version)
+- **2025-11-06:** Phase 8 - Stable URL identifiers implementation (PR #360, #267)
 
 ---
 
-**Document Status:** ✅ COMPLETE
+**Document Status:** ✅ COMPLETE (Phase 8 deployed)
 **Next Review:** After 30 days in production
 **Owner:** Engineering Team
