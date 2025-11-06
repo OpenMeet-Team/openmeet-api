@@ -10,12 +10,19 @@ The `openmeet-metrics-dashboard.json` file contains a dashboard configuration fo
 
 OpenMeet API exposes the following metrics on the `/metrics` endpoint:
 
+### Application Metrics
 - `users_total` - Total number of registered users per tenant
 - `active_users_30d` - Number of active users in the last 30 days per tenant
 - `events_total` - Total number of events per tenant
 - `event_attendees_total` - Total number of event attendees per tenant
 - `groups_total` - Total number of groups per tenant
 - `group_members_total` - Total number of group members per tenant
+
+### ATProto Handle Resolution Metrics
+- `atproto_handle_cache_hits_total` - Number of cache hits for handle resolution
+- `atproto_handle_cache_misses_total` - Number of cache misses for handle resolution
+- `atproto_handle_resolution_errors_total` - Number of handle resolution errors (by error_type)
+- `atproto_handle_resolution_duration_seconds` - Handle resolution duration histogram (by cache_status: hit/miss/error)
 
 ## Setting Up Amazon Managed Prometheus (AMP)
 
