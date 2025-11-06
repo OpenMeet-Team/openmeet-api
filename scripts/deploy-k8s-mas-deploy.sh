@@ -143,7 +143,14 @@ fi
 cd ../openmeet-api
 
 echo
-echo "2. Scaling down API, Matrix and MAS services in $ENVIRONMENT namespace..."
+echo "2. Pausing ArgoCD auto-sync for maintenance..."
+kubectl patch application openmeet-$ENVIRONMENT -n argocd --type merge -p '{"spec":{"syncPolicy":null}}' || {
+    echo "⚠️  Warning: Failed to pause ArgoCD auto-sync. Continuing anyway..."
+}
+echo "  ✅ ArgoCD auto-sync paused"
+
+echo
+echo "3. Scaling down API, Matrix and MAS services in $ENVIRONMENT namespace..."
 kubectl scale deployment api --replicas=0 -n "$ENVIRONMENT" || echo "⚠️  API deployment not found or already scaled"
 kubectl scale deployment matrix-synapse --replicas=0 -n "$ENVIRONMENT" || echo "⚠️  Matrix deployment not found or already scaled"
 kubectl scale deployment mas --replicas=0 -n "$ENVIRONMENT" || echo "⚠️  MAS deployment not found or already scaled"
@@ -156,23 +163,23 @@ kubectl wait --for=delete pod -l app=mas -n "$ENVIRONMENT" --timeout=60s || true
 
 if [[ "$ENVIRONMENT" == "dev" ]]; then
     echo
-    echo "3. Restoring main API database (dev only)..."
+    echo "4. Restoring main API database (dev only)..."
     ./scripts/restore-db.sh "$API_TIMESTAMP"
 else
     echo
-    echo "3. Skipping database restore (prod environment - preserving existing data)..."
+    echo "4. Skipping database restore (prod environment - preserving existing data)..."
 fi
 
 echo
-echo "4. Restoring Matrix/MAS databases..."
+echo "5. Restoring Matrix/MAS databases..."
 ./scripts/restore-matrix-mas-dbs.sh "$MATRIX_TIMESTAMP"
 
 echo
-echo "5. Running tenant migrations..."
+echo "6. Running tenant migrations..."
 npm run migration:run:tenants
 
 echo
-echo "6. Scaling up API, Matrix and MAS services in $ENVIRONMENT namespace..."
+echo "7. Scaling up API, Matrix and MAS services in $ENVIRONMENT namespace..."
 kubectl scale deployment api --replicas=1 -n "$ENVIRONMENT"
 kubectl scale deployment matrix-synapse --replicas=1 -n "$ENVIRONMENT"
 kubectl scale deployment mas --replicas=1 -n "$ENVIRONMENT"
@@ -182,6 +189,13 @@ echo "Waiting for services to be ready..."
 kubectl wait --for=condition=available deployment/api -n "$ENVIRONMENT" --timeout=300s
 kubectl wait --for=condition=available deployment/matrix-synapse -n "$ENVIRONMENT" --timeout=300s
 kubectl wait --for=condition=available deployment/mas -n "$ENVIRONMENT" --timeout=300s
+
+echo
+echo "8. Resuming ArgoCD auto-sync..."
+kubectl patch application openmeet-$ENVIRONMENT -n argocd --type merge -p '{"spec":{"syncPolicy":{"automated":{},"syncOptions":["CreateNamespace=true"]}}}' || {
+    echo "⚠️  Warning: Failed to resume ArgoCD auto-sync. You may need to manually re-enable it."
+}
+echo "  ✅ ArgoCD auto-sync resumed"
 
 ln -sf .env-local .env
 
