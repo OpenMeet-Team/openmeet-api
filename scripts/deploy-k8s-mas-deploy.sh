@@ -27,7 +27,12 @@ else
 fi
 
 # Optional commit hash parameter (defaults to current HEAD)
-DEPLOY_COMMIT="${4:-$(git rev-parse HEAD)}"
+# Always expand to full 40-character commit hash (handles short or full input)
+if [[ -n "$4" ]]; then
+    DEPLOY_COMMIT=$(git rev-parse "$4")
+else
+    DEPLOY_COMMIT=$(git rev-parse HEAD)
+fi
 
 # Validate environment
 if [[ "$ENVIRONMENT" != "dev" && "$ENVIRONMENT" != "prod" ]]; then
