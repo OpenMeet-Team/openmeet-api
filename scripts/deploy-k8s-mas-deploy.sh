@@ -6,10 +6,11 @@ set -e
 
 # Check if environment parameter is provided
 if [ $# -eq 0 ]; then
-    echo "Usage: $0 <environment> [api_timestamp] [matrix_timestamp]"
+    echo "Usage: $0 <environment> [api_timestamp] [matrix_timestamp] [commit_hash]"
     echo "  environment: dev or prod"
     echo "  api_timestamp: optional API backup timestamp"
     echo "  matrix_timestamp: optional Matrix/MAS backup timestamp"
+    echo "  commit_hash: optional commit hash to deploy (defaults to current HEAD)"
     echo "  Dev defaults: API=2025-09-18_10-33-02, Matrix=2025-09-18_10-33-59"
     echo "  Prod defaults: current timestamp (no restore)"
     exit 1
@@ -24,6 +25,9 @@ else
     API_TIMESTAMP="${2:-$(date +%Y-%m-%d_%H-%M-%S)}"
     MATRIX_TIMESTAMP="${3:-$(date +%Y-%m-%d_%H-%M-%S)}"
 fi
+
+# Optional commit hash parameter (defaults to current HEAD)
+DEPLOY_COMMIT="${4:-$(git rev-parse HEAD)}"
 
 # Validate environment
 if [[ "$ENVIRONMENT" != "dev" && "$ENVIRONMENT" != "prod" ]]; then
@@ -52,36 +56,83 @@ echo
 read -p "Continue with full K8s deployment to $ENVIRONMENT? (yes): " -r
 [[ ! $REPLY =~ ^yes$ ]] && exit 0
 
-# Get current git commit hash for image tag
-CURRENT_COMMIT=$(git rev-parse HEAD)
 echo
-echo "Current API commit: $CURRENT_COMMIT"
+echo "Deploy commit: $DEPLOY_COMMIT"
 
 echo
-echo "1. Updating image tags in kustomization.yaml and pushing to Git..."
+echo "1. Validating and updating infrastructure repository..."
+
+# Check if infrastructure repo exists
+if [[ ! -d "../openmeet-infrastructure" ]]; then
+    echo "❌ Error: ../openmeet-infrastructure directory not found"
+    exit 1
+fi
+
 cd ../openmeet-infrastructure
+
+# Check if it's a git repo
+if [[ ! -d ".git" ]]; then
+    echo "❌ Error: ../openmeet-infrastructure is not a git repository"
+    exit 1
+fi
+
+# Check current branch
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [[ "$CURRENT_BRANCH" != "main" ]]; then
+    echo "⚠️  Warning: Infrastructure repo is on branch '$CURRENT_BRANCH', not 'main'"
+    read -p "Continue anyway? (yes): " -r
+    [[ ! $REPLY =~ ^yes$ ]] && exit 0
+fi
+
+# Pull latest changes
+echo "  📥 Pulling latest changes from origin..."
+git pull origin main || {
+    echo "❌ Error: Failed to pull from origin/main"
+    exit 1
+}
+
 KUSTOMIZATION_FILE="k8s/environments/$ENVIRONMENT/kustomization.yaml"
 
+# Check if kustomization file exists
+if [[ ! -f "$KUSTOMIZATION_FILE" ]]; then
+    echo "❌ Error: $KUSTOMIZATION_FILE not found"
+    exit 1
+fi
+
 # Update API image tag
-sed -i "s|openmeet-api:[a-f0-9]\{40\}|openmeet-api:${CURRENT_COMMIT}|g" "$KUSTOMIZATION_FILE"
-echo "  ✅ Updated API image to: ${CURRENT_COMMIT}"
+sed -i "s|openmeet-api:[a-f0-9]\{40\}|openmeet-api:${DEPLOY_COMMIT}|g" "$KUSTOMIZATION_FILE"
+echo "  ✅ Updated API image to: ${DEPLOY_COMMIT}"
 
 # Check if there are changes to commit
 if git diff --quiet "$KUSTOMIZATION_FILE"; then
-    echo "  ℹ️  No image tag changes (already at ${CURRENT_COMMIT})"
+    echo "  ℹ️  No image tag changes (already at ${DEPLOY_COMMIT})"
 else
-    echo "  📝 Committing and pushing image tag update..."
-    git add "$KUSTOMIZATION_FILE"
-    git commit -m "chore(k8s): update API image tag to ${CURRENT_COMMIT} for ${ENVIRONMENT}
+    echo
+    echo "Changes to be committed:"
+    git diff "$KUSTOMIZATION_FILE" | grep "^[-+].*openmeet-api:" || true
+    echo
+    read -p "Push these changes to origin/main? (yes): " -r
+    if [[ $REPLY =~ ^yes$ ]]; then
+        git add "$KUSTOMIZATION_FILE"
+        git commit -m "chore(k8s): update API image tag to ${DEPLOY_COMMIT} for ${ENVIRONMENT}
 
 Automated deployment via deploy-k8s-mas-deploy.sh
 ArgoCD will automatically sync this change."
 
-    git push origin main
-    echo "  ✅ Pushed to origin/main - ArgoCD will sync automatically"
+        git push origin main || {
+            echo "❌ Error: Failed to push to origin/main"
+            exit 1
+        }
+        echo "  ✅ Pushed to origin/main - ArgoCD will sync automatically"
 
-    echo "  ⏳ Waiting 30 seconds for ArgoCD to detect changes..."
-    sleep 30
+        echo "  ⏳ Waiting 45 seconds for ArgoCD to detect and sync changes..."
+        sleep 45
+    else
+        echo "❌ Deployment cancelled - changes not pushed"
+        git restore "$KUSTOMIZATION_FILE"
+        cd ../openmeet-api
+        exit 0
+    fi
 fi
 
 cd ../openmeet-api
@@ -133,7 +184,7 @@ echo
 echo "✅ Complete K8s deployment finished!"
 echo "  • Environment: $ENVIRONMENT"
 echo "  • Namespace: $ENVIRONMENT"
-echo "  • Image tag: ${CURRENT_COMMIT}"
+echo "  • Image tag: ${DEPLOY_COMMIT}"
 echo "  • Deployment method: ArgoCD (Git-driven)"
 echo "  • API, Matrix and MAS services: Scaled down, databases restored, scaled back up"
 if [[ "$ENVIRONMENT" == "dev" ]]; then
