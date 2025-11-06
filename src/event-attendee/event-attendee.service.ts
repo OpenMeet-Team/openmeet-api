@@ -287,7 +287,7 @@ export class EventAttendeeService {
 
       .leftJoin('eventAttendee.user', 'user')
       .leftJoin('user.photo', 'photo')
-      .addSelect(['user.name', 'user.slug', 'photo.path'])
+      .addSelect(['user.name', 'user.slug', 'user.provider', 'user.socialId', 'user.isShadowAccount', 'photo.path'])
 
       .where('eventAttendee.eventId = :eventId', { eventId });
 
@@ -1020,7 +1020,7 @@ export class EventAttendeeService {
 
       .leftJoin('eventAttendee.user', 'user')
       .leftJoin('user.photo', 'photo')
-      .addSelect(['user.name', 'user.slug', 'photo.path'])
+      .addSelect(['user.name', 'user.slug', 'user.provider', 'user.socialId', 'user.isShadowAccount', 'photo.path'])
 
       .where('eventAttendee.id = :attendeeId', { attendeeId })
       .getOne();
