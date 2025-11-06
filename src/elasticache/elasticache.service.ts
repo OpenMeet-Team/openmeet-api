@@ -12,9 +12,10 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ElastiCacheService.name);
   private redis: RedisClientType;
 
-  getRedis(): RedisClientType {
+  getRedis(): RedisClientType | null {
     if (!this.redis?.isOpen) {
-      throw new Error('Redis client is not connected');
+      this.logger.warn('Redis client is not connected');
+      return null; // Return null instead of throwing
     }
     return this.redis;
   }
@@ -117,43 +118,80 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
   }
 
   async set(key: string, value: any, ttl?: number): Promise<void> {
-    if (!this.redis?.isOpen) {
-      throw new Error('Redis client is not connected');
+    try {
+      if (!this.redis?.isOpen) {
+        this.logger.warn('Redis client is not connected, skipping cache set');
+        return; // Gracefully skip caching instead of throwing
+      }
+
+      // Add timeout to prevent hanging when Redis is down/slow
+      const timeout = new Promise<void>((resolve) => {
+        setTimeout(() => {
+          this.logger.warn(`Redis set operation timeout for key: ${key}`);
+          resolve(); // Resolve instead of reject
+        }, 5000);
+      });
+
+      const operation = (async () => {
+        try {
+          if (ttl) {
+            await this.redis.set(key, JSON.stringify(value), { EX: ttl });
+          } else {
+            await this.redis.set(key, JSON.stringify(value));
+          }
+        } catch (err) {
+          this.logger.error(`Redis set error for key ${key}: ${err.message}`);
+        }
+      })();
+
+      await Promise.race([operation, timeout]);
+    } catch (error) {
+      // Swallow all errors to ensure graceful degradation
+      this.logger.error(`Failed to set cache key ${key}: ${error.message}`);
     }
-
-    // Add timeout to prevent hanging when Redis is down/slow
-    const timeout = new Promise<void>((_, reject) => {
-      setTimeout(() => reject(new Error('Redis operation timeout')), 5000);
-    });
-
-    const operation = ttl
-      ? this.redis.set(key, JSON.stringify(value), { EX: ttl })
-      : this.redis.set(key, JSON.stringify(value));
-
-    await Promise.race([operation, timeout]);
   }
 
   async get<T>(key: string): Promise<T | null> {
-    if (!this.redis?.isOpen) {
-      throw new Error('Redis client is not connected');
+    try {
+      if (!this.redis?.isOpen) {
+        this.logger.warn('Redis client is not connected, returning null');
+        return null; // Return null instead of throwing
+      }
+
+      // Add timeout to prevent hanging when Redis is down/slow
+      const timeout = new Promise<null>((resolve) => {
+        setTimeout(() => {
+          this.logger.warn(`Redis get operation timeout for key: ${key}`);
+          resolve(null); // Resolve with null instead of reject
+        }, 5000);
+      });
+
+      const operation = this.redis.get(key).catch((err) => {
+        this.logger.error(`Redis get error for key ${key}: ${err.message}`);
+        return null; // Return null on error
+      });
+
+      const value = await Promise.race([operation, timeout]);
+      return value ? JSON.parse(value as string) : null;
+    } catch (error) {
+      // Swallow all errors and return null for graceful degradation
+      this.logger.error(`Failed to get cache key ${key}: ${error.message}`);
+      return null;
     }
-
-    // Add timeout to prevent hanging when Redis is down/slow
-    const timeout = new Promise<null>((_, reject) => {
-      setTimeout(() => reject(new Error('Redis operation timeout')), 5000);
-    });
-
-    const operation = this.redis.get(key);
-    const value = await Promise.race([operation, timeout]);
-    return value ? JSON.parse(value as string) : null;
   }
 
   async del(key: string): Promise<void> {
-    if (!this.redis?.isOpen) {
-      throw new Error('Redis client is not connected');
-    }
+    try {
+      if (!this.redis?.isOpen) {
+        this.logger.warn('Redis client is not connected, skipping cache delete');
+        return; // Gracefully skip instead of throwing
+      }
 
-    await this.redis.del(key);
+      await this.redis.del(key);
+    } catch (error) {
+      // Swallow all errors to ensure graceful degradation
+      this.logger.error(`Failed to delete cache key ${key}: ${error.message}`);
+    }
   }
 
   // Helper method to check connection status
@@ -181,11 +219,12 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
    * @returns true if lock was acquired, false otherwise
    */
   async acquireLock(lockKey: string, ttl: number = 30000): Promise<boolean> {
-    if (!this.redis?.isOpen) {
-      throw new Error('Redis client is not connected');
-    }
-
     try {
+      if (!this.redis?.isOpen) {
+        this.logger.warn('Redis client is not connected, cannot acquire lock');
+        return false; // Return false instead of throwing
+      }
+
       // Generate a unique value for this lock instance
       const lockValue = `${Date.now()}-${Math.random()}`;
 
@@ -210,11 +249,12 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
    * @param lockKey The key to release
    */
   async releaseLock(lockKey: string): Promise<void> {
-    if (!this.redis?.isOpen) {
-      throw new Error('Redis client is not connected');
-    }
-
     try {
+      if (!this.redis?.isOpen) {
+        this.logger.warn('Redis client is not connected, skipping lock release');
+        return; // Gracefully skip instead of throwing
+      }
+
       await this.redis.del(lockKey);
     } catch (error) {
       this.logger.error(

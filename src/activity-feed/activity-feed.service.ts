@@ -4,6 +4,8 @@ import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../tenant/tenant.service';
 import { ActivityFeedEntity } from './infrastructure/persistence/relational/entities/activity-feed.entity';
 import { GroupVisibility, EventVisibility } from '../core/constants/constant';
+import { AtprotoHandleCacheService } from '../bluesky/atproto-handle-cache.service';
+import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class ActivityFeedService {
@@ -12,6 +14,7 @@ export class ActivityFeedService {
   constructor(
     @Inject(REQUEST) private readonly request: any,
     private readonly tenantConnectionService: TenantConnectionService,
+    private readonly atprotoHandleCache: AtprotoHandleCacheService,
   ) {}
 
   async getTenantRepository() {
@@ -99,7 +102,7 @@ export class ActivityFeedService {
       offset?: number;
       visibility?: string[];
     } = {},
-  ): Promise<ActivityFeedEntity[]> {
+  ): Promise<Array<ActivityFeedEntity & { displayName?: string }>> {
     await this.getTenantRepository();
 
     const queryOptions: any = {
@@ -107,6 +110,7 @@ export class ActivityFeedService {
         feedScope: 'group',
         groupId,
       },
+      relations: ['actor'],
       order: { updatedAt: 'DESC' },
       take: options.limit || 20,
       skip: options.offset || 0,
@@ -116,7 +120,8 @@ export class ActivityFeedService {
       queryOptions.where.visibility = In(options.visibility);
     }
 
-    return await this.activityFeedRepository.find(queryOptions);
+    const activities = await this.activityFeedRepository.find(queryOptions);
+    return await this.resolveDisplayNames(activities);
   }
 
   /**
@@ -131,7 +136,7 @@ export class ActivityFeedService {
       offset?: number;
       visibility?: string[];
     } = {},
-  ): Promise<ActivityFeedEntity[]> {
+  ): Promise<Array<ActivityFeedEntity & { displayName?: string }>> {
     await this.getTenantRepository();
 
     // Build where conditions for both standalone and group events
@@ -148,12 +153,14 @@ export class ActivityFeedService {
 
     const queryOptions: any = {
       where: whereConditions,
+      relations: ['actor'],
       order: { updatedAt: 'DESC' },
       take: options.limit || 20,
       skip: options.offset || 0,
     };
 
-    return await this.activityFeedRepository.find(queryOptions);
+    const activities = await this.activityFeedRepository.find(queryOptions);
+    return await this.resolveDisplayNames(activities);
   }
 
   /**
@@ -166,13 +173,14 @@ export class ActivityFeedService {
       offset?: number;
       visibility?: string[];
     } = {},
-  ): Promise<ActivityFeedEntity[]> {
+  ): Promise<Array<ActivityFeedEntity & { displayName?: string }>> {
     await this.getTenantRepository();
 
     const queryOptions: any = {
       where: {
         feedScope: 'sitewide',
       },
+      relations: ['actor'],
       order: { updatedAt: 'DESC' },
       take: options.limit || 20,
       skip: options.offset || 0,
@@ -184,7 +192,8 @@ export class ActivityFeedService {
       queryOptions.where.visibility = In(options.visibility);
     }
 
-    return await this.activityFeedRepository.find(queryOptions);
+    const activities = await this.activityFeedRepository.find(queryOptions);
+    return await this.resolveDisplayNames(activities);
   }
 
   /**
@@ -329,4 +338,73 @@ export class ActivityFeedService {
    *     .execute();
    * }
    */
+
+  /**
+   * Resolve display names for activity feed actors
+   * - For Bluesky shadow users: Resolve DID → handle using cache
+   * - For regular users: Use firstName
+   * - Batch resolution for performance
+   */
+  async resolveDisplayNames(
+    activities: ActivityFeedEntity[],
+  ): Promise<Array<ActivityFeedEntity & { displayName?: string }>> {
+    if (!activities.length) {
+      return [];
+    }
+
+    // Collect unique DIDs that need resolution
+    const didsToResolve = new Set<string>();
+    const userCache = new Map<number, string>(); // userId -> displayName
+
+    for (const activity of activities) {
+      if (!activity.actor) continue;
+
+      const user = activity.actor;
+
+      // Skip if we've already processed this user
+      if (userCache.has(user.id)) continue;
+
+      // Check if this is a Bluesky user with a DID
+      if (
+        user.provider === AuthProvidersEnum.bluesky &&
+        user.socialId?.startsWith('did:')
+      ) {
+        didsToResolve.add(user.socialId);
+      } else {
+        // For regular users, use firstName
+        userCache.set(user.id, user.firstName || '');
+      }
+    }
+
+    // Batch resolve all DIDs if any
+    if (didsToResolve.size > 0) {
+      const resolvedHandles = await this.atprotoHandleCache.resolveHandles(
+        Array.from(didsToResolve),
+      );
+
+      // Populate cache with resolved handles
+      for (const activity of activities) {
+        if (!activity.actor) continue;
+        const user = activity.actor;
+
+        if (
+          user.provider === AuthProvidersEnum.bluesky &&
+          user.socialId?.startsWith('did:')
+        ) {
+          const handle = resolvedHandles.get(user.socialId);
+          if (handle) {
+            userCache.set(user.id, handle);
+          }
+        }
+      }
+    }
+
+    // Return activities with resolved display names
+    return activities.map((activity) => {
+      const displayName = activity.actor
+        ? userCache.get(activity.actor.id)
+        : undefined;
+      return Object.assign(activity, { displayName });
+    });
+  }
 }

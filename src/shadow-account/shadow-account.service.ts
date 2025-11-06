@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { StatusEntity } from '../status/infrastructure/persistence/relational/entities/status.entity';
 import { TenantConnectionService } from '../tenant/tenant.service';
@@ -8,6 +8,7 @@ import { ulid } from 'ulid';
 import slugify from 'slugify';
 import { generateShortCode } from '../utils/short-code';
 import { trace, SpanStatusCode, SpanKind } from '@opentelemetry/api';
+import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 
 /**
  * Service for managing shadow accounts across different platforms
@@ -19,7 +20,11 @@ export class ShadowAccountService {
   private readonly logger = new Logger(ShadowAccountService.name);
   private readonly tracer = trace.getTracer('shadow-account-service');
 
-  constructor(private readonly tenantService: TenantConnectionService) {}
+  constructor(
+    private readonly tenantService: TenantConnectionService,
+    @Inject(forwardRef(() => BlueskyIdentityService))
+    private readonly blueskyIdentityService: BlueskyIdentityService,
+  ) {}
 
   /**
    * Find or create a shadow account for an external user
@@ -90,7 +95,35 @@ export class ShadowAccountService {
           shadowUser.provider = provider;
           shadowUser.isShadowAccount = true;
           shadowUser.email = null;
-          shadowUser.firstName = displayName;
+
+          // ✅ RESOLVE HANDLE FOR BLUESKY USERS
+          let resolvedHandle = displayName; // Default to displayName
+
+          if (provider === AuthProvidersEnum.bluesky) {
+            try {
+              // If displayName is already a handle (not a DID), use it
+              if (!displayName.startsWith('did:')) {
+                resolvedHandle = displayName;
+                this.logger.log(
+                  `Using provided handle for ${externalId}: ${displayName}`,
+                );
+              } else {
+                // Resolve DID → handle
+                resolvedHandle =
+                  await this.blueskyIdentityService.extractHandleFromDid(
+                    externalId,
+                  );
+                this.logger.log(`Resolved ${externalId} → ${resolvedHandle}`);
+              }
+            } catch (error) {
+              this.logger.warn(
+                `Could not resolve handle for ${externalId}: ${error.message}. Falling back to DID.`,
+              );
+              resolvedHandle = externalId; // Fallback to DID
+            }
+          }
+
+          shadowUser.firstName = resolvedHandle; // ✅ Store handle, not DID
           shadowUser.lastName = null;
           // Use empty string instead of null for password
           shadowUser.password = '';

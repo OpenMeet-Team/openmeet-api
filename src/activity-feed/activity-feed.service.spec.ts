@@ -6,11 +6,15 @@ import { TESTING_TENANT_ID } from '../../test/utils/constants';
 import { Repository } from 'typeorm';
 import { ActivityFeedEntity } from './infrastructure/persistence/relational/entities/activity-feed.entity';
 import { GroupVisibility } from '../core/constants/constant';
+import { AtprotoHandleCacheService } from '../bluesky/atproto-handle-cache.service';
+import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
+import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 
 describe('ActivityFeedService', () => {
   let service: ActivityFeedService;
   let repository: jest.Mocked<Repository<ActivityFeedEntity>>;
   let tenantService: jest.Mocked<TenantConnectionService>;
+  let handleCacheService: jest.Mocked<AtprotoHandleCacheService>;
 
   const mockActivity: Partial<ActivityFeedEntity> = {
     id: 1,
@@ -45,6 +49,11 @@ describe('ActivityFeedService', () => {
       }),
     };
 
+    const mockHandleCacheService = {
+      resolveHandle: jest.fn(),
+      resolveHandles: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ActivityFeedService,
@@ -56,6 +65,10 @@ describe('ActivityFeedService', () => {
           provide: TenantConnectionService,
           useValue: mockTenantService,
         },
+        {
+          provide: AtprotoHandleCacheService,
+          useValue: mockHandleCacheService,
+        },
       ],
     }).compile();
 
@@ -64,6 +77,9 @@ describe('ActivityFeedService', () => {
     tenantService = module.get(
       TenantConnectionService,
     ) as jest.Mocked<TenantConnectionService>;
+    handleCacheService = module.get(
+      AtprotoHandleCacheService,
+    ) as jest.Mocked<AtprotoHandleCacheService>;
 
     // Get the repository after tenant connection is established
     const connection =
@@ -343,6 +359,7 @@ describe('ActivityFeedService', () => {
           feedScope: 'group',
           groupId: 42,
         },
+        relations: ['actor'],
         order: { updatedAt: 'DESC' },
         take: 20,
         skip: 0,
@@ -351,6 +368,8 @@ describe('ActivityFeedService', () => {
     });
 
     it('should filter by visibility for guest users', async () => {
+      repository.find.mockResolvedValue([mockActivity as ActivityFeedEntity]);
+
       await service.getGroupFeed(42, {
         visibility: ['public'],
         limit: 20,
@@ -367,6 +386,8 @@ describe('ActivityFeedService', () => {
     });
 
     it('should include members_only activities for members', async () => {
+      repository.find.mockResolvedValue([mockActivity as ActivityFeedEntity]);
+
       await service.getGroupFeed(42, {
         visibility: ['public', 'members_only'],
       });
@@ -381,6 +402,8 @@ describe('ActivityFeedService', () => {
     });
 
     it('should respect limit parameter', async () => {
+      repository.find.mockResolvedValue([mockActivity as ActivityFeedEntity]);
+
       await service.getGroupFeed(42, { limit: 10 });
 
       expect(repository.find).toHaveBeenCalledWith(
@@ -391,6 +414,8 @@ describe('ActivityFeedService', () => {
     });
 
     it('should respect offset parameter for pagination', async () => {
+      repository.find.mockResolvedValue([mockActivity as ActivityFeedEntity]);
+
       await service.getGroupFeed(42, { limit: 10, offset: 20 });
 
       expect(repository.find).toHaveBeenCalledWith(
@@ -416,6 +441,216 @@ describe('ActivityFeedService', () => {
     it('should map Private to members_only', () => {
       const result = service.mapVisibility(GroupVisibility.Private);
       expect(result).toBe('members_only');
+    });
+  });
+
+  describe('resolveDisplayNames() - Handle Resolution', () => {
+    it('should resolve DID to handle for Bluesky shadow users', async () => {
+      // Arrange
+      const blueskyUser: Partial<UserEntity> = {
+        id: 100,
+        slug: 'alice-abc123',
+        firstName: 'alice.bsky.social',
+        provider: AuthProvidersEnum.bluesky,
+        socialId: 'did:plc:abc123',
+      };
+
+      const activity: Partial<ActivityFeedEntity> = {
+        ...mockActivity,
+        actorId: 100,
+        actor: blueskyUser as UserEntity,
+      };
+
+      handleCacheService.resolveHandles.mockResolvedValue(
+        new Map([['did:plc:abc123', 'alice.bsky.social']]),
+      );
+
+      // Act
+      const result = await service.resolveDisplayNames([
+        activity as ActivityFeedEntity,
+      ]);
+
+      // Assert
+      expect(result[0].displayName).toBe('alice.bsky.social');
+      expect(handleCacheService.resolveHandles).toHaveBeenCalledWith([
+        'did:plc:abc123',
+      ]);
+    });
+
+    it('should use firstName for regular email users', async () => {
+      // Arrange
+      const regularUser: Partial<UserEntity> = {
+        id: 100,
+        slug: 'sarah-chen',
+        firstName: 'Sarah',
+        lastName: 'Chen',
+        provider: AuthProvidersEnum.email,
+        socialId: null,
+      };
+
+      const activity: Partial<ActivityFeedEntity> = {
+        ...mockActivity,
+        actorId: 100,
+        actor: regularUser as UserEntity,
+      };
+
+      // Act
+      const result = await service.resolveDisplayNames([
+        activity as ActivityFeedEntity,
+      ]);
+
+      // Assert
+      expect(result[0].displayName).toBe('Sarah');
+      expect(handleCacheService.resolveHandles).not.toHaveBeenCalled();
+    });
+
+    it('should batch resolve multiple unique Bluesky users', async () => {
+      // Arrange
+      const user1: Partial<UserEntity> = {
+        id: 100,
+        provider: AuthProvidersEnum.bluesky,
+        socialId: 'did:plc:alice123',
+        firstName: 'alice.bsky.social',
+      };
+
+      const user2: Partial<UserEntity> = {
+        id: 101,
+        provider: AuthProvidersEnum.bluesky,
+        socialId: 'did:plc:bob456',
+        firstName: 'bob.bsky.social',
+      };
+
+      const activities = [
+        { ...mockActivity, id: 1, actorId: 100, actor: user1 as UserEntity },
+        { ...mockActivity, id: 2, actorId: 101, actor: user2 as UserEntity },
+        { ...mockActivity, id: 3, actorId: 100, actor: user1 as UserEntity },
+      ];
+
+      handleCacheService.resolveHandles.mockResolvedValue(
+        new Map([
+          ['did:plc:alice123', 'alice.bsky.social'],
+          ['did:plc:bob456', 'bob.bsky.social'],
+        ]),
+      );
+
+      // Act
+      const result = await service.resolveDisplayNames(
+        activities as ActivityFeedEntity[],
+      );
+
+      // Assert - Should batch resolve both DIDs in one call
+      expect(handleCacheService.resolveHandles).toHaveBeenCalledTimes(1);
+      expect(handleCacheService.resolveHandles).toHaveBeenCalledWith([
+        'did:plc:alice123',
+        'did:plc:bob456',
+      ]);
+      expect(result[0].displayName).toBe('alice.bsky.social');
+      expect(result[1].displayName).toBe('bob.bsky.social');
+      expect(result[2].displayName).toBe('alice.bsky.social');
+    });
+
+    it('should handle mix of Bluesky and regular users', async () => {
+      // Arrange
+      const blueskyUser: Partial<UserEntity> = {
+        id: 100,
+        provider: AuthProvidersEnum.bluesky,
+        socialId: 'did:plc:alice123',
+        firstName: 'alice.bsky.social',
+      };
+
+      const regularUser: Partial<UserEntity> = {
+        id: 101,
+        provider: AuthProvidersEnum.email,
+        firstName: 'Bob',
+        socialId: null,
+      };
+
+      const activities = [
+        {
+          ...mockActivity,
+          id: 1,
+          actorId: 100,
+          actor: blueskyUser as UserEntity,
+        },
+        {
+          ...mockActivity,
+          id: 2,
+          actorId: 101,
+          actor: regularUser as UserEntity,
+        },
+      ];
+
+      handleCacheService.resolveHandles.mockResolvedValue(
+        new Map([['did:plc:alice123', 'alice.bsky.social']]),
+      );
+
+      // Act
+      const result = await service.resolveDisplayNames(
+        activities as ActivityFeedEntity[],
+      );
+
+      // Assert
+      expect(handleCacheService.resolveHandles).toHaveBeenCalledWith([
+        'did:plc:alice123',
+      ]);
+      expect(result[0].displayName).toBe('alice.bsky.social');
+      expect(result[1].displayName).toBe('Bob');
+    });
+
+    it('should fallback to DID if handle resolution fails', async () => {
+      // Arrange
+      const blueskyUser: Partial<UserEntity> = {
+        id: 100,
+        provider: AuthProvidersEnum.bluesky,
+        socialId: 'did:plc:abc123',
+        firstName: 'did:plc:abc123',
+      };
+
+      const activity: Partial<ActivityFeedEntity> = {
+        ...mockActivity,
+        actorId: 100,
+        actor: blueskyUser as UserEntity,
+      };
+
+      // Mock returns DID as fallback (when resolution fails)
+      handleCacheService.resolveHandles.mockResolvedValue(
+        new Map([['did:plc:abc123', 'did:plc:abc123']]),
+      );
+
+      // Act
+      const result = await service.resolveDisplayNames([
+        activity as ActivityFeedEntity,
+      ]);
+
+      // Assert - Should use DID as fallback gracefully
+      expect(result[0].displayName).toBe('did:plc:abc123');
+    });
+
+    it('should handle activities without actors', async () => {
+      // Arrange
+      const activity: Partial<ActivityFeedEntity> = {
+        ...mockActivity,
+        actorId: null,
+        actor: undefined,
+      };
+
+      // Act
+      const result = await service.resolveDisplayNames([
+        activity as ActivityFeedEntity,
+      ]);
+
+      // Assert - Should handle missing actor gracefully
+      expect(result[0].displayName).toBeUndefined();
+      expect(handleCacheService.resolveHandles).not.toHaveBeenCalled();
+    });
+
+    it('should handle empty feed array', async () => {
+      // Act
+      const result = await service.resolveDisplayNames([]);
+
+      // Assert
+      expect(result).toEqual([]);
+      expect(handleCacheService.resolveHandles).not.toHaveBeenCalled();
     });
   });
 });

@@ -101,9 +101,11 @@ describe('Auth Module', () => {
         // We need to get the LATEST email (from the failed login), not the original registration email
 
         // Get emails sent after the login attempt
-        const loginAttemptTime = (global as any).loginAttemptTimestamp || Date.now() - 10000;
-        const recentEmails = await mailDevService.getEmailsSince(loginAttemptTime);
-        const userEmails = recentEmails.filter(email =>
+        const loginAttemptTime =
+          (global as any).loginAttemptTimestamp || Date.now() - 10000;
+        const recentEmails =
+          await mailDevService.getEmailsSince(loginAttemptTime);
+        const userEmails = recentEmails.filter((email) =>
           email.to?.some(
             (recipient) =>
               recipient.address.toLowerCase() === newUserEmail.toLowerCase(),
@@ -114,8 +116,10 @@ describe('Auth Module', () => {
 
         // Extract codes from all emails (since timestamps might be identical)
         const codes = userEmails
-          .map(email => EmailVerificationTestHelpers.extractVerificationCode(email))
-          .filter(code => code !== null);
+          .map((email) =>
+            EmailVerificationTestHelpers.extractVerificationCode(email),
+          )
+          .filter((code) => code !== null);
 
         expect(codes.length).toBeGreaterThan(0);
 

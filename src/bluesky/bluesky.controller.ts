@@ -12,6 +12,7 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { BlueskyService } from './bluesky.service';
 import { JWTAuthGuard } from '../auth/auth.guard';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -83,6 +84,7 @@ export class BlueskyController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 20, ttl: 60000 } }) // 20 requests per minute for public ATProto profile lookups
   @Get('profile/:identifier')
   @ApiOperation({ summary: 'Get public ATProtocol profile by DID or handle' })
   async getPublicProfile(@Param('identifier') identifier: string) {

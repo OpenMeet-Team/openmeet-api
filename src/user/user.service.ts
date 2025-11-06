@@ -236,8 +236,9 @@ export class UserService {
     const publicEvents = await eventsQuery.getMany();
     user['events'] = publicEvents;
 
-    // Resolve and update Bluesky handle from DID (for any Bluesky user)
-    if (user?.preferences?.bluesky?.did) {
+    // Resolve and update Bluesky handle from DID (only for authenticated Bluesky users, not shadow accounts)
+    // Shadow accounts already have their handle in firstName field
+    if (user?.preferences?.bluesky?.did && !user.isShadowAccount) {
       try {
         const profile = await this.blueskyIdentityService.resolveProfile(
           user.preferences.bluesky.did,
@@ -1125,5 +1126,93 @@ export class UserService {
       where: { socialId: externalId },
       relations: ['role', 'role.permissions'],
     });
+  }
+
+  /**
+   * Find user by multiple identifier types: slug, DID, or ATProto handle
+   * Implements Phase 3 of ATProto handle resolution
+   *
+   * @param identifier Can be:
+   *   - Slug: "alice-abc123" (most common)
+   *   - DID: "did:plc:abc123" or "did:web:example.com"
+   *   - ATProto handle: "alice.bsky.social" or "@alice.bsky.social"
+   * @param tenantId Optional tenant ID
+   * @returns User with full profile data or null if not found
+   */
+  async findByIdentifier(
+    identifier: string,
+    tenantId?: string,
+  ): Promise<NullableType<User>> {
+    // Handle edge cases
+    if (!identifier || identifier.trim() === '') {
+      return null;
+    }
+
+    const trimmedIdentifier = identifier.trim();
+
+    // 1. DID detection (highest priority)
+    if (trimmedIdentifier.startsWith('did:')) {
+      this.logger.debug(`Identifier is DID: ${trimmedIdentifier}`);
+      const user = await this.findBySocialIdAndProvider(
+        {
+          socialId: trimmedIdentifier,
+          provider: AuthProvidersEnum.bluesky,
+        },
+        tenantId,
+      );
+
+      // If user found, load full profile with all relations
+      if (user?.slug) {
+        return this.showProfile(user.slug);
+      }
+
+      return user;
+    }
+
+    // 2. Handle detection (contains domain pattern or starts with @)
+    let handle = trimmedIdentifier;
+    if (handle.startsWith('@')) {
+      handle = handle.substring(1);
+    }
+
+    // Check if it looks like a handle (contains a dot for domain)
+    if (handle.includes('.')) {
+      this.logger.debug(`Identifier appears to be ATProto handle: ${handle}`);
+      try {
+        // Resolve handle to DID via ATProto (lightweight, no profile fetch)
+        const did =
+          await this.blueskyIdentityService.resolveHandleToDid(handle);
+
+        if (!did) {
+          this.logger.warn(`Handle ${handle} could not be resolved to a DID`);
+          return null;
+        }
+
+        // Look up user in our database by DID
+        const user = await this.findBySocialIdAndProvider(
+          {
+            socialId: did,
+            provider: AuthProvidersEnum.bluesky,
+          },
+          tenantId,
+        );
+
+        // If user found, load full profile with all relations
+        if (user?.slug) {
+          return this.showProfile(user.slug);
+        }
+
+        return user;
+      } catch (error) {
+        this.logger.warn(
+          `Failed to resolve handle ${handle}: ${error.message}`,
+        );
+        return null;
+      }
+    }
+
+    // 3. Default: treat as slug
+    this.logger.debug(`Identifier treated as slug: ${trimmedIdentifier}`);
+    return this.showProfile(trimmedIdentifier);
   }
 }

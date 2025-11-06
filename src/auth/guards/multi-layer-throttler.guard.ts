@@ -212,6 +212,12 @@ export class MultiLayerThrottlerGuard extends ThrottlerGuard {
     try {
       const redis = this.cacheService.getRedis();
 
+      // If Redis is not connected, fail open (allow request) to avoid blocking all traffic
+      if (!redis) {
+        console.warn(`Redis not connected, skipping rate limit check for key ${fullKey}`);
+        return true;
+      }
+
       // Use atomic INCR to increment counter
       const current = await redis.incr(fullKey);
 
