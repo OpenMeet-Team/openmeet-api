@@ -12,6 +12,20 @@ export class BackfillShadowUserHandles1762347421000
       `🔍 Backfilling shadow user handles with DIDs in firstName in ${schema}...`,
     );
 
+    /**
+     * MIGRATION DESIGN: No transaction wrapper (intentional)
+     *
+     * This migration uses a best-effort approach without a transaction:
+     * - ✅ Idempotent: Only updates users with DIDs in firstName
+     * - ✅ Resilient: Continues if individual users fail
+     * - ✅ Safe to re-run: Skips already-migrated users
+     * - ✅ Tracks results: Reports success/error/unchanged counts
+     *
+     * Using a transaction would cause the entire migration to fail if
+     * ANY user's handle resolution fails, which is too strict for a
+     * backfill operation that depends on external API calls.
+     */
+
     // Find all shadow users with DIDs in firstName
     const shadowUsers = await queryRunner.query(`
       SELECT

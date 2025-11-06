@@ -12,8 +12,25 @@ export class BackfillActivityFeedMetadataHandles1762347422000
       `🔍 Backfilling activity feed metadata with resolved handles in ${schema}...`,
     );
 
-    // First, check if we have any activity feed entries with DIDs in actorName
-    const affectedActivities = await queryRunner.query(`
+    /**
+     * MIGRATION DESIGN: Uses transaction for atomic update
+     *
+     * This migration wraps the UPDATE in a transaction because:
+     * - ✅ Single bulk UPDATE operation (not iterative)
+     * - ✅ Copies data from users table (no external APIs)
+     * - ✅ Idempotent: Only updates entries with DIDs in actorName
+     * - ✅ Atomic: All-or-nothing prevents partial updates
+     *
+     * Unlike the user handle migration, this doesn't depend on external
+     * services, so transaction safety is appropriate.
+     */
+
+    // Start transaction for atomic operation
+    await queryRunner.startTransaction();
+
+    try {
+      // First, check if we have any activity feed entries with DIDs in actorName
+      const affectedActivities = await queryRunner.query(`
       SELECT COUNT(*) as count
       FROM "${schema}"."activityFeed" af
       INNER JOIN "${schema}".users u ON af."actorId" = u.id
@@ -29,6 +46,7 @@ export class BackfillActivityFeedMetadataHandles1762347422000
       console.log(
         `  ✅ No activity feed entries with DIDs in actorName found in ${schema}`,
       );
+      await queryRunner.commitTransaction();
       return;
     }
 
@@ -72,15 +90,26 @@ export class BackfillActivityFeedMetadataHandles1762347422000
 
     const remainingCount = parseInt(remainingDids[0]?.count || '0', 10);
 
-    if (remainingCount > 0) {
-      console.log(
-        `  ⚠️  Warning: ${remainingCount} activity entries still have DIDs in actorName`,
-      );
-      console.log(
-        `      This may indicate users whose handles were not resolved in Part A migration`,
-      );
-    } else {
-      console.log(`  ✅ Verification: No DIDs remaining in actorName`);
+      if (remainingCount > 0) {
+        console.log(
+          `  ⚠️  Warning: ${remainingCount} activity entries still have DIDs in actorName`,
+        );
+        console.log(
+          `      This may indicate users whose handles were not resolved in Part A migration`,
+        );
+      } else {
+        console.log(`  ✅ Verification: No DIDs remaining in actorName`);
+      }
+
+      // Commit transaction
+      await queryRunner.commitTransaction();
+      console.log(`  ✅ Transaction committed successfully`);
+
+    } catch (error) {
+      // Rollback on any error
+      await queryRunner.rollbackTransaction();
+      console.error(`  ❌ Migration failed, transaction rolled back: ${error.message}`);
+      throw error;
     }
   }
 

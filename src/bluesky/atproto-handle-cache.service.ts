@@ -3,6 +3,7 @@ import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { BlueskyIdentityService } from './bluesky-identity.service';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter, Histogram } from 'prom-client';
+import * as crypto from 'crypto';
 
 /**
  * Service for caching ATProto handle resolutions using ElastiCache (Redis)
@@ -20,6 +21,9 @@ export class AtprotoHandleCacheService {
   private readonly CACHE_PREFIX = 'atproto:handle:';
   private readonly CACHE_TTL = 900; // 15 minutes (in seconds)
 
+  // DID validation pattern (plc and web methods only)
+  private readonly DID_PATTERN = /^did:(plc|web):[a-zA-Z0-9._-]{1,100}$/;
+
   constructor(
     private readonly cache: ElastiCacheService,
     private readonly blueskyIdentity: BlueskyIdentityService,
@@ -32,6 +36,47 @@ export class AtprotoHandleCacheService {
     @InjectMetric('atproto_handle_resolution_duration_seconds')
     private readonly resolutionDuration: Histogram<string>,
   ) {}
+
+  /**
+   * Validate DID format to prevent cache poisoning attacks
+   * Checks format, length, and dangerous characters
+   */
+  private validateDid(did: string): boolean {
+    if (!did || typeof did !== 'string') {
+      return false;
+    }
+
+    // Length check to prevent memory exhaustion
+    if (did.length > 200) {
+      this.logger.warn(`DID too long (${did.length} chars): ${did.substring(0, 50)}...`);
+      return false;
+    }
+
+    // Format validation (did:plc:xxx or did:web:xxx)
+    if (!this.DID_PATTERN.test(did)) {
+      this.logger.warn(`Invalid DID format: ${did.substring(0, 50)}`);
+      return false;
+    }
+
+    // Check for injection characters (null bytes, newlines, escape sequences)
+    const dangerousChars = /[\x00\n\r\t\x1b]/;
+    if (dangerousChars.test(did)) {
+      this.logger.warn(`DID contains dangerous characters: ${did.substring(0, 50)}`);
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Sanitize cache key using hash to prevent injection and collisions
+   * Uses SHA-256 hash for deterministic, collision-resistant keys
+   */
+  private sanitizeCacheKey(did: string): string {
+    // Use hash for cache key to prevent injection attacks
+    const hash = crypto.createHash('sha256').update(did).digest('hex');
+    return `${this.CACHE_PREFIX}${hash}`;
+  }
 
   /**
    * Resolve DID to handle with ElastiCache caching
@@ -49,7 +94,17 @@ export class AtprotoHandleCacheService {
         return did;
       }
 
-      const cacheKey = `${this.CACHE_PREFIX}${did}`;
+      // Validate DID format to prevent cache poisoning
+      if (!this.validateDid(did)) {
+        this.logger.warn(`Invalid DID rejected: ${did.substring(0, 50)}`);
+        this.resolutionErrors.inc({ error_type: 'invalid_did' });
+        timer({ cache_status: 'error' });
+        // Return as-is for backward compatibility
+        return did;
+      }
+
+      // Use sanitized cache key (hash-based) to prevent injection
+      const cacheKey = this.sanitizeCacheKey(did);
 
       // Try ElastiCache first (shared across pods)
       const cached = await this.cache.get<string>(cacheKey);
@@ -112,7 +167,13 @@ export class AtprotoHandleCacheService {
    * @param did The DID to invalidate cache for
    */
   async invalidate(did: string): Promise<void> {
-    const cacheKey = `${this.CACHE_PREFIX}${did}`;
+    // Validate DID before invalidating
+    if (!this.validateDid(did)) {
+      this.logger.warn(`Cannot invalidate invalid DID: ${did.substring(0, 50)}`);
+      return;
+    }
+
+    const cacheKey = this.sanitizeCacheKey(did);
     await this.cache.del(cacheKey);
     this.logger.log(`Invalidated cache for ${did}`);
   }

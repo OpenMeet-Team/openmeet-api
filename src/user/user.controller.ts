@@ -12,6 +12,7 @@ import {
   Patch,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CreateUserDto } from './dto/create-user.dto';
 import {
   ApiCreatedResponse,
@@ -129,6 +130,7 @@ export class UserController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 20, ttl: 60000 } }) // 20 requests per minute for public profile lookups
   @Get(':identifier/profile')
   @ApiOperation({
     summary: 'Get user profile by identifier',
