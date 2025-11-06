@@ -87,6 +87,7 @@ export class UserEntity extends EntityRelationalHelper {
     example: 'email',
   })
   @Column({ default: AuthProvidersEnum.email })
+  @Expose()
   provider: string;
 
   @ApiProperty({
@@ -97,6 +98,7 @@ export class UserEntity extends EntityRelationalHelper {
   })
   @Index()
   @Column({ type: String, nullable: true })
+  @Expose()
   socialId?: string | null; // For Bluesky users, this contains the DID
 
   @ApiProperty({
@@ -229,6 +231,7 @@ export class UserEntity extends EntityRelationalHelper {
       'Indicates if this is a shadow account created from Bluesky integration',
   })
   @Column({ type: Boolean, default: false })
+  @Expose()
   isShadowAccount: boolean;
 
   @Column('jsonb', { nullable: true })

@@ -165,6 +165,9 @@ export class EventQueryService {
         user: {
           name: true,
           slug: true,
+          provider: true,
+          socialId: true,
+          isShadowAccount: true,
           photo: {
             path: true,
           },
