@@ -60,6 +60,7 @@ import { ExternalCalendarModule } from './external-calendar/external-calendar.mo
 import { SitemapModule } from './sitemap/sitemap.module';
 import { OidcModule } from './oidc/oidc.module';
 import { ActivityFeedModule } from './activity-feed/activity-feed.module';
+import { MetaModule } from './meta/meta.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -158,6 +159,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     ExternalCalendarModule,
     SitemapModule,
     OidcModule,
+    MetaModule,
   ],
   providers: [
     TenantConnectionService,

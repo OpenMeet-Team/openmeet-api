@@ -161,25 +161,33 @@ services:
     networks:
       - api-network
 
-  # api:
-  #   build:
-  #     context: .
-  #     dockerfile: ./Dockerfile.dev
-  #   container_name: api
-  #   hostname: api
-  #   ports:
-  #     - ${APP_PORT}:${APP_PORT}
-  #   env_file:
-  #     - .env
-  #   volumes:
-  #     - ./src/:/app/src/
-  #     # - ./package.json:/app/package.json
-  #     # - /app/node_modules # Use node_modules from the container
-  #     - .env/:/app/.env
-  #   networks:
-  #     - api-network
-  #   depends_on:
-  #     - postgres
+  # NestJS API with hot reload
+  api:
+    image: node:22.18.0-alpine
+    container_name: api
+    hostname: api
+    working_dir: /app
+    command: sh -c "npm install && npm run start:dev"
+    ports:
+      - ${APP_PORT}:${APP_PORT}
+    volumes:
+      - .:/app
+      - /app/node_modules  # Prevent overwriting node_modules
+    environment:
+      - NODE_ENV=development
+      - TZ=UTC
+      # Override localhost hosts for container networking
+      - DATABASE_HOST=postgres
+      - ELASTICACHE_HOST=redis
+    env_file:
+      - .env
+    networks:
+      - api-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   tracing:
     image: jaegertracing/all-in-one:latest
@@ -208,4 +216,5 @@ volumes:
 
 networks:
   api-network:
+    name: api-network  # Explicit name to avoid project prefix
     driver: bridge
