@@ -12,7 +12,6 @@ TENANTS_B64=WwogIHsKICAgICJpZCI6ICIiLAogICAgIm5hbWUiOiAiUHVibGljIgogIH0sCiAgewog
 
 # Test tenant, must exist in the TENANTS_B64 variable
 TEST_TENANT_ID=ciTenantB
-APP_TENANT_ID=ciTenantB
 
 # Admin of the installation
 ADMIN_EMAIL=admin@openmeet.net
