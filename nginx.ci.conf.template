@@ -1,0 +1,97 @@
+# OpenMeet API CI - Nginx Bot Detection Test Config
+# Simplified config for testing bot detection and meta tag routing in CI
+
+# Detect common bots/crawlers via User-Agent
+map $http_user_agent $is_bot {
+    default 0;
+
+    # Social Media Crawlers
+    ~*facebookexternalhit 1;
+    ~*facebook 1;
+    ~*twitterbot 1;
+    ~*twitter 1;
+    ~*discordbot 1;
+    ~*discord 1;
+    ~*slackbot 1;
+    ~*slack 1;
+    ~*whatsapp 1;
+    ~*telegram 1;
+
+    # Link Preview Services
+    ~*linkedinbot 1;
+    ~*pinterestbot 1;
+    ~*redditbot 1;
+    ~*tumblr 1;
+    ~*skypeuripreview 1;
+    ~*vkshare 1;
+
+    # Search Engine Bots
+    ~*googlebot 1;
+    ~*bingbot 1;
+    ~*slurp 1;  # Yahoo
+    ~*duckduckbot 1;
+    ~*baiduspider 1;
+    ~*yandexbot 1;
+    ~*applebot 1;
+
+    # General Crawlers
+    ~*bot 1;
+    ~*crawler 1;
+    ~*spider 1;
+    ~*archiveorg 1;
+}
+
+server {
+    listen 80;
+    server_name _;
+
+    # Enable gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css text/xml text/javascript application/javascript application/xml+rss application/json;
+
+    # --- Meta Tag Routes (Events & Groups) ---
+    # Route bots to API meta endpoint
+    location ~ ^/(events|groups)/[^/]+$ {
+        # Set common headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header User-Agent $http_user_agent;
+        proxy_set_header X-Tenant-Id ${APP_TENANT_ID};
+        proxy_http_version 1.1;
+
+        # If bot: proxy to API for meta tags
+        if ($is_bot) {
+            # Rewrite to /api/meta prefix
+            rewrite ^(.*)$ /api/meta$1 break;
+            proxy_pass http://api:3000;
+        }
+
+        # Humans: return 404 in CI (no SPA to serve)
+        if ($is_bot = 0) {
+            return 404;
+        }
+    }
+
+    # --- All Other Routes ---
+    # Proxy to API for testing
+    location / {
+        proxy_pass http://api:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Tenant-Id ${APP_TENANT_ID};
+    }
+
+    # --- Health Check ---
+    location /health {
+        access_log off;
+        return 200 "healthy\n";
+        add_header Content-Type text/plain;
+    }
+}
