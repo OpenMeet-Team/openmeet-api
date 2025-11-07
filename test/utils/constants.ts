@@ -7,6 +7,8 @@ export const TESTING_USER_PASSWORD = process.env.TEST_USER_PASSWORD as string;
 export const TESTING_USER_ID = 2;
 export const TESTING_APP_URL =
   process.env.BACKEND_DOMAIN || `http://localhost:${process.env.APP_PORT}`;
+export const TESTING_NGINX_URL =
+  process.env.NGINX_URL || 'http://localhost:8080';
 export const TESTING_MAIL_HOST = process.env.MAIL_HOST;
 export const TESTING_MAIL_PORT = process.env.MAIL_CLIENT_PORT;
 export const TESTING_MAS_URL =

@@ -85,6 +85,19 @@ services:
       timeout: 5s
       retries: 5
 
+  # Nginx for testing bot detection and routing
+  nginx:
+    image: nginx:1.25-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.ci.conf.template:/etc/nginx/templates/default.conf.template:ro
+    environment:
+      - TENANT_ID=ciTenantB
+    depends_on:
+      api:
+        condition: service_healthy
+
   # Matrix Authentication Service (MAS) for CI testing
   matrix-auth-service:
     image: ghcr.io/element-hq/matrix-authentication-service:latest

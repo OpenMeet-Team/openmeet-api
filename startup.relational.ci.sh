@@ -56,6 +56,22 @@ echo "Waiting for MAS service to be ready..."
 echo "Waiting for Matrix service to be ready..."
 /opt/wait-for-it.sh matrix:8448 -t 60
 
+# Wait for nginx (it depends on our healthcheck, so retry until it's available)
+echo "Waiting for Nginx to be ready (it waits for our healthcheck)..."
+MAX_RETRIES=30
+RETRY_COUNT=0
+until curl -f http://nginx/health 2>/dev/null || [ $RETRY_COUNT -eq $MAX_RETRIES ]; do
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  echo "Waiting for nginx... attempt $RETRY_COUNT/$MAX_RETRIES"
+  sleep 2
+done
+
+if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+  echo "WARNING: Nginx did not become ready, tests may fail"
+else
+  echo "Nginx is ready!"
+fi
+
 # Run all E2E tests
 echo "Running all E2E tests..."
 npm run test:e2e -- --runInBand --forceExit

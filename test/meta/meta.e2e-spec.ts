@@ -1,5 +1,9 @@
 import request from 'supertest';
-import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
+import {
+  TESTING_APP_URL,
+  TESTING_NGINX_URL,
+  TESTING_TENANT_ID,
+} from '../utils/constants';
 import { loginAsTester, createEvent } from '../utils/functions';
 import { EventType, EventVisibility } from '../../src/core/constants/constant';
 
@@ -333,6 +337,148 @@ describe('Meta Controller (e2e) - Bot Link Previews', () => {
         expect(metaHtml).not.toContain('event:start_time');
         expect(metaHtml).not.toContain('event:location');
       }
+    });
+  });
+
+  describe('Nginx bot detection and routing', () => {
+    it('should route bot requests through nginx to API meta endpoint', async () => {
+      // Create a public event
+      const eventData = {
+        name: 'Nginx Test Event',
+        slug: `nginx-test-${Date.now()}`,
+        description: 'Testing nginx bot routing',
+        startDate: new Date('2025-12-25T20:00:00Z').toISOString(),
+        endDate: new Date('2025-12-25T22:00:00Z').toISOString(),
+        type: EventType.InPerson,
+        location: 'Test Location for Nginx',
+        visibility: EventVisibility.Public,
+        categories: [],
+      };
+
+      const event = await createEvent(TESTING_APP_URL, token, eventData);
+
+      // Request through nginx as a bot (Slack)
+      const nginxResponse = await request(TESTING_NGINX_URL)
+        .get(`/events/${event.slug}`)
+        .set('User-Agent', 'Slackbot-LinkExpanding 1.0');
+
+      expect(nginxResponse.status).toBe(200);
+      expect(nginxResponse.headers['content-type']).toContain('text/html');
+
+      const html = nginxResponse.text;
+      expect(html).toContain('og:title');
+      expect(html).toContain('og:description');
+      expect(html).toContain(eventData.name);
+      expect(html).toContain(eventData.description);
+    });
+
+    it('should route different bot User-Agents correctly', async () => {
+      const eventData = {
+        name: 'Multi Bot Test',
+        slug: `multi-bot-test-${Date.now()}`,
+        description: 'Testing multiple bot types',
+        startDate: new Date().toISOString(),
+        endDate: new Date(Date.now() + 3600000).toISOString(),
+        type: EventType.InPerson,
+        visibility: EventVisibility.Public,
+        categories: [],
+      };
+
+      const event = await createEvent(TESTING_APP_URL, token, eventData);
+
+      const botUserAgents = [
+        'Slackbot-LinkExpanding 1.0',
+        'facebookexternalhit/1.1',
+        'Twitterbot/1.0',
+        'Discordbot/2.0',
+        'LinkedInBot/1.0',
+      ];
+
+      for (const userAgent of botUserAgents) {
+        const response = await request(TESTING_NGINX_URL)
+          .get(`/events/${event.slug}`)
+          .set('User-Agent', userAgent);
+
+        expect(response.status).toBe(200);
+        expect(response.text).toContain('og:title');
+        expect(response.text).toContain(eventData.name);
+      }
+    });
+
+    it('should return 404 for non-bot requests (humans)', async () => {
+      const eventData = {
+        name: 'Human Request Test',
+        slug: `human-test-${Date.now()}`,
+        description: 'Testing human routing',
+        startDate: new Date().toISOString(),
+        endDate: new Date(Date.now() + 3600000).toISOString(),
+        type: EventType.InPerson,
+        visibility: EventVisibility.Public,
+        categories: [],
+      };
+
+      const event = await createEvent(TESTING_APP_URL, token, eventData);
+
+      // Request through nginx as a human (regular browser)
+      const humanResponse = await request(TESTING_NGINX_URL)
+        .get(`/events/${event.slug}`)
+        .set(
+          'User-Agent',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        );
+
+      // Should return 404 since there's no SPA in CI
+      expect(humanResponse.status).toBe(404);
+    });
+
+    it('should include Vary header for CDN caching', async () => {
+      const eventData = {
+        name: 'Vary Header Test',
+        slug: `vary-test-${Date.now()}`,
+        description: 'Testing Vary header',
+        startDate: new Date().toISOString(),
+        endDate: new Date(Date.now() + 3600000).toISOString(),
+        type: EventType.InPerson,
+        visibility: EventVisibility.Public,
+        categories: [],
+      };
+
+      const event = await createEvent(TESTING_APP_URL, token, eventData);
+
+      const response = await request(TESTING_NGINX_URL)
+        .get(`/events/${event.slug}`)
+        .set('User-Agent', 'Slackbot/1.0');
+
+      expect(response.status).toBe(200);
+      expect(response.headers.vary).toContain('User-Agent');
+    });
+
+    it('should return 404 for private events through nginx', async () => {
+      // Create a private event
+      const privateEventData = {
+        name: 'Private Nginx Test',
+        slug: `private-nginx-test-${Date.now()}`,
+        description: 'Should not be visible via nginx',
+        startDate: new Date().toISOString(),
+        endDate: new Date(Date.now() + 3600000).toISOString(),
+        type: EventType.InPerson,
+        visibility: EventVisibility.Private,
+        categories: [],
+      };
+
+      const event = await createEvent(
+        TESTING_APP_URL,
+        token,
+        privateEventData,
+      );
+
+      // Try to access through nginx as bot
+      const response = await request(TESTING_NGINX_URL)
+        .get(`/events/${event.slug}`)
+        .set('User-Agent', 'Slackbot/1.0');
+
+      expect(response.status).toBe(404);
+      expect(response.text).toBe('Event not found');
     });
   });
 });
