@@ -93,7 +93,7 @@ services:
     volumes:
       - ./nginx.ci.conf.template:/etc/nginx/templates/default.conf.template:ro
     environment:
-      - TENANT_ID=ciTenantB
+      - APP_TENANT_ID=ciTenantB
     depends_on:
       api:
         condition: service_healthy
