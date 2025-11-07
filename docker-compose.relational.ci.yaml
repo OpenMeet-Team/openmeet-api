@@ -94,9 +94,6 @@ services:
       - ./nginx.ci.conf.template:/etc/nginx/templates/default.conf.template:ro
     environment:
       - APP_TENANT_ID=ciTenantB
-    depends_on:
-      api:
-        condition: service_healthy
 
   # Matrix Authentication Service (MAS) for CI testing
   matrix-auth-service:
