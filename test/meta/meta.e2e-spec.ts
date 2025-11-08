@@ -1,7 +1,7 @@
 import request from 'supertest';
 import {
   TESTING_APP_URL,
-  TESTING_NGINX_URL,
+  TESTING_FRONTEND_DOMAIN,
   TESTING_TENANT_ID,
 } from '../utils/constants';
 import { loginAsTester, createEvent } from '../utils/functions';
@@ -137,7 +137,7 @@ describe('Meta Controller (e2e) - Bot Link Previews', () => {
       const longDescription =
         'This is a very long description that exceeds 200 characters. '.repeat(
           10,
-        );
+        ).trim(); // Trim trailing space
 
       const eventData = {
         name: 'Event with Long Description',
@@ -170,8 +170,8 @@ describe('Meta Controller (e2e) - Bot Link Previews', () => {
       // Meta description should be truncated to ~200 chars
       expect(metaDescription.length).toBeLessThanOrEqual(200);
 
-      // Body should contain full description
-      expect(metaHtml).toContain(longDescription);
+      // Body should contain full description (wrapped in <p> tag)
+      expect(metaHtml).toContain(`<p>${longDescription}</p>`);
     });
 
     it('should handle events with images correctly', async () => {
@@ -243,10 +243,13 @@ describe('Meta Controller (e2e) - Bot Link Previews', () => {
       expect(metaHtml).not.toContain('<script>alert(');
       expect(metaHtml).not.toContain('onerror="alert');
 
-      // Should contain escaped HTML
+      // Should contain escaped HTML in title and location
       expect(metaHtml).toContain('&lt;script&gt;');
-      expect(metaHtml).toContain('&lt;img');
       expect(metaHtml).toContain('&lt;b&gt;');
+
+      // Description should have HTML stripped (not double-escaped)
+      // The stripHtml() removes <img> tags entirely, so check for the remaining text
+      expect(metaHtml).toContain('Description with malicious HTML');
     });
   });
 
@@ -358,9 +361,10 @@ describe('Meta Controller (e2e) - Bot Link Previews', () => {
       const event = await createEvent(TESTING_APP_URL, token, eventData);
 
       // Request through nginx as a bot (Slack)
-      const nginxResponse = await request(TESTING_NGINX_URL)
+      const nginxResponse = await request(TESTING_FRONTEND_DOMAIN)
         .get(`/events/${event.slug}`)
-        .set('User-Agent', 'Slackbot-LinkExpanding 1.0');
+        .set('User-Agent', 'Slackbot-LinkExpanding 1.0')
+        .set('x-tenant-id', TESTING_TENANT_ID);
 
       expect(nginxResponse.status).toBe(200);
       expect(nginxResponse.headers['content-type']).toContain('text/html');
@@ -395,9 +399,10 @@ describe('Meta Controller (e2e) - Bot Link Previews', () => {
       ];
 
       for (const userAgent of botUserAgents) {
-        const response = await request(TESTING_NGINX_URL)
+        const response = await request(TESTING_FRONTEND_DOMAIN)
           .get(`/events/${event.slug}`)
-          .set('User-Agent', userAgent);
+          .set('User-Agent', userAgent)
+          .set('x-tenant-id', TESTING_TENANT_ID);
 
         expect(response.status).toBe(200);
         expect(response.text).toContain('og:title');
@@ -420,15 +425,23 @@ describe('Meta Controller (e2e) - Bot Link Previews', () => {
       const event = await createEvent(TESTING_APP_URL, token, eventData);
 
       // Request through nginx as a human (regular browser)
-      const humanResponse = await request(TESTING_NGINX_URL)
+      const humanResponse = await request(TESTING_FRONTEND_DOMAIN)
         .get(`/events/${event.slug}`)
         .set(
           'User-Agent',
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        );
+        )
+        .set('x-tenant-id', TESTING_TENANT_ID);
 
-      // Should return 404 since there's no SPA in CI
-      expect(humanResponse.status).toBe(404);
+      // Humans should get the SPA (200), not the bot meta HTML
+      expect(humanResponse.status).toBe(200);
+
+      // Should be the SPA, not bot meta HTML
+      // Check for SPA-specific markers
+      const responseText = humanResponse.text;
+      expect(responseText).toContain('<div id="q-app"></div>'); // Quasar app div
+      expect(responseText).not.toContain('Explore More:'); // Bot HTML has this navigation
+      expect(responseText).not.toContain('event:start_time'); // Bot HTML has event-specific meta
     });
 
     it('should include Vary header for CDN caching', async () => {
@@ -445,9 +458,10 @@ describe('Meta Controller (e2e) - Bot Link Previews', () => {
 
       const event = await createEvent(TESTING_APP_URL, token, eventData);
 
-      const response = await request(TESTING_NGINX_URL)
+      const response = await request(TESTING_FRONTEND_DOMAIN)
         .get(`/events/${event.slug}`)
-        .set('User-Agent', 'Slackbot/1.0');
+        .set('User-Agent', 'Slackbot/1.0')
+        .set('x-tenant-id', TESTING_TENANT_ID);
 
       expect(response.status).toBe(200);
       expect(response.headers.vary).toContain('User-Agent');
@@ -473,9 +487,10 @@ describe('Meta Controller (e2e) - Bot Link Previews', () => {
       );
 
       // Try to access through nginx as bot
-      const response = await request(TESTING_NGINX_URL)
+      const response = await request(TESTING_FRONTEND_DOMAIN)
         .get(`/events/${event.slug}`)
-        .set('User-Agent', 'Slackbot/1.0');
+        .set('User-Agent', 'Slackbot/1.0')
+        .set('x-tenant-id', TESTING_TENANT_ID);
 
       expect(response.status).toBe(404);
       expect(response.text).toBe('Event not found');

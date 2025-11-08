@@ -218,7 +218,16 @@ if (!/bot|crawl|spider/i.test(navigator.userAgent)) {
   <h1>${title}</h1>
   ${eventDetails}
   <p>${fullDescription}</p>
-  <a href="${url}">View full ${type} →</a>
+  <hr>
+  <nav>
+    <p><strong>Explore More:</strong></p>
+    <ul>
+      <li><a href="${frontendDomain}/">OpenMeet Home</a></li>
+      <li><a href="${frontendDomain}/events">Browse Events</a></li>
+      <li><a href="${frontendDomain}/groups">Browse Groups</a></li>
+      ${data.group?.slug ? `<li><a href="${frontendDomain}/groups/${data.group.slug}">View Organizing Group: ${this.escapeHtml(data.group.name)}</a></li>` : ''}
+    </ul>
+  </nav>
 </body>
 </html>`;
   }
