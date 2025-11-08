@@ -11,9 +11,9 @@ describe('MetaController', () => {
   let configService: ConfigService;
 
   const mockConfigService = {
-    get: jest.fn((key: string) => {
+    get: jest.fn((key: string, options?: any) => {
       const config = {
-        FRONTEND_DOMAIN: 'https://platform.openmeet.net',
+        'app.frontendDomain': 'https://platform.openmeet.net',
         'file.cloudfrontDistributionDomain': 'ds1xtylbemsat.cloudfront.net',
         'file.driver': 'cloudfront',
         'app.backendDomain': 'https://api.openmeet.net',
@@ -118,7 +118,7 @@ describe('MetaController', () => {
       const cloudfrontDomain = mockConfigService.get(
         'file.cloudfrontDistributionDomain',
       );
-      const frontendDomain = mockConfigService.get('FRONTEND_DOMAIN');
+      const frontendDomain = mockConfigService.get('app.frontendDomain');
 
       const mockGroup = {
         name: 'Test Group',
@@ -145,7 +145,7 @@ describe('MetaController', () => {
       jest.spyOn(configService, 'get').mockImplementation((key: string) => {
         if (key === 'file.driver') return 'local';
         if (key === 'app.backendDomain') return backendDomain;
-        if (key === 'FRONTEND_DOMAIN') return frontendDomain;
+        if (key === 'app.frontendDomain') return frontendDomain;
         return null;
       });
 
@@ -166,7 +166,7 @@ describe('MetaController', () => {
     });
 
     it('should use default image when no image provided', () => {
-      const frontendDomain = mockConfigService.get('FRONTEND_DOMAIN');
+      const frontendDomain = mockConfigService.get('app.frontendDomain');
 
       const mockGroup = {
         name: 'Test Group',
