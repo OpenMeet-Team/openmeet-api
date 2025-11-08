@@ -52,6 +52,25 @@ export class MetaController {
   }
 
   /**
+   * Strip HTML tags from text
+   * Used for descriptions that may contain HTML (like group descriptions)
+   */
+  private stripHtml(html: string): string {
+    if (!html) return '';
+    // Remove HTML tags, decode entities, and clean up whitespace
+    return html
+      .replace(/<[^>]*>/g, '') // Remove all HTML tags
+      .replace(/&nbsp;/g, ' ') // Replace &nbsp; with space
+      .replace(/&lt;/g, '<') // Decode common entities
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#039;/g, "'")
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .trim();
+  }
+
+  /**
    * Escape HTML to prevent XSS attacks
    * Critical security measure when rendering user-generated content
    */
@@ -70,22 +89,61 @@ export class MetaController {
    */
   private renderMetaHTML(type: 'event' | 'group', data: any): string {
     const title = this.escapeHtml(data.name || data.title || 'OpenMeet Event');
-    const fullDescription = this.escapeHtml(data.description || '');
+
+    // Strip HTML tags first (for group descriptions), then escape for safety
+    const rawDescription = data.description || '';
+    const strippedDescription = this.stripHtml(rawDescription);
+    const fullDescription = this.escapeHtml(strippedDescription);
     const metaDescription = fullDescription.slice(0, 200); // Truncate for meta tags (OG standard)
 
     const frontendDomain = this.getFrontendDomain();
 
     // Construct the full image URL from FileEntity
+    // When file driver is CLOUDFRONT, the path contains just the S3 key (tenant-id/filename.png)
+    // We need to manually construct the full CloudFront URL
     const imagePath = data.image?.path;
-    const image = imagePath
-      ? `${frontendDomain}${imagePath}`
-      : `${frontendDomain}/default-og.jpg`;
+    let image: string;
+
+    if (imagePath) {
+      // Get CloudFront distribution domain from config
+      const cloudfrontDomain = this.configService.get<string>('file.cloudfrontDistributionDomain');
+      const fileDriver = this.configService.get<string>('file.driver');
+
+      if (fileDriver === 'cloudfront' && cloudfrontDomain) {
+        // CloudFront: construct full URL with distribution domain
+        image = `https://${cloudfrontDomain}/${imagePath}`;
+      } else {
+        // Fallback: use backend domain (for local or S3 presigned)
+        const backendDomain = this.configService.get<string>('app.backendDomain');
+        image = `${backendDomain}${imagePath}`;
+      }
+    } else {
+      // No image: use default
+      image = `${frontendDomain}/default-og.jpg`;
+    }
 
     const url = `${frontendDomain}/${type}s/${data.slug}`;
 
-    // Additional metadata for events
+    // LinkedIn and additional metadata
     let additionalMeta = '';
     let eventDetails = '';
+
+    // Author information (for LinkedIn and attribution)
+    if (data.user?.firstName && data.user?.lastName) {
+      const authorName = this.escapeHtml(`${data.user.firstName} ${data.user.lastName}`);
+      additionalMeta += `<meta property="article:author" content="${authorName}" />\n`;
+    } else if (data.createdBy?.firstName && data.createdBy?.lastName) {
+      const authorName = this.escapeHtml(`${data.createdBy.firstName} ${data.createdBy.lastName}`);
+      additionalMeta += `<meta property="article:author" content="${authorName}" />\n`;
+    }
+
+    // Article published time (when the event/group was created on the platform)
+    if (data.createdAt) {
+      const publishedTime = new Date(data.createdAt).toISOString();
+      additionalMeta += `<meta property="article:published_time" content="${publishedTime}" />\n`;
+    }
+
+    // Event-specific metadata
     if (type === 'event') {
       if (data.startDate) {
         const startDate = new Date(data.startDate).toISOString();
@@ -133,6 +191,7 @@ export class MetaController {
 <meta property="og:url" content="${url}" />
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="OpenMeet" />
+<meta property="og:locale" content="en_US" />
 
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image" />
