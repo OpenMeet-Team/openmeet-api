@@ -44,7 +44,9 @@ export class MetaController {
    * Get frontend domain from config, throw if not set
    */
   private getFrontendDomain(): string {
-    const frontendDomain = this.configService.get<string>('FRONTEND_DOMAIN');
+    const frontendDomain = this.configService.get<string>('FRONTEND_DOMAIN', {
+      infer: true,
+    });
     if (!frontendDomain) {
       throw new Error('FRONTEND_DOMAIN environment variable is not configured');
     }
@@ -108,16 +110,21 @@ export class MetaController {
       // Get CloudFront distribution domain from config
       const cloudfrontDomain = this.configService.get<string>(
         'file.cloudfrontDistributionDomain',
+        { infer: true },
       );
-      const fileDriver = this.configService.get<string>('file.driver');
+      const fileDriver = this.configService.get<string>('file.driver', {
+        infer: true,
+      });
 
       if (fileDriver === 'cloudfront' && cloudfrontDomain) {
         // CloudFront: construct full URL with distribution domain
         image = `https://${cloudfrontDomain}/${imagePath}`;
       } else {
         // Fallback: use backend domain (for local or S3 presigned)
-        const backendDomain =
-          this.configService.get<string>('app.backendDomain');
+        const backendDomain = this.configService.get<string>(
+          'app.backendDomain',
+          { infer: true },
+        );
         image = `${backendDomain}${imagePath}`;
       }
     } else {
