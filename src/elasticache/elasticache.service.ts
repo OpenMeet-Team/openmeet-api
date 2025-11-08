@@ -183,7 +183,9 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
   async del(key: string): Promise<void> {
     try {
       if (!this.redis?.isOpen) {
-        this.logger.warn('Redis client is not connected, skipping cache delete');
+        this.logger.warn(
+          'Redis client is not connected, skipping cache delete',
+        );
         return; // Gracefully skip instead of throwing
       }
 
@@ -251,7 +253,9 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
   async releaseLock(lockKey: string): Promise<void> {
     try {
       if (!this.redis?.isOpen) {
-        this.logger.warn('Redis client is not connected, skipping lock release');
+        this.logger.warn(
+          'Redis client is not connected, skipping lock release',
+        );
         return; // Gracefully skip instead of throwing
       }
 

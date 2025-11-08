@@ -436,6 +436,7 @@ export class GroupService {
     await this.getTenantSpecificGroupRepository();
     const group = await this.groupRepository.findOne({
       where: { slug },
+      relations: ['image', 'createdBy', 'categories'],
     });
 
     if (!group) {
