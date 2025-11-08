@@ -106,7 +106,9 @@ export class MetaController {
 
     if (imagePath) {
       // Get CloudFront distribution domain from config
-      const cloudfrontDomain = this.configService.get<string>('file.cloudfrontDistributionDomain');
+      const cloudfrontDomain = this.configService.get<string>(
+        'file.cloudfrontDistributionDomain',
+      );
       const fileDriver = this.configService.get<string>('file.driver');
 
       if (fileDriver === 'cloudfront' && cloudfrontDomain) {
@@ -114,7 +116,8 @@ export class MetaController {
         image = `https://${cloudfrontDomain}/${imagePath}`;
       } else {
         // Fallback: use backend domain (for local or S3 presigned)
-        const backendDomain = this.configService.get<string>('app.backendDomain');
+        const backendDomain =
+          this.configService.get<string>('app.backendDomain');
         image = `${backendDomain}${imagePath}`;
       }
     } else {
@@ -130,10 +133,14 @@ export class MetaController {
 
     // Author information (for LinkedIn and attribution)
     if (data.user?.firstName && data.user?.lastName) {
-      const authorName = this.escapeHtml(`${data.user.firstName} ${data.user.lastName}`);
+      const authorName = this.escapeHtml(
+        `${data.user.firstName} ${data.user.lastName}`,
+      );
       additionalMeta += `<meta property="article:author" content="${authorName}" />\n`;
     } else if (data.createdBy?.firstName && data.createdBy?.lastName) {
-      const authorName = this.escapeHtml(`${data.createdBy.firstName} ${data.createdBy.lastName}`);
+      const authorName = this.escapeHtml(
+        `${data.createdBy.firstName} ${data.createdBy.lastName}`,
+      );
       additionalMeta += `<meta property="article:author" content="${authorName}" />\n`;
     }
 

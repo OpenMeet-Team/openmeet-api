@@ -40,23 +40,23 @@ export class BackfillActivityFeedMetadataHandles1762347422000
         AND u."deletedAt" IS NULL
     `);
 
-    const count = parseInt(affectedActivities[0]?.count || '0', 10);
+      const count = parseInt(affectedActivities[0]?.count || '0', 10);
 
-    if (count === 0) {
+      if (count === 0) {
+        console.log(
+          `  ✅ No activity feed entries with DIDs in actorName found in ${schema}`,
+        );
+        await queryRunner.commitTransaction();
+        return;
+      }
+
       console.log(
-        `  ✅ No activity feed entries with DIDs in actorName found in ${schema}`,
+        `  📊 Found ${count} activity feed entries to backfill in ${schema}`,
       );
-      await queryRunner.commitTransaction();
-      return;
-    }
 
-    console.log(
-      `  📊 Found ${count} activity feed entries to backfill in ${schema}`,
-    );
-
-    // Update activity feed metadata with resolved handles from users table
-    // This uses jsonb_set to update just the actorName field in metadata
-    const result = await queryRunner.query(`
+      // Update activity feed metadata with resolved handles from users table
+      // This uses jsonb_set to update just the actorName field in metadata
+      const result = await queryRunner.query(`
       UPDATE "${schema}"."activityFeed" af
       SET metadata = jsonb_set(
         metadata,
@@ -71,14 +71,16 @@ export class BackfillActivityFeedMetadataHandles1762347422000
         AND u."deletedAt" IS NULL
     `);
 
-    const updatedCount = result[1] || 0;
+      const updatedCount = result[1] || 0;
 
-    console.log('');
-    console.log('🎉 Activity feed metadata backfill complete!');
-    console.log(`  ✅ Successfully updated: ${updatedCount} activity entries`);
+      console.log('');
+      console.log('🎉 Activity feed metadata backfill complete!');
+      console.log(
+        `  ✅ Successfully updated: ${updatedCount} activity entries`,
+      );
 
-    // Verify the update
-    const remainingDids = await queryRunner.query(`
+      // Verify the update
+      const remainingDids = await queryRunner.query(`
       SELECT COUNT(*) as count
       FROM "${schema}"."activityFeed" af
       INNER JOIN "${schema}".users u ON af."actorId" = u.id
@@ -88,7 +90,7 @@ export class BackfillActivityFeedMetadataHandles1762347422000
         AND u."deletedAt" IS NULL
     `);
 
-    const remainingCount = parseInt(remainingDids[0]?.count || '0', 10);
+      const remainingCount = parseInt(remainingDids[0]?.count || '0', 10);
 
       if (remainingCount > 0) {
         console.log(
@@ -104,11 +106,12 @@ export class BackfillActivityFeedMetadataHandles1762347422000
       // Commit transaction
       await queryRunner.commitTransaction();
       console.log(`  ✅ Transaction committed successfully`);
-
     } catch (error) {
       // Rollback on any error
       await queryRunner.rollbackTransaction();
-      console.error(`  ❌ Migration failed, transaction rolled back: ${error.message}`);
+      console.error(
+        `  ❌ Migration failed, transaction rolled back: ${error.message}`,
+      );
       throw error;
     }
   }

@@ -48,7 +48,9 @@ export class AtprotoHandleCacheService {
 
     // Length check to prevent memory exhaustion
     if (did.length > 200) {
-      this.logger.warn(`DID too long (${did.length} chars): ${did.substring(0, 50)}...`);
+      this.logger.warn(
+        `DID too long (${did.length} chars): ${did.substring(0, 50)}...`,
+      );
       return false;
     }
 
@@ -61,7 +63,9 @@ export class AtprotoHandleCacheService {
     // Check for injection characters (null bytes, newlines, escape sequences)
     const dangerousChars = /[\x00\n\r\t\x1b]/;
     if (dangerousChars.test(did)) {
-      this.logger.warn(`DID contains dangerous characters: ${did.substring(0, 50)}`);
+      this.logger.warn(
+        `DID contains dangerous characters: ${did.substring(0, 50)}`,
+      );
       return false;
     }
 
@@ -169,7 +173,9 @@ export class AtprotoHandleCacheService {
   async invalidate(did: string): Promise<void> {
     // Validate DID before invalidating
     if (!this.validateDid(did)) {
-      this.logger.warn(`Cannot invalidate invalid DID: ${did.substring(0, 50)}`);
+      this.logger.warn(
+        `Cannot invalidate invalid DID: ${did.substring(0, 50)}`,
+      );
       return;
     }
 

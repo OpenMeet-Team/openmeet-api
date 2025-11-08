@@ -61,8 +61,7 @@ describe('MetaController', () => {
     });
 
     it('should handle mixed HTML and entities', () => {
-      const input =
-        '<p>Hello&nbsp;<b>world</b>&lt;test&gt;</p>&amp;more';
+      const input = '<p>Hello&nbsp;<b>world</b>&lt;test&gt;</p>&amp;more';
       const result = controller['stripHtml'](input);
       expect(result).toBe('Hello world<test>&more');
     });
@@ -116,7 +115,9 @@ describe('MetaController', () => {
 
   describe('renderMetaHTML - Image URL Construction', () => {
     it('should construct CloudFront URLs correctly for groups (Issue #2 fix)', () => {
-      const cloudfrontDomain = mockConfigService.get('file.cloudfrontDistributionDomain');
+      const cloudfrontDomain = mockConfigService.get(
+        'file.cloudfrontDistributionDomain',
+      );
       const frontendDomain = mockConfigService.get('FRONTEND_DOMAIN');
 
       const mockGroup = {
@@ -321,8 +322,12 @@ describe('MetaController', () => {
       expect(html).not.toContain('<img src=x onerror');
 
       // Should contain escaped versions in meta tags and body
-      expect(html).toContain('&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;');
-      expect(html).toContain('&lt;script&gt;alert(&quot;location&quot;)&lt;/script&gt;');
+      expect(html).toContain(
+        '&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;',
+      );
+      expect(html).toContain(
+        '&lt;script&gt;alert(&quot;location&quot;)&lt;/script&gt;',
+      );
 
       // Description should have HTML stripped, leaving just the text
       expect(html).toContain('Some text here');

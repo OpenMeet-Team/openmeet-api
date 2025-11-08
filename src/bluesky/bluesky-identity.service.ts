@@ -105,7 +105,11 @@ export class BlueskyIdentityService {
   private createTimeout<T>(timeoutMs: number, operation: string): Promise<T> {
     return new Promise((_, reject) => {
       setTimeout(() => {
-        reject(new Error(`ATProto operation timeout after ${timeoutMs}ms: ${operation}`));
+        reject(
+          new Error(
+            `ATProto operation timeout after ${timeoutMs}ms: ${operation}`,
+          ),
+        );
       }, timeoutMs);
     });
   }
@@ -176,20 +180,22 @@ export class BlueskyIdentityService {
         // If strict allowlist is configured, fail closed on DNS errors
         // Otherwise, allow it (might be IPv6-only or temporary DNS issue)
         if (envDomains) {
-          this.logger.warn(`DNS resolution failed in strict mode, blocking: ${url.hostname}`);
+          this.logger.warn(
+            `DNS resolution failed in strict mode, blocking: ${url.hostname}`,
+          );
           return false;
         }
 
         // In permissive mode, log warning but allow through
-        this.logger.warn(`DNS resolution failed but allowing in permissive mode: ${url.hostname}`);
+        this.logger.warn(
+          `DNS resolution failed but allowing in permissive mode: ${url.hostname}`,
+        );
       }
 
       // All checks passed
       return true;
     } catch (error) {
-      this.logger.error(
-        `PDS endpoint validation error: ${error.message}`,
-      );
+      this.logger.error(`PDS endpoint validation error: ${error.message}`);
       return false;
     }
   }
@@ -238,7 +244,10 @@ export class BlueskyIdentityService {
         // Add timeout to prevent hanging
         const resolvedDid = await Promise.race([
           idResolver.handle.resolve(handleOrDid),
-          this.createTimeout<string>(this.TIMEOUT_HANDLE_RESOLUTION, 'handle resolution'),
+          this.createTimeout<string>(
+            this.TIMEOUT_HANDLE_RESOLUTION,
+            'handle resolution',
+          ),
         ]);
 
         if (!resolvedDid) {
@@ -275,9 +284,7 @@ export class BlueskyIdentityService {
       // Validate PDS endpoint to prevent SSRF attacks
       const isValid = await this.validatePdsEndpoint(pdsEndpoint);
       if (!isValid) {
-        throw new Error(
-          `Untrusted or invalid PDS endpoint: ${pdsEndpoint}`,
-        );
+        throw new Error(`Untrusted or invalid PDS endpoint: ${pdsEndpoint}`);
       }
 
       // Create agent pointing to the user's PDS
@@ -341,7 +348,10 @@ export class BlueskyIdentityService {
       // Add timeout to prevent hanging
       const did = await Promise.race([
         idResolver.handle.resolve(handle),
-        this.createTimeout<string>(this.TIMEOUT_HANDLE_RESOLUTION, 'handle to DID resolution'),
+        this.createTimeout<string>(
+          this.TIMEOUT_HANDLE_RESOLUTION,
+          'handle to DID resolution',
+        ),
       ]);
 
       if (!did) {
@@ -375,7 +385,10 @@ export class BlueskyIdentityService {
       // Add timeout to prevent hanging
       const didDoc = await Promise.race([
         idResolver.did.resolveNoCheck(did),
-        this.createTimeout(this.TIMEOUT_DID_RESOLUTION, 'DID to handle extraction'),
+        this.createTimeout(
+          this.TIMEOUT_DID_RESOLUTION,
+          'DID to handle extraction',
+        ),
       ]);
 
       const handle = getHandle(didDoc);
