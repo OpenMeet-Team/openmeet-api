@@ -29,9 +29,10 @@ export class BlueskyIdentityService {
   constructor(private readonly configService: ConfigService) {
     // Load PDS domains from environment variable if strict mode is desired
     // Format: comma-separated list, e.g., "bsky.network,bsky.social,custom.pds.com"
-    const envDomains = this.configService.get('ATPROTO_ALLOWED_PDS_DOMAINS', {
-      infer: true,
-    });
+    // eslint-disable-next-line no-restricted-syntax
+    const envDomains = this.configService.get<string>(
+      'ATPROTO_ALLOWED_PDS_DOMAINS',
+    );
 
     if (envDomains) {
       this.ALLOWED_PDS_DOMAINS = envDomains
@@ -143,9 +144,10 @@ export class BlueskyIdentityService {
       // 3. Domain allowlist (OPTIONAL - only if explicitly configured)
       // By default, allow any public domain to support decentralized ATProto
       // Operators can restrict to specific domains via ATPROTO_ALLOWED_PDS_DOMAINS
-      const envDomains = this.configService.get('ATPROTO_ALLOWED_PDS_DOMAINS', {
-        infer: true,
-      });
+      // eslint-disable-next-line no-restricted-syntax
+      const envDomains = this.configService.get<string>(
+        'ATPROTO_ALLOWED_PDS_DOMAINS',
+      );
 
       if (envDomains) {
         // Strict mode: only allow configured domains

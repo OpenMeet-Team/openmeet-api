@@ -44,9 +44,10 @@ export class MetaController {
    * Get frontend domain from config, throw if not set
    */
   private getFrontendDomain(): string {
-    const frontendDomain = this.configService.get<string>('FRONTEND_DOMAIN', {
-      infer: true,
-    });
+    const frontendDomain = this.configService.get<string>(
+      'app.frontendDomain',
+      { infer: true },
+    );
     if (!frontendDomain) {
       throw new Error('FRONTEND_DOMAIN environment variable is not configured');
     }
