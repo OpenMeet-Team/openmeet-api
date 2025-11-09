@@ -179,6 +179,7 @@ services:
       # Override localhost hosts for container networking
       - DATABASE_HOST=postgres
       - ELASTICACHE_HOST=redis
+      - MAIL_HOST=maildev
     env_file:
       - .env
     networks:
