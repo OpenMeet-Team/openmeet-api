@@ -333,4 +333,209 @@ describe('MetaController', () => {
       expect(html).toContain('Some text here');
     });
   });
+
+  describe('Event Link Previews - Bot Access Behavior', () => {
+    let mockResponse: any;
+
+    beforeEach(() => {
+      mockResponse = {
+        status: jest.fn().mockReturnThis(),
+        send: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+      };
+    });
+
+    it('allows bots to generate rich link previews for public events', async () => {
+      const mockEvent = {
+        slug: 'yoga-workshop',
+        name: 'Beginner Yoga Workshop',
+        description: 'Join us for a relaxing yoga session',
+        visibility: EventVisibility.Public,
+        location: 'Downtown Studio',
+        startDate: new Date('2025-06-14T14:00:00Z'),
+      };
+
+      mockEventQueryService.findEventBySlug.mockResolvedValue(mockEvent);
+
+      await controller.getEventMeta('yoga-workshop', mockResponse);
+
+      const sentHtml = mockResponse.send.mock.calls[0][0];
+      expect(sentHtml).toContain('Beginner Yoga Workshop');
+      expect(sentHtml).toContain('Join us for a relaxing yoga session');
+      expect(sentHtml).toContain('Downtown Studio');
+      expect(mockResponse.status).not.toHaveBeenCalledWith(404);
+    });
+
+    it('allows WhatsApp/Discord bots to preview authenticated (unlisted) events', async () => {
+      const mockEvent = {
+        slug: 'private-birthday-party',
+        name: "Emma's 6th Birthday",
+        description: 'Join us for cake and games!',
+        visibility: EventVisibility.Authenticated,
+        location: '123 Main St',
+      };
+
+      mockEventQueryService.findEventBySlug.mockResolvedValue(mockEvent);
+
+      await controller.getEventMeta('private-birthday-party', mockResponse);
+
+      const sentHtml = mockResponse.send.mock.calls[0][0];
+      // Check for HTML-escaped version (apostrophes are escaped as &#039;)
+      expect(sentHtml).toContain("Emma&#039;s 6th Birthday");
+      expect(sentHtml).toContain('Join us for cake and games!');
+      expect(mockResponse.status).not.toHaveBeenCalledWith(404);
+    });
+
+    it('prevents search engines from indexing authenticated events', async () => {
+      const mockEvent = {
+        slug: 'semi-private-event',
+        name: 'Semi-Private Event',
+        description: 'Only for those with the link',
+        visibility: EventVisibility.Authenticated,
+      };
+
+      mockEventQueryService.findEventBySlug.mockResolvedValue(mockEvent);
+
+      await controller.getEventMeta('semi-private-event', mockResponse);
+
+      expect(mockResponse.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          'X-Robots-Tag': 'noindex, nofollow',
+        }),
+      );
+    });
+
+    it('allows search engines to index public events', async () => {
+      const mockEvent = {
+        slug: 'public-meetup',
+        name: 'Public Meetup',
+        description: 'Everyone welcome!',
+        visibility: EventVisibility.Public,
+      };
+
+      mockEventQueryService.findEventBySlug.mockResolvedValue(mockEvent);
+
+      await controller.getEventMeta('public-meetup', mockResponse);
+
+      expect(mockResponse.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          'X-Robots-Tag': 'index, follow',
+        }),
+      );
+    });
+
+    it('hides private events completely from bots', async () => {
+      const mockEvent = {
+        slug: 'secret-meeting',
+        name: 'Secret Meeting',
+        description: 'Top secret content',
+        visibility: EventVisibility.Private,
+      };
+
+      mockEventQueryService.findEventBySlug.mockResolvedValue(mockEvent);
+
+      await controller.getEventMeta('secret-meeting', mockResponse);
+
+      expect(mockResponse.status).toHaveBeenCalledWith(404);
+      expect(mockResponse.send).toHaveBeenCalledWith('Event not found');
+      const sentContent = mockResponse.send.mock.calls[0][0];
+      expect(sentContent).not.toContain('Secret Meeting');
+      expect(sentContent).not.toContain('Top secret content');
+    });
+
+    it('returns generic 404 for non-existent events without leaking information', async () => {
+      mockEventQueryService.findEventBySlug.mockResolvedValue(null);
+
+      await controller.getEventMeta('non-existent', mockResponse);
+
+      expect(mockResponse.status).toHaveBeenCalledWith(404);
+      expect(mockResponse.send).toHaveBeenCalledWith('Event not found');
+    });
+  });
+
+  describe('Group Link Previews - Bot Access Behavior', () => {
+    let mockResponse: any;
+
+    beforeEach(() => {
+      mockResponse = {
+        status: jest.fn().mockReturnThis(),
+        send: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+      };
+    });
+
+    it('allows bots to generate rich link previews for public groups', async () => {
+      const mockGroup = {
+        slug: 'photography-club',
+        name: 'Photography Club',
+        description: 'For photography enthusiasts',
+        visibility: GroupVisibility.Public,
+      };
+
+      mockGroupService.findGroupBySlug.mockResolvedValue(mockGroup);
+
+      await controller.getGroupMeta('photography-club', mockResponse);
+
+      const sentHtml = mockResponse.send.mock.calls[0][0];
+      expect(sentHtml).toContain('Photography Club');
+      expect(sentHtml).toContain('For photography enthusiasts');
+      expect(mockResponse.status).not.toHaveBeenCalledWith(404);
+    });
+
+    it('allows link preview bots to preview authenticated groups', async () => {
+      const mockGroup = {
+        slug: 'book-club',
+        name: 'Secret Book Club',
+        description: 'Monthly book discussions',
+        visibility: GroupVisibility.Authenticated,
+      };
+
+      mockGroupService.findGroupBySlug.mockResolvedValue(mockGroup);
+
+      await controller.getGroupMeta('book-club', mockResponse);
+
+      const sentHtml = mockResponse.send.mock.calls[0][0];
+      expect(sentHtml).toContain('Secret Book Club');
+      expect(sentHtml).toContain('Monthly book discussions');
+      expect(mockResponse.status).not.toHaveBeenCalledWith(404);
+    });
+
+    it('prevents search engines from indexing authenticated groups', async () => {
+      const mockGroup = {
+        slug: 'invite-only-group',
+        name: 'Invite Only Group',
+        description: 'Link sharing only',
+        visibility: GroupVisibility.Authenticated,
+      };
+
+      mockGroupService.findGroupBySlug.mockResolvedValue(mockGroup);
+
+      await controller.getGroupMeta('invite-only-group', mockResponse);
+
+      expect(mockResponse.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          'X-Robots-Tag': 'noindex, nofollow',
+        }),
+      );
+    });
+
+    it('hides private groups completely from bots', async () => {
+      const mockGroup = {
+        slug: 'secret-society',
+        name: 'Secret Society',
+        description: 'Members only',
+        visibility: GroupVisibility.Private,
+      };
+
+      mockGroupService.findGroupBySlug.mockResolvedValue(mockGroup);
+
+      await controller.getGroupMeta('secret-society', mockResponse);
+
+      expect(mockResponse.status).toHaveBeenCalledWith(404);
+      expect(mockResponse.send).toHaveBeenCalledWith('Group not found');
+      const sentContent = mockResponse.send.mock.calls[0][0];
+      expect(sentContent).not.toContain('Secret Society');
+      expect(sentContent).not.toContain('Members only');
+    });
+  });
 });
