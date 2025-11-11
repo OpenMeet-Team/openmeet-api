@@ -265,30 +265,50 @@ export class AuthService {
       });
     }
 
-    // Automatically claim shadow account if one exists for Bluesky users
+    // Convert shadow account to real account when they log in
     if (
       authProvider === AuthProvidersEnum.bluesky &&
       socialData.id &&
-      !user.isShadowAccount
+      user.isShadowAccount
     ) {
       try {
-        const claimedUser = await this.shadowAccountService.claimShadowAccount(
-          user.id,
-          socialData.id,
-          AuthProvidersEnum.bluesky,
-          tenantId,
-        );
+        // Ensure the user has a role
+        if (!user.role) {
+          const roleEntity = await this.roleService.findByName(
+            RoleEnum.User,
+            tenantId,
+          );
 
-        if (claimedUser) {
-          this.logger.log(
-            `Automatically claimed shadow account for Bluesky user ${socialData.id} in tenant ${tenantId}`,
+          if (!roleEntity) {
+            throw new Error(`Role not found: ${RoleEnum.User}`);
+          }
+
+          user = await this.userService.update(
+            user.id,
+            {
+              isShadowAccount: false,
+              role: roleEntity,
+            },
+            tenantId,
+          );
+        } else {
+          user = await this.userService.update(
+            user.id,
+            {
+              isShadowAccount: false,
+            },
+            tenantId,
           );
         }
-      } catch (error) {
-        // Log the error but don't fail the login if claiming fails
-        this.logger.warn(
-          `Failed to automatically claim shadow account for user ${user.id}: ${error.message}`,
+
+        this.logger.log(
+          `Converted shadow account to real account for Bluesky user ${socialData.id} (user ID: ${user.id}) in tenant ${tenantId}`,
         );
+      } catch (error) {
+        this.logger.error(
+          `Failed to convert shadow account to real account for user ${user.id}: ${error.message}`,
+        );
+        // Don't fail the login, but log the error
       }
     }
 

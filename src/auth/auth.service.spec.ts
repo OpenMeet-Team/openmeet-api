@@ -36,6 +36,7 @@ describe('AuthService', () => {
   const mockUserService = {
     findById: jest.fn(),
     findOrCreateUser: jest.fn(),
+    update: jest.fn(),
   };
 
   const mockJwtService = {
@@ -59,6 +60,7 @@ describe('AuthService', () => {
 
   const mockRoleService = {
     findById: jest.fn(),
+    findByName: jest.fn(),
   };
 
   const mockTenantConnectionService = {
@@ -313,15 +315,25 @@ describe('AuthService', () => {
     });
 
     describe('Bluesky Provider - Edge Cases', () => {
-      it('should not attempt claim when user is a shadow account', async () => {
-        // Arrange - User being logged in is a shadow account
+      it('should convert shadow account to real account when they log in', async () => {
+        // Arrange - User being logged in is a shadow account without a role
         const shadowLoginUser = {
           ...mockRealUser,
           isShadowAccount: true,
+          role: null,
         };
+        const convertedUser = {
+          ...shadowLoginUser,
+          isShadowAccount: false,
+          role: { id: 1, name: 'user' },
+        };
+        const mockUserRole = { id: 1, name: 'user' };
+
         mockUserService.findOrCreateUser = jest
           .fn()
           .mockResolvedValue(shadowLoginUser);
+        mockUserService.update = jest.fn().mockResolvedValue(convertedUser);
+        mockRoleService.findByName = jest.fn().mockResolvedValue(mockUserRole);
 
         // Act
         await authService.validateSocialLogin(
@@ -330,10 +342,58 @@ describe('AuthService', () => {
           'test-tenant',
         );
 
-        // Assert - Should not attempt to claim
+        // Assert - Should convert shadow account to real account
+        expect(mockRoleService.findByName).toHaveBeenCalledWith(
+          'user',
+          'test-tenant',
+        );
+        expect(mockUserService.update).toHaveBeenCalledWith(
+          shadowLoginUser.id,
+          {
+            isShadowAccount: false,
+            role: mockUserRole,
+          },
+          'test-tenant',
+        );
+        // Should not attempt to claim since this IS the shadow account logging in
         expect(
           mockShadowAccountService.claimShadowAccount,
         ).not.toHaveBeenCalled();
+      });
+
+      it('should convert shadow account with existing role to real account', async () => {
+        // Arrange - Shadow account that already has a role (edge case)
+        const shadowLoginUser = {
+          ...mockRealUser,
+          isShadowAccount: true,
+          role: { id: 1, name: 'user' },
+        };
+        const convertedUser = {
+          ...shadowLoginUser,
+          isShadowAccount: false,
+        };
+
+        mockUserService.findOrCreateUser = jest
+          .fn()
+          .mockResolvedValue(shadowLoginUser);
+        mockUserService.update = jest.fn().mockResolvedValue(convertedUser);
+
+        // Act
+        await authService.validateSocialLogin(
+          AuthProvidersEnum.bluesky,
+          mockSocialData,
+          'test-tenant',
+        );
+
+        // Assert - Should only update isShadowAccount, not role
+        expect(mockUserService.update).toHaveBeenCalledWith(
+          shadowLoginUser.id,
+          {
+            isShadowAccount: false,
+          },
+          'test-tenant',
+        );
+        expect(mockRoleService.findByName).not.toHaveBeenCalled();
       });
 
       it('should not attempt claim when socialData.id is missing', async () => {
