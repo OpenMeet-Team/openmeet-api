@@ -61,6 +61,7 @@ import { SitemapModule } from './sitemap/sitemap.module';
 import { OidcModule } from './oidc/oidc.module';
 import { ActivityFeedModule } from './activity-feed/activity-feed.module';
 import { MetaModule } from './meta/meta.module';
+import { TestHelpersModule } from './test-helpers/test-helpers.module';
 
 const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
   useClass: TypeOrmConfigService,
@@ -160,6 +161,8 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     SitemapModule,
     OidcModule,
     MetaModule,
+    // Conditionally import test helpers only in non-production environments
+    ...(process.env.NODE_ENV !== 'production' ? [TestHelpersModule] : []),
   ],
   providers: [
     TenantConnectionService,
