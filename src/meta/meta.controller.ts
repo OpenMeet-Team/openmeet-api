@@ -271,9 +271,7 @@ if (!/bot|crawl|spider/i.test(navigator.userAgent)) {
       // Security: Only serve meta tags for PUBLIC and AUTHENTICATED events
       // Private events return 404 to prevent information leakage
       if (event.visibility === EventVisibility.Private) {
-        this.logger.warn(
-          `Attempted to fetch meta for private event: ${slug}`,
-        );
+        this.logger.warn(`Attempted to fetch meta for private event: ${slug}`);
         res.status(HttpStatus.NOT_FOUND).send('Event not found');
         return;
       }
@@ -281,9 +279,10 @@ if (!/bot|crawl|spider/i.test(navigator.userAgent)) {
       const html = this.renderMetaHTML('event', event);
 
       // Set appropriate robot directives based on visibility
-      const robotsTag = event.visibility === EventVisibility.Public
-        ? 'index, follow'
-        : 'noindex, nofollow'; // Authenticated events: allow previews but not search indexing
+      const robotsTag =
+        event.visibility === EventVisibility.Public
+          ? 'index, follow'
+          : 'noindex, nofollow'; // Authenticated events: allow previews but not search indexing
 
       res.set({
         'Content-Type': 'text/html; charset=utf-8',
@@ -292,7 +291,9 @@ if (!/bot|crawl|spider/i.test(navigator.userAgent)) {
         'X-Robots-Tag': robotsTag,
       });
 
-      this.logger.debug(`Served meta HTML for event: ${slug} (visibility: ${event.visibility})`);
+      this.logger.debug(
+        `Served meta HTML for event: ${slug} (visibility: ${event.visibility})`,
+      );
       res.send(html);
     } catch (error) {
       this.logger.error(`Error fetching event meta for ${slug}:`, error);
@@ -324,9 +325,7 @@ if (!/bot|crawl|spider/i.test(navigator.userAgent)) {
       // Security: Only serve meta tags for PUBLIC and AUTHENTICATED groups
       // Private groups return 404 to prevent information leakage
       if (group.visibility === GroupVisibility.Private) {
-        this.logger.warn(
-          `Attempted to fetch meta for private group: ${slug}`,
-        );
+        this.logger.warn(`Attempted to fetch meta for private group: ${slug}`);
         res.status(HttpStatus.NOT_FOUND).send('Group not found');
         return;
       }
@@ -334,9 +333,10 @@ if (!/bot|crawl|spider/i.test(navigator.userAgent)) {
       const html = this.renderMetaHTML('group', group);
 
       // Set appropriate robot directives based on visibility
-      const robotsTag = group.visibility === GroupVisibility.Public
-        ? 'index, follow'
-        : 'noindex, nofollow'; // Authenticated groups: allow previews but not search indexing
+      const robotsTag =
+        group.visibility === GroupVisibility.Public
+          ? 'index, follow'
+          : 'noindex, nofollow'; // Authenticated groups: allow previews but not search indexing
 
       res.set({
         'Content-Type': 'text/html; charset=utf-8',
@@ -345,7 +345,9 @@ if (!/bot|crawl|spider/i.test(navigator.userAgent)) {
         'X-Robots-Tag': robotsTag,
       });
 
-      this.logger.debug(`Served meta HTML for group: ${slug} (visibility: ${group.visibility})`);
+      this.logger.debug(
+        `Served meta HTML for group: ${slug} (visibility: ${group.visibility})`,
+      );
       res.send(html);
     } catch (error) {
       this.logger.error(`Error fetching group meta for ${slug}:`, error);
