@@ -278,19 +278,34 @@ export class EventSeriesOccurrenceService {
       }
 
       // DST-AWARE DATE CALCULATION
-      // Extract the local time from the template event
+      // The occurrenceDate from RRule already has the correct UTC time that maintains
+      // the local time across DST boundaries. We need to use it directly.
       const timeZone = series.timeZone || 'UTC';
+
+      // Parse the occurrence date (which comes from RRule with correct UTC time)
+      const occurrenceDateUtc = new Date(occurrenceDate);
+
+      // Get the local date and time components from the RRule-generated date
+      const rruleLocalDate = formatInTimeZone(
+        occurrenceDateUtc,
+        timeZone,
+        'yyyy-MM-dd',
+      );
+      const rruleLocalTime = formatInTimeZone(
+        occurrenceDateUtc,
+        timeZone,
+        'HH:mm:ss',
+      );
+
+      // Get the expected local time from the template event
       const templateLocalTime = formatInTimeZone(
         updatedTemplateEvent.startDate,
         timeZone,
         'HH:mm:ss',
       );
 
-      // Get just the date part from occurrenceDate (may be ISO string or date string)
-      const occurrenceDateOnly = occurrenceDate.split('T')[0];
-
-      // Combine occurrence date with template's local time
-      const localDateTime = `${occurrenceDateOnly}T${templateLocalTime}`;
+      // Combine the RRule date with the template's local time
+      const localDateTime = `${rruleLocalDate}T${templateLocalTime}`;
 
       // Convert to UTC using the timezone (this handles DST correctly)
       const startDateUtc = fromZonedTime(localDateTime, timeZone);
@@ -305,7 +320,9 @@ export class EventSeriesOccurrenceService {
 
       this.logger.debug('[materializeOccurrence] DST-aware date calculation', {
         occurrenceDate,
-        occurrenceDateOnly,
+        occurrenceDateUtc: occurrenceDateUtc.toISOString(),
+        rruleLocalDate,
+        rruleLocalTime,
         templateLocalTime,
         localDateTime,
         startDateUtc: startDateUtc.toISOString(),
