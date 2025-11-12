@@ -139,14 +139,24 @@ async function createCategory(app, token, categoryData) {
 async function createEvent(app: string, authToken: string, eventData: any) {
   // console.log('Creating event with data:', JSON.stringify(eventData, null, 2));
 
+  // Generate default dates
+  const defaultStartDate = new Date(Date.now() + 86400000); // 1 day from now
+  const defaultEndDate = new Date(defaultStartDate.getTime() + 3600000); // 1 hour after start
+
   const payload = {
     timeZone: 'UTC', // Default timezone
     maxAttendees: 100, // Default max attendees
     categories: [], // Default empty categories
-    startDate: new Date(Date.now() + 86400000).toISOString(), // Default start date (1 day from now)
-    endDate: new Date(Date.now() + 90000000).toISOString(), // Default end date (1 hour after start)
+    startDate: defaultStartDate.toISOString(), // Default start date (1 day from now)
+    endDate: defaultEndDate.toISOString(), // Default end date (1 hour after start)
     ...eventData, // Spread incoming eventData, potentially overriding the defaults if provided
   };
+
+  // If startDate was overridden but endDate wasn't, recalculate endDate
+  if (eventData.startDate && !eventData.endDate) {
+    const startDate = new Date(eventData.startDate);
+    payload.endDate = new Date(startDate.getTime() + 3600000).toISOString(); // 1 hour after custom start
+  }
 
   // Handle both Express app instances and URL strings
   const response = await request(app)

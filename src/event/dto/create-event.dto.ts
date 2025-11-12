@@ -28,7 +28,9 @@ import { RecurrenceFrequency } from '../../event-series/interfaces/recurrence.in
  * Custom validator to ensure end date is after start date
  */
 @ValidatorConstraint({ name: 'IsAfterStartDate', async: false })
-export class IsAfterStartDateConstraint implements ValidatorConstraintInterface {
+export class IsAfterStartDateConstraint
+  implements ValidatorConstraintInterface
+{
   validate(endDate: any, args: ValidationArguments) {
     const object = args.object as any;
     if (!endDate || !object.startDate) {
@@ -39,7 +41,7 @@ export class IsAfterStartDateConstraint implements ValidatorConstraintInterface 
     return end > start;
   }
 
-  defaultMessage(args: ValidationArguments) {
+  defaultMessage(_args: ValidationArguments) {
     return 'End date must be after start date';
   }
 }

@@ -1,6 +1,10 @@
 import { validate } from 'class-validator';
 import { CreateEventDto } from './create-event.dto';
-import { EventType, EventStatus, EventVisibility } from '../../core/constants/constant';
+import {
+  EventType,
+  EventStatus,
+  EventVisibility,
+} from '../../core/constants/constant';
 
 describe('CreateEventDto - End Date Validation', () => {
   it('should fail validation when end date is before start date', async () => {
@@ -12,14 +16,16 @@ describe('CreateEventDto - End Date Validation', () => {
     dto.visibility = EventVisibility.Public;
     dto.timeZone = 'America/Vancouver';
     dto.startDate = '2025-11-13T02:00:00.000Z' as unknown as Date; // 6pm PST
-    dto.endDate = '2025-11-12T17:00:00.000Z' as unknown as Date;   // 9am PST previous day
+    dto.endDate = '2025-11-12T17:00:00.000Z' as unknown as Date; // 9am PST previous day
 
     const errors = await validate(dto);
     const endDateError = errors.find((e) => e.property === 'endDate');
 
     expect(endDateError).toBeDefined();
     expect(endDateError?.constraints).toHaveProperty('IsAfterStartDate');
-    expect(endDateError?.constraints?.IsAfterStartDate).toBe('End date must be after start date');
+    expect(endDateError?.constraints?.IsAfterStartDate).toBe(
+      'End date must be after start date',
+    );
   });
 
   it('should pass validation when end date is after start date', async () => {
@@ -31,7 +37,7 @@ describe('CreateEventDto - End Date Validation', () => {
     dto.visibility = EventVisibility.Public;
     dto.timeZone = 'America/Vancouver';
     dto.startDate = '2025-11-13T02:00:00.000Z' as unknown as Date; // 6pm PST
-    dto.endDate = '2025-11-13T05:00:00.000Z' as unknown as Date;   // 9pm PST
+    dto.endDate = '2025-11-13T05:00:00.000Z' as unknown as Date; // 9pm PST
 
     const errors = await validate(dto);
     const endDateError = errors.find((e) => e.property === 'endDate');
