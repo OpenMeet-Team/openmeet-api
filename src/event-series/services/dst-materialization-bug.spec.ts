@@ -18,7 +18,6 @@ import { formatInTimeZone } from 'date-fns-tz';
 describe('DST Materialization Bug', () => {
   let service: EventSeriesOccurrenceService;
   let eventManagementService: EventManagementService;
-  let eventSeriesService: EventSeriesService;
 
   const mockUserId = 1;
   const mockTenantId = 'tenant_test';
@@ -132,7 +131,6 @@ describe('DST Materialization Bug', () => {
     eventManagementService = module.get<EventManagementService>(
       EventManagementService,
     );
-    eventSeriesService = module.get<EventSeriesService>(EventSeriesService);
   });
 
   it('should maintain 7pm local time when materializing across DST boundary', async () => {
@@ -146,16 +144,18 @@ describe('DST Materialization Bug', () => {
 
     // Capture the DTO passed to eventManagementService.create()
     let capturedDto: any = null;
-    jest.spyOn(eventManagementService, 'create').mockImplementation((dto: any) => {
-      capturedDto = dto;
-      return Promise.resolve({
-        ...templateEvent,
-        ...dto,
-        id: 2,
-        slug: 'materialized-event',
-        seriesSlug: dto.seriesSlug,
-      } as any);
-    });
+    jest
+      .spyOn(eventManagementService, 'create')
+      .mockImplementation((dto: any) => {
+        capturedDto = dto;
+        return Promise.resolve({
+          ...templateEvent,
+          ...dto,
+          id: 2,
+          slug: 'materialized-event',
+          seriesSlug: dto.seriesSlug,
+        } as any);
+      });
 
     // Materialize occurrence for November 12 (after DST ended on Nov 2)
     // Pass the date in the format RRule generates it (just the date part)
@@ -173,7 +173,10 @@ describe('DST Materialization Bug', () => {
     console.log('\n=== Debug Info ===');
     console.log('Occurrence date passed:', occurrenceDate);
     console.log('Created startDate UTC:', capturedDto.startDate.toISOString());
-    console.log('Template startDate UTC:', templateEvent.startDate.toISOString());
+    console.log(
+      'Template startDate UTC:',
+      templateEvent.startDate.toISOString(),
+    );
 
     // Convert created dates to local time
     const createdStartLocal = formatInTimeZone(
@@ -203,15 +206,17 @@ describe('DST Materialization Bug', () => {
 
   it('should maintain same duration across DST boundary', async () => {
     let capturedDto: any = null;
-    jest.spyOn(eventManagementService, 'create').mockImplementation((dto: any) => {
-      capturedDto = dto;
-      return Promise.resolve({
-        ...templateEvent,
-        ...dto,
-        id: 2,
-        slug: 'materialized-event',
-      } as any);
-    });
+    jest
+      .spyOn(eventManagementService, 'create')
+      .mockImplementation((dto: any) => {
+        capturedDto = dto;
+        return Promise.resolve({
+          ...templateEvent,
+          ...dto,
+          id: 2,
+          slug: 'materialized-event',
+        } as any);
+      });
 
     await service.materializeOccurrence(
       'weekly-meeting-series',
