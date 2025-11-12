@@ -265,30 +265,71 @@ export class AuthService {
       });
     }
 
-    // Automatically claim shadow account if one exists for Bluesky users
-    if (
-      authProvider === AuthProvidersEnum.bluesky &&
-      socialData.id &&
-      !user.isShadowAccount
-    ) {
-      try {
-        const claimedUser = await this.shadowAccountService.claimShadowAccount(
-          user.id,
-          socialData.id,
-          AuthProvidersEnum.bluesky,
-          tenantId,
-        );
+    // Handle shadow accounts for Bluesky users
+    if (authProvider === AuthProvidersEnum.bluesky && socialData.id) {
+      // Case 1: Shadow account logging in for the first time - convert to real account
+      if (user.isShadowAccount) {
+        try {
+          // Ensure the user has a role
+          if (!user.role) {
+            const roleEntity = await this.roleService.findByName(
+              RoleEnum.User,
+              tenantId,
+            );
 
-        if (claimedUser) {
+            if (!roleEntity) {
+              throw new Error(`Role not found: ${RoleEnum.User}`);
+            }
+
+            user = await this.userService.update(
+              user.id,
+              {
+                isShadowAccount: false,
+                role: roleEntity,
+              },
+              tenantId,
+            );
+          } else {
+            user = await this.userService.update(
+              user.id,
+              {
+                isShadowAccount: false,
+              },
+              tenantId,
+            );
+          }
+
           this.logger.log(
-            `Automatically claimed shadow account for Bluesky user ${socialData.id} in tenant ${tenantId}`,
+            `Converted shadow account to real account for Bluesky user ${socialData.id} (user ID: ${user.id}) in tenant ${tenantId}`,
+          );
+        } catch (error) {
+          this.logger.error(
+            `Failed to convert shadow account to real account for user ${user.id}: ${error.message}`,
+          );
+          // Don't fail the login, but log the error
+        }
+      }
+      // Case 2: Real user logging in - claim any existing shadow account
+      else {
+        try {
+          const claimedUser = await this.shadowAccountService.claimShadowAccount(
+            user.id,
+            socialData.id,
+            AuthProvidersEnum.bluesky,
+            tenantId,
+          );
+
+          if (claimedUser) {
+            this.logger.log(
+              `Automatically claimed shadow account for Bluesky user ${socialData.id} in tenant ${tenantId}`,
+            );
+          }
+        } catch (error) {
+          // Log the error but don't fail the login if claiming fails
+          this.logger.warn(
+            `Failed to automatically claim shadow account for user ${user.id}: ${error.message}`,
           );
         }
-      } catch (error) {
-        // Log the error but don't fail the login if claiming fails
-        this.logger.warn(
-          `Failed to automatically claim shadow account for user ${user.id}: ${error.message}`,
-        );
       }
     }
 

@@ -73,6 +73,13 @@ export class User {
   status?: Status;
 
   @ApiProperty({
+    type: Boolean,
+    example: false,
+  })
+  @Expose({ groups: ['me', 'admin'] })
+  isShadowAccount?: boolean;
+
+  @ApiProperty({
     type: String,
     example: '1234567890',
   })
