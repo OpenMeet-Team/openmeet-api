@@ -13,14 +13,9 @@ jest.setTimeout(60000);
 describe('Shadow Account Conversion (E2E)', () => {
   const app = TESTING_APP_URL;
   let serverApp;
-  let authToken: string;
 
   beforeAll(async () => {
-    authToken = await getAuthToken(
-      app,
-      TESTING_USER_EMAIL,
-      TESTING_USER_PASSWORD,
-    );
+    await getAuthToken(app, TESTING_USER_EMAIL, TESTING_USER_PASSWORD);
     serverApp = request.agent(app).set('x-tenant-id', TESTING_TENANT_ID);
   });
 

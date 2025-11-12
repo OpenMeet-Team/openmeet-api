@@ -11,6 +11,10 @@ import {
   IsObject,
   IsIn,
   Min,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+  ValidationArguments,
+  Validate,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -19,6 +23,28 @@ import { FileEntity } from '../../file/infrastructure/persistence/relational/ent
 import { GroupEntity } from 'src/group/infrastructure/persistence/relational/entities/group.entity';
 import { SourceFields } from '../../core/interfaces/source-data.interface';
 import { RecurrenceFrequency } from '../../event-series/interfaces/recurrence.interface';
+
+/**
+ * Custom validator to ensure end date is after start date
+ */
+@ValidatorConstraint({ name: 'IsAfterStartDate', async: false })
+export class IsAfterStartDateConstraint
+  implements ValidatorConstraintInterface
+{
+  validate(endDate: any, args: ValidationArguments) {
+    const object = args.object as any;
+    if (!endDate || !object.startDate) {
+      return true; // Skip validation if either date is missing
+    }
+    const start = new Date(object.startDate).getTime();
+    const end = new Date(endDate).getTime();
+    return end > start;
+  }
+
+  defaultMessage(_args: ValidationArguments) {
+    return 'End date must be after start date';
+  }
+}
 
 export class RecurrenceRuleDto {
   @ApiProperty({
@@ -154,6 +180,7 @@ export class CreateEventDto implements SourceFields {
   })
   @IsOptional()
   @IsDateString()
+  @Validate(IsAfterStartDateConstraint)
   endDate?: Date;
 
   @ApiProperty({

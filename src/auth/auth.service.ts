@@ -312,12 +312,13 @@ export class AuthService {
       // Case 2: Real user logging in - claim any existing shadow account
       else {
         try {
-          const claimedUser = await this.shadowAccountService.claimShadowAccount(
-            user.id,
-            socialData.id,
-            AuthProvidersEnum.bluesky,
-            tenantId,
-          );
+          const claimedUser =
+            await this.shadowAccountService.claimShadowAccount(
+              user.id,
+              socialData.id,
+              AuthProvidersEnum.bluesky,
+              tenantId,
+            );
 
           if (claimedUser) {
             this.logger.log(

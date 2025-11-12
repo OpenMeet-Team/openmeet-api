@@ -24,7 +24,7 @@ import { AllConfigType } from '../../config/config.type';
 export class TestOnlyGuard implements CanActivate {
   constructor(private configService: ConfigService<AllConfigType>) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  canActivate(_context: ExecutionContext): boolean {
     const nodeEnv = this.configService.get('app.nodeEnv', { infer: true });
 
     // Block access in production environment

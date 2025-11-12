@@ -11,7 +11,7 @@ describe('MetaController', () => {
   let configService: ConfigService;
 
   const mockConfigService = {
-    get: jest.fn((key: string, options?: any) => {
+    get: jest.fn((key: string, _options?: any) => {
       const config = {
         'app.frontendDomain': 'https://platform.openmeet.net',
         'file.cloudfrontDistributionDomain': 'ds1xtylbemsat.cloudfront.net',
@@ -345,7 +345,7 @@ describe('MetaController', () => {
       };
     });
 
-    it('allows bots to generate rich link previews for public events', async () => {
+    it('should allow bots to generate rich link previews for public events', async () => {
       const mockEvent = {
         slug: 'yoga-workshop',
         name: 'Beginner Yoga Workshop',
@@ -366,7 +366,7 @@ describe('MetaController', () => {
       expect(mockResponse.status).not.toHaveBeenCalledWith(404);
     });
 
-    it('allows WhatsApp/Discord bots to preview authenticated (unlisted) events', async () => {
+    it('should allow WhatsApp/Discord bots to preview authenticated (unlisted) events', async () => {
       const mockEvent = {
         slug: 'private-birthday-party',
         name: "Emma's 6th Birthday",
@@ -381,12 +381,12 @@ describe('MetaController', () => {
 
       const sentHtml = mockResponse.send.mock.calls[0][0];
       // Check for HTML-escaped version (apostrophes are escaped as &#039;)
-      expect(sentHtml).toContain("Emma&#039;s 6th Birthday");
+      expect(sentHtml).toContain('Emma&#039;s 6th Birthday');
       expect(sentHtml).toContain('Join us for cake and games!');
       expect(mockResponse.status).not.toHaveBeenCalledWith(404);
     });
 
-    it('prevents search engines from indexing authenticated events', async () => {
+    it('should prevent search engines from indexing authenticated events', async () => {
       const mockEvent = {
         slug: 'semi-private-event',
         name: 'Semi-Private Event',
@@ -405,7 +405,7 @@ describe('MetaController', () => {
       );
     });
 
-    it('allows search engines to index public events', async () => {
+    it('should allow search engines to index public events', async () => {
       const mockEvent = {
         slug: 'public-meetup',
         name: 'Public Meetup',
@@ -424,7 +424,7 @@ describe('MetaController', () => {
       );
     });
 
-    it('hides private events completely from bots', async () => {
+    it('should hide private events completely from bots', async () => {
       const mockEvent = {
         slug: 'secret-meeting',
         name: 'Secret Meeting',
@@ -443,7 +443,7 @@ describe('MetaController', () => {
       expect(sentContent).not.toContain('Top secret content');
     });
 
-    it('returns generic 404 for non-existent events without leaking information', async () => {
+    it('should return generic 404 for non-existent events without leaking information', async () => {
       mockEventQueryService.findEventBySlug.mockResolvedValue(null);
 
       await controller.getEventMeta('non-existent', mockResponse);
@@ -464,7 +464,7 @@ describe('MetaController', () => {
       };
     });
 
-    it('allows bots to generate rich link previews for public groups', async () => {
+    it('should allow bots to generate rich link previews for public groups', async () => {
       const mockGroup = {
         slug: 'photography-club',
         name: 'Photography Club',
@@ -482,7 +482,7 @@ describe('MetaController', () => {
       expect(mockResponse.status).not.toHaveBeenCalledWith(404);
     });
 
-    it('allows link preview bots to preview authenticated groups', async () => {
+    it('should allow link preview bots to preview authenticated groups', async () => {
       const mockGroup = {
         slug: 'book-club',
         name: 'Secret Book Club',
@@ -500,7 +500,7 @@ describe('MetaController', () => {
       expect(mockResponse.status).not.toHaveBeenCalledWith(404);
     });
 
-    it('prevents search engines from indexing authenticated groups', async () => {
+    it('should prevent search engines from indexing authenticated groups', async () => {
       const mockGroup = {
         slug: 'invite-only-group',
         name: 'Invite Only Group',
@@ -519,7 +519,7 @@ describe('MetaController', () => {
       );
     });
 
-    it('hides private groups completely from bots', async () => {
+    it('should hide private groups completely from bots', async () => {
       const mockGroup = {
         slug: 'secret-society',
         name: 'Secret Society',
