@@ -16,7 +16,7 @@ import { Trace } from '../../utils/trace.decorator';
 import { RecurrencePatternService } from './recurrence-pattern.service';
 import { UserService } from '../../user/user.service';
 import { parseISO, format } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
+import { toZonedTime, formatInTimeZone, fromZonedTime } from 'date-fns-tz';
 import { startOfDay } from 'date-fns';
 import { REQUEST } from '@nestjs/core';
 import { TenantConnectionService } from '../../tenant/tenant.service';
@@ -277,18 +277,48 @@ export class EventSeriesOccurrenceService {
         );
       }
 
+      // DST-AWARE DATE CALCULATION
+      // Extract the local time from the template event
+      const timeZone = series.timeZone || 'UTC';
+      const templateLocalTime = formatInTimeZone(
+        updatedTemplateEvent.startDate,
+        timeZone,
+        'HH:mm:ss',
+      );
+
+      // Get just the date part from occurrenceDate (may be ISO string or date string)
+      const occurrenceDateOnly = occurrenceDate.split('T')[0];
+
+      // Combine occurrence date with template's local time
+      const localDateTime = `${occurrenceDateOnly}T${templateLocalTime}`;
+
+      // Convert to UTC using the timezone (this handles DST correctly)
+      const startDateUtc = fromZonedTime(localDateTime, timeZone);
+
+      // Calculate end date using duration from template
+      const durationMs = updatedTemplateEvent.endDate
+        ? updatedTemplateEvent.endDate.getTime() -
+          updatedTemplateEvent.startDate.getTime()
+        : 60 * 60 * 1000; // 1 hour default
+
+      const endDateUtc = new Date(startDateUtc.getTime() + durationMs);
+
+      this.logger.debug('[materializeOccurrence] DST-aware date calculation', {
+        occurrenceDate,
+        occurrenceDateOnly,
+        templateLocalTime,
+        localDateTime,
+        startDateUtc: startDateUtc.toISOString(),
+        endDateUtc: endDateUtc.toISOString(),
+        timeZone,
+      });
+
       // Create a properly typed CreateEventDto object
       const createDto: CreateEventDto = {
         name: updatedTemplateEvent.name,
         description: updatedTemplateEvent.description || '',
-        startDate: new Date(occurrenceDate),
-        endDate: updatedTemplateEvent.endDate
-          ? new Date(
-              new Date(occurrenceDate).getTime() +
-                (updatedTemplateEvent.endDate.getTime() -
-                  updatedTemplateEvent.startDate.getTime()),
-            )
-          : new Date(new Date(occurrenceDate).getTime() + 60 * 60 * 1000), // 1 hour default duration if no endDate
+        startDate: startDateUtc,
+        endDate: endDateUtc,
         type: updatedTemplateEvent.type,
         location: updatedTemplateEvent.location,
         lat: updatedTemplateEvent.lat,
