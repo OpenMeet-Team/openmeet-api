@@ -121,6 +121,11 @@ describe('Timezone Handling in Recurring Events (e2e)', () => {
         'America/New_York',
         'HH:mm',
       );
+      const beforeTransitionWeekday = formatInTimeZone(
+        beforeTransitionDate,
+        'America/New_York',
+        'EEEE',
+      );
 
       // Verify day of transition
       const transitionDate = occurrenceDates[transitionDateIndex];
@@ -128,6 +133,11 @@ describe('Timezone Handling in Recurring Events (e2e)', () => {
         transitionDate,
         'America/New_York',
         'HH:mm',
+      );
+      const transitionWeekday = formatInTimeZone(
+        transitionDate,
+        'America/New_York',
+        'EEEE',
       );
 
       // Verify day after transition
@@ -137,11 +147,24 @@ describe('Timezone Handling in Recurring Events (e2e)', () => {
         'America/New_York',
         'HH:mm',
       );
+      const afterTransitionWeekday = formatInTimeZone(
+        afterTransitionDate,
+        'America/New_York',
+        'EEEE',
+      );
 
       // All should be the same local time despite DST change
       expect(beforeTransitionFormatted).toBe(expectedLocalTime);
       expect(transitionFormatted).toBe(expectedLocalTime);
       expect(afterTransitionFormatted).toBe(expectedLocalTime);
+
+      // CRITICAL: Verify weekdays are consecutive days (daily recurrence)
+      // March 11 is Saturday, March 12 is Sunday, March 13 is Monday
+      expect(beforeTransitionWeekday).toBe('Saturday');
+      expect(transitionWeekday).toBe('Sunday');
+      expect(afterTransitionWeekday).toBe('Monday');
+
+      console.log(`[DST Weekday Check] Before: ${beforeTransitionWeekday}, Transition: ${transitionWeekday}, After: ${afterTransitionWeekday}`);
     }
 
     // Verify first occurrence local time
