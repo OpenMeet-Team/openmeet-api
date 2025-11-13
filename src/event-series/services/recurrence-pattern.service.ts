@@ -47,44 +47,42 @@ export class RecurrencePatternService {
     const originalUtcStartDate =
       startDate instanceof Date ? startDate : new Date();
 
-    // TIMEZONE HANDLING FIX:
-    // Instead of preserving the UTC time (which results in different local times across DST transitions),
-    // we want to preserve the local time in the target timezone.
+    // WALL-CLOCK-TIME APPROACH:
+    // To correctly handle timezones and DST:
+    // 1. Extract local time components (e.g., "Wednesday 6:00 PM PST")
+    // 2. Create a Date with those components as if they were UTC (wall clock)
+    // 3. Let RRule generate occurrences in wall-clock-time (no tzid)
+    // 4. Convert each generated occurrence back to real UTC for that timezone
+    //
+    // This approach avoids RRule's tzid interpretation issues and handles DST naturally.
 
-    // Get the target local time that we want to maintain
+    // Extract local time components
     const localTimeStr = formatInTimeZone(
       originalUtcStartDate,
       timeZone,
       'HH:mm:ss',
     );
-
-    // Get the local date part
     const localDateStr = formatInTimeZone(
       originalUtcStartDate,
       timeZone,
       'yyyy-MM-dd',
     );
 
-    // Construct the full local datetime string using the components
-    const targetLocalDateTime = `${localDateStr} ${localTimeStr}`;
+    // Parse components for wall-clock Date creation
+    const [year, month, day] = localDateStr.split('-').map(Number);
+    const [hours, minutes, seconds] = localTimeStr.split(':').map(Number);
 
-    // Convert the target local time back to UTC
-    const dtstartDateObject = toDate(targetLocalDateTime, { timeZone });
+    // Create wall-clock Date (local components treated as UTC)
+    // E.g., "Wed Oct 15, 6:00 PM PST" becomes "Wed Oct 15, 6:00 PM UTC" for RRule
+    const wallClockDate = new Date(
+      Date.UTC(year, month - 1, day, hours, minutes, seconds),
+    );
 
-    this.logger.debug('[generateOccurrences] Timezone conversion details', {
+    this.logger.debug('[generateOccurrences] Wall-clock-time setup', {
       originalUTC: originalUtcStartDate.toISOString(),
-      originalLocalTime: formatInTimeZone(
-        originalUtcStartDate,
-        timeZone,
-        'HH:mm:ss',
-      ),
-      targetLocalTime: targetLocalDateTime,
-      correctedUTC: dtstartDateObject.toISOString(),
-      verifiedLocalTime: formatInTimeZone(
-        dtstartDateObject,
-        timeZone,
-        'HH:mm:ss',
-      ),
+      localComponents: `${localDateStr} ${localTimeStr}`,
+      wallClockUTC: wallClockDate.toISOString(),
+      wallClockDay: formatInTimeZone(wallClockDate, 'UTC', 'EEEE'),
       timeZone,
     });
 
@@ -105,7 +103,7 @@ export class RecurrencePatternService {
       this.logger.log('[WEEKLY_PATTERN_DEBUG] Weekly pattern details:', {
         byweekday: rule.byweekday,
         interval: rule.interval || 1,
-        startDate: dtstartDateObject.toISOString(), // Using the already calculated date
+        startDate: wallClockDate.toISOString(), // Using wall-clock date
         timeZone,
         until: rule.until,
         count: rule.count,
@@ -136,7 +134,7 @@ export class RecurrencePatternService {
     const rruleOptions: Partial<Options> = {
       freq: this.mapFrequency(rule.frequency),
       interval: rule.interval || 1,
-      dtstart: dtstartDateObject,
+      dtstart: wallClockDate, // Use wall-clock date
       until: rule.until
         ? toDate(rule.until, { timeZone })
         : until
@@ -147,7 +145,7 @@ export class RecurrencePatternService {
       bymonth: rule.bymonth || null,
       bysetpos: rule.bysetpos || null, // Add bysetpos for monthly nth weekday patterns
       wkst: 0,
-      tzid: timeZone, // RRule's timezone handling for DST
+      // NO tzid - we handle timezone conversion manually for each occurrence
     };
 
     // Log if we're using bysetpos for debugging
@@ -187,7 +185,7 @@ export class RecurrencePatternService {
 
     // Determine the date range for generation
     const effectiveStartDate =
-      startAfterDate instanceof Date ? startAfterDate : dtstartDateObject;
+      startAfterDate instanceof Date ? startAfterDate : wallClockDate;
     // For yearly patterns, we need a longer window to see future occurrences
     const yearsToLookAhead = rule.frequency === 'YEARLY' ? 5 : 1;
     const effectiveEndDate =
@@ -281,6 +279,56 @@ export class RecurrencePatternService {
       );
       this.logger.debug('[generateOccurrences] Occurrences after exclusion', {
         count: occurrences.length,
+      });
+    }
+
+    // CONVERT WALL-CLOCK TIMES BACK TO REAL UTC:
+    // RRule generated occurrences in wall-clock time (e.g., "Wed 6:00 PM UTC").
+    // Now convert each to real UTC by interpreting as local time in the target timezone.
+    // This naturally handles DST - each occurrence date gets its own offset.
+    if (timeZone !== 'UTC' && occurrences.length > 0) {
+      this.logger.debug(
+        '[generateOccurrences] Converting wall-clock times to real UTC',
+        {
+          timeZone,
+          beforeConversion: occurrences.slice(0, 3).map((occ) => ({
+            wallClock: occ.toISOString(),
+            day: formatInTimeZone(occ, 'UTC', 'EEEE'),
+          })),
+        },
+      );
+
+      occurrences = occurrences.map((wallClockOcc) => {
+        // Extract wall-clock components (treating UTC as wall-clock)
+        const wallYear = wallClockOcc.getUTCFullYear();
+        const wallMonth = String(wallClockOcc.getUTCMonth() + 1).padStart(
+          2,
+          '0',
+        );
+        const wallDay = String(wallClockOcc.getUTCDate()).padStart(2, '0');
+        const wallHour = String(wallClockOcc.getUTCHours()).padStart(2, '0');
+        const wallMinute = String(wallClockOcc.getUTCMinutes()).padStart(
+          2,
+          '0',
+        );
+        const wallSecond = String(wallClockOcc.getUTCSeconds()).padStart(
+          2,
+          '0',
+        );
+
+        // Build local datetime string
+        const localDateTimeString = `${wallYear}-${wallMonth}-${wallDay} ${wallHour}:${wallMinute}:${wallSecond}`;
+
+        // Convert to real UTC for this timezone (handles DST automatically)
+        return toDate(localDateTimeString, { timeZone });
+      });
+
+      this.logger.debug('[generateOccurrences] After conversion to real UTC', {
+        timeZone,
+        afterConversion: occurrences.slice(0, 3).map((occ) => ({
+          realUTC: occ.toISOString(),
+          localTime: formatInTimeZone(occ, timeZone, 'EEEE h:mm a z'),
+        })),
       });
     }
 
