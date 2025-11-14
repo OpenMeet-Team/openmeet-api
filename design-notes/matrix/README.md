@@ -19,6 +19,12 @@ This directory contains streamlined documentation for the Matrix chat integratio
    - Key design decisions
    - Future enhancements
 
+3. [Chat Room Recreation](./chat-room-recreation.md)
+   - Room privacy management and recreation feature
+   - Migration from encrypted to public rooms
+   - UX improvements for chat access
+   - Technical implementation details
+
 ## Quick Start
 
 For developers new to the Matrix integration:
@@ -79,4 +85,15 @@ docker-compose -f docker-compose-dev.yml logs matrix | grep -A 10 "Success! Matr
 - ✅ Service architecture optimization
 - ✅ Admin token regeneration
 - ✅ Robust room operation error handling
-- ✅ E2E encryption support
+- ✅ E2E encryption support (currently disabled for better UX)
+
+### Room Configuration (November 2025)
+
+**Current Settings**: All event and group chat rooms are created as **public and unencrypted** for optimal user experience.
+
+**Rationale**:
+- E2EE requires consent screens and manual session verification
+- Public, unencrypted rooms provide immediate access without friction
+- Users can join and see messages instantly without setup steps
+
+**Implementation**: See `matrix-room.service.ts:generateRoomOptions()` which hardcodes `isPublic: true, encrypted: false` for all entity rooms (events and groups). Direct message rooms remain private and encrypted.

@@ -16,7 +16,7 @@ describe('Matrix Private Room Encryption (e2e)', () => {
   }
 
   describe('Private Group Room Creation', () => {
-    it('should create encrypted room for private group via application service', async () => {
+    it('should create room for private group via application service', async () => {
       // 1. Create a test user and private group
       const testUser = await createTestUser(
         TESTING_APP_URL,
@@ -29,8 +29,8 @@ describe('Matrix Private Room Encryption (e2e)', () => {
       const privateGroup = await createGroup(TESTING_APP_URL, testUser.token, {
         slug: `test-private-group-${Date.now()}`,
         name: 'Test Private Group',
-        description: 'Test private group for encryption testing',
-        visibility: 'private', // This should trigger encryption
+        description: 'Test private group for Matrix room testing',
+        visibility: 'private',
       });
 
       expect(privateGroup.visibility).toBe('private');
@@ -45,9 +45,8 @@ describe('Matrix Private Room Encryption (e2e)', () => {
       expect(response.status).toBe(200);
       expect(response.body).toEqual({});
 
-      // Note: We can't directly verify encryption from the application service response,
-      // but we can check the logs for the encryption decision logic we added.
-      // The logs should show: "Group {slug} has visibility private, encryption: true"
+      // Note: Room encryption settings are determined by generateRoomOptions()
+      // Currently all rooms are public/unencrypted for better UX
 
       // 4. Cleanup
       await server
@@ -55,7 +54,7 @@ describe('Matrix Private Room Encryption (e2e)', () => {
         .set('Authorization', `Bearer ${testUser.token}`);
     });
 
-    it('should create public room for public group via application service', async () => {
+    it('should create room for public group via application service', async () => {
       // 1. Create a test user and public group
       const testUser = await createTestUser(
         TESTING_APP_URL,
@@ -68,8 +67,8 @@ describe('Matrix Private Room Encryption (e2e)', () => {
       const publicGroup = await createGroup(TESTING_APP_URL, testUser.token, {
         slug: `test-public-group-${Date.now()}`,
         name: 'Test Public Group',
-        description: 'Test public group for encryption testing',
-        visibility: 'public', // This should NOT trigger encryption
+        description: 'Test public group for Matrix room testing',
+        visibility: 'public',
       });
 
       expect(publicGroup.visibility).toBe('public');
@@ -84,7 +83,8 @@ describe('Matrix Private Room Encryption (e2e)', () => {
       expect(response.status).toBe(200);
       expect(response.body).toEqual({});
 
-      // The logs should show: "Group {slug} has visibility public, encryption: false"
+      // Note: Room encryption settings are determined by generateRoomOptions()
+      // Currently all rooms are public/unencrypted for better UX
 
       // 4. Cleanup
       await server
@@ -94,7 +94,7 @@ describe('Matrix Private Room Encryption (e2e)', () => {
   });
 
   describe('Private Event Room Creation', () => {
-    it('should create encrypted room for private event via application service', async () => {
+    it('should create room for private event via application service', async () => {
       // 1. Create a test user and private event
       const testUser = await createTestUser(
         TESTING_APP_URL,
@@ -109,11 +109,11 @@ describe('Matrix Private Room Encryption (e2e)', () => {
         name: 'Test Private Event',
         type: 'in-person',
         status: 'published',
-        visibility: 'private', // This should trigger encryption
+        visibility: 'private',
         startDate: new Date(Date.now() + 86400000).toISOString(),
         endDate: new Date(Date.now() + 90000000).toISOString(),
         timeZone: 'UTC',
-        description: 'Test private event for encryption testing',
+        description: 'Test private event for Matrix room testing',
         maxAttendees: 50,
         categories: [],
       });
@@ -130,7 +130,8 @@ describe('Matrix Private Room Encryption (e2e)', () => {
       expect(response.status).toBe(200);
       expect(response.body).toEqual({});
 
-      // The logs should show: "Event {slug} has visibility private, encryption: true"
+      // Note: Room encryption settings are determined by generateRoomOptions()
+      // Currently all rooms are public/unencrypted for better UX
 
       // 4. Cleanup
       await server
@@ -138,7 +139,7 @@ describe('Matrix Private Room Encryption (e2e)', () => {
         .set('Authorization', `Bearer ${testUser.token}`);
     });
 
-    it('should create public room for public event via application service', async () => {
+    it('should create room for public event via application service', async () => {
       // 1. Create a test user and public event
       const testUser = await createTestUser(
         TESTING_APP_URL,
@@ -153,11 +154,11 @@ describe('Matrix Private Room Encryption (e2e)', () => {
         name: 'Test Public Event',
         type: 'online',
         status: 'published',
-        visibility: 'public', // This should NOT trigger encryption
+        visibility: 'public',
         startDate: new Date(Date.now() + 86400000).toISOString(),
         endDate: new Date(Date.now() + 90000000).toISOString(),
         timeZone: 'UTC',
-        description: 'Test public event for encryption testing',
+        description: 'Test public event for Matrix room testing',
         maxAttendees: 100,
         categories: [],
         locationOnline: 'https://example.com/meeting',
@@ -175,7 +176,8 @@ describe('Matrix Private Room Encryption (e2e)', () => {
       expect(response.status).toBe(200);
       expect(response.body).toEqual({});
 
-      // The logs should show: "Event {slug} has visibility public, encryption: false"
+      // Note: Room encryption settings are determined by generateRoomOptions()
+      // Currently all rooms are public/unencrypted for better UX
 
       // 4. Cleanup
       await server
