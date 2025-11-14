@@ -54,19 +54,21 @@ export class MatrixRoomService implements IMatrixRoomProvider {
     localpart: string,
     entityType: 'group' | 'event' = 'group',
   ): CreateRoomOptions {
-    // Determine encryption based on visibility
-    const shouldEncrypt = entity.visibility === 'private';
+    // Always create public, unencrypted rooms for better UX
+    // E2EE causes friction with consent screens and session management
+    const isPublic = true;
+    const encrypted = false;
 
     this.logger.log(
-      `${entityType.charAt(0).toUpperCase() + entityType.slice(1)} ${entity.slug} has visibility ${entity.visibility}, encryption: ${shouldEncrypt}`,
+      `${entityType.charAt(0).toUpperCase() + entityType.slice(1)} ${entity.slug} - creating public, unencrypted chat room`,
     );
 
     return {
       room_alias_name: localpart,
       name: `${entity.name} Chat`,
       topic: `Chat room for ${entity.name}`,
-      isPublic: !shouldEncrypt, // Private entities get private rooms
-      encrypted: shouldEncrypt, // Private entities get encrypted rooms
+      isPublic: isPublic,
+      encrypted: encrypted,
     };
   }
 
