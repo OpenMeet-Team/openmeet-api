@@ -54,7 +54,7 @@ describe('RecurrencePatternService - Monthly Day 29', () => {
     expect(firstDay).toBe(29);
 
     // All occurrences should be on day 29 (or last day of month for Feb)
-    occurrences.forEach((isoString, index) => {
+    occurrences.forEach((isoString) => {
       const date = new Date(isoString);
       const day = parseInt(formatInTimeZone(date, timeZone, 'd'));
       const month = formatInTimeZone(date, timeZone, 'MMMM yyyy');
@@ -72,5 +72,79 @@ describe('RecurrencePatternService - Monthly Day 29', () => {
 
       console.log(`  ✓ ${month} day ${day} at ${time}`);
     });
+  });
+
+  it('should handle monthly day 31 correctly (skip February)', () => {
+    // Day 31 doesn't exist in Feb, Apr, Jun, Sep, Nov
+    const startDate = new Date('2025-01-31T17:00:00-05:00'); // Jan 31, 5pm EST
+    const timeZone = 'America/New_York';
+
+    const rule = {
+      frequency: RecurrenceFrequency.MONTHLY,
+      interval: 1,
+      bymonthday: [31], // Day 31 of each month
+    };
+
+    const occurrences = service.generateOccurrences(startDate, rule, {
+      timeZone,
+      count: 12,
+    });
+
+    console.log('\nGenerated monthly occurrences (day 31):');
+    occurrences.forEach((isoString, index) => {
+      const date = new Date(isoString);
+      const localDisplay = formatInTimeZone(
+        date,
+        timeZone,
+        'EEEE, MMMM d, yyyy h:mm a z',
+      );
+      console.log(`  ${index + 1}. ${localDisplay}`);
+    });
+
+    // Extract months that were generated
+    const months = occurrences.map((isoString) => {
+      const date = new Date(isoString);
+      return formatInTimeZone(date, timeZone, 'MMMM');
+    });
+
+    // Verify February is skipped (no 31st day)
+    expect(months).not.toContain('February');
+
+    // Verify April, June, September, November are skipped (only 30 days)
+    expect(months).not.toContain('April');
+    expect(months).not.toContain('June');
+    expect(months).not.toContain('September');
+    expect(months).not.toContain('November');
+
+    // Verify all months with 31 days appear
+    const monthsWith31Days = [
+      'January',
+      'March',
+      'May',
+      'July',
+      'August',
+      'October',
+      'December',
+    ];
+    monthsWith31Days.forEach((month) => {
+      expect(months).toContain(month);
+    });
+
+    // All occurrences should be day 31
+    occurrences.forEach((isoString) => {
+      const date = new Date(isoString);
+      const day = parseInt(formatInTimeZone(date, timeZone, 'd'));
+      const month = formatInTimeZone(date, timeZone, 'MMMM yyyy');
+      const time = formatInTimeZone(date, timeZone, 'h:mm a');
+
+      expect(day).toBe(31);
+      expect(time).toBe('5:00 PM');
+
+      console.log(`  ✓ ${month} day ${day} at ${time}`);
+    });
+
+    console.log(
+      '\n✅ Day 31 correctly skips months without 31 days (Feb, Apr, Jun, Sep, Nov)',
+    );
   });
 });

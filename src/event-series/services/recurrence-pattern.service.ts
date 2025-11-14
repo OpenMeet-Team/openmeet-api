@@ -22,6 +22,7 @@ interface RecurrenceOptions {
 @Injectable()
 export class RecurrencePatternService {
   private readonly logger = new Logger(RecurrencePatternService.name);
+  private readonly MAX_OCCURRENCES = 2000; // Safety limit to prevent excessive generation
 
   /**
    * Generates occurrences for a recurrence pattern.
@@ -42,6 +43,9 @@ export class RecurrencePatternService {
       excludeDates = [],
       timeZone = 'UTC',
     } = options;
+
+    // Apply safety limit to prevent excessive occurrence generation
+    const safeCount = count ? Math.min(count, this.MAX_OCCURRENCES) : 10;
 
     // Ensure startDate is a valid Date object
     const originalUtcStartDate =
@@ -207,8 +211,8 @@ export class RecurrencePatternService {
     );
 
     // Immediately limit to count to avoid excessive memory usage
-    if (count > 0) {
-      occurrences = occurrences.slice(0, count);
+    if (safeCount > 0) {
+      occurrences = occurrences.slice(0, safeCount);
     }
 
     this.logger.debug('[generateOccurrences] Occurrences after between', {
