@@ -64,7 +64,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
@@ -151,7 +152,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
@@ -239,7 +241,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
@@ -291,7 +294,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red"
+                "color": "red",
+                "value": null
               },
               {
                 "color": "yellow",
@@ -383,7 +387,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "yellow",
@@ -490,7 +495,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
@@ -523,8 +529,8 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(http_request_errors_total{namespace=~\"$namespace\"}[5m])) by (method, path)",
-          "legendFormat": "{{method}} {{path}}",
+          "expr": "sum(rate(http_request_errors_total{namespace=~\"$namespace\"}[5m])) by (method, area, status)",
+          "legendFormat": "{{method}} {{area}} ({{status}})",
           "refId": "A"
         }
       ],
@@ -574,7 +580,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "yellow",
@@ -611,7 +618,7 @@
       },
       "targets": [
         {
-          "expr": "nodejs_active_requests{namespace=~\"$namespace\"}",
+          "expr": "nodejs_active_requests_total{namespace=~\"$namespace\"}",
           "legendFormat": "{{pod}}",
           "refId": "A"
         }
@@ -662,7 +669,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
@@ -698,7 +706,7 @@
       },
       "targets": [
         {
-          "expr": "rate(synapse_http_server_response_time_seconds_sum[5m]) / rate(synapse_http_server_response_time_seconds_count[5m])",
+          "expr": "topk(10, rate(synapse_http_server_response_time_seconds_sum{namespace=~\"$namespace\", servlet!=\"SyncRestServlet\"}[5m]) / rate(synapse_http_server_response_time_seconds_count{namespace=~\"$namespace\", servlet!=\"SyncRestServlet\"}[5m]))",
           "legendFormat": "{{method}} {{servlet}}",
           "refId": "A"
         }
@@ -749,7 +757,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
@@ -782,7 +791,7 @@
       },
       "targets": [
         {
-          "expr": "rate(synapse_http_server_response_db_txn_duration_seconds_sum[5m]) / rate(synapse_http_server_response_db_txn_count[5m])",
+          "expr": "rate(synapse_http_server_response_db_txn_duration_seconds_total{namespace=~\"$namespace\"}[5m]) / rate(synapse_http_server_response_db_txn_count_total{namespace=~\"$namespace\"}[5m])",
           "legendFormat": "{{method}} {{servlet}}",
           "refId": "A"
         }
@@ -815,7 +824,7 @@
           "refId": "A"
         }
       ],
-      "title": "Pod CPU Usage",
+      "title": "Pod CPU Usage (requires cAdvisor metrics)",
       "type": "timeseries"
     },
     {
@@ -843,7 +852,7 @@
           "refId": "A"
         }
       ],
-      "title": "Pod Memory Usage",
+      "title": "Pod Memory Usage (requires cAdvisor metrics)",
       "type": "timeseries"
     },
     {
@@ -871,7 +880,7 @@
       "id": 12,
       "targets": [
         {
-          "expr": "sum(users_total{namespace=~\"$namespace\"})",
+          "expr": "max(users_total{namespace=~\"$namespace\", tenant=\"all\"})",
           "refId": "A"
         }
       ],
@@ -903,7 +912,7 @@
       "id": 13,
       "targets": [
         {
-          "expr": "sum(events_total{namespace=~\"$namespace\"})",
+          "expr": "max(events_total{namespace=~\"$namespace\", tenant=\"all\"})",
           "refId": "A"
         }
       ],
@@ -935,7 +944,7 @@
       "id": 14,
       "targets": [
         {
-          "expr": "sum(groups_total{namespace=~\"$namespace\"})",
+          "expr": "max(groups_total{namespace=~\"$namespace\", tenant=\"all\"})",
           "refId": "A"
         }
       ],
@@ -967,7 +976,7 @@
       "id": 15,
       "targets": [
         {
-          "expr": "sum(active_users_30d{namespace=~\"$namespace\"})",
+          "expr": "max(active_users_30d{namespace=~\"$namespace\", tenant=\"all\"})",
           "refId": "A"
         }
       ],
@@ -1114,9 +1123,9 @@
     "list": [
       {
         "current": {
-          "selected": false,
-          "text": "dev",
-          "value": "dev"
+          "selected": true,
+          "text": "prod",
+          "value": "prod"
         },
         "hide": 0,
         "includeAll": false,
@@ -1125,30 +1134,31 @@
         "name": "namespace",
         "options": [
           {
-            "selected": true,
+            "selected": false,
             "text": "dev",
             "value": "dev"
           },
           {
-            "selected": false,
+            "selected": true,
             "text": "prod",
             "value": "prod"
           }
         ],
         "query": "dev,prod",
+        "queryValue": "",
         "skipUrlSync": false,
         "type": "custom"
       }
     ]
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "OpenMeet Performance",
   "uid": "bf453gnri5zb4e",
-  "version": 4,
+  "version": 10,
   "weekStart": ""
 }
