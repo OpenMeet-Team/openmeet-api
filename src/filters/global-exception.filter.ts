@@ -10,6 +10,7 @@ import { Request, Response } from 'express';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter } from 'prom-client';
+import { getApiArea } from '../common/utils/metrics.util';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -42,12 +43,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const errorMessage =
       exception instanceof Error ? exception.message : 'Unknown error occurred';
 
-    // Increment exception counter with labels
+    // Increment exception counter with simplified labels (low cardinality)
+    const area = getApiArea(path);
+    const statusGroup = Math.floor(status / 100) * 100;
     this.exceptionCounter.inc({
       method,
-      path,
-      status,
-      error: errorName,
+      area,
+      status: statusGroup.toString(),
     });
 
     // Create a span for the exception

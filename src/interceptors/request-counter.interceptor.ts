@@ -3,14 +3,18 @@ import {
   NestInterceptor,
   ExecutionContext,
   CallHandler,
+  Logger,
 } from '@nestjs/common';
 import { Observable, throwError } from 'rxjs';
 import { catchError, tap } from 'rxjs/operators';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter, Histogram } from 'prom-client';
+import { getApiArea } from '../common/utils/metrics.util';
 
 @Injectable()
 export class RequestCounterInterceptor implements NestInterceptor {
+  private readonly logger = new Logger(RequestCounterInterceptor.name);
+
   constructor(
     @InjectMetric('http_requests_total')
     private counter: Counter<string>,
@@ -26,19 +30,43 @@ export class RequestCounterInterceptor implements NestInterceptor {
     next: CallHandler,
   ): Promise<Observable<any>> {
     const request = context.switchToHttp().getRequest();
-    const { method, url } = request;
-    const labels = { method, path: this.normalizePath(url) };
+    const response = context.switchToHttp().getResponse();
+    const { method, url, headers } = request;
 
-    // Track total requests with method and path labels
+    // Simplified labels: just method and API area (low cardinality)
+    const area = getApiArea(url);
+    const labels = { method, area };
+
+    // Track total requests
     this.counter.inc(labels);
 
     const start = Date.now();
+    const startTime = new Date().toISOString();
+
+    // Extract context for logging
+    const tenantId = headers['x-tenant-id'] as string;
+    const userId = request.user?.id;
 
     return new Promise((resolve) => {
       // Handle successful requests and capture duration
       const successHandler = tap(() => {
         const duration = (Date.now() - start) / 1000; // Convert to seconds
         this.requestDuration.observe(labels, duration);
+
+        // Structured logging for detailed per-endpoint analysis
+        this.logger.log(
+          JSON.stringify({
+            event: 'http_request',
+            timestamp: startTime,
+            method,
+            path: url.split('?')[0],
+            status: response.statusCode,
+            duration_ms: Math.round(duration * 1000),
+            area,
+            tenant_id: tenantId || null,
+            user_id: userId || null,
+          }),
+        );
       });
 
       // Handle errors
@@ -46,13 +74,31 @@ export class RequestCounterInterceptor implements NestInterceptor {
         const duration = (Date.now() - start) / 1000; // Convert to seconds
         this.requestDuration.observe(labels, duration);
 
-        // Track errors with method, path, and status code labels
+        // Simplified error labels: method, status group (2xx, 4xx, 5xx), area
+        const statusGroup = Math.floor((error.status || 500) / 100) * 100;
         const errorLabels = {
-          ...labels,
-          status: error.status || 500,
-          error: error.name || 'UnknownError',
+          method,
+          status: statusGroup.toString(),
+          area,
         };
         this.errorCounter.inc(errorLabels);
+
+        // Detailed error logging
+        this.logger.error(
+          JSON.stringify({
+            event: 'http_request_error',
+            timestamp: startTime,
+            method,
+            path: url.split('?')[0],
+            status: error.status || 500,
+            duration_ms: Math.round(duration * 1000),
+            error_name: error.name || 'UnknownError',
+            error_message: error.message,
+            area,
+            tenant_id: tenantId || null,
+            user_id: userId || null,
+          }),
+        );
 
         return throwError(() => error);
       });
@@ -63,63 +109,5 @@ export class RequestCounterInterceptor implements NestInterceptor {
 
   getRequestCount(): number {
     return this.requestCount;
-  }
-
-  // Normalize path to avoid high cardinality in metrics
-  // e.g. /users/123 -> /users/:id, /groups/my-group-name -> /groups/:slug
-  private normalizePath(path: string): string {
-    // Strip query parameters
-    const baseUrl = path.split('?')[0];
-
-    // Define patterns to normalize with their replacements
-    const patterns = [
-      // UUID pattern
-      {
-        regex: /\/[0-9a-f]{8,}(?:-[0-9a-f]{4,}){3,}-[0-9a-f]{12,}/g,
-        replacement: '/:uuid',
-      },
-
-      // Slug patterns for common resources
-      { regex: /\/events\/[^\/]+/g, replacement: '/events/:slug' },
-      { regex: /\/groups\/[^\/]+/g, replacement: '/groups/:slug' },
-      { regex: /\/categories\/[^\/]+/g, replacement: '/categories/:slug' },
-      {
-        regex: /\/sub-categories\/[^\/]+/g,
-        replacement: '/sub-categories/:slug',
-      },
-      { regex: /\/users\/[^\/]+/g, replacement: '/users/:slug' },
-      { regex: /\/chat\/group\/[^\/]+/g, replacement: '/chat/group/:slug' },
-      { regex: /\/chat\/event\/[^\/]+/g, replacement: '/chat/event/:slug' },
-
-      // /api/chat/event/:slug/members/tom-from-openmeet-yp4sub
-      {
-        regex: /\/api\/chat\/event\/[^\/]+\/members\/[^\/]+/g,
-        replacement: '/api/chat/event/:slug/members/:slug',
-      },
-
-      // API versioned paths
-      {
-        regex: /\/api\/v\d+\/events\/[^\/]+/g,
-        replacement: '/api/v:version/events/:slug',
-      },
-      {
-        regex: /\/api\/v\d+\/groups\/[^\/]+/g,
-        replacement: '/api/v:version/groups/:slug',
-      },
-
-      // Numeric IDs (only apply this last as a fallback)
-      { regex: /\/\d+/g, replacement: '/:id' },
-    ];
-
-    // Apply each pattern in sequence
-    let normalizedPath = baseUrl;
-    patterns.forEach((pattern) => {
-      normalizedPath = normalizedPath.replace(
-        pattern.regex,
-        pattern.replacement,
-      );
-    });
-
-    return normalizedPath;
   }
 }
