@@ -8,6 +8,7 @@ const connectionCache = new Map<
   {
     connection: DataSource;
     lastUsed: number;
+    tenantId: string;
   }
 >();
 
@@ -43,6 +44,10 @@ export function stopCleanupInterval() {
     clearInterval(cleanupInterval);
     cleanupInterval = null;
   }
+}
+
+export function getConnectionCache() {
+  return connectionCache;
 }
 
 // Only start cleanup interval in production/development
@@ -196,6 +201,7 @@ export const AppDataSource = (tenantId: string) => {
             connectionCache.set(cacheKey, {
               connection: dataSource,
               lastUsed: Date.now(),
+              tenantId: tenantId,
             });
 
             return dataSource;
