@@ -10,27 +10,28 @@ import {
 import { TenantModule } from '../tenant/tenant.module';
 
 // Define HTTP metrics providers for export and reuse
+// Changed from path-based to area-based labels to reduce cardinality
 const httpMetricsProviders = [
   makeCounterProvider({
     name: 'http_requests_total',
     help: 'Total number of HTTP requests',
-    labelNames: ['method', 'path'],
+    labelNames: ['method', 'area'], // area: events, groups, auth, matrix, etc.
   }),
   makeHistogramProvider({
     name: 'http_request_duration_seconds',
     help: 'Duration of HTTP requests in seconds',
-    labelNames: ['method', 'path'],
+    labelNames: ['method', 'area'],
     buckets: [0.01, 0.05, 0.1, 0.5, 1, 2.5, 5, 10],
   }),
   makeCounterProvider({
     name: 'http_request_errors_total',
     help: 'Total number of HTTP request errors',
-    labelNames: ['method', 'path', 'status', 'error'],
+    labelNames: ['method', 'area', 'status'], // status: 200, 400, 500 (grouped)
   }),
   makeCounterProvider({
     name: 'unhandled_exceptions_total',
     help: 'Total number of unhandled exceptions',
-    labelNames: ['method', 'path', 'status', 'error'],
+    labelNames: ['method', 'area', 'status'], // Simplified to reduce cardinality
   }),
 ];
 
