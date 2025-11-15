@@ -1336,7 +1336,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "http_request_duration_seconds_sum{namespace=~\"$namespace\", method=~\"GET|POST\", area!=\"health\"} / http_request_duration_seconds_count{namespace=~\"$namespace\", method=~\"GET|POST\", area!=\"health\"}",
+          "expr": "sum by (method, area) (rate(http_request_duration_seconds_sum{namespace=~\"$namespace\", method=~\"GET|POST\", area!=\"health\"}[5m])) / sum by (method, area) (rate(http_request_duration_seconds_count{namespace=~\"$namespace\", method=~\"GET|POST\", area!=\"health\"}[5m]))",
           "legendFormat": "{{method}} {{area}}",
           "range": true,
           "refId": "A"
@@ -1522,7 +1522,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "http_request_duration_seconds_sum{namespace=~\"$namespace\", area!=\"health\"} / http_request_duration_seconds_count{namespace=~\"$namespace\", area!=\"health\"}",
+          "expr": "sum by (method, area) (rate(http_request_duration_seconds_sum{namespace=~\"$namespace\", area!=\"health\"}[5m])) / sum by (method, area) (rate(http_request_duration_seconds_count{namespace=~\"$namespace\", area!=\"health\"}[5m]))",
           "legendFormat": "{{method}} {{area}}",
           "range": true,
           "refId": "A"
