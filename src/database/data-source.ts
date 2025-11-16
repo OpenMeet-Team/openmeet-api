@@ -62,6 +62,20 @@ export function generateQueryFingerprint(sanitizedQuery: string): string {
 /**
  * Patch the PostgreSQL driver's query method to record metrics and traces
  * This intercepts ALL database queries at the driver level
+ *
+ * ## Pool Isolation Architecture
+ *
+ * Each tenant has an isolated connection pool:
+ * 1. AppDataSource(tenantId) creates DataSource with unique cache key: `${URL}_tenant_${tenantId}`
+ * 2. Each DataSource.initialize() → driver.connect() → creates NEW pg.Pool instance
+ * 3. Pools are NOT shared between tenants (different cache keys = different DataSource = different Pool)
+ * 4. This function patches once per pool, capturing the tenantId in closure
+ * 5. Since pools are isolated per tenant, all queries through this pool have the correct tenantId
+ *
+ * ## Why this is safe:
+ * - connectionCache uses schema name in key, preventing pool reuse across tenants
+ * - TypeORM creates one Pool per DataSource (see PostgresDriver.connect())
+ * - The captured tenantId correctly attributes all metrics/traces from this pool's queries
  */
 function patchDriverForMetrics(dataSource: DataSource, tenantId: string): void {
   try {
@@ -74,10 +88,9 @@ function patchDriverForMetrics(dataSource: DataSource, tenantId: string): void {
     }
 
     // Avoid patching the same pool multiple times
+    // This can happen when returning cached DataSource instances
+    // Since pools are isolated per tenant, the original tenantId is still correct
     if (driver._openmeet_query_patched) {
-      console.log(
-        `[DB-METRICS] Driver already patched for tenant ${tenantId}, skipping`,
-      );
       return;
     }
 
