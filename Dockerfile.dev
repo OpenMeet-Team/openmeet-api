@@ -10,5 +10,5 @@ RUN npm install
 # Copy source files
 COPY . .
 
-# Start in development mode with watch
-CMD [ "npm", "run", "start:dev" ]
+# Start in development mode with nodemon watch
+CMD [ "npm", "run", "start:dev:nodemon" ]

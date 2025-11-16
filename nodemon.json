@@ -1,8 +1,8 @@
 {
-  "watch": ["src"],
-  "ext": "ts",
+  "watch": ["src", "src/i18n"],
+  "ext": "ts,json",
   "ignore": ["src/**/*.spec.ts"],
-  "exec": "nest start",
+  "exec": "nest start --tenant-config=./config/tenants.json",
   "legacyWatch": true,
   "delay": 1000
 }

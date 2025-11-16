@@ -35,7 +35,7 @@
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "TZ=UTC nest start --tenant-config=./config/tenants.json",
     "start:dev": "TZ=UTC nest start --watch --tenant-config=./config/tenants.json",
-    "start:dev:nodemon": "TZ=UTC nodemon --exec 'nest start' --tenant-config=./config/tenants.json",
+    "start:dev:nodemon": "TZ=UTC nodemon --exec 'nest start --tenant-config=./config/tenants.json'",
     "start:debug": "TZ=UTC nest start --debug --watch --tenant-config=./config/tenants.json",
     "start:prod": "TZ=UTC node dist/main --tenant-config=./config/tenants.json",
     "start:swc": "TZ=UTC nest start -b swc -w",
