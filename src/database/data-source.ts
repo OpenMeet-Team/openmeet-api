@@ -129,8 +129,9 @@ function patchDriverForMetrics(dataSource: DataSource, tenantId: string): void {
             const queryFingerprint = generateQueryFingerprint(sanitizedQuery);
 
             // Start trace span with proper context propagation
+            // Span name follows OpenTelemetry conventions: db.<operation>
             const span = tracer.startSpan(
-              'db.query',
+              `db.${operation.toLowerCase()}`,
               {
                 kind: SpanKind.CLIENT,
                 attributes: {
