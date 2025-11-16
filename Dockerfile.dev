@@ -1,14 +1,14 @@
-FROM node:18-alpine
+FROM node:22.18.0-alpine
 
 WORKDIR /app
 EXPOSE 3000
 
+# Install dependencies
 COPY package*.json ./
-
 RUN npm install
 
+# Copy source files
 COPY . .
 
-RUN npm run build
-
-CMD [ "npm", "run", "start:dev" ]
+# Start in development mode with nodemon watch
+CMD [ "npm", "run", "start:dev:nodemon" ]
