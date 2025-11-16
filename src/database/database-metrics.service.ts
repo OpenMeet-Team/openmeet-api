@@ -130,17 +130,27 @@ export class DatabaseMetricsService implements OnModuleInit {
       // Track aggregate QPS
       let totalQps = 0;
 
-      // Calculate QPS for each tenant/operation combination
+      // Aggregate counts by tenant:operation (sum success + error for total throughput)
+      const totalCountsByTenantOp = new Map<string, number>();
       for (const [key, count] of this.queryCountMap.entries()) {
+        const [tenantId, operation] = key.split(':');
+        const aggregateKey = `${tenantId}:${operation}`;
+        totalCountsByTenantOp.set(
+          aggregateKey,
+          (totalCountsByTenantOp.get(aggregateKey) || 0) + count,
+        );
+      }
+
+      // Calculate total QPS (success + error) for each tenant/operation
+      for (const [key, count] of totalCountsByTenantOp.entries()) {
         const [tenantId, operation] = key.split(':');
         const qps = count / elapsedSeconds;
 
         this.queriesPerSecondGauge.set({ tenant: tenantId, operation }, qps);
-
         totalQps += qps;
       }
 
-      // Set aggregate QPS
+      // Set aggregate QPS across all tenants and operations
       this.queriesPerSecondGauge.set(
         { tenant: 'all', operation: 'all' },
         totalQps,
@@ -162,23 +172,24 @@ export class DatabaseMetricsService implements OnModuleInit {
     tenantId: string,
     operation: string,
     durationMs: number,
+    status: 'success' | 'error' = 'success',
   ): void {
     try {
       const durationSeconds = durationMs / 1000;
 
       this.queryDurationHistogram.observe(
-        { tenant: tenantId, operation },
+        { tenant: tenantId, operation, status },
         durationSeconds,
       );
 
       // Track query count for QPS calculation
-      const key = `${tenantId}:${operation}`;
+      const key = `${tenantId}:${operation}:${status}`;
       this.queryCountMap.set(key, (this.queryCountMap.get(key) || 0) + 1);
 
       // Warn on slow queries (> 1 second)
       if (durationMs > 1000) {
         this.logger.warn(
-          `Slow query detected for tenant ${tenantId} (${operation}): ${durationMs}ms`,
+          `Slow query detected for tenant ${tenantId} (${operation}, ${status}): ${durationMs}ms`,
         );
       }
     } catch (error) {

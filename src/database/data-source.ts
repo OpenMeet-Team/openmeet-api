@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { SpanStatusCode, trace, context, SpanKind } from '@opentelemetry/api';
 import { getMetricsService } from './database-metrics.service';
+import { createHash } from 'crypto';
 
 /**
  * Extract the SQL operation type from a query string
@@ -16,6 +17,46 @@ function extractOperation(query: string): string {
   if (trimmed.startsWith('COMMIT')) return 'COMMIT';
   if (trimmed.startsWith('ROLLBACK')) return 'ROLLBACK';
   return 'OTHER';
+}
+
+/**
+ * Sanitize SQL query by replacing literal values with placeholders
+ * Removes sensitive data like emails, passwords, API keys from traces
+ * @internal Exported for testing
+ */
+export function sanitizeQuery(query: string): string {
+  let sanitized = query;
+
+  // Replace string literals (single quotes): 'value' -> ?
+  sanitized = sanitized.replace(/'([^']*)'/g, '?');
+
+  // Replace numeric literals that aren't part of SQL keywords
+  // Matches standalone numbers but not in table names, column names, etc.
+  sanitized = sanitized.replace(/\b(\d+)\b/g, '?');
+
+  // Replace array/list values: (1, 2, 3) -> (?)
+  sanitized = sanitized.replace(/\([?,\s]+\)/g, '(?)');
+
+  // Collapse multiple consecutive ? to single ? for readability
+  sanitized = sanitized.replace(/\?(\s*,\s*\?)+/g, '?');
+
+  return sanitized;
+}
+
+/**
+ * Generate query fingerprint for grouping similar queries
+ * Creates a consistent hash for queries with same structure
+ * @internal Exported for testing
+ */
+export function generateQueryFingerprint(sanitizedQuery: string): string {
+  // Normalize whitespace and case for consistent fingerprinting
+  const normalized = sanitizedQuery
+    .replace(/\s+/g, ' ') // Collapse whitespace
+    .trim()
+    .toUpperCase();
+
+  // Create short hash (first 12 chars of SHA256)
+  return createHash('sha256').update(normalized).digest('hex').substring(0, 12);
 }
 
 /**
@@ -70,32 +111,43 @@ function patchDriverForMetrics(dataSource: DataSource, tenantId: string): void {
                 : args[0]?.text || args[0]?.query || 'UNKNOWN';
             const operation = extractOperation(query);
 
-            // Start trace span
-            const span = tracer.startSpan('db.query', {
-              kind: SpanKind.CLIENT,
-              attributes: {
-                'db.system': 'postgresql',
-                'db.operation': operation,
-                'db.statement': query.substring(0, 500),
-                'tenant.id': tenantId,
+            // Sanitize query to remove sensitive values (PII, credentials, etc.)
+            const sanitizedQuery = sanitizeQuery(query);
+            const queryFingerprint = generateQueryFingerprint(sanitizedQuery);
+
+            // Start trace span with proper context propagation
+            const span = tracer.startSpan(
+              'db.query',
+              {
+                kind: SpanKind.CLIENT,
+                attributes: {
+                  'db.system': 'postgresql',
+                  'db.operation': operation,
+                  'db.statement': sanitizedQuery.substring(0, 1000), // Truncate for safety
+                  'db.query.fingerprint': queryFingerprint,
+                  'db.name': process.env.DATABASE_NAME,
+                  'tenant.id': tenantId,
+                },
               },
-            });
+              context.active(),
+            );
 
             const result = originalClientQuery(...args);
 
-            // Handle promise-based queries
+            // Handle promise-based queries (node-postgres always returns promises)
             if (result && typeof result.then === 'function') {
               return result
                 .then((res: any) => {
                   const duration = Date.now() - startTime;
 
-                  // Record metrics
+                  // Record metrics with success status
                   const metricsService = getMetricsService();
                   if (metricsService) {
                     metricsService.recordQueryDuration(
                       tenantId,
                       operation,
                       duration,
+                      'success',
                     );
                   }
 
@@ -108,12 +160,14 @@ function patchDriverForMetrics(dataSource: DataSource, tenantId: string): void {
                 .catch((err: any) => {
                   const duration = Date.now() - startTime;
 
+                  // Record metrics with error status
                   const metricsService = getMetricsService();
                   if (metricsService) {
                     metricsService.recordQueryDuration(
                       tenantId,
-                      `${operation}_error`,
+                      operation,
                       duration,
+                      'error',
                     );
                   }
 
@@ -125,6 +179,20 @@ function patchDriverForMetrics(dataSource: DataSource, tenantId: string): void {
                 });
             }
 
+            // Synchronous fallback (unlikely with node-postgres)
+            // Record metrics immediately without timing
+            const duration = Date.now() - startTime;
+            const metricsService = getMetricsService();
+            if (metricsService) {
+              metricsService.recordQueryDuration(
+                tenantId,
+                operation,
+                duration,
+                'success',
+              );
+            }
+            span.setAttribute('db.duration_ms', duration);
+            span.setStatus({ code: SpanStatusCode.OK });
             span.end();
             return result;
           };
