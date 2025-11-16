@@ -48,6 +48,12 @@ const databaseMetricsProviders = [
     help: 'Database queries per second',
     labelNames: ['tenant', 'operation'],
   }),
+  makeHistogramProvider({
+    name: 'db_connection_acquisition_duration_seconds',
+    help: 'Time to acquire a database connection in seconds',
+    labelNames: ['tenant'],
+    buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1],
+  }),
 ];
 
 @Module({

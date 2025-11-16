@@ -1,9 +1,16 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Gauge, Histogram, Counter } from 'prom-client';
 import { DataSource } from 'typeorm';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { getConnectionCache } from './data-source';
+
+// Global registry for accessing metrics service from non-NestJS code
+let metricsServiceInstance: DatabaseMetricsService | null = null;
+
+export function getMetricsService(): DatabaseMetricsService | null {
+  return metricsServiceInstance;
+}
 
 /**
  * DatabaseMetricsService
@@ -23,8 +30,14 @@ import { getConnectionCache } from './data-source';
  * - db_queries_per_second: Current QPS gauge
  */
 @Injectable()
-export class DatabaseMetricsService {
+export class DatabaseMetricsService implements OnModuleInit {
   private readonly logger = new Logger(DatabaseMetricsService.name);
+
+  onModuleInit() {
+    // Register this instance globally so data-source.ts can access it
+    metricsServiceInstance = this;
+    this.logger.log('DatabaseMetricsService registered globally');
+  }
 
   // Track query counts for QPS calculation
   private queryCountMap = new Map<string, number>();
@@ -45,6 +58,8 @@ export class DatabaseMetricsService {
     private readonly connectionErrorsCounter: Counter<string>,
     @InjectMetric('db_queries_per_second')
     private readonly queriesPerSecondGauge: Gauge<string>,
+    @InjectMetric('db_connection_acquisition_duration_seconds')
+    private readonly connectionAcquisitionHistogram: Histogram<string>,
   ) {}
 
   /**
@@ -187,6 +202,29 @@ export class DatabaseMetricsService {
       );
     } catch (error) {
       this.logger.error('Error recording connection error:', error);
+    }
+  }
+
+  /**
+   * Record connection acquisition time
+   */
+  recordConnectionAcquisition(tenantId: string, durationMs: number): void {
+    try {
+      const durationSeconds = durationMs / 1000;
+
+      this.connectionAcquisitionHistogram.observe(
+        { tenant: tenantId },
+        durationSeconds,
+      );
+
+      // Warn if connection acquisition is slow (> 100ms)
+      if (durationMs > 100) {
+        this.logger.warn(
+          `Slow connection acquisition for tenant ${tenantId}: ${durationMs}ms`,
+        );
+      }
+    } catch (error) {
+      this.logger.error('Error recording connection acquisition:', error);
     }
   }
 
