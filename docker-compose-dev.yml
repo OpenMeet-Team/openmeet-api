@@ -167,7 +167,7 @@ services:
     container_name: api
     hostname: api
     working_dir: /app
-    command: sh -c "npm install && npm run start:dev"
+    command: sh -c "npm install && npm run start:dev:nodemon"
     ports:
       - ${APP_PORT}:${APP_PORT}
     volumes:
@@ -176,6 +176,9 @@ services:
     environment:
       - NODE_ENV=development
       - TZ=UTC
+      # Enable polling for file watching in Docker
+      - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=1000
       # Override localhost hosts for container networking
       - DATABASE_HOST=postgres
       - ELASTICACHE_HOST=redis
