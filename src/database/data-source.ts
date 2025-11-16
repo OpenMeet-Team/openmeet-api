@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { SpanStatusCode, trace, context, SpanKind } from '@opentelemetry/api';
+import { getMetricsService } from './database-metrics.service';
 
 // Add connection cache at module level
 const connectionCache = new Map<
@@ -8,6 +9,7 @@ const connectionCache = new Map<
   {
     connection: DataSource;
     lastUsed: number;
+    tenantId: string;
   }
 >();
 
@@ -43,6 +45,10 @@ export function stopCleanupInterval() {
     clearInterval(cleanupInterval);
     cleanupInterval = null;
   }
+}
+
+export function getConnectionCache() {
+  return connectionCache;
 }
 
 // Only start cleanup interval in production/development
@@ -192,10 +198,34 @@ export const AppDataSource = (tenantId: string) => {
 
             span.setAttribute('database.connection_time_ms', duration);
 
+            // Record connection acquisition metrics
+            const metricsService = getMetricsService();
+            if (metricsService) {
+              metricsService.recordConnectionAcquisition(tenantId, duration);
+            }
+
+            // Set up pool error event listener
+            try {
+              const pool = (dataSource.driver as any).master;
+              if (pool && !pool._openmeet_listeners_attached) {
+                pool.on('error', (err: Error & { code?: string }) => {
+                  const errorType = err.code || err.name || 'UNKNOWN';
+                  if (metricsService) {
+                    metricsService.recordConnectionError(tenantId, errorType);
+                  }
+                });
+                // Mark that we've attached listeners to avoid duplicates
+                pool._openmeet_listeners_attached = true;
+              }
+            } catch (error) {
+              console.error('Failed to attach pool error listener:', error);
+            }
+
             // Cache successful connection
             connectionCache.set(cacheKey, {
               connection: dataSource,
               lastUsed: Date.now(),
+              tenantId: tenantId,
             });
 
             return dataSource;

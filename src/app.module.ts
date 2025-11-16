@@ -53,6 +53,7 @@ import { MatrixModule } from './matrix/matrix.module';
 import { EventSeriesModule } from './event-series/event-series.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { InterceptorsModule } from './core/interceptors.module';
+import { DatabaseMetricsModule } from './database/database-metrics.module';
 import { ShadowAccountModule } from './shadow-account/shadow-account.module';
 import { CalendarSourceModule } from './calendar-source/calendar-source.module';
 import { CalendarFeedModule } from './calendar-feed/calendar-feed.module';
@@ -125,6 +126,7 @@ const infrastructureDatabaseModule = TypeOrmModule.forRootAsync({
     HealthModule,
     TracingModule,
     MetricsModule,
+    DatabaseMetricsModule,
     InterceptorsModule,
     // It's important that UserModule comes before MatrixModule to ensure it's initialized first
     UserModule,
