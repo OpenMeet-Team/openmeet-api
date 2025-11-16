@@ -35,6 +35,7 @@ export class DatabaseMetricsService implements OnModuleInit {
 
   onModuleInit() {
     // Register this instance globally so data-source.ts can access it
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     metricsServiceInstance = this;
     this.logger.log('DatabaseMetricsService registered globally');
   }
@@ -67,7 +68,7 @@ export class DatabaseMetricsService implements OnModuleInit {
    * Runs every 30 seconds to match scrape interval
    */
   @Cron(CronExpression.EVERY_30_SECONDS)
-  async collectPoolMetrics() {
+  collectPoolMetrics() {
     try {
       const connectionCache = getConnectionCache();
 
@@ -77,11 +78,12 @@ export class DatabaseMetricsService implements OnModuleInit {
       let totalWaiting = 0;
       let totalActive = 0;
 
-      for (const [_cacheKey, { connection, tenantId }] of connectionCache.entries()) {
+      for (const [, { connection, tenantId }] of connectionCache.entries()) {
         const poolMetrics = this.getPoolMetrics(connection);
         if (!poolMetrics) continue;
 
-        const { totalCount, idleCount, waitingCount, activeCount } = poolMetrics;
+        const { totalCount, idleCount, waitingCount, activeCount } =
+          poolMetrics;
 
         // Set per-tenant metrics (following pattern from metrics.service.ts:106)
         this.poolSizeGauge.set({ tenant: tenantId }, totalCount);
@@ -133,10 +135,7 @@ export class DatabaseMetricsService implements OnModuleInit {
         const [tenantId, operation] = key.split(':');
         const qps = count / elapsedSeconds;
 
-        this.queriesPerSecondGauge.set(
-          { tenant: tenantId, operation },
-          qps,
-        );
+        this.queriesPerSecondGauge.set({ tenant: tenantId, operation }, qps);
 
         totalQps += qps;
       }

@@ -3,6 +3,149 @@ import { DataSource, DataSourceOptions } from 'typeorm';
 import { SpanStatusCode, trace, context, SpanKind } from '@opentelemetry/api';
 import { getMetricsService } from './database-metrics.service';
 
+/**
+ * Extract the SQL operation type from a query string
+ */
+function extractOperation(query: string): string {
+  const trimmed = query.trim().toUpperCase();
+  if (trimmed.startsWith('SELECT')) return 'SELECT';
+  if (trimmed.startsWith('INSERT')) return 'INSERT';
+  if (trimmed.startsWith('UPDATE')) return 'UPDATE';
+  if (trimmed.startsWith('DELETE')) return 'DELETE';
+  if (trimmed.startsWith('BEGIN')) return 'BEGIN';
+  if (trimmed.startsWith('COMMIT')) return 'COMMIT';
+  if (trimmed.startsWith('ROLLBACK')) return 'ROLLBACK';
+  return 'OTHER';
+}
+
+/**
+ * Patch the PostgreSQL driver's query method to record metrics and traces
+ * This intercepts ALL database queries at the driver level
+ */
+function patchDriverForMetrics(dataSource: DataSource, tenantId: string): void {
+  try {
+    const driver = (dataSource.driver as any)?.master;
+    if (!driver) {
+      console.warn(
+        `[DB-METRICS] Cannot patch driver for tenant ${tenantId}: master pool not found`,
+      );
+      return;
+    }
+
+    // Avoid patching the same pool multiple times
+    if (driver._openmeet_query_patched) {
+      console.log(
+        `[DB-METRICS] Driver already patched for tenant ${tenantId}, skipping`,
+      );
+      return;
+    }
+
+    const tracer = trace.getTracer('database');
+
+    // TypeORM uses pool.connect() to get clients, then calls query on the client
+    // So we need to patch pool.connect() to wrap the client's query method
+    const originalConnect = driver.connect.bind(driver);
+
+    driver.connect = function (callback: any): any {
+      return originalConnect(function (
+        err: any,
+        client: any,
+        release: any,
+      ): any {
+        if (err || !client) {
+          return callback(err, client, release);
+        }
+
+        // Patch this client's query method if not already patched
+        if (!client._openmeet_query_patched) {
+          const originalClientQuery = client.query.bind(client);
+
+          client.query = function (...args: any[]): any {
+            const startTime = Date.now();
+
+            // Extract query text
+            const query =
+              typeof args[0] === 'string'
+                ? args[0]
+                : args[0]?.text || args[0]?.query || 'UNKNOWN';
+            const operation = extractOperation(query);
+
+            // Start trace span
+            const span = tracer.startSpan('db.query', {
+              kind: SpanKind.CLIENT,
+              attributes: {
+                'db.system': 'postgresql',
+                'db.operation': operation,
+                'db.statement': query.substring(0, 500),
+                'tenant.id': tenantId,
+              },
+            });
+
+            const result = originalClientQuery(...args);
+
+            // Handle promise-based queries
+            if (result && typeof result.then === 'function') {
+              return result
+                .then((res: any) => {
+                  const duration = Date.now() - startTime;
+
+                  // Record metrics
+                  const metricsService = getMetricsService();
+                  if (metricsService) {
+                    metricsService.recordQueryDuration(
+                      tenantId,
+                      operation,
+                      duration,
+                    );
+                  }
+
+                  span.setAttribute('db.duration_ms', duration);
+                  span.setStatus({ code: SpanStatusCode.OK });
+                  span.end();
+
+                  return res;
+                })
+                .catch((err: any) => {
+                  const duration = Date.now() - startTime;
+
+                  const metricsService = getMetricsService();
+                  if (metricsService) {
+                    metricsService.recordQueryDuration(
+                      tenantId,
+                      `${operation}_error`,
+                      duration,
+                    );
+                  }
+
+                  span.recordException(err);
+                  span.setStatus({ code: SpanStatusCode.ERROR });
+                  span.end();
+
+                  throw err;
+                });
+            }
+
+            span.end();
+            return result;
+          };
+
+          client._openmeet_query_patched = true;
+        }
+
+        return callback(err, client, release);
+      });
+    };
+
+    // Mark this pool as patched
+    driver._openmeet_query_patched = true;
+  } catch (error) {
+    console.error(
+      `[DB-METRICS] Failed to patch database driver for tenant ${tenantId}:`,
+      error,
+    );
+  }
+}
+
 // Add connection cache at module level
 const connectionCache = new Map<
   string,
@@ -71,6 +214,11 @@ export const AppDataSource = (tenantId: string) => {
 
   if (cached?.connection?.isInitialized) {
     cached.lastUsed = Date.now();
+
+    // Ensure the driver is patched even for cached connections
+    // This handles cases where connection was created before metrics service initialized
+    patchDriverForMetrics(cached.connection, tenantId);
+
     return cached.connection;
   } else if (cached) {
     // Only remove from cache if connection exists but isn't initialized
@@ -220,6 +368,9 @@ export const AppDataSource = (tenantId: string) => {
             } catch (error) {
               console.error('Failed to attach pool error listener:', error);
             }
+
+            // Patch driver to intercept queries for metrics and tracing
+            patchDriverForMetrics(dataSource, tenantId);
 
             // Cache successful connection
             connectionCache.set(cacheKey, {
