@@ -43,10 +43,10 @@ const databaseMetricsProviders = [
     help: 'Total number of database connection errors',
     labelNames: ['tenant', 'error_type'],
   }),
-  makeGaugeProvider({
-    name: 'db_queries_per_second',
-    help: 'Database queries per second',
-    labelNames: ['tenant', 'operation'],
+  makeCounterProvider({
+    name: 'db_queries_total',
+    help: 'Total number of database queries executed',
+    labelNames: ['tenant', 'operation', 'status'],
   }),
   makeHistogramProvider({
     name: 'db_connection_acquisition_duration_seconds',
