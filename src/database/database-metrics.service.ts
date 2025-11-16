@@ -35,13 +35,10 @@ export class DatabaseMetricsService implements OnModuleInit {
 
   onModuleInit() {
     // Register this instance globally so data-source.ts can access it
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     metricsServiceInstance = this;
     this.logger.log('DatabaseMetricsService registered globally');
   }
-
-  // Track query counts for QPS calculation
-  private queryCountMap = new Map<string, number>();
-  private lastQpsUpdate = Date.now();
 
   constructor(
     @InjectMetric('db_pool_size')
@@ -56,8 +53,8 @@ export class DatabaseMetricsService implements OnModuleInit {
     private readonly queryDurationHistogram: Histogram<string>,
     @InjectMetric('db_connection_errors_total')
     private readonly connectionErrorsCounter: Counter<string>,
-    @InjectMetric('db_queries_per_second')
-    private readonly queriesPerSecondGauge: Gauge<string>,
+    @InjectMetric('db_queries_total')
+    private readonly queriesCounter: Counter<string>,
     @InjectMetric('db_connection_acquisition_duration_seconds')
     private readonly connectionAcquisitionHistogram: Histogram<string>,
   ) {}
@@ -67,7 +64,7 @@ export class DatabaseMetricsService implements OnModuleInit {
    * Runs every 30 seconds to match scrape interval
    */
   @Cron(CronExpression.EVERY_30_SECONDS)
-  async collectPoolMetrics() {
+  collectPoolMetrics() {
     try {
       const connectionCache = getConnectionCache();
 
@@ -77,11 +74,12 @@ export class DatabaseMetricsService implements OnModuleInit {
       let totalWaiting = 0;
       let totalActive = 0;
 
-      for (const [_cacheKey, { connection, tenantId }] of connectionCache.entries()) {
+      for (const [, { connection, tenantId }] of connectionCache.entries()) {
         const poolMetrics = this.getPoolMetrics(connection);
         if (!poolMetrics) continue;
 
-        const { totalCount, idleCount, waitingCount, activeCount } = poolMetrics;
+        const { totalCount, idleCount, waitingCount, activeCount } =
+          poolMetrics;
 
         // Set per-tenant metrics (following pattern from metrics.service.ts:106)
         this.poolSizeGauge.set({ tenant: tenantId }, totalCount);
@@ -114,72 +112,33 @@ export class DatabaseMetricsService implements OnModuleInit {
   }
 
   /**
-   * Update QPS metrics based on query counts
-   * Called every 30 seconds to align with pool metrics collection
-   */
-  @Cron(CronExpression.EVERY_30_SECONDS)
-  updateQpsMetrics() {
-    try {
-      const now = Date.now();
-      const elapsedSeconds = (now - this.lastQpsUpdate) / 1000;
-
-      if (elapsedSeconds === 0) return;
-
-      // Track aggregate QPS
-      let totalQps = 0;
-
-      // Calculate QPS for each tenant/operation combination
-      for (const [key, count] of this.queryCountMap.entries()) {
-        const [tenantId, operation] = key.split(':');
-        const qps = count / elapsedSeconds;
-
-        this.queriesPerSecondGauge.set(
-          { tenant: tenantId, operation },
-          qps,
-        );
-
-        totalQps += qps;
-      }
-
-      // Set aggregate QPS
-      this.queriesPerSecondGauge.set(
-        { tenant: 'all', operation: 'all' },
-        totalQps,
-      );
-
-      // Reset counters
-      this.queryCountMap.clear();
-      this.lastQpsUpdate = now;
-    } catch (error) {
-      this.logger.error('Error updating QPS metrics:', error);
-    }
-  }
-
-  /**
    * Record query duration for performance tracking
    * Following pattern from rsvp-integration.service.ts:55-59
+   *
+   * Note: Query count is tracked via Counter, not manual calculation.
+   * Use rate(db_queries_total[1m]) in Prometheus for QPS metrics.
    */
   recordQueryDuration(
     tenantId: string,
     operation: string,
     durationMs: number,
+    status: 'success' | 'error' = 'success',
   ): void {
     try {
       const durationSeconds = durationMs / 1000;
 
       this.queryDurationHistogram.observe(
-        { tenant: tenantId, operation },
+        { tenant: tenantId, operation, status },
         durationSeconds,
       );
 
-      // Track query count for QPS calculation
-      const key = `${tenantId}:${operation}`;
-      this.queryCountMap.set(key, (this.queryCountMap.get(key) || 0) + 1);
+      // Increment query counter (Prometheus calculates rate automatically)
+      this.queriesCounter.inc({ tenant: tenantId, operation, status });
 
       // Warn on slow queries (> 1 second)
       if (durationMs > 1000) {
         this.logger.warn(
-          `Slow query detected for tenant ${tenantId} (${operation}): ${durationMs}ms`,
+          `Slow query detected for tenant ${tenantId} (${operation}, ${status}): ${durationMs}ms`,
         );
       }
     } catch (error) {

@@ -2,6 +2,231 @@ import 'reflect-metadata';
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { SpanStatusCode, trace, context, SpanKind } from '@opentelemetry/api';
 import { getMetricsService } from './database-metrics.service';
+import { createHash } from 'crypto';
+
+/**
+ * Extract the SQL operation type from a query string
+ */
+function extractOperation(query: string): string {
+  const trimmed = query.trim().toUpperCase();
+  if (trimmed.startsWith('SELECT')) return 'SELECT';
+  if (trimmed.startsWith('INSERT')) return 'INSERT';
+  if (trimmed.startsWith('UPDATE')) return 'UPDATE';
+  if (trimmed.startsWith('DELETE')) return 'DELETE';
+  if (trimmed.startsWith('BEGIN')) return 'BEGIN';
+  if (trimmed.startsWith('COMMIT')) return 'COMMIT';
+  if (trimmed.startsWith('ROLLBACK')) return 'ROLLBACK';
+  return 'OTHER';
+}
+
+/**
+ * Sanitize SQL query by replacing literal values with placeholders
+ * Removes sensitive data like emails, passwords, API keys from traces
+ * @internal Exported for testing
+ */
+export function sanitizeQuery(query: string): string {
+  let sanitized = query;
+
+  // Replace string literals (single quotes): 'value' -> ?
+  sanitized = sanitized.replace(/'([^']*)'/g, '?');
+
+  // Replace numeric literals that aren't part of SQL keywords
+  // Matches standalone numbers but not in table names, column names, etc.
+  sanitized = sanitized.replace(/\b(\d+)\b/g, '?');
+
+  // Replace array/list values: (1, 2, 3) -> (?)
+  sanitized = sanitized.replace(/\([?,\s]+\)/g, '(?)');
+
+  // Collapse multiple consecutive ? to single ? for readability
+  sanitized = sanitized.replace(/\?(\s*,\s*\?)+/g, '?');
+
+  return sanitized;
+}
+
+/**
+ * Generate query fingerprint for grouping similar queries
+ * Creates a consistent hash for queries with same structure
+ * @internal Exported for testing
+ */
+export function generateQueryFingerprint(sanitizedQuery: string): string {
+  // Normalize whitespace and case for consistent fingerprinting
+  const normalized = sanitizedQuery
+    .replace(/\s+/g, ' ') // Collapse whitespace
+    .trim()
+    .toUpperCase();
+
+  // Create short hash (first 12 chars of SHA256)
+  return createHash('sha256').update(normalized).digest('hex').substring(0, 12);
+}
+
+/**
+ * Patch the PostgreSQL driver's query method to record metrics and traces
+ * This intercepts ALL database queries at the driver level
+ *
+ * ## Pool Isolation Architecture
+ *
+ * Each tenant has an isolated connection pool:
+ * 1. AppDataSource(tenantId) creates DataSource with unique cache key: `${URL}_tenant_${tenantId}`
+ * 2. Each DataSource.initialize() → driver.connect() → creates NEW pg.Pool instance
+ * 3. Pools are NOT shared between tenants (different cache keys = different DataSource = different Pool)
+ * 4. This function patches once per pool, capturing the tenantId in closure
+ * 5. Since pools are isolated per tenant, all queries through this pool have the correct tenantId
+ *
+ * ## Why this is safe:
+ * - connectionCache uses schema name in key, preventing pool reuse across tenants
+ * - TypeORM creates one Pool per DataSource (see PostgresDriver.connect())
+ * - The captured tenantId correctly attributes all metrics/traces from this pool's queries
+ */
+function patchDriverForMetrics(dataSource: DataSource, tenantId: string): void {
+  try {
+    const driver = (dataSource.driver as any)?.master;
+    if (!driver) {
+      console.warn(
+        `[DB-METRICS] Cannot patch driver for tenant ${tenantId}: master pool not found`,
+      );
+      return;
+    }
+
+    // Avoid patching the same pool multiple times
+    // This can happen when returning cached DataSource instances
+    // Since pools are isolated per tenant, the original tenantId is still correct
+    if (driver._openmeet_query_patched) {
+      return;
+    }
+
+    const tracer = trace.getTracer('database');
+
+    // TypeORM uses pool.connect() to get clients, then calls query on the client
+    // So we need to patch pool.connect() to wrap the client's query method
+    const originalConnect = driver.connect.bind(driver);
+
+    driver.connect = function (callback: any): any {
+      return originalConnect(function (
+        err: any,
+        client: any,
+        release: any,
+      ): any {
+        if (err || !client) {
+          return callback(err, client, release);
+        }
+
+        // Patch this client's query method if not already patched
+        if (!client._openmeet_query_patched) {
+          const originalClientQuery = client.query.bind(client);
+
+          client.query = function (...args: any[]): any {
+            const startTime = Date.now();
+
+            // Extract query text
+            const query =
+              typeof args[0] === 'string'
+                ? args[0]
+                : args[0]?.text || args[0]?.query || 'UNKNOWN';
+            const operation = extractOperation(query);
+
+            // Sanitize query to remove sensitive values (PII, credentials, etc.)
+            const sanitizedQuery = sanitizeQuery(query);
+            const queryFingerprint = generateQueryFingerprint(sanitizedQuery);
+
+            // Start trace span with proper context propagation
+            // Span name follows OpenTelemetry conventions: db.<operation>
+            const span = tracer.startSpan(
+              `db.${operation.toLowerCase()}`,
+              {
+                kind: SpanKind.CLIENT,
+                attributes: {
+                  'db.system': 'postgresql',
+                  'db.operation': operation,
+                  'db.statement': sanitizedQuery.substring(0, 1000), // Truncate for safety
+                  'db.query.fingerprint': queryFingerprint,
+                  'db.name': process.env.DATABASE_NAME,
+                  'tenant.id': tenantId,
+                },
+              },
+              context.active(),
+            );
+
+            const result = originalClientQuery(...args);
+
+            // Handle promise-based queries (node-postgres always returns promises)
+            if (result && typeof result.then === 'function') {
+              return result
+                .then((res: any) => {
+                  const duration = Date.now() - startTime;
+
+                  // Record metrics with success status
+                  const metricsService = getMetricsService();
+                  if (metricsService) {
+                    metricsService.recordQueryDuration(
+                      tenantId,
+                      operation,
+                      duration,
+                      'success',
+                    );
+                  }
+
+                  span.setAttribute('db.duration_ms', duration);
+                  span.setStatus({ code: SpanStatusCode.OK });
+                  span.end();
+
+                  return res;
+                })
+                .catch((err: any) => {
+                  const duration = Date.now() - startTime;
+
+                  // Record metrics with error status
+                  const metricsService = getMetricsService();
+                  if (metricsService) {
+                    metricsService.recordQueryDuration(
+                      tenantId,
+                      operation,
+                      duration,
+                      'error',
+                    );
+                  }
+
+                  span.recordException(err);
+                  span.setStatus({ code: SpanStatusCode.ERROR });
+                  span.end();
+
+                  throw err;
+                });
+            }
+
+            // Synchronous fallback (unlikely with node-postgres)
+            // Record metrics immediately without timing
+            const duration = Date.now() - startTime;
+            const metricsService = getMetricsService();
+            if (metricsService) {
+              metricsService.recordQueryDuration(
+                tenantId,
+                operation,
+                duration,
+                'success',
+              );
+            }
+            span.setAttribute('db.duration_ms', duration);
+            span.setStatus({ code: SpanStatusCode.OK });
+            span.end();
+            return result;
+          };
+
+          client._openmeet_query_patched = true;
+        }
+
+        return callback(err, client, release);
+      });
+    };
+
+    // Mark this pool as patched
+    driver._openmeet_query_patched = true;
+  } catch (error) {
+    console.error(
+      `[DB-METRICS] Failed to patch database driver for tenant ${tenantId}:`,
+      error,
+    );
+  }
+}
 
 // Add connection cache at module level
 const connectionCache = new Map<
@@ -71,6 +296,11 @@ export const AppDataSource = (tenantId: string) => {
 
   if (cached?.connection?.isInitialized) {
     cached.lastUsed = Date.now();
+
+    // Ensure the driver is patched even for cached connections
+    // This handles cases where connection was created before metrics service initialized
+    patchDriverForMetrics(cached.connection, tenantId);
+
     return cached.connection;
   } else if (cached) {
     // Only remove from cache if connection exists but isn't initialized
@@ -220,6 +450,9 @@ export const AppDataSource = (tenantId: string) => {
             } catch (error) {
               console.error('Failed to attach pool error listener:', error);
             }
+
+            // Patch driver to intercept queries for metrics and tracing
+            patchDriverForMetrics(dataSource, tenantId);
 
             // Cache successful connection
             connectionCache.set(cacheKey, {

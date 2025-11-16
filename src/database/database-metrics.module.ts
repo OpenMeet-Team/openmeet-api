@@ -35,7 +35,7 @@ const databaseMetricsProviders = [
   makeHistogramProvider({
     name: 'db_query_duration_seconds',
     help: 'Database query duration in seconds',
-    labelNames: ['tenant', 'operation'],
+    labelNames: ['tenant', 'operation', 'status'],
     buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 2.5, 5, 10],
   }),
   makeCounterProvider({
@@ -43,10 +43,10 @@ const databaseMetricsProviders = [
     help: 'Total number of database connection errors',
     labelNames: ['tenant', 'error_type'],
   }),
-  makeGaugeProvider({
-    name: 'db_queries_per_second',
-    help: 'Database queries per second',
-    labelNames: ['tenant', 'operation'],
+  makeCounterProvider({
+    name: 'db_queries_total',
+    help: 'Total number of database queries executed',
+    labelNames: ['tenant', 'operation', 'status'],
   }),
   makeHistogramProvider({
     name: 'db_connection_acquisition_duration_seconds',
