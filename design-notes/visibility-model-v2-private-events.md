@@ -58,7 +58,7 @@ This document defines a new visibility model that clarifies the distinction betw
 - **Access:** Anyone with link can view full details (no login required)
 - **Link Previews:** Yes (Open Graph tags for sharing)
 - **Bot Access:** Preview only (for link unfurling)
-- **Activity Feed:** Visible in sitewide feed
+- **Activity Feed:** NOT visible in sitewide feed, or anonymized
 - **Use Case:** Events you want to share via link but not advertise publicly
 
 **Examples:**
@@ -75,7 +75,7 @@ This document defines a new visibility model that clarifies the distinction betw
 - **Access (Invited):** Full details
 - **Link Previews:** No (returns 403/404)
 - **Bot Access:** Blocked (403/404)
-- **Activity Feed:** Members-only activities, or anonymized in sitewide feed
+- **Activity Feed:** NOT visibile in sitewide feed, or anonymized 
 - **Use Case:** Confidential meetings, private parties, sensitive events
 
 **Examples:**
