@@ -29,8 +29,19 @@ export class VisibilityGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
 
-    const eventSlug = request.headers['x-event-slug'] as string;
-    const groupSlug = request.headers['x-group-slug'] as string;
+    // Determine entity type from route path
+    // Check group routes first as they may contain '/events' in the path (e.g., /groups/:slug/events)
+    const path = request.route?.path || request.url;
+    const isGroupRoute = path.includes('/groups');
+    const isEventRoute = !isGroupRoute && path.includes('/events');
+
+    // Read from params first (standard REST pattern), fallback to headers for backwards compatibility
+    const eventSlug = isEventRoute
+      ? (request.params?.slug || request.headers['x-event-slug']) as string
+      : request.headers['x-event-slug'] as string;
+    const groupSlug = isGroupRoute
+      ? (request.params?.slug || request.headers['x-group-slug']) as string
+      : request.headers['x-group-slug'] as string;
 
     const user = request.user;
 
