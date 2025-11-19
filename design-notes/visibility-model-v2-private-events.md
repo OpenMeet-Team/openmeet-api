@@ -37,7 +37,7 @@ This document defines a new visibility model that clarifies the distinction betw
 |-----------|--------------|------------------|------------------------|---------------------|
 | **Public** | ✅ Yes | ✅ Full details | ✅ Full details | ✅ Full details |
 | **Unlisted** | ❌ No | ✅ Full details | ✅ Full details | ✅ Full details |
-| **Private** | ❌ No | 🔒 Login required | 📋 Teaser info only | ✅ Full details |
+| **Private** | ❌ No | 🔒 Login required | 🚫 403 Forbidden | ✅ Full details |
 
 ### Public Events
 **Philosophy:** Fully discoverable and open
@@ -70,12 +70,12 @@ This document defines a new visibility model that clarifies the distinction betw
 **Philosophy:** Truly private - login + invitation required
 
 - **Indexed:** No
-- **Access (Logged Out):** Shows "Private event - login required" message
-- **Access (Logged In, Not Invited):** Shows teaser info + "Request Invitation" option
+- **Access (Logged Out):** 403 Forbidden - "Private event - login required"
+- **Access (Logged In, Not Invited):** 403 Forbidden - "Access denied - invitation required"
 - **Access (Invited):** Full details
-- **Link Previews:** No (returns 403/404)
-- **Bot Access:** Blocked (403/404)
-- **Activity Feed:** NOT visibile in sitewide feed, or anonymized 
+- **Link Previews:** No (returns 403)
+- **Bot Access:** Blocked (403)
+- **Activity Feed:** NOT visible in sitewide feed (members-only activities only)
 - **Use Case:** Confidential meetings, private parties, sensitive events
 
 **Examples:**
@@ -115,33 +115,22 @@ This document defines a new visibility model that clarifies the distinction betw
 **System Response:**
 ```
 ┌─────────────────────────────────────┐
-│  🔒 Emma's 6th Birthday Party       │
+│  🔒 Access Denied                   │
 ├─────────────────────────────────────┤
-│  Hosted by: Sarah Johnson           │
-│  Date: June 15, 2025                │
-│  Location: Hidden until invited     │
+│  You do not have permission to      │
+│  view this event.                    │
 │                                      │
-│  This is a private event.            │
-│  You can request an invitation.      │
-│                                      │
-│  [ Request Invitation ]              │
+│  This event is private and          │
+│  requires an invitation.             │
 └─────────────────────────────────────┘
 ```
 
-**Shown (Teaser Info):**
-- Event name
-- Host name
-- Date & time
-- "Private event" badge
+**HTTP Response:** 403 Forbidden
 
-**Hidden (Member-Only Info):**
-- Full description
-- Exact location
-- Attendee list
-- RSVP button
-- Chat/discussion
-
-**HTTP Response:** 200 OK (shows teaser page)
+**Rationale:** Maximum security - no information disclosure to prevent:
+- Enumeration attacks (discovering private event names/hosts)
+- Leaking sensitive information (medical, political, personal topics)
+- Social engineering attacks
 
 ### Private Event: Invited User
 
@@ -172,30 +161,33 @@ This document defines a new visibility model that clarifies the distinction betw
 
 ## Information Disclosure Model
 
-### Public Information (Shown to Anyone)
-For **Private** events, minimal info is shown to indicate event exists but is restricted:
+### Private Events: Zero Disclosure Policy
 
-- ✅ Event name
-- ✅ Host name
-- ✅ Date & time (no timezone details)
-- ✅ "Private event" indicator
+For **Private** events, **no information** is disclosed to non-invited users:
+
+**Unauthenticated or Non-Invited Users See:**
+- ❌ Event name
+- ❌ Host name
+- ❌ Date & time
 - ❌ Description
 - ❌ Location
 - ❌ Attendee list
 - ❌ Discussion/chat
+- ✅ Only: "Access Denied - Event is private"
 
-### Member-Only Information (Shown to Invited)
-Full event details available only after authentication + invitation:
-
+**Invited/Attending Users See:**
+- ✅ Event name
+- ✅ Host name
 - ✅ Full description
 - ✅ Exact location with map
+- ✅ Date & time (full details)
 - ✅ Attendee list
 - ✅ RSVP status
 - ✅ Event discussion/chat
 - ✅ Host contact info
 - ✅ Event updates
 
-**Rationale:** This allows hosts to control sensitive information while still allowing invited users to know the event exists and request access.
+**Rationale:** Maximum security approach prevents information leakage, enumeration attacks, and protects sensitive events (medical support groups, political organizing, confidential meetings).
 
 ---
 
@@ -240,7 +232,7 @@ Private events in private groups:
 Host manually enters email addresses:
 
 - System sends invitation emails with token links
-- Email contains event teaser + invitation button
+- Email contains event name + invitation button with unique token
 - Tracks invitation status (sent, opened, RSVP'd)
 - Supports inviting non-users via email (they create account to RSVP)
 
@@ -484,15 +476,15 @@ When Alice RSVPs to a private event:
 |----------|-------------|-----------------|
 | Event doesn't exist | 404 Not Found | "Event not found" |
 | Private event (logged out) | 403 Forbidden | "This is a private event. Please log in." |
-| Private event (logged in, not invited) | 200 OK | Shows teaser page with "Request Invitation" |
+| Private event (logged in, not invited) | 403 Forbidden | "Access denied. Event requires invitation." |
 | Private event (invited) | 200 OK | Shows full details |
 | Unlisted event | 200 OK | Shows full details (no auth required) |
 | Public event | 200 OK | Shows full details |
 
 **Rationale:**
-- **403 vs 404:** Different errors help users understand what's happening
-- **Information Leakage:** Acceptable trade-off - users know event exists but can't see sensitive details
-- **User Experience:** Better than cryptic 404 when a friend shares a private event link
+- **403 for all non-invited access:** Maximum security - no information disclosure
+- **No teaser pages:** Prevents enumeration attacks and leaking sensitive information
+- **Clear binary access:** Either you have access (200) or you don't (403)
 
 ---
 
@@ -506,16 +498,15 @@ When Alice RSVPs to a private event:
 
 **Enumeration Attacks:**
 - Attacker tries `/events/private-1`, `/events/private-2`, etc.
-- Learns which private events exist
-- **Mitigation:** Acceptable - revealing existence is OK, details are protected
+- **Mitigation:** Returns generic 403 with no details - cannot learn event names, hosts, or dates
 
 **Activity Feed Leaks:**
-- "Alice joined X" reveals event name
-- **Mitigation:** Filter private event activities from sitewide feed
+- "Alice joined X" could reveal event name
+- **Mitigation:** Private event activities NEVER appear in sitewide feed
 
 **Error Message Leaks:**
-- Different errors for "not found" vs "private"
-- **Mitigation:** Acceptable trade-off for better UX
+- Different errors for "not found" (404) vs "private" (403)
+- **Mitigation:** 403 message is generic - reveals event exists but zero details disclosed
 
 ### Best Practices
 
@@ -602,14 +593,13 @@ See `visibility-model-v2-private-events-impl.md` for detailed implementation pla
 **Timeline:**
 - **Phase 0** (Weeks -2 to 0): Pre-migration audit & host notification
 - **Phase 1** (Week 1): Database migration (authenticated → unlisted)
-- **Phase 2** (Week 1-2): VisibilityGuard security fix
-- **Phase 3** (Week 2): Frontend teaser pages
-- **Phase 4** (Week 2-3): Invitation token system
-- **Phase 5** (Week 3): Activity feed privacy
-- **Phase 6** (Week 3-4): Testing & validation
-- **Phase 7** (Week 4): Deployment & monitoring
+- **Phase 2** (Week 1-2): VisibilityGuard security fix (hard 403 for non-invited)
+- **Phase 3** (Week 2): Invitation token system
+- **Phase 4** (Week 2-3): Activity feed privacy & membership enforcement
+- **Phase 5** (Week 3-4): Testing & validation
+- **Phase 6** (Week 4): Deployment & monitoring
 
-**Total Duration:** ~6 weeks (including 2-week pre-migration period)
+**Total Duration:** ~5-6 weeks (including 2-week pre-migration period)
 
 ---
 
