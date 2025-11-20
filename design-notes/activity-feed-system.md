@@ -271,7 +271,7 @@ When private groups/events have activity, create TWO activities:
 
 **Activity Visibility Levels:**
 - `public`: Anyone can see (from public groups/events)
-- `authenticated`: Logged-in users only (from authenticated groups/events)
+- `authenticated`: Logged-in users only (from unlisted groups/events)
 - `members_only`: Group members / event attendees only (from private groups/events)
 - `private`: Reserved for internal system use (never displayed in feeds)
 

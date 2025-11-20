@@ -58,7 +58,7 @@ This document defines a new visibility model that clarifies the distinction betw
 - **Access:** Anyone with link can view full details (no login required)
 - **Link Previews:** Yes (Open Graph tags for sharing)
 - **Bot Access:** Preview only (for link unfurling)
-- **Activity Feed:** NOT visible in sitewide feed, or anonymized
+- **Activity Feed:** NOT visible in sitewide feed (event-scoped activities only)
 - **Use Case:** Events you want to share via link but not advertise publicly
 
 **Examples:**
@@ -94,12 +94,12 @@ This document defines a new visibility model that clarifies the distinction betw
 **System Response:**
 ```
 ┌─────────────────────────────────────┐
-│  🔒 Private Event                   │
+│  🔒 Private Event                  │
 ├─────────────────────────────────────┤
 │  This is a private event.           │
 │  You must log in and be invited     │
-│  to view event details.              │
-│                                      │
+│  to view event details.             │
+│                                     │
 │  [ Log In ]  [ Create Account ]     │
 └─────────────────────────────────────┘
 ```
@@ -118,14 +118,16 @@ This document defines a new visibility model that clarifies the distinction betw
 │  🔒 Access Denied                   │
 ├─────────────────────────────────────┤
 │  You do not have permission to      │
-│  view this event.                    │
-│                                      │
+│  view this event.                   │
+│                                     │
 │  This event is private and          │
-│  requires an invitation.             │
+│  requires an invitation.            │
 └─────────────────────────────────────┘
 ```
 
 **HTTP Response:** 403 Forbidden
+
+**Important:** No event details are shown. No "request invitation" mechanism is provided.
 
 **Rationale:** Maximum security - no information disclosure to prevent:
 - Enumeration attacks (discovering private event names/hosts)
@@ -144,14 +146,14 @@ This document defines a new visibility model that clarifies the distinction betw
 │  Hosted by: Sarah Johnson           │
 │  Date: June 15, 2025 at 2:00 PM     │
 │  Location: 123 Main St, Springfield │
-│                                      │
+│                                     │
 │  Join us for Emma's 6th birthday... │
-│  [full description]                  │
-│                                      │
-│  👥 Attendees (8)                    │
-│  [attendee list]                     │
-│                                      │
-│  [ Going ]  [ Can't Go ]             │
+│  [full description]                 │
+│                                     │
+│  👥 Attendees (8)                  │
+│  [attendee list]                    │
+│                                     │
+│  [ Going ]  [ Can't Go ]            │
 └─────────────────────────────────────┘
 ```
 
@@ -193,6 +195,30 @@ For **Private** events, **no information** is disclosed to non-invited users:
 
 ## Invitation Mechanisms
 
+### Important: Invitation Acceptance ≠ RSVP
+
+**Two Separate Steps:**
+
+**Step 1: Accept Invitation (View Access)**
+- User clicks invitation link with token
+- System validates token + email ownership
+- User granted VIEW access to event details
+- Status: "invited" (can view, not attending yet)
+- **Does NOT count against capacity**
+
+**Step 2: RSVP (Attendance Commitment)**
+- User on event page clicks "Going" / "Maybe" / "No"
+- System updates attendee status
+- "Going" counts against event capacity
+- User receives confirmation
+
+**Why Two Steps?**
+- Allows users to view details before committing
+- Prevents accidental capacity consumption
+- Clear distinction between "can see" and "will attend"
+
+---
+
 ### For Private Events
 
 #### 1. Invitation Tokens (Shareable Links)
@@ -213,6 +239,35 @@ https://openmeet.net/events/birthday?invite=abc123xyz
 - **Max Uses:** Unlimited by default, or set a limit (e.g., "first 10 people")
 - **Revocation:** Host can revoke token, which removes all users who joined via it
 - **Tracking:** System tracks invitation creation, usage, and acceptance
+
+**Email-Locked Invitations:**
+
+When sending invitations via email (Option 2 below), invitations are locked to the specific email address:
+
+```typescript
+interface EventInvitation {
+  token: string;
+  eventId: number;
+  invitedEmail: string;     // ← LOCKED to this email
+  invitedUserId?: number;   // NULL until claimed
+  expiresAt: Date;
+}
+```
+
+**Validation Flow:**
+1. Invitation sent to alice@work.com
+2. Alice signs up with alice@personal.com
+3. Alice tries to use invitation
+4. System checks: Does user own alice@work.com (verified)?
+5. Not found → Error: "This invitation is for alice@work.com. Please add and verify this email."
+6. Alice adds alice@work.com as secondary email
+7. Alice verifies alice@work.com
+8. System auto-grants access
+
+**Edge Cases:**
+- **Forwarded links:** If Bob forwards link to Carol, Carol cannot use it (locked to Bob's email)
+- **Email change:** If Alice changes primary email but keeps old one verified, invitation still works
+- **Unverified email:** Must verify email before using invitation
 
 #### 2. Group Membership (Auto-Invitation)
 Private events in private groups:
@@ -456,13 +511,57 @@ When Alice RSVPs to a private event:
 
 ### Activity Visibility Rules
 
-| Event Visibility | Activity Visibility | Who Can See Activity |
-|-----------------|-------------------|---------------------|
-| Public | `public` | Everyone (sitewide feed) |
-| Unlisted | `public` | Everyone (sitewide feed) |
-| Private | `members_only` | Attendees only (event/group feed) |
+| Event Visibility | Feed Scope | Activity Visibility | In Sitewide Feed? |
+|-----------------|------------|-------------------|-------------------|
+| Public (standalone) | sitewide | `public` | ✅ Yes - Everyone sees |
+| Public (in group) | group | `public` | ❌ No - Group feed only |
+| Unlisted | event | `members_only` | ❌ No - Event attendees only |
+| Private | event | `members_only` | ❌ No - Event attendees only |
 
-**Key Point:** Private event activities are completely hidden from sitewide feeds to prevent information leakage.
+**Key Points:**
+- **Only Public standalone events appear in sitewide discovery feed**
+- **Events in groups use group feed** (regardless of event visibility)
+- **Unlisted = not discoverable** - activities stay within event scope
+- **Private event activities are completely hidden** from sitewide feeds to prevent information leakage
+
+**Activity Feed Access Control:**
+- **Sitewide feed:** Public activities from public standalone events only
+- **Group feed:** Only group members can view (enforced at API level)
+- **Event feed:** Only event attendees can view (enforced at API level)
+
+### Complete Activity Feed Examples
+
+**Public Event - "Community Yoga Class":**
+```
+Sitewide Feed (Everyone sees):
+✅ "Sarah created: Community Yoga Class"
+✅ "5 people RSVP'd to Community Yoga Class"
+
+Event Feed (Everyone sees):
+✅ All event activities visible to anyone
+```
+
+**Unlisted Event - "Friends Game Night":**
+```
+Sitewide Feed:
+❌ No activities shown
+
+Event Feed (Anyone with event link sees):
+✅ "Alice is attending Friends Game Night"
+✅ "Bob posted in the discussion"
+```
+
+**Private Event - "Emma's Birthday Party":**
+```
+Sitewide Feed:
+❌ No activities shown
+
+Event Feed (Invited attendees only):
+✅ "Alice is attending Emma's Birthday Party"
+✅ "Sarah posted: Don't forget to bring gifts!"
+```
+
+**Rule:** Only Public standalone events contribute to sitewide discovery feed.
 
 ---
 
