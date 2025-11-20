@@ -140,22 +140,22 @@ describe('Sitewide Activity Feed Security (E2E)', () => {
 
         // Should not contain private group/event activities
         if (activity.groupId === privateGroup.id) {
-          fail(
+          throw new Error(
             `Private group activity leaked to sitewide feed for unauthenticated user: ${JSON.stringify(activity)}`,
           );
         }
         if (activity.eventId === privateEvent.id) {
-          fail(
+          throw new Error(
             `Private event activity leaked to sitewide feed for unauthenticated user: ${JSON.stringify(activity)}`,
           );
         }
         if (activity.groupId === authenticatedGroup.id) {
-          fail(
+          throw new Error(
             `Unlisted group activity leaked to sitewide feed for unauthenticated user: ${JSON.stringify(activity)}`,
           );
         }
         if (activity.eventId === authenticatedEvent.id) {
-          fail(
+          throw new Error(
             `Unlisted event activity leaked to sitewide feed for unauthenticated user: ${JSON.stringify(activity)}`,
           );
         }
@@ -233,12 +233,12 @@ describe('Sitewide Activity Feed Security (E2E)', () => {
 
         // Should not contain private group/event activities
         if (activity.groupId === privateGroup.id) {
-          fail(
+          throw new Error(
             `Private group activity leaked to sitewide feed for authenticated user: ${JSON.stringify(activity)}`,
           );
         }
         if (activity.eventId === privateEvent.id) {
-          fail(
+          throw new Error(
             `Private event activity leaked to sitewide feed for authenticated user: ${JSON.stringify(activity)}`,
           );
         }

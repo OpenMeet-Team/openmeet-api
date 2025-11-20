@@ -247,13 +247,15 @@ describe('Guards (e2e)', () => {
         expect(response.body.slug).toBe(publicEvent.slug);
       });
 
-      it('should deny access to unlisted event without authentication', async () => {
+      it('should allow access to unlisted event without authentication', async () => {
+        // Unlisted events are accessible via direct link without authentication
         const response = await request(app)
           .get(`/api/events/${authenticatedEvent.slug}`)
           .set('x-tenant-id', TESTING_TENANT_ID)
           .set('x-event-slug', authenticatedEvent.slug);
 
-        expect(response.status).toBe(403);
+        expect(response.status).toBe(200);
+        expect(response.body.slug).toBe(authenticatedEvent.slug);
       });
 
       it('should allow access to unlisted event with valid token', async () => {

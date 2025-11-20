@@ -62,14 +62,10 @@ export class VisibilityGuard implements CanActivate {
 
       switch (event.visibility) {
         case EventVisibility.Public:
-          return true;
         case EventVisibility.Unlisted:
-          if (!user) {
-            throw new ForbiddenException(
-              'VisibilityGuard: This event is not public',
-            );
-          }
-          break;
+          // Public and Unlisted events are accessible without authentication
+          // Unlisted means hidden from listings but accessible via direct link
+          return true;
         case EventVisibility.Private:
           if (!user) {
             throw new ForbiddenException(
@@ -103,14 +99,10 @@ export class VisibilityGuard implements CanActivate {
 
       switch (group.visibility) {
         case GroupVisibility.Public:
-          return true;
         case GroupVisibility.Unlisted:
-          if (!user) {
-            throw new ForbiddenException(
-              'This group requires authentication. Please log in to view the group details.',
-            );
-          }
-          break;
+          // Public and Unlisted groups are accessible without authentication
+          // Unlisted means hidden from listings but accessible via direct link
+          return true;
         case GroupVisibility.Private:
           if (!user) {
             throw new ForbiddenException(

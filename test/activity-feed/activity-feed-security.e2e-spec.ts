@@ -156,9 +156,9 @@ describe('Activity Feed Security (E2E)', () => {
     });
   });
 
-  describe('GET /groups/:slug/feed - Authenticated Groups', () => {
+  describe('GET /groups/:slug/feed - Unlisted Groups', () => {
     it('should allow authenticated users to access unlisted group feed', async () => {
-      // Given: Authenticated (unlisted) group exists
+      // Given: Unlisted group exists
       // When: Any authenticated user requests feed
       const response = await request(app)
         .get(`/api/groups/${authenticatedGroup.slug}/feed`)
@@ -170,14 +170,14 @@ describe('Activity Feed Security (E2E)', () => {
         bodyLength: response.body?.length,
       });
 
-      // Then: Should succeed (authenticated = anyone with account can access)
+      // Then: Should succeed (unlisted = accessible via direct link)
       expect(response.status).toBe(200);
       expect(Array.isArray(response.body)).toBe(true);
     });
 
-    it('should deny unauthenticated users access to unlisted group feed', async () => {
+    it('should allow unauthenticated users to access unlisted group feed', async () => {
       // Given: Unlisted group exists
-      // When: Unauthenticated user requests feed
+      // When: Unauthenticated user requests feed via direct link
       const response = await request(app)
         .get(`/api/groups/${authenticatedGroup.slug}/feed`)
         .set('x-tenant-id', TESTING_TENANT_ID);
@@ -187,8 +187,9 @@ describe('Activity Feed Security (E2E)', () => {
         body: response.body,
       });
 
-      // Then: Should be denied (401 or 403)
-      expect([401, 403]).toContain(response.status);
+      // Then: Should succeed (unlisted = accessible via direct link, no auth required)
+      expect(response.status).toBe(200);
+      expect(Array.isArray(response.body)).toBe(true);
     });
   });
 
@@ -385,9 +386,9 @@ describe('Activity Feed Security (E2E)', () => {
       expect(Array.isArray(response.body)).toBe(true);
     });
 
-    it('should deny unauthenticated users access to unlisted event feed', async () => {
+    it('should allow unauthenticated users to access unlisted event feed', async () => {
       // Given: Unlisted event exists
-      // When: Unauthenticated user requests feed
+      // When: Unauthenticated user requests feed via direct link
       const response = await request(app)
         .get(`/api/events/${authenticatedEvent.slug}/feed`)
         .set('x-tenant-id', TESTING_TENANT_ID);
@@ -397,8 +398,9 @@ describe('Activity Feed Security (E2E)', () => {
         body: response.body,
       });
 
-      // Then: Should be denied (401 or 403)
-      expect([401, 403]).toContain(response.status);
+      // Then: Should succeed (unlisted = accessible via direct link, no auth required)
+      expect(response.status).toBe(200);
+      expect(Array.isArray(response.body)).toBe(true);
     });
 
     it('should allow anyone to access public event feed', async () => {

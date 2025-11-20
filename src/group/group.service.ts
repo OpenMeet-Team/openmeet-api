@@ -315,18 +315,17 @@ export class GroupService {
 
     // Build visibility conditions
     if (userId) {
-      // For authenticated users: show public, authenticated, and private groups they're members of
+      // For authenticated users: show public and private groups they're members of
+      // Unlisted groups are hidden from listings - only accessible via direct link
       groupQuery
         .leftJoin('group.groupMembers', 'members', 'members.userId = :userId', {
           userId,
         })
         .andWhere(
           '(group.visibility = :publicVisibility OR ' +
-            'group.visibility = :authenticatedVisibility OR ' +
             '(group.visibility = :privateVisibility AND members.id IS NOT NULL))',
           {
             publicVisibility: GroupVisibility.Public,
-            authenticatedVisibility: GroupVisibility.Unlisted,
             privateVisibility: GroupVisibility.Private,
           },
         );

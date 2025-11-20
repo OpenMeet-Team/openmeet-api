@@ -308,9 +308,10 @@ export class EventQueryService {
           qb.where('event.visibility = :publicVisibility', {
             publicVisibility: EventVisibility.Public,
           });
-          qb.orWhere('event.visibility = :authVisibility', {
-            authVisibility: EventVisibility.Unlisted,
-          });
+          // Unlisted events are hidden from listings - only accessible via direct link
+          // qb.orWhere('event.visibility = :unlistedVisibility', {
+          //   unlistedVisibility: EventVisibility.Unlisted,
+          // });
           if (attendedEventIds.length > 0) {
             qb.orWhere(
               'event.visibility = :privateVisibility AND event.id IN (:...attendedEventIds)',
