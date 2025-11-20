@@ -6,6 +6,9 @@ import { REQUEST } from '@nestjs/core';
 import { GroupVisibility } from '../core/constants/constant';
 import { ActivityFeedEntity } from './infrastructure/persistence/relational/entities/activity-feed.entity';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
+import { EventQueryService } from '../event/services/event-query.service';
+import { EventAttendeeService } from '../event-attendee/event-attendee.service';
+import { GroupMemberService } from '../group-member/group-member.service';
 
 describe('GroupActivityFeedController', () => {
   let controller: GroupActivityFeedController;
@@ -88,6 +91,25 @@ describe('GroupActivityFeedController', () => {
           provide: GroupService,
           useFactory: () => ({
             getGroupBySlug: jest.fn(),
+            findGroupBySlug: jest.fn(),
+          }),
+        },
+        {
+          provide: EventQueryService,
+          useFactory: () => ({
+            findEventBySlug: jest.fn(),
+          }),
+        },
+        {
+          provide: EventAttendeeService,
+          useFactory: () => ({
+            findEventAttendeeByUserId: jest.fn(),
+          }),
+        },
+        {
+          provide: GroupMemberService,
+          useFactory: () => ({
+            findGroupMemberByUserId: jest.fn(),
           }),
         },
         {

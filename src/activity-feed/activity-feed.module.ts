@@ -13,6 +13,8 @@ import { GroupModule } from '../group/group.module';
 import { TenantModule } from '../tenant/tenant.module';
 import { EventModule } from '../event/event.module';
 import { BlueskyModule } from '../bluesky/bluesky.module';
+import { EventAttendeeModule } from '../event-attendee/event-attendee.module';
+import { GroupMemberModule } from '../group-member/group-member.module';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { BlueskyModule } from '../bluesky/bluesky.module';
     forwardRef(() => UserModule),
     forwardRef(() => GroupModule),
     forwardRef(() => EventModule),
+    EventAttendeeModule,
+    GroupMemberModule,
   ],
   controllers: [
     SitewideActivityFeedController,
