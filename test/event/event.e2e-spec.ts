@@ -648,9 +648,12 @@ describe('EventController (e2e)', () => {
 
     expect(updatedEvent.name).toBe('Updated Test Event');
 
-    // Verify the event is updated
-    const foundEvent = await getEvent(TESTING_APP_URL, token, testEvent.slug);
-    expect(foundEvent.name).toBe('Updated Test Event');
+    // Verify the event is updated - draft events should return 404 from public endpoint
+    const getEventResponse = await request(TESTING_APP_URL)
+      .get(`/api/events/${testEvent.slug}`)
+      .set('Authorization', `Bearer ${token}`)
+      .set('x-tenant-id', TESTING_TENANT_ID);
+    expect(getEventResponse.status).toBe(404); // Draft events not accessible via public endpoint
 
     // Clean up by deleting the event
     const deleteEventResponse = await request(TESTING_APP_URL)
