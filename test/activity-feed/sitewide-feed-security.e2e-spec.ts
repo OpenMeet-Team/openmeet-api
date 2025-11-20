@@ -59,10 +59,10 @@ describe('Sitewide Activity Feed Security (E2E)', () => {
       });
 
       authenticatedGroup = await createGroup(app, adminToken, {
-        name: `Sitewide Authenticated Group ${timestamp}`,
+        name: `Sitewide Unlisted Group ${timestamp}`,
         description: 'An unlisted group for sitewide feed testing',
         status: GroupStatus.Published,
-        visibility: GroupVisibility.Authenticated,
+        visibility: GroupVisibility.Unlisted,
       });
 
       privateGroup = await createGroup(app, adminToken, {
@@ -82,11 +82,11 @@ describe('Sitewide Activity Feed Security (E2E)', () => {
       });
 
       authenticatedEvent = await createEvent(app, adminToken, {
-        name: `Sitewide Authenticated Event ${timestamp}`,
+        name: `Sitewide Unlisted Event ${timestamp}`,
         description: 'An unlisted event for sitewide feed testing',
         type: EventType.Hybrid,
         status: EventStatus.Published,
-        visibility: EventVisibility.Authenticated,
+        visibility: EventVisibility.Unlisted,
       });
 
       privateEvent = await createEvent(app, adminToken, {

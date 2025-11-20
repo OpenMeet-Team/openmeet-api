@@ -46,10 +46,10 @@ describe('Guards (e2e)', () => {
     console.log('Created publicEvent:', publicEvent);
 
     authenticatedEvent = await createEvent(app, adminToken, {
-      name: 'Authenticated Event',
-      slug: 'authenticated-event',
+      name: 'Unlisted Event',
+      slug: 'unlisted-event',
       description: 'Unlisted event description',
-      visibility: EventVisibility.Authenticated,
+      visibility: EventVisibility.Unlisted,
       status: EventStatus.Published,
       startDate: new Date(
         new Date().getTime() + 1000 * 60 * 60 * 24,

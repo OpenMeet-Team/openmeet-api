@@ -66,7 +66,7 @@ describe('EventController Recommendations (e2e)', () => {
       name: 'Recommended Event 1',
       description: 'Recommended event 1 description',
       status: EventStatus.Published,
-      visibility: EventVisibility.Authenticated,
+      visibility: EventVisibility.Unlisted,
       startDate: new Date(
         futureDate.getTime() + 24 * 60 * 60 * 1000,
       ).toISOString(), // +1 day

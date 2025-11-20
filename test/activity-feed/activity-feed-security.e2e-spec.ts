@@ -65,12 +65,12 @@ describe('Activity Feed Security (E2E)', () => {
         visibility: GroupVisibility.Private,
       });
 
-      // Create authenticated (unlisted) group
+      // Create unlisted group
       authenticatedGroup = await createGroup(app, adminToken, {
-        name: `Authenticated Test Group ${timestamp}`,
+        name: `Unlisted Test Group ${timestamp}`,
         description: 'An unlisted group for testing activity feed security',
         status: GroupStatus.Published,
-        visibility: GroupVisibility.Authenticated,
+        visibility: GroupVisibility.Unlisted,
       });
 
       // Create public group
@@ -273,13 +273,13 @@ describe('Activity Feed Security (E2E)', () => {
           visibility: EventVisibility.Private,
         });
 
-        // Create authenticated (unlisted) event
+        // Create unlisted event
         authenticatedEvent = await createEvent(app, adminToken, {
-          name: `Authenticated Test Event ${timestamp}`,
+          name: `Unlisted Test Event ${timestamp}`,
           description: 'An unlisted event for testing activity feed security',
           type: EventType.Hybrid,
           status: EventStatus.Published,
-          visibility: EventVisibility.Authenticated,
+          visibility: EventVisibility.Unlisted,
         });
 
         // Create public event
