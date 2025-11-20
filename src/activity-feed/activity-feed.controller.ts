@@ -16,6 +16,7 @@ import { ActivityFeedQueryDto } from './dto/activity-feed-query.dto';
 import { ActivityFeedEntity } from './infrastructure/persistence/relational/entities/activity-feed.entity';
 import { Public } from '../auth/decorators/public.decorator';
 import { JWTAuthGuard } from '../auth/auth.guard';
+import { VisibilityGuard } from '../shared/guard/visibility.guard';
 
 @ApiTags('Activity Feed')
 @Controller('feed')
@@ -94,11 +95,12 @@ export class GroupActivityFeedController {
   ) {}
 
   @Public()
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Get(':slug/feed')
   @ApiOperation({
     summary: 'Get activity feed for a group',
     description:
-      'Returns recent activities for a group. Public endpoint with optional auth for more visibility.',
+      'Returns recent activities for a group. Access control based on group visibility: Public (anyone), Authenticated (logged in users), Private (members only).',
   })
   async getGroupFeed(
     @Param('slug') slug: string,
@@ -165,11 +167,12 @@ export class EventActivityFeedController {
   ) {}
 
   @Public()
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Get(':slug/feed')
   @ApiOperation({
     summary: 'Get activity feed for an event',
     description:
-      'Returns recent activities for an event. Public endpoint with optional auth for more visibility.',
+      'Returns recent activities for an event. Access control based on event visibility: Public (anyone), Authenticated (logged in users), Private (attendees only).',
   })
   async getEventFeed(
     @Param('slug') slug: string,
