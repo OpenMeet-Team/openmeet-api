@@ -326,7 +326,7 @@ export class GroupService {
             '(group.visibility = :privateVisibility AND members.id IS NOT NULL))',
           {
             publicVisibility: GroupVisibility.Public,
-            authenticatedVisibility: GroupVisibility.Authenticated,
+            authenticatedVisibility: GroupVisibility.Unlisted,
             privateVisibility: GroupVisibility.Private,
           },
         );

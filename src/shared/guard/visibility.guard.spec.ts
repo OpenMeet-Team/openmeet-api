@@ -263,7 +263,7 @@ describe('VisibilityGuard', () => {
   describe('canActivate - Authentication Required', () => {
     it('should require authentication for events with authenticated visibility', async () => {
       mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
-        visibility: EventVisibility.Authenticated,
+        visibility: EventVisibility.Unlisted,
         status: EventStatus.Published,
       } as unknown as EventEntity);
 
@@ -280,7 +280,7 @@ describe('VisibilityGuard', () => {
 
     it('should allow authenticated users to access authenticated events', async () => {
       mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
-        visibility: EventVisibility.Authenticated,
+        visibility: EventVisibility.Unlisted,
         status: EventStatus.Published,
       } as unknown as EventEntity);
 

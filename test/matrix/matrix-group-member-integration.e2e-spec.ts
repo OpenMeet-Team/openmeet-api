@@ -301,19 +301,19 @@ describe('Matrix Group Member Integration (e2e)', () => {
     });
   });
 
-  describe('Authenticated Group Matrix Integration', () => {
-    it('should emit Matrix events when users join authenticated groups as members', async () => {
-      // Create an authenticated group without approval requirement
+  describe('Unlisted Group Matrix Integration', () => {
+    it('should emit Matrix events when users join unlisted groups as members', async () => {
+      // Create an unlisted group without approval requirement
       testGroup = await createGroup(ownerToken, {
-        name: 'Authenticated Test Group',
-        description: 'An authenticated group for Matrix testing',
-        visibility: 'authenticated',
+        name: 'Unlisted Test Group',
+        description: 'An unlisted group for Matrix testing',
+        visibility: 'unlisted',
         requireApproval: false,
       });
 
-      console.log(`Created authenticated group: ${testGroup.slug}`);
+      console.log(`Created unlisted group: ${testGroup.slug}`);
 
-      // Member joins the authenticated group - should be assigned Member role
+      // Member joins the unlisted group - should be assigned Member role
       const joinResponse = await joinGroup(
         TESTING_APP_URL,
         TESTING_TENANT_ID,
@@ -336,7 +336,7 @@ describe('Matrix Group Member Integration (e2e)', () => {
       expect(joinedMember.groupRole.name).toBe('member');
 
       console.log(
-        `Member ${memberUser.slug} successfully joined authenticated group with member role`,
+        `Member ${memberUser.slug} successfully joined unlisted group with member role`,
       );
     });
   });
@@ -382,7 +382,7 @@ describe('Matrix Group Member Integration (e2e)', () => {
           requireApproval: false,
         },
         {
-          visibility: 'authenticated',
+          visibility: 'unlisted',
           expectedRole: 'member',
           requireApproval: false,
         },

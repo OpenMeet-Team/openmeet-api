@@ -309,7 +309,7 @@ export class EventQueryService {
             publicVisibility: EventVisibility.Public,
           });
           qb.orWhere('event.visibility = :authVisibility', {
-            authVisibility: EventVisibility.Authenticated,
+            authVisibility: EventVisibility.Unlisted,
           });
           if (attendedEventIds.length > 0) {
             qb.orWhere(

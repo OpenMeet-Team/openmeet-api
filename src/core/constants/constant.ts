@@ -91,7 +91,7 @@ export enum EventAttendeePermission {
 
 export enum EventVisibility {
   Public = 'public',
-  Authenticated = 'authenticated',
+  Unlisted = 'unlisted',
   Private = 'private',
 }
 
@@ -103,7 +103,7 @@ export enum GroupStatus {
 
 export enum GroupVisibility {
   Public = 'public',
-  Authenticated = 'authenticated',
+  Unlisted = 'unlisted',
   Private = 'private',
 }
 

@@ -48,7 +48,7 @@ describe('Guards (e2e)', () => {
     authenticatedEvent = await createEvent(app, adminToken, {
       name: 'Authenticated Event',
       slug: 'authenticated-event',
-      description: 'Authenticated event description',
+      description: 'Unlisted event description',
       visibility: EventVisibility.Authenticated,
       status: EventStatus.Published,
       startDate: new Date(
@@ -139,7 +139,7 @@ describe('Guards (e2e)', () => {
       }, 60000);
 
       // this one fails to return the last private event, but does return private events.
-      it.skip('should show public and authenticated events to authenticated users', async () => {
+      it.skip('should show public and unlisted events to authenticated users', async () => {
         let allEvents: any[] = [];
         let currentPage = 1;
         let hasMorePages = true;
@@ -247,7 +247,7 @@ describe('Guards (e2e)', () => {
         expect(response.body.slug).toBe(publicEvent.slug);
       });
 
-      it('should deny access to authenticated event without authentication', async () => {
+      it('should deny access to unlisted event without authentication', async () => {
         const response = await request(app)
           .get(`/api/events/${authenticatedEvent.slug}`)
           .set('x-tenant-id', TESTING_TENANT_ID)
@@ -256,7 +256,7 @@ describe('Guards (e2e)', () => {
         expect(response.status).toBe(403);
       });
 
-      it('should allow access to authenticated event with valid token', async () => {
+      it('should allow access to unlisted event with valid token', async () => {
         const response = await request(app)
           .get(`/api/events/${authenticatedEvent.slug}`)
           .set('Authorization', `Bearer ${userToken}`)

@@ -37,11 +37,11 @@ export class VisibilityGuard implements CanActivate {
 
     // Read from params first (standard REST pattern), fallback to headers for backwards compatibility
     const eventSlug = isEventRoute
-      ? (request.params?.slug || request.headers['x-event-slug']) as string
-      : request.headers['x-event-slug'] as string;
+      ? ((request.params?.slug || request.headers['x-event-slug']) as string)
+      : (request.headers['x-event-slug'] as string);
     const groupSlug = isGroupRoute
-      ? (request.params?.slug || request.headers['x-group-slug']) as string
-      : request.headers['x-group-slug'] as string;
+      ? ((request.params?.slug || request.headers['x-group-slug']) as string)
+      : (request.headers['x-group-slug'] as string);
 
     const user = request.user;
 
@@ -63,7 +63,7 @@ export class VisibilityGuard implements CanActivate {
       switch (event.visibility) {
         case EventVisibility.Public:
           return true;
-        case EventVisibility.Authenticated:
+        case EventVisibility.Unlisted:
           if (!user) {
             throw new ForbiddenException(
               'VisibilityGuard: This event is not public',
@@ -104,7 +104,7 @@ export class VisibilityGuard implements CanActivate {
       switch (group.visibility) {
         case GroupVisibility.Public:
           return true;
-        case GroupVisibility.Authenticated:
+        case GroupVisibility.Unlisted:
           if (!user) {
             throw new ForbiddenException(
               'This group requires authentication. Please log in to view the group details.',

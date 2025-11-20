@@ -371,7 +371,7 @@ describe('MetaController', () => {
         slug: 'private-birthday-party',
         name: "Emma's 6th Birthday",
         description: 'Join us for cake and games!',
-        visibility: EventVisibility.Authenticated,
+        visibility: EventVisibility.Unlisted,
         location: '123 Main St',
       };
 
@@ -391,7 +391,7 @@ describe('MetaController', () => {
         slug: 'semi-private-event',
         name: 'Semi-Private Event',
         description: 'Only for those with the link',
-        visibility: EventVisibility.Authenticated,
+        visibility: EventVisibility.Unlisted,
       };
 
       mockEventQueryService.findEventBySlug.mockResolvedValue(mockEvent);
@@ -487,7 +487,7 @@ describe('MetaController', () => {
         slug: 'book-club',
         name: 'Secret Book Club',
         description: 'Monthly book discussions',
-        visibility: GroupVisibility.Authenticated,
+        visibility: GroupVisibility.Unlisted,
       };
 
       mockGroupService.findGroupBySlug.mockResolvedValue(mockGroup);
@@ -505,7 +505,7 @@ describe('MetaController', () => {
         slug: 'invite-only-group',
         name: 'Invite Only Group',
         description: 'Link sharing only',
-        visibility: GroupVisibility.Authenticated,
+        visibility: GroupVisibility.Unlisted,
       };
 
       mockGroupService.findGroupBySlug.mockResolvedValue(mockGroup);

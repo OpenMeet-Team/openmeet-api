@@ -4,7 +4,6 @@ import {
   createGroup,
   loginAsAdmin,
   createTestUser,
-  joinGroup,
   createEvent,
 } from '../utils/functions';
 import {
@@ -61,7 +60,7 @@ describe('Sitewide Activity Feed Security (E2E)', () => {
 
       authenticatedGroup = await createGroup(app, adminToken, {
         name: `Sitewide Authenticated Group ${timestamp}`,
-        description: 'An authenticated group for sitewide feed testing',
+        description: 'An unlisted group for sitewide feed testing',
         status: GroupStatus.Published,
         visibility: GroupVisibility.Authenticated,
       });
@@ -84,7 +83,7 @@ describe('Sitewide Activity Feed Security (E2E)', () => {
 
       authenticatedEvent = await createEvent(app, adminToken, {
         name: `Sitewide Authenticated Event ${timestamp}`,
-        description: 'An authenticated event for sitewide feed testing',
+        description: 'An unlisted event for sitewide feed testing',
         type: EventType.Hybrid,
         status: EventStatus.Published,
         visibility: EventVisibility.Authenticated,
@@ -152,12 +151,12 @@ describe('Sitewide Activity Feed Security (E2E)', () => {
         }
         if (activity.groupId === authenticatedGroup.id) {
           fail(
-            `Authenticated group activity leaked to sitewide feed for unauthenticated user: ${JSON.stringify(activity)}`,
+            `Unlisted group activity leaked to sitewide feed for unauthenticated user: ${JSON.stringify(activity)}`,
           );
         }
         if (activity.eventId === authenticatedEvent.id) {
           fail(
-            `Authenticated event activity leaked to sitewide feed for unauthenticated user: ${JSON.stringify(activity)}`,
+            `Unlisted event activity leaked to sitewide feed for unauthenticated user: ${JSON.stringify(activity)}`,
           );
         }
       }
@@ -209,7 +208,7 @@ describe('Sitewide Activity Feed Security (E2E)', () => {
   });
 
   describe('GET /api/feed - Authenticated Users', () => {
-    it('should show activities from public and authenticated groups/events', async () => {
+    it('should show activities from public and unlisted groups/events', async () => {
       // Given: User is logged in
       // When: Request sitewide feed
       const response = await request(app)

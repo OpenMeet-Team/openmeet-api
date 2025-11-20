@@ -206,7 +206,7 @@ export class ActivityFeedService {
     switch (entityVisibility) {
       case GroupVisibility.Public:
         return 'public';
-      case GroupVisibility.Authenticated:
+      case GroupVisibility.Unlisted:
         return 'authenticated';
       case GroupVisibility.Private:
         return 'members_only';

@@ -41,7 +41,7 @@ export const eventSeedData = [
       id: 1,
     },
     status: EventStatus.Published,
-    visibility: EventVisibility.Authenticated,
+    visibility: EventVisibility.Unlisted,
     allowWaitlist: true,
   },
   {
