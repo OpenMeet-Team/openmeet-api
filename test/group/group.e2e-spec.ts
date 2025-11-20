@@ -140,6 +140,7 @@ describe('GroupController (e2e)', () => {
     testGroup = await createGroup(token, {
       name: 'Test Group',
       description: 'A test group',
+      visibility: 'private', // Explicitly set to verify creator is added as member
     });
 
     const getGroupMembersResponse = await request(TESTING_APP_URL)

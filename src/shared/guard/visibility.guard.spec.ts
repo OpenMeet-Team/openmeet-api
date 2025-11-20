@@ -66,6 +66,8 @@ describe('VisibilityGuard', () => {
           headers: params.headers || {},
           params: params.params || {},
           user: params.user,
+          route: params.route,
+          url: params.url,
         }),
       }),
     } as ExecutionContext;
@@ -81,6 +83,7 @@ describe('VisibilityGuard', () => {
 
       const context = mockContext({
         headers: { 'x-event-slug': 'test-event' },
+        route: { path: '/events/:slug' },
       });
 
       await expect(guard.canActivate(context)).resolves.toBe(true);
@@ -93,6 +96,7 @@ describe('VisibilityGuard', () => {
 
       const context = mockContext({
         headers: { 'x-event-slug': 'non-existent-event' },
+        route: { path: '/events/:slug' },
       });
 
       await expect(guard.canActivate(context)).rejects.toThrow(
@@ -108,6 +112,7 @@ describe('VisibilityGuard', () => {
 
       const context = mockContext({
         headers: { 'x-event-slug': 'private-event' },
+        route: { path: '/events/:slug' },
       });
 
       await expect(guard.canActivate(context)).rejects.toThrow(
@@ -123,6 +128,7 @@ describe('VisibilityGuard', () => {
 
       const context = mockContext({
         headers: { 'x-event-slug': 'header-event' },
+        route: { path: '/events/:slug' },
       });
 
       await expect(guard.canActivate(context)).resolves.toBe(true);
@@ -141,6 +147,7 @@ describe('VisibilityGuard', () => {
 
       const context = mockContext({
         headers: { 'x-group-slug': 'test-group' },
+        route: { path: '/groups/:slug' },
       });
 
       await expect(guard.canActivate(context)).resolves.toBe(true);
@@ -153,6 +160,7 @@ describe('VisibilityGuard', () => {
 
       const context = mockContext({
         headers: { 'x-group-slug': 'non-existent-group' },
+        route: { path: '/groups/:slug' },
       });
 
       await expect(guard.canActivate(context)).rejects.toThrow(
@@ -168,6 +176,7 @@ describe('VisibilityGuard', () => {
 
       const context = mockContext({
         headers: { 'x-group-slug': 'private-group' },
+        route: { path: '/groups/:slug' },
       });
 
       await expect(guard.canActivate(context)).rejects.toThrow(
@@ -183,6 +192,7 @@ describe('VisibilityGuard', () => {
 
       const context = mockContext({
         headers: { 'x-group-slug': 'header-group' },
+        route: { path: '/groups/:slug' },
       });
 
       await expect(guard.canActivate(context)).resolves.toBe(true);
@@ -210,6 +220,7 @@ describe('VisibilityGuard', () => {
       const context = mockContext({
         headers: { 'x-group-slug': 'private-group' },
         user: mockUser,
+        route: { path: '/groups/:slug' },
       });
 
       // This should pass - authenticated group members should access private groups
@@ -233,6 +244,7 @@ describe('VisibilityGuard', () => {
       const context = mockContext({
         headers: { 'x-group-slug': 'private-group' },
         user: mockUser,
+        route: { path: '/groups/:slug' },
       });
 
       // This should throw ForbiddenException for non-members
@@ -258,6 +270,7 @@ describe('VisibilityGuard', () => {
       const context = mockContext({
         params: { slug: 'auth-event' },
         headers: { 'x-event-slug': 'auth-event' },
+        route: { path: '/events/:slug' },
       });
 
       await expect(guard.canActivate(context)).rejects.toThrow(
@@ -274,9 +287,163 @@ describe('VisibilityGuard', () => {
       const context = mockContext({
         headers: { 'x-event-slug': 'auth-event' },
         user: { id: 1 },
+        route: { path: '/events/:slug' },
       });
 
       await expect(guard.canActivate(context)).resolves.toBe(true);
+    });
+  });
+
+  describe('canActivate - URL Params (Issue #1 Bug Fix)', () => {
+    describe('Event slug from params', () => {
+      it('should read event slug from request.params.slug when headers not set', async () => {
+        mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
+          visibility: EventVisibility.Public,
+          status: EventStatus.Published,
+        } as unknown as EventEntity);
+
+        const context = mockContext({
+          params: { slug: 'event-from-params' },
+          // NO headers set - simulates real frontend request
+          route: { path: '/events/:slug' },
+        });
+
+        await expect(guard.canActivate(context)).resolves.toBe(true);
+        expect(eventQueryService.findEventBySlug).toHaveBeenCalledWith(
+          'event-from-params',
+        );
+      });
+
+      it('should block private events accessed via params without authentication', async () => {
+        mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
+          id: 1,
+          visibility: EventVisibility.Private,
+          status: EventStatus.Published,
+        } as unknown as EventEntity);
+
+        const context = mockContext({
+          params: { slug: 'private-event' },
+          // No user - should throw ForbiddenException
+          route: { path: '/events/:slug' },
+        });
+
+        await expect(guard.canActivate(context)).rejects.toThrow(
+          ForbiddenException,
+        );
+        expect(eventQueryService.findEventBySlug).toHaveBeenCalledWith(
+          'private-event',
+        );
+      });
+
+      it('should prefer params over headers when both are present', async () => {
+        mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
+          visibility: EventVisibility.Public,
+          status: EventStatus.Published,
+        } as unknown as EventEntity);
+
+        const context = mockContext({
+          params: { slug: 'params-slug' },
+          headers: { 'x-event-slug': 'header-slug' },
+          route: { path: '/events/:slug' },
+        });
+
+        await expect(guard.canActivate(context)).resolves.toBe(true);
+        expect(eventQueryService.findEventBySlug).toHaveBeenCalledWith(
+          'params-slug',
+        );
+      });
+    });
+
+    describe('Group slug from params', () => {
+      it('should read group slug from request.params.slug when headers not set', async () => {
+        const mockGroup = {
+          visibility: GroupVisibility.Public,
+        } as unknown as GroupEntity;
+        groupService.findGroupBySlug.mockResolvedValue(mockGroup);
+
+        const context = mockContext({
+          params: { slug: 'group-from-params' },
+          // NO headers set - simulates real frontend request
+          route: { path: '/groups/:slug/members' },
+        });
+
+        await expect(guard.canActivate(context)).resolves.toBe(true);
+        expect(groupService.findGroupBySlug).toHaveBeenCalledWith(
+          'group-from-params',
+        );
+      });
+
+      it('should block private groups accessed via params without membership', async () => {
+        const mockGroup = {
+          id: 1,
+          visibility: GroupVisibility.Private,
+        } as unknown as GroupEntity;
+        const mockUser = { id: 123, slug: 'test-user' };
+
+        groupService.findGroupBySlug.mockResolvedValue(mockGroup);
+        groupMemberService.findGroupMemberByUserId.mockResolvedValue(null); // Not a member
+
+        const context = mockContext({
+          params: { slug: 'private-group' },
+          user: mockUser,
+          route: { path: '/groups/:slug/about' },
+        });
+
+        await expect(guard.canActivate(context)).rejects.toThrow(
+          ForbiddenException,
+        );
+        expect(groupService.findGroupBySlug).toHaveBeenCalledWith(
+          'private-group',
+        );
+      });
+
+      it('should prefer params over headers for groups when both are present', async () => {
+        const mockGroup = {
+          visibility: GroupVisibility.Public,
+        } as unknown as GroupEntity;
+        groupService.findGroupBySlug.mockResolvedValue(mockGroup);
+
+        const context = mockContext({
+          params: { slug: 'params-group-slug' },
+          headers: { 'x-group-slug': 'header-group-slug' },
+          route: { path: '/groups/:slug/events' },
+        });
+
+        await expect(guard.canActivate(context)).resolves.toBe(true);
+        expect(groupService.findGroupBySlug).toHaveBeenCalledWith(
+          'params-group-slug',
+        );
+      });
+    });
+
+    describe('Security regression tests', () => {
+      it('should NOT allow access to private event when no slug provided at all', async () => {
+        const context = mockContext({
+          // No params, no headers
+          url: '/some-other-route',
+        });
+
+        // Should return true because no entity to check
+        await expect(guard.canActivate(context)).resolves.toBe(true);
+      });
+
+      it('should enforce private event visibility even with params', async () => {
+        mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
+          id: 1,
+          visibility: EventVisibility.Private,
+          status: EventStatus.Published,
+        } as unknown as EventEntity);
+
+        const context = mockContext({
+          params: { slug: 'private-event' },
+          // No user authentication
+          route: { path: '/events/:slug' },
+        });
+
+        await expect(guard.canActivate(context)).rejects.toThrow(
+          new ForbiddenException('VisibilityGuard: This event is not public'),
+        );
+      });
     });
   });
 });
