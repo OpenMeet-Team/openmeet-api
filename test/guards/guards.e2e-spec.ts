@@ -46,10 +46,10 @@ describe('Guards (e2e)', () => {
     console.log('Created publicEvent:', publicEvent);
 
     authenticatedEvent = await createEvent(app, adminToken, {
-      name: 'Authenticated Event',
-      slug: 'authenticated-event',
-      description: 'Authenticated event description',
-      visibility: EventVisibility.Authenticated,
+      name: 'Unlisted Event',
+      slug: 'unlisted-event',
+      description: 'Unlisted event description',
+      visibility: EventVisibility.Unlisted,
       status: EventStatus.Published,
       startDate: new Date(
         new Date().getTime() + 1000 * 60 * 60 * 24,
@@ -139,7 +139,7 @@ describe('Guards (e2e)', () => {
       }, 60000);
 
       // this one fails to return the last private event, but does return private events.
-      it.skip('should show public and authenticated events to authenticated users', async () => {
+      it.skip('should show public and unlisted events to authenticated users', async () => {
         let allEvents: any[] = [];
         let currentPage = 1;
         let hasMorePages = true;
@@ -247,16 +247,18 @@ describe('Guards (e2e)', () => {
         expect(response.body.slug).toBe(publicEvent.slug);
       });
 
-      it('should deny access to authenticated event without authentication', async () => {
+      it('should allow access to unlisted event without authentication', async () => {
+        // Unlisted events are accessible via direct link without authentication
         const response = await request(app)
           .get(`/api/events/${authenticatedEvent.slug}`)
           .set('x-tenant-id', TESTING_TENANT_ID)
           .set('x-event-slug', authenticatedEvent.slug);
 
-        expect(response.status).toBe(403);
+        expect(response.status).toBe(200);
+        expect(response.body.slug).toBe(authenticatedEvent.slug);
       });
 
-      it('should allow access to authenticated event with valid token', async () => {
+      it('should allow access to unlisted event with valid token', async () => {
         const response = await request(app)
           .get(`/api/events/${authenticatedEvent.slug}`)
           .set('Authorization', `Bearer ${userToken}`)

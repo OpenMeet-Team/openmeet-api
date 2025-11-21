@@ -158,7 +158,7 @@ describe('ActivityFeedService', () => {
         feedScope: 'group' as const,
         groupId: 42,
         actorId: 100,
-        groupVisibility: GroupVisibility.Authenticated,
+        groupVisibility: GroupVisibility.Unlisted,
       };
 
       const authActivity = { ...mockActivity, visibility: 'authenticated' };
@@ -434,7 +434,7 @@ describe('ActivityFeedService', () => {
     });
 
     it('should map Authenticated to authenticated', () => {
-      const result = service.mapVisibility(GroupVisibility.Authenticated);
+      const result = service.mapVisibility(GroupVisibility.Unlisted);
       expect(result).toBe('authenticated');
     });
 

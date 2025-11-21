@@ -205,10 +205,13 @@ export class ActivityFeedService {
   ): 'public' | 'authenticated' | 'members_only' {
     switch (entityVisibility) {
       case GroupVisibility.Public:
+      case EventVisibility.Public:
         return 'public';
-      case GroupVisibility.Authenticated:
+      case GroupVisibility.Unlisted:
+      case EventVisibility.Unlisted:
         return 'authenticated';
       case GroupVisibility.Private:
+      case EventVisibility.Private:
         return 'members_only';
       default:
         return 'public';

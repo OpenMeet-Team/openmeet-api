@@ -4,7 +4,6 @@ import {
   createGroup,
   loginAsAdmin,
   createTestUser,
-  joinGroup,
   createEvent,
 } from '../utils/functions';
 import {
@@ -60,10 +59,10 @@ describe('Sitewide Activity Feed Security (E2E)', () => {
       });
 
       authenticatedGroup = await createGroup(app, adminToken, {
-        name: `Sitewide Authenticated Group ${timestamp}`,
-        description: 'An authenticated group for sitewide feed testing',
+        name: `Sitewide Unlisted Group ${timestamp}`,
+        description: 'An unlisted group for sitewide feed testing',
         status: GroupStatus.Published,
-        visibility: GroupVisibility.Authenticated,
+        visibility: GroupVisibility.Unlisted,
       });
 
       privateGroup = await createGroup(app, adminToken, {
@@ -83,11 +82,11 @@ describe('Sitewide Activity Feed Security (E2E)', () => {
       });
 
       authenticatedEvent = await createEvent(app, adminToken, {
-        name: `Sitewide Authenticated Event ${timestamp}`,
-        description: 'An authenticated event for sitewide feed testing',
+        name: `Sitewide Unlisted Event ${timestamp}`,
+        description: 'An unlisted event for sitewide feed testing',
         type: EventType.Hybrid,
         status: EventStatus.Published,
-        visibility: EventVisibility.Authenticated,
+        visibility: EventVisibility.Unlisted,
       });
 
       privateEvent = await createEvent(app, adminToken, {
@@ -141,23 +140,23 @@ describe('Sitewide Activity Feed Security (E2E)', () => {
 
         // Should not contain private group/event activities
         if (activity.groupId === privateGroup.id) {
-          fail(
+          throw new Error(
             `Private group activity leaked to sitewide feed for unauthenticated user: ${JSON.stringify(activity)}`,
           );
         }
         if (activity.eventId === privateEvent.id) {
-          fail(
+          throw new Error(
             `Private event activity leaked to sitewide feed for unauthenticated user: ${JSON.stringify(activity)}`,
           );
         }
         if (activity.groupId === authenticatedGroup.id) {
-          fail(
-            `Authenticated group activity leaked to sitewide feed for unauthenticated user: ${JSON.stringify(activity)}`,
+          throw new Error(
+            `Unlisted group activity leaked to sitewide feed for unauthenticated user: ${JSON.stringify(activity)}`,
           );
         }
         if (activity.eventId === authenticatedEvent.id) {
-          fail(
-            `Authenticated event activity leaked to sitewide feed for unauthenticated user: ${JSON.stringify(activity)}`,
+          throw new Error(
+            `Unlisted event activity leaked to sitewide feed for unauthenticated user: ${JSON.stringify(activity)}`,
           );
         }
       }
@@ -209,7 +208,7 @@ describe('Sitewide Activity Feed Security (E2E)', () => {
   });
 
   describe('GET /api/feed - Authenticated Users', () => {
-    it('should show activities from public and authenticated groups/events', async () => {
+    it('should show activities from public and unlisted groups/events', async () => {
       // Given: User is logged in
       // When: Request sitewide feed
       const response = await request(app)
@@ -234,12 +233,12 @@ describe('Sitewide Activity Feed Security (E2E)', () => {
 
         // Should not contain private group/event activities
         if (activity.groupId === privateGroup.id) {
-          fail(
+          throw new Error(
             `Private group activity leaked to sitewide feed for authenticated user: ${JSON.stringify(activity)}`,
           );
         }
         if (activity.eventId === privateEvent.id) {
-          fail(
+          throw new Error(
             `Private event activity leaked to sitewide feed for authenticated user: ${JSON.stringify(activity)}`,
           );
         }

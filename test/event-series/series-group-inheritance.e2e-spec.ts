@@ -19,7 +19,6 @@ jest.setTimeout(60000);
 
 describe('Event Series Group Inheritance (Issue #2)', () => {
   let ownerToken: string;
-  let memberToken: string;
   let outsiderToken: string;
   let privateGroupSlug: string;
   let memberEmail: string;
@@ -31,14 +30,13 @@ describe('Event Series Group Inheritance (Issue #2)', () => {
     // Register additional test users
     const timestamp = Date.now();
     memberEmail = `member-${timestamp}@test.com`;
-    const memberUser = await createTestUser(
+    await createTestUser(
       TESTING_APP_URL,
       TESTING_TENANT_ID,
       memberEmail,
       'Test',
       'Member',
     );
-    memberToken = memberUser.token;
 
     const outsiderUser = await createTestUser(
       TESTING_APP_URL,

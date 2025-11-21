@@ -65,12 +65,12 @@ describe('Activity Feed Security (E2E)', () => {
         visibility: GroupVisibility.Private,
       });
 
-      // Create authenticated (unlisted) group
+      // Create unlisted group
       authenticatedGroup = await createGroup(app, adminToken, {
-        name: `Authenticated Test Group ${timestamp}`,
-        description: 'An authenticated group for testing activity feed security',
+        name: `Unlisted Test Group ${timestamp}`,
+        description: 'An unlisted group for testing activity feed security',
         status: GroupStatus.Published,
-        visibility: GroupVisibility.Authenticated,
+        visibility: GroupVisibility.Unlisted,
       });
 
       // Create public group
@@ -82,7 +82,12 @@ describe('Activity Feed Security (E2E)', () => {
       });
 
       // Add groupMember to private group only
-      await joinGroup(app, TESTING_TENANT_ID, privateGroup.slug, groupMemberToken);
+      await joinGroup(
+        app,
+        TESTING_TENANT_ID,
+        privateGroup.slug,
+        groupMemberToken,
+      );
 
       console.log('Test setup complete:', {
         privateGroup: privateGroup.slug,
@@ -151,39 +156,40 @@ describe('Activity Feed Security (E2E)', () => {
     });
   });
 
-  describe('GET /groups/:slug/feed - Authenticated Groups', () => {
-    it('should allow authenticated users to access authenticated group feed', async () => {
-      // Given: Authenticated (unlisted) group exists
+  describe('GET /groups/:slug/feed - Unlisted Groups', () => {
+    it('should allow authenticated users to access unlisted group feed', async () => {
+      // Given: Unlisted group exists
       // When: Any authenticated user requests feed
       const response = await request(app)
         .get(`/api/groups/${authenticatedGroup.slug}/feed`)
         .set('Authorization', `Bearer ${nonMemberToken}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
 
-      console.log('Authenticated user access to authenticated group:', {
+      console.log('Authenticated user access to unlisted group:', {
         status: response.status,
         bodyLength: response.body?.length,
       });
 
-      // Then: Should succeed (authenticated = anyone with account can access)
+      // Then: Should succeed (unlisted = accessible via direct link)
       expect(response.status).toBe(200);
       expect(Array.isArray(response.body)).toBe(true);
     });
 
-    it('should deny unauthenticated users access to authenticated group feed', async () => {
-      // Given: Authenticated group exists
-      // When: Unauthenticated user requests feed
+    it('should allow unauthenticated users to access unlisted group feed', async () => {
+      // Given: Unlisted group exists
+      // When: Unauthenticated user requests feed via direct link
       const response = await request(app)
         .get(`/api/groups/${authenticatedGroup.slug}/feed`)
         .set('x-tenant-id', TESTING_TENANT_ID);
 
-      console.log('Unauthenticated access to authenticated group:', {
+      console.log('Unauthenticated access to unlisted group:', {
         status: response.status,
         body: response.body,
       });
 
-      // Then: Should be denied (401 or 403)
-      expect([401, 403]).toContain(response.status);
+      // Then: Should succeed (unlisted = accessible via direct link, no auth required)
+      expect(response.status).toBe(200);
+      expect(Array.isArray(response.body)).toBe(true);
     });
   });
 
@@ -267,13 +273,13 @@ describe('Activity Feed Security (E2E)', () => {
           visibility: EventVisibility.Private,
         });
 
-        // Create authenticated (unlisted) event
+        // Create unlisted event
         authenticatedEvent = await createEvent(app, adminToken, {
-          name: `Authenticated Test Event ${timestamp}`,
-          description: 'An authenticated event for testing activity feed security',
+          name: `Unlisted Test Event ${timestamp}`,
+          description: 'An unlisted event for testing activity feed security',
           type: EventType.Hybrid,
           status: EventStatus.Published,
-          visibility: EventVisibility.Authenticated,
+          visibility: EventVisibility.Unlisted,
         });
 
         // Create public event
@@ -362,7 +368,7 @@ describe('Activity Feed Security (E2E)', () => {
       expect([401, 403]).toContain(response.status);
     });
 
-    it('should allow authenticated users to access authenticated event feed', async () => {
+    it('should allow authenticated users to access unlisted event feed', async () => {
       // Given: Authenticated (unlisted) event exists
       // When: Any authenticated user requests feed
       const response = await request(app)
@@ -370,7 +376,7 @@ describe('Activity Feed Security (E2E)', () => {
         .set('Authorization', `Bearer ${nonAttendeeToken}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
 
-      console.log('Authenticated user access to authenticated event feed:', {
+      console.log('Authenticated user access to unlisted event feed:', {
         status: response.status,
         bodyLength: response.body?.length,
       });
@@ -380,20 +386,21 @@ describe('Activity Feed Security (E2E)', () => {
       expect(Array.isArray(response.body)).toBe(true);
     });
 
-    it('should deny unauthenticated users access to authenticated event feed', async () => {
-      // Given: Authenticated event exists
-      // When: Unauthenticated user requests feed
+    it('should allow unauthenticated users to access unlisted event feed', async () => {
+      // Given: Unlisted event exists
+      // When: Unauthenticated user requests feed via direct link
       const response = await request(app)
         .get(`/api/events/${authenticatedEvent.slug}/feed`)
         .set('x-tenant-id', TESTING_TENANT_ID);
 
-      console.log('Unauthenticated access to authenticated event feed:', {
+      console.log('Unauthenticated access to unlisted event feed:', {
         status: response.status,
         body: response.body,
       });
 
-      // Then: Should be denied (401 or 403)
-      expect([401, 403]).toContain(response.status);
+      // Then: Should succeed (unlisted = accessible via direct link, no auth required)
+      expect(response.status).toBe(200);
+      expect(Array.isArray(response.body)).toBe(true);
     });
 
     it('should allow anyone to access public event feed', async () => {

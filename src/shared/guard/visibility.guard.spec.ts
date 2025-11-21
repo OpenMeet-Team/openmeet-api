@@ -260,32 +260,31 @@ describe('VisibilityGuard', () => {
     });
   });
 
-  describe('canActivate - Authentication Required', () => {
-    it('should require authentication for events with authenticated visibility', async () => {
+  describe('canActivate - Unlisted Visibility', () => {
+    it('should allow unauthenticated access to unlisted events via direct link', async () => {
+      // Unlisted = hidden from listings but accessible via direct link without auth
       mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
-        visibility: EventVisibility.Authenticated,
+        visibility: EventVisibility.Unlisted,
         status: EventStatus.Published,
       } as unknown as EventEntity);
 
       const context = mockContext({
-        params: { slug: 'auth-event' },
-        headers: { 'x-event-slug': 'auth-event' },
+        params: { slug: 'unlisted-event' },
+        headers: { 'x-event-slug': 'unlisted-event' },
         route: { path: '/events/:slug' },
       });
 
-      await expect(guard.canActivate(context)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(guard.canActivate(context)).resolves.toBe(true);
     });
 
-    it('should allow authenticated users to access authenticated events', async () => {
+    it('should allow authenticated users to access unlisted events', async () => {
       mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
-        visibility: EventVisibility.Authenticated,
+        visibility: EventVisibility.Unlisted,
         status: EventStatus.Published,
       } as unknown as EventEntity);
 
       const context = mockContext({
-        headers: { 'x-event-slug': 'auth-event' },
+        headers: { 'x-event-slug': 'unlisted-event' },
         user: { id: 1 },
         route: { path: '/events/:slug' },
       });

@@ -37,11 +37,11 @@ export class VisibilityGuard implements CanActivate {
 
     // Read from params first (standard REST pattern), fallback to headers for backwards compatibility
     const eventSlug = isEventRoute
-      ? (request.params?.slug || request.headers['x-event-slug']) as string
-      : request.headers['x-event-slug'] as string;
+      ? ((request.params?.slug || request.headers['x-event-slug']) as string)
+      : (request.headers['x-event-slug'] as string);
     const groupSlug = isGroupRoute
-      ? (request.params?.slug || request.headers['x-group-slug']) as string
-      : request.headers['x-group-slug'] as string;
+      ? ((request.params?.slug || request.headers['x-group-slug']) as string)
+      : (request.headers['x-group-slug'] as string);
 
     const user = request.user;
 
@@ -62,14 +62,10 @@ export class VisibilityGuard implements CanActivate {
 
       switch (event.visibility) {
         case EventVisibility.Public:
+        case EventVisibility.Unlisted:
+          // Public and Unlisted events are accessible without authentication
+          // Unlisted means hidden from listings but accessible via direct link
           return true;
-        case EventVisibility.Authenticated:
-          if (!user) {
-            throw new ForbiddenException(
-              'VisibilityGuard: This event is not public',
-            );
-          }
-          break;
         case EventVisibility.Private:
           if (!user) {
             throw new ForbiddenException(
@@ -103,14 +99,10 @@ export class VisibilityGuard implements CanActivate {
 
       switch (group.visibility) {
         case GroupVisibility.Public:
+        case GroupVisibility.Unlisted:
+          // Public and Unlisted groups are accessible without authentication
+          // Unlisted means hidden from listings but accessible via direct link
           return true;
-        case GroupVisibility.Authenticated:
-          if (!user) {
-            throw new ForbiddenException(
-              'This group requires authentication. Please log in to view the group details.',
-            );
-          }
-          break;
         case GroupVisibility.Private:
           if (!user) {
             throw new ForbiddenException(

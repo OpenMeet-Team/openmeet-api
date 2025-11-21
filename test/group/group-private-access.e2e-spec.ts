@@ -121,34 +121,34 @@ describe('Group Private Access (e2e)', () => {
     expect(joinResponse.body).toHaveProperty('id');
   });
 
-  it('should allow unauthenticated users to see basic authenticated group info for discovery', async () => {
+  it('should allow unauthenticated users to see basic unlisted group info for discovery', async () => {
     // First clean up the previous private group
     await request(TESTING_APP_URL)
       .delete(`/api/groups/${privateGroup.slug}`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
 
-    // Create an authenticated group instead
-    const authenticatedGroup = await createGroup(token, {
-      name: 'Authenticated Test Group',
-      description: 'A group that requires authentication to view',
-      visibility: 'authenticated', // This should require login but not membership
+    // Create an unlisted group instead
+    const unlistedGroup = await createGroup(token, {
+      name: 'Unlisted Test Group',
+      description: 'A group that is unlisted but accessible via link',
+      visibility: 'unlisted', // This should require login but not membership
     });
 
-    // Try to access the authenticated group without authentication
+    // Try to access the unlisted group without authentication
     const response = await request(TESTING_APP_URL)
-      .get(`/api/groups/${authenticatedGroup.slug}`)
+      .get(`/api/groups/${unlistedGroup.slug}`)
       .set('x-tenant-id', TESTING_TENANT_ID)
-      .set('x-group-slug', authenticatedGroup.slug);
+      .set('x-group-slug', unlistedGroup.slug);
 
     // Should return 200 with basic group info for discovery
     expect(response.status).toBe(200);
-    expect(response.body).toHaveProperty('name', 'Authenticated Test Group');
-    expect(response.body).toHaveProperty('visibility', 'authenticated');
+    expect(response.body).toHaveProperty('name', 'Unlisted Test Group');
+    expect(response.body).toHaveProperty('visibility', 'unlisted');
 
     // Clean up
     await request(TESTING_APP_URL)
-      .delete(`/api/groups/${authenticatedGroup.slug}`)
+      .delete(`/api/groups/${unlistedGroup.slug}`)
       .set('Authorization', `Bearer ${token}`)
       .set('x-tenant-id', TESTING_TENANT_ID);
   });

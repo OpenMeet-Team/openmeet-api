@@ -36,7 +36,7 @@ describe('ActivityFeedListener', () => {
     id: 44,
     slug: 'authenticated-group',
     name: 'Authenticated Group',
-    visibility: GroupVisibility.Authenticated,
+    visibility: GroupVisibility.Unlisted,
   };
 
   const mockUser: Partial<UserEntity> = {
@@ -305,7 +305,7 @@ describe('ActivityFeedListener', () => {
         actorId: 100,
         actorSlug: 'sarah-chen',
         actorName: 'Sarah Chen',
-        groupVisibility: GroupVisibility.Authenticated,
+        groupVisibility: GroupVisibility.Unlisted,
         aggregationStrategy: 'time_window',
         aggregationWindow: 60,
       });
