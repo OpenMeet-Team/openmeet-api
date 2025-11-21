@@ -11,6 +11,7 @@ import {
   mockEvents,
   mockGroupService,
   mockGroupMemberService,
+  mockGroupMemberQueryService,
   mockGroupMember,
   mockRepository,
   mockGroupAboutResponse,
@@ -18,6 +19,7 @@ import {
   mockGroupMailService,
 } from '../test/mocks';
 import { GroupMemberService } from '../group-member/group-member.service';
+import { GroupMemberQueryService } from '../group-member/group-member-query.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { UpdateGroupMemberRoleDto } from '../group-member/dto/create-groupMember.dto';
@@ -45,6 +47,10 @@ describe('GroupController', () => {
         {
           provide: GroupMemberService,
           useValue: mockGroupMemberService,
+        },
+        {
+          provide: GroupMemberQueryService,
+          useValue: mockGroupMemberQueryService,
         },
         {
           provide: Repository,
