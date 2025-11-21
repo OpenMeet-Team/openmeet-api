@@ -1423,26 +1423,6 @@ export class EventManagementService {
       }
     }
 
-    // Check if event requires group membership and validate user membership
-    if (event.requireGroupMembership && event.group) {
-      const groupMember =
-        await this.groupMemberQueryService.findGroupMemberByUserId(
-          event.group.id,
-          userId,
-          this.request.tenantId,
-        );
-      if (!groupMember) {
-        throw new BadRequestException(
-          'You must be a member of this group to attend this event',
-        );
-      }
-      if (groupMember.groupRole?.name === GroupRole.Guest) {
-        throw new BadRequestException(
-          'Guests are not allowed to attend this event. Please contact a group admin to change your role.',
-        );
-      }
-    }
-
     const user = await this.userService.getUserById(userId);
 
     // Check if event requires group membership and validate user membership
