@@ -542,8 +542,9 @@ describe('Group Role Management and Event Permissions (e2e)', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.message).toContain(
-        'You must be a member of this group to attend this event',
+        'You must be a member of the',
       );
+      expect(response.body.message).toContain('group to attend this event');
     });
 
     it('should allow anyone to attend events with requireGroupMembership=false', async () => {
