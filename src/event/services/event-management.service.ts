@@ -7,6 +7,7 @@ import {
   NotFoundException,
   forwardRef,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
 import { Repository } from 'typeorm';
@@ -1365,6 +1366,60 @@ export class EventManagementService {
     });
     if (!event) {
       throw new NotFoundException(`Event with slug ${slug} not found`);
+    }
+
+    // Issue #8: Check if user has access to RSVP to private events
+    if (event.visibility === EventVisibility.Private) {
+      this.logger.debug(
+        `[attendEvent] Event is private, checking access for user ${userId}`,
+      );
+
+      // Check if user is already an attendee (invited, confirmed, etc.)
+      const existingAttendee =
+        await this.eventAttendeeService.findEventAttendeeByUserId(
+          event.id,
+          userId,
+        );
+
+      if (!existingAttendee) {
+        // User is not an attendee, check if they're a member of the event's group
+        if (event.group?.id) {
+          this.logger.debug(
+            `[attendEvent] User is not an attendee, checking group membership for group ${event.group.id}`,
+          );
+
+          const groupMember =
+            await this.groupMemberService.findGroupMemberByUserId(
+              event.group.id,
+              userId,
+            );
+
+          if (!groupMember) {
+            this.logger.debug(
+              `[attendEvent] User ${userId} is neither an attendee nor a group member, denying RSVP to private event`,
+            );
+            throw new ForbiddenException(
+              'You must be invited to RSVP to this private event',
+            );
+          }
+
+          this.logger.debug(
+            `[attendEvent] User ${userId} is a group member, allowing RSVP to private event`,
+          );
+        } else {
+          // Private event not in a group, and user is not invited
+          this.logger.debug(
+            `[attendEvent] Private event has no group and user is not invited, denying RSVP`,
+          );
+          throw new ForbiddenException(
+            'You must be invited to RSVP to this private event',
+          );
+        }
+      } else {
+        this.logger.debug(
+          `[attendEvent] User ${userId} is already an attendee (status: ${existingAttendee.status}), allowing RSVP`,
+        );
+      }
     }
 
     // Check if event requires group membership and validate user membership

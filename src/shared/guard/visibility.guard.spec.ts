@@ -120,6 +120,51 @@ describe('VisibilityGuard', () => {
       );
     });
 
+    it('should allow group members to access private events in their group', async () => {
+      const eventAttendeeService = guard['eventAttendeeService'];
+      jest.spyOn(eventAttendeeService, 'findEventAttendeeByUserId').mockResolvedValueOnce(null);
+      jest.spyOn(groupMemberService, 'findGroupMemberByUserId').mockResolvedValueOnce({ id: 1 } as any);
+
+      mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
+        id: 1,
+        group: { id: 123 } as any,
+        visibility: EventVisibility.Private,
+        status: EventStatus.Published,
+      } as unknown as EventEntity);
+
+      const context = mockContext({
+        headers: { 'x-event-slug': 'private-group-event' },
+        route: { path: '/events/:slug' },
+        user: { id: 456 },
+      });
+
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+      expect(groupMemberService.findGroupMemberByUserId).toHaveBeenCalledWith(123, 456);
+    });
+
+    it('should deny non-members access to private group events', async () => {
+      const eventAttendeeService = guard['eventAttendeeService'];
+      jest.spyOn(eventAttendeeService, 'findEventAttendeeByUserId').mockResolvedValueOnce(null);
+      jest.spyOn(groupMemberService, 'findGroupMemberByUserId').mockResolvedValueOnce(null);
+
+      mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
+        id: 1,
+        group: { id: 123 } as any,
+        visibility: EventVisibility.Private,
+        status: EventStatus.Published,
+      } as unknown as EventEntity);
+
+      const context = mockContext({
+        headers: { 'x-event-slug': 'private-group-event' },
+        route: { path: '/events/:slug' },
+        user: { id: 456 },
+      });
+
+      await expect(guard.canActivate(context)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
     it('should check both header and params for event slug', async () => {
       mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
         visibility: EventVisibility.Public,

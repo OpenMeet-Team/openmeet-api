@@ -72,17 +72,37 @@ export class VisibilityGuard implements CanActivate {
               'VisibilityGuard: This event is not public',
             );
           }
+
           // Check if user is an attendee of the private event
           const eventAttendee =
             await this.eventAttendeeService.findEventAttendeeByUserId(
               event.id,
               user.id,
             );
-          if (!eventAttendee) {
-            throw new ForbiddenException(
-              'VisibilityGuard: You do not have permission to view this private event',
-            );
+
+          if (eventAttendee) {
+            // User is an attendee, allow access
+            break;
           }
+
+          // User is not an attendee, check if they're a member of the event's group
+          if (event.group?.id) {
+            const groupMember =
+              await this.groupMemberService.findGroupMemberByUserId(
+                event.group.id,
+                user.id,
+              );
+
+            if (groupMember) {
+              // User is a group member, allow access
+              break;
+            }
+          }
+
+          // User is neither an attendee nor a group member
+          throw new ForbiddenException(
+            'VisibilityGuard: You do not have permission to view this private event',
+          );
           break;
         default:
           throw new ForbiddenException(
