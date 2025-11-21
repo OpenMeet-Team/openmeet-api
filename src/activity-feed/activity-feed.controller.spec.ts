@@ -9,6 +9,7 @@ import { GroupEntity } from '../group/infrastructure/persistence/relational/enti
 import { EventQueryService } from '../event/services/event-query.service';
 import { EventAttendeeService } from '../event-attendee/event-attendee.service';
 import { GroupMemberService } from '../group-member/group-member.service';
+import { GroupMemberQueryService } from '../group-member/group-member-query.service';
 
 describe('GroupActivityFeedController', () => {
   let controller: GroupActivityFeedController;
@@ -110,6 +111,13 @@ describe('GroupActivityFeedController', () => {
           provide: GroupMemberService,
           useFactory: () => ({
             findGroupMemberByUserId: jest.fn(),
+          }),
+        },
+        {
+          provide: GroupMemberQueryService,
+          useFactory: () => ({
+            isUserMemberOfGroup: jest.fn(),
+            findMemberByUserAndGroup: jest.fn(),
           }),
         },
         {

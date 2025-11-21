@@ -8,7 +8,7 @@ import { VisibilityGuard } from './visibility.guard';
 import { EventQueryService } from '../../event/services/event-query.service';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { GroupService } from '../../group/group.service';
-import { GroupMemberService } from '../../group-member/group-member.service';
+import { GroupMemberQueryService } from '../../group-member/group-member-query.service';
 import {
   EventVisibility,
   GroupVisibility,
@@ -22,7 +22,7 @@ describe('VisibilityGuard', () => {
   let guard: VisibilityGuard;
   let eventQueryService: jest.Mocked<EventQueryService>;
   let groupService: jest.Mocked<GroupService>;
-  let groupMemberService: jest.Mocked<GroupMemberService>;
+  let groupMemberQueryService: jest.Mocked<GroupMemberQueryService>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -45,7 +45,7 @@ describe('VisibilityGuard', () => {
           },
         },
         {
-          provide: GroupMemberService,
+          provide: GroupMemberQueryService,
           useValue: {
             findGroupMemberByUserId: jest.fn(),
           },
@@ -56,7 +56,7 @@ describe('VisibilityGuard', () => {
     guard = module.get<VisibilityGuard>(VisibilityGuard);
     eventQueryService = module.get(EventQueryService);
     groupService = module.get(GroupService);
-    groupMemberService = module.get(GroupMemberService);
+    groupMemberQueryService = module.get(GroupMemberQueryService);
   });
 
   const mockContext = (params: any = {}) => {
@@ -68,6 +68,7 @@ describe('VisibilityGuard', () => {
           user: params.user,
           route: params.route,
           url: params.url,
+          tenantId: params.tenantId || 'test-tenant',
         }),
       }),
     } as ExecutionContext;
@@ -113,6 +114,61 @@ describe('VisibilityGuard', () => {
       const context = mockContext({
         headers: { 'x-event-slug': 'private-event' },
         route: { path: '/events/:slug' },
+      });
+
+      await expect(guard.canActivate(context)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('should allow group members to access private events in their group', async () => {
+      const eventAttendeeService = guard['eventAttendeeService'];
+      jest
+        .spyOn(eventAttendeeService, 'findEventAttendeeByUserId')
+        .mockResolvedValueOnce(null);
+      jest
+        .spyOn(groupMemberQueryService, 'findGroupMemberByUserId')
+        .mockResolvedValueOnce({ id: 1 } as any);
+
+      mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
+        id: 1,
+        group: { id: 123 } as any,
+        visibility: EventVisibility.Private,
+        status: EventStatus.Published,
+      } as unknown as EventEntity);
+
+      const context = mockContext({
+        headers: { 'x-event-slug': 'private-group-event' },
+        route: { path: '/events/:slug' },
+        user: { id: 456 },
+      });
+
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+      expect(
+        groupMemberQueryService.findGroupMemberByUserId,
+      ).toHaveBeenCalledWith(123, 456, 'test-tenant');
+    });
+
+    it('should deny non-members access to private group events', async () => {
+      const eventAttendeeService = guard['eventAttendeeService'];
+      jest
+        .spyOn(eventAttendeeService, 'findEventAttendeeByUserId')
+        .mockResolvedValueOnce(null);
+      jest
+        .spyOn(groupMemberQueryService, 'findGroupMemberByUserId')
+        .mockResolvedValueOnce(null);
+
+      mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
+        id: 1,
+        group: { id: 123 } as any,
+        visibility: EventVisibility.Private,
+        status: EventStatus.Published,
+      } as unknown as EventEntity);
+
+      const context = mockContext({
+        headers: { 'x-event-slug': 'private-group-event' },
+        route: { path: '/events/:slug' },
+        user: { id: 456 },
       });
 
       await expect(guard.canActivate(context)).rejects.toThrow(
@@ -213,7 +269,7 @@ describe('VisibilityGuard', () => {
       };
 
       groupService.findGroupBySlug.mockResolvedValue(mockGroup);
-      groupMemberService.findGroupMemberByUserId.mockResolvedValue(
+      groupMemberQueryService.findGroupMemberByUserId.mockResolvedValue(
         mockGroupMember,
       );
 
@@ -225,10 +281,9 @@ describe('VisibilityGuard', () => {
 
       // This should pass - authenticated group members should access private groups
       await expect(guard.canActivate(context)).resolves.toBe(true);
-      expect(groupMemberService.findGroupMemberByUserId).toHaveBeenCalledWith(
-        1,
-        123,
-      );
+      expect(
+        groupMemberQueryService.findGroupMemberByUserId,
+      ).toHaveBeenCalledWith(1, 123, 'test-tenant');
     });
 
     it('should deny authenticated non-members access to private groups', async () => {
@@ -239,7 +294,7 @@ describe('VisibilityGuard', () => {
       const mockUser = { id: 123, slug: 'test-user' };
 
       groupService.findGroupBySlug.mockResolvedValue(mockGroup);
-      groupMemberService.findGroupMemberByUserId.mockResolvedValue(null); // Not a member
+      groupMemberQueryService.findGroupMemberByUserId.mockResolvedValue(null); // Not a member
 
       const context = mockContext({
         headers: { 'x-group-slug': 'private-group' },
@@ -253,10 +308,9 @@ describe('VisibilityGuard', () => {
           'You must be a member of this private group to access it.',
         ),
       );
-      expect(groupMemberService.findGroupMemberByUserId).toHaveBeenCalledWith(
-        1,
-        123,
-      );
+      expect(
+        groupMemberQueryService.findGroupMemberByUserId,
+      ).toHaveBeenCalledWith(1, 123, 'test-tenant');
     });
   });
 
@@ -380,7 +434,7 @@ describe('VisibilityGuard', () => {
         const mockUser = { id: 123, slug: 'test-user' };
 
         groupService.findGroupBySlug.mockResolvedValue(mockGroup);
-        groupMemberService.findGroupMemberByUserId.mockResolvedValue(null); // Not a member
+        groupMemberQueryService.findGroupMemberByUserId.mockResolvedValue(null); // Not a member
 
         const context = mockContext({
           params: { slug: 'private-group' },

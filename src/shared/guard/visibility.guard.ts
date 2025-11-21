@@ -13,7 +13,7 @@ import {
 } from '../../core/constants/constant';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { GroupService } from '../../group/group.service';
-import { GroupMemberService } from '../../group-member/group-member.service';
+import { GroupMemberQueryService } from '../../group-member/group-member-query.service';
 import { EventQueryService } from '../../event/services/event-query.service';
 
 @Injectable()
@@ -23,7 +23,7 @@ export class VisibilityGuard implements CanActivate {
     private readonly eventQueryService: EventQueryService,
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly groupService: GroupService,
-    private readonly groupMemberService: GroupMemberService,
+    private readonly groupMemberQueryService: GroupMemberQueryService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -72,17 +72,38 @@ export class VisibilityGuard implements CanActivate {
               'VisibilityGuard: This event is not public',
             );
           }
+
           // Check if user is an attendee of the private event
           const eventAttendee =
             await this.eventAttendeeService.findEventAttendeeByUserId(
               event.id,
               user.id,
             );
-          if (!eventAttendee) {
-            throw new ForbiddenException(
-              'VisibilityGuard: You do not have permission to view this private event',
-            );
+
+          if (eventAttendee) {
+            // User is an attendee, allow access
+            break;
           }
+
+          // User is not an attendee, check if they're a member of the event's group
+          if (event.group?.id) {
+            const groupMember =
+              await this.groupMemberQueryService.findGroupMemberByUserId(
+                event.group.id,
+                user.id,
+                request.tenantId || request.headers['x-tenant-id'],
+              );
+
+            if (groupMember) {
+              // User is a group member, allow access
+              break;
+            }
+          }
+
+          // User is neither an attendee nor a group member
+          throw new ForbiddenException(
+            'VisibilityGuard: You do not have permission to view this private event',
+          );
           break;
         default:
           throw new ForbiddenException(
@@ -111,9 +132,10 @@ export class VisibilityGuard implements CanActivate {
           }
           // Check if user is a member of the private group
           const groupMember =
-            await this.groupMemberService.findGroupMemberByUserId(
+            await this.groupMemberQueryService.findGroupMemberByUserId(
               group.id,
               user.id,
+              request.tenantId || request.headers['x-tenant-id'],
             );
           if (!groupMember) {
             throw new ForbiddenException(

@@ -29,7 +29,7 @@ import { stopCleanupInterval } from '../../database/data-source';
 import { EventManagementService } from './event-management.service';
 import { EventSeriesService } from '../../event-series/services/event-series.service';
 import { EventQueryService } from './event-query.service';
-import { GroupMemberService } from '../../group-member/group-member.service';
+import { GroupMemberQueryService } from '../../group-member/group-member-query.service';
 import { RoleEnum } from '../../role/role.enum';
 import { EventSeriesEntity } from '../../event-series/infrastructure/persistence/relational/entities/event-series.entity';
 import { UpdateEventDto } from '../dto/update-event.dto';
@@ -46,7 +46,7 @@ describe('EventManagementService', () => {
   let mockTenantConnectionService: jest.Mocked<TenantConnectionService>;
   let mockDiscussionService: any;
   let mockEventQueryService: jest.Mocked<EventQueryService>;
-  let mockGroupMemberService: jest.Mocked<GroupMemberService>;
+  let mockGroupMemberQueryService: jest.Mocked<GroupMemberQueryService>;
 
   const mockSeriesId = 1;
   const mockSeriesSlug = 'test-series';
@@ -172,9 +172,9 @@ describe('EventManagementService', () => {
       findEventsBySeriesId: jest.fn(),
     } as any;
 
-    mockGroupMemberService = {
+    mockGroupMemberQueryService = {
       findGroupMemberByUserId: jest.fn(),
-    } as unknown as jest.Mocked<GroupMemberService>;
+    } as unknown as jest.Mocked<GroupMemberQueryService>;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -264,8 +264,8 @@ describe('EventManagementService', () => {
           useValue: mockEventQueryService,
         },
         {
-          provide: GroupMemberService,
-          useValue: mockGroupMemberService,
+          provide: GroupMemberQueryService,
+          useValue: mockGroupMemberQueryService,
         },
       ],
     })
@@ -897,6 +897,218 @@ describe('EventManagementService', () => {
           status: EventAttendeeStatus.Confirmed,
         }),
       );
+    });
+
+    // Issue #8: RSVP Pre-Access Check Tests
+    describe('Private Event Access Control (Issue #8)', () => {
+      it('should deny RSVP to private event for non-invited users (no group)', async () => {
+        const privateEvent = {
+          ...findOneMockEventEntity,
+          visibility: EventVisibility.Private,
+          group: null,
+          groupId: null,
+        } as EventEntity;
+
+        // Restore the original implementation for this test
+        jest.spyOn(service, 'attendEvent').mockRestore();
+
+        // Mock repository findOne to return the private event
+        mockRepository.findOne.mockResolvedValueOnce(privateEvent);
+
+        // Mock eventAttendeeService.findEventAttendeeByUserId to return null (not invited)
+        const mockEventAttendeeService = service[
+          'eventAttendeeService'
+        ] as jest.Mocked<EventAttendeeService>;
+        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+          null,
+        );
+
+        const attendeeDto = {};
+
+        await expect(
+          service.attendEvent(privateEvent.slug, mockUser.id, attendeeDto),
+        ).rejects.toThrow('You must be invited to RSVP to this private event');
+      });
+
+      it('should allow RSVP to private event for already invited users', async () => {
+        const privateEvent = {
+          ...findOneMockEventEntity,
+          visibility: EventVisibility.Private,
+          group: null,
+          groupId: null,
+        } as EventEntity;
+
+        const existingAttendee = {
+          id: 1,
+          status: EventAttendeeStatus.Invited,
+          user: mockUser,
+          event: privateEvent,
+          role: { id: 1, name: EventAttendeeRole.Participant },
+        } as any;
+
+        // Restore the original implementation for this test
+        jest.spyOn(service, 'attendEvent').mockRestore();
+
+        // Mock repository findOne to return the private event
+        mockRepository.findOne.mockResolvedValueOnce(privateEvent);
+
+        // Mock eventAttendeeService.findEventAttendeeByUserId to return existing attendee
+        const mockEventAttendeeService = service[
+          'eventAttendeeService'
+        ] as jest.Mocked<EventAttendeeService>;
+        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+          existingAttendee,
+        );
+
+        // Mock userService.getUserById
+        const mockUserService = service[
+          'userService'
+        ] as jest.Mocked<UserService>;
+        mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
+
+        // Mock the second findEventAttendeeByUserId call
+        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+          existingAttendee,
+        );
+
+        const attendeeDto = {};
+
+        const result = await service.attendEvent(
+          privateEvent.slug,
+          mockUser.id,
+          attendeeDto,
+        );
+
+        expect(result).toBeDefined();
+        expect(result).toEqual(existingAttendee);
+      });
+
+      it('should allow RSVP to private group event for group members', async () => {
+        const privateGroupEvent = {
+          ...findOneMockEventEntity,
+          visibility: EventVisibility.Private,
+          group: { id: 123, slug: 'test-group' },
+          groupId: 123,
+        } as EventEntity;
+
+        const currentMockEventAttendee = {
+          id: 1,
+          status: EventAttendeeStatus.Confirmed,
+        } as any;
+
+        // Restore the original implementation for this test
+        jest.spyOn(service, 'attendEvent').mockRestore();
+
+        // Mock repository findOne to return the private group event
+        mockRepository.findOne.mockResolvedValueOnce(privateGroupEvent);
+
+        // Mock eventAttendeeService.findEventAttendeeByUserId to return null (not yet an attendee)
+        const mockEventAttendeeService = service[
+          'eventAttendeeService'
+        ] as jest.Mocked<EventAttendeeService>;
+        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+          null,
+        );
+
+        // Mock groupMemberService to return group member
+        mockGroupMemberQueryService.findGroupMemberByUserId.mockResolvedValueOnce(
+          {
+            id: 1,
+            userId: mockUser.id,
+            groupId: 123,
+          } as any,
+        );
+
+        // Mock userService.getUserById
+        const mockUserService = service[
+          'userService'
+        ] as jest.Mocked<UserService>;
+        mockUserService.getUserById.mockResolvedValueOnce(mockUser as any);
+
+        // Mock eventAttendeeService.findEventAttendeeByUserId second call
+        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+          null,
+        );
+
+        // Mock eventRoleService.getRoleByName
+        const mockEventRoleService = service[
+          'eventRoleService'
+        ] as jest.Mocked<EventRoleService>;
+        mockEventRoleService.getRoleByName.mockResolvedValueOnce({
+          id: 1,
+          name: EventAttendeeRole.Participant,
+          attendees: [],
+          permissions: [],
+        } as any);
+
+        // Mock eventAttendeeService.showEventAttendeesCount
+        mockEventAttendeeService.showEventAttendeesCount.mockResolvedValueOnce(
+          0,
+        );
+
+        // Mock eventAttendeeService.create
+        mockEventAttendeeService.create.mockResolvedValueOnce(
+          currentMockEventAttendee,
+        );
+
+        // Mock eventMailService.sendMailAttendeeGuestJoined
+        const mockEventMailService = service[
+          'eventMailService'
+        ] as jest.Mocked<EventMailService>;
+        mockEventMailService.sendMailAttendeeGuestJoined.mockResolvedValueOnce();
+
+        // Mock the extra findEventAttendeeByUserId call
+        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+          currentMockEventAttendee,
+        );
+
+        const attendeeDto = {};
+
+        const result = await service.attendEvent(
+          privateGroupEvent.slug,
+          mockUser.id,
+          attendeeDto,
+        );
+
+        expect(result).toBeDefined();
+        expect(
+          mockGroupMemberQueryService.findGroupMemberByUserId,
+        ).toHaveBeenCalledWith(123, mockUser.id, 'test-tenant');
+      });
+
+      it('should deny RSVP to private group event for non-group members', async () => {
+        const privateGroupEvent = {
+          ...findOneMockEventEntity,
+          visibility: EventVisibility.Private,
+          group: { id: 123, slug: 'test-group' },
+          groupId: 123,
+        } as EventEntity;
+
+        // Restore the original implementation for this test
+        jest.spyOn(service, 'attendEvent').mockRestore();
+
+        // Mock repository findOne to return the private group event
+        mockRepository.findOne.mockResolvedValueOnce(privateGroupEvent);
+
+        // Mock eventAttendeeService.findEventAttendeeByUserId to return null (not an attendee)
+        const mockEventAttendeeService = service[
+          'eventAttendeeService'
+        ] as jest.Mocked<EventAttendeeService>;
+        mockEventAttendeeService.findEventAttendeeByUserId.mockResolvedValueOnce(
+          null,
+        );
+
+        // Mock groupMemberService to return null (not a group member)
+        mockGroupMemberQueryService.findGroupMemberByUserId.mockResolvedValueOnce(
+          null,
+        );
+
+        const attendeeDto = {};
+
+        await expect(
+          service.attendEvent(privateGroupEvent.slug, mockUser.id, attendeeDto),
+        ).rejects.toThrow('You must be invited to RSVP to this private event');
+      });
     });
   });
 

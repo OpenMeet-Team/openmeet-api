@@ -67,6 +67,11 @@ export const mockGroupMemberService = {
   showGroupDetailsMember: jest.fn().mockResolvedValue(mockGroupMember),
 };
 
+export const mockGroupMemberQueryService = {
+  isUserMemberOfGroup: jest.fn().mockResolvedValue(false),
+  findMemberByUserAndGroup: jest.fn().mockResolvedValue(null),
+};
+
 export const mockGroupService = {
   getHomePageFeaturedGroups: jest.fn().mockResolvedValue(mockGroups),
   getHomePageUserCreatedGroups: jest.fn().mockResolvedValue(mockGroups),

@@ -16,6 +16,7 @@ import {
   mockEventAttendeeService,
   mockEventMailService,
   mockGroupMemberService,
+  mockGroupMemberQueryService,
   mockGroupService,
   mockUser,
 } from '../test/mocks';
@@ -27,6 +28,7 @@ import { PermissionsGuard } from '../shared/guard/permissions.guard';
 import { ExecutionContext } from '@nestjs/common';
 import { PERMISSIONS_KEY } from '../shared/guard/permissions.decorator';
 import { GroupMemberService } from '../group-member/group-member.service';
+import { GroupMemberQueryService } from '../group-member/group-member-query.service';
 import { VisibilityGuard } from '../shared/guard/visibility.guard';
 import { EventManagementService } from './services/event-management.service';
 import { EventQueryService } from './services/event-query.service';
@@ -172,6 +174,10 @@ describe('EventController', () => {
         {
           provide: GroupMemberService,
           useValue: mockGroupMemberService,
+        },
+        {
+          provide: GroupMemberQueryService,
+          useValue: mockGroupMemberQueryService,
         },
         PermissionsGuard,
         VisibilityGuard,

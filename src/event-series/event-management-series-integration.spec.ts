@@ -29,6 +29,7 @@ import { BlueskyService } from '../bluesky/bluesky.service';
 import { BlueskyIdService } from '../bluesky/bluesky-id.service';
 import { RecurrenceFrequency } from '../event-series/interfaces/recurrence.interface';
 import { GroupMemberService } from '../group-member/group-member.service';
+import { GroupMemberQueryService } from '../group-member/group-member-query.service';
 // import { DiscussionService } from '../chat/services/discussion.service'; // Removed unused import
 
 describe('EventManagementService Integration with EventSeriesService', () => {
@@ -281,6 +282,13 @@ describe('EventManagementService Integration with EventSeriesService', () => {
             updateGroupMemberRole: jest.fn().mockResolvedValue({}),
             createGroupMember: jest.fn().mockResolvedValue({}),
             getTenantSpecificRepository: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: GroupMemberQueryService,
+          useValue: {
+            isUserMemberOfGroup: jest.fn().mockResolvedValue(false),
+            findMemberByUserAndGroup: jest.fn().mockResolvedValue(null),
           },
         },
       ],
