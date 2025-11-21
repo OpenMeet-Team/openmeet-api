@@ -236,6 +236,7 @@ describe('Activity Feed Security (E2E)', () => {
     let authenticatedEvent: any;
     let attendeeToken: string;
     let nonAttendeeToken: string;
+    let eventTestGroup: any;
 
     // Store user info
     let attendeeUser: any;
@@ -264,13 +265,30 @@ describe('Activity Feed Security (E2E)', () => {
         );
         nonAttendeeToken = nonAttendeeUser.token;
 
-        // Create private event
+        // Create a group for the private event
+        eventTestGroup = await createGroup(app, adminToken, {
+          name: `Event Test Group ${timestamp}`,
+          description: 'A group for testing private event access',
+          status: GroupStatus.Published,
+          visibility: GroupVisibility.Private,
+        });
+
+        // Have attendeeUser join the group
+        await joinGroup(
+          app,
+          TESTING_TENANT_ID,
+          eventTestGroup.slug,
+          attendeeToken,
+        );
+
+        // Create private event associated with the group
         privateEvent = await createEvent(app, adminToken, {
           name: `Private Test Event ${timestamp}`,
           description: 'A private event for testing activity feed security',
           type: EventType.Hybrid,
           status: EventStatus.Published,
           visibility: EventVisibility.Private,
+          group: eventTestGroup.id,
         });
 
         // Create unlisted event

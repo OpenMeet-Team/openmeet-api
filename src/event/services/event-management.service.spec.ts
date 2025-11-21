@@ -29,7 +29,7 @@ import { stopCleanupInterval } from '../../database/data-source';
 import { EventManagementService } from './event-management.service';
 import { EventSeriesService } from '../../event-series/services/event-series.service';
 import { EventQueryService } from './event-query.service';
-import { GroupMemberService } from '../../group-member/group-member.service';
+import { GroupMemberQueryService } from '../../group-member/group-member-query.service';
 import { RoleEnum } from '../../role/role.enum';
 import { EventSeriesEntity } from '../../event-series/infrastructure/persistence/relational/entities/event-series.entity';
 import { UpdateEventDto } from '../dto/update-event.dto';
@@ -46,7 +46,7 @@ describe('EventManagementService', () => {
   let mockTenantConnectionService: jest.Mocked<TenantConnectionService>;
   let mockDiscussionService: any;
   let mockEventQueryService: jest.Mocked<EventQueryService>;
-  let mockGroupMemberService: jest.Mocked<GroupMemberService>;
+  let mockGroupMemberQueryService: jest.Mocked<GroupMemberQueryService>;
 
   const mockSeriesId = 1;
   const mockSeriesSlug = 'test-series';
@@ -172,9 +172,9 @@ describe('EventManagementService', () => {
       findEventsBySeriesId: jest.fn(),
     } as any;
 
-    mockGroupMemberService = {
+    mockGroupMemberQueryService = {
       findGroupMemberByUserId: jest.fn(),
-    } as unknown as jest.Mocked<GroupMemberService>;
+    } as unknown as jest.Mocked<GroupMemberQueryService>;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -264,8 +264,8 @@ describe('EventManagementService', () => {
           useValue: mockEventQueryService,
         },
         {
-          provide: GroupMemberService,
-          useValue: mockGroupMemberService,
+          provide: GroupMemberQueryService,
+          useValue: mockGroupMemberQueryService,
         },
       ],
     })
@@ -1011,11 +1011,13 @@ describe('EventManagementService', () => {
         );
 
         // Mock groupMemberService to return group member
-        mockGroupMemberService.findGroupMemberByUserId.mockResolvedValueOnce({
-          id: 1,
-          userId: mockUser.id,
-          groupId: 123,
-        } as any);
+        mockGroupMemberQueryService.findGroupMemberByUserId.mockResolvedValueOnce(
+          {
+            id: 1,
+            userId: mockUser.id,
+            groupId: 123,
+          } as any,
+        );
 
         // Mock userService.getUserById
         const mockUserService = service[
@@ -1070,8 +1072,8 @@ describe('EventManagementService', () => {
 
         expect(result).toBeDefined();
         expect(
-          mockGroupMemberService.findGroupMemberByUserId,
-        ).toHaveBeenCalledWith(123, mockUser.id);
+          mockGroupMemberQueryService.findGroupMemberByUserId,
+        ).toHaveBeenCalledWith(123, mockUser.id, 'test-tenant');
       });
 
       it('should deny RSVP to private group event for non-group members', async () => {
@@ -1097,7 +1099,7 @@ describe('EventManagementService', () => {
         );
 
         // Mock groupMemberService to return null (not a group member)
-        mockGroupMemberService.findGroupMemberByUserId.mockResolvedValueOnce(
+        mockGroupMemberQueryService.findGroupMemberByUserId.mockResolvedValueOnce(
           null,
         );
 

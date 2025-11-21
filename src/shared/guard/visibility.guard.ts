@@ -13,7 +13,7 @@ import {
 } from '../../core/constants/constant';
 import { EventAttendeeService } from '../../event-attendee/event-attendee.service';
 import { GroupService } from '../../group/group.service';
-import { GroupMemberService } from '../../group-member/group-member.service';
+import { GroupMemberQueryService } from '../../group-member/group-member-query.service';
 import { EventQueryService } from '../../event/services/event-query.service';
 
 @Injectable()
@@ -23,7 +23,7 @@ export class VisibilityGuard implements CanActivate {
     private readonly eventQueryService: EventQueryService,
     private readonly eventAttendeeService: EventAttendeeService,
     private readonly groupService: GroupService,
-    private readonly groupMemberService: GroupMemberService,
+    private readonly groupMemberQueryService: GroupMemberQueryService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -88,9 +88,10 @@ export class VisibilityGuard implements CanActivate {
           // User is not an attendee, check if they're a member of the event's group
           if (event.group?.id) {
             const groupMember =
-              await this.groupMemberService.findGroupMemberByUserId(
+              await this.groupMemberQueryService.findGroupMemberByUserId(
                 event.group.id,
                 user.id,
+                request.tenantId || request.headers['x-tenant-id'],
               );
 
             if (groupMember) {
@@ -131,9 +132,10 @@ export class VisibilityGuard implements CanActivate {
           }
           // Check if user is a member of the private group
           const groupMember =
-            await this.groupMemberService.findGroupMemberByUserId(
+            await this.groupMemberQueryService.findGroupMemberByUserId(
               group.id,
               user.id,
+              request.tenantId || request.headers['x-tenant-id'],
             );
           if (!groupMember) {
             throw new ForbiddenException(

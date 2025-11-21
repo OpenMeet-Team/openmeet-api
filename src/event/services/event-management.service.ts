@@ -44,7 +44,7 @@ import { UserEntity } from '../../user/infrastructure/persistence/relational/ent
 import { RecurrenceFrequency } from '../../event-series/interfaces/recurrence.interface';
 import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
-import { GroupMemberService } from '../../group-member/group-member.service';
+import { GroupMemberQueryService } from '../../group-member/group-member-query.service';
 import { GroupRole } from '../../core/constants/constant';
 import { assert } from 'console';
 import { EventQueryService } from '../services/event-query.service';
@@ -78,8 +78,8 @@ export class EventManagementService {
     private readonly eventSeriesService: EventSeriesService,
     @Inject(forwardRef(() => EventQueryService))
     private readonly eventQueryService: EventQueryService,
-    @Inject(forwardRef(() => GroupMemberService))
-    private readonly groupMemberService: GroupMemberService,
+    @Inject(forwardRef(() => GroupMemberQueryService))
+    private readonly groupMemberQueryService: GroupMemberQueryService,
   ) {
     void this.initializeRepository();
   }
@@ -1389,9 +1389,10 @@ export class EventManagementService {
           );
 
           const groupMember =
-            await this.groupMemberService.findGroupMemberByUserId(
+            await this.groupMemberQueryService.findGroupMemberByUserId(
               event.group.id,
               userId,
+              this.request.tenantId,
             );
 
           if (!groupMember) {
@@ -1424,10 +1425,12 @@ export class EventManagementService {
 
     // Check if event requires group membership and validate user membership
     if (event.requireGroupMembership && event.group) {
-      const groupMember = await this.groupMemberService.findGroupMemberByUserId(
-        event.group.id,
-        userId,
-      );
+      const groupMember =
+        await this.groupMemberQueryService.findGroupMemberByUserId(
+          event.group.id,
+          userId,
+          this.request.tenantId,
+        );
       if (!groupMember) {
         throw new BadRequestException(
           'You must be a member of this group to attend this event',
@@ -1448,10 +1451,12 @@ export class EventManagementService {
         `[attendEvent] Event requires group membership, checking user ${userId} membership in group ${event.group.id}`,
       );
 
-      const groupMember = await this.groupMemberService.findGroupMemberByUserId(
-        event.group.id,
-        userId,
-      );
+      const groupMember =
+        await this.groupMemberQueryService.findGroupMemberByUserId(
+          event.group.id,
+          userId,
+          this.request.tenantId,
+        );
 
       if (!groupMember) {
         this.logger.debug(
@@ -1504,9 +1509,10 @@ export class EventManagementService {
     // If event belongs to a group, check if user is owner/admin
     if (event.group && event.group.id) {
       const userGroupMember =
-        await this.groupMemberService.findGroupMemberByUserId(
+        await this.groupMemberQueryService.findGroupMemberByUserId(
           event.group.id,
           userId,
+          this.request.tenantId,
         );
 
       if (userGroupMember) {

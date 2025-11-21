@@ -4,12 +4,20 @@ import {
   TESTING_TENANT_ID,
   TESTING_USER_ID,
 } from '../utils/constants';
-import { loginAsTester, loginAsAdmin, createEvent } from '../utils/functions';
+import {
+  loginAsTester,
+  loginAsAdmin,
+  createEvent,
+  createGroup,
+  joinGroup,
+} from '../utils/functions';
 import {
   EventVisibility,
   EventStatus,
   EventType,
   EventAttendeeStatus,
+  GroupStatus,
+  GroupVisibility,
 } from '../../src/core/constants/constant';
 
 // Set a global timeout for all tests in this file
@@ -22,11 +30,24 @@ describe('Guards (e2e)', () => {
   let publicEvent: any;
   let authenticatedEvent: any;
   let privateEvent: any;
+  let testGroup: any;
 
   beforeAll(async () => {
     jest.setTimeout(30000);
     userToken = await loginAsTester();
     adminToken = await loginAsAdmin();
+
+    // Create a group for the private event
+    const timestamp = Date.now();
+    testGroup = await createGroup(app, adminToken, {
+      name: `Guards Test Group ${timestamp}`,
+      description: 'A group for testing private event access',
+      status: GroupStatus.Published,
+      visibility: GroupVisibility.Private,
+    });
+
+    // Have the test user join the group
+    await joinGroup(app, TESTING_TENANT_ID, testGroup.slug, userToken);
 
     // Create events with different visibility levels
     publicEvent = await createEvent(app, adminToken, {
@@ -71,6 +92,7 @@ describe('Guards (e2e)', () => {
       maxAttendees: 100,
       type: EventType.Hybrid,
       categories: [1],
+      group: testGroup.id,
     });
     // Add test user as attendee to private event
     await request(app)
@@ -305,6 +327,7 @@ describe('Guards (e2e)', () => {
 
       it('should allow access to private event for attendee', async () => {
         // First, make sure the private event exists and is properly configured
+        // Associate it with the test group so the user can attend
         const privateEvent = await createEvent(app, adminToken, {
           name: 'Private Event',
           slug: 'private-event',
@@ -315,6 +338,7 @@ describe('Guards (e2e)', () => {
           maxAttendees: 100,
           type: EventType.Hybrid,
           categories: [1],
+          group: testGroup.id,
         });
 
         // Add user as attendee with proper DTO structure
