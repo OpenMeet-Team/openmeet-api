@@ -122,8 +122,12 @@ describe('VisibilityGuard', () => {
 
     it('should allow group members to access private events in their group', async () => {
       const eventAttendeeService = guard['eventAttendeeService'];
-      jest.spyOn(eventAttendeeService, 'findEventAttendeeByUserId').mockResolvedValueOnce(null);
-      jest.spyOn(groupMemberService, 'findGroupMemberByUserId').mockResolvedValueOnce({ id: 1 } as any);
+      jest
+        .spyOn(eventAttendeeService, 'findEventAttendeeByUserId')
+        .mockResolvedValueOnce(null);
+      jest
+        .spyOn(groupMemberService, 'findGroupMemberByUserId')
+        .mockResolvedValueOnce({ id: 1 } as any);
 
       mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
         id: 1,
@@ -139,13 +143,20 @@ describe('VisibilityGuard', () => {
       });
 
       await expect(guard.canActivate(context)).resolves.toBe(true);
-      expect(groupMemberService.findGroupMemberByUserId).toHaveBeenCalledWith(123, 456);
+      expect(groupMemberService.findGroupMemberByUserId).toHaveBeenCalledWith(
+        123,
+        456,
+      );
     });
 
     it('should deny non-members access to private group events', async () => {
       const eventAttendeeService = guard['eventAttendeeService'];
-      jest.spyOn(eventAttendeeService, 'findEventAttendeeByUserId').mockResolvedValueOnce(null);
-      jest.spyOn(groupMemberService, 'findGroupMemberByUserId').mockResolvedValueOnce(null);
+      jest
+        .spyOn(eventAttendeeService, 'findEventAttendeeByUserId')
+        .mockResolvedValueOnce(null);
+      jest
+        .spyOn(groupMemberService, 'findGroupMemberByUserId')
+        .mockResolvedValueOnce(null);
 
       mockEventQueryService.findEventBySlug.mockResolvedValueOnce({
         id: 1,

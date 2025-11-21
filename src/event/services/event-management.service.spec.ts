@@ -1069,10 +1069,9 @@ describe('EventManagementService', () => {
         );
 
         expect(result).toBeDefined();
-        expect(mockGroupMemberService.findGroupMemberByUserId).toHaveBeenCalledWith(
-          123,
-          mockUser.id,
-        );
+        expect(
+          mockGroupMemberService.findGroupMemberByUserId,
+        ).toHaveBeenCalledWith(123, mockUser.id);
       });
 
       it('should deny RSVP to private group event for non-group members', async () => {
