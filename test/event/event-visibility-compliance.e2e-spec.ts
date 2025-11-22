@@ -64,20 +64,20 @@ describe('Event Visibility Compliance (e2e)', () => {
     });
 
     testEvents.authenticated = await createEvent(TESTING_APP_URL, adminToken, {
-      name: 'Authenticated Event - Visibility Test',
-      slug: `authenticated-event-${Date.now()}`,
-      description: 'This is an authenticated event for testing visibility',
+      name: 'Unlisted Event - Visibility Test',
+      slug: `unlisted-event-${Date.now()}`,
+      description: 'This is an unlisted event for testing visibility',
       startDate: new Date(Date.now() + 7 * 86400000).toISOString(),
       endDate: new Date(Date.now() + 7 * 86400000 + 7200000).toISOString(),
       type: EventType.Hybrid,
-      location: 'Authenticated Location',
-      locationOnline: 'https://authenticated-event.com',
+      location: 'Unlisted Location',
+      locationOnline: 'https://unlisted-event.com',
       maxAttendees: 100,
       categories: [1],
       lat: 40.7128,
       lon: -74.006,
       status: 'published',
-      visibility: 'authenticated',
+      visibility: 'unlisted',
       timeZone: 'America/New_York',
     });
 
@@ -131,14 +131,12 @@ describe('Event Visibility Compliance (e2e)', () => {
       expect(response.body.location).toBeDefined();
     });
 
-    it('[CURRENT] requires authentication to view attendee list (should be 200 per design doc)', async () => {
+    it('should allow unauthenticated users to view attendee list', async () => {
       const response = await request(TESTING_APP_URL)
         .get(`/api/events/${testEvents.public.slug}/attendees`)
         .set('x-tenant-id', TESTING_TENANT_ID);
 
-      // Current behavior: 401 (requires auth)
-      // Expected per design doc: 200 (public attendee list)
-      expect(response.status).toBe(401);
+      expect(response.status).toBe(200);
     });
 
     it('should allow authenticated users to view event details', async () => {
@@ -162,26 +160,24 @@ describe('Event Visibility Compliance (e2e)', () => {
     });
   });
 
-  describe('Authenticated Events (will be renamed to Unlisted in v2)', () => {
+  describe('Unlisted Events', () => {
     it('should allow unauthenticated users with link to view event details', async () => {
       const response = await request(TESTING_APP_URL)
         .get(`/api/events/${testEvents.authenticated.slug}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
 
       expect(response.status).toBe(200);
-      expect(response.body.name).toBe('Authenticated Event - Visibility Test');
+      expect(response.body.name).toBe('Unlisted Event - Visibility Test');
       expect(response.body.description).toBeDefined();
       expect(response.body.location).toBeDefined();
     });
 
-    it('[CURRENT] requires authentication to view attendee list (should be 200 per design doc)', async () => {
+    it('should allow unauthenticated users to view attendee list', async () => {
       const response = await request(TESTING_APP_URL)
         .get(`/api/events/${testEvents.authenticated.slug}/attendees`)
         .set('x-tenant-id', TESTING_TENANT_ID);
 
-      // Current behavior: 401 (requires auth)
-      // Expected per design doc: 200 (anyone with link can view)
-      expect(response.status).toBe(401);
+      expect(response.status).toBe(200);
     });
 
     it('should allow authenticated users to view event details', async () => {
@@ -205,47 +201,30 @@ describe('Event Visibility Compliance (e2e)', () => {
     });
   });
 
-  describe('Private Events - Current Behavior (TODO: Will change when visibility model v2 is implemented)', () => {
-    it('[FUTURE] should return 403 for unauthenticated users', async () => {
+  describe('Private Events', () => {
+    it('should return 403 for unauthenticated users', async () => {
       const response = await request(TESTING_APP_URL)
         .get(`/api/events/${testEvents.private.slug}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
 
-      // TODO: Should be 403 when visibility model v2 is implemented
-      // For now, accepting current behavior
-      expect([200, 403]).toContain(response.status);
+      expect(response.status).toBe(403);
     });
 
-    it('[FUTURE] should block unauthenticated users from viewing attendee list', async () => {
+    it('should block unauthenticated users from viewing attendee list', async () => {
       const response = await request(TESTING_APP_URL)
         .get(`/api/events/${testEvents.private.slug}/attendees`)
         .set('x-tenant-id', TESTING_TENANT_ID);
 
-      // TODO: Should be 401 or 403 when visibility model v2 is implemented
-      // For now, documenting expected future behavior
-      expect([200, 401, 403]).toContain(response.status);
+      expect(response.status).toBe(403);
     });
 
-    it('[FUTURE] should show teaser page for authenticated but not invited users', async () => {
-      const response = await request(TESTING_APP_URL)
-        .get(`/api/events/${testEvents.private.slug}`)
-        .set('Authorization', `Bearer ${regularUserToken}`)
-        .set('x-tenant-id', TESTING_TENANT_ID);
-
-      // TODO: Should return 200 with teaser page (limited info) when v2 is implemented
-      // Teaser should show: name, host, date/time
-      // Teaser should NOT show: description, location, attendees
-      expect([200, 403]).toContain(response.status);
-    });
-
-    it('[FUTURE] should block non-invited authenticated users from viewing attendee list', async () => {
+    it('should block non-invited authenticated users from viewing attendee list', async () => {
       const response = await request(TESTING_APP_URL)
         .get(`/api/events/${testEvents.private.slug}/attendees`)
         .set('Authorization', `Bearer ${regularUserToken}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
 
-      // TODO: Should be 401 or 403 when visibility model v2 is implemented
-      expect([200, 401, 403]).toContain(response.status);
+      expect(response.status).toBe(403);
     });
 
     it('should allow invited/attending users to view full event details', async () => {
@@ -312,7 +291,7 @@ describe('Event Visibility Compliance (e2e)', () => {
         },
       };
 
-      const expectedBehaviorV2 = {
+      const expectedBehavior = {
         public: {
           unauthenticated: {
             viewEvent: 200,
@@ -323,7 +302,7 @@ describe('Event Visibility Compliance (e2e)', () => {
             viewAttendees: 200,
           },
         },
-        unlisted: { // Renamed from 'authenticated' in v2
+        unlisted: {
           unauthenticated: {
             viewEvent: 200,
             viewAttendees: 200,
@@ -335,15 +314,15 @@ describe('Event Visibility Compliance (e2e)', () => {
         },
         private: {
           unauthenticated: {
-            viewEvent: 403, // "Login required"
+            viewEvent: 403,
             viewAttendees: 403,
           },
           authenticated_not_invited: {
-            viewEvent: 200, // Teaser page with limited info
-            viewAttendees: 403, // Not allowed
+            viewEvent: 403,
+            viewAttendees: 403,
           },
           authenticated_invited: {
-            viewEvent: 200, // Full details
+            viewEvent: 200,
             viewAttendees: 200,
           },
         },
@@ -351,12 +330,12 @@ describe('Event Visibility Compliance (e2e)', () => {
 
       // This test always passes - it's just documentation
       expect(currentBehavior).toBeDefined();
-      expect(expectedBehaviorV2).toBeDefined();
+      expect(expectedBehavior).toBeDefined();
 
       console.log('\n📋 Current Visibility Behavior:');
       console.log(JSON.stringify(currentBehavior, null, 2));
-      console.log('\n📋 Visibility Model V2 - Expected Behavior:');
-      console.log(JSON.stringify(expectedBehaviorV2, null, 2));
+      console.log('\n📋 Expected Visibility Behavior:');
+      console.log(JSON.stringify(expectedBehavior, null, 2));
     });
   });
 });

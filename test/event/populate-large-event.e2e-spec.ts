@@ -24,7 +24,7 @@ describe('Populate Large Event (e2e) - Manual Testing Data', () => {
     {
       slug: 'test-event-authenticated-attendees',
       name: `${NUM_ATTENDEES} person Test Event (authenticated) - Manual Testing`,
-      visibility: 'authenticated',
+      visibility: 'unlisted',
     },
     {
       slug: 'test-event-private-attendees',
