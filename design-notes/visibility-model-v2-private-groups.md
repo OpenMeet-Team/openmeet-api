@@ -540,6 +540,73 @@ Group Feed (Members only):
 
 ---
 
+## Search & Discovery Behavior
+
+### Public vs. Personalized Search
+
+The term "not searchable" has caused confusion. This section clarifies the distinction between **public discovery** and **personalized search**.
+
+| Visibility | Public Search (Unauthenticated) | Member Search (Authenticated) | Sitemaps/SEO | Dashboard/My Groups |
+|-----------|--------------------------------|------------------------------|--------------|---------------------|
+| **Public** | ✅ Shown | ✅ Shown | ✅ Indexed | ✅ Shown |
+| **Unlisted** | ❌ Hidden | ✅ Shown (if member) | ❌ Not indexed | ✅ Shown |
+| **Private** | ❌ Hidden | ✅ Shown (if member) | ❌ Not indexed | ✅ Shown |
+
+**Key Distinction:**
+- **"Not searchable"** means excluded from **public discovery** (Google, sitemaps, anonymous/public search results)
+- **Members CAN find their own** unlisted/private groups via authenticated search
+- This prevents "orphaned" content where members can't find groups they belong to
+- Dashboard views (My Groups, Organized, Joined) always show all your groups regardless of visibility
+
+**Implementation Details:**
+
+**All Listing/Search Endpoints (`/groups`, `/home/search`):**
+- Anonymous users: Only Public groups shown
+- Authenticated users: Public + Unlisted (if member) + Private (if member)
+- **Key**: Unlisted/Private require actual membership, not just authentication
+- **Consistent behavior**: Search and browse listings use identical filtering
+
+**Dashboard/Personal Views (`/groups/dashboard`):**
+- Authenticated users: ALL groups they're members of (Public, Unlisted, Private)
+
+**What "Unlisted" Actually Means:**
+- ❌ Not in Google search results
+- ❌ Not in sitemaps
+- ❌ Not visible to anonymous users in search/listings
+- ❌ Not visible to authenticated users who haven't joined
+- ✅ Accessible via direct URL (no auth required)
+- ✅ Visible to members in search/listings (they joined via the URL)
+
+**Key Point:** "Unlisted" means not discoverable through public channels, but once you have the URL and join, the group appears in your personalized searches and listings.
+
+**Examples:**
+
+**Unlisted Group - "Friends Book Club":**
+- Anonymous user browses groups → ❌ Not shown
+- Anonymous user searches "book club" → ❌ Not shown
+- Anonymous user visits direct URL → ✅ Can view full details and join
+- Authenticated non-member browses groups → ❌ Not shown
+- Authenticated non-member searches "book club" → ❌ Not shown
+- Member browses groups → ✅ Shown (they joined via URL)
+- Member searches "book club" → ✅ Shown (they joined via URL)
+- Member views "My Groups" → ✅ Shown
+- Google indexes site → ❌ Not included
+
+**Private Group - "Executive Board":**
+- Anonymous user searches "executive" → ❌ Not shown
+- Authenticated non-member searches "executive" → ❌ Not shown
+- Member searches "executive" → ✅ Shown (they're a member)
+- Member views "My Groups" → ✅ Shown
+- Sitemap generation → ❌ Not included
+
+**Rationale:**
+- "Unlisted" means "not publicly discoverable" and "not in listings", not "unfindable by people who have access"
+- Members should be able to search their own groups
+- Prevents user frustration ("I know I'm a member but can't find it!")
+- Maintains privacy (only people with access can find them)
+
+---
+
 ## HTTP Status Codes & Error Handling
 
 ### Response Codes by Scenario

@@ -1,10 +1,11 @@
-import { Controller, Get, Query, Redirect, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Redirect, UseGuards, Optional } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { HomeService } from './home.service';
 import { Public } from '../auth/decorators/public.decorator';
 import { UserEntity } from '../user/infrastructure/persistence/relational/entities/user.entity';
 import { AuthGuard } from '@nestjs/passport';
+import { JWTAuthGuard } from '../auth/auth.guard';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { HomeQuery } from './dto/home-query.dto';
@@ -38,13 +39,16 @@ export class HomeController {
     return this.service.getGuestHomeState();
   }
 
+  @Public()
+  @UseGuards(JWTAuthGuard)
   @Get('home/search')
   @ApiOperation({ summary: 'Search Event and Group' })
   searchEventGroup(
     @Query() pagination: PaginationDto,
     @Query() query: HomeQuery,
+    @Optional() @AuthUser() user?: UserEntity,
   ) {
-    return this.service.globalSearch(pagination, query);
+    return this.service.globalSearch(pagination, query, user?.id);
   }
 
   @UseGuards(AuthGuard('jwt'))

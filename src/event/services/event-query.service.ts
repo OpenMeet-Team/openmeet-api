@@ -56,6 +56,97 @@ export class EventQueryService {
       dataSource.getRepository(EventAttendeesEntity);
   }
 
+  /**
+   * Apply visibility filtering to event queries based on authentication and attendance.
+   *
+   * Implements the visibility model:
+   * - Public: Always visible to everyone
+   * - Unlisted: Only visible to actual attendees (not all authenticated users)
+   * - Private: Only visible to actual attendees
+   *
+   * "Unlisted" means not discoverable unless you have the URL and RSVP'd as an attendee.
+   *
+   * @param queryBuilder - The query builder to apply filters to
+   * @param userId - Optional user ID for authenticated users
+   * @returns Promise that resolves when filtering is complete
+   */
+  private async applyEventVisibilityFilter(
+    queryBuilder: any,
+    userId?: number,
+  ): Promise<void> {
+    if (userId) {
+      // Authenticated users: show Public + Unlisted (if attendee/host/group member) + Private (if attendee/host/group member)
+      const attendedEventIds =
+        await this.eventAttendeeService.findEventIdsByUserId(userId);
+
+      // Left join to check group membership for events in groups
+      queryBuilder.leftJoin(
+        'event.group',
+        'visibilityGroup',
+      );
+      queryBuilder.leftJoin(
+        'visibilityGroup.groupMembers',
+        'visibilityGroupMembers',
+        'visibilityGroupMembers.userId = :userId',
+        { userId },
+      );
+
+      queryBuilder.andWhere(
+        new Brackets((qb) => {
+          qb.where('event.visibility = :publicVisibility', {
+            publicVisibility: EventVisibility.Public,
+          });
+
+          // For unlisted/private: show if user is creator OR attendee OR group member
+          qb.orWhere(
+            new Brackets((subQb) => {
+              subQb.where(
+                '(event.visibility IN (:...restrictedVisibilities) AND event.userId = :userId)',
+                {
+                  restrictedVisibilities: [
+                    EventVisibility.Unlisted,
+                    EventVisibility.Private,
+                  ],
+                  userId,
+                },
+              );
+
+              if (attendedEventIds.length > 0) {
+                subQb.orWhere(
+                  '(event.visibility IN (:...restrictedVisibilities) AND event.id IN (:...attendedEventIds))',
+                  {
+                    restrictedVisibilities: [
+                      EventVisibility.Unlisted,
+                      EventVisibility.Private,
+                    ],
+                    attendedEventIds,
+                  },
+                );
+              }
+
+              // Also show events in groups where user is a member
+              // This is handled by left joining group members table
+              subQb.orWhere(
+                '(event.visibility IN (:...restrictedVisibilities) AND visibilityGroupMembers.id IS NOT NULL)',
+                {
+                  restrictedVisibilities: [
+                    EventVisibility.Unlisted,
+                    EventVisibility.Private,
+                  ],
+                },
+              );
+            }),
+          );
+        }),
+      );
+    } else {
+      // Anonymous users: show only Public events
+      queryBuilder.andWhere('event.visibility = :visibility', {
+        visibility: EventVisibility.Public,
+      });
+    }
+  }
+
   @Trace('event-query.findEventBySlug')
   async findEventBySlug(slug: string): Promise<EventEntity | null> {
     await this.initializeRepository();
@@ -293,36 +384,9 @@ export class EventQueryService {
       .orderBy('event.startDate', 'ASC')
       .addOrderBy('event.id', 'ASC');
 
-    if (!user) {
-      eventQuery.andWhere('event.visibility = :visibility', {
-        visibility: EventVisibility.Public,
-      });
-    } else if (user.roles?.includes('admin')) {
-      // Admins can see all events
-    } else {
-      const attendedEventIds =
-        await this.eventAttendeeService.findEventIdsByUserId(user.id);
-
-      eventQuery.andWhere(
-        new Brackets((qb) => {
-          qb.where('event.visibility = :publicVisibility', {
-            publicVisibility: EventVisibility.Public,
-          });
-          // Unlisted events are hidden from listings - only accessible via direct link
-          // qb.orWhere('event.visibility = :unlistedVisibility', {
-          //   unlistedVisibility: EventVisibility.Unlisted,
-          // });
-          if (attendedEventIds.length > 0) {
-            qb.orWhere(
-              'event.visibility = :privateVisibility AND event.id IN (:...attendedEventIds)',
-              {
-                privateVisibility: EventVisibility.Private,
-                attendedEventIds,
-              },
-            );
-          }
-        }),
-      );
+    // Apply visibility filtering (admins can see all events)
+    if (!user?.roles?.includes('admin')) {
+      await this.applyEventVisibilityFilter(eventQuery, user?.id);
     }
 
     if (search) {
@@ -475,6 +539,7 @@ export class EventQueryService {
   async searchAllEvents(
     pagination: PaginationDto,
     query: HomeQuery,
+    userId?: number,
   ): Promise<any> {
     await this.initializeRepository();
     const eventQuery = this.eventRepository
@@ -482,7 +547,10 @@ export class EventQueryService {
       .where('event.status IN (:...statuses)', {
         statuses: [EventStatus.Published, EventStatus.Cancelled],
       })
-      .select(['event.name', 'event.slug']);
+      .select(['event.id', 'event.name', 'event.slug']);
+
+    // Apply visibility filtering
+    await this.applyEventVisibilityFilter(eventQuery, userId);
 
     if (query.search) {
       eventQuery.andWhere('event.name ILIKE :search', {

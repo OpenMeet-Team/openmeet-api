@@ -574,6 +574,73 @@ Event Feed (Invited attendees only):
 
 ---
 
+## Search & Discovery Behavior
+
+### Public vs. Personalized Search
+
+The term "not searchable" has caused confusion. This section clarifies the distinction between **public discovery** and **personalized search**.
+
+| Visibility | Public Search (Unauthenticated) | Member Search (Authenticated) | Sitemaps/SEO | Dashboard/My Events |
+|-----------|--------------------------------|------------------------------|--------------|---------------------|
+| **Public** | ✅ Shown | ✅ Shown | ✅ Indexed | ✅ Shown |
+| **Unlisted** | ❌ Hidden | ✅ Shown (if attendee) | ❌ Not indexed | ✅ Shown |
+| **Private** | ❌ Hidden | ✅ Shown (if attendee) | ❌ Not indexed | ✅ Shown |
+
+**Key Distinction:**
+- **"Not searchable"** means excluded from **public discovery** (Google, sitemaps, anonymous/public search results)
+- **Attendees CAN find their own** unlisted/private events via authenticated search
+- This prevents "orphaned" content where attendees can't find events they're invited to
+- Dashboard views (My Events, Attending, Hosting) always show all your events regardless of visibility
+
+**Implementation Details:**
+
+**All Listing/Search Endpoints (`/events`, `/groups`, `/home/search`):**
+- Anonymous users: Only Public items shown
+- Authenticated users: Public + Unlisted (if attendee) + Private (if attendee)
+- **Key**: Unlisted/Private require actual membership/attendance, not just authentication
+- **Consistent behavior**: Search and browse listings use identical filtering
+
+**Dashboard/Personal Views (`/events/dashboard`, `/groups/dashboard`):**
+- Authenticated users: ALL events they have access to (Public, Unlisted, Private)
+
+**What "Unlisted" Actually Means:**
+- ❌ Not in Google search results
+- ❌ Not in sitemaps
+- ❌ Not visible to anonymous users in search/listings
+- ❌ Not visible to authenticated users who haven't RSVP'd
+- ✅ Accessible via direct URL (no auth required)
+- ✅ Visible to attendees in search/listings (they RSVP'd via the URL)
+
+**Key Point:** "Unlisted" means not discoverable through public channels, but once you have the URL and RSVP, it appears in your personalized searches and listings.
+
+**Examples:**
+
+**Unlisted Event - "Friends Game Night":**
+- Anonymous user browses events → ❌ Not shown
+- Anonymous user searches "game night" → ❌ Not shown
+- Anonymous user visits direct URL → ✅ Can view full details and RSVP
+- Authenticated non-attendee browses events → ❌ Not shown
+- Authenticated non-attendee searches "game night" → ❌ Not shown
+- RSVP'd attendee browses events → ✅ Shown (they RSVP'd via URL)
+- RSVP'd attendee searches "game night" → ✅ Shown (they RSVP'd via URL)
+- RSVP'd attendee views "My Events" → ✅ Shown
+- Google indexes site → ❌ Not included
+
+**Private Event - "Emma's Birthday Party":**
+- Anonymous user searches "birthday" → ❌ Not shown
+- Authenticated non-attendee searches "birthday" → ❌ Not shown
+- Invited attendee searches "birthday" → ✅ Shown (they're invited)
+- Invited attendee views "My Events" → ✅ Shown
+- Sitemap generation → ❌ Not included
+
+**Rationale:**
+- "Unlisted" means "not publicly discoverable" and "not in listings", not "unfindable by people who have access"
+- Members/attendees should be able to search their own content
+- Prevents user frustration ("I know I'm invited but can't find it!")
+- Maintains privacy (only people with access can find them)
+
+---
+
 ## Error Handling & HTTP Status Codes
 
 ### Event Exists vs. Doesn't Exist
