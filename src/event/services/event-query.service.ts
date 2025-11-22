@@ -75,21 +75,10 @@ export class EventQueryService {
     userId?: number,
   ): Promise<void> {
     if (userId) {
-      // Authenticated users: show Public + Unlisted (if attendee/host/group member) + Private (if attendee/host/group member)
+      // Authenticated users: show Public + Unlisted/Private only if hosting or RSVP'd
+      // Note: Group membership grants URL access (via VisibilityGuard) but NOT search discoverability
       const attendedEventIds =
         await this.eventAttendeeService.findEventIdsByUserId(userId);
-
-      // Left join to check group membership for events in groups
-      queryBuilder.leftJoin(
-        'event.group',
-        'visibilityGroup',
-      );
-      queryBuilder.leftJoin(
-        'visibilityGroup.groupMembers',
-        'visibilityGroupMembers',
-        'visibilityGroupMembers.userId = :userId',
-        { userId },
-      );
 
       queryBuilder.andWhere(
         new Brackets((qb) => {
@@ -97,7 +86,7 @@ export class EventQueryService {
             publicVisibility: EventVisibility.Public,
           });
 
-          // For unlisted/private: show if user is creator OR attendee OR group member
+          // For unlisted/private: show ONLY if user is creator OR attendee
           qb.orWhere(
             new Brackets((subQb) => {
               subQb.where(
@@ -123,18 +112,6 @@ export class EventQueryService {
                   },
                 );
               }
-
-              // Also show events in groups where user is a member
-              // This is handled by left joining group members table
-              subQb.orWhere(
-                '(event.visibility IN (:...restrictedVisibilities) AND visibilityGroupMembers.id IS NOT NULL)',
-                {
-                  restrictedVisibilities: [
-                    EventVisibility.Unlisted,
-                    EventVisibility.Private,
-                  ],
-                },
-              );
             }),
           );
         }),
