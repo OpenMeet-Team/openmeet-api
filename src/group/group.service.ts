@@ -90,6 +90,51 @@ export class GroupService {
     this.groupRoleRepository = dataSource.getRepository(GroupRoleEntity);
   }
 
+  /**
+   * Apply visibility filtering to group queries based on authentication and membership.
+   *
+   * Implements the visibility model:
+   * - Public: Always visible to everyone
+   * - Unlisted: Only visible to actual members (not all authenticated users)
+   * - Private: Only visible to actual members
+   *
+   * "Unlisted" means not discoverable unless you have the URL and joined as a member.
+   *
+   * @param queryBuilder - The query builder to apply filters to
+   * @param userId - Optional user ID for authenticated users
+   * @returns The query builder with visibility filters applied
+   */
+  private applyGroupVisibilityFilter(queryBuilder: any, userId?: number): any {
+    if (userId) {
+      // Authenticated users: show Public + Unlisted (if member) + Private (if member)
+      // Key: Must be an actual member, not just logged in
+      queryBuilder.leftJoin(
+        'group.groupMembers',
+        'visibilityMembers',
+        'visibilityMembers.userId = :userId',
+        { userId },
+      );
+
+      queryBuilder.andWhere(
+        '(group.visibility = :publicVisibility OR ' +
+          '(group.visibility = :unlistedVisibility AND visibilityMembers.id IS NOT NULL) OR ' +
+          '(group.visibility = :privateVisibility AND visibilityMembers.id IS NOT NULL))',
+        {
+          publicVisibility: GroupVisibility.Public,
+          unlistedVisibility: GroupVisibility.Unlisted,
+          privateVisibility: GroupVisibility.Private,
+        },
+      );
+    } else {
+      // Anonymous users: show only Public groups
+      queryBuilder.andWhere('group.visibility = :publicVisibility', {
+        publicVisibility: GroupVisibility.Public,
+      });
+    }
+
+    return queryBuilder;
+  }
+
   async getGroupsWhereUserCanCreateEvents(
     userId: number,
   ): Promise<GroupEntity[]> {
@@ -313,28 +358,8 @@ export class GroupService {
       )
       .where('group.status = :status', { status: GroupStatus.Published });
 
-    // Build visibility conditions
-    if (userId) {
-      // For authenticated users: show public and private groups they're members of
-      // Unlisted groups are hidden from listings - only accessible via direct link
-      groupQuery
-        .leftJoin('group.groupMembers', 'members', 'members.userId = :userId', {
-          userId,
-        })
-        .andWhere(
-          '(group.visibility = :publicVisibility OR ' +
-            '(group.visibility = :privateVisibility AND members.id IS NOT NULL))',
-          {
-            publicVisibility: GroupVisibility.Public,
-            privateVisibility: GroupVisibility.Private,
-          },
-        );
-    } else {
-      // For anonymous users: show only public groups
-      groupQuery.andWhere('group.visibility = :publicVisibility', {
-        publicVisibility: GroupVisibility.Public,
-      });
-    }
+    // Apply visibility filtering
+    this.applyGroupVisibilityFilter(groupQuery, userId);
 
     // Add existing query conditions
     if (categories && categories.length > 0) {
@@ -380,6 +405,7 @@ export class GroupService {
   async searchAllGroups(
     pagination: PaginationDto,
     query: HomeQuery,
+    userId?: number,
   ): Promise<any> {
     await this.getTenantSpecificGroupRepository();
     const { page, limit } = pagination;
@@ -387,7 +413,10 @@ export class GroupService {
     const groupQuery = this.groupRepository
       .createQueryBuilder('group')
       .where('group.status = :status', { status: GroupStatus.Published })
-      .select(['group.name', 'group.slug']);
+      .select(['group.id', 'group.name', 'group.slug']);
+
+    // Apply visibility filtering
+    this.applyGroupVisibilityFilter(groupQuery, userId);
 
     if (search) {
       groupQuery.andWhere('group.name ILIKE :search', {
