@@ -222,6 +222,9 @@ For **Private** events, **no information** is disclosed to non-invited users:
 ### For Private Events
 
 #### 1. Invitation Tokens (Shareable Links)
+
+**Status:** ✅ **MVP FEATURE** (as of 2025-01-21 - moved from V2)
+
 Host generates shareable link with token:
 
 ```
@@ -234,15 +237,21 @@ https://openmeet.net/events/birthday?invite=abc123xyz
 - Recipient must still log in to view full details
 - Tracks who used the invitation
 
-**Token Properties:**
+**Token Properties (MVP):**
 - **Expiration:** 30 days default (host configurable: 7/30/90 days or custom)
 - **Max Uses:** Unlimited by default, or set a limit (e.g., "first 10 people")
-- **Revocation:** Host can revoke token, which removes all users who joined via it
 - **Tracking:** System tracks invitation creation, usage, and acceptance
 
-**Email-Locked Invitations:**
+**Potential V2 Enhancements (Not Finalized):**
+- **Revocation UI:** Admin panel to revoke tokens (backend already supports revocation)
+- **Usage Analytics:** Dashboard showing invitation funnel (created → clicked → RSVP'd)
+- **Email Delivery:** Automated email sending (vs manual sharing)
 
-When sending invitations via email (Option 2 below), invitations are locked to the specific email address:
+**Email-Locked Invitations (Proposed V2 - May Not Be Needed):**
+
+**Status:** 💭 **PROPOSED** - Not confirmed for V2, may not be necessary
+
+If we add automated email delivery in the future, we could optionally lock invitations to specific email addresses:
 
 ```typescript
 interface EventInvitation {

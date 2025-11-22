@@ -1,13 +1,13 @@
 # Access & Attendance System Roadmap
 
-**Last Updated:** 2025-01-19
-**Status:** Active Development Plan
+**Last Updated:** 2025-01-21
+**Status:** MVP Nearly Complete - 6/11 Issues Done
 
 ---
 
 ## Overview
 
-The Access & Attendance System controls who can view events/groups and how users RSVP to events. This roadmap defines a phased approach prioritizing security, simplicity, and user value.
+The Access & Attendance System controls who can view events/groups and how users are invited and RSVP to events. This roadmap defines a phased approach prioritizing security, simplicity, and user value.
 
 **System Name:** Access & Attendance
 **Scope:** Events and Groups visibility, permissions, invitations, and RSVP management
@@ -98,7 +98,11 @@ The Access & Attendance System controls who can view events/groups and how users
 
 **Effort:** 0 days (already done, just fix bugs)
 
-### P2: Private Event Access (Week 2-3) - 5 days
+### P2: Private Event Access (Week 2-3) - 6.5 days
+
+**⚠️ CRITICAL REQUIREMENT ADDED (2025-01-21):** Shareable invitation links moved from V2 to MVP
+
+**Rationale:** Original MVP plan (group membership + manual add) only works for existing OpenMeet users. This makes private events unusable for real-world scenarios (birthday parties, family events) where most guests don't have accounts yet.
 
 **How users gain access to private events:**
 
@@ -108,15 +112,29 @@ The Access & Attendance System controls who can view events/groups and how users
    - Can RSVP Going/Not Going once they view it
    - Implementation: `src/shared/guard/visibility.guard.ts:103-120`
    - Also used in: `src/event/services/event-management.service.ts` (requireGroupMembership flag)
+   - **Limitation:** Only works for existing OpenMeet users
    - Effort: 0 days (already implemented)
 
-2. **Manual Add Attendees**
-   - Host can add specific users to any private event
+2. **Shareable Invitation Links** - ⭐ REQUIRED FOR MVP
+   - Host creates shareable link: `openmeet.net/events/party?invite=abc123`
+   - Host shares link via WhatsApp, text, Discord, email, etc.
+   - Anyone with link can click → Create account/login → Auto-granted access
+   - **Solves critical gap:** Enables inviting non-users to private events
+   - Backend: Token generation, validation, auto-add on acceptance
+   - Frontend: "Create Invite Link" UI, link management panel
+   - Database: `event_invitations` + `event_invitation_uses` tables
+   - Effort: 1.5 days
+   - **See:** `event-attendance-management.md` for detailed design
+
+3. **Manual Add Attendees** - OPTIONAL (Nice-to-Have)
+   - Host can search and add existing OpenMeet users
    - Creates `eventAttendee` record with status: `invited`
    - Invited users can view event and RSVP
    - Backend: ✅ Already exists (`EventAttendeeService`)
    - Frontend: ❌ Needs "Manage Attendees" admin UI panel
-   - Effort: 3 days (frontend work)
+   - **Use Case:** Adding existing users is faster than generating link
+   - **Not blocking:** Shareable links can accomplish the same goal
+   - Effort: 3 days (frontend work) - May defer to V2
    - Files: New frontend component + API integration
 
 3. **RSVP Pre-Access Check** - ⭐ NEW REQUIREMENT
@@ -130,6 +148,41 @@ The Access & Attendance System controls who can view events/groups and how users
    - E2E tests for manual attendee addition
    - Integration tests for visibility rules
    - Effort: 1 day
+
+### P2b: Critical Private Event Fixes (Week 3) - 2 days
+
+**⚠️ ADDED 2025-01-21:** Critical gaps discovered through use case analysis
+
+**Issues found:** Users who accept invitations can't find events again, hosts can't remove attendees, capacity can be reduced below confirmed count
+
+1. **"My Events" Dashboard for Invited Users** - ⭐ CRITICAL
+   - Problem: User clicks invite link → RSVP's → loses link → can't find event again
+   - Solution: Dashboard showing "Events I'm Invited To" and "Events I'm Attending"
+   - Location: `openmeet-platform/src/pages/dashboard/DashboardEventsPage.vue`
+   - Backend: ✅ Already returns user's events via `/api/events/dashboard`
+   - Frontend: ❌ Need to add private events to dashboard view
+   - Effort: 1 day (frontend work)
+   - **Why Critical:** Without this, users lose access if they forget URL
+
+2. **Retroactive Capacity Enforcement** - ⭐ CRITICAL
+   - Problem: Host reduces capacity from 30→25 after 26 people already RSVP'd
+   - Solution: Prevent capacity reduction below current confirmed count
+   - Location: `src/event/services/event-management.service.ts` (update validation)
+   - Backend: ❌ No validation currently
+   - Frontend: ❌ No error handling for this case
+   - Effort: 0.5 days (backend validation + frontend error)
+   - **Why Critical:** Prevents impossible data states
+
+3. **Remove Attendee UI** - ⭐ CRITICAL
+   - Problem: Host can revoke invitation link but can't remove specific user who already accepted
+   - Solution: Add "Remove" button to attendee management
+   - Location: `openmeet-platform/src/pages/event/EventAttendeesPage.vue`
+   - Backend: ✅ Already exists (`DELETE /events/:slug/attendees/:id`)
+   - Frontend: ✅ Already has delete functionality in EventAttendeesPage
+   - Effort: 0 days - **ALREADY IMPLEMENTED**
+   - Files: EventAttendeesPage.vue line 99-100 (remove attendee menu item)
+
+**Total Added:** 1.5 days (Dashboard + Capacity = 1.5, Remove already done)
 
 ### P3: Simple RSVP (Week 3-4) - SCOPE DECISION NEEDED
 
@@ -256,31 +309,50 @@ Before creating GitHub issues, we need to decide:
 **Estimated Effort:** 6-8 weeks
 **Priority:** P1 (High Value)
 
-### Invitation Token System (2-3 weeks)
+### Email Invitation Delivery (1-2 weeks)
 
-**User Story:** Host wants to generate shareable invitation links with control over usage
+**User Story:** Host wants to send automated email invitations instead of manually sharing links
+
+**Status:** ✅ MVP includes shareable links - this adds automated email sending
 
 **Features:**
-- Token-based invitations (not single shared code)
-- Shareable links with expiration
-- Per-user or multi-use tokens
-- Revocation support
-- Usage tracking and analytics
+- Automated email delivery of invitation tokens
+- Per-user invitation tracking (sent → opened → clicked → RSVP'd)
+- Email-locked invitations (token tied to specific email address)
+- Bulk CSV upload for large invitation lists
+- Resend invitation functionality
+- Email templates with event details
 
-**Database:**
+**Database (Already exists from MVP):**
 ```sql
 event_invitations {
   id, event_id, token,
-  created_by_user_id, invited_user_id,
-  max_uses, uses_count,
-  expires_at, revoked_at
+  invited_email,              -- Now populated for email invites
+  max_uses,                   -- Set to 1 for email-locked
+  uses_count,
+  created_by_user_id,
+  expires_at, revoked_at,
+  status
+}
+
+-- V2 Enhancement: Add email tracking
+event_invitation_email_events {
+  id, invitation_id,
+  event_type,                 -- sent, opened, clicked
+  created_at
 }
 ```
 
-**Why not in MVP?**
-- Group membership + manual add covers most use cases
-- Proper invitation system requires careful design
-- Can add incrementally after MVP ships
+**What Changes from MVP:**
+- MVP: Host generates link, manually shares it
+- V2: System sends emails automatically with per-user tokens
+- Same underlying token system, just adds delivery mechanism
+
+**Effort:** 1.5 days
+- Email template design
+- Bulk sending infrastructure
+- Email event tracking (open, click)
+- Resend functionality
 
 ### Waitlist System (1-2 weeks)
 
@@ -408,15 +480,36 @@ event_invitations {
 3. **Complexity** - Adds edge cases throughout system
 4. **Can restore** - Keep enum value, can re-add in V2 if requested
 
-### Why Group Membership + Manual Add Instead of Invitations?
+### ~~Why Group Membership + Manual Add Instead of Invitations?~~ [SUPERSEDED]
 
-**Decision:** Two-pronged approach for private event access
+**Original Decision (2025-01-19):** Two-pronged approach for private event access
+**Status:** ❌ SUPERSEDED - Shareable links now required for MVP
 
-**Rationale:**
-1. **Permanent features** - Both continue working when invitation system launches
-2. **Covers use cases** - Group events (membership) + standalone events (manual add)
-3. **No migration** - Features don't get replaced, only enhanced
-4. **Fast to ship** - ~1 week vs 2-3 weeks for full invitation system
+**Why the change?**
+
+**Critical flaw discovered:** Both group membership AND manual add only work for existing OpenMeet users.
+
+**Real-world scenario that breaks:**
+```
+Birthday Party (standalone private event)
+- Host wants to invite 10 family members
+- 2 family members have OpenMeet accounts ✅ Can add manually
+- 8 family members DON'T have accounts ❌ CANNOT INVITE AT ALL
+
+Host would have to say: "Go to openmeet.net, create an account,
+then tell me your username, then I'll manually add you"
+```
+
+**Updated Decision (2025-01-21):** Shareable invitation links required for MVP
+
+**New Rationale:**
+1. **Solves critical gap** - Enables inviting non-users to private events
+2. **Fast to ship** - 1.5 days for shareable links (vs 3 days for email delivery)
+3. **Matches industry standard** - Facebook Events uses shareable links
+4. **Permanent feature** - V2 enhances with email delivery, not replacement
+5. **Flexible distribution** - Host can share via any channel (WhatsApp, text, Discord)
+
+**V2 Enhancement:** Add automated email delivery (+1.5 days later)
 
 ---
 
@@ -433,7 +526,8 @@ event_invitations {
 - ✅ Users can RSVP Going or Not Going
 - ✅ Capacity limits enforced (no overbooking)
 - ✅ Group members can access private group events
-- ✅ Hosts can manually add attendees to private events
+- ✅ Hosts can generate shareable invitation links
+- ✅ Non-users can be invited to private events via links
 
 **Quality:**
 - ✅ All edge cases tested
@@ -442,10 +536,11 @@ event_invitations {
 
 ### V2 Success Criteria
 
-**Invitations:**
-- ✅ Host can generate shareable invitation links
-- ✅ Links respect expiration and revocation
-- ✅ Usage tracking works correctly
+**Email Invitations:**
+- ✅ System sends automated invitation emails
+- ✅ Per-user invitation tracking (sent → opened → clicked)
+- ✅ Email-locked tokens work correctly
+- ✅ Bulk CSV upload for large invitation lists
 
 **Waitlist:**
 - ✅ Users auto-promoted when spots open
@@ -463,9 +558,13 @@ event_invitations {
 
 | Phase | Duration | Key Deliverables |
 |-------|----------|------------------|
-| **MVP** | Weeks 1-4 | Security fixes, three-tier visibility, simple RSVP, private access (group + manual) |
-| **V2** | Months 2-3 | Invitation tokens, waitlist, two-step RSVP, approval workflows |
-| **Future** | 6+ months | Viral invitations, email invites, guest policies, advanced features |
+| **MVP** | Weeks 1-4 (9.5 days total) | Security fixes, three-tier visibility, simple RSVP, private access (group membership + **shareable invitation links** + critical UX fixes) |
+| **V2** | Months 2-3 (6-8 weeks) | **Email invitation delivery**, waitlist, two-step RSVP, approval workflows, revocation UI, RSVP notifications |
+| **Future** | 6+ months | Viral invitations, guest policies, advanced capacity features |
+
+**Key Changes:**
+- Shareable invitation links moved from V2 to MVP (+1.5 days)
+- Critical UX fixes added after use case analysis (+1.5 days)
 
 ---
 

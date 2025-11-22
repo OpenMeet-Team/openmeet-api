@@ -59,6 +59,152 @@ Step 2: RSVP to Event (Separate Action)
 
 ---
 
+## Invitation System
+
+### MVP: Shareable Invitation Links
+
+**Decision Date:** 2025-01-21
+**Status:** ✅ MVP Feature (Revised from V2)
+
+#### Problem Statement
+
+**Original MVP Plan:** Manual add existing OpenMeet users only
+- ❌ Cannot invite non-users to private events
+- ❌ User must create account BEFORE being added
+- ❌ Poor UX for real-world scenarios (birthday parties, family events)
+
+**Critical Gap:** Both "group membership" and "manual add" only work for existing OpenMeet users.
+
+**Real-World Scenario:**
+```
+Birthday Party (standalone private event)
+- 10 guests invited
+- 2 are on OpenMeet ✅ Can add manually
+- 8 are NOT on OpenMeet ❌ Cannot invite at all
+
+Host would have to say: "Go to openmeet.net, create account,
+tell me your username, then I'll add you"
+```
+
+#### MVP Solution: Shareable Links
+
+**Delivery Method:** Manual sharing (host copies and shares link themselves)
+
+**User Flow:**
+1. Host creates private event
+2. Host clicks "Create Invite Link" → Gets `openmeet.net/events/party?invite=abc123`
+3. Host shares link via WhatsApp, text, Discord, email, etc.
+4. Guests click link
+5. If not logged in → Prompted to create account or log in
+6. After authentication → Automatically granted access to view event
+7. Can now RSVP Going/Not Going
+
+**Link Configuration:**
+- **Expiration:** 7/30/90 days or custom
+- **Max Uses:** Unlimited (shareable) or limited (first 20 people)
+- **Revocation:** Host can revoke link (removes all users who joined via it)
+- **Multiple Links:** Host can create separate links (one for family, one for friends)
+
+**Why Shareable Links (Not Email Invitations)?**
+
+| Consideration | Shareable Links | Email Invitations |
+|---------------|----------------|-------------------|
+| **Solves core problem** | ✅ Non-users can be invited | ✅ Non-users can be invited |
+| **Development time** | ⚡ 1.5 days | ⏱️ 3 days |
+| **Distribution flexibility** | ✅ Any channel (WhatsApp, text, Discord) | ❌ Email only |
+| **Infrastructure required** | ✅ Minimal (just token system) | ❌ Email templates + sending |
+| **Tracking invited users** | ❌ Only know who clicked | ✅ Know who was invited |
+| **User preference** | ✅ Matches Facebook Events model | ⚠️ May go to spam |
+| **Bulk management** | ✅ One link for many people | ❌ One email per person |
+
+**Decision:** Shareable links for MVP, email delivery as V2 enhancement.
+
+**Implementation Effort:** 1.5 days
+- Backend: Token generation, validation, auto-add on acceptance
+- Frontend: "Create Link" UI, link management panel
+- Database: `event_invitations` table
+
+#### Architecture: One System, Two Delivery Methods
+
+**Core Database Schema:**
+```sql
+event_invitations {
+  id SERIAL PRIMARY KEY,
+  event_id INTEGER REFERENCES events(id),
+  token VARCHAR(255) UNIQUE NOT NULL,
+  invited_email VARCHAR(255),        -- NULL for shareable links
+  max_uses INTEGER,                  -- NULL = unlimited, 1 = single-use
+  uses_count INTEGER DEFAULT 0,
+  expires_at TIMESTAMP,
+  created_by_user_id INTEGER REFERENCES users(id),
+  revoked_at TIMESTAMP,
+  status VARCHAR(50) DEFAULT 'active',  -- active, expired, revoked
+  created_at TIMESTAMP DEFAULT NOW()
+}
+
+event_invitation_uses {
+  id SERIAL PRIMARY KEY,
+  invitation_id INTEGER REFERENCES event_invitations(id),
+  user_id INTEGER REFERENCES users(id),
+  used_at TIMESTAMP DEFAULT NOW()
+}
+```
+
+**Token Format:**
+- Shareable: `openmeet.net/events/party?invite=abc123xyz` (append to event URL)
+- Email (V2): `openmeet.net/invite/xyz789` (dedicated endpoint, auto-redirect)
+
+**Access Flow:**
+1. User visits event URL with `?invite=TOKEN`
+2. System validates token (not expired, not revoked, under max_uses)
+3. If valid → Create `event_attendee` record with status `invited`
+4. Record use in `event_invitation_uses` table
+5. Redirect to event page (now has access)
+
+**V2 Enhancement: Email Delivery** (2-3 months)
+- Same underlying token system
+- Add email template rendering
+- Add bulk email sending
+- Per-user tokens (max_uses = 1, invited_email set)
+- Track "sent → opened → clicked → RSVPd" funnel
+- Resend invitation functionality
+- Estimated effort: +1.5 days
+
+**Benefits of Single System:**
+- Same token validation logic for both methods
+- Same database schema
+- Same security model (expiration, revocation)
+- Email delivery is just an enhancement, not a rewrite
+- No migration needed when adding email
+
+#### Comparison to Other Platforms
+
+**Facebook Events:**
+- ✅ Shareable event links
+- ❌ No per-user email invitations (deprecated feature)
+- Our approach: Same as Facebook
+
+**Eventbrite:**
+- ✅ Email invitations
+- ❌ No shareable invite links (public events only)
+- Our approach: More flexible (both methods)
+
+**Partiful:**
+- ✅ Shareable links
+- ✅ Optional email sending
+- Our approach: Same model (shareable now, email in V2)
+
+#### Related: Group Invitations
+
+**Same System:** Group invitations use identical token system
+- `group_invitations` table (parallel schema)
+- Same shareable link approach
+- V2 adds email delivery for groups
+
+**Unified Experience:** "Invite People" works same way for events and groups
+
+---
+
 ## RSVP States
 
 ### User-Facing RSVP Choices
