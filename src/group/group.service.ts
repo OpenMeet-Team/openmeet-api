@@ -780,10 +780,7 @@ export class GroupService {
     let assignedRole: GroupRole;
     let newGroupMember;
 
-    if (
-      groupEntity?.requireApproval ||
-      groupEntity?.visibility === GroupVisibility.Private
-    ) {
+    if (groupEntity?.requireApproval) {
       newGroupMember = await this.groupMemberService.createGroupMember(
         { userId: userEntity.id, groupId: groupEntity.id },
         GroupRole.Guest,
