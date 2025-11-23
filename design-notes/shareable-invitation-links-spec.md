@@ -1,19 +1,88 @@
-# Shareable Invitation Links - Specification
+# Invitation System - Specification
 
-**Status:** ⚠️ **DESIGN UNDER REVIEW - Critical Security Questions**
-**Original Effort Estimate:** 1.5 days
-**Revised Estimate:** TBD pending security decisions
+**Status:** ✅ **DESIGN APPROVED - Phased Implementation**
+**Related PRs:** #387 (shareable invites for groups), #392 (visibility e2e tests)
+**Total Effort Estimate:** 12.5 days (phased across 3 releases)
 
 ---
 
-## ⚠️ CRITICAL DESIGN QUESTIONS (Unresolved)
+## Executive Summary
 
-**Date:** 2025-01-22
-**Issue:** Fundamental tension between "shareable links" and "private/confidential events"
+This document defines a **three-phase invitation system** for private events and groups:
 
-### The Core Problem
+1. **Phase 1 (MVP):** Direct invite of existing OpenMeet users
+2. **Phase 2 (V1.5):** Email invitations with personal codes
+3. **Phase 3 (V2):** Viral invitations with accountability chains
 
-Shareable invitation links (one URL shared with multiple people) have **inherent security risks** that may be **incompatible with truly private events**:
+**Key Decision:** Viral invitations REPLACE simple generic links. Instead of one link everyone forwards, each person gets their own traceable sub-link.
+
+---
+
+## ✅ DESIGN DECISIONS (Resolved)
+
+**Date:** 2025-01-23
+**Resolution:** Use viral invitations instead of generic shareable links
+
+### Decision 1: Private Events + Shareable Links ✅
+
+**Answer:** Yes, BUT only via viral invitations (not generic links)
+
+**Rationale:**
+- Generic links (one URL for everyone) have security risks
+- Viral invitations provide accountability while keeping shareability
+- Each person gets their own traceable invitation link
+- Full invitation chain visible to host
+
+### Decision 2: Security Mitigations ✅
+
+**Answer:** Viral invitation chains provide accountability
+
+Instead of:
+```
+Generic Link: openmeet.net/events/party?invite=abc123
+- Everyone uses same URL
+- No accountability
+- Can't trace who shared with whom
+```
+
+Use:
+```
+Viral Invitations: Each person gets personal sub-link
+- Alice: openmeet.net/events/party?invite=alice-xyz789
+- Bob: openmeet.net/events/party?invite=bob-xyz789
+- Full chain tracked: Host → Alice → Dave → Emma
+- Can revoke Alice's entire branch
+```
+
+### Decision 3: MVP Scope ✅
+
+**Answer:** Three-phase rollout
+
+1. **Phase 1 (MVP - 5 days):** Direct invite (existing OpenMeet users)
+2. **Phase 2 (V1.5 - +3 days):** Email invitations (personal codes)
+3. **Phase 3 (V2 - +4.5 days):** Viral invitations (replaces generic links)
+
+### Decision 4: Revocation Behavior ✅
+
+**Answer:** Granular control per branch
+
+- Disable link: Stops new uses, existing attendees keep access
+- Remove person: Remove individual only
+- Remove branch: Remove entire invitation subtree
+
+### Decision 5: Auto-RSVP ✅
+
+**Answer:** No auto-RSVP
+
+- Accepting invitation grants view access only
+- User must manually RSVP for events
+- User becomes member for groups (auto-join)
+
+---
+
+## Security Analysis: Generic Links vs Viral Invitations
+
+### Generic Shareable Links Have Security Risks:
 
 #### Security Risks of URL-Based Tokens
 
@@ -98,9 +167,79 @@ When invitation token appears in URL (`openmeet.net/events/party?invite=abc123`)
    - Issue: User hasn't seen event details before committing
    - **Decision:** Grant view access automatically, require manual RSVP click (agreed in review)
 
-### Alternative Approaches
+### Why Viral Invitations Solve the Problem
 
-#### Approach 1: No Shareable Links for Private Events (Most Secure)
+**Viral invitations maintain shareability while adding accountability:**
+
+✅ **Traceability:** Every person traceable to original inviter
+✅ **Accountability:** Host can ask "Alice, who is Dave?"
+✅ **Granular Revocation:** Remove individuals or entire branches
+✅ **Controlled Growth:** Set depth limits and per-person quotas
+✅ **Audit Trail:** Full invitation tree visible to host
+
+**Trade-off:** Slightly more complex implementation, but much better security model.
+
+---
+
+## Three-Phase Implementation Plan
+
+### Phase 1: Direct Invite (MVP - 5 days)
+
+**Goal:** Enable hosts to invite existing OpenMeet users
+
+**Solves:** Critical blocker - private groups have no way to add members
+
+**Features:**
+- Search OpenMeet users by name/username
+- Click "Invite" to send in-app + email notification
+- Invited user gets instant access (no codes needed)
+- Works for both events and groups
+
+**Priority:** HIGHEST - This is the blocker
+
+---
+
+### Phase 2: Email Invitations (V1.5 - +3 days)
+
+**Goal:** Invite non-OpenMeet users via email with personal codes
+
+**Solves:** Birthday party scenario - invite family members not on platform
+
+**Features:**
+- Paste email list (comma-separated)
+- Send personalized emails with unique tokens
+- Each token locked to specific email address
+- Track: Sent → Opened → Clicked → Accepted
+- Auto-match invitation when user signs up
+
+**Priority:** HIGH - Needed for real-world private events
+
+---
+
+### Phase 3: Viral Invitations (V2 - +4.5 days)
+
+**Goal:** Allow invitees to invite their friends (with accountability)
+
+**Solves:** Large events where host doesn't know everyone (birthday party with extended network)
+
+**Features:**
+- Host enables "Allow invitees to invite others"
+- Each invitee gets personal sub-link to share
+- Set depth limit (e.g., friends of friends only)
+- Set per-person quota (e.g., 5 invites each)
+- Full invitation tree visible to host
+- Granular revocation (per-person or per-branch)
+- Contact chain ("Who is Leo?" → "Leo invited by Karen, invited by Carol, invited by YOU")
+
+**Priority:** MEDIUM - Enhancement for larger events
+
+**This replaces generic shareable links** - No need for generic links once viral invitations exist.
+
+---
+
+## Removed Approaches
+
+### ❌ Approach 1: No Shareable Links for Private Events
 ```
 Private Event Invitation Methods (MVP):
 ✅ Manual add by username (existing users only)
@@ -115,7 +254,9 @@ Trade-offs:
 - Poor UX for real-world private events ("create account first, then tell me your username")
 ```
 
-#### Approach 2: Email Invitations Only (Secure, More Complex)
+**Decision:** Rejected - Too restrictive, doesn't solve non-user problem
+
+### ❌ Approach 2: Email Invitations Only
 ```
 Private Event Invitation Methods:
 ✅ Manual add by username
@@ -135,7 +276,9 @@ Trade-offs:
 - Less flexible than shareable links
 ```
 
-#### Approach 3: Shareable Links with Warnings (Fastest, Least Secure)
+**Decision:** Adopted as Phase 2
+
+### ❌ Approach 3: Generic Shareable Links with Warnings
 ```
 Private Event Invitation Methods:
 ✅ Manual add by username
@@ -153,106 +296,195 @@ Trade-offs:
 - False sense of security
 ```
 
-#### Approach 4: Two-Tier Visibility Model (Recommended?)
-```
-Unlisted Events:
-✅ Shareable links (anyone with link can view, no login)
-✅ Convenient for casual private events
-✅ Security risk acceptable (birthday parties, game nights)
+**Decision:** Rejected - Replaced by viral invitations (better accountability)
 
-Private Events:
-✅ Manual add (existing users)
-✅ Group membership (existing users)
-✅ Email invitations (V2, per-person tokens)
-❌ No shareable links (incompatible with confidentiality)
+### ✅ Approach 4: Viral Invitations (ADOPTED)
+```
+Private Events + Viral Invitations:
+✅ Direct invite (Phase 1)
+✅ Email invitations (Phase 2)
+✅ Viral invitations with depth limits (Phase 3)
+✅ Full invitation tree tracked
+✅ Granular revocation per branch
+✅ Each person accountable to chain
+
+Example Flow:
+1. Host invites Alice, Bob, Carol
+2. Alice invites Dave, Emma (her friends)
+3. Dave invites Frank (his friend)
+4. Host sees: Host → Alice → Dave → Frank
+5. Stranger shows up? Host asks: "Alice, who is Dave? Dave, who is Frank?"
+6. If needed: Remove Frank, or remove Dave's branch, or remove Alice's entire tree
 
 Philosophy:
-- If event needs shareable links → Use Unlisted
-- If event needs true confidentiality → Use Private (no shareable links)
-- Clear separation of use cases
+- Viral invitations provide shareability WITH accountability
+- No need for generic "one link for everyone" approach
+- Always know who invited whom
 ```
 
-### Required Decisions Before Implementation
+---
 
-- [ ] **Decision 1:** Can private events have shareable invitation links? (Yes/No)
-- [ ] **Decision 2:** If yes, what security mitigations are required?
-- [ ] **Decision 3:** What's the MVP scope for inviting non-users?
-- [ ] **Decision 4:** Revocation behavior (Disable vs Remove attendees) - ✅ **RESOLVED: Separate actions**
-- [ ] **Decision 5:** Auto-RSVP on invitation acceptance - ✅ **RESOLVED: Manual RSVP required**
+## Problem Statement
 
-**Next Steps:** Make architectural decisions above, then revise spec accordingly.
+**Current State:**
+1. Private groups have NO way to add members (critical blocker)
+2. Cannot invite non-OpenMeet users to private events
+3. Generic shareable links have security risks (no accountability)
+
+**Real-World Impact:**
+- Private group created → Nobody can join
+- Birthday party → Can't invite family not on platform
+- Someone forwards link → Host doesn't know who invited strangers
 
 ---
 
-## Problem
+## Solution: Three-Phase Invitation System
 
-Hosts cannot invite non-OpenMeet users to private events. Current solutions only work for existing users, making private events unusable for real-world scenarios (birthday parties, family events).
+**Phase 1 (MVP):** Direct invite existing users
+**Phase 2 (V1.5):** Email invitations for non-users
+**Phase 3 (V2):** Viral invitations with accountability chains
 
-**NOTE:** This problem statement may need revision based on decisions above. If private events cannot support shareable links for security reasons, the "solution" may be different than originally proposed.
+**Example Flow:**
+```
+Host creates private event "Emma's Birthday Party"
+→ Phase 1: Directly invites 10 friends on OpenMeet
+→ Phase 2: Emails invitation codes to 15 family members not on platform
+→ Phase 3: Enables viral invites (each person can invite 5 friends)
+→ Alice invites her 5 friends (Dave, Emma, Frank, Grace, Henry)
+→ Dave invites his 3 friends (Ivan, Jane, Karen)
+→ Host sees full tree: Host → Alice → Dave → Ivan
+→ Stranger shows up? Host traces: "Alice, who is Dave? Dave, who is Ivan?"
+```
 
 ---
 
-## Solution
+## User Flows by Phase
 
-Enable hosts to generate shareable links that grant access to private events.
+### Phase 1: Direct Invite (MVP)
 
-**Example:** `openmeet.net/events/party?invite=abc123`
+**Host Flow:**
+1. Opens private event/group page
+2. Clicks "Invite People"
+3. Sees "Search OpenMeet Users" as PRIMARY option
+4. Types "Alice" → Sees search results with profiles
+5. Clicks "Invite" next to Alice Smith
+6. Alice instantly added, receives in-app + email notification
+
+**Guest (Alice) Flow:**
+1. Gets in-app notification: "Sarah invited you to Emma's Birthday Party"
+2. Gets email: "You've been invited..." [View Event]
+3. Clicks notification → Already logged in → See event details
+4. For events: Can RSVP Going/Not Going
+5. For groups: Already a member, sees all content
 
 ---
 
-## User Flows
+### Phase 2: Email Invitations
 
-### Host Creates Invitation Link
+**Host Flow:**
+1. Clicks "Invite People"
+2. Chooses "Send Email Invitations"
+3. Pastes email list:
+   ```
+   alice@gmail.com
+   bob@yahoo.com
+   carol@work.com
+   ```
+4. Optionally adds personal message
+5. Clicks "Send Invitations"
+6. Sees tracking: alice@gmail.com - Sent ✓
 
-1. Host opens private event management page
-2. Clicks "Create Invitation Link"
-3. Configures:
-   - Expiration: 7/30/90 days (default: 30)
-   - Max uses: Unlimited or N people
-4. Gets shareable link
-5. Copies and shares via WhatsApp/text/Discord/email
+**Guest (Has Account) Flow:**
+1. Gets email: "Sarah invited you to Emma's Birthday Party"
+2. Clicks unique link: `openmeet.net/invite/xyz789alice`
+3. Already logged in → Auto-granted access
+4. Sees event/group details → Can RSVP/Join
 
-### Guest Accepts Invitation
+**Guest (No Account) Flow:**
+1. Gets email with unique link
+2. Clicks → Redirected to signup (email pre-filled)
+3. Signs up → Auto-matched to invitation → Auto-granted access
+4. Sees event/group details → Can RSVP/Join
 
-**Not Logged In:**
-1. Clicks invitation link
-2. Redirected to login/signup with return URL
-3. After authentication, returns to event page
-4. Backend validates token and grants access
-5. User added as attendee with "invited" status
-6. Can view event details and RSVP
+---
 
-**Already Logged In:**
-1. Clicks invitation link
-2. Backend validates token and grants access
-3. User added as attendee with "invited" status
-4. Can view event details and RSVP
+### Phase 3: Viral Invitations
 
-### Host Manages Links
+**Host Flow:**
+1. Clicks "Invite People"
+2. Invites initial people (Alice, Bob, Carol)
+3. Enables "Allow invitees to invite others"
+4. Configures:
+   - Depth limit: 2 levels (friends of friends)
+   - Per-person quota: 5 invites each
+   - Expiration: 30 days
 
-1. Views list of active invitation links
-2. Sees usage stats (N/max uses, expiration date)
-3. Can copy link again
-4. Can revoke link
+**Alice (First-level invitee) Flow:**
+1. Accepts invitation → Becomes member
+2. Sees on event page: "Invite your friends"
+3. Clicks "Generate my invitation link"
+4. Gets personal link: `openmeet.net/events/party?invite=alice-xyz789`
+5. Shares with 5 friends via WhatsApp
+
+**Dave (Second-level invitee) Flow:**
+1. Clicks Alice's personal link
+2. Logs in/signs up
+3. Auto-granted access
+4. Sees: "You were invited by Alice"
+5. Can see: "Invite your friends" (if depth allows)
+6. OR sees: "Invitation limit reached" (if at max depth)
+
+**Host Manages Viral Tree:**
+1. Views invitation tree:
+   ```
+   Host
+   ├─ Alice (invited 5 people)
+   │  ├─ Dave
+   │  ├─ Emma
+   │  └─ Frank
+   ├─ Bob (invited 3 people)
+   └─ Carol (invited 0 people)
+   ```
+2. Clicks "Who is Dave?" → Shows: Dave invited by Alice, invited by Host
+3. Can message Alice: "Who is Dave?"
+4. Can remove Dave individually
+5. Can remove Alice's entire branch (Alice + her 5 invitees)
 
 ---
 
 ## Data Model
 
-### event_invitations
+### Phase 1: Direct Invites (Simple)
 
-Stores invitation links created by hosts.
+**Approach:** Use existing `event_attendees` and `group_members` tables
+- Add `invited_by_user_id` field (who sent the invitation)
+- Add `invitation_method` enum: 'direct' | 'email' | 'viral'
+
+**No separate invitation table needed** - direct invites immediately grant access
+
+---
+
+### Phase 2 & 3: Email + Viral Invitations
+
+### event_invitations
 
 **Fields:**
 - id
 - event_id → events
-- token (unique, URL-safe string)
-- invited_email (nullable - NULL for shareable, set for email invites in V2)
-- max_uses (nullable - NULL = unlimited)
+- token (unique, URL-safe string, 32+ chars)
+- invitation_type ('email' | 'viral') - NEW
+- invited_email (nullable - set for email, NULL for viral)
+- invited_by_user_id - NEW (who created this invitation)
+- parent_invitation_id - NEW (links to parent for viral chains)
+- depth - NEW (0 = host, 1 = first level, 2 = second level)
+- max_depth - NEW (how many levels down can this branch go)
+- can_invite_others - NEW (whether this person can create sub-invitations)
+- max_invites_per_person - NEW (quota for sub-invitations)
+- max_uses (nullable - NULL = unlimited, 1 = email-locked, N = limited viral)
 - uses_count (increments each use)
 - expires_at (nullable - when link expires)
-- created_by_user_id → users
-- revoked_at (nullable - when host revoked)
+- created_by_user_id → users (host or admin)
+- revoked_at (nullable - when disabled)
 - status (active/expired/revoked)
 - created_at
 - updated_at
@@ -261,6 +493,12 @@ Stores invitation links created by hosts.
 - token (unique)
 - event_id
 - status
+- parent_invitation_id (for tree queries)
+- invited_by_user_id (for accountability)
+
+### group_invitations
+
+**Same structure as event_invitations**, but with `group_id` instead of `event_id`
 
 ### event_invitation_uses
 
@@ -271,9 +509,25 @@ Tracks who used each invitation.
 - invitation_id → event_invitations
 - user_id → users
 - used_at
+- ip_address (for security/abuse detection)
 
 **Constraints:**
 - Unique(invitation_id, user_id) - prevent duplicate uses
+
+### event_invitation_chain
+
+**NEW:** Tracks the full invitation tree for accountability
+
+**Fields:**
+- id
+- event_id
+- user_id (person who joined)
+- invited_by_user_id (person who invited them)
+- invitation_id (the token they used)
+- depth (0 = host, 1 = direct invite, 2 = friend of friend)
+- joined_at
+
+**Purpose:** Quick lookup of "who invited this person?" and "show full chain"
 
 ---
 
@@ -355,80 +609,197 @@ Click 11 (Dave): ❌ Max uses reached (count = 10)
 
 ## API Endpoints
 
-### POST /events/:slug/invitations
+### Phase 1: Direct Invites
+
+#### POST /events/:slug/invitations/direct
 **Auth:** Required (must be event host)
 
 **Request:**
 ```json
 {
-  "expiresIn": "30days",
-  "maxUses": 20
+  "userIds": [123, 456, 789]
 }
 ```
 
 **Response:**
 ```json
 {
-  "id": 123,
-  "token": "abc123xyz",
-  "inviteUrl": "https://openmeet.net/events/party?invite=abc123xyz",
-  "maxUses": 20,
-  "usesCount": 0,
-  "expiresAt": "2025-02-20T12:00:00Z",
-  "status": "active"
+  "invited": [
+    { "userId": 123, "username": "alice", "notified": true },
+    { "userId": 456, "username": "bob", "notified": true }
+  ],
+  "alreadyMembers": [
+    { "userId": 789, "username": "carol" }
+  ]
 }
 ```
 
-### GET /events/:slug/invitations
+**Same for groups:** `POST /groups/:slug/invitations/direct`
+
+---
+
+### Phase 2: Email Invitations
+
+#### POST /events/:slug/invitations/email
 **Auth:** Required (must be event host)
+
+**Request:**
+```json
+{
+  "emails": ["alice@example.com", "bob@example.com"],
+  "personalMessage": "Hope you can make it!",
+  "expiresIn": "30days"
+}
+```
 
 **Response:**
 ```json
-[
-  {
-    "id": 123,
-    "inviteUrl": "...",
-    "maxUses": 20,
-    "usesCount": 5,
-    "expiresAt": "...",
-    "status": "active",
-    "createdAt": "..."
+{
+  "sent": [
+    {
+      "email": "alice@example.com",
+      "token": "xyz789alice",
+      "inviteUrl": "https://openmeet.net/invite/xyz789alice",
+      "status": "sent"
+    }
+  ],
+  "failed": []
+}
+```
+
+---
+
+### Phase 3: Viral Invitations
+
+#### POST /events/:slug/invitations/viral/enable
+**Auth:** Required (must be event host)
+
+**Request:**
+```json
+{
+  "maxDepth": 2,
+  "maxInvitesPerPerson": 5,
+  "expiresIn": "30days"
+}
+```
+
+**Response:**
+```json
+{
+  "enabled": true,
+  "settings": {
+    "maxDepth": 2,
+    "maxInvitesPerPerson": 5,
+    "expiresAt": "2025-02-20T12:00:00Z"
   }
-]
+}
 ```
 
-### DELETE /events/:slug/invitations/:id
-**Auth:** Required (must be event host)
+#### POST /events/:slug/invitations/viral/my-link
+**Auth:** Required (must be event attendee with invite privileges)
 
-Revokes the invitation link.
+Generates personal sub-invitation link for the current user.
 
 **Response:**
 ```json
-{ "success": true }
+{
+  "inviteUrl": "https://openmeet.net/events/party?invite=alice-xyz789",
+  "remainingInvites": 5,
+  "depth": 1,
+  "canInvite": true
+}
 ```
 
-### GET /events/:slug?invite=TOKEN
+#### GET /events/:slug/invitations/tree
+**Auth:** Required (must be event host)
+
+Returns full invitation tree.
+
+**Response:**
+```json
+{
+  "tree": [
+    {
+      "userId": 1,
+      "username": "host",
+      "depth": 0,
+      "invitedBy": null,
+      "children": [
+        {
+          "userId": 2,
+          "username": "alice",
+          "depth": 1,
+          "invitedBy": 1,
+          "invitedCount": 5,
+          "children": [
+            { "userId": 5, "username": "dave", "depth": 2, "invitedBy": 2 }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+#### DELETE /events/:slug/invitations/branch/:userId
+**Auth:** Required (must be event host)
+
+Removes user and their entire invitation subtree.
+
+**Response:**
+```json
+{
+  "removed": ["alice", "dave", "emma", "frank"],
+  "count": 4
+}
+```
+
+---
+
+### Common Endpoints (All Phases)
+
+#### GET /events/:slug?invite=TOKEN
 **Auth:** Optional
 
 When `invite` query param present:
-- If not authenticated: Return 401 with "login required" message
+- If not authenticated: Redirect to login with return URL
 - If authenticated: Validate token and grant access
 
 **Token Validation:**
-1. Token exists
-2. Not revoked
-3. Not expired
-4. Under max uses
-5. User hasn't already used it
+1. Token exists and active
+2. Not revoked or expired
+3. Under max uses
+4. User hasn't already used it
+5. For email invitations: User owns the invited email (verified)
+6. For viral: Within depth limit
 
 **On Success:**
-- Create event_attendee record (status: invited)
+- Grant access (create attendee/member record)
 - Record usage in event_invitation_uses
+- Record invitation chain
 - Increment uses_count
-- Return event details
+- Return event/group details
 
 **On Failure:**
-- Return 403 with error message
+- Return 403 with specific error message
+
+#### GET /events/:slug/invitations
+**Auth:** Required (must be event host)
+
+Lists all invitations (direct, email, viral).
+
+**Response:**
+```json
+{
+  "direct": { "count": 10, "users": [...] },
+  "email": { "count": 15, "sent": [...], "pending": [...] },
+  "viral": {
+    "enabled": true,
+    "totalInvited": 23,
+    "tree": [...]
+  }
+}
+```
 
 ---
 
@@ -627,23 +998,94 @@ await db.transaction(async (trx) => {
 
 ## Acceptance Criteria
 
-- [ ] Host can create invitation link with expiration
-- [ ] Host can create invitation link with max uses
-- [ ] Host can copy invitation link
-- [ ] Host can view list of invitations with stats
-- [ ] Host can revoke invitation link
-- [ ] Guest clicks link → prompted to login (if not authenticated)
-- [ ] After login, guest auto-granted event access
-- [ ] Guest added with "invited" status
-- [ ] Guest can view event details
-- [ ] Guest can RSVP
-- [ ] Expired links show error
-- [ ] Revoked links show error
-- [ ] Over-used links show error
-- [ ] Duplicate use by same user is no-op
-- [ ] Non-host cannot create invitations
-- [ ] Non-host cannot view invitations
-- [ ] Non-host cannot revoke invitations
+### Phase 1: Direct Invites (MVP)
+
+**For Events:**
+- [ ] Host can search OpenMeet users by name/username
+- [ ] Host can invite multiple users at once
+- [ ] Invited users receive in-app notification
+- [ ] Invited users receive email notification
+- [ ] Invited users auto-granted "invited" status
+- [ ] Invited users can view event details
+- [ ] Invited users can RSVP Going/Not Going
+- [ ] Host can see list of invited users
+- [ ] Non-host cannot invite users
+
+**For Groups:**
+- [ ] Admin can search OpenMeet users
+- [ ] Admin can invite multiple users at once
+- [ ] Invited users auto-granted membership
+- [ ] Invited users can see all group content
+- [ ] Invited users can see all group events
+- [ ] Admin can see list of members
+- [ ] Non-admin cannot invite users
+
+---
+
+### Phase 2: Email Invitations
+
+**Backend:**
+- [ ] Host can paste email list (comma-separated)
+- [ ] System generates unique token per email
+- [ ] System sends personalized email to each address
+- [ ] Email contains unique link (not shareable)
+- [ ] Token locked to specific email address
+- [ ] User must verify email ownership to use token
+- [ ] Non-user clicking link → Signup with email pre-filled
+- [ ] After signup, auto-matched to invitation
+- [ ] Host can see invitation status (sent/opened/accepted)
+- [ ] Host can resend invitation to specific email
+- [ ] Expired tokens show clear error message
+
+**Frontend:**
+- [ ] Email invitation UI with textarea for email list
+- [ ] Shows validation for email format
+- [ ] Shows sending progress
+- [ ] Shows tracking: sent/opened/accepted per email
+- [ ] Resend button for unaccepted invitations
+
+---
+
+### Phase 3: Viral Invitations
+
+**Enable Viral Invitations:**
+- [ ] Host can enable viral invitations on event/group
+- [ ] Host sets max depth (how many levels)
+- [ ] Host sets per-person quota (invites per person)
+- [ ] Host sets expiration for all viral invites
+- [ ] Settings apply to all viral sub-invitations
+
+**Invitee Experience:**
+- [ ] Invited user sees "Invite your friends" button
+- [ ] User clicks → Gets personal invitation link
+- [ ] Link format: `?invite=username-token`
+- [ ] User can copy and share their personal link
+- [ ] User sees remaining quota (e.g., "3/5 invites used")
+- [ ] User at max depth cannot generate sub-invites
+- [ ] User sees: "You were invited by [Name]"
+
+**Invitation Tree:**
+- [ ] Host can view full invitation tree
+- [ ] Tree shows: Username, depth, invited by whom
+- [ ] Host can expand/collapse branches
+- [ ] Host can click any person to see their chain
+- [ ] Host can message any inviter in chain
+- [ ] Host can see: "Dave invited by Alice, Alice invited by You"
+
+**Revocation:**
+- [ ] Host can remove individual person
+- [ ] Host can remove entire branch (person + all their invitees)
+- [ ] Removal shows confirmation: "Will remove N people"
+- [ ] Removed users lose access immediately
+- [ ] Removed users cannot use their old links
+
+**Security:**
+- [ ] Each viral link is unique to the inviter
+- [ ] Depth limits enforced (cannot invite beyond max depth)
+- [ ] Per-person quotas enforced (cannot exceed invite limit)
+- [ ] Expired viral tokens show error
+- [ ] Revoked branches cannot be re-used
+- [ ] Full audit trail maintained
 
 ---
 
@@ -668,26 +1110,99 @@ await db.transaction(async (trx) => {
 
 ---
 
-## Future Enhancements (V2)
+## Implementation Timeline
 
-**Email Delivery:**
-- Send invitations directly via email
-- Use invited_email field
-- Track email open/click events
-- Per-user tokens (max_uses = 1)
+### Phase 1: Direct Invites (MVP - 5 days)
 
-**Bulk Invitations:**
-- CSV upload for large lists
-- Batch email sending
+**Backend (3 days):**
+- User search API
+- Direct invitation logic
+- In-app notifications
+- Email notifications (simple template)
+- Works for events + groups
 
-**Analytics:**
-- Invitation funnel (created → clicked → accepted → RSVP'd)
-- Conversion rates
-- Most effective sharing channels
+**Frontend (1.5 days):**
+- User search component
+- Invite modal
+- Notification UI
 
-**Group Invitations:**
-- Same system for private groups
-- Parallel table: group_invitations
+**Testing (0.5 days):**
+- E2E tests for direct invites
+
+**Deliverable:** Private groups now have a way to add members ✅
+
+---
+
+### Phase 2: Email Invitations (V1.5 - +3 days)
+
+**Backend (2 days):**
+- Database migration (add viral fields)
+- Email-locked token generation
+- MJML email templates
+- Token validation with email verification
+- Invitation tracking
+
+**Frontend (1 day):**
+- Email list input UI
+- Invitation tracking dashboard
+- Resend functionality
+
+**Testing (included):**
+- Email invitation flows
+
+**Deliverable:** Can invite non-OpenMeet users via email ✅
+
+---
+
+### Phase 3: Viral Invitations (V2 - +4.5 days)
+
+**Backend (2.5 days):**
+- Invitation chain tracking
+- Tree building queries
+- Per-person link generation
+- Depth/quota enforcement
+- Branch revocation logic
+
+**Frontend (1.5 days):**
+- Viral invitation settings UI
+- "Generate my link" button
+- Invitation tree visualization
+- Granular revocation UI
+
+**Testing (0.5 days):**
+- Viral chain scenarios
+- Edge cases (max depth, quotas)
+
+**Deliverable:** Full viral invitation system with accountability ✅
+
+---
+
+**Total Implementation:** 12.5 days across 3 phases
+
+---
+
+## Future Enhancements (V3+)
+
+**Advanced Analytics:**
+- Invitation funnel visualization
+- Conversion rates per inviter
+- Most effective invitation methods
+- Viral growth metrics
+
+**Invitation Templates:**
+- Customizable email templates
+- SMS invitations (via phone number)
+- WhatsApp integration
+
+**Approval Workflows:**
+- Require host approval for 2nd+ level invites
+- Questionnaires for new members
+- Conditional approval rules
+
+**Bulk Operations:**
+- CSV upload for large email lists
+- Bulk branch operations
+- Export invitation data
 
 ---
 
