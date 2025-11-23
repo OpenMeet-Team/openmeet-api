@@ -78,7 +78,7 @@ export class ActivityFeedListener {
         `Created group.created activity for ${group.slug} by ${user.slug}`,
       );
 
-      // Create sitewide activity for discovery
+      // Create sitewide activity for discovery (only for public groups)
       if (group.visibility === GroupVisibility.Public) {
         // Public groups: show full details for discovery
         await this.activityFeedService.create({
@@ -97,24 +97,8 @@ export class ActivityFeedListener {
         this.logger.log(
           `Created sitewide group.created activity for ${group.slug}`,
         );
-      } else {
-        // Private/authenticated groups: anonymized activity for social proof
-        await this.activityFeedService.create({
-          activityType: 'group.activity',
-          feedScope: 'sitewide',
-          groupVisibility: GroupVisibility.Public, // Force public for sitewide
-          metadata: {
-            activityCount: 1,
-            activityDescription: 'A new group was created',
-          },
-          aggregationStrategy: 'time_window',
-          aggregationWindow: 60,
-        });
-
-        this.logger.log(
-          `Created anonymized sitewide activity for private group ${group.slug}`,
-        );
       }
+      // Private/unlisted groups do not appear in sitewide feed
     } catch (error) {
       this.logger.error(
         `Failed to create activity for group ${params.slug}: ${error.message}`,
@@ -179,26 +163,7 @@ export class ActivityFeedListener {
       // Check for group milestones
       await this.checkGroupMilestone(group);
 
-      // For private groups, create anonymized sitewide activity
-      if (group.visibility === GroupVisibility.Private) {
-        await this.activityFeedService.create({
-          activityType: 'group.activity',
-          feedScope: 'sitewide',
-          groupId: group.id,
-          groupSlug: group.slug,
-          groupName: group.name,
-          groupVisibility: GroupVisibility.Public, // Force public for sitewide
-          metadata: {
-            activityCount: 1,
-          },
-          aggregationStrategy: 'time_window',
-          aggregationWindow: 60,
-        });
-
-        this.logger.log(
-          `Created anonymized sitewide activity for private group ${group.slug}`,
-        );
-      }
+      // Private/unlisted groups do not appear in sitewide feed
     } catch (error) {
       this.logger.error(
         `Failed to create activity for group ${params.groupSlug} and user ${params.userSlug}: ${error.message}`,
@@ -325,42 +290,10 @@ export class ActivityFeedListener {
           this.logger.log(
             `Created sitewide event.created activity for ${event.slug} (${group ? 'group event' : 'standalone event'})`,
           );
-        } else {
-          // Public event in non-public group: anonymized activity for social proof
-          await this.activityFeedService.create({
-            activityType: 'group.activity',
-            feedScope: 'sitewide',
-            groupVisibility: GroupVisibility.Public, // Force public for sitewide
-            metadata: {
-              activityCount: 1,
-              activityDescription: 'A new event was created',
-            },
-            aggregationStrategy: 'time_window',
-            aggregationWindow: 60,
-          });
-
-          this.logger.log(
-            `Created anonymized sitewide activity for public event ${event.slug} in non-public group`,
-          );
         }
-      } else {
-        // Private/authenticated events: anonymized activity for social proof
-        await this.activityFeedService.create({
-          activityType: 'group.activity',
-          feedScope: 'sitewide',
-          groupVisibility: GroupVisibility.Public, // Force public for sitewide
-          metadata: {
-            activityCount: 1,
-            activityDescription: 'A new event was created',
-          },
-          aggregationStrategy: 'time_window',
-          aggregationWindow: 60,
-        });
-
-        this.logger.log(
-          `Created anonymized sitewide activity for private/authenticated event ${event.slug}`,
-        );
+        // Public events in non-public groups do not appear in sitewide feed
       }
+      // Private/unlisted events do not appear in sitewide feed
     } catch (error) {
       this.logger.error(
         `Failed to create activity for event ${params.slug}: ${error.message}`,

@@ -109,6 +109,7 @@ describe('Search Visibility Compliance (e2e)', () => {
       slug: `searchtest-public-group-${timestamp}`,
       description: 'Public group for search visibility testing',
       visibility: 'public',
+      status: 'published',
       categories: [1],
     });
 
@@ -117,6 +118,7 @@ describe('Search Visibility Compliance (e2e)', () => {
       slug: `searchtest-unlisted-group-${timestamp}`,
       description: 'Unlisted group for search visibility testing',
       visibility: 'unlisted',
+      status: 'published',
       categories: [1],
     });
 
@@ -125,6 +127,7 @@ describe('Search Visibility Compliance (e2e)', () => {
       slug: `searchtest-private-group-${timestamp}`,
       description: 'Private group for search visibility testing',
       visibility: 'private',
+      status: 'published',
       categories: [1],
     });
   });

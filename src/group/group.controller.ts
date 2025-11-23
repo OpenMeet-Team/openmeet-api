@@ -106,7 +106,7 @@ export class GroupController {
   }
 
   @Public()
-  @UseGuards(JWTAuthGuard)
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Get(':slug')
   @ApiOperation({
     summary: 'Get group by group slug and authenticated user',

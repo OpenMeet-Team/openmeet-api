@@ -26,7 +26,7 @@ async function getAuthToken(
   return response.body.token;
 }
 
-async function createGroup(
+export async function createGroup(
   app: string,
   authToken: string,
   groupData: any,

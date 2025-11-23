@@ -12,6 +12,7 @@ import {
   Header,
   Res,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 // import { Response } from 'express'; - removed unused import
 
@@ -283,21 +284,19 @@ export class EventController {
     return this.eventAttendeeService.deleteEventAttendee(attendeeId);
   }
 
-  // @Permissions({
-  //   context: 'event',
-  //   permissions: [EventAttendeePermission.ViewEvent],
-  // })
-  @UseGuards(JWTAuthGuard, PermissionsGuard)
+  @Public()
+  @UseGuards(JWTAuthGuard, VisibilityGuard)
   @Get(':slug/attendees')
   @ApiOperation({ summary: 'Get all event attendees' })
   async showEventAttendees(
     @Param('slug') slug: string,
     @Query() pagination: PaginationDto,
     @Query() query: QueryEventAttendeeDto,
-    @AuthUser() user: User,
+    @Optional() @AuthUser() user?: User,
   ): Promise<any> {
-    const userId = user?.id;
-    query.userId = userId;
+    if (user?.id) {
+      query.userId = user.id;
+    }
     return this.eventQueryService.showEventAttendees(slug, pagination);
   }
 
