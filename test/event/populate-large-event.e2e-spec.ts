@@ -1,13 +1,6 @@
 import request from 'supertest';
-import {
-  TESTING_APP_URL,
-  TESTING_TENANT_ID,
-} from '../utils/constants';
-import {
-  loginAsAdmin,
-  createEvent,
-  createTestUser,
-} from '../utils/functions';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
+import { loginAsAdmin, createEvent, createTestUser } from '../utils/functions';
 import { EventType } from '../../src/core/constants/constant';
 
 jest.setTimeout(600000); // 10 minute timeout for creating many users across multiple events
@@ -47,10 +40,12 @@ describe('Populate Large Event (e2e) - Manual Testing Data', () => {
         if (eventResponse.status === 200) {
           eventConfig.event = eventResponse.body;
           console.log(`\n✅ Found existing event: ${eventConfig.name}`);
-          console.log(`📍 Event URL: https://platform.dev.openmeet.net/events/${eventConfig.slug}`);
+          console.log(
+            `📍 Event URL: https://platform.dev.openmeet.net/events/${eventConfig.slug}`,
+          );
           continue;
         }
-      } catch (error) {
+      } catch {
         // Event doesn't exist, we'll create it below
       }
 
@@ -75,8 +70,12 @@ describe('Populate Large Event (e2e) - Manual Testing Data', () => {
 
       eventConfig.event = createdEvent;
       console.log(`\n✅ Created event: ${eventConfig.name}`);
-      console.log(`📍 Event URL: https://platform.dev.openmeet.net/events/${createdEvent.slug}`);
-      console.log(`   Visibility: ${eventConfig.visibility}, Actual slug: ${createdEvent.slug}`);
+      console.log(
+        `📍 Event URL: https://platform.dev.openmeet.net/events/${createdEvent.slug}`,
+      );
+      console.log(
+        `   Visibility: ${eventConfig.visibility}, Actual slug: ${createdEvent.slug}`,
+      );
     }
 
     console.log('\n');
@@ -95,7 +94,9 @@ describe('Populate Large Event (e2e) - Manual Testing Data', () => {
       for (let i = 1; i <= NUM_ATTENDEES; i++) {
         const email = `testuser${i}-${timestamp}-${eventConfig.visibility}@openmeet.test`;
         const firstName = `TestUser${i}`;
-        const lastName = eventConfig.visibility.charAt(0).toUpperCase() + eventConfig.visibility.slice(1);
+        const lastName =
+          eventConfig.visibility.charAt(0).toUpperCase() +
+          eventConfig.visibility.slice(1);
 
         // Create a new user
         const user = await createTestUser(
@@ -125,7 +126,9 @@ describe('Populate Large Event (e2e) - Manual Testing Data', () => {
 
         // Log progress every 10 users
         if (i % 10 === 0) {
-          console.log(`  ✓ Created and registered ${i}/${NUM_ATTENDEES} attendees`);
+          console.log(
+            `  ✓ Created and registered ${i}/${NUM_ATTENDEES} attendees`,
+          );
         }
       }
 
@@ -139,7 +142,9 @@ describe('Populate Large Event (e2e) - Manual Testing Data', () => {
 
       const attendeeCount = attendeesResponse.body.data.length;
       const totalAttendees = attendeesResponse.body.total;
-      console.log(`  ✅ Event successfully populated with ${totalAttendees} attendees (showing ${attendeeCount})`);
+      console.log(
+        `  ✅ Event successfully populated with ${totalAttendees} attendees (showing ${attendeeCount})`,
+      );
 
       // Expect exactly NUM_ATTENDEES attendees - no failures allowed
       expect(totalAttendees).toBeGreaterThanOrEqual(NUM_ATTENDEES);
@@ -155,10 +160,14 @@ describe('Populate Large Event (e2e) - Manual Testing Data', () => {
         .set('x-tenant-id', TESTING_TENANT_ID);
 
       console.log(`   📍 ${eventConfig.name}`);
-      console.log(`      URL: https://platform.dev.openmeet.net/events/${eventSlug}`);
+      console.log(
+        `      URL: https://platform.dev.openmeet.net/events/${eventSlug}`,
+      );
       console.log(`      Attendees: ${attendeesResponse.body.total}`);
     }
-    console.log('\n⚠️  NOTE: This test does NOT clean up data - events and users persist for manual testing\n');
+    console.log(
+      '\n⚠️  NOTE: This test does NOT clean up data - events and users persist for manual testing\n',
+    );
   });
 
   // NOTE: No afterAll cleanup - we want this data to persist for manual testing!

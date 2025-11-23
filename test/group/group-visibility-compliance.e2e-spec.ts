@@ -1,21 +1,12 @@
 import request from 'supertest';
-import {
-  TESTING_APP_URL,
-  TESTING_TENANT_ID,
-} from '../utils/constants';
-import {
-  loginAsAdmin,
-  createGroup,
-  createTestUser,
-} from '../utils/functions';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
+import { loginAsAdmin, createGroup, createTestUser } from '../utils/functions';
 
 jest.setTimeout(120000);
 
 describe('Group Visibility Compliance (e2e)', () => {
   let adminToken: string;
-  let adminUser: any;
   let regularUserToken: string;
-  let regularUser: any;
 
   const testGroups = {
     public: null,
@@ -26,11 +17,6 @@ describe('Group Visibility Compliance (e2e)', () => {
   beforeAll(async () => {
     // Login as admin
     adminToken = await loginAsAdmin();
-    const adminResponse = await request(TESTING_APP_URL)
-      .get('/api/v1/auth/me')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .set('x-tenant-id', TESTING_TENANT_ID);
-    adminUser = adminResponse.body;
 
     // Create a regular user
     const regularUserData = await createTestUser(
@@ -41,7 +27,6 @@ describe('Group Visibility Compliance (e2e)', () => {
       'User',
     );
     regularUserToken = regularUserData.token;
-    regularUser = regularUserData.user;
 
     // Create test groups with different visibility levels
     testGroups.public = await createGroup(TESTING_APP_URL, adminToken, {

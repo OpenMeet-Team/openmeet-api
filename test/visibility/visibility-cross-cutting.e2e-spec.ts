@@ -1,8 +1,5 @@
 import request from 'supertest';
-import {
-  TESTING_APP_URL,
-  TESTING_TENANT_ID,
-} from '../utils/constants';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import {
   loginAsAdmin,
   createEvent,
@@ -15,11 +12,8 @@ jest.setTimeout(120000);
 
 describe('Visibility Cross-Cutting Concerns (e2e)', () => {
   let adminToken: string;
-  let adminUser: any;
   let regularUserToken: string;
-  let regularUser: any;
   let otherUserToken: string;
-  let otherUser: any;
 
   const testData = {
     publicGroup: null,
@@ -36,11 +30,6 @@ describe('Visibility Cross-Cutting Concerns (e2e)', () => {
   beforeAll(async () => {
     // Login as admin
     adminToken = await loginAsAdmin();
-    const adminResponse = await request(TESTING_APP_URL)
-      .get('/api/v1/auth/me')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .set('x-tenant-id', TESTING_TENANT_ID);
-    adminUser = adminResponse.body;
 
     // Create two regular users
     const regularUserData = await createTestUser(
@@ -51,7 +40,6 @@ describe('Visibility Cross-Cutting Concerns (e2e)', () => {
       'User',
     );
     regularUserToken = regularUserData.token;
-    regularUser = regularUserData.user;
 
     const otherUserData = await createTestUser(
       TESTING_APP_URL,
@@ -61,7 +49,6 @@ describe('Visibility Cross-Cutting Concerns (e2e)', () => {
       'User',
     );
     otherUserToken = otherUserData.token;
-    otherUser = otherUserData.user;
 
     const timestamp = Date.now();
 
@@ -166,43 +153,51 @@ describe('Visibility Cross-Cutting Concerns (e2e)', () => {
       timeZone: 'America/New_York',
     });
 
-    testData.groupUnlistedEvent = await createEvent(TESTING_APP_URL, adminToken, {
-      name: `Group Unlisted Event ${timestamp}`,
-      slug: `group-unlisted-event-${timestamp}`,
-      description: 'Unlisted event in private group',
-      group: { id: testData.privateGroup.id },
-      startDate: new Date(Date.now() + 7 * 86400000).toISOString(),
-      endDate: new Date(Date.now() + 7 * 86400000 + 7200000).toISOString(),
-      type: EventType.Hybrid,
-      location: 'Unlisted Location',
-      locationOnline: 'https://group-unlisted.com',
-      maxAttendees: 100,
-      categories: [1],
-      lat: 40.7128,
-      lon: -74.006,
-      status: 'published',
-      visibility: 'unlisted',
-      timeZone: 'America/New_York',
-    });
+    testData.groupUnlistedEvent = await createEvent(
+      TESTING_APP_URL,
+      adminToken,
+      {
+        name: `Group Unlisted Event ${timestamp}`,
+        slug: `group-unlisted-event-${timestamp}`,
+        description: 'Unlisted event in private group',
+        group: { id: testData.privateGroup.id },
+        startDate: new Date(Date.now() + 7 * 86400000).toISOString(),
+        endDate: new Date(Date.now() + 7 * 86400000 + 7200000).toISOString(),
+        type: EventType.Hybrid,
+        location: 'Unlisted Location',
+        locationOnline: 'https://group-unlisted.com',
+        maxAttendees: 100,
+        categories: [1],
+        lat: 40.7128,
+        lon: -74.006,
+        status: 'published',
+        visibility: 'unlisted',
+        timeZone: 'America/New_York',
+      },
+    );
 
-    testData.groupPrivateEvent = await createEvent(TESTING_APP_URL, adminToken, {
-      name: `Group Private Event ${timestamp}`,
-      slug: `group-private-event-${timestamp}`,
-      description: 'Private event in private group',
-      group: { id: testData.privateGroup.id },
-      startDate: new Date(Date.now() + 7 * 86400000).toISOString(),
-      endDate: new Date(Date.now() + 7 * 86400000 + 7200000).toISOString(),
-      type: EventType.Hybrid,
-      location: 'Private Location',
-      locationOnline: 'https://group-private.com',
-      maxAttendees: 100,
-      categories: [1],
-      lat: 40.7128,
-      lon: -74.006,
-      status: 'published',
-      visibility: 'private',
-      timeZone: 'America/New_York',
-    });
+    testData.groupPrivateEvent = await createEvent(
+      TESTING_APP_URL,
+      adminToken,
+      {
+        name: `Group Private Event ${timestamp}`,
+        slug: `group-private-event-${timestamp}`,
+        description: 'Private event in private group',
+        group: { id: testData.privateGroup.id },
+        startDate: new Date(Date.now() + 7 * 86400000).toISOString(),
+        endDate: new Date(Date.now() + 7 * 86400000 + 7200000).toISOString(),
+        type: EventType.Hybrid,
+        location: 'Private Location',
+        locationOnline: 'https://group-private.com',
+        maxAttendees: 100,
+        categories: [1],
+        lat: 40.7128,
+        lon: -74.006,
+        status: 'published',
+        visibility: 'private',
+        timeZone: 'America/New_York',
+      },
+    );
 
     // Add regularUser to private group
     await request(TESTING_APP_URL)

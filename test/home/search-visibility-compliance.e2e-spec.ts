@@ -1,8 +1,5 @@
 import request from 'supertest';
-import {
-  TESTING_APP_URL,
-  TESTING_TENANT_ID,
-} from '../utils/constants';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
 import {
   loginAsAdmin,
   createEvent,
@@ -16,7 +13,6 @@ jest.setTimeout(120000);
 describe('Search Visibility Compliance (e2e)', () => {
   let adminToken: string;
   let regularUserToken: string;
-  let regularUser: any;
 
   const testData = {
     events: {
@@ -44,7 +40,6 @@ describe('Search Visibility Compliance (e2e)', () => {
       'Tester',
     );
     regularUserToken = regularUserData.token;
-    regularUser = regularUserData.user;
 
     // Create test events with different visibility levels
     const timestamp = Date.now();

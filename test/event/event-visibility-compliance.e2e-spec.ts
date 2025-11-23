@@ -1,22 +1,13 @@
 import request from 'supertest';
-import {
-  TESTING_APP_URL,
-  TESTING_TENANT_ID,
-} from '../utils/constants';
-import {
-  loginAsAdmin,
-  createEvent,
-  createTestUser,
-} from '../utils/functions';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
+import { loginAsAdmin, createEvent, createTestUser } from '../utils/functions';
 import { EventType } from '../../src/core/constants/constant';
 
 jest.setTimeout(120000);
 
 describe('Event Visibility Compliance (e2e)', () => {
   let adminToken: string;
-  let adminUser: any;
   let regularUserToken: string;
-  let regularUser: any;
 
   const testEvents = {
     public: null,
@@ -27,11 +18,6 @@ describe('Event Visibility Compliance (e2e)', () => {
   beforeAll(async () => {
     // Login as admin
     adminToken = await loginAsAdmin();
-    const adminResponse = await request(TESTING_APP_URL)
-      .get('/api/v1/auth/me')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .set('x-tenant-id', TESTING_TENANT_ID);
-    adminUser = adminResponse.body;
 
     // Create a regular user
     const regularUserData = await createTestUser(
@@ -42,7 +28,6 @@ describe('Event Visibility Compliance (e2e)', () => {
       'User',
     );
     regularUserToken = regularUserData.token;
-    regularUser = regularUserData.user;
 
     // Create test events with different visibility levels
     testEvents.public = await createEvent(TESTING_APP_URL, adminToken, {
@@ -265,7 +250,8 @@ describe('Event Visibility Compliance (e2e)', () => {
             viewAttendees: 200,
           },
         },
-        authenticated: { // Currently named 'authenticated', will be 'unlisted' in v2
+        authenticated: {
+          // Currently named 'authenticated', will be 'unlisted' in v2
           unauthenticated: {
             viewEvent: 200,
             viewAttendees: 401, // Currently requires auth (design doc says should be 200)
