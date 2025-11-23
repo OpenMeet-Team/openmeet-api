@@ -49,24 +49,15 @@ describe('Group Private Access (e2e)', () => {
     }
   });
 
-  it('should allow unauthenticated users to see basic private group info for discovery', async () => {
+  it('should block unauthenticated users from viewing private group details', async () => {
     // Try to access the private group without authentication
     const response = await request(TESTING_APP_URL)
       .get(`/api/groups/${privateGroup.slug}`)
       .set('x-tenant-id', TESTING_TENANT_ID)
       .set('x-group-slug', privateGroup.slug); // This header is needed for the VisibilityGuard
 
-    // Should return 200 with basic group info for discovery
-    expect(response.status).toBe(200);
-
-    // Should get basic group information (name, description, visibility)
-    expect(response.body).toHaveProperty('name', 'Private Test Group');
-    expect(response.body).toHaveProperty(
-      'description',
-      'A private test group that should show minimal info to unauthenticated users',
-    );
-    expect(response.body).toHaveProperty('slug', privateGroup.slug);
-    expect(response.body).toHaveProperty('visibility', 'private');
+    // Should return 403 - private groups are not accessible without membership
+    expect(response.status).toBe(403);
   });
 
   it('should show full group details for authenticated users who are members of private groups', async () => {

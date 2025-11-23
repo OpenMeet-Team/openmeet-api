@@ -19,11 +19,7 @@ describe('Populate Large Event (e2e) - Manual Testing Data', () => {
       name: `${NUM_ATTENDEES} person Test Event (authenticated) - Manual Testing`,
       visibility: 'unlisted',
     },
-    {
-      slug: 'test-event-private-attendees',
-      name: `${NUM_ATTENDEES} person Test Event (private) - Manual Testing`,
-      visibility: 'private',
-    },
+    // Note: Private events removed - users cannot attend without invitation
   ];
 
   beforeAll(async () => {
@@ -114,7 +110,6 @@ describe('Populate Large Event (e2e) - Manual Testing Data', () => {
           .set('x-tenant-id', TESTING_TENANT_ID)
           .send({});
 
-        // Note: This will fail for private events once we properly enforce visibility permissions
         expect(attendResponse.status).toBe(201);
 
         attendees.push({

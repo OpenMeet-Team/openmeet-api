@@ -87,12 +87,13 @@ describe('Group Admin Messaging Foundation (e2e)', () => {
         email: adminEmail,
       });
 
-      // Create test group
+      // Create test group (public for easier testing)
       const groupData = {
         name: 'Admin Messaging Foundation Test',
         description: 'Testing infrastructure for admin messaging',
         slug: `admin-foundation-${timestamp}`,
         maxMembers: 50,
+        visibility: 'public',
       };
 
       const groupResponse = await serverApp
