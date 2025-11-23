@@ -208,8 +208,8 @@ describe('ActivityFeedListener', () => {
       // Act
       await listener.handleGroupMemberAdded(params);
 
-      // Assert
-      expect(activityFeedService.create).toHaveBeenCalledTimes(2);
+      // Assert - Only creates group-scoped activity, not sitewide
+      expect(activityFeedService.create).toHaveBeenCalledTimes(1);
     });
 
     it('should create detailed members_only activity for private group', async () => {
@@ -244,7 +244,7 @@ describe('ActivityFeedListener', () => {
       });
     });
 
-    it('should create anonymized public activity for private group', async () => {
+    it('should NOT create sitewide activity for private group', async () => {
       // Arrange
       const params = {
         groupSlug: 'secret-group',
@@ -260,20 +260,14 @@ describe('ActivityFeedListener', () => {
       // Act
       await listener.handleGroupMemberAdded(params);
 
-      // Assert - Second call should be anonymized activity
-      expect(activityFeedService.create).toHaveBeenNthCalledWith(2, {
-        activityType: 'group.activity',
-        feedScope: 'sitewide',
-        groupId: 43,
-        groupSlug: 'secret-group',
-        groupName: 'Secret Group',
-        groupVisibility: GroupVisibility.Public, // Force public for sitewide
-        metadata: {
-          activityCount: 1,
-        },
-        aggregationStrategy: 'time_window',
-        aggregationWindow: 60,
-      });
+      // Assert - Only one call (group-scoped), no sitewide activity
+      expect(activityFeedService.create).toHaveBeenCalledTimes(1);
+      expect(activityFeedService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          feedScope: 'group',
+          groupVisibility: GroupVisibility.Private,
+        }),
+      );
     });
   });
 
@@ -609,18 +603,11 @@ describe('ActivityFeedListener', () => {
       expect(eventActivity).toBeDefined();
       expect(eventActivity.eventName).toBe('Secret Meeting'); // Attendees can see name
 
-      // Behavior 2: Sitewide feed must NOT expose private details
+      // Behavior 2: Sitewide feed must NOT include private events
       const sitewideActivity = activities.find(
         (a) => a.feedScope === 'sitewide',
       );
-      expect(sitewideActivity).toBeDefined();
-      expect(sitewideActivity.activityType).toBe('group.activity'); // Anonymized
-      expect(sitewideActivity.eventName).toBeUndefined(); // No event name
-      expect(sitewideActivity.eventSlug).toBeUndefined(); // No event slug
-      expect(sitewideActivity.actorName).toBeUndefined(); // No creator name
-      expect(sitewideActivity.metadata.activityDescription).toBe(
-        'A new event was created',
-      );
+      expect(sitewideActivity).toBeUndefined(); // Private events do not appear in sitewide feed
     });
   });
 

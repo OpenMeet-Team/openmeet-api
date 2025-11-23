@@ -1,0 +1,327 @@
+import request from 'supertest';
+import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
+import { loginAsAdmin, createEvent, createTestUser } from '../utils/functions';
+import { EventType } from '../../src/core/constants/constant';
+
+jest.setTimeout(120000);
+
+describe('Event Visibility Compliance (e2e)', () => {
+  let adminToken: string;
+  let regularUserToken: string;
+
+  const testEvents = {
+    public: null,
+    authenticated: null, // TODO: Will be renamed to 'unlisted' in visibility model v2
+    private: null,
+  };
+
+  beforeAll(async () => {
+    // Login as admin
+    adminToken = await loginAsAdmin();
+
+    // Create a regular user
+    const regularUserData = await createTestUser(
+      TESTING_APP_URL,
+      TESTING_TENANT_ID,
+      `visibility-test-${Date.now()}@openmeet.test`,
+      'Regular',
+      'User',
+    );
+    regularUserToken = regularUserData.token;
+
+    // Create test events with different visibility levels
+    testEvents.public = await createEvent(TESTING_APP_URL, adminToken, {
+      name: 'Public Event - Visibility Test',
+      slug: `public-event-${Date.now()}`,
+      description: 'This is a public event for testing visibility',
+      startDate: new Date(Date.now() + 7 * 86400000).toISOString(),
+      endDate: new Date(Date.now() + 7 * 86400000 + 7200000).toISOString(),
+      type: EventType.Hybrid,
+      location: 'Public Location',
+      locationOnline: 'https://public-event.com',
+      maxAttendees: 100,
+      categories: [1],
+      lat: 40.7128,
+      lon: -74.006,
+      status: 'published',
+      visibility: 'public',
+      timeZone: 'America/New_York',
+    });
+
+    testEvents.authenticated = await createEvent(TESTING_APP_URL, adminToken, {
+      name: 'Unlisted Event - Visibility Test',
+      slug: `unlisted-event-${Date.now()}`,
+      description: 'This is an unlisted event for testing visibility',
+      startDate: new Date(Date.now() + 7 * 86400000).toISOString(),
+      endDate: new Date(Date.now() + 7 * 86400000 + 7200000).toISOString(),
+      type: EventType.Hybrid,
+      location: 'Unlisted Location',
+      locationOnline: 'https://unlisted-event.com',
+      maxAttendees: 100,
+      categories: [1],
+      lat: 40.7128,
+      lon: -74.006,
+      status: 'published',
+      visibility: 'unlisted',
+      timeZone: 'America/New_York',
+    });
+
+    testEvents.private = await createEvent(TESTING_APP_URL, adminToken, {
+      name: 'Private Event - Visibility Test',
+      slug: `private-event-${Date.now()}`,
+      description: 'This is a private event for testing visibility',
+      startDate: new Date(Date.now() + 7 * 86400000).toISOString(),
+      endDate: new Date(Date.now() + 7 * 86400000 + 7200000).toISOString(),
+      type: EventType.Hybrid,
+      location: 'Private Location',
+      locationOnline: 'https://private-event.com',
+      maxAttendees: 100,
+      categories: [1],
+      lat: 40.7128,
+      lon: -74.006,
+      status: 'published',
+      visibility: 'private',
+      timeZone: 'America/New_York',
+    });
+
+    // Admin attends the private event (so they have access)
+    await request(TESTING_APP_URL)
+      .post(`/api/events/${testEvents.private.slug}/attend`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('x-tenant-id', TESTING_TENANT_ID)
+      .send({});
+  });
+
+  afterAll(async () => {
+    // Cleanup: delete test events
+    for (const event of Object.values(testEvents)) {
+      if (event?.slug) {
+        await request(TESTING_APP_URL)
+          .delete(`/api/events/${event.slug}`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .set('x-tenant-id', TESTING_TENANT_ID);
+      }
+    }
+  });
+
+  describe('Public Events', () => {
+    it('should allow unauthenticated users to view event details', async () => {
+      const response = await request(TESTING_APP_URL)
+        .get(`/api/events/${testEvents.public.slug}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(response.status).toBe(200);
+      expect(response.body.name).toBe('Public Event - Visibility Test');
+      expect(response.body.description).toBeDefined();
+      expect(response.body.location).toBeDefined();
+    });
+
+    it('should allow unauthenticated users to view attendee list', async () => {
+      const response = await request(TESTING_APP_URL)
+        .get(`/api/events/${testEvents.public.slug}/attendees`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(response.status).toBe(200);
+    });
+
+    it('should allow authenticated users to view event details', async () => {
+      const response = await request(TESTING_APP_URL)
+        .get(`/api/events/${testEvents.public.slug}`)
+        .set('Authorization', `Bearer ${regularUserToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(response.status).toBe(200);
+      expect(response.body.description).toBeDefined();
+    });
+
+    it('should allow authenticated users to view attendee list', async () => {
+      const response = await request(TESTING_APP_URL)
+        .get(`/api/events/${testEvents.public.slug}/attendees`)
+        .set('Authorization', `Bearer ${regularUserToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toBeDefined();
+    });
+  });
+
+  describe('Unlisted Events', () => {
+    it('should allow unauthenticated users with link to view event details', async () => {
+      const response = await request(TESTING_APP_URL)
+        .get(`/api/events/${testEvents.authenticated.slug}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(response.status).toBe(200);
+      expect(response.body.name).toBe('Unlisted Event - Visibility Test');
+      expect(response.body.description).toBeDefined();
+      expect(response.body.location).toBeDefined();
+    });
+
+    it('should allow unauthenticated users to view attendee list', async () => {
+      const response = await request(TESTING_APP_URL)
+        .get(`/api/events/${testEvents.authenticated.slug}/attendees`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(response.status).toBe(200);
+    });
+
+    it('should allow authenticated users to view event details', async () => {
+      const response = await request(TESTING_APP_URL)
+        .get(`/api/events/${testEvents.authenticated.slug}`)
+        .set('Authorization', `Bearer ${regularUserToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(response.status).toBe(200);
+      expect(response.body.description).toBeDefined();
+    });
+
+    it('should allow authenticated users to view attendee list', async () => {
+      const response = await request(TESTING_APP_URL)
+        .get(`/api/events/${testEvents.authenticated.slug}/attendees`)
+        .set('Authorization', `Bearer ${regularUserToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toBeDefined();
+    });
+  });
+
+  describe('Private Events', () => {
+    it('should return 403 for unauthenticated users', async () => {
+      const response = await request(TESTING_APP_URL)
+        .get(`/api/events/${testEvents.private.slug}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(response.status).toBe(403);
+    });
+
+    it('should block unauthenticated users from viewing attendee list', async () => {
+      const response = await request(TESTING_APP_URL)
+        .get(`/api/events/${testEvents.private.slug}/attendees`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(response.status).toBe(403);
+    });
+
+    it('should block non-invited authenticated users from viewing attendee list', async () => {
+      const response = await request(TESTING_APP_URL)
+        .get(`/api/events/${testEvents.private.slug}/attendees`)
+        .set('Authorization', `Bearer ${regularUserToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(response.status).toBe(403);
+    });
+
+    it('should allow invited/attending users to view full event details', async () => {
+      const response = await request(TESTING_APP_URL)
+        .get(`/api/events/${testEvents.private.slug}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(response.status).toBe(200);
+      expect(response.body.name).toBe('Private Event - Visibility Test');
+      expect(response.body.description).toBeDefined();
+      expect(response.body.location).toBeDefined();
+    });
+
+    it('should allow invited/attending users to view attendee list', async () => {
+      const response = await request(TESTING_APP_URL)
+        .get(`/api/events/${testEvents.private.slug}/attendees`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toBeDefined();
+      expect(response.body.total).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Visibility Model Compliance Summary', () => {
+    it('should document expected behavior per visibility level', () => {
+      // This test serves as documentation for the expected behavior
+      const currentBehavior = {
+        public: {
+          unauthenticated: {
+            viewEvent: 200,
+            viewAttendees: 401, // Currently requires auth (design doc says should be 200)
+          },
+          authenticated: {
+            viewEvent: 200,
+            viewAttendees: 200,
+          },
+        },
+        authenticated: {
+          // Currently named 'authenticated', will be 'unlisted' in v2
+          unauthenticated: {
+            viewEvent: 200,
+            viewAttendees: 401, // Currently requires auth (design doc says should be 200)
+          },
+          authenticated: {
+            viewEvent: 200,
+            viewAttendees: 200,
+          },
+        },
+        private: {
+          unauthenticated: {
+            viewEvent: 200, // Currently open (design doc says should be 403)
+            viewAttendees: 401, // Currently requires auth
+          },
+          authenticated_not_invited: {
+            viewEvent: 200, // Currently shows full details (design doc says teaser only)
+            viewAttendees: 200, // Currently allowed (design doc says should be 403)
+          },
+          authenticated_invited: {
+            viewEvent: 200, // Full details
+            viewAttendees: 200,
+          },
+        },
+      };
+
+      const expectedBehavior = {
+        public: {
+          unauthenticated: {
+            viewEvent: 200,
+            viewAttendees: 200,
+          },
+          authenticated: {
+            viewEvent: 200,
+            viewAttendees: 200,
+          },
+        },
+        unlisted: {
+          unauthenticated: {
+            viewEvent: 200,
+            viewAttendees: 200,
+          },
+          authenticated: {
+            viewEvent: 200,
+            viewAttendees: 200,
+          },
+        },
+        private: {
+          unauthenticated: {
+            viewEvent: 403,
+            viewAttendees: 403,
+          },
+          authenticated_not_invited: {
+            viewEvent: 403,
+            viewAttendees: 403,
+          },
+          authenticated_invited: {
+            viewEvent: 200,
+            viewAttendees: 200,
+          },
+        },
+      };
+
+      // This test always passes - it's just documentation
+      expect(currentBehavior).toBeDefined();
+      expect(expectedBehavior).toBeDefined();
+
+      console.log('\n📋 Current Visibility Behavior:');
+      console.log(JSON.stringify(currentBehavior, null, 2));
+      console.log('\n📋 Expected Visibility Behavior:');
+      console.log(JSON.stringify(expectedBehavior, null, 2));
+    });
+  });
+});

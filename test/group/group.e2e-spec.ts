@@ -79,10 +79,11 @@ describe('GroupController (e2e)', () => {
   });
 
   it('should successfully create a group, update it, find it, comment on it, and delete it', async () => {
-    // Create a group
+    // Create a group (public so it's accessible for testing)
     testGroup = await createGroup(token, {
       name: 'Test Group',
       description: 'A test group',
+      visibility: 'public',
     });
     expect(testGroup.name).toBe('Test Group');
     expect(testGroup.description).toBe('A test group');
@@ -91,6 +92,7 @@ describe('GroupController (e2e)', () => {
     const testGroup2 = await createGroup(token, {
       name: 'Test Group 2',
       description: 'Another test group',
+      visibility: 'public',
     });
     expect(testGroup2.name).toBe('Test Group 2');
     expect(testGroup2.description).toBe('Another test group');

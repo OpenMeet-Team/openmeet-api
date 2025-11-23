@@ -26,7 +26,7 @@ async function getAuthToken(
   return response.body.token;
 }
 
-async function createGroup(
+export async function createGroup(
   app: string,
   authToken: string,
   groupData: any,
@@ -174,6 +174,7 @@ async function createEvent(app: string, authToken: string, eventData: any) {
     console.error('Create event failed:', {
       status: response.status,
       body: response.body,
+      payload: payload,
     });
   }
 
@@ -293,17 +294,36 @@ async function createTestUser(
     throw new Error(`Failed to create test user: ${response.status}`);
   }
 
-  // Get verification code from email
-  const verificationEmail =
-    await mailDevService.getMostRecentEmailByRecipient(email);
-  if (!verificationEmail) {
-    throw new Error(`No verification email found for ${email}`);
+  // Get verification code from email with retry logic
+  let verificationEmail;
+  let code;
+  const maxRetries = 5;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    verificationEmail =
+      await mailDevService.getMostRecentEmailByRecipient(email);
+
+    if (verificationEmail) {
+      code =
+        EmailVerificationTestHelpers.extractVerificationCode(verificationEmail);
+      if (code) break;
+    }
+
+    if (attempt < maxRetries) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
   }
 
-  const code =
-    EmailVerificationTestHelpers.extractVerificationCode(verificationEmail);
+  if (!verificationEmail) {
+    throw new Error(
+      `No verification email found for ${email} after ${maxRetries} attempts`,
+    );
+  }
+
   if (!code) {
-    throw new Error(`No verification code found in email for ${email}`);
+    throw new Error(
+      `No verification code found in email for ${email} after ${maxRetries} attempts`,
+    );
   }
 
   // Verify email and get login tokens

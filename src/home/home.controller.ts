@@ -1,4 +1,11 @@
-import { Controller, Get, Query, Redirect, UseGuards, Optional } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Query,
+  Redirect,
+  UseGuards,
+  Optional,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { HomeService } from './home.service';
