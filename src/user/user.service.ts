@@ -21,6 +21,7 @@ import { User } from './domain/user';
 import { Repository } from 'typeorm';
 import { UserEntity } from './infrastructure/persistence/relational/entities/user.entity';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
+import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { UserPermissionEntity } from './infrastructure/persistence/relational/entities/user-permission.entity';
 import { RoleService } from '../role/role.service';
@@ -211,7 +212,6 @@ export class UserService {
       relations: {
         photo: true,
         interests: true,
-        groups: true,
         groupMembers: {
           group: true,
           groupRole: true,
@@ -235,6 +235,17 @@ export class UserService {
 
     const publicEvents = await eventsQuery.getMany();
     user['events'] = publicEvents;
+
+    // Load groups with visibility filtering
+    // Only show public groups on user profiles (anonymous users can view profiles)
+    const groupsQuery = this.usersRepository.manager
+      .createQueryBuilder(GroupEntity, 'group')
+      .where('group.createdById = :userId', { userId: user.id })
+      .andWhere('group.visibility = :visibility', { visibility: 'public' })
+      .andWhere('group.status = :status', { status: 'published' });
+
+    const publicGroups = await groupsQuery.getMany();
+    user['groups'] = publicGroups;
 
     // Resolve and update Bluesky handle from DID (only for authenticated Bluesky users, not shadow accounts)
     // Shadow accounts already have their handle in firstName field
