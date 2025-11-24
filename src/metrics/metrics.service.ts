@@ -105,11 +105,11 @@ export class MetricsService implements OnModuleInit {
       metrics.users = parseInt(userCount[0].count, 10);
       this.usersGauge.set({ tenant: tenantId }, metrics.users);
 
-      // Active users
+      // Active users (based on last token refresh or login)
       const activeUserQuery = `
-        SELECT COUNT(DISTINCT "userId") as count 
-        FROM ${schemaPrefix}"sessions" 
-        WHERE "createdAt" > NOW() - INTERVAL '30 days'
+        SELECT COUNT(DISTINCT "userId") as count
+        FROM ${schemaPrefix}"sessions"
+        WHERE "updatedAt" > NOW() - INTERVAL '30 days'
       `;
       const activeUserCount = await connection.query(activeUserQuery);
       metrics.activeUsers = parseInt(activeUserCount[0].count, 10);
