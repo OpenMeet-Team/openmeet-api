@@ -754,14 +754,16 @@ export class GroupService {
   ): Promise<GroupEntity[]> {
     await this.getTenantSpecificGroupRepository();
 
+    // Fix N+1: Don't load ALL group members, just check membership
+    // Use innerJoin instead of leftJoinAndSelect to filter without loading all members
     return await this.groupRepository
       .createQueryBuilder('group')
-      .leftJoinAndSelect('group.groupMembers', 'groupMembers')
-      .leftJoinAndSelect('groupMembers.groupRole', 'groupRole')
       .leftJoinAndSelect('group.image', 'image')
+      .leftJoinAndSelect('group.createdBy', 'createdBy')
       .innerJoin('group.groupMembers', 'member', 'member.userId = :userId', {
         userId,
       })
+      .innerJoin('member.groupRole', 'groupRole')
       .where('groupRole.name != :ownerRole', { ownerRole: GroupRole.Owner })
       .getMany();
   }

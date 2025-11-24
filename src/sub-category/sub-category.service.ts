@@ -91,10 +91,12 @@ export class SubCategoryService {
   async getHomePageUserInterests(userId: number): Promise<SubCategoryEntity[]> {
     await this.getTenantSpecificSubCategoryRepository();
 
-    return this.subCategoryRepository.find({
-      where: { users: { id: userId } },
-      relations: ['users'],
-    }); // TODO: check if this is correct. Should return list of user interests
+    // Fix N+1: Don't load ALL users for each subcategory, just filter by user
+    // Use innerJoin to filter without loading all users interested in the subcategory
+    return this.subCategoryRepository
+      .createQueryBuilder('subcategory')
+      .innerJoin('subcategory.users', 'user', 'user.id = :userId', { userId })
+      .getMany();
   }
 
   async findMany(ids: number[]): Promise<SubCategoryEntity[]> {

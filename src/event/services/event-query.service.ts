@@ -669,7 +669,10 @@ export class EventQueryService {
     const eventsQuery = this.eventRepository
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.user', 'user')
+      .leftJoinAndSelect('user.photo', 'userPhoto')
+      .leftJoinAndSelect('user.status', 'userStatus')
       .leftJoinAndSelect('event.group', 'group')
+      .leftJoinAndSelect('group.image', 'groupImage')
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.image', 'image')
       .leftJoinAndSelect(
@@ -736,6 +739,15 @@ export class EventQueryService {
       .leftJoinAndSelect('event.attendees', 'attendees')
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.image', 'image')
+      .loadRelationCountAndMap(
+        'event.attendeesCount',
+        'event.attendees',
+        'attendee',
+        (qb) =>
+          qb.where('attendee.status = :confirmedStatus', {
+            confirmedStatus: EventAttendeeStatus.Confirmed,
+          }),
+      )
       .where('event.visibility = :visibility', {
         visibility: EventVisibility.Public,
       })
@@ -760,16 +772,7 @@ export class EventQueryService {
       );
     }
 
-    // Step 1: Add attendee counts
-    const eventsWithCounts = await Promise.all(
-      events.map(async (event) => {
-        event.attendeesCount =
-          await this.eventAttendeeService.showConfirmedEventAttendeesCount(
-            event.id,
-          );
-        return event;
-      }),
-    );
+    const eventsWithCounts = events;
 
     // Step 2: Serialize events first using instanceToPlain, then add recurrence info
     // This is the key to fixing the issue - serialize first, then modify
@@ -821,6 +824,15 @@ export class EventQueryService {
     const event = await this.eventRepository
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.image', 'image')
+      .loadRelationCountAndMap(
+        'event.attendeesCount',
+        'event.attendees',
+        'attendee',
+        (qb) =>
+          qb.where('attendee.status = :confirmedStatus', {
+            confirmedStatus: EventAttendeeStatus.Confirmed,
+          }),
+      )
       .where('event.user.id = :userId', { userId })
       .andWhere(
         '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))',
@@ -843,11 +855,6 @@ export class EventQueryService {
         `Next hosted event image before: path=${JSON.stringify(event.image.path)}`,
       );
     }
-
-    event.attendeesCount =
-      await this.eventAttendeeService.showConfirmedEventAttendeesCount(
-        event.id,
-      );
 
     // Add recurrence info
     const processedEvent = this.addRecurrenceInformation(event);
@@ -908,6 +915,15 @@ export class EventQueryService {
       .leftJoinAndSelect('event.attendees', 'attendee')
       .leftJoinAndSelect('event.image', 'image')
       .leftJoinAndSelect('attendee.user', 'user')
+      .loadRelationCountAndMap(
+        'event.attendeesCount',
+        'event.attendees',
+        'attendeeCount',
+        (qb) =>
+          qb.where('attendeeCount.status = :confirmedStatus', {
+            confirmedStatus: EventAttendeeStatus.Confirmed,
+          }),
+      )
       .where('attendee.user.id = :userId', { userId })
       .andWhere(
         '(event.startDate > :now OR (event.startDate <= :now AND (event.endDate > :now OR (event.endDate IS NULL AND event.startDate > :oneHourAgo))))',
@@ -935,16 +951,7 @@ export class EventQueryService {
       );
     }
 
-    // Step 1: Add attendee counts to all events
-    const eventsWithCounts = await Promise.all(
-      events.map(async (event) => {
-        event.attendeesCount =
-          await this.eventAttendeeService.showConfirmedEventAttendeesCount(
-            event.id,
-          );
-        return event;
-      }),
-    );
+    const eventsWithCounts = events;
 
     // Step 2: Serialize events first, then add recurrence info (following Attempt 10)
     // This is the key to fixing the issue - serialize first, then modify
