@@ -1,12 +1,20 @@
 import request from 'supertest';
 import { TESTING_APP_URL, TESTING_TENANT_ID } from '../utils/constants';
-import { loginAsAdmin, createGroup, createEvent, createTestUser } from '../utils/functions';
-import { EventStatus, EventType, GroupStatus } from '../../src/core/constants/constant';
+import {
+  createGroup,
+  createEvent,
+  createTestUser,
+  joinGroup,
+} from '../utils/functions';
+import {
+  EventStatus,
+  EventType,
+  GroupStatus,
+} from '../../src/core/constants/constant';
 
 jest.setTimeout(120000);
 
 describe('User Profile Visibility Compliance (e2e)', () => {
-  let adminToken: string;
   let testUserToken: string;
   let testUserSlug: string;
 
@@ -23,9 +31,6 @@ describe('User Profile Visibility Compliance (e2e)', () => {
   };
 
   beforeAll(async () => {
-    // Login as admin
-    adminToken = await loginAsAdmin();
-
     // Create a test user who will own the groups and events
     const testUserData = await createTestUser(
       TESTING_APP_URL,
@@ -225,6 +230,67 @@ describe('User Profile Visibility Compliance (e2e)', () => {
         .delete(`/api/groups/${draftGroup.slug}`)
         .set('Authorization', `Bearer ${testUserToken}`)
         .set('x-tenant-id', TESTING_TENANT_ID);
+    });
+  });
+
+  describe('Group Membership Visibility on User Profiles', () => {
+    it('should only show memberships to public groups on user profile', async () => {
+      // Create another user who will join the test groups
+      const memberUserData = await createTestUser(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        `group-member-${Date.now()}@openmeet.test`,
+        'Member',
+        'User',
+      );
+
+      // Join all three groups (public, unlisted, private)
+      await joinGroup(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        testGroups.public.slug,
+        memberUserData.token,
+      );
+      await joinGroup(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        testGroups.unlisted.slug,
+        memberUserData.token,
+      );
+      await joinGroup(
+        TESTING_APP_URL,
+        TESTING_TENANT_ID,
+        testGroups.private.slug,
+        memberUserData.token,
+      );
+
+      // View the member's profile as an anonymous user
+      const response = await request(TESTING_APP_URL)
+        .get(`/api/v1/users/${memberUserData.user.slug}/profile`)
+        .set('x-tenant-id', TESTING_TENANT_ID);
+
+      expect(response.status).toBe(200);
+      expect(response.body.groupMembers).toBeDefined();
+      expect(Array.isArray(response.body.groupMembers)).toBe(true);
+
+      // Check which groups are visible in memberships
+      const publicMembership = response.body.groupMembers.find(
+        (gm: any) => gm.group?.slug === testGroups.public.slug,
+      );
+      const unlistedMembership = response.body.groupMembers.find(
+        (gm: any) => gm.group?.slug === testGroups.unlisted.slug,
+      );
+      const privateMembership = response.body.groupMembers.find(
+        (gm: any) => gm.group?.slug === testGroups.private.slug,
+      );
+
+      // Only membership to public group should be visible
+      expect(publicMembership).toBeDefined();
+      expect(publicMembership.group.name).toBe('Public Group - Profile Test');
+
+      // Memberships to unlisted and private groups should NOT be visible
+      expect(unlistedMembership).toBeUndefined();
+      expect(privateMembership).toBeUndefined();
     });
   });
 
