@@ -22,6 +22,7 @@ import { Repository } from 'typeorm';
 import { UserEntity } from './infrastructure/persistence/relational/entities/user.entity';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
+import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { UserPermissionEntity } from './infrastructure/persistence/relational/entities/user-permission.entity';
 import { RoleService } from '../role/role.service';
@@ -212,10 +213,6 @@ export class UserService {
       relations: {
         photo: true,
         interests: true,
-        groupMembers: {
-          group: true,
-          groupRole: true,
-        },
       },
     });
 
@@ -246,6 +243,19 @@ export class UserService {
 
     const publicGroups = await groupsQuery.getMany();
     user['groups'] = publicGroups;
+
+    // Load group memberships with visibility filtering
+    // Only show memberships to public groups on user profiles
+    const groupMembersQuery = this.usersRepository.manager
+      .createQueryBuilder(GroupMemberEntity, 'groupMember')
+      .leftJoinAndSelect('groupMember.group', 'group')
+      .leftJoinAndSelect('groupMember.groupRole', 'groupRole')
+      .where('groupMember.userId = :userId', { userId: user.id })
+      .andWhere('group.visibility = :visibility', { visibility: 'public' })
+      .andWhere('group.status = :status', { status: 'published' });
+
+    const publicGroupMembers = await groupMembersQuery.getMany();
+    user['groupMembers'] = publicGroupMembers;
 
     // Resolve and update Bluesky handle from DID (only for authenticated Bluesky users, not shadow accounts)
     // Shadow accounts already have their handle in firstName field
