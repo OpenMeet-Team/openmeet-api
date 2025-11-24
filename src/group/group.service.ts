@@ -724,20 +724,28 @@ export class GroupService {
     take: number = 0,
   ): Promise<GroupEntity[]> {
     await this.getTenantSpecificGroupRepository();
-    const groups = await this.groupRepository.find({
-      where: { createdBy: { id: userId } },
-      take,
-      relations: ['createdBy'],
-      order: { createdAt: 'DESC' },
-    });
 
-    return await Promise.all(
-      groups.map(async (group) => {
-        group.groupMembersCount =
-          await this.groupMemberService.getGroupMembersCount(group.id);
-        return group;
-      }),
-    );
+    // Use loadRelationCountAndMap to get member counts in a single query to avoid N+1
+    const queryBuilder = this.groupRepository
+      .createQueryBuilder('group')
+      .leftJoinAndSelect('group.createdBy', 'createdBy')
+      .loadRelationCountAndMap(
+        'group.groupMembersCount',
+        'group.groupMembers',
+        'member',
+        (qb) =>
+          qb
+            .innerJoin('member.groupRole', 'role')
+            .where('role.name != :guestRole', { guestRole: GroupRole.Guest }),
+      )
+      .where('group.createdById = :userId', { userId })
+      .orderBy('group.createdAt', 'DESC');
+
+    if (take > 0) {
+      queryBuilder.limit(take);
+    }
+
+    return await queryBuilder.getMany();
   }
 
   async getHomePageUserParticipatedGroups(

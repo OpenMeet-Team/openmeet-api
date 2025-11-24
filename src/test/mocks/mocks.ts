@@ -158,6 +158,7 @@ export const mockRepository = {
   findAndCount: jest.fn(),
   update: jest.fn(),
   getOne: jest.fn(),
+  loadRelationCountAndMap: jest.fn().mockReturnThis(),
 };
 
 export const mockDashboardService = {
