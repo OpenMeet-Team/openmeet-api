@@ -877,28 +877,27 @@ export class EventQueryService {
     userId: number,
   ): Promise<EventEntity[]> {
     await this.initializeRepository();
+
+    // Use loadRelationCountAndMap to get attendee counts in a single query to avoid N+1
     const events = await this.eventRepository
       .createQueryBuilder('event')
+      .loadRelationCountAndMap(
+        'event.attendeesCount',
+        'event.attendees',
+        'attendee',
+        (qb) =>
+          qb.where('attendee.status = :confirmedStatus', {
+            confirmedStatus: EventAttendeeStatus.Confirmed,
+          }),
+      )
       .where('event.user.id = :userId', { userId })
       .andWhere('event.status = :status', { status: EventStatus.Draft })
       .orderBy('event.updatedAt', 'DESC')
       .limit(3)
       .getMany();
 
-    const eventsWithCounts = (await Promise.all(
-      events.map(async (event) => ({
-        ...event,
-        attendeesCount:
-          await this.eventAttendeeService.showConfirmedEventAttendeesCount(
-            event.id,
-          ),
-      })),
-    )) as EventEntity[];
-
     // Add recurrence descriptions
-    return eventsWithCounts.map((event) =>
-      this.addRecurrenceInformation(event),
-    );
+    return events.map((event) => this.addRecurrenceInformation(event));
   }
 
   @Trace('event-query.getHomePageUserUpcomingEvents')
