@@ -729,6 +729,7 @@ export class GroupService {
     const queryBuilder = this.groupRepository
       .createQueryBuilder('group')
       .leftJoinAndSelect('group.createdBy', 'createdBy')
+      .leftJoinAndSelect('group.image', 'image')
       .loadRelationCountAndMap(
         'group.groupMembersCount',
         'group.groupMembers',
