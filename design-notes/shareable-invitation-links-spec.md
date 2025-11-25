@@ -78,6 +78,29 @@ Viral Invitations: Each person gets personal sub-link
 - User must manually RSVP for events
 - User becomes member for groups (auto-join)
 
+### OPEN QUESTION: Membership Approval for Groups
+
+**The idea:** Allow groups to require admin approval after someone accepts an invitation.
+
+**Auto-Approval (current behavior):**
+- User accepts invitation → Immediately becomes a member
+
+**Manual Approval (proposed):**
+- Admin enables "Require Approval" setting
+- User accepts invitation → Status: "Pending Approval"
+- Admin reviews and approves/rejects
+
+**Concerns:**
+- Does this add unnecessary complexity?
+- If you're sending an invitation, haven't you already decided to let them in?
+- When would you want approval AFTER sending an invitation?
+
+**Possible use cases:**
+- Viral invitations where host wants to vet friends-of-friends?
+- Large organizations with HR approval workflows?
+
+**Status:** Needs more discussion and input.
+
 ---
 
 ## Security Analysis: Generic Links vs Viral Invitations
