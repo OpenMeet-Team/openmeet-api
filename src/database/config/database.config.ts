@@ -70,6 +70,18 @@ class EnvironmentVariablesValidator {
   @IsString()
   @IsOptional()
   DATABASE_CERT: string;
+
+  @IsInt()
+  @IsOptional()
+  DATABASE_POOL_MIN_CONNECTIONS: number;
+
+  @IsInt()
+  @IsOptional()
+  DATABASE_POOL_IDLE_TIMEOUT_MS: number;
+
+  @IsBoolean()
+  @IsOptional()
+  DATABASE_POOL_ALLOW_EXIT_ON_IDLE: boolean;
 }
 
 export default registerAs<DatabaseConfig>('database', () => {
@@ -95,5 +107,13 @@ export default registerAs<DatabaseConfig>('database', () => {
     ca: process.env.DATABASE_CA,
     key: process.env.DATABASE_KEY,
     cert: process.env.DATABASE_CERT,
+    // Pool settings - defaults favor keeping connections alive
+    poolMinConnections: process.env.DATABASE_POOL_MIN_CONNECTIONS
+      ? parseInt(process.env.DATABASE_POOL_MIN_CONNECTIONS, 10)
+      : 5,
+    poolIdleTimeoutMs: process.env.DATABASE_POOL_IDLE_TIMEOUT_MS
+      ? parseInt(process.env.DATABASE_POOL_IDLE_TIMEOUT_MS, 10)
+      : 30000,
+    poolAllowExitOnIdle: process.env.DATABASE_POOL_ALLOW_EXIT_ON_IDLE === 'true',
   };
 });

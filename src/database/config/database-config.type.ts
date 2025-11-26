@@ -14,4 +14,8 @@ export type DatabaseConfig = {
   ca?: string;
   key?: string;
   cert?: string;
+  // Pool settings
+  poolMinConnections: number;
+  poolIdleTimeoutMs: number;
+  poolAllowExitOnIdle: boolean;
 };

@@ -374,9 +374,13 @@ export const AppDataSource = (tenantId: string) => {
         max: process.env.DATABASE_MAX_CONNECTIONS
           ? parseInt(process.env.DATABASE_MAX_CONNECTIONS, 10)
           : 100,
-        idleTimeoutMillis: 30000,
+        idleTimeoutMillis: process.env.DATABASE_POOL_IDLE_TIMEOUT_MS
+          ? parseInt(process.env.DATABASE_POOL_IDLE_TIMEOUT_MS, 10)
+          : 30000,
         connectionTimeoutMillis: 5000,
-        min: 5,
+        min: process.env.DATABASE_POOL_MIN_CONNECTIONS
+          ? parseInt(process.env.DATABASE_POOL_MIN_CONNECTIONS, 10)
+          : 5,
         maxUses: 7500,
         statement_timeout: 15000,
         query_timeout: 15000,
@@ -398,8 +402,8 @@ export const AppDataSource = (tenantId: string) => {
         maxPoolSize: process.env.DATABASE_MAX_POOL_SIZE
           ? parseInt(process.env.DATABASE_MAX_POOL_SIZE, 10)
           : 40,
-        // Cleanup idle connections
-        allowExitOnIdle: true,
+        // Cleanup idle connections - defaults to false to keep min connections alive
+        allowExitOnIdle: process.env.DATABASE_POOL_ALLOW_EXIT_ON_IDLE === 'true',
       },
     } as DataSourceOptions);
   });
