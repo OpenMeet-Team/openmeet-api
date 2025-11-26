@@ -68,7 +68,6 @@ export class EventQueryService {
    *
    * @param queryBuilder - The query builder to apply filters to
    * @param userId - Optional user ID for authenticated users
-   * @returns Promise that resolves when filtering is complete
    */
   private async applyEventVisibilityFilter(
     queryBuilder: any,
@@ -77,9 +76,7 @@ export class EventQueryService {
     if (userId) {
       // Authenticated users: show Public + Unlisted/Private only if hosting or RSVP'd
       // Note: Group membership grants URL access (via VisibilityGuard) but NOT search discoverability
-      const attendedEventIds =
-        await this.eventAttendeeService.findEventIdsByUserId(userId);
-
+      // Using EXISTS subquery instead of pre-fetching all attended event IDs for better performance
       queryBuilder.andWhere(
         new Brackets((qb) => {
           qb.where('event.visibility = :publicVisibility', {
@@ -100,18 +97,20 @@ export class EventQueryService {
                 },
               );
 
-              if (attendedEventIds.length > 0) {
-                subQb.orWhere(
-                  '(event.visibility IN (:...restrictedVisibilities) AND event.id IN (:...attendedEventIds))',
-                  {
-                    restrictedVisibilities: [
-                      EventVisibility.Unlisted,
-                      EventVisibility.Private,
-                    ],
-                    attendedEventIds,
-                  },
-                );
-              }
+              // Use EXISTS subquery to check attendance (more efficient than IN with pre-fetched IDs)
+              subQb.orWhere(
+                `(event.visibility IN (:...restrictedVisibilities) AND EXISTS (
+                  SELECT 1 FROM "eventAttendees" ea
+                  WHERE ea."eventId" = event.id AND ea."userId" = :attendeeUserId
+                ))`,
+                {
+                  restrictedVisibilities: [
+                    EventVisibility.Unlisted,
+                    EventVisibility.Private,
+                  ],
+                  attendeeUserId: userId,
+                },
+              );
             }),
           );
         }),
@@ -339,6 +338,7 @@ export class EventQueryService {
       query;
 
     // We need to make sure to fetch the event images properly
+    // Note: Removed loadRelationCountAndMap to avoid N+1 queries - counts fetched in batch below
     const eventQuery = this.eventRepository
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.user', 'user')
@@ -346,15 +346,6 @@ export class EventQueryService {
       .leftJoinAndSelect('event.image', 'image') // Use consistent naming to match the entity property
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.group', 'group')
-      .loadRelationCountAndMap(
-        'event.attendeesCount',
-        'event.attendees',
-        'attendees',
-        (qb) =>
-          qb.where('attendees.status = :status', {
-            status: EventAttendeeStatus.Confirmed,
-          }),
-      )
       .where('event.status IN (:...statuses)', {
         statuses: [EventStatus.Published, EventStatus.Cancelled],
       })
@@ -431,6 +422,28 @@ export class EventQueryService {
       page: pagination.page,
       limit: pagination.limit,
     });
+
+    // Batch fetch attendee counts in a single query (avoids N+1)
+    if (paginatedResults.data && paginatedResults.data.length > 0) {
+      const eventIds = paginatedResults.data.map((e) => e.id);
+      const counts = await this.eventAttendeesRepository
+        .createQueryBuilder('att')
+        .select('att.eventId', 'eventId')
+        .addSelect('COUNT(att.id)', 'count')
+        .where('att.eventId IN (:...eventIds)', { eventIds })
+        .andWhere('att.status = :status', {
+          status: EventAttendeeStatus.Confirmed,
+        })
+        .groupBy('att.eventId')
+        .getRawMany();
+
+      const countMap = new Map(
+        counts.map((c) => [c.eventId, parseInt(c.count, 10)]),
+      );
+      paginatedResults.data.forEach((event) => {
+        (event as any).attendeesCount = countMap.get(event.id) || 0;
+      });
+    }
 
     // Add recurrence descriptions to all events in the result without losing fields
     if (paginatedResults.data && paginatedResults.data.length > 0) {
@@ -665,57 +678,94 @@ export class EventQueryService {
   async showDashboardEvents(userId: number): Promise<EventEntity[]> {
     await this.initializeRepository();
 
-    // Create a single efficient query instead of multiple separate queries
-    const eventsQuery = this.eventRepository
+    // Split into two indexed queries instead of OR (which prevents index usage)
+    // Query 1: Events created by user
+    const createdEventsQuery = this.eventRepository
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.user', 'user')
       .leftJoinAndSelect('user.photo', 'userPhoto')
-      .leftJoinAndSelect('user.status', 'userStatus')
       .leftJoinAndSelect('event.group', 'group')
       .leftJoinAndSelect('group.image', 'groupImage')
       .leftJoinAndSelect('event.categories', 'categories')
       .leftJoinAndSelect('event.image', 'image')
-      .leftJoinAndSelect(
+      .where('event.userId = :userId', { userId });
+
+    // Query 2: Events user is attending (not cancelled)
+    const attendingEventsQuery = this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.user', 'user')
+      .leftJoinAndSelect('user.photo', 'userPhoto')
+      .leftJoinAndSelect('event.group', 'group')
+      .leftJoinAndSelect('group.image', 'groupImage')
+      .leftJoinAndSelect('event.categories', 'categories')
+      .leftJoinAndSelect('event.image', 'image')
+      .innerJoin(
         'event.attendees',
         'attendee',
-        'attendee.user.id = :userId',
-        { userId },
-      )
-      .leftJoinAndSelect('attendee.role', 'role')
-      .leftJoinAndSelect('role.permissions', 'permissions')
-      .where('event.user.id = :userId', { userId })
-      .orWhere(
-        '(attendee.id IS NOT NULL AND attendee.status != :cancelledStatus)',
-        { cancelledStatus: EventAttendeeStatus.Cancelled },
-      )
-      // Load all attendees count in a single query using COUNT subquery
-      .loadRelationCountAndMap(
-        'event.attendeesCount',
-        'event.attendees',
-        'attendeesCount',
-        (qb) =>
-          qb.where('attendeesCount.status = :status', {
-            status: EventAttendeeStatus.Confirmed,
-          }),
+        'attendee.userId = :userId AND attendee.status != :cancelledStatus',
+        { userId, cancelledStatus: EventAttendeeStatus.Cancelled },
       );
 
-    const events = await eventsQuery.getMany();
+    // Execute both queries in parallel
+    const [createdEvents, attendingEvents] = await Promise.all([
+      createdEventsQuery.getMany(),
+      attendingEventsQuery.getMany(),
+    ]);
 
-    // Deduplicate events (in case a user both created and is attending an event)
-    const uniqueEvents = Array.from(
-      new Map(events.map((event) => [event.id, event])).values(),
-    );
-
-    // Process the events without additional database queries
-    const processedEvents = uniqueEvents.map((event) => {
-      // Add attendee information if it exists
-      if (event.attendees && event.attendees.length > 0) {
-        event.attendee = event.attendees[0];
+    // Merge and deduplicate
+    const eventMap = new Map<number, EventEntity>();
+    [...createdEvents, ...attendingEvents].forEach((event) => {
+      if (!eventMap.has(event.id)) {
+        eventMap.set(event.id, event);
       }
-
-      // Add recurrence information
-      return this.addRecurrenceInformation(event);
     });
+    const uniqueEvents = Array.from(eventMap.values());
+
+    // Batch fetch attendee counts and user's attendance info (avoids N+1)
+    if (uniqueEvents.length > 0) {
+      const eventIds = uniqueEvents.map((e) => e.id);
+
+      const [counts, attendeeRecords] = await Promise.all([
+        // Batch fetch attendee counts
+        this.eventAttendeesRepository
+          .createQueryBuilder('att')
+          .select('att.eventId', 'eventId')
+          .addSelect('COUNT(att.id)', 'count')
+          .where('att.eventId IN (:...eventIds)', { eventIds })
+          .andWhere('att.status = :status', {
+            status: EventAttendeeStatus.Confirmed,
+          })
+          .groupBy('att.eventId')
+          .getRawMany(),
+        // Batch fetch user's attendance info
+        this.eventAttendeesRepository
+          .createQueryBuilder('att')
+          .leftJoinAndSelect('att.role', 'role')
+          .leftJoin('att.event', 'event')
+          .addSelect('event.id')
+          .where('att.eventId IN (:...eventIds)', { eventIds })
+          .andWhere('att.userId = :userId', { userId })
+          .getMany(),
+      ]);
+
+      const countMap = new Map(
+        counts.map((c) => [c.eventId, parseInt(c.count, 10)]),
+      );
+      const attendeeMap = new Map(attendeeRecords.map((a) => [a.event?.id, a]));
+
+      uniqueEvents.forEach((event) => {
+        (event as any).attendeesCount = countMap.get(event.id) || 0;
+        const attendee = attendeeMap.get(event.id);
+        if (attendee) {
+          event.attendee = attendee;
+        }
+      });
+    }
+
+    // Process events and add recurrence info
+    const processedEvents = uniqueEvents.map((event) =>
+      this.addRecurrenceInformation(event),
+    );
 
     // Sort events: future events first, then by start date
     return processedEvents.sort((a, b) => {

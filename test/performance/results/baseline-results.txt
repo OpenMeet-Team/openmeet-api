@@ -1,0 +1,42 @@
+========== BASELINE PERFORMANCE TEST ==========
+Date: 2025-11-26 12:50
+Environment: Local development
+Tenant: lsdfaopkljdfs (production-like data)
+VUs: 10
+Duration: 30s
+Iterations: 455
+
+HTTP Request Duration:
+  avg: 55.03ms
+  p95: 100.82ms
+
+Event List Duration (custom):
+  avg: 60.09ms
+  p95: 115.89ms
+
+Error Rate: 0.00%
+==================================================
+
+========== OPTIMIZED PERFORMANCE TEST ==========
+Date: 2025-11-26 13:01
+Environment: Local development
+Tenant: lsdfaopkljdfs (production-like data)
+VUs: 10
+Duration: 30s
+Iterations: 472 (+3.7%)
+
+HTTP Request Duration:
+  avg: 46.36ms (-15.8%)
+  p95: 83.38ms (-17.3%)
+
+Event List Duration (custom):
+  avg: 54.01ms (-10.1%)
+  p95: 85.64ms (-26.1%)
+
+Error Rate: 0.00%
+
+Optimizations applied:
+1. getManyAndCount() - single query instead of separate count + select
+2. Batch attendee count - single GROUP BY query instead of N+1
+3. EXISTS subquery - visibility check in main query instead of pre-fetch
+==================================================

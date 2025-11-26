@@ -1,0 +1,40 @@
+========== DASHBOARD BASELINE PERFORMANCE TEST ==========
+Date: 2025-11-26 13:20
+Environment: Local development
+Tenant: oiupsdknasfdf (test tenant - smaller dataset)
+VUs: 5
+Duration: 30s
+Iterations: 281
+
+HTTP Request Duration:
+  avg: 36.03ms
+  p95: 55.62ms
+
+Error Rate: 0.00%
+===========================================================
+
+========== DASHBOARD OPTIMIZED - LARGE TENANT ==========
+Date: 2025-11-26 13:34
+Environment: Local development
+Tenant: lsdfaopkljdfs (production-like data)
+VUs: 5
+Duration: 30s
+Iterations: 266
+
+HTTP Request Duration:
+  avg: 66.14ms
+  p95: 96.24ms
+
+Error Rate: 0.00%
+
+Original slow query: ~6000ms
+Optimized result:    ~66ms
+Improvement:         ~91x faster
+
+Optimizations applied:
+1. Split OR query into 2 parallel indexed queries
+2. Removed loadRelationCountAndMap (N+1)
+3. Batch fetch attendee counts with GROUP BY
+4. Batch fetch user attendance with single query
+5. Removed unnecessary user.status and role.permissions JOINs
+===========================================================

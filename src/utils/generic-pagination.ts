@@ -33,47 +33,27 @@ export async function paginate<T extends ObjectLiteral>(
     },
     async (span) => {
       try {
-        // Create child span for count query
-        const countResult = await tracer.startActiveSpan(
-          'get_total_count',
-          {
-            kind: SpanKind.INTERNAL,
-            attributes: {
-              'query.type': 'count',
-            },
-          },
-          async (countSpan) => {
-            const startTime = Date.now();
-            const total = await query.getCount();
-            const duration = Date.now() - startTime;
-
-            countSpan.setAttribute('total_records', total);
-            countSpan.setAttribute('query.duration_ms', duration);
-            countSpan.end();
-            return total;
-          },
-        );
-
-        // Create child span for fetching results
-        const results = await tracer.startActiveSpan(
+        // Use getManyAndCount for optimized single-roundtrip query
+        const [results, countResult] = await tracer.startActiveSpan(
           'get_paginated_results',
           {
             kind: SpanKind.INTERNAL,
             attributes: {
-              'query.type': 'select',
+              'query.type': 'select_with_count',
               'query.offset': (page - 1) * limit,
               'query.limit': limit,
             },
           },
           async (resultsSpan) => {
             const startTime = Date.now();
-            const data = await query
+            const [data, total] = await query
               .skip((page - 1) * limit)
               .take(limit)
-              .getMany();
+              .getManyAndCount();
             const duration = Date.now() - startTime;
 
             resultsSpan.setAttribute('records_retrieved', data.length);
+            resultsSpan.setAttribute('total_records', total);
             resultsSpan.setAttribute('query.duration_ms', duration);
             resultsSpan.setAttribute('query.sql', query.getQuery());
             resultsSpan.setAttribute(
@@ -81,7 +61,7 @@ export async function paginate<T extends ObjectLiteral>(
               JSON.stringify(query.getParameters()),
             );
             resultsSpan.end();
-            return data;
+            return [data, total] as const;
           },
         );
 
