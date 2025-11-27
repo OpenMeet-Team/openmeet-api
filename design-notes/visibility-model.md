@@ -184,32 +184,11 @@ The activity feed for a group or event follows the same access rules as the grou
 
 # Part 2: Proposed Changes (Not Yet Implemented)
 
-The following features are planned to enable private visibility:
+The following features are planned to enable **private visibility**:
 
-## Phase 1: Direct User Invitations
-
-Allow hosts to invite existing OpenMeet users:
-- Search for users by name
-- Send invitation (in-app notification + email)
-- Works for both events and groups
-
-**This unblocks:** Re-enabling private visibility in the UI
-
-## Phase 2: Email Invitations
-
-Allow hosts to invite people by email address:
-- Enter email addresses to invite
-- System sends invitation email with personal link
-- Non-users can sign up and automatically get access
-- Track invitation status (sent, opened, accepted)
-
-## Phase 3: Shareable Invitation Links
-
-Allow hosts to create invitation URLs:
-- Generate a link that grants access when clicked
-- Optional: Set expiration date (7, 30, 90 days)
-- Optional: Limit number of uses
-- Can revoke links (removes access for everyone who used it)
+* determine the right kind of invitations to implement
+* implement invitations
+* reopen private visibility groups and events for general use
 
 ---
 
@@ -228,6 +207,5 @@ Allow hosts to create invitation URLs:
 
 ## Related Documents
 
-- **MVP Roadmap:** PROPOSED-MVP-ISSUES.md
 - **Invitation System Design:** shareable-invitation-links-spec.md
 - **Activity Feed Details:** activity-feed-system.md
