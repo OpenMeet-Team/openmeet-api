@@ -184,7 +184,7 @@ services:
       - ELASTICACHE_HOST=redis
       - MAIL_HOST=maildev
     env_file:
-      - .env
+      - .env-local
     networks:
       - api-network
     depends_on:
