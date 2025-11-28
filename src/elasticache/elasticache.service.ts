@@ -22,6 +22,7 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
   private readonly MAX_RETRIES = 5;
   private readonly RETRY_DELAY = 5000;
   private readonly CONNECTION_TIMEOUT = 10000;
+  private readonly OPERATION_TIMEOUT = 1000; // Fail fast on slow cache operations
 
   constructor(private configService: ConfigService) {}
 
@@ -37,6 +38,8 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
             infer: true,
           }) === 'true',
         connectTimeout: this.CONNECTION_TIMEOUT,
+        keepAlive: 30000, // Send TCP keepalive every 30 seconds
+        noDelay: true, // Disable Nagle's algorithm for lower latency
       },
       // ElastiCache uses AUTH token instead of username/password, if set to true
       ...(this.configService.get('ELASTICACHE_AUTH', { infer: true }) ===
@@ -129,7 +132,7 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
         setTimeout(() => {
           this.logger.warn(`Redis set operation timeout for key: ${key}`);
           resolve(); // Resolve instead of reject
-        }, 5000);
+        }, this.OPERATION_TIMEOUT);
       });
 
       const operation = (async () => {
@@ -163,7 +166,7 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
         setTimeout(() => {
           this.logger.warn(`Redis get operation timeout for key: ${key}`);
           resolve(null); // Resolve with null instead of reject
-        }, 5000);
+        }, this.OPERATION_TIMEOUT);
       });
 
       const operation = this.redis.get(key).catch((err) => {
