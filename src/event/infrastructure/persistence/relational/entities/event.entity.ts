@@ -34,6 +34,7 @@ import { EventSourceType } from '../../../../../core/constants/source-type.const
 import { EventSeriesEntity } from '../../../../../event-series/infrastructure/persistence/relational/entities/event-series.entity';
 
 @Entity({ name: 'events' })
+@Index('IDX_events_status_startDate', ['status', 'startDate'])
 export class EventEntity
   extends EntityRelationalHelper
   implements SourceFields
@@ -80,6 +81,7 @@ export class EventEntity
   description: string;
 
   @Column({ type: Date })
+  @Index()
   startDate: Date;
 
   @Column({ type: Date, nullable: true })
@@ -121,6 +123,7 @@ export class EventEntity
     type: 'enum',
     enum: EventStatus,
   })
+  @Index()
   status: EventStatus;
 
   @Column({
