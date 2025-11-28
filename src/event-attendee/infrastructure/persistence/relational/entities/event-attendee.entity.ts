@@ -5,6 +5,7 @@ import {
   PrimaryGeneratedColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { UserEntity } from '../../../../../user/infrastructure/persistence/relational/entities/user.entity';
 import { EventEntity } from '../../../../../event/infrastructure/persistence/relational/entities/event.entity';
@@ -14,6 +15,10 @@ import { SourceFields } from '../../../../../core/interfaces/source-data.interfa
 import { EventSourceType } from '../../../../../core/constants/source-type.constant';
 
 @Entity({ name: 'eventAttendees' })
+@Index('IDX_eventAttendees_user', ['user'])
+@Index('IDX_eventAttendees_event', ['event'])
+@Index('IDX_eventAttendees_user_status', ['user', 'status'])
+@Index('IDX_eventAttendees_status_event', ['status', 'event'])
 export class EventAttendeesEntity implements SourceFields {
   @PrimaryGeneratedColumn()
   id: number;
