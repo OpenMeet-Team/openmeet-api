@@ -144,16 +144,20 @@ export class AtprotoHandleCacheService {
         const handle = await this.blueskyIdentity.extractHandleFromDid(did);
         span.setAttribute('atproto.external_call_ms', Date.now() - externalStartTime);
 
-        // Store in ElastiCache (shared across all API nodes)
-        await this.cache.set(cacheKey, handle, this.CACHE_TTL);
+        // Fire-and-forget: Store in ElastiCache without blocking the response
+        // ElastiCache Serverless has cold-start latency that can block for 3+ seconds
+        this.cache.set(cacheKey, handle, this.CACHE_TTL).catch((err) => {
+          this.logger.warn(`Background cache set failed for ${did}: ${err.message}`);
+        });
+
         timer({ cache_status: 'miss' });
         span.setAttribute('atproto.status', 'resolved_external');
         span.setAttribute('atproto.handle', handle);
         span.setAttribute('atproto.total_duration_ms', Date.now() - startTime);
         span.end();
 
-        this.logger.log(
-          `Cached handle for ${did}: ${handle} (TTL: ${this.CACHE_TTL}s)`,
+        this.logger.debug(
+          `Resolved handle for ${did}: ${handle} (caching in background)`,
         );
 
         return handle;
