@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { promises as dns } from 'dns';
 import { isIP } from 'net';
+import { trace, SpanStatusCode } from '@opentelemetry/api';
 
 /**
  * Service for resolving Bluesky/ATProto identity information
@@ -15,6 +16,7 @@ import { isIP } from 'net';
 @Injectable()
 export class BlueskyIdentityService {
   private readonly logger = new Logger(BlueskyIdentityService.name);
+  private readonly tracer = trace.getTracer('bluesky-identity');
 
   // Default trusted PDS domains for production
   // Can be overridden via ATPROTO_ALLOWED_PDS_DOMAINS environment variable
@@ -226,114 +228,138 @@ export class BlueskyIdentityService {
     labels?: any[];
     source: string;
   }> {
-    try {
-      this.logger.debug(
-        `Looking up public ATProtocol profile for: ${handleOrDid}`,
-      );
+    return this.tracer.startActiveSpan('atproto.resolveProfile', async (span) => {
+      const overallStartTime = Date.now();
+      span.setAttribute('atproto.input', handleOrDid);
+      span.setAttribute('atproto.operation', 'resolve_full_profile');
 
-      // Use require() to workaround ts-jest module resolution issues
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { IdResolver, getPds, getHandle } = require('@atproto/identity');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { Agent } = require('@atproto/api');
+      try {
+        this.logger.debug(
+          `Looking up public ATProtocol profile for: ${handleOrDid}`,
+        );
 
-      // Create identity resolver (contains both handle and did resolvers)
-      const idResolver = new IdResolver();
+        // Use require() to workaround ts-jest module resolution issues
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { IdResolver, getPds, getHandle } = require('@atproto/identity');
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { Agent } = require('@atproto/api');
 
-      // Resolve handle to DID if needed
-      let did = handleOrDid;
+        // Create identity resolver (contains both handle and did resolvers)
+        const idResolver = new IdResolver();
 
-      if (!handleOrDid.startsWith('did:')) {
-        // If a handle was provided, resolve it to a DID first
-        this.logger.debug(`Resolving handle ${handleOrDid} to DID`);
+        // Resolve handle to DID if needed
+        let did = handleOrDid;
+
+        if (!handleOrDid.startsWith('did:')) {
+          // If a handle was provided, resolve it to a DID first
+          this.logger.debug(`Resolving handle ${handleOrDid} to DID`);
+          span.setAttribute('atproto.needs_handle_resolution', true);
+
+          // Add timeout to prevent hanging
+          const handleStartTime = Date.now();
+          const resolvedDid = await Promise.race([
+            idResolver.handle.resolve(handleOrDid),
+            this.createTimeout<string>(
+              this.TIMEOUT_HANDLE_RESOLUTION,
+              'handle resolution',
+            ),
+          ]);
+          span.setAttribute('atproto.handle_resolution_ms', Date.now() - handleStartTime);
+
+          if (!resolvedDid) {
+            throw new Error(`Could not resolve handle ${handleOrDid} to a DID`);
+          }
+          did = resolvedDid;
+          this.logger.debug(`Resolved ${handleOrDid} to ${did}`);
+        }
+        span.setAttribute('atproto.did', did);
+
+        // Resolve DID to get the full DID document
+        this.logger.debug(`Resolving DID ${did} to DID document`);
 
         // Add timeout to prevent hanging
-        const resolvedDid = await Promise.race([
-          idResolver.handle.resolve(handleOrDid),
-          this.createTimeout<string>(
-            this.TIMEOUT_HANDLE_RESOLUTION,
-            'handle resolution',
-          ),
+        const didStartTime = Date.now();
+        const didDoc = await Promise.race([
+          idResolver.did.resolveNoCheck(did),
+          this.createTimeout(this.TIMEOUT_DID_RESOLUTION, 'DID resolution'),
         ]);
+        span.setAttribute('atproto.did_resolution_ms', Date.now() - didStartTime);
 
-        if (!resolvedDid) {
-          throw new Error(`Could not resolve handle ${handleOrDid} to a DID`);
+        if (!didDoc) {
+          throw new Error(`Could not resolve DID document for ${did}`);
         }
-        did = resolvedDid;
-        this.logger.debug(`Resolved ${handleOrDid} to ${did}`);
+
+        // Extract PDS endpoint and handle from DID document
+        const pdsEndpoint = getPds(didDoc);
+        const handle = getHandle(didDoc);
+        span.setAttribute('atproto.pds_endpoint', pdsEndpoint || 'none');
+
+        if (!pdsEndpoint) {
+          throw new Error(`No PDS endpoint found for DID ${did}`);
+        }
+
+        this.logger.debug(`PDS endpoint for ${did}: ${pdsEndpoint}`);
+        this.logger.debug(`Handle for ${did}: ${handle}`);
+
+        // Validate PDS endpoint to prevent SSRF attacks
+        const isValid = await this.validatePdsEndpoint(pdsEndpoint);
+        if (!isValid) {
+          throw new Error(`Untrusted or invalid PDS endpoint: ${pdsEndpoint}`);
+        }
+
+        // Create agent pointing to the user's PDS
+        const agent = new Agent(pdsEndpoint);
+
+        // Fetch profile data using DID or handle with timeout
+        const profileStartTime = Date.now();
+        const response = await Promise.race([
+          agent.getProfile({ actor: did }),
+          this.createTimeout(this.TIMEOUT_PROFILE_FETCH, 'profile fetch'),
+        ]);
+        span.setAttribute('atproto.profile_fetch_ms', Date.now() - profileStartTime);
+
+        this.logger.debug(
+          `Profile API response - did: ${response.data.did}, handle: ${response.data.handle}, handleFromDoc: ${handle}`,
+        );
+
+        // Format the response, using handle from DID document as fallback
+        const resolvedHandle = response.data.handle || handle || did;
+        this.logger.debug(`Final resolved handle: ${resolvedHandle}`);
+
+        span.setAttribute('atproto.handle', resolvedHandle);
+        span.setAttribute('atproto.total_duration_ms', Date.now() - overallStartTime);
+        span.end();
+
+        return {
+          did: response.data.did,
+          handle: resolvedHandle,
+          displayName: response.data.displayName,
+          avatar: response.data.avatar,
+          followersCount: response.data.followersCount || 0,
+          followingCount: response.data.followingCount || 0,
+          postsCount: response.data.postsCount || 0,
+          description: response.data.description,
+          indexedAt: response.data.indexedAt,
+          labels: response.data.labels || [],
+          source: 'atprotocol-public',
+        };
+      } catch (error) {
+        span.setAttribute('atproto.error', error.message);
+        span.setAttribute('atproto.total_duration_ms', Date.now() - overallStartTime);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+        span.end();
+
+        this.logger.error('Failed to fetch public ATProtocol profile', {
+          error: error.message,
+          stack: error.stack,
+          handleOrDid,
+        });
+
+        throw new Error(
+          `Unable to resolve profile for ${handleOrDid}: ${error.message}`,
+        );
       }
-
-      // Resolve DID to get the full DID document
-      this.logger.debug(`Resolving DID ${did} to DID document`);
-
-      // Add timeout to prevent hanging
-      const didDoc = await Promise.race([
-        idResolver.did.resolveNoCheck(did),
-        this.createTimeout(this.TIMEOUT_DID_RESOLUTION, 'DID resolution'),
-      ]);
-
-      if (!didDoc) {
-        throw new Error(`Could not resolve DID document for ${did}`);
-      }
-
-      // Extract PDS endpoint and handle from DID document
-      const pdsEndpoint = getPds(didDoc);
-      const handle = getHandle(didDoc);
-
-      if (!pdsEndpoint) {
-        throw new Error(`No PDS endpoint found for DID ${did}`);
-      }
-
-      this.logger.debug(`PDS endpoint for ${did}: ${pdsEndpoint}`);
-      this.logger.debug(`Handle for ${did}: ${handle}`);
-
-      // Validate PDS endpoint to prevent SSRF attacks
-      const isValid = await this.validatePdsEndpoint(pdsEndpoint);
-      if (!isValid) {
-        throw new Error(`Untrusted or invalid PDS endpoint: ${pdsEndpoint}`);
-      }
-
-      // Create agent pointing to the user's PDS
-      const agent = new Agent(pdsEndpoint);
-
-      // Fetch profile data using DID or handle with timeout
-      const response = await Promise.race([
-        agent.getProfile({ actor: did }),
-        this.createTimeout(this.TIMEOUT_PROFILE_FETCH, 'profile fetch'),
-      ]);
-
-      this.logger.debug(
-        `Profile API response - did: ${response.data.did}, handle: ${response.data.handle}, handleFromDoc: ${handle}`,
-      );
-
-      // Format the response, using handle from DID document as fallback
-      const resolvedHandle = response.data.handle || handle || did;
-      this.logger.debug(`Final resolved handle: ${resolvedHandle}`);
-
-      return {
-        did: response.data.did,
-        handle: resolvedHandle,
-        displayName: response.data.displayName,
-        avatar: response.data.avatar,
-        followersCount: response.data.followersCount || 0,
-        followingCount: response.data.followingCount || 0,
-        postsCount: response.data.postsCount || 0,
-        description: response.data.description,
-        indexedAt: response.data.indexedAt,
-        labels: response.data.labels || [],
-        source: 'atprotocol-public',
-      };
-    } catch (error) {
-      this.logger.error('Failed to fetch public ATProtocol profile', {
-        error: error.message,
-        stack: error.stack,
-        handleOrDid,
-      });
-
-      throw new Error(
-        `Unable to resolve profile for ${handleOrDid}: ${error.message}`,
-      );
-    }
+    });
   }
 
   /**
@@ -383,27 +409,41 @@ export class BlueskyIdentityService {
    * @returns The handle or DID as fallback
    */
   async extractHandleFromDid(did: string): Promise<string> {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { IdResolver, getHandle } = require('@atproto/identity');
-      const idResolver = new IdResolver();
+    return this.tracer.startActiveSpan('atproto.extractHandleFromDid', async (span) => {
+      const startTime = Date.now();
+      span.setAttribute('atproto.did', did);
+      span.setAttribute('atproto.operation', 'did_to_handle');
 
-      // Add timeout to prevent hanging
-      const didDoc = await Promise.race([
-        idResolver.did.resolveNoCheck(did),
-        this.createTimeout(
-          this.TIMEOUT_DID_RESOLUTION,
-          'DID to handle extraction',
-        ),
-      ]);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { IdResolver, getHandle } = require('@atproto/identity');
+        const idResolver = new IdResolver();
 
-      const handle = getHandle(didDoc);
-      return handle || did;
-    } catch (error) {
-      this.logger.warn(
-        `Failed to extract handle from DID document for ${did}: ${error.message}`,
-      );
-      return did; // Fallback to DID
-    }
+        // Add timeout to prevent hanging
+        span.setAttribute('atproto.timeout_ms', this.TIMEOUT_DID_RESOLUTION);
+        const didDoc = await Promise.race([
+          idResolver.did.resolveNoCheck(did),
+          this.createTimeout(
+            this.TIMEOUT_DID_RESOLUTION,
+            'DID to handle extraction',
+          ),
+        ]);
+
+        const handle = getHandle(didDoc);
+        span.setAttribute('atproto.handle', handle || did);
+        span.setAttribute('atproto.duration_ms', Date.now() - startTime);
+        span.end();
+        return handle || did;
+      } catch (error) {
+        span.setAttribute('atproto.error', error.message);
+        span.setAttribute('atproto.duration_ms', Date.now() - startTime);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+        span.end();
+        this.logger.warn(
+          `Failed to extract handle from DID document for ${did}: ${error.message}`,
+        );
+        return did; // Fallback to DID
+      }
+    });
   }
 }

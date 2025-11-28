@@ -4,6 +4,7 @@ import { BlueskyIdentityService } from './bluesky-identity.service';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter, Histogram } from 'prom-client';
 import * as crypto from 'crypto';
+import { trace, SpanStatusCode } from '@opentelemetry/api';
 
 /**
  * Service for caching ATProto handle resolutions using ElastiCache (Redis)
@@ -18,6 +19,7 @@ import * as crypto from 'crypto';
 @Injectable()
 export class AtprotoHandleCacheService {
   private readonly logger = new Logger(AtprotoHandleCacheService.name);
+  private readonly tracer = trace.getTracer('atproto-handle-cache');
   private readonly CACHE_PREFIX = 'atproto:handle:';
   private readonly CACHE_TTL = 900; // 15 minutes (in seconds)
 
@@ -90,58 +92,85 @@ export class AtprotoHandleCacheService {
    * @returns The resolved handle or DID as fallback
    */
   async resolveHandle(did: string): Promise<string> {
-    const timer = this.resolutionDuration.startTimer();
+    return this.tracer.startActiveSpan('atproto.resolveHandle', async (span) => {
+      const startTime = Date.now();
+      const timer = this.resolutionDuration.startTimer();
+      span.setAttribute('atproto.did', did);
 
-    try {
-      // Return as-is if it doesn't look like a DID
-      if (!did?.startsWith('did:')) {
-        return did;
-      }
+      try {
+        // Return as-is if it doesn't look like a DID
+        if (!did?.startsWith('did:')) {
+          span.setAttribute('atproto.status', 'not_a_did');
+          span.end();
+          return did;
+        }
 
-      // Validate DID format to prevent cache poisoning
-      if (!this.validateDid(did)) {
-        this.logger.warn(`Invalid DID rejected: ${did.substring(0, 50)}`);
-        this.resolutionErrors.inc({ error_type: 'invalid_did' });
+        // Validate DID format to prevent cache poisoning
+        if (!this.validateDid(did)) {
+          this.logger.warn(`Invalid DID rejected: ${did.substring(0, 50)}`);
+          this.resolutionErrors.inc({ error_type: 'invalid_did' });
+          timer({ cache_status: 'error' });
+          span.setAttribute('atproto.status', 'invalid_did');
+          span.setStatus({ code: SpanStatusCode.ERROR, message: 'Invalid DID' });
+          span.end();
+          return did;
+        }
+
+        // Use sanitized cache key (hash-based) to prevent injection
+        const cacheKey = this.sanitizeCacheKey(did);
+
+        // Try ElastiCache first (shared across pods)
+        const cacheStartTime = Date.now();
+        const cached = await this.cache.get<string>(cacheKey);
+        span.setAttribute('atproto.cache_lookup_ms', Date.now() - cacheStartTime);
+
+        if (cached) {
+          this.cacheHits.inc();
+          timer({ cache_status: 'hit' });
+          span.setAttribute('atproto.status', 'cache_hit');
+          span.setAttribute('atproto.handle', cached);
+          span.setAttribute('atproto.total_duration_ms', Date.now() - startTime);
+          span.end();
+          this.logger.debug(`Cache hit for ${did}: ${cached}`);
+          return cached;
+        }
+
+        // Cache miss - resolve from ATProto
+        this.cacheMisses.inc();
+        span.setAttribute('atproto.cache_miss', true);
+        this.logger.debug(`Cache miss for ${did}, resolving via ATProto...`);
+
+        const externalStartTime = Date.now();
+        const handle = await this.blueskyIdentity.extractHandleFromDid(did);
+        span.setAttribute('atproto.external_call_ms', Date.now() - externalStartTime);
+
+        // Store in ElastiCache (shared across all API nodes)
+        await this.cache.set(cacheKey, handle, this.CACHE_TTL);
+        timer({ cache_status: 'miss' });
+        span.setAttribute('atproto.status', 'resolved_external');
+        span.setAttribute('atproto.handle', handle);
+        span.setAttribute('atproto.total_duration_ms', Date.now() - startTime);
+        span.end();
+
+        this.logger.log(
+          `Cached handle for ${did}: ${handle} (TTL: ${this.CACHE_TTL}s)`,
+        );
+
+        return handle;
+      } catch (error) {
+        this.resolutionErrors.inc({
+          error_type: error.name || 'unknown',
+        });
         timer({ cache_status: 'error' });
-        // Return as-is for backward compatibility
+        span.setAttribute('atproto.status', 'error');
+        span.setAttribute('atproto.error', error.message);
+        span.setAttribute('atproto.total_duration_ms', Date.now() - startTime);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+        span.end();
+        this.logger.warn(`Failed to resolve handle for ${did}: ${error.message}`);
         return did;
       }
-
-      // Use sanitized cache key (hash-based) to prevent injection
-      const cacheKey = this.sanitizeCacheKey(did);
-
-      // Try ElastiCache first (shared across pods)
-      const cached = await this.cache.get<string>(cacheKey);
-      if (cached) {
-        this.cacheHits.inc();
-        timer({ cache_status: 'hit' });
-        this.logger.debug(`Cache hit for ${did}: ${cached}`);
-        return cached;
-      }
-
-      // Cache miss - resolve from ATProto
-      this.cacheMisses.inc();
-      this.logger.debug(`Cache miss for ${did}, resolving via ATProto...`);
-
-      const handle = await this.blueskyIdentity.extractHandleFromDid(did);
-
-      // Store in ElastiCache (shared across all API nodes)
-      await this.cache.set(cacheKey, handle, this.CACHE_TTL);
-      timer({ cache_status: 'miss' });
-      this.logger.log(
-        `Cached handle for ${did}: ${handle} (TTL: ${this.CACHE_TTL}s)`,
-      );
-
-      return handle;
-    } catch (error) {
-      this.resolutionErrors.inc({
-        error_type: error.name || 'unknown',
-      });
-      timer({ cache_status: 'error' });
-      this.logger.warn(`Failed to resolve handle for ${did}: ${error.message}`);
-      // Graceful degradation: return DID if resolution fails
-      return did;
-    }
+    });
   }
 
   /**
@@ -151,17 +180,26 @@ export class AtprotoHandleCacheService {
    * @returns Map of DID to resolved handle
    */
   async resolveHandles(dids: string[]): Promise<Map<string, string>> {
-    const results = new Map<string, string>();
+    return this.tracer.startActiveSpan('atproto.resolveHandles', async (span) => {
+      const startTime = Date.now();
+      span.setAttribute('atproto.batch_size', dids.length);
 
-    // Resolve all in parallel (each checks cache independently)
-    await Promise.all(
-      dids.map(async (did) => {
-        const handle = await this.resolveHandle(did);
-        results.set(did, handle);
-      }),
-    );
+      const results = new Map<string, string>();
 
-    return results;
+      // Resolve all in parallel (each checks cache independently)
+      await Promise.all(
+        dids.map(async (did) => {
+          const handle = await this.resolveHandle(did);
+          results.set(did, handle);
+        }),
+      );
+
+      span.setAttribute('atproto.resolved_count', results.size);
+      span.setAttribute('atproto.total_duration_ms', Date.now() - startTime);
+      span.end();
+
+      return results;
+    });
   }
 
   /**

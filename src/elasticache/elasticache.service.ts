@@ -6,10 +6,12 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, RedisClientType } from 'redis';
+import { trace, SpanStatusCode } from '@opentelemetry/api';
 
 @Injectable()
 export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ElastiCacheService.name);
+  private readonly tracer = trace.getTracer('elasticache-service');
   private redis: RedisClientType;
 
   getRedis(): RedisClientType | null {
@@ -121,66 +123,148 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
   }
 
   async set(key: string, value: any, ttl?: number): Promise<void> {
-    try {
-      if (!this.redis?.isOpen) {
-        this.logger.warn('Redis client is not connected, skipping cache set');
-        return; // Gracefully skip caching instead of throwing
-      }
+    return this.tracer.startActiveSpan('redis.set', async (span) => {
+      const startTime = Date.now();
+      const keyPrefix = key.includes(':')
+        ? key.substring(0, key.lastIndexOf(':') + 1)
+        : 'unknown';
+      span.setAttribute('db.system', 'redis');
+      span.setAttribute('db.operation', 'SET');
+      span.setAttribute('cache.key_prefix', keyPrefix);
+      if (ttl) span.setAttribute('cache.ttl_seconds', ttl);
 
-      // Add timeout to prevent hanging when Redis is down/slow
-      const timeout = new Promise<void>((resolve) => {
-        setTimeout(() => {
-          this.logger.warn(`Redis set operation timeout for key: ${key}`);
-          resolve(); // Resolve instead of reject
-        }, this.OPERATION_TIMEOUT);
-      });
-
-      const operation = (async () => {
-        try {
-          if (ttl) {
-            await this.redis.set(key, JSON.stringify(value), { EX: ttl });
-          } else {
-            await this.redis.set(key, JSON.stringify(value));
-          }
-        } catch (err) {
-          this.logger.error(`Redis set error for key ${key}: ${err.message}`);
+      try {
+        if (!this.redis?.isOpen) {
+          span.setAttribute('cache.status', 'disconnected');
+          span.setStatus({ code: SpanStatusCode.ERROR, message: 'Redis not connected' });
+          span.end();
+          this.logger.warn('Redis client is not connected, skipping cache set');
+          return;
         }
-      })();
 
-      await Promise.race([operation, timeout]);
-    } catch (error) {
-      // Swallow all errors to ensure graceful degradation
-      this.logger.error(`Failed to set cache key ${key}: ${error.message}`);
-    }
+        let timedOut = false;
+        let operationCompleted = false;
+
+        const timeout = new Promise<void>((resolve) => {
+          setTimeout(() => {
+            if (!operationCompleted) {
+              timedOut = true;
+              span.setAttribute('cache.timeout', true);
+              span.setAttribute('cache.timeout_ms', this.OPERATION_TIMEOUT);
+              this.logger.warn(`Redis set operation timeout for key: ${key}`);
+            }
+            resolve();
+          }, this.OPERATION_TIMEOUT);
+        });
+
+        const operation = (async () => {
+          try {
+            if (ttl) {
+              await this.redis.set(key, JSON.stringify(value), { EX: ttl });
+            } else {
+              await this.redis.set(key, JSON.stringify(value));
+            }
+            operationCompleted = true;
+            span.setAttribute('cache.operation_duration_ms', Date.now() - startTime);
+          } catch (err) {
+            operationCompleted = true;
+            span.setAttribute('cache.error', err.message);
+            this.logger.error(`Redis set error for key ${key}: ${err.message}`);
+          }
+        })();
+
+        await Promise.race([operation, timeout]);
+
+        if (timedOut && !operationCompleted) {
+          span.setAttribute('cache.status', 'timeout');
+          span.setStatus({ code: SpanStatusCode.ERROR, message: 'Operation timeout' });
+        } else {
+          span.setAttribute('cache.status', 'success');
+        }
+
+        span.setAttribute('cache.total_duration_ms', Date.now() - startTime);
+        span.end();
+      } catch (error) {
+        span.setAttribute('cache.status', 'error');
+        span.setAttribute('cache.error', error.message);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+        span.end();
+        this.logger.error(`Failed to set cache key ${key}: ${error.message}`);
+      }
+    });
   }
 
   async get<T>(key: string): Promise<T | null> {
-    try {
-      if (!this.redis?.isOpen) {
-        this.logger.warn('Redis client is not connected, returning null');
-        return null; // Return null instead of throwing
+    return this.tracer.startActiveSpan('redis.get', async (span) => {
+      const startTime = Date.now();
+      // Extract key prefix for grouping (e.g., "atproto:handle:" from full key)
+      const keyPrefix = key.includes(':')
+        ? key.substring(0, key.lastIndexOf(':') + 1)
+        : 'unknown';
+      span.setAttribute('db.system', 'redis');
+      span.setAttribute('db.operation', 'GET');
+      span.setAttribute('cache.key_prefix', keyPrefix);
+
+      try {
+        if (!this.redis?.isOpen) {
+          span.setAttribute('cache.status', 'disconnected');
+          span.setStatus({ code: SpanStatusCode.ERROR, message: 'Redis not connected' });
+          span.end();
+          this.logger.warn('Redis client is not connected, returning null');
+          return null;
+        }
+
+        let timedOut = false;
+        let operationCompleted = false;
+
+        const timeout = new Promise<null>((resolve) => {
+          setTimeout(() => {
+            if (!operationCompleted) {
+              timedOut = true;
+              span.setAttribute('cache.timeout', true);
+              span.setAttribute('cache.timeout_ms', this.OPERATION_TIMEOUT);
+              this.logger.warn(`Redis get operation timeout for key: ${key}`);
+            }
+            resolve(null);
+          }, this.OPERATION_TIMEOUT);
+        });
+
+        const operation = this.redis.get(key).then((result) => {
+          operationCompleted = true;
+          span.setAttribute('cache.operation_duration_ms', Date.now() - startTime);
+          return result;
+        }).catch((err) => {
+          operationCompleted = true;
+          span.setAttribute('cache.error', err.message);
+          this.logger.error(`Redis get error for key ${key}: ${err.message}`);
+          return null;
+        });
+
+        const value = await Promise.race([operation, timeout]);
+
+        if (timedOut && !operationCompleted) {
+          span.setAttribute('cache.status', 'timeout');
+          span.setStatus({ code: SpanStatusCode.ERROR, message: 'Operation timeout' });
+        } else if (value) {
+          span.setAttribute('cache.status', 'hit');
+          span.setAttribute('cache.hit', true);
+        } else {
+          span.setAttribute('cache.status', 'miss');
+          span.setAttribute('cache.hit', false);
+        }
+
+        span.setAttribute('cache.total_duration_ms', Date.now() - startTime);
+        span.end();
+        return value ? JSON.parse(value as string) : null;
+      } catch (error) {
+        span.setAttribute('cache.status', 'error');
+        span.setAttribute('cache.error', error.message);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+        span.end();
+        this.logger.error(`Failed to get cache key ${key}: ${error.message}`);
+        return null;
       }
-
-      // Add timeout to prevent hanging when Redis is down/slow
-      const timeout = new Promise<null>((resolve) => {
-        setTimeout(() => {
-          this.logger.warn(`Redis get operation timeout for key: ${key}`);
-          resolve(null); // Resolve with null instead of reject
-        }, this.OPERATION_TIMEOUT);
-      });
-
-      const operation = this.redis.get(key).catch((err) => {
-        this.logger.error(`Redis get error for key ${key}: ${err.message}`);
-        return null; // Return null on error
-      });
-
-      const value = await Promise.race([operation, timeout]);
-      return value ? JSON.parse(value as string) : null;
-    } catch (error) {
-      // Swallow all errors and return null for graceful degradation
-      this.logger.error(`Failed to get cache key ${key}: ${error.message}`);
-      return null;
-    }
+    });
   }
 
   async del(key: string): Promise<void> {
