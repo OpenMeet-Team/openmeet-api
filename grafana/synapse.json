@@ -53,7 +53,7 @@
           "uid": "${DS_PROMETHEUS}"
         },
         "enable": true,
-        "expr": "changes(process_start_time_seconds{env=\"$env\",job=~\"synapse\"}[$bucket_size]) * on (env, job) group_left(version) synapse_build_info{env=\"$env\",job=\"synapse\"}",
+        "expr": "changes(process_start_time_seconds{env=\"$env\",app=\"matrix-synapse\"}[$bucket_size]) * on (env, app) group_left(version) synapse_build_info{env=\"$env\",app=\"matrix-synapse\"}",
         "iconColor": "purple",
         "name": "deploys",
         "titleFormat": "Deployed {{version}}"
