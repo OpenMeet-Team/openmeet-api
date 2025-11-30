@@ -486,6 +486,25 @@ export class EventManagementService {
       throw new NotFoundException(`Event with slug ${slug} not found`);
     }
 
+    // Validate capacity reduction - cannot reduce below confirmed attendees
+    if (
+      updateEventDto.maxAttendees !== undefined &&
+      event.maxAttendees !== null &&
+      updateEventDto.maxAttendees < event.maxAttendees
+    ) {
+      const confirmedCount =
+        await this.eventAttendeeService.showConfirmedEventAttendeesCount(
+          event.id,
+        );
+
+      if (updateEventDto.maxAttendees < confirmedCount) {
+        throw new BadRequestException(
+          `Cannot reduce capacity to ${updateEventDto.maxAttendees}. ` +
+            `Event has ${confirmedCount} confirmed attendee${confirmedCount !== 1 ? 's' : ''}.`,
+        );
+      }
+    }
+
     // Special case: Converting a non-recurring event to a recurring event by adding a recurrence rule
     if (updateEventDto.recurrenceRule && !event.seriesSlug) {
       this.logger.debug(

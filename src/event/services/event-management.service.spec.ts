@@ -201,6 +201,7 @@ describe('EventManagementService', () => {
             deleteEventAttendees: jest.fn(),
             update: jest.fn(),
             showEventAttendeesCount: jest.fn().mockResolvedValue(0),
+            showConfirmedEventAttendeesCount: jest.fn().mockResolvedValue(0),
             save: jest
               .fn()
               .mockImplementation((attendee) => Promise.resolve(attendee)),
@@ -1461,6 +1462,149 @@ describe('EventManagementService', () => {
         undefined,
         'America/Chicago',
         expect.any(Object),
+      );
+    });
+  });
+
+  describe('Capacity Enforcement (Issue #393)', () => {
+    it('should throw BadRequestException when reducing capacity below confirmed attendees', async () => {
+      const existingEvent = {
+        ...findOneMockEventEntity,
+        id: 800,
+        slug: 'capacity-test-event',
+        maxAttendees: 50,
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockReset();
+      mockRepository.findOne.mockResolvedValue(existingEvent);
+
+      // Mock 30 confirmed attendees
+      (
+        eventAttendeeService.showConfirmedEventAttendeesCount as jest.Mock
+      ).mockResolvedValue(30);
+
+      const updateDto: UpdateEventDto = {
+        maxAttendees: 20, // Trying to reduce below 30 confirmed
+      };
+
+      await expect(
+        service.update('capacity-test-event', updateDto),
+      ).rejects.toThrow(
+        'Cannot reduce capacity to 20. Event has 30 confirmed attendees.',
+      );
+
+      expect(
+        eventAttendeeService.showConfirmedEventAttendeesCount,
+      ).toHaveBeenCalledWith(800);
+    });
+
+    it('should allow reducing capacity when still above confirmed count', async () => {
+      const existingEvent = {
+        ...findOneMockEventEntity,
+        id: 801,
+        slug: 'capacity-ok-event',
+        maxAttendees: 50,
+      } as EventEntity;
+
+      const updatedEvent = {
+        ...existingEvent,
+        maxAttendees: 35,
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockReset();
+
+      // First call returns existing, subsequent calls return updated
+      let callCount = 0;
+      mockRepository.findOne.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve(existingEvent);
+        return Promise.resolve(updatedEvent);
+      });
+
+      // Mock 30 confirmed attendees
+      (
+        eventAttendeeService.showConfirmedEventAttendeesCount as jest.Mock
+      ).mockResolvedValue(30);
+
+      const updateDto: UpdateEventDto = {
+        maxAttendees: 35, // Above the 30 confirmed
+      };
+
+      const result = await service.update('capacity-ok-event', updateDto);
+
+      expect(result).toBeDefined();
+      expect(
+        eventAttendeeService.showConfirmedEventAttendeesCount,
+      ).toHaveBeenCalledWith(801);
+    });
+
+    it('should allow increasing capacity without checking confirmed count', async () => {
+      const existingEvent = {
+        ...findOneMockEventEntity,
+        id: 802,
+        slug: 'capacity-increase-event',
+        maxAttendees: 50,
+      } as EventEntity;
+
+      const updatedEvent = {
+        ...existingEvent,
+        maxAttendees: 100,
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockReset();
+
+      let callCount = 0;
+      mockRepository.findOne.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve(existingEvent);
+        return Promise.resolve(updatedEvent);
+      });
+
+      (
+        eventAttendeeService.showConfirmedEventAttendeesCount as jest.Mock
+      ).mockClear();
+
+      const updateDto: UpdateEventDto = {
+        maxAttendees: 100, // Increasing from 50 to 100
+      };
+
+      const result = await service.update('capacity-increase-event', updateDto);
+
+      expect(result).toBeDefined();
+      // Should not check confirmed count when increasing
+      expect(
+        eventAttendeeService.showConfirmedEventAttendeesCount,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should handle singular attendee in error message', async () => {
+      const existingEvent = {
+        ...findOneMockEventEntity,
+        id: 803,
+        slug: 'single-attendee-event',
+        maxAttendees: 10,
+      } as EventEntity;
+
+      await service['initializeRepository']();
+      mockRepository.findOne.mockReset();
+      mockRepository.findOne.mockResolvedValue(existingEvent);
+
+      // Mock 1 confirmed attendee
+      (
+        eventAttendeeService.showConfirmedEventAttendeesCount as jest.Mock
+      ).mockResolvedValue(1);
+
+      const updateDto: UpdateEventDto = {
+        maxAttendees: 0, // Trying to set to 0
+      };
+
+      await expect(
+        service.update('single-attendee-event', updateDto),
+      ).rejects.toThrow(
+        'Cannot reduce capacity to 0. Event has 1 confirmed attendee.',
       );
     });
   });
