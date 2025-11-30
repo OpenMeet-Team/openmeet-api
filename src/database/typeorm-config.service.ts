@@ -35,6 +35,7 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
         // based on https://node-postgres.com/apis/pool
         // max connection pool size
         max: this.configService.get('database.maxConnections', { infer: true }),
+        application_name: `openmeet_${this.configService.get('app.nodeEnv', { infer: true })}_main`,
         // Set timezone to UTC in the PostgreSQL connection, may mean migration needed
         // timezone: 'UTC',
         ssl: this.configService.get('database.sslEnabled', { infer: true })
