@@ -574,20 +574,28 @@ export class EventQueryService {
       return [];
     }
 
-    const eventsWithCounts = (await Promise.all(
-      events.map(async (event) => ({
-        ...event,
-        attendeesCount:
-          await this.eventAttendeeService.showConfirmedEventAttendeesCount(
-            event.id,
-          ),
-      })),
-    )) as EventEntity[];
+    // Batch fetch attendee counts in a single query (avoids N+1)
+    const eventIds = events.map((e) => e.id);
+    const counts = await this.eventAttendeesRepository
+      .createQueryBuilder('att')
+      .select('att.eventId', 'eventId')
+      .addSelect('COUNT(att.id)', 'count')
+      .where('att.eventId IN (:...eventIds)', { eventIds })
+      .andWhere('att.status = :status', {
+        status: EventAttendeeStatus.Confirmed,
+      })
+      .groupBy('att.eventId')
+      .getRawMany();
+
+    const countMap = new Map(
+      counts.map((c) => [c.eventId, parseInt(c.count, 10)]),
+    );
+    events.forEach((event) => {
+      (event as any).attendeesCount = countMap.get(event.id) || 0;
+    });
 
     // Add recurrence descriptions
-    return eventsWithCounts.map((event) =>
-      this.addRecurrenceInformation(event),
-    );
+    return events.map((event) => this.addRecurrenceInformation(event));
   }
 
   @Trace('event-query.getEventsByAttendee')
@@ -611,29 +619,41 @@ export class EventQueryService {
     limit: number,
   ): Promise<EventEntity[]> {
     await this.initializeRepository();
+    // Only load relations needed for list view (EventsItemComponent)
+    // Removed: 'user', 'categories' - not displayed in list view
     const events = await this.eventRepository.find({
       where: {
         group: { id: groupId },
         status: In([EventStatus.Published, EventStatus.Cancelled]),
       },
-      relations: ['user', 'group', 'categories', 'series'],
+      relations: ['group', 'series', 'image'],
       take: limit,
     });
 
-    const eventsWithCounts = (await Promise.all(
-      events.map(async (event) => ({
-        ...event,
-        attendeesCount:
-          await this.eventAttendeeService.showConfirmedEventAttendeesCount(
-            event.id,
-          ),
-      })),
-    )) as EventEntity[];
+    // Batch fetch attendee counts in a single query (avoids N+1)
+    if (events.length > 0) {
+      const eventIds = events.map((e) => e.id);
+      const counts = await this.eventAttendeesRepository
+        .createQueryBuilder('att')
+        .select('att.eventId', 'eventId')
+        .addSelect('COUNT(att.id)', 'count')
+        .where('att.eventId IN (:...eventIds)', { eventIds })
+        .andWhere('att.status = :status', {
+          status: EventAttendeeStatus.Confirmed,
+        })
+        .groupBy('att.eventId')
+        .getRawMany();
+
+      const countMap = new Map(
+        counts.map((c) => [c.eventId, parseInt(c.count, 10)]),
+      );
+      events.forEach((event) => {
+        (event as any).attendeesCount = countMap.get(event.id) || 0;
+      });
+    }
 
     // Add recurrence descriptions
-    return eventsWithCounts.map((event) =>
-      this.addRecurrenceInformation(event),
-    );
+    return events.map((event) => this.addRecurrenceInformation(event));
   }
 
   @Trace('event-query.findUpcomingEventsForGroup')
@@ -658,20 +678,30 @@ export class EventQueryService {
       .limit(limit)
       .getMany();
 
-    const eventsWithCounts = (await Promise.all(
-      events.map(async (event) => ({
-        ...event,
-        attendeesCount:
-          await this.eventAttendeeService.showConfirmedEventAttendeesCount(
-            event.id,
-          ),
-      })),
-    )) as EventEntity[];
+    // Batch fetch attendee counts in a single query (avoids N+1)
+    if (events.length > 0) {
+      const eventIds = events.map((e) => e.id);
+      const counts = await this.eventAttendeesRepository
+        .createQueryBuilder('att')
+        .select('att.eventId', 'eventId')
+        .addSelect('COUNT(att.id)', 'count')
+        .where('att.eventId IN (:...eventIds)', { eventIds })
+        .andWhere('att.status = :status', {
+          status: EventAttendeeStatus.Confirmed,
+        })
+        .groupBy('att.eventId')
+        .getRawMany();
+
+      const countMap = new Map(
+        counts.map((c) => [c.eventId, parseInt(c.count, 10)]),
+      );
+      events.forEach((event) => {
+        (event as any).attendeesCount = countMap.get(event.id) || 0;
+      });
+    }
 
     // Add recurrence descriptions
-    return eventsWithCounts.map((event) =>
-      this.addRecurrenceInformation(event),
-    );
+    return events.map((event) => this.addRecurrenceInformation(event));
   }
 
   @Trace('event-query.showDashboardEvents')
