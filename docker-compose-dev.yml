@@ -183,6 +183,7 @@ services:
       - DATABASE_HOST=postgres
       - ELASTICACHE_HOST=redis
       - MAIL_HOST=maildev
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tracing:4318
     env_file:
       - .env-local
     networks:
@@ -201,7 +202,7 @@ services:
       start_period: 40s
 
   tracing:
-    image: jaegertracing/all-in-one:latest
+    image: jaegertracing/jaeger:latest
     ports:
       - 6831:6831/udp
       - 6832:6832/udp

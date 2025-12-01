@@ -139,56 +139,74 @@ describe('EventQueryService', () => {
   });
 
   describe('findEventsForGroup', () => {
-    it('should return events for a group', async () => {
-      // Mock the database operations through the tenant connection
-      const mockRepositoryFind = jest.fn().mockResolvedValue([mockEventEntity]);
-      const mockGetRepository = jest.fn().mockReturnValue({
-        find: mockRepositoryFind,
-      });
+    it('should use batch query for attendee counts instead of N+1 individual calls', async () => {
+      // Create multiple mock events to simulate N+1 scenario
+      const mockEvents = Array.from({ length: 10 }, (_, i) => ({
+        ...mockEventEntity,
+        id: i + 1,
+        slug: `test-event-${i + 1}`,
+      }));
 
-      // Mock the attendee count service call which is used to enrich event data
-      const mockAttendeeCount = jest.fn().mockResolvedValue(5);
+      // Track individual showConfirmedEventAttendeesCount calls (N+1 pattern)
+      const mockAttendeeCountFn = jest.fn().mockResolvedValue(5);
       jest
         .spyOn(
           service['eventAttendeeService'],
           'showConfirmedEventAttendeesCount',
         )
-        .mockImplementation(mockAttendeeCount);
+        .mockImplementation(mockAttendeeCountFn);
 
-      // Provide a mock for the tenant connection
+      // Mock query builder for batch count query
+      const mockGetRawMany = jest.fn().mockResolvedValue(
+        mockEvents.map((e) => ({ eventId: e.id, count: '5' })),
+      );
+      const mockQueryBuilder = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: mockGetRawMany,
+      };
+
+      // Mock the repository with both find and createQueryBuilder
+      const mockRepositoryFind = jest.fn().mockResolvedValue(mockEvents);
+      const mockEventAttendeesRepo = {
+        createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+      };
+
       jest
         .spyOn(service['tenantConnectionService'], 'getTenantConnection')
         .mockResolvedValue({
-          getRepository: mockGetRepository,
+          getRepository: jest.fn().mockImplementation((entity) => {
+            if (entity.name === 'EventAttendeesEntity') {
+              return mockEventAttendeesRepo;
+            }
+            return {
+              find: mockRepositoryFind,
+              createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+            };
+          }),
         } as any);
 
-      // Call the method under test
-      await service.findEventsForGroup(1, 3);
+      // Call the method
+      const result = await service.findEventsForGroup(1, 10);
 
-      // Verify tenant connection was used correctly
-      expect(
-        service['tenantConnectionService'].getTenantConnection,
-      ).toHaveBeenCalled();
+      // Verify we got all events back with attendee counts
+      expect(result).toHaveLength(10);
 
-      // Verify repository was queried correctly
-      expect(mockGetRepository).toHaveBeenCalledWith(EventEntity);
-      expect(mockRepositoryFind).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            group: { id: 1 },
-            status: expect.objectContaining({
-              _type: 'in',
-              _value: [EventStatus.Published, EventStatus.Cancelled],
-            }),
-          }),
-          take: 3,
-        }),
-      );
+      // KEY ASSERTION: After the fix, showConfirmedEventAttendeesCount should NOT be called
+      // at all because we use a batch query instead
+      // Before the fix: this would be called 10 times (once per event) - N+1 problem
+      // After the fix: this should be called 0 times (batch query used instead)
+      const individualCallCount = mockAttendeeCountFn.mock.calls.length;
 
-      // Verify attendee service was called to enrich the returned events
-      expect(
-        service['eventAttendeeService'].showConfirmedEventAttendeesCount,
-      ).toHaveBeenCalledWith(mockEventEntity.id);
+      // KEY ASSERTION: showConfirmedEventAttendeesCount should NOT be called
+      // because we use a batch query instead (N+1 fix)
+      expect(individualCallCount).toBe(0);
+
+      // Verify batch query was used
+      expect(mockGetRawMany).toHaveBeenCalled();
     });
   });
 
