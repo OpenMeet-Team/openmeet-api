@@ -224,6 +224,7 @@ export class UserService {
     // Only show public events on user profiles
     const eventsQuery = this.usersRepository.manager
       .createQueryBuilder(EventEntity, 'event')
+      .leftJoinAndSelect('event.image', 'eventImage')
       .where('event.userId = :userId', { userId: user.id })
       .andWhere('event.visibility = :visibility', { visibility: 'public' })
       .andWhere('event.status IN (:...statuses)', {
@@ -237,6 +238,7 @@ export class UserService {
     // Only show public groups on user profiles (anonymous users can view profiles)
     const groupsQuery = this.usersRepository.manager
       .createQueryBuilder(GroupEntity, 'group')
+      .leftJoinAndSelect('group.image', 'groupImage')
       .where('group.createdById = :userId', { userId: user.id })
       .andWhere('group.visibility = :visibility', { visibility: 'public' })
       .andWhere('group.status = :status', { status: 'published' });
@@ -249,6 +251,7 @@ export class UserService {
     const groupMembersQuery = this.usersRepository.manager
       .createQueryBuilder(GroupMemberEntity, 'groupMember')
       .leftJoinAndSelect('groupMember.group', 'group')
+      .leftJoinAndSelect('group.image', 'groupMemberGroupImage')
       .leftJoinAndSelect('groupMember.groupRole', 'groupRole')
       .where('groupMember.userId = :userId', { userId: user.id })
       .andWhere('group.visibility = :visibility', { visibility: 'public' })
