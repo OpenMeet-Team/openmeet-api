@@ -1,5 +1,4 @@
-import { Injectable } from '@nestjs/common';
-import { Facebook } from 'fb';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SocialInterface } from '../social/interfaces/social.interface';
 import { FacebookInterface } from './interfaces/facebook.interface';
@@ -13,27 +12,15 @@ export class AuthFacebookService {
   async getProfileByToken(
     loginDto: AuthFacebookLoginDto,
   ): Promise<SocialInterface> {
-    const fb: Facebook = new Facebook({
-      appId: this.configService.get('facebook.appId', {
-        infer: true,
-      }),
-      appSecret: this.configService.get('facebook.appSecret', {
-        infer: true,
-      }),
-      version: 'v7.0',
-    });
-    fb.setAccessToken(loginDto.accessToken);
+    const fields = 'id,email,first_name,last_name';
+    const url = `https://graph.facebook.com/v19.0/me?fields=${fields}&access_token=${encodeURIComponent(loginDto.accessToken)}`;
 
-    const data: FacebookInterface = await new Promise((resolve) => {
-      fb.api(
-        '/me',
-        'get',
-        { fields: 'id,last_name,email,first_name' },
-        (response) => {
-          resolve(response);
-        },
-      );
-    });
+    const response = await fetch(url);
+    const data: FacebookInterface = await response.json();
+
+    if (!response.ok || !data.id) {
+      throw new UnauthorizedException('Invalid Facebook access token');
+    }
 
     return {
       id: data.id,
