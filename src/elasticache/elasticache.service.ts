@@ -136,7 +136,10 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
       try {
         if (!this.redis?.isOpen) {
           span.setAttribute('cache.status', 'disconnected');
-          span.setStatus({ code: SpanStatusCode.ERROR, message: 'Redis not connected' });
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: 'Redis not connected',
+          });
           span.end();
           this.logger.warn('Redis client is not connected, skipping cache set');
           return;
@@ -165,7 +168,10 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
               await this.redis.set(key, JSON.stringify(value));
             }
             operationCompleted = true;
-            span.setAttribute('cache.operation_duration_ms', Date.now() - startTime);
+            span.setAttribute(
+              'cache.operation_duration_ms',
+              Date.now() - startTime,
+            );
           } catch (err) {
             operationCompleted = true;
             span.setAttribute('cache.error', err.message);
@@ -177,7 +183,10 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
 
         if (timedOut && !operationCompleted) {
           span.setAttribute('cache.status', 'timeout');
-          span.setStatus({ code: SpanStatusCode.ERROR, message: 'Operation timeout' });
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: 'Operation timeout',
+          });
         } else {
           span.setAttribute('cache.status', 'success');
         }
@@ -208,7 +217,10 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
       try {
         if (!this.redis?.isOpen) {
           span.setAttribute('cache.status', 'disconnected');
-          span.setStatus({ code: SpanStatusCode.ERROR, message: 'Redis not connected' });
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: 'Redis not connected',
+          });
           span.end();
           this.logger.warn('Redis client is not connected, returning null');
           return null;
@@ -229,22 +241,31 @@ export class ElastiCacheService implements OnModuleInit, OnModuleDestroy {
           }, this.OPERATION_TIMEOUT);
         });
 
-        const operation = this.redis.get(key).then((result) => {
-          operationCompleted = true;
-          span.setAttribute('cache.operation_duration_ms', Date.now() - startTime);
-          return result;
-        }).catch((err) => {
-          operationCompleted = true;
-          span.setAttribute('cache.error', err.message);
-          this.logger.error(`Redis get error for key ${key}: ${err.message}`);
-          return null;
-        });
+        const operation = this.redis
+          .get(key)
+          .then((result) => {
+            operationCompleted = true;
+            span.setAttribute(
+              'cache.operation_duration_ms',
+              Date.now() - startTime,
+            );
+            return result;
+          })
+          .catch((err) => {
+            operationCompleted = true;
+            span.setAttribute('cache.error', err.message);
+            this.logger.error(`Redis get error for key ${key}: ${err.message}`);
+            return null;
+          });
 
         const value = await Promise.race([operation, timeout]);
 
         if (timedOut && !operationCompleted) {
           span.setAttribute('cache.status', 'timeout');
-          span.setStatus({ code: SpanStatusCode.ERROR, message: 'Operation timeout' });
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: 'Operation timeout',
+          });
         } else if (value) {
           span.setAttribute('cache.status', 'hit');
           span.setAttribute('cache.hit', true);

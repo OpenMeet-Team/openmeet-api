@@ -353,78 +353,84 @@ export class ActivityFeedService {
   async resolveDisplayNames(
     activities: ActivityFeedEntity[],
   ): Promise<Array<ActivityFeedEntity & { displayName?: string }>> {
-    return this.tracer.startActiveSpan('activity-feed.resolveDisplayNames', async (span) => {
-      const startTime = Date.now();
-      span.setAttribute('activity.count', activities.length);
+    return this.tracer.startActiveSpan(
+      'activity-feed.resolveDisplayNames',
+      async (span) => {
+        const startTime = Date.now();
+        span.setAttribute('activity.count', activities.length);
 
-      if (!activities.length) {
-        span.setAttribute('activity.status', 'empty');
-        span.end();
-        return [];
-      }
-
-      // Collect unique DIDs that need resolution
-      const didsToResolve = new Set<string>();
-      const userCache = new Map<number, string>(); // userId -> displayName
-
-      for (const activity of activities) {
-        if (!activity.actor) continue;
-
-        const user = activity.actor;
-
-        // Skip if we've already processed this user
-        if (userCache.has(user.id)) continue;
-
-        // Check if this is a Bluesky user with a DID
-        if (
-          user.provider === AuthProvidersEnum.bluesky &&
-          user.socialId?.startsWith('did:')
-        ) {
-          didsToResolve.add(user.socialId);
-        } else {
-          // For regular users, use firstName
-          userCache.set(user.id, user.firstName || '');
+        if (!activities.length) {
+          span.setAttribute('activity.status', 'empty');
+          span.end();
+          return [];
         }
-      }
 
-      span.setAttribute('activity.dids_to_resolve', didsToResolve.size);
-      span.setAttribute('activity.regular_users', userCache.size);
+        // Collect unique DIDs that need resolution
+        const didsToResolve = new Set<string>();
+        const userCache = new Map<number, string>(); // userId -> displayName
 
-      // Batch resolve all DIDs if any
-      if (didsToResolve.size > 0) {
-        const resolveStartTime = Date.now();
-        const resolvedHandles = await this.atprotoHandleCache.resolveHandles(
-          Array.from(didsToResolve),
-        );
-        span.setAttribute('activity.resolve_duration_ms', Date.now() - resolveStartTime);
-
-        // Populate cache with resolved handles
         for (const activity of activities) {
           if (!activity.actor) continue;
+
           const user = activity.actor;
 
+          // Skip if we've already processed this user
+          if (userCache.has(user.id)) continue;
+
+          // Check if this is a Bluesky user with a DID
           if (
             user.provider === AuthProvidersEnum.bluesky &&
             user.socialId?.startsWith('did:')
           ) {
-            const handle = resolvedHandles.get(user.socialId);
-            if (handle) {
-              userCache.set(user.id, handle);
+            didsToResolve.add(user.socialId);
+          } else {
+            // For regular users, use firstName
+            userCache.set(user.id, user.firstName || '');
+          }
+        }
+
+        span.setAttribute('activity.dids_to_resolve', didsToResolve.size);
+        span.setAttribute('activity.regular_users', userCache.size);
+
+        // Batch resolve all DIDs if any
+        if (didsToResolve.size > 0) {
+          const resolveStartTime = Date.now();
+          const resolvedHandles = await this.atprotoHandleCache.resolveHandles(
+            Array.from(didsToResolve),
+          );
+          span.setAttribute(
+            'activity.resolve_duration_ms',
+            Date.now() - resolveStartTime,
+          );
+
+          // Populate cache with resolved handles
+          for (const activity of activities) {
+            if (!activity.actor) continue;
+            const user = activity.actor;
+
+            if (
+              user.provider === AuthProvidersEnum.bluesky &&
+              user.socialId?.startsWith('did:')
+            ) {
+              const handle = resolvedHandles.get(user.socialId);
+              if (handle) {
+                userCache.set(user.id, handle);
+              }
             }
           }
         }
-      }
 
-      span.setAttribute('activity.total_duration_ms', Date.now() - startTime);
-      span.end();
+        span.setAttribute('activity.total_duration_ms', Date.now() - startTime);
+        span.end();
 
-      // Return activities with resolved display names
-      return activities.map((activity) => {
-        const displayName = activity.actor
-          ? userCache.get(activity.actor.id)
-          : undefined;
-        return Object.assign(activity, { displayName });
-      });
-    });
+        // Return activities with resolved display names
+        return activities.map((activity) => {
+          const displayName = activity.actor
+            ? userCache.get(activity.actor.id)
+            : undefined;
+          return Object.assign(activity, { displayName });
+        });
+      },
+    );
   }
 }

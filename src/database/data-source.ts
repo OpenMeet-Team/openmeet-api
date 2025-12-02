@@ -403,7 +403,8 @@ export const AppDataSource = (tenantId: string) => {
           ? parseInt(process.env.DATABASE_MAX_POOL_SIZE, 10)
           : 40,
         // Cleanup idle connections - defaults to false to keep min connections alive
-        allowExitOnIdle: process.env.DATABASE_POOL_ALLOW_EXIT_ON_IDLE === 'true',
+        allowExitOnIdle:
+          process.env.DATABASE_POOL_ALLOW_EXIT_ON_IDLE === 'true',
       },
     } as DataSourceOptions);
   });

@@ -157,9 +157,11 @@ describe('EventQueryService', () => {
         .mockImplementation(mockAttendeeCountFn);
 
       // Mock query builder for batch count query
-      const mockGetRawMany = jest.fn().mockResolvedValue(
-        mockEvents.map((e) => ({ eventId: e.id, count: '5' })),
-      );
+      const mockGetRawMany = jest
+        .fn()
+        .mockResolvedValue(
+          mockEvents.map((e) => ({ eventId: e.id, count: '5' })),
+        );
       const mockQueryBuilder = {
         select: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),

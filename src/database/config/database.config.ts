@@ -114,6 +114,7 @@ export default registerAs<DatabaseConfig>('database', () => {
     poolIdleTimeoutMs: process.env.DATABASE_POOL_IDLE_TIMEOUT_MS
       ? parseInt(process.env.DATABASE_POOL_IDLE_TIMEOUT_MS, 10)
       : 30000,
-    poolAllowExitOnIdle: process.env.DATABASE_POOL_ALLOW_EXIT_ON_IDLE === 'true',
+    poolAllowExitOnIdle:
+      process.env.DATABASE_POOL_ALLOW_EXIT_ON_IDLE === 'true',
   };
 });

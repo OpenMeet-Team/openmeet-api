@@ -69,6 +69,7 @@ export class EventQueryService {
    * @param queryBuilder - The query builder to apply filters to
    * @param userId - Optional user ID for authenticated users
    */
+  // eslint-disable-next-line @typescript-eslint/require-await
   private async applyEventVisibilityFilter(
     queryBuilder: any,
     userId?: number,
