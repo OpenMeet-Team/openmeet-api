@@ -153,13 +153,28 @@ export class RsvpIntegrationService {
           attendeeToUpdate.sourceType = rsvpData.eventSourceType || null;
           attendeeToUpdate.lastSyncedAt = new Date();
 
+          // Update metadata - preserve originalCreatedAt from existing record
+          if (rsvpData.metadata) {
+            const existingSourceData =
+              (attendeeToUpdate.sourceData as Record<string, unknown>) || {};
+            attendeeToUpdate.sourceData = {
+              ...existingSourceData,
+              rsvpCid: rsvpData.metadata.cid,
+              eventCid: rsvpData.metadata.eventCid,
+              rkey: rsvpData.metadata.rkey,
+              // Preserve original createdAt if it exists
+              originalCreatedAt:
+                existingSourceData.originalCreatedAt || rsvpData.timestamp,
+            };
+          }
+
           // Save the updated entity
           await this.eventAttendeeService.save(attendeeToUpdate);
         }
 
         // Get the updated record
         const updatedAttendee = await this.eventAttendeeService.findOne({
-          id: existingAttendee.id,
+          where: { id: existingAttendee.id },
         });
 
         timer();
@@ -180,6 +195,15 @@ export class RsvpIntegrationService {
         sourceId: rsvpData.sourceId,
         sourceType: rsvpData.eventSourceType,
         lastSyncedAt: new Date(),
+        // Store metadata including eventCid for version tracking
+        sourceData: rsvpData.metadata
+          ? {
+              rsvpCid: rsvpData.metadata.cid,
+              eventCid: rsvpData.metadata.eventCid,
+              rkey: rsvpData.metadata.rkey,
+              originalCreatedAt: rsvpData.timestamp,
+            }
+          : undefined,
         // Skip syncing back to Bluesky since this RSVP came from Bluesky
         skipBlueskySync: true,
       };
@@ -230,6 +254,9 @@ export class RsvpIntegrationService {
     });
 
     try {
+      // Get the tenant connection - needed for EventAttendeeService queries
+      await this.tenantService.getTenantConnection(tenantId);
+
       // First approach: Try to find attendees by sourceId
       if (sourceId.startsWith('at://')) {
         try {

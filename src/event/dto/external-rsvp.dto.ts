@@ -61,9 +61,28 @@ export class ExternalRsvpDto {
 
   @ApiPropertyOptional({
     description: 'Source ID of the RSVP record',
-    example: 'at://did:plc:xyz789abc/app.bsky.rsvp/1234',
+    example: 'at://did:plc:xyz789abc/community.lexicon.calendar.rsvp/1234',
   })
   @IsString()
   @IsOptional()
   sourceId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Additional metadata from the RSVP record',
+    example: {
+      cid: 'bafyreid...',
+      eventCid: 'bafyreid...',
+      rkey: 'abc123',
+    },
+  })
+  @IsOptional()
+  metadata?: {
+    cid?: string;
+    eventCid?: string;
+    rkey?: string;
+    collection?: string;
+    rev?: string;
+    time_us?: number;
+    eventUri?: string;
+  };
 }

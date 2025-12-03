@@ -1,4 +1,5 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { BlueskyService } from './bluesky.service';
 import { BlueskyIdService } from './bluesky-id.service';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
@@ -6,7 +7,11 @@ import { Counter, Histogram } from 'prom-client';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { EventSourceType } from '../core/constants/source-type.constant';
 import { Trace } from '../utils/trace.decorator';
-import { BLUESKY_COLLECTIONS } from './BlueskyTypes';
+import {
+  BLUESKY_COLLECTIONS,
+  RSVP_STATUS,
+  RsvpStatusShort,
+} from './BlueskyTypes';
 
 /**
  * Service for managing RSVPs in the ATProtocol ecosystem
@@ -15,6 +20,15 @@ import { BLUESKY_COLLECTIONS } from './BlueskyTypes';
 @Injectable()
 export class BlueskyRsvpService {
   private readonly logger = new Logger(BlueskyRsvpService.name);
+
+  /**
+   * Generate a deterministic rkey for an RSVP based on the event URI.
+   * This ensures the same event always produces the same rkey, making updates idempotent.
+   * Uses a hash-based approach similar to Smoke Signal's implementation.
+   */
+  private generateRsvpRkey(eventUri: string): string {
+    return createHash('sha256').update(eventUri).digest('hex').substring(0, 13);
+  }
 
   constructor(
     @Inject(forwardRef(() => BlueskyService))
@@ -36,10 +50,10 @@ export class BlueskyRsvpService {
   @Trace('bluesky-rsvp.createRsvp')
   async createRsvp(
     event: EventEntity,
-    status: 'going' | 'interested' | 'notgoing',
+    status: RsvpStatusShort,
     did: string,
     tenantId: string,
-  ): Promise<{ success: boolean; rsvpUri: string }> {
+  ): Promise<{ success: boolean; rsvpUri: string; rsvpCid?: string }> {
     // Start measuring duration
     const timer = this.processingDuration.startTimer({
       tenant: tenantId,
@@ -98,6 +112,18 @@ export class BlueskyRsvpService {
         event.sourceData.rkey as string,
       );
 
+      // Get event CID for StrongRef (required by community.lexicon.calendar.rsvp spec)
+      const eventCid = event.sourceData.cid as string | undefined;
+      if (!eventCid) {
+        this.logger.warn(
+          `Event source data is missing CID - RSVP may not validate correctly`,
+          {
+            eventId: event.id,
+            eventSourceData: event.sourceData,
+          },
+        );
+      }
+
       // Get Bluesky agent for the user
       this.logger.debug(`Creating Bluesky session for user`, {
         userDid: did,
@@ -112,20 +138,20 @@ export class BlueskyRsvpService {
         throw new Error(`Failed to create Bluesky session for user ${did}`);
       }
 
-      // Create the RSVP record using standard collection names
-      const recordData = {
+      // Create the RSVP record using StrongRef format per community.lexicon.calendar.rsvp spec
+      const recordData: Record<string, unknown> = {
         $type: BLUESKY_COLLECTIONS.RSVP,
         subject: {
-          $type: BLUESKY_COLLECTIONS.EVENT,
           uri: eventUri,
+          ...(eventCid && { cid: eventCid }), // Include CID if available
         },
-        status,
+        status: RSVP_STATUS[status], // Use full NSID-prefixed status
         createdAt: new Date().toISOString(),
       };
 
-      // Generate a consistent rkey for the RSVP based on event and user
-      // Format: event-rkey-rsvp-user-did
-      const rkey = `${event.sourceData.rkey}-rsvp`;
+      // Generate a deterministic rkey for the RSVP based on event URI
+      // This ensures the same event always produces the same rkey, making updates idempotent
+      const rkey = this.generateRsvpRkey(eventUri);
 
       this.logger.debug(`Sending RSVP record to Bluesky PDS`, {
         userDid: did,
@@ -163,9 +189,10 @@ export class BlueskyRsvpService {
         `Successfully created RSVP for event ${event.name} with status ${status}`,
         {
           eventUri,
+          eventCid,
           did,
           rkey,
-          cid: result.data.cid,
+          rsvpCid: result.data.cid,
           rsvpUri,
         },
       );
@@ -176,6 +203,7 @@ export class BlueskyRsvpService {
       return {
         success: true,
         rsvpUri,
+        rsvpCid: result.data.cid,
       };
     } catch (error) {
       // Stop the timer for error case
@@ -295,9 +323,15 @@ export class BlueskyRsvpService {
         // Safely type the record value for TypeScript
         const value = record.value as {
           status?: string;
-          subject?: { uri?: string };
+          subject?: { uri?: string; cid?: string };
           createdAt?: string;
         };
+
+        // Strip NSID prefix from status if present (e.g., "community.lexicon.calendar.rsvp#going" -> "going")
+        let status = value.status;
+        if (status && status.includes('#')) {
+          status = status.split('#').pop();
+        }
 
         return {
           uri: this.blueskyIdService.createUri(
@@ -307,8 +341,9 @@ export class BlueskyRsvpService {
           ),
           cid: record.cid,
           rkey: record.rkey,
-          status: value.status,
+          status,
           eventUri: value.subject?.uri,
+          eventCid: value.subject?.cid,
           createdAt: value.createdAt,
         };
       });

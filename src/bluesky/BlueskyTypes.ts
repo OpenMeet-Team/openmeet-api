@@ -50,3 +50,19 @@ export const BLUESKY_COLLECTIONS = {
   EVENT: 'community.lexicon.calendar.event',
   RSVP: 'community.lexicon.calendar.rsvp',
 };
+
+// RSVP status values with full NSID prefix per community.lexicon.calendar.rsvp spec
+export const RSVP_STATUS = {
+  going: 'community.lexicon.calendar.rsvp#going',
+  interested: 'community.lexicon.calendar.rsvp#interested',
+  notgoing: 'community.lexicon.calendar.rsvp#notgoing',
+} as const;
+
+export type RsvpStatusShort = 'going' | 'interested' | 'notgoing';
+export type RsvpStatusFull = (typeof RSVP_STATUS)[RsvpStatusShort];
+
+// StrongRef type per com.atproto.repo.strongRef
+export interface StrongRef {
+  uri: string;
+  cid: string;
+}
