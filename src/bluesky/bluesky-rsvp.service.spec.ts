@@ -72,6 +72,7 @@ describe('BlueskyRsvpService', () => {
         sourceData: {
           did: 'did:plc:abcdef123456',
           rkey: 'event123',
+          cid: 'bafyreieventcid123',
         },
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -163,14 +164,14 @@ describe('BlueskyRsvpService', () => {
       expect(mockAgent.com.atproto.repo.putRecord).toHaveBeenCalledWith({
         repo: userDid,
         collection: 'community.lexicon.calendar.rsvp',
-        rkey: expect.stringContaining('event123-rsvp'),
+        rkey: expect.any(String), // Deterministic hash-based rkey
         record: {
           $type: 'community.lexicon.calendar.rsvp',
           subject: {
-            $type: 'community.lexicon.calendar.event',
             uri: mockEventUri,
+            cid: 'bafyreieventcid123', // StrongRef includes CID
           },
-          status: 'going',
+          status: 'community.lexicon.calendar.rsvp#going', // NSID-prefixed status
           createdAt: expect.any(String),
         },
       });
@@ -182,6 +183,7 @@ describe('BlueskyRsvpService', () => {
       expect(result).toEqual({
         success: true,
         rsvpUri: mockRsvpUri,
+        rsvpCid: 'cidxyz123',
       });
     });
 

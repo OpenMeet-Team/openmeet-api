@@ -884,6 +884,7 @@ export class EventAttendeeService {
       .createQueryBuilder('eventAttendee')
       .leftJoinAndSelect('eventAttendee.event', 'event')
       .leftJoinAndSelect('eventAttendee.user', 'user')
+      .leftJoinAndSelect('eventAttendee.role', 'role')
       .where(`eventAttendee.sourceId = :sourceId`, { sourceId });
 
     // Add user slug filter if provided

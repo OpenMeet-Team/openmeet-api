@@ -160,7 +160,7 @@ export class RsvpIntegrationController {
       );
 
       return {
-        success: true,
+        success: result.success,
         message: result.message,
       };
     } catch (error) {
