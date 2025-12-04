@@ -12,6 +12,7 @@ This document serves as the authoritative source of truth for the design and imp
   - [2. Profile Management Components](#2-profile-management-components)
   - [3. Event Synchronization Components](#3-event-synchronization-components)
   - [4. Shadow User Components](#4-shadow-user-components)
+  - [5. Group Synchronization Components](#5-group-synchronization-components)
 - [User Authentication Flow](#user-authentication-flow)
 - [Event Synchronization](#event-synchronization)
   - [1. OpenMeet → Bluesky](#1-openmeet--bluesky)
@@ -43,6 +44,15 @@ This document serves as the authoritative source of truth for the design and imp
   - [Event Processing Flow](#event-processing-flow)
   - [Data Flow Diagram](#data-flow-diagram)
   - [Error Handling Strategy](#error-handling-strategy)
+- [Group Integration (AT Protocol)](#group-integration-at-protocol)
+  - [Overview](#overview)
+  - [Group Identity Model](#group-identity-model)
+  - [Membership Model](#membership-model)
+  - [Group Events](#group-events)
+  - [Leadership and Governance](#leadership-and-governance)
+  - [Future: Threshold Signing](#future-threshold-signing)
+- [Community Lexicon Adoption](#community-lexicon-adoption)
+- [Data Flow Patterns](#data-flow-patterns)
 - [References](#references-1)
 
 ## Introduction and Overview
@@ -59,14 +69,29 @@ The AT Protocol, being decentralized, presents unique challenges and opportuniti
 ## Key Design Principles
 
 1. **Source of Truth Management**
-   - Bluesky PDS is the source of truth for Bluesky-created events
-   - OpenMeet is the source of truth for locally-created events
-   - Clear origin tracking for conflict resolution
+
+   The source of truth depends on the user type and data ownership:
+
+   | User Type | Data Type | Source of Truth | OpenMeet Role |
+   |-----------|-----------|-----------------|---------------|
+   | Bluesky user | User's own data (RSVPs, memberships, posts) | User's PDS | Cache/Index |
+   | Bluesky user | Events they create | User's PDS | Cache/Index |
+   | Email/OAuth user | All their data | OpenMeet PostgreSQL | Authoritative |
+   | ATProto-enabled Group | Group profile, events, governance | Group's PDS | Cache/Index |
+   | Non-ATProto Group | All group data | OpenMeet PostgreSQL | Authoritative |
+
+   **Key Principles:**
+   - **For Bluesky users**: Write to PDS first, cache locally second
+   - **On conflict**: PDS wins, update local cache
+   - **Firehose subscription**: Keeps cache synchronized with external changes
+   - **User data portability**: Users can verify their data exists in their PDS independent of OpenMeet
+   - **Clear origin tracking**: `sourceType`, `sourceId`, `sourceCid` fields track data provenance
 
 2. **Decentralized Identity**
    - Support for multiple PDSes, not just bsky.social
    - Proper DID and handle resolution
    - Profile data syncing with respect for user privacy
+   - Group DIDs for collective identity (planned)
 
 3. **Shadow Account Architecture**
    - Lightweight provisional accounts for event creators discovered via Bluesky
@@ -77,6 +102,13 @@ The AT Protocol, being decentralized, presents unique challenges and opportuniti
    - Bidirectional event and RSVP syncing
    - Deduplication to prevent duplicate event creation
    - Graceful degradation when Bluesky services are unavailable
+   - Periodic reconciliation to ensure cache consistency
+
+5. **Hybrid User Support**
+   - Full functionality for non-Bluesky users (email, OAuth)
+   - AT Protocol is an optional enhancement layer, not a requirement
+   - Non-Bluesky users can later connect Bluesky to gain data portability
+   - Migration path: local data → PDS when user connects Bluesky
 
 ## Architecture Components
 
@@ -108,6 +140,14 @@ The integration consists of several key components:
 - **Shadow Account Service**: Creates and manages lightweight accounts
 - **Series Detection**: Identifies potential recurring patterns from individual events
 - **Account Claiming**: Transfers ownership when shadow users register
+
+### 5. Group Synchronization Components (Planned)
+
+- **Group DID Management**: Creates and manages DIDs for AT Protocol-enabled groups
+- **Group Profile Sync**: Synchronizes group profile data between Group PDS and OpenMeet
+- **Membership Sync**: Tracks membership records from user PDSes via firehose
+- **Group Event Sync**: Manages events owned by groups (stored in group's PDS)
+- **Governance Sync**: Tracks leadership and governance records
 
 ## User Authentication Flow
 
@@ -531,6 +571,22 @@ interface BlueskyEnhancedProfile extends BlueskyPublicProfile {
    - Implement exponential backoff for sync failures
    - Implement sync status tracking in admin interface
 
+6. **Group Integration (AT Protocol)**
+   - Group DID creation and management
+   - `community.lexicon.group.*` lexicon adoption
+   - Membership sync (user PDS ↔ OpenMeet cache)
+   - Group-owned events model (events in group's PDS)
+   - Leadership and governance tracking
+   - Firehose subscription for group-related collections
+   - UI for enabling AT Protocol on existing groups
+
+7. **Future: Threshold Signing for Groups**
+   - FROST threshold signature integration for group key management
+   - M-of-N leader approval for group operations
+   - Signing ceremony coordination service
+   - Leader rotation and key resharing
+   - True decentralized group ownership
+
 ## Minimum Viable Implementation
 
 To expedite delivery of the core integration features, we will focus initially on a Minimum Viable Implementation (MVI) approach. This allows us to quickly provide value while continuing to build out the complete architecture.
@@ -738,11 +794,323 @@ External Source → Firehose/Scraper → RabbitMQ → Event Processor
    - Implement circuit breaker pattern to prevent cascading failures
    - Auto-recover when systems return to normal state
 
+## Group Integration (AT Protocol)
+
+This section describes the planned integration of AT Protocol groups into OpenMeet, enabling decentralized group ownership and interoperability with other AT Protocol applications.
+
+### Overview
+
+Groups on AT Protocol have their own DID (Decentralized Identifier), similar to users. This enables:
+- Groups to own their identity independent of any single platform
+- Group data (profile, events) to be stored in a group-controlled PDS
+- Interoperability with other AT Protocol apps (e.g., Smoke Signal)
+- Portability if a group decides to leave OpenMeet
+
+### Group Identity Model
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ ATProto-Enabled Group                                           │
+│                                                                 │
+│ Group DID: did:plc:abc123...                                    │
+│ Handle: @seattle-hikers.openmeet.net                            │
+│                                                                 │
+│ Group's PDS contains:                                           │
+│ ├── community.lexicon.group.profile/self                        │
+│ ├── community.lexicon.group.governance/self                     │
+│ └── community.lexicon.calendar.event/* (group-owned events)     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Two types of groups in OpenMeet:**
+
+| Type | Source of Truth | AT Protocol Integration |
+|------|-----------------|------------------------|
+| Non-ATProto Group | OpenMeet PostgreSQL | None |
+| ATProto-Enabled Group | Group's PDS | Full sync via firehose |
+
+Groups can be upgraded from Non-ATProto to ATProto-enabled, creating a DID and migrating data to the group's PDS.
+
+### Membership Model
+
+Membership follows the "user-owned data" principle:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ USER'S PDS (source of truth for their membership)               │
+│                                                                 │
+│ at://did:plc:carol/community.lexicon.group.membership/tid123    │
+│ {                                                               │
+│   group: {                                                      │
+│     uri: "at://did:plc:group/...profile/self",                 │
+│     cid: "bafy..."                                              │
+│   },                                                            │
+│   role: "member",                                               │
+│   joinedAt: "2025-01-15T..."                                    │
+│ }                                                               │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ OPENMEET POSTGRESQL (cache/index)                               │
+│                                                                 │
+│ group_members:                                                  │
+│   userId: 123                                                   │
+│   groupId: 456                                                  │
+│   role: 'member'                                                │
+│   sourceType: 'bluesky'                                         │
+│   sourceId: 'at://did:plc:carol/.../tid123'                    │
+│   sourceCid: 'bafy...'                                          │
+│   lastSyncedAt: timestamp                                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Membership by user type:**
+
+| User Type | Membership Source of Truth | Sync Behavior |
+|-----------|---------------------------|---------------|
+| Bluesky user | User's PDS | Write to PDS first, cache locally |
+| Email/OAuth user | OpenMeet PostgreSQL | Local only (no PDS) |
+| External Bluesky user | Their PDS | Discovered via firehose, cached |
+
+### Group Events
+
+Groups can own events directly (stored in group's PDS) or members can create events linked to the group:
+
+**Group-Owned Events:**
+```
+at://did:plc:group/community.lexicon.calendar.event/tid
+{
+  name: "Monthly Meetup",
+  startsAt: "...",
+  createdBy: "did:plc:alice",  // which leader created it
+  ...
+}
+```
+- Stored in GROUP's PDS
+- Requires leader permission to create
+- Group controls editing/deletion
+
+**Member-Created Events (linked to group):**
+```
+at://did:plc:alice/community.lexicon.calendar.event/tid
+{
+  name: "Casual Hike",
+  startsAt: "...",
+  hostGroup: { uri: "at://did:plc:group/...", cid: "..." },
+  ...
+}
+```
+- Stored in MEMBER's PDS
+- Member controls their own event
+- Group can moderate via labels
+
+### Leadership and Governance
+
+Groups have a governance record tracking leadership:
+
+```
+community.lexicon.group.governance/self
+{
+  leaders: ["did:plc:alice", "did:plc:bob", "did:plc:carol"],
+  threshold: 2,  // for future threshold signing
+  votingPeriodHours: 48,
+  createdAt: "...",
+  updatedAt: "..."
+}
+```
+
+**Phase 1 (OpenMeet-managed):**
+- OpenMeet holds the group's signing key
+- Leaders are tracked in governance record
+- OpenMeet enforces leader permissions
+
+**Phase 2 (Threshold signing):**
+- Group's signing key is split among leaders
+- M-of-N leaders required to sign group operations
+- True decentralized control
+
+### Future: Threshold Signing
+
+Using FROST (Flexible Round-Optimized Schnorr Threshold) signatures for decentralized group control:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ THRESHOLD SIGNING (2-of-3 example)                              │
+│                                                                 │
+│ Group signing key split into 3 shares:                          │
+│                                                                 │
+│ ┌─────────┐    ┌─────────┐    ┌─────────┐                      │
+│ │ Alice   │    │  Bob    │    │ Carol   │                      │
+│ │ Share 1 │    │ Share 2 │    │ Share 3 │                      │
+│ └─────────┘    └─────────┘    └─────────┘                      │
+│                                                                 │
+│ To sign a group operation (e.g., create event):                │
+│ 1. Alice initiates signing request                             │
+│ 2. Bob reviews and approves                                    │
+│ 3. Alice + Bob participate in FROST protocol                   │
+│ 4. Valid signature produced (key never reconstructed)          │
+│ 5. Record published to group's PDS                             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Library:** [@substrate-system/frost](https://github.com/substrate-system/frost) - TypeScript, RFC 9591 compliant
+
+**Benefits:**
+- No single point of control
+- Group can migrate away from OpenMeet
+- True collective ownership
+- Cryptographic enforcement of governance
+
+## Community Lexicon Adoption
+
+OpenMeet uses community-standard lexicons from [lexicon-community](https://github.com/lexicon-community/lexicon) for interoperability:
+
+### Currently Used
+
+| Lexicon | Purpose | Status |
+|---------|---------|--------|
+| `community.lexicon.calendar.event` | Event records | Implemented |
+| `community.lexicon.calendar.rsvp` | RSVP/attendance records | Implemented |
+
+### Proposed for Groups
+
+| Lexicon | Purpose | Status |
+|---------|---------|--------|
+| `community.lexicon.group.profile` | Group name, description, settings | Proposed |
+| `community.lexicon.group.governance` | Leadership, threshold, voting rules | Proposed |
+| `community.lexicon.group.membership` | User's membership in a group | Proposed |
+| `community.lexicon.group.post` | Discussion posts within a group | Proposed |
+| `community.lexicon.group.invite` | Invitations for private groups | Proposed |
+
+These lexicons should be proposed to the lexicon-community for standardization to ensure interoperability with other AT Protocol applications.
+
+## Data Flow Patterns
+
+### Pattern 1: Bluesky User Joins Group
+
+```
+User clicks "Join Group" in OpenMeet
+    │
+    ├─► Is user a Bluesky user?
+    │       │
+    │       ├─► YES: Write to User's PDS first
+    │       │       │
+    │       │       ▼
+    │       │   POST community.lexicon.group.membership
+    │       │       │
+    │       │       ▼
+    │       │   PDS returns URI + CID
+    │       │       │
+    │       │       ▼
+    │       │   Cache in PostgreSQL (sourceType: 'bluesky')
+    │       │
+    │       └─► NO: Write directly to PostgreSQL (sourceType: 'openmeet')
+    │
+    ▼
+Success response to user
+```
+
+### Pattern 2: External User Joins via Another App
+
+```
+User joins group via Smoke Signal (not OpenMeet)
+    │
+    ▼
+Smoke Signal writes membership to User's PDS
+    │
+    ▼
+OpenMeet firehose consumer detects membership record
+    │
+    ▼
+Check: Does this reference one of our groups?
+    │
+    ├─► YES:
+    │       │
+    │       ▼
+    │   Create shadow account for user (if needed)
+    │       │
+    │       ▼
+    │   Cache membership in PostgreSQL
+    │       │
+    │       ▼
+    │   User appears as member in OpenMeet
+    │
+    └─► NO: Ignore (not our group)
+```
+
+### Pattern 3: Membership Deletion/Conflict
+
+```
+User deletes membership via another app
+    │
+    ▼
+Firehose detects DELETE operation
+    │
+    ▼
+Find cached record by sourceId
+    │
+    ▼
+Delete from PostgreSQL cache
+    │
+    ▼
+User no longer appears as member
+
+─────────────────────────────────────────
+
+Cache disagrees with PDS (conflict detected)
+    │
+    ▼
+Fetch current state from PDS
+    │
+    ▼
+PDS WINS - update cache to match
+    │
+    ▼
+Log conflict for monitoring
+```
+
+### Pattern 4: Email User Later Connects Bluesky
+
+```
+Email user (local-only membership) connects Bluesky
+    │
+    ▼
+User now has a PDS
+    │
+    ▼
+Migrate local memberships to PDS:
+    │
+    ├─► For each membership with sourceType: 'openmeet':
+    │       │
+    │       ▼
+    │   Create membership record in user's PDS
+    │       │
+    │       ▼
+    │   Update PostgreSQL record:
+    │       sourceType: 'bluesky'
+    │       sourceId: at://...
+    │       sourceCid: bafy...
+    │
+    ▼
+User's data is now portable
+```
+
 ## References
 
+### Internal Documents
 1. [ATProtocol Integration Guide](/design-notes/recurring-events/atprotocol-integration-guide.md)
 2. [Bluesky Integration Implementation Plan](/design-notes/recurring-events/bluesky-integration-implementation.md)
 3. [Bluesky Login Flow Redesign](/design-notes/matrix/bluesky-login-flow.md)
 4. [Bluesky Event Sync](/design-notes/bsky-event-sync.md)
 5. [Event Series Implementation Guide](/design-notes/recurring-events/event-series-implementation-guide.md)
 6. [Main Design Document](/design-notes/recurring-events/main-design-document.md)
+
+### External Resources - Groups on AT Protocol
+7. [Representing Groups and Shared Resources in ATProto](https://discourse.atprotocol.community/t/representing-groups-and-other-shared-resources-in-atproto/296) - Community discussion on group design patterns
+8. [AT Namespaces for Community Spaces](https://bnewbold.leaflet.pub/3m2x7bilyrc23) - Bryan Newbold's analysis of group identity options
+9. [lexicon-community/lexicon](https://github.com/lexicon-community/lexicon) - Community lexicon repository (events, RSVPs, locations)
+10. [SmokeSignal-Events](https://smokesignal.events/) - Another AT Protocol events app for interoperability testing
+
+### External Resources - Threshold Signatures
+11. [@substrate-system/frost](https://github.com/substrate-system/frost) - TypeScript FROST implementation (RFC 9591)
+12. [RFC 9591 - FROST Protocol](https://www.rfc-editor.org/rfc/rfc9591.html) - FROST threshold signature specification

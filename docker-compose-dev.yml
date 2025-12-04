@@ -3,7 +3,7 @@
 
 services:
   postgres:
-    # use the db with postGIS extentions
+    # use the db with postGIS extensions
     image: postgis/postgis:16-3.4-alpine
     container_name: openmeet_postgres
     ports:
@@ -218,6 +218,90 @@ services:
       - COLLECTOR_OTLP_ENABLED=true
     networks:
       - api-network
+
+  # RabbitMQ for Bluesky event ingestion pipeline
+  rabbitmq:
+    image: rabbitmq:4.2-management-alpine
+    container_name: openmeet_rabbitmq
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - api-network
+
+  # Bluesky Firehose Consumer - connects to Bluesky and publishes to RabbitMQ
+  bsky-firehose-consumer:
+    image: node:22.18.0-alpine
+    container_name: bsky-firehose-consumer
+    working_dir: /app
+    command: sh -c "npm install && npm run start:dev"
+    ports:
+      - "3001:3001"
+    volumes:
+      - ../bsky-firehose-consumer:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - RABBITMQ_EXCHANGE=community.lexicon.calendar
+      - RABBITMQ_QUEUE_NAME=community.lexicon.calendar.queue
+      - BSKY_FIREHOSE_URL=wss://jetstream2.us-east.bsky.network/subscribe
+      - BSKY_COLLECTIONS=community.lexicon.calendar.event,community.lexicon.calendar.rsvp
+      - ENABLE_TRACING=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tracing:4318
+      - OTEL_SERVICE_NAME=bsky-firehose-consumer
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - api-network
+    restart: unless-stopped
+
+  # Bluesky Event Processor - consumes from RabbitMQ and calls OpenMeet API
+  # Required env vars in .env-local:
+  #   BSKY_API_KEY - service API key for OpenMeet API auth
+  #   BSKY_TENANT_ID - tenant ID (e.g., lsdfaopkljdfs for local dev)
+  bsky-event-processor:
+    image: node:22.18.0-alpine
+    container_name: bsky-event-processor
+    working_dir: /app
+    command: sh -c "npm install && npm run start:dev"
+    ports:
+      - "3002:3002"
+    volumes:
+      - ../bsky-event-processor:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - PORT=3002
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - RABBITMQ_EXCHANGE=community.lexicon.calendar
+      - RABBITMQ_QUEUE_NAME=community.lexicon.calendar.queue
+      - API_URL=http://api:${APP_PORT}
+      - API_KEY=${BSKY_API_KEY}
+      - API_TENANT_ID=${BSKY_TENANT_ID}
+      - ENABLE_TRACING=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tracing:4318
+      - OTEL_SERVICE_NAME=bsky-event-processor
+    env_file:
+      - .env-local
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    networks:
+      - api-network
+    restart: unless-stopped
 
 volumes:
   dbdata:
