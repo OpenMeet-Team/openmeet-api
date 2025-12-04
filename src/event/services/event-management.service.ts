@@ -23,6 +23,7 @@ import { EventMailService } from '../../event-mail/event-mail.service';
 import { AuditLoggerService } from '../../logger/audit-logger.provider';
 import { BlueskyService } from '../../bluesky/bluesky.service';
 import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
+import { BlueskyRsvpService } from '../../bluesky/bluesky-rsvp.service';
 import { CreateEventDto } from '../dto/create-event.dto';
 import { UpdateEventDto } from '../dto/update-event.dto';
 import {
@@ -73,6 +74,8 @@ export class EventManagementService {
     private readonly blueskyService: BlueskyService,
     @Inject(forwardRef(() => BlueskyIdService))
     private readonly blueskyIdService: BlueskyIdService,
+    @Inject(forwardRef(() => BlueskyRsvpService))
+    private readonly blueskyRsvpService: BlueskyRsvpService,
     // DiscussionService removed - Matrix Application Service handles room operations directly
     @Inject(forwardRef(() => EventSeriesService))
     private readonly eventSeriesService: EventSeriesService,
@@ -91,6 +94,78 @@ export class EventManagementService {
       await this.tenantConnectionService.getTenantConnection(tenantId);
 
     this.eventRepository = dataSource.getRepository(EventEntity);
+  }
+
+  /**
+   * Syncs an RSVP status change to Bluesky for Bluesky users attending Bluesky events
+   * @param event The event being attended
+   * @param user The user attending
+   * @param attendee The attendee record
+   * @param status The new attendance status
+   */
+  @Trace('event-management.syncRsvpToBluesky')
+  private async syncRsvpToBluesky(
+    event: EventEntity,
+    user: UserEntity,
+    attendee: EventAttendeesEntity,
+    status: EventAttendeeStatus,
+  ): Promise<void> {
+    try {
+      // Only sync for Bluesky users
+      if (user.provider !== 'bluesky' || !user.socialId) {
+        this.logger.debug(
+          `[syncRsvpToBluesky] Skipping - user ${user.slug} is not a Bluesky user`,
+        );
+        return;
+      }
+
+      const blueskyDid = user.socialId;
+
+      this.logger.debug('[syncRsvpToBluesky] Syncing RSVP to Bluesky', {
+        userSlug: user.slug,
+        did: blueskyDid,
+        eventSlug: event.slug,
+        status,
+      });
+
+      // Map OpenMeet status to Bluesky status
+      const statusMap: Record<string, 'going' | 'interested' | 'notgoing'> = {
+        [EventAttendeeStatus.Confirmed]: 'going',
+        [EventAttendeeStatus.Maybe]: 'interested',
+        [EventAttendeeStatus.Cancelled]: 'notgoing',
+        [EventAttendeeStatus.Pending]: 'interested',
+        [EventAttendeeStatus.Waitlist]: 'interested',
+      };
+
+      const blueskyStatus = statusMap[status] || 'interested';
+
+      // Create/update RSVP in Bluesky
+      const result = await this.blueskyRsvpService.createRsvp(
+        event,
+        blueskyStatus,
+        blueskyDid,
+        this.request.tenantId,
+      );
+
+      if (result.success) {
+        this.logger.debug(
+          `[syncRsvpToBluesky] Successfully synced RSVP: ${result.rsvpUri}`,
+        );
+
+        // Update the attendee record with the RSVP URI
+        attendee.sourceId = result.rsvpUri;
+        attendee.sourceType = EventSourceType.BLUESKY;
+        attendee.lastSyncedAt = new Date();
+
+        await this.eventAttendeeService.save(attendee);
+      }
+    } catch (error) {
+      // Log but don't fail if Bluesky sync fails
+      this.logger.error(
+        `[syncRsvpToBluesky] Failed to sync RSVP to Bluesky: ${error.message}`,
+        error.stack,
+      );
+    }
   }
 
   /**
@@ -1613,6 +1688,14 @@ export class EventManagementService {
         tenantId: this.request.tenantId,
       });
 
+      // Sync RSVP to Bluesky if applicable
+      await this.syncRsvpToBluesky(
+        event,
+        user,
+        updatedAttendee,
+        attendeeStatus,
+      );
+
       // Get the updated record with relations for return
       return await this.eventAttendeeService.findEventAttendeeByUserId(
         event.id,
@@ -1678,6 +1761,9 @@ export class EventManagementService {
         this.logger.debug(
           `[attendEvent] Reactivated attendee record to status ${attendee.status}`,
         );
+
+        // Sync RSVP to Bluesky if applicable
+        await this.syncRsvpToBluesky(event, user, attendee, attendeeStatus);
       } else {
         // Create new attendee record if none exists
         this.logger.debug(

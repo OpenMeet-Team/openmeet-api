@@ -35,6 +35,7 @@ import { EventSeriesEntity } from '../../event-series/infrastructure/persistence
 import { UpdateEventDto } from '../dto/update-event.dto';
 import { RecurrenceFrequency } from '../../event-series/interfaces/recurrence-frequency.enum';
 import { BlueskyIdService } from '../../bluesky/bluesky-id.service';
+import { BlueskyRsvpService } from '../../bluesky/bluesky-rsvp.service';
 
 describe('EventManagementService', () => {
   let service: EventManagementService;
@@ -246,6 +247,12 @@ describe('EventManagementService', () => {
             createUri: jest.fn(),
             parseUri: jest.fn(),
             isValidUri: jest.fn(),
+          },
+        },
+        {
+          provide: BlueskyRsvpService,
+          useValue: {
+            createRsvp: jest.fn().mockResolvedValue({ success: true, rsvpUri: 'at://test' }),
           },
         },
         {
