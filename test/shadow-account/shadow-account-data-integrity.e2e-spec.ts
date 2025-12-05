@@ -170,7 +170,8 @@ describe('Shadow Account Data Integrity (e2e)', () => {
 
       // Find by DID since it was used as the handle
       const attendee = attendeesResponse.body.data.find(
-        (a: any) => a.user.name === userDid || a.user.slug?.includes('fallback'),
+        (a: any) =>
+          a.user.name === userDid || a.user.slug?.includes('fallback'),
       );
 
       expect(attendee).toBeDefined();
