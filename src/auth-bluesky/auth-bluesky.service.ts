@@ -35,11 +35,21 @@ export class AuthBlueskyService {
   }
 
   public async initializeClient(tenantId: string) {
-    return await initializeOAuthClient(
-      tenantId,
-      this.configService,
-      this.elasticacheService,
-    );
+    this.logger.debug('initializeClient called', { tenantId });
+    try {
+      const client = await initializeOAuthClient(
+        tenantId,
+        this.configService,
+        this.elasticacheService,
+      );
+      this.logger.debug('initializeClient succeeded');
+      return client;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(`initializeClient failed: ${errorMessage}`, error);
+      throw error;
+    }
   }
 
   async getProfileFromParams(params: URLSearchParams, tenantId: string) {
@@ -223,16 +233,12 @@ export class AuthBlueskyService {
       }
     }, 100); // Small delay to ensure login response is sent first
 
+    // Only send minimal data in callback URL to avoid 414 Request-URI Too Large errors
+    // The frontend will call /auth/me to get full user data with permissions
     const newParams = new URLSearchParams({
       token: loginResponse.token,
       refreshToken: loginResponse.refreshToken,
       tokenExpires: loginResponse.tokenExpires.toString(),
-      user: Buffer.from(
-        JSON.stringify({
-          ...loginResponse.user,
-          socialId: profileData.did,
-        }),
-      ).toString('base64'),
       profile: Buffer.from(JSON.stringify(profileData)).toString('base64'),
     });
 
@@ -248,8 +254,15 @@ export class AuthBlueskyService {
 
   async createAuthUrl(handle: string, tenantId: string): Promise<string> {
     try {
-      this.logger.debug('Creating auth URL for Bluesky OAuth');
+      this.logger.debug('Creating auth URL for Bluesky OAuth', {
+        handle,
+        tenantId,
+      });
       const client = await this.initializeClient(tenantId);
+
+      if (!client) {
+        throw new Error('OAuth client initialization returned undefined');
+      }
 
       this.logger.debug('Calling client.authorize');
       const url = await client.authorize(handle, {
@@ -262,8 +275,10 @@ export class AuthBlueskyService {
 
       this.logger.debug('Successfully created auth URL');
       return url.toString();
-    } catch (error) {
-      this.logger.error(`Failed to create auth URL: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create auth URL: ${errorMessage}`, error);
       throw new BadRequestException(
         `Unable to start Bluesky authentication. Please try again or contact support if the problem persists.`,
       );
