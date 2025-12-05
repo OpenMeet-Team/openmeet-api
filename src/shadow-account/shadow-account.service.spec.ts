@@ -223,6 +223,79 @@ describe('ShadowAccountService', () => {
       expect(result.isShadowAccount).toBe(true);
     });
 
+    it('should update preferences.bluesky.handle with resolved handle when DID was passed in preferences', async () => {
+      // This test catches the bug where preferences.bluesky.handle contained the DID
+      // instead of the resolved handle, while firstName was correctly set to the handle.
+      // Simulates the flow from rsvp-integration.service.ts when userHandle is a DID.
+      userRepository.findOne.mockResolvedValue(null);
+      userRepository.save.mockImplementation((entity) =>
+        Promise.resolve({
+          ...entity,
+          id: 1,
+        } as UserEntity),
+      );
+      blueskyIdentityService.extractHandleFromDid.mockResolvedValue(
+        'schuman.de',
+      );
+
+      // This is what rsvp-integration.service.ts passes when userHandle is a DID
+      const preferencesWithDidAsHandle = {
+        bluesky: {
+          did: 'did:plc:xo7zswqvg5vhhicuj5faubvi',
+          handle: 'did:plc:xo7zswqvg5vhhicuj5faubvi', // Bug: DID passed as handle
+        },
+      };
+
+      const result = await service.findOrCreateShadowAccount(
+        'did:plc:xo7zswqvg5vhhicuj5faubvi',
+        'did:plc:xo7zswqvg5vhhicuj5faubvi', // DID passed as displayName
+        AuthProvidersEnum.bluesky,
+        'tenant1',
+        preferencesWithDidAsHandle,
+      );
+
+      // Assert: Both firstName AND preferences.bluesky.handle should have the resolved handle
+      expect(result.firstName).toEqual('schuman.de'); // firstName is correctly resolved
+      expect(result.preferences?.bluesky?.handle).toEqual('schuman.de'); // preferences.bluesky.handle should ALSO be resolved
+      expect(result.preferences?.bluesky?.handle).not.toEqual(
+        'did:plc:xo7zswqvg5vhhicuj5faubvi',
+      ); // Should NOT contain DID
+      expect(result.preferences?.bluesky?.did).toEqual(
+        'did:plc:xo7zswqvg5vhhicuj5faubvi',
+      ); // DID should stay in did field
+    });
+
+    it('should ensure preferences.bluesky.handle matches firstName when handle is provided', async () => {
+      // Test consistency: when a handle is provided, both firstName and preferences.bluesky.handle
+      // should contain the same value
+      userRepository.findOne.mockResolvedValue(null);
+      userRepository.save.mockImplementation((entity) =>
+        Promise.resolve({
+          ...entity,
+          id: 1,
+        } as UserEntity),
+      );
+
+      // Handle provided correctly in both displayName and preferences
+      const result = await service.findOrCreateShadowAccount(
+        'did:plc:abc123xyz',
+        'alice.bsky.social', // Handle provided
+        AuthProvidersEnum.bluesky,
+        'tenant1',
+        {
+          bluesky: {
+            did: 'did:plc:abc123xyz',
+            handle: 'alice.bsky.social', // Handle provided correctly
+          },
+        },
+      );
+
+      // Assert: firstName and preferences.bluesky.handle should be consistent
+      expect(result.firstName).toEqual('alice.bsky.social');
+      expect(result.preferences?.bluesky?.handle).toEqual('alice.bsky.social');
+      expect(result.preferences?.bluesky?.handle).toEqual(result.firstName); // Consistency check
+    });
+
     it('should use displayName if it is already a handle (not a DID)', async () => {
       // Arrange
       userRepository.findOne.mockResolvedValue(null);

@@ -145,6 +145,14 @@ export class ShadowAccountService {
           // Set provider-specific preferences
           shadowUser.preferences = preferences || {};
 
+          // Ensure preferences.bluesky.handle uses resolved handle
+          if (
+            provider === AuthProvidersEnum.bluesky &&
+            shadowUser.preferences.bluesky
+          ) {
+            shadowUser.preferences.bluesky.handle = resolvedHandle;
+          }
+
           // Save the shadow account
           const savedUser = await userRepository.save(shadowUser);
 

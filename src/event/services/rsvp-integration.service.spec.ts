@@ -34,8 +34,6 @@ describe('RsvpIntegrationService', () => {
   let service: RsvpIntegrationService;
   let eventQueryService: jest.Mocked<EventQueryService>;
   let eventAttendeeService: jest.Mocked<EventAttendeeService>;
-  let eventRoleService: jest.Mocked<EventRoleService>;
-  let shadowAccountService: jest.Mocked<ShadowAccountService>;
 
   const mockEvent = { id: 1, name: 'Test Event' } as unknown as EventEntity;
   const mockUser = { id: 2, firstName: 'Test User' } as unknown as UserEntity;
@@ -114,12 +112,6 @@ describe('RsvpIntegrationService', () => {
     eventAttendeeService = module.get(
       EventAttendeeService,
     ) as jest.Mocked<EventAttendeeService>;
-    eventRoleService = module.get(
-      EventRoleService,
-    ) as jest.Mocked<EventRoleService>;
-    shadowAccountService = module.get(
-      ShadowAccountService,
-    ) as jest.Mocked<ShadowAccountService>;
   });
 
   it('should be defined', () => {

@@ -23,6 +23,7 @@ import { UserEntity } from './infrastructure/persistence/relational/entities/use
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { GroupEntity } from '../group/infrastructure/persistence/relational/entities/group.entity';
 import { GroupMemberEntity } from '../group-member/infrastructure/persistence/relational/entities/group-member.entity';
+import { EventAttendeesEntity } from '../event-attendee/infrastructure/persistence/relational/entities/event-attendee.entity';
 import { SubCategoryService } from '../sub-category/sub-category.service';
 import { UserPermissionEntity } from './infrastructure/persistence/relational/entities/user-permission.entity';
 import { RoleService } from '../role/role.service';
@@ -259,6 +260,25 @@ export class UserService {
 
     const publicGroupMembers = await groupMembersQuery.getMany();
     user['groupMembers'] = publicGroupMembers;
+
+    // Load events the user is attending (via eventAttendees)
+    // Only show public events on user profiles
+    const attendingEventsQuery = this.usersRepository.manager
+      .createQueryBuilder(EventAttendeesEntity, 'eventAttendee')
+      .leftJoinAndSelect('eventAttendee.event', 'event')
+      .leftJoinAndSelect('event.image', 'eventImage')
+      .where('eventAttendee.userId = :userId', { userId: user.id })
+      .andWhere('event.visibility = :visibility', { visibility: 'public' })
+      .andWhere('event.status IN (:...statuses)', {
+        statuses: ['published', 'cancelled'],
+      })
+      .orderBy('event.startDate', 'ASC');
+
+    const attendingRecords = await attendingEventsQuery.getMany();
+    user['attendingEvents'] = attendingRecords.map((record) => ({
+      ...record.event,
+      attendeeStatus: record.status,
+    }));
 
     // Resolve and update Bluesky handle from DID (only for authenticated Bluesky users, not shadow accounts)
     // Shadow accounts already have their handle in firstName field
