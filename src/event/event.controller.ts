@@ -23,6 +23,7 @@ import { UpdateEventDto } from './dto/update-event.dto';
 import { EventEntity } from './infrastructure/persistence/relational/entities/event.entity';
 import { JWTAuthGuard } from '../auth/auth.guard';
 import { QueryEventDto } from './dto/query-events.dto';
+import { DashboardSummaryDto } from './dto/dashboard-summary.dto';
 import { Public } from '../auth/decorators/public.decorator';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
@@ -91,9 +92,26 @@ export class EventController {
     );
   }
 
+  @Get('dashboard/summary')
+  @ApiOperation({
+    summary: 'Get dashboard summary with counts and upcoming events',
+    description:
+      'Returns event counts and limited previews for the "What\'s Next" dashboard view. Optimized for fast loading.',
+  })
+  @Trace('event.getDashboardSummary')
+  async getDashboardSummary(@AuthUser() user: User): Promise<DashboardSummaryDto> {
+    return this.eventQueryService.getDashboardSummary(user.id);
+  }
+
+  /**
+   * @deprecated Use GET /dashboard/summary instead for better performance.
+   * This endpoint returns ALL events and will be slow for users with many events.
+   * Kept for backward compatibility with past events dialog and chat panel.
+   */
   @Get('dashboard')
   @ApiOperation({
-    summary: 'Get all events for the dashboard.',
+    summary: 'Get all events for the dashboard (DEPRECATED - use /dashboard/summary)',
+    deprecated: true,
   })
   @Trace('event.showDashboardEvents')
   async showDashboardEvents(@AuthUser() user: User): Promise<EventEntity[]> {

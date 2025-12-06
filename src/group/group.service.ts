@@ -29,6 +29,7 @@ import { GroupMemberService } from '../group-member/group-member.service';
 import { PaginationDto } from '../utils/dto/pagination.dto';
 import { paginate } from '../utils/generic-pagination';
 import { QueryGroupDto } from './dto/group-query.dto';
+import { DashboardGroupsSummaryDto } from './dto/dashboard-groups-summary.dto';
 import slugify from 'slugify';
 import { EventEntity } from '../event/infrastructure/persistence/relational/entities/event.entity';
 import { FilesS3PresignedService } from '../file/infrastructure/uploader/s3-presigned/file.service';
@@ -970,6 +971,71 @@ export class GroupService {
       // Then sort by name
       return a.name.localeCompare(b.name);
     });
+  }
+
+  @Trace('group.getDashboardSummary')
+  async getDashboardSummary(userId: number): Promise<DashboardGroupsSummaryDto> {
+    await this.getTenantSpecificGroupRepository();
+
+    const leadershipRoles = [GroupRole.Owner, GroupRole.Admin, GroupRole.Moderator];
+
+    // Base query for user's groups with membership info
+    const createGroupQuery = () =>
+      this.groupRepository
+        .createQueryBuilder('group')
+        .leftJoinAndSelect('group.image', 'image')
+        .leftJoinAndSelect('group.categories', 'categories')
+        .innerJoin('group.groupMembers', 'groupMember')
+        .innerJoin('groupMember.user', 'memberUser')
+        .leftJoinAndSelect('groupMember.groupRole', 'groupRole')
+        .addSelect(['groupMember.id'])
+        .where('memberUser.id = :userId', { userId });
+
+    // Execute queries in parallel
+    const [leadingCount, memberCount, leadingGroups, memberGroups] =
+      await Promise.all([
+        // Count: groups where user is leader
+        createGroupQuery()
+          .andWhere('groupRole.name IN (:...leadershipRoles)', { leadershipRoles })
+          .getCount(),
+
+        // Count: groups where user is regular member
+        createGroupQuery()
+          .andWhere('groupRole.name = :memberRole', { memberRole: GroupRole.Member })
+          .getCount(),
+
+        // Leading groups (limited preview)
+        createGroupQuery()
+          .andWhere('groupRole.name IN (:...leadershipRoles)', { leadershipRoles })
+          .orderBy('group.name', 'ASC')
+          .limit(5)
+          .getMany(),
+
+        // Member groups (limited preview)
+        createGroupQuery()
+          .andWhere('groupRole.name = :memberRole', { memberRole: GroupRole.Member })
+          .orderBy('group.name', 'ASC')
+          .limit(5)
+          .getMany(),
+      ]);
+
+    // Add groupMember info to each group for the frontend
+    // Since we filter by userId in the query, groupMembers contains only the current user's membership
+    const allGroups = [...leadingGroups, ...memberGroups];
+    for (const group of allGroups) {
+      if (group.groupMembers?.length > 0) {
+        (group as any).groupMember = group.groupMembers[0];
+      }
+    }
+
+    return {
+      counts: {
+        leading: leadingCount,
+        member: memberCount,
+      },
+      leadingGroups,
+      memberGroups,
+    };
   }
 
   async getGroupMembers(groupId: number): Promise<GroupMemberEntity[]> {

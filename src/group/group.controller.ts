@@ -35,6 +35,7 @@ import {
   PreviewAdminMessageDto,
 } from './dto/admin-message.dto';
 import { ContactAdminsDto } from './dto/contact-admins.dto';
+import { DashboardGroupsSummaryDto } from './dto/dashboard-groups-summary.dto';
 
 @ApiTags('Groups')
 @Controller('groups')
@@ -88,8 +89,27 @@ export class GroupController {
     return await this.groupService.getGroupsWhereUserCanCreateEvents(user.id);
   }
 
+  @Get('dashboard/summary')
+  @ApiOperation({
+    summary: 'Get dashboard summary with counts and group previews',
+    description:
+      'Returns group counts and limited previews for the dashboard. Optimized for fast loading.',
+  })
+  async getDashboardSummary(
+    @AuthUser() user: User,
+  ): Promise<DashboardGroupsSummaryDto> {
+    return await this.groupService.getDashboardSummary(user.id);
+  }
+
+  /**
+   * @deprecated Use GET /dashboard/summary instead for better performance.
+   * This endpoint returns ALL groups and will be slow for users with many groups.
+   */
   @Get('dashboard')
-  @ApiOperation({ summary: 'Get all groups for the dashboard' })
+  @ApiOperation({
+    summary: 'Get all groups for the dashboard (DEPRECATED - use /dashboard/summary)',
+    deprecated: true,
+  })
   async showDashboardGroups(@AuthUser() user: User): Promise<GroupEntity[]> {
     return await this.groupService.showDashboardGroups(user.id);
   }

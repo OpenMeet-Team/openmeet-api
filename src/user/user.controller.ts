@@ -38,6 +38,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RoleEnum } from '../role/role.enum';
 import { JWTAuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../role/role.guard';
+import { ProfileSummaryDto } from './dto/profile-summary.dto';
 
 @ApiBearerAuth()
 @Roles(RoleEnum.Admin)
@@ -130,12 +131,45 @@ export class UserController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 30, ttl: 60000 } }) // 30 requests per minute
+  @Get(':identifier/profile/summary')
+  @ApiOperation({
+    summary: 'Get user profile summary with counts and limited previews',
+    description:
+      'Returns profile summary optimized for fast loading - includes counts and limited previews of events/groups. Supports slug, DID, or ATProto handle.',
+  })
+  @ApiParam({
+    name: 'identifier',
+    description:
+      'User identifier - can be slug, ATProto DID, or ATProto handle',
+    examples: {
+      slug: { value: 'alice-abc123', summary: 'User slug (most common)' },
+      did: { value: 'did:plc:abc123', summary: 'ATProto DID' },
+      handle: { value: 'alice.bsky.social', summary: 'ATProto handle' },
+    },
+  })
+  @ApiOkResponse({
+    type: ProfileSummaryDto,
+    description: 'Profile summary with counts and limited previews',
+  })
+  async getProfileSummary(
+    @Param('identifier') identifier: string,
+  ): Promise<NullableType<ProfileSummaryDto>> {
+    return this.userService.getProfileSummary(identifier);
+  }
+
+  /**
+   * @deprecated Use GET /:slug/profile/summary instead for better performance.
+   * This endpoint returns ALL events/groups and will be slow for users with many items.
+   */
+  @Public()
   @Throttle({ default: { limit: 20, ttl: 60000 } }) // 20 requests per minute for public profile lookups
   @Get(':identifier/profile')
   @ApiOperation({
-    summary: 'Get user profile by identifier',
+    summary: 'Get user profile by identifier (DEPRECATED - use /:slug/profile/summary)',
     description:
       'Retrieve user profile using multiple identifier types: slug (alice-abc123), ATProto DID (did:plc:abc123), or ATProto handle (alice.bsky.social or @alice.bsky.social)',
+    deprecated: true,
   })
   @ApiParam({
     name: 'identifier',

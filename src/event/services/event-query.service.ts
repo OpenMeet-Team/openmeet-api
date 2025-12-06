@@ -14,6 +14,7 @@ import { EventAttendeesEntity } from '../../event-attendee/infrastructure/persis
 import { EventSeriesEntity } from '../../event-series/infrastructure/persistence/relational/entities/event-series.entity';
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { QueryEventDto } from '../dto/query-events.dto';
+import { DashboardSummaryDto } from '../dto/dashboard-summary.dto';
 import { PaginationDto } from '../../utils/dto/pagination.dto';
 import { HomeQuery } from '../../home/dto/home-query.dto';
 import {
@@ -809,6 +810,165 @@ export class EventQueryService {
 
       return aDate.getTime() - bDate.getTime();
     });
+  }
+
+  @Trace('event-query.getDashboardSummary')
+  async getDashboardSummary(userId: number): Promise<DashboardSummaryDto> {
+    await this.initializeRepository();
+
+    const now = new Date();
+    const endOfWeek = new Date(now);
+    endOfWeek.setDate(now.getDate() + (7 - now.getDay())); // End of current week (Sunday)
+    endOfWeek.setHours(23, 59, 59, 999);
+
+    // Base query builder for events created by user (hosting)
+    const createHostingQuery = () =>
+      this.eventRepository
+        .createQueryBuilder('event')
+        .leftJoinAndSelect('event.user', 'user')
+        .leftJoinAndSelect('user.photo', 'userPhoto')
+        .leftJoinAndSelect('event.group', 'group')
+        .leftJoinAndSelect('group.image', 'groupImage')
+        .leftJoinAndSelect('event.categories', 'categories')
+        .leftJoinAndSelect('event.image', 'image')
+        .where('event.userId = :userId', { userId });
+
+    // Base query builder for events user is attending (not cancelled, not host)
+    const createAttendingQuery = () =>
+      this.eventRepository
+        .createQueryBuilder('event')
+        .leftJoinAndSelect('event.user', 'user')
+        .leftJoinAndSelect('user.photo', 'userPhoto')
+        .leftJoinAndSelect('event.group', 'group')
+        .leftJoinAndSelect('group.image', 'groupImage')
+        .leftJoinAndSelect('event.categories', 'categories')
+        .leftJoinAndSelect('event.image', 'image')
+        .innerJoin(
+          'event.attendees',
+          'attendee',
+          'attendee.userId = :userId AND attendee.status != :cancelledStatus',
+          { userId, cancelledStatus: EventAttendeeStatus.Cancelled },
+        )
+        .andWhere('event.userId != :userId', { userId }); // Exclude events they're hosting
+
+    // Execute all queries in parallel
+    const [
+      hostingUpcomingCount,
+      attendingUpcomingCount,
+      pastCount,
+      hostingThisWeek,
+      hostingLater,
+      attendingSoon,
+    ] = await Promise.all([
+      // Count: hosting upcoming
+      createHostingQuery()
+        .andWhere('event.startDate >= :now', { now })
+        .getCount(),
+
+      // Count: attending upcoming (not hosting)
+      createAttendingQuery()
+        .andWhere('event.startDate >= :now', { now })
+        .getCount(),
+
+      // Count: past events (both hosting and attending, deduplicated via union approach)
+      this.getPastEventsCount(userId, now),
+
+      // Hosting this week (full list, typically small)
+      createHostingQuery()
+        .andWhere('event.startDate >= :now', { now })
+        .andWhere('event.startDate <= :endOfWeek', { endOfWeek })
+        .orderBy('event.startDate', 'ASC')
+        .getMany(),
+
+      // Hosting later (limited preview)
+      createHostingQuery()
+        .andWhere('event.startDate > :endOfWeek', { endOfWeek })
+        .orderBy('event.startDate', 'ASC')
+        .limit(5)
+        .getMany(),
+
+      // Attending soon (limited preview)
+      createAttendingQuery()
+        .andWhere('event.startDate >= :now', { now })
+        .orderBy('event.startDate', 'ASC')
+        .limit(5)
+        .getMany(),
+    ]);
+
+    // Batch fetch attendee counts for all events
+    const allEvents = [...hostingThisWeek, ...hostingLater, ...attendingSoon];
+    if (allEvents.length > 0) {
+      const eventIds = allEvents.map((e) => e.id);
+
+      const [counts, attendeeRecords] = await Promise.all([
+        this.eventAttendeesRepository
+          .createQueryBuilder('att')
+          .select('att.eventId', 'eventId')
+          .addSelect('COUNT(att.id)', 'count')
+          .where('att.eventId IN (:...eventIds)', { eventIds })
+          .andWhere('att.status = :status', {
+            status: EventAttendeeStatus.Confirmed,
+          })
+          .groupBy('att.eventId')
+          .getRawMany(),
+        this.eventAttendeesRepository
+          .createQueryBuilder('att')
+          .leftJoinAndSelect('att.role', 'role')
+          .leftJoin('att.event', 'event')
+          .addSelect('event.id')
+          .where('att.eventId IN (:...eventIds)', { eventIds })
+          .andWhere('att.userId = :userId', { userId })
+          .getMany(),
+      ]);
+
+      const countMap = new Map(
+        counts.map((c) => [c.eventId, parseInt(c.count, 10)]),
+      );
+      const attendeeMap = new Map(attendeeRecords.map((a) => [a.event?.id, a]));
+
+      allEvents.forEach((event) => {
+        (event as any).attendeesCount = countMap.get(event.id) || 0;
+        const attendee = attendeeMap.get(event.id);
+        if (attendee) {
+          event.attendee = attendee;
+        }
+      });
+    }
+
+    // Add recurrence info
+    const processEvents = (events: EventEntity[]) =>
+      events.map((event) => this.addRecurrenceInformation(event));
+
+    return {
+      counts: {
+        hostingUpcoming: hostingUpcomingCount,
+        attendingUpcoming: attendingUpcomingCount,
+        past: pastCount,
+      },
+      hostingThisWeek: processEvents(hostingThisWeek),
+      hostingLater: processEvents(hostingLater),
+      attendingSoon: processEvents(attendingSoon),
+    };
+  }
+
+  private async getPastEventsCount(userId: number, now: Date): Promise<number> {
+    // Count unique past events (hosting OR attending)
+    const result = await this.eventRepository
+      .createQueryBuilder('event')
+      .select('COUNT(DISTINCT event.id)', 'count')
+      .leftJoin('event.attendees', 'attendee')
+      .where('event.startDate < :now', { now })
+      .andWhere(
+        new Brackets((qb) => {
+          qb.where('event.userId = :userId', { userId }).orWhere(
+            'attendee.userId = :userId AND attendee.status != :cancelledStatus',
+            { userId, cancelledStatus: EventAttendeeStatus.Cancelled },
+          );
+        }),
+      )
+      .getRawOne();
+
+    return parseInt(result?.count || '0', 10);
   }
 
   @Trace('event-query.getHomePageFeaturedEvents')
