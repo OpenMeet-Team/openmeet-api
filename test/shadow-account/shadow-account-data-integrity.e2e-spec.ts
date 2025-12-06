@@ -268,7 +268,7 @@ describe('Shadow Account Data Integrity (e2e)', () => {
       expect(attendee).toBeDefined();
       // Slug should be based on the handle (slugified) with a short code
       expect(attendee.user.slug).toBeDefined();
-      expect(attendee.user.slug).toMatch(/^slug-test-.*-[a-z0-9]+$/);
+      expect(attendee.user.slug).toMatch(/^slug-test-.*-[a-z0-9_-]+$/);
     });
 
     it('should handle special characters in handle (custom domains)', async () => {

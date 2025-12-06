@@ -1565,10 +1565,13 @@ export class EventManagementService {
     }
 
     // If attendee exists with different status than requested, update it
+    // Note: Cancelled status is handled by reactivateEventAttendanceBySlug below
+    // which includes Bluesky sync
     if (
       eventAttendee &&
       createEventAttendeeDto.status &&
-      eventAttendee.status !== attendeeStatus
+      eventAttendee.status !== attendeeStatus &&
+      eventAttendee.status !== EventAttendeeStatus.Cancelled
     ) {
       this.logger.debug(
         `[attendEvent] Updating existing attendance record from ${eventAttendee.status} to ${attendeeStatus}`,
