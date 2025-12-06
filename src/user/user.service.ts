@@ -35,6 +35,7 @@ import { StatusDto } from '../status/dto/status.dto';
 import { GlobalMatrixValidationService } from '../matrix/services/global-matrix-validation.service';
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
 import { AuthProvidersEnum } from '../auth/auth-providers.enum';
+import { ProfileSummaryDto } from './dto/profile-summary.dto';
 
 @Injectable({ scope: Scope.REQUEST, durable: true })
 export class UserService {
@@ -344,6 +345,218 @@ export class UserService {
     }
 
     return user;
+  }
+
+  /**
+   * Get user profile summary with counts and limited previews
+   * Optimized for fast loading - returns counts + limited data
+   * Supports multiple identifier types: slug, DID, or ATProto handle
+   */
+  async getProfileSummary(
+    identifier: string,
+    tenantId?: string,
+  ): Promise<NullableType<ProfileSummaryDto>> {
+    await this.getTenantSpecificRepository(tenantId);
+
+    const PREVIEW_LIMIT = 5;
+
+    // Resolve identifier to user (supports slug, DID, handle)
+    let user: UserEntity | null = null;
+
+    if (!identifier || identifier.trim() === '') {
+      return null;
+    }
+
+    const trimmedIdentifier = identifier.trim();
+
+    // 1. DID detection (highest priority)
+    if (trimmedIdentifier.startsWith('did:')) {
+      this.logger.debug(
+        `getProfileSummary: Identifier is DID: ${trimmedIdentifier}`,
+      );
+      const foundUser = await this.findBySocialIdAndProvider(
+        {
+          socialId: trimmedIdentifier,
+          provider: AuthProvidersEnum.bluesky,
+        },
+        tenantId,
+      );
+      if (foundUser?.slug) {
+        user = await this.usersRepository.findOne({
+          where: { slug: foundUser.slug },
+          relations: { photo: true, interests: true },
+        });
+      }
+    }
+    // 2. Handle detection (contains domain pattern or starts with @)
+    else {
+      let handle = trimmedIdentifier;
+      if (handle.startsWith('@')) {
+        handle = handle.substring(1);
+      }
+
+      if (handle.includes('.')) {
+        this.logger.debug(
+          `getProfileSummary: Identifier appears to be ATProto handle: ${handle}`,
+        );
+        try {
+          const did =
+            await this.blueskyIdentityService.resolveHandleToDid(handle);
+          if (did) {
+            const foundUser = await this.findBySocialIdAndProvider(
+              { socialId: did, provider: AuthProvidersEnum.bluesky },
+              tenantId,
+            );
+            if (foundUser?.slug) {
+              user = await this.usersRepository.findOne({
+                where: { slug: foundUser.slug },
+                relations: { photo: true, interests: true },
+              });
+            }
+          }
+        } catch (error) {
+          this.logger.warn(
+            `getProfileSummary: Failed to resolve handle ${handle}: ${error.message}`,
+          );
+        }
+      } else {
+        // 3. Default: treat as slug
+        user = await this.usersRepository.findOne({
+          where: { slug: trimmedIdentifier },
+          relations: { photo: true, interests: true },
+        });
+      }
+    }
+
+    if (!user) {
+      return null;
+    }
+
+    // Create query builders for counts and limited data
+    const createEventQuery = () =>
+      this.usersRepository.manager
+        .createQueryBuilder(EventEntity, 'event')
+        .leftJoinAndSelect('event.image', 'eventImage')
+        .where('event.userId = :userId', { userId: user.id })
+        .andWhere('event.visibility = :visibility', { visibility: 'public' })
+        .andWhere('event.status IN (:...statuses)', {
+          statuses: ['published', 'cancelled'],
+        });
+
+    const createAttendingQuery = () =>
+      this.usersRepository.manager
+        .createQueryBuilder(EventAttendeesEntity, 'eventAttendee')
+        .leftJoinAndSelect('eventAttendee.event', 'event')
+        .leftJoinAndSelect('event.image', 'eventImage')
+        .where('eventAttendee.userId = :userId', { userId: user.id })
+        .andWhere('event.visibility = :visibility', { visibility: 'public' })
+        .andWhere('event.status IN (:...statuses)', {
+          statuses: ['published', 'cancelled'],
+        });
+
+    const createGroupQuery = () =>
+      this.usersRepository.manager
+        .createQueryBuilder(GroupEntity, 'group')
+        .leftJoinAndSelect('group.image', 'groupImage')
+        .where('group.createdById = :userId', { userId: user.id })
+        .andWhere('group.visibility = :visibility', { visibility: 'public' })
+        .andWhere('group.status = :status', { status: 'published' });
+
+    const createMembershipQuery = () =>
+      this.usersRepository.manager
+        .createQueryBuilder(GroupMemberEntity, 'groupMember')
+        .leftJoinAndSelect('groupMember.group', 'group')
+        .leftJoinAndSelect('group.image', 'groupMemberGroupImage')
+        .leftJoinAndSelect('groupMember.groupRole', 'groupRole')
+        .where('groupMember.userId = :userId', { userId: user.id })
+        .andWhere('group.visibility = :visibility', { visibility: 'public' })
+        .andWhere('group.status = :status', { status: 'published' })
+        .andWhere('groupRole.name != :ownerRole', { ownerRole: 'owner' });
+
+    // Execute all queries in parallel
+    const [
+      organizedEventsCount,
+      organizedEvents,
+      attendingEventsCount,
+      attendingRecords,
+      ownedGroupsCount,
+      ownedGroups,
+      groupMembershipsCount,
+      groupMemberships,
+    ] = await Promise.all([
+      // Counts
+      createEventQuery().getCount(),
+      createEventQuery()
+        .orderBy('event.startDate', 'DESC')
+        .take(PREVIEW_LIMIT)
+        .getMany(),
+      createAttendingQuery().getCount(),
+      createAttendingQuery()
+        .orderBy('event.startDate', 'ASC')
+        .take(PREVIEW_LIMIT)
+        .getMany(),
+      createGroupQuery().getCount(),
+      createGroupQuery().orderBy('group.name', 'ASC').take(PREVIEW_LIMIT).getMany(),
+      createMembershipQuery().getCount(),
+      createMembershipQuery()
+        .orderBy('group.name', 'ASC')
+        .take(PREVIEW_LIMIT)
+        .getMany(),
+    ]);
+
+    // Map attending records to events with attendee status
+    const attendingEvents = attendingRecords.map((record) => ({
+      ...record.event,
+      attendeeStatus: record.status,
+    }));
+
+    // Build the summary response
+    const summary: ProfileSummaryDto = {
+      id: user.id,
+      slug: user.slug,
+      firstName: user.firstName ?? undefined,
+      lastName: user.lastName ?? undefined,
+      bio: user.bio ?? undefined,
+      photo: user.photo
+        ? { id: String(user.photo.id), path: user.photo.path }
+        : undefined,
+      provider: user.provider ?? undefined,
+      socialId: user.socialId ?? undefined,
+      isShadowAccount: user.isShadowAccount,
+      preferences: user.preferences,
+      counts: {
+        organizedEvents: organizedEventsCount,
+        attendingEvents: attendingEventsCount,
+        ownedGroups: ownedGroupsCount,
+        groupMemberships: groupMembershipsCount,
+      },
+      interests: user.interests || [],
+      organizedEvents,
+      attendingEvents: attendingEvents as unknown as EventEntity[],
+      ownedGroups,
+      groupMemberships,
+    };
+
+    // Resolve Bluesky handle if needed (same logic as showProfile)
+    if (user?.preferences?.bluesky?.did && !user.isShadowAccount) {
+      try {
+        const profile = await this.blueskyIdentityService.resolveProfile(
+          user.preferences.bluesky.did,
+        );
+        const blueskyPrefs = summary.preferences?.bluesky as
+          | { handle?: string; did?: string }
+          | undefined;
+        if (blueskyPrefs) {
+          blueskyPrefs.handle = profile.handle || user.preferences.bluesky.did;
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Failed to resolve Bluesky handle: ${error.message}`,
+        );
+      }
+    }
+
+    return summary;
   }
 
   async findById(
