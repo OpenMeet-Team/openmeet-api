@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { EventEntity } from '../../event/infrastructure/persistence/relational/entities/event.entity';
+import { FileEntity } from '../../file/infrastructure/persistence/relational/entities/file.entity';
 import { GroupEntity } from '../../group/infrastructure/persistence/relational/entities/group.entity';
 import { GroupMemberEntity } from '../../group-member/infrastructure/persistence/relational/entities/group-member.entity';
 import { SubCategoryEntity } from '../../sub-category/infrastructure/persistence/relational/entities/sub-category.entity';
@@ -34,8 +35,8 @@ export class ProfileSummaryDto {
   @ApiProperty({ description: 'User bio', required: false })
   bio?: string;
 
-  @ApiProperty({ description: 'User photo', required: false })
-  photo?: { id: string; path: string };
+  @ApiProperty({ description: 'User photo', required: false, type: FileEntity })
+  photo?: FileEntity | null;
 
   @ApiProperty({ description: 'Auth provider' })
   provider?: string;

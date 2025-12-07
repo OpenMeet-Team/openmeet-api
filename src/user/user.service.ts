@@ -520,9 +520,7 @@ export class UserService {
       firstName: user.firstName ?? undefined,
       lastName: user.lastName ?? undefined,
       bio: user.bio ?? undefined,
-      photo: user.photo
-        ? { id: String(user.photo.id), path: user.photo.path }
-        : undefined,
+      photo: user.photo,
       provider: user.provider ?? undefined,
       socialId: user.socialId ?? undefined,
       isShadowAccount: user.isShadowAccount,
