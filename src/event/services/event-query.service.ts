@@ -15,6 +15,11 @@ import { EventSeriesEntity } from '../../event-series/infrastructure/persistence
 import { TenantConnectionService } from '../../tenant/tenant.service';
 import { QueryEventDto } from '../dto/query-events.dto';
 import { DashboardSummaryDto } from '../dto/dashboard-summary.dto';
+import {
+  DashboardEventsQueryDto,
+  DashboardEventsTab,
+} from '../dto/dashboard-events-query.dto';
+import { PaginationResult } from '../../utils/generic-pagination';
 import { PaginationDto } from '../../utils/dto/pagination.dto';
 import { HomeQuery } from '../../home/dto/home-query.dto';
 import {
@@ -969,6 +974,69 @@ export class EventQueryService {
       .getRawOne();
 
     return parseInt(result?.count || '0', 10);
+  }
+
+  @Trace('event-query.showDashboardEventsPaginated')
+  async showDashboardEventsPaginated(
+    userId: number,
+    query: DashboardEventsQueryDto,
+  ): Promise<PaginationResult<EventEntity>> {
+    await this.initializeRepository();
+
+    const { page = 1, limit = 10, tab } = query;
+    const now = new Date();
+
+    // Base query builder with common selections
+    let eventQuery = this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.user', 'user')
+      .leftJoinAndSelect('user.photo', 'userPhoto')
+      .leftJoinAndSelect('event.group', 'group')
+      .leftJoinAndSelect('group.image', 'groupImage')
+      .leftJoinAndSelect('event.categories', 'categories')
+      .leftJoinAndSelect('event.image', 'image');
+
+    // Apply tab-specific filtering
+    if (tab === DashboardEventsTab.Hosting) {
+      // Events user is hosting (upcoming)
+      eventQuery = eventQuery
+        .where('event.userId = :userId', { userId })
+        .andWhere('event.startDate >= :now', { now })
+        .orderBy('event.startDate', 'ASC');
+    } else if (tab === DashboardEventsTab.Attending) {
+      // Events user is attending (not hosting, upcoming)
+      eventQuery = eventQuery
+        .innerJoin(
+          'event.attendees',
+          'attendee',
+          'attendee.userId = :userId AND attendee.status != :cancelledStatus',
+          { userId, cancelledStatus: EventAttendeeStatus.Cancelled },
+        )
+        .where('event.userId != :userId', { userId })
+        .andWhere('event.startDate >= :now', { now })
+        .orderBy('event.startDate', 'ASC');
+    } else if (tab === DashboardEventsTab.Past) {
+      // Past events (both hosting and attending)
+      eventQuery = eventQuery
+        .leftJoin('event.attendees', 'attendee')
+        .where('event.startDate < :now', { now })
+        .andWhere(
+          '(event.userId = :userId OR (attendee.userId = :userId AND attendee.status != :cancelledStatus))',
+          { userId, cancelledStatus: EventAttendeeStatus.Cancelled },
+        )
+        .orderBy('event.startDate', 'DESC');
+    } else {
+      // No tab specified - return all user's events (hosting + attending, upcoming first)
+      eventQuery = eventQuery
+        .leftJoin('event.attendees', 'attendee')
+        .where(
+          '(event.userId = :userId OR (attendee.userId = :userId AND attendee.status != :cancelledStatus))',
+          { userId, cancelledStatus: EventAttendeeStatus.Cancelled },
+        )
+        .orderBy('event.startDate', 'ASC');
+    }
+
+    return await paginate(eventQuery, { page, limit });
   }
 
   @Trace('event-query.getHomePageFeaturedEvents')

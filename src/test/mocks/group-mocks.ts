@@ -109,6 +109,12 @@ export const mockGroupService = {
   showGroupDiscussions: jest.fn().mockResolvedValue(mockDiscussions),
   searchAllGroups: jest.fn().mockResolvedValue(mockGroups),
   showDashboardGroups: jest.fn().mockResolvedValue(mockGroups),
+  showDashboardGroupsPaginated: jest.fn().mockResolvedValue({
+    data: mockGroups,
+    total: mockGroups.length,
+    page: 1,
+    totalPages: 1,
+  }),
 };
 
 export const mockGroupMailService = {

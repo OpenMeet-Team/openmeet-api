@@ -83,7 +83,10 @@ export class EventAttendeeService {
     ) {
       this.logger.debug(
         `[syncRsvpToBluesky] Skipping - not a Bluesky event or missing rkey`,
-        { sourceType: event.sourceType, hasRkey: Boolean(event.sourceData?.rkey) },
+        {
+          sourceType: event.sourceType,
+          hasRkey: Boolean(event.sourceData?.rkey),
+        },
       );
       return true;
     }

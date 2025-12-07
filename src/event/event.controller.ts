@@ -24,6 +24,7 @@ import { EventEntity } from './infrastructure/persistence/relational/entities/ev
 import { JWTAuthGuard } from '../auth/auth.guard';
 import { QueryEventDto } from './dto/query-events.dto';
 import { DashboardSummaryDto } from './dto/dashboard-summary.dto';
+import { DashboardEventsQueryDto } from './dto/dashboard-events-query.dto';
 import { Public } from '../auth/decorators/public.decorator';
 import { AuthUser } from '../core/decorators/auth-user.decorator';
 import { User } from '../user/domain/user';
@@ -99,23 +100,24 @@ export class EventController {
       'Returns event counts and limited previews for the "What\'s Next" dashboard view. Optimized for fast loading.',
   })
   @Trace('event.getDashboardSummary')
-  async getDashboardSummary(@AuthUser() user: User): Promise<DashboardSummaryDto> {
+  async getDashboardSummary(
+    @AuthUser() user: User,
+  ): Promise<DashboardSummaryDto> {
     return this.eventQueryService.getDashboardSummary(user.id);
   }
 
-  /**
-   * @deprecated Use GET /dashboard/summary instead for better performance.
-   * This endpoint returns ALL events and will be slow for users with many events.
-   * Kept for backward compatibility with past events dialog and chat panel.
-   */
   @Get('dashboard')
   @ApiOperation({
-    summary: 'Get all events for the dashboard (DEPRECATED - use /dashboard/summary)',
-    deprecated: true,
+    summary: 'Get paginated list of user events with optional tab filter',
+    description:
+      'Returns paginated events for the current user. Use tab=hosting for events user is organizing, tab=attending for RSVPed events, tab=past for past events.',
   })
-  @Trace('event.showDashboardEvents')
-  async showDashboardEvents(@AuthUser() user: User): Promise<EventEntity[]> {
-    return this.eventQueryService.showDashboardEvents(user.id);
+  @Trace('event.showDashboardEventsPaginated')
+  async showDashboardEvents(
+    @AuthUser() user: User,
+    @Query() query: DashboardEventsQueryDto,
+  ) {
+    return this.eventQueryService.showDashboardEventsPaginated(user.id, query);
   }
 
   @Permissions({

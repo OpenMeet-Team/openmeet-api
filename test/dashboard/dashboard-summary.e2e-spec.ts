@@ -22,8 +22,8 @@ jest.setTimeout(120000);
 
 describe('Dashboard Summary Endpoints (e2e)', () => {
   let token: string;
-  let createdEvents: any[] = [];
-  let createdGroups: any[] = [];
+  const createdEvents: any[] = [];
+  const createdGroups: any[] = [];
 
   beforeAll(async () => {
     token = await loginAsTester();
@@ -300,9 +300,7 @@ describe('Dashboard Summary Endpoints (e2e)', () => {
       it('should return empty response for non-existent handle', async () => {
         // Test with a handle format that doesn't exist
         const response = await request(TESTING_APP_URL)
-          .get(
-            '/api/v1/users/nonexistent.handle.bsky.social/profile/summary',
-          )
+          .get('/api/v1/users/nonexistent.handle.bsky.social/profile/summary')
           .set('x-tenant-id', TESTING_TENANT_ID);
 
         // Returns 200 with empty body since handle doesn't resolve
@@ -352,6 +350,156 @@ describe('Dashboard Summary Endpoints (e2e)', () => {
 
         expect(response.status).toBe(200);
         expect(response.body.counts.ownedGroups).toBeGreaterThanOrEqual(1);
+      });
+    });
+  });
+
+  describe('GET /events/dashboard (paginated)', () => {
+    describe('when unauthenticated', () => {
+      it('should fail with 401', async () => {
+        const response = await request(TESTING_APP_URL)
+          .get('/api/events/dashboard')
+          .set('x-tenant-id', TESTING_TENANT_ID);
+
+        expect(response.status).toBe(401);
+      });
+    });
+
+    describe('when authenticated', () => {
+      it('should return paginated results', async () => {
+        const response = await request(TESTING_APP_URL)
+          .get('/api/events/dashboard')
+          .set('Authorization', `Bearer ${token}`)
+          .set('x-tenant-id', TESTING_TENANT_ID);
+
+        expect(response.status).toBe(200);
+        expect(response.body).toBeDefined();
+
+        // Verify pagination structure
+        expect(Array.isArray(response.body.data)).toBe(true);
+        expect(typeof response.body.total).toBe('number');
+        expect(typeof response.body.page).toBe('number');
+        expect(typeof response.body.totalPages).toBe('number');
+      });
+
+      it('should support page and limit parameters', async () => {
+        const response = await request(TESTING_APP_URL)
+          .get('/api/events/dashboard?page=1&limit=5')
+          .set('Authorization', `Bearer ${token}`)
+          .set('x-tenant-id', TESTING_TENANT_ID);
+
+        expect(response.status).toBe(200);
+        expect(response.body.page).toBe(1);
+        expect(response.body.data.length).toBeLessThanOrEqual(5);
+      });
+
+      it('should filter by tab=hosting', async () => {
+        const response = await request(TESTING_APP_URL)
+          .get('/api/events/dashboard?tab=hosting')
+          .set('Authorization', `Bearer ${token}`)
+          .set('x-tenant-id', TESTING_TENANT_ID);
+
+        expect(response.status).toBe(200);
+        expect(Array.isArray(response.body.data)).toBe(true);
+      });
+
+      it('should filter by tab=attending', async () => {
+        const response = await request(TESTING_APP_URL)
+          .get('/api/events/dashboard?tab=attending')
+          .set('Authorization', `Bearer ${token}`)
+          .set('x-tenant-id', TESTING_TENANT_ID);
+
+        expect(response.status).toBe(200);
+        expect(Array.isArray(response.body.data)).toBe(true);
+      });
+
+      it('should filter by tab=past', async () => {
+        const response = await request(TESTING_APP_URL)
+          .get('/api/events/dashboard?tab=past')
+          .set('Authorization', `Bearer ${token}`)
+          .set('x-tenant-id', TESTING_TENANT_ID);
+
+        expect(response.status).toBe(200);
+        expect(Array.isArray(response.body.data)).toBe(true);
+      });
+
+      it('should reject invalid tab value', async () => {
+        const response = await request(TESTING_APP_URL)
+          .get('/api/events/dashboard?tab=invalid')
+          .set('Authorization', `Bearer ${token}`)
+          .set('x-tenant-id', TESTING_TENANT_ID);
+
+        expect(response.status).toBe(422);
+      });
+    });
+  });
+
+  describe('GET /groups/dashboard (paginated)', () => {
+    describe('when unauthenticated', () => {
+      it('should fail with 401', async () => {
+        const response = await request(TESTING_APP_URL)
+          .get('/api/groups/dashboard')
+          .set('x-tenant-id', TESTING_TENANT_ID);
+
+        expect(response.status).toBe(401);
+      });
+    });
+
+    describe('when authenticated', () => {
+      it('should return paginated results', async () => {
+        const response = await request(TESTING_APP_URL)
+          .get('/api/groups/dashboard')
+          .set('Authorization', `Bearer ${token}`)
+          .set('x-tenant-id', TESTING_TENANT_ID);
+
+        expect(response.status).toBe(200);
+        expect(response.body).toBeDefined();
+
+        // Verify pagination structure
+        expect(Array.isArray(response.body.data)).toBe(true);
+        expect(typeof response.body.total).toBe('number');
+        expect(typeof response.body.page).toBe('number');
+        expect(typeof response.body.totalPages).toBe('number');
+      });
+
+      it('should support page and limit parameters', async () => {
+        const response = await request(TESTING_APP_URL)
+          .get('/api/groups/dashboard?page=1&limit=5')
+          .set('Authorization', `Bearer ${token}`)
+          .set('x-tenant-id', TESTING_TENANT_ID);
+
+        expect(response.status).toBe(200);
+        expect(response.body.page).toBe(1);
+        expect(response.body.data.length).toBeLessThanOrEqual(5);
+      });
+
+      it('should filter by role=leader', async () => {
+        const response = await request(TESTING_APP_URL)
+          .get('/api/groups/dashboard?role=leader')
+          .set('Authorization', `Bearer ${token}`)
+          .set('x-tenant-id', TESTING_TENANT_ID);
+
+        expect(response.status).toBe(200);
+        expect(Array.isArray(response.body.data)).toBe(true);
+      });
+
+      it('should filter by role=member', async () => {
+        const response = await request(TESTING_APP_URL)
+          .get('/api/groups/dashboard?role=member')
+          .set('Authorization', `Bearer ${token}`)
+          .set('x-tenant-id', TESTING_TENANT_ID);
+
+        expect(response.status).toBe(200);
+        expect(Array.isArray(response.body.data)).toBe(true);
+      });
+
+      it('should reject invalid role value', async () => {
+        const response = await request(TESTING_APP_URL)
+          .get('/api/groups/dashboard?role=invalid')
+          .set('Authorization', `Bearer ${token}`)
+          .set('x-tenant-id', TESTING_TENANT_ID);
+
+        expect(response.status).toBe(422);
       });
     });
   });
