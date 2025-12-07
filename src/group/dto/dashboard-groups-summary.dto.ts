@@ -15,7 +15,8 @@ export class DashboardGroupsSummaryDto {
 
   @ApiProperty({
     type: [GroupEntity],
-    description: 'Groups user is leading (owner/admin/moderator) - limited preview',
+    description:
+      'Groups user is leading (owner/admin/moderator) - limited preview',
   })
   leadingGroups: GroupEntity[];
 

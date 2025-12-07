@@ -496,7 +496,10 @@ export class UserService {
         .take(PREVIEW_LIMIT)
         .getMany(),
       createGroupQuery().getCount(),
-      createGroupQuery().orderBy('group.name', 'ASC').take(PREVIEW_LIMIT).getMany(),
+      createGroupQuery()
+        .orderBy('group.name', 'ASC')
+        .take(PREVIEW_LIMIT)
+        .getMany(),
       createMembershipQuery().getCount(),
       createMembershipQuery()
         .orderBy('group.name', 'ASC')
@@ -550,9 +553,7 @@ export class UserService {
           blueskyPrefs.handle = profile.handle || user.preferences.bluesky.did;
         }
       } catch (error) {
-        this.logger.warn(
-          `Failed to resolve Bluesky handle: ${error.message}`,
-        );
+        this.logger.warn(`Failed to resolve Bluesky handle: ${error.message}`);
       }
     }
 

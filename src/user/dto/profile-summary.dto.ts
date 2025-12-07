@@ -40,7 +40,10 @@ export class ProfileSummaryDto {
   @ApiProperty({ description: 'Auth provider' })
   provider?: string;
 
-  @ApiProperty({ description: 'Social ID (e.g., Bluesky DID)', required: false })
+  @ApiProperty({
+    description: 'Social ID (e.g., Bluesky DID)',
+    required: false,
+  })
   socialId?: string;
 
   @ApiProperty({ description: 'Whether this is a shadow account' })

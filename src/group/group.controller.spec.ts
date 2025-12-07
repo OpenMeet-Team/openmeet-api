@@ -258,9 +258,20 @@ describe('GroupController', () => {
   });
 
   describe('showDashboardGroups', () => {
-    it('should return dashboard groups', async () => {
-      const result = await controller.showDashboardGroups(mockUser);
-      expect(result).toEqual([mockGroup]);
+    it('should return paginated dashboard groups', async () => {
+      const pagination = { page: 1, limit: 10 };
+      const query = { role: undefined };
+      const result = await controller.showDashboardGroups(
+        mockUser,
+        pagination,
+        query,
+      );
+      expect(result).toEqual({
+        data: [mockGroup],
+        total: 1,
+        page: 1,
+        totalPages: 1,
+      });
     });
   });
 });

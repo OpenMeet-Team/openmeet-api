@@ -36,6 +36,7 @@ import {
 } from './dto/admin-message.dto';
 import { ContactAdminsDto } from './dto/contact-admins.dto';
 import { DashboardGroupsSummaryDto } from './dto/dashboard-groups-summary.dto';
+import { DashboardGroupsQueryDto } from './dto/dashboard-groups-query.dto';
 
 @ApiTags('Groups')
 @Controller('groups')
@@ -101,17 +102,22 @@ export class GroupController {
     return await this.groupService.getDashboardSummary(user.id);
   }
 
-  /**
-   * @deprecated Use GET /dashboard/summary instead for better performance.
-   * This endpoint returns ALL groups and will be slow for users with many groups.
-   */
   @Get('dashboard')
   @ApiOperation({
-    summary: 'Get all groups for the dashboard (DEPRECATED - use /dashboard/summary)',
-    deprecated: true,
+    summary: 'Get paginated list of user groups with optional role filter',
+    description:
+      'Returns paginated groups for the current user. Use role=leader for groups where user is owner/admin/moderator, role=member for regular membership.',
   })
-  async showDashboardGroups(@AuthUser() user: User): Promise<GroupEntity[]> {
-    return await this.groupService.showDashboardGroups(user.id);
+  async showDashboardGroups(
+    @AuthUser() user: User,
+    @Query() pagination: PaginationDto,
+    @Query() query: DashboardGroupsQueryDto,
+  ) {
+    return await this.groupService.showDashboardGroupsPaginated(
+      user.id,
+      pagination,
+      query.role,
+    );
   }
 
   @Permissions({

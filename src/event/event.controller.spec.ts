@@ -80,6 +80,7 @@ const mockEventQueryService = {
   editEvent: jest.fn(),
   findEventBySlug: jest.fn(),
   showDashboardEvents: jest.fn(),
+  showDashboardEventsPaginated: jest.fn(),
   showEventAttendees: jest.fn(),
   getEventsByCreator: jest.fn(),
   getEventsByAttendee: jest.fn(),
@@ -402,10 +403,19 @@ describe('EventController', () => {
   // Discussion-related tests have been moved to chat.controller.spec.ts
 
   describe('showDashboardEvents', () => {
-    it('should return dashboard events', async () => {
-      mockEventQueryService.showDashboardEvents.mockResolvedValue(mockEvents);
-      const result = await controller.showDashboardEvents(mockUser);
-      expect(result).toEqual(mockEvents);
+    it('should return paginated dashboard events', async () => {
+      const mockPaginatedResult = {
+        data: mockEvents,
+        total: mockEvents.length,
+        page: 1,
+        totalPages: 1,
+      };
+      mockEventQueryService.showDashboardEventsPaginated.mockResolvedValue(
+        mockPaginatedResult,
+      );
+      const query = { page: 1, limit: 10, tab: undefined };
+      const result = await controller.showDashboardEvents(mockUser, query);
+      expect(result).toEqual(mockPaginatedResult);
     });
   });
 

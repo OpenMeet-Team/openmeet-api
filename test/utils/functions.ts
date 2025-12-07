@@ -262,7 +262,8 @@ async function getMyEvents(app, token) {
     .set('x-tenant-id', TESTING_TENANT_ID);
 
   expect(response.status).toBe(200);
-  return response.body;
+  // Return the data array from paginated response
+  return response.body.data;
 }
 
 async function createTestUser(

@@ -166,7 +166,8 @@ export class UserController {
   @Throttle({ default: { limit: 20, ttl: 60000 } }) // 20 requests per minute for public profile lookups
   @Get(':identifier/profile')
   @ApiOperation({
-    summary: 'Get user profile by identifier (DEPRECATED - use /:slug/profile/summary)',
+    summary:
+      'Get user profile by identifier (DEPRECATED - use /:slug/profile/summary)',
     description:
       'Retrieve user profile using multiple identifier types: slug (alice-abc123), ATProto DID (did:plc:abc123), or ATProto handle (alice.bsky.social or @alice.bsky.social)',
     deprecated: true,
