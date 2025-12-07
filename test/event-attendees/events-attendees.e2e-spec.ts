@@ -109,11 +109,11 @@ describe('EventAttendeeController (e2e)', () => {
       .set('x-tenant-id', TESTING_TENANT_ID);
 
     expect(getMyEventsResponse.status).toBe(200);
-    expect(Array.isArray(getMyEventsResponse.body)).toBe(true);
+    expect(Array.isArray(getMyEventsResponse.body.data)).toBe(true);
 
     // Find the created test event in the dashboard response
-    const foundEvent = getMyEventsResponse.body.find(
-      (e) => e.slug === testEvent.slug,
+    const foundEvent = getMyEventsResponse.body.data.find(
+      (e: { slug: string }) => e.slug === testEvent.slug,
     );
     expect(foundEvent).toBeDefined();
   });
