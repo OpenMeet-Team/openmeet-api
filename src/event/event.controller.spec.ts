@@ -285,6 +285,7 @@ describe('EventController', () => {
         mockEvent.slug,
         updateEventDto,
         mockUser.id,
+        undefined,
       );
     });
 

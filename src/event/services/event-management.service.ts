@@ -461,6 +461,7 @@ export class EventManagementService {
    * @param slug The slug of the event to update
    * @param updateEventDto The data to update the event with
    * @param userId The ID of the user performing the update
+   * @param sendNotifications Whether to send notification emails to attendees (defaults to false)
    * @param The userId parameter is deprecated and will be removed in a future version
    */
   @Trace('event-management.update')
@@ -468,6 +469,7 @@ export class EventManagementService {
     slug: string,
     updateEventDto: UpdateEventDto,
     userId?: number, // deprecated
+    sendNotifications?: boolean,
   ): Promise<EventEntity> {
     await this.initializeRepository();
 
@@ -885,6 +887,7 @@ export class EventManagementService {
       slug: updatedEvent.slug,
       userId: this.request.user?.id,
       tenantId: this.request.tenantId,
+      sendNotifications: sendNotifications ?? false, // Default to false
     });
 
     return updatedEvent;

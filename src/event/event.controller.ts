@@ -205,6 +205,7 @@ export class EventController {
       slug,
       updateEventDto,
       userId,
+      updateEventDto.sendNotifications,
     );
 
     // Log what we're returning to help debug the test issue

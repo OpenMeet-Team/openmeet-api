@@ -439,6 +439,7 @@ describe('EventAnnouncementService', () => {
         slug: 'test-event',
         userId: 1,
         tenantId: 'test-tenant-123',
+        sendNotifications: true,
       });
 
       // Assert - emails should be sent to group members
@@ -528,6 +529,7 @@ describe('EventAnnouncementService', () => {
         slug: 'test-event',
         userId: 1,
         tenantId: 'test-tenant-123',
+        sendNotifications: true,
       });
 
       // Assert - Should send emails to event attendees (David, Emma) even without a group
@@ -544,6 +546,7 @@ describe('EventAnnouncementService', () => {
         slug: 'test-event',
         userId: 1,
         tenantId: 'test-tenant-123',
+        sendNotifications: true,
       });
 
       // Assert - Should send emails to event attendees (David, Emma) even if group has no members
@@ -561,6 +564,7 @@ describe('EventAnnouncementService', () => {
         slug: 'test-event',
         userId: 1,
         tenantId: 'test-tenant-123',
+        sendNotifications: true,
       });
 
       // Assert
@@ -587,6 +591,7 @@ describe('EventAnnouncementService', () => {
         slug: 'test-event',
         userId: 1,
         tenantId: 'test-tenant-123',
+        sendNotifications: true,
       });
 
       // Assert
@@ -612,6 +617,7 @@ describe('EventAnnouncementService', () => {
           slug: 'test-event',
           userId: 1,
           tenantId: 'test-tenant-123',
+          sendNotifications: true,
         }),
       ).resolves.not.toThrow();
 
@@ -628,6 +634,7 @@ describe('EventAnnouncementService', () => {
         slug: 'non-existent-event',
         userId: 1,
         tenantId: 'test-tenant-123',
+        sendNotifications: true,
       });
 
       // Assert
@@ -648,6 +655,7 @@ describe('EventAnnouncementService', () => {
         slug: 'test-event',
         userId: 1,
         tenantId: 'test-tenant-123',
+        sendNotifications: true,
       });
 
       // Assert - should send cancellation emails, not update emails
@@ -676,6 +684,48 @@ describe('EventAnnouncementService', () => {
         tenantConfig: expect.any(Object),
         icsContent: expect.any(String),
       });
+    });
+
+    it('should NOT send notification emails when sendNotifications is false', async () => {
+      // Act
+      await service.handleEventUpdated({
+        eventId: 1,
+        slug: 'test-event',
+        userId: 1,
+        tenantId: 'test-tenant-123',
+        sendNotifications: false,
+      });
+
+      // Assert - no emails should be sent
+      expect(mailerService.sendCalendarInviteMail).not.toHaveBeenCalled();
+    });
+
+    it('should send notification emails when sendNotifications is true', async () => {
+      // Act
+      await service.handleEventUpdated({
+        eventId: 1,
+        slug: 'test-event',
+        userId: 1,
+        tenantId: 'test-tenant-123',
+        sendNotifications: true,
+      });
+
+      // Assert - emails should be sent
+      expect(mailerService.sendCalendarInviteMail).toHaveBeenCalledTimes(5);
+    });
+
+    it('should NOT send notification emails when sendNotifications is undefined (default behavior)', async () => {
+      // Act
+      await service.handleEventUpdated({
+        eventId: 1,
+        slug: 'test-event',
+        userId: 1,
+        tenantId: 'test-tenant-123',
+        // sendNotifications omitted - should default to false
+      });
+
+      // Assert - no emails should be sent by default
+      expect(mailerService.sendCalendarInviteMail).not.toHaveBeenCalled();
     });
   });
 

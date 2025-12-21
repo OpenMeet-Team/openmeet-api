@@ -27,4 +27,14 @@ export class UpdateEventDto extends PartialType(CreateEventDto) {
   @IsOptional()
   @IsString()
   seriesSlug?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether to send notification emails to attendees about this update. Defaults to false to avoid notification fatigue for minor edits.',
+    example: false,
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  sendNotifications?: boolean;
 }

@@ -657,6 +657,7 @@ describe('Calendar Invite E2E', () => {
           startDate: newStartDate.toISOString(),
           endDate: new Date(newStartDate.getTime() + 7200000).toISOString(), // +2 hours
           location: 'Updated Venue, 456 New St',
+          sendNotifications: true, // Explicitly request notifications
         })
         .expect(200);
 

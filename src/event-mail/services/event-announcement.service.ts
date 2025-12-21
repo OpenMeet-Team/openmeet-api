@@ -239,12 +239,22 @@ export class EventAnnouncementService {
     slug: string;
     userId: number;
     tenantId?: string;
+    sendNotifications?: boolean;
   }) {
     this.logger.log('Processing event update announcement', {
       eventId: params.eventId,
       slug: params.slug,
       tenantId: params.tenantId,
+      sendNotifications: params.sendNotifications,
     });
+
+    // Skip sending notifications if explicitly disabled (defaults to false)
+    if (params.sendNotifications !== true) {
+      this.logger.log(
+        `Skipping event update notifications for ${params.slug} (sendNotifications=${params.sendNotifications})`,
+      );
+      return;
+    }
 
     try {
       // Get the event with related data using slug (includes group and user relations)
