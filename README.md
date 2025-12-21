@@ -2,8 +2,10 @@ Welcome to the OpenMeet API repository! Whether you’re a developer looking to 
 
 # About OpenMeet
 
-OpenMeet is an open-source platform designed to help people organize and connect, whether it's for grassroots movements, community building, or event management. The platform 
+OpenMeet is an open-source platform designed to help people organize and connect, whether it's for grassroots movements, community building, or event management. The platform
 focuses on privacy, decentralization, and empowering users to take control of their data and interactions.
+
+**[View the Roadmap →](ROADMAP.md)** — See what we're building, what's working today, and how to contribute.
 
 ## What You Can Do with OpenMeet
 
