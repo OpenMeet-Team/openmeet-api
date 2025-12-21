@@ -286,8 +286,26 @@ export class EventSeriesOccurrenceService {
         'HH:mm:ss',
       );
 
-      // Get just the date part from occurrenceDate (may be ISO string or date string)
-      const occurrenceDateOnly = occurrenceDate.split('T')[0];
+      // Extract the date part from occurrenceDate IN THE SERIES TIMEZONE
+      // Issue #421 fix: Handle two input formats:
+      // 1. Full UTC ISO string (e.g., "2026-03-12T03:00:00.000Z" = March 11, 7pm PST)
+      //    - Must extract date in series timezone, not UTC
+      //    - split('T')[0] would give wrong date for evening events
+      // 2. Date-only string (e.g., "2026-03-11")
+      //    - Already the local date, use as-is
+      let occurrenceDateOnly: string;
+      if (occurrenceDate.includes('T')) {
+        // Full ISO string - extract date in series timezone
+        const occurrenceDateObj = new Date(occurrenceDate);
+        occurrenceDateOnly = formatInTimeZone(
+          occurrenceDateObj,
+          timeZone,
+          'yyyy-MM-dd',
+        );
+      } else {
+        // Date-only string - use as-is (already represents local date)
+        occurrenceDateOnly = occurrenceDate;
+      }
 
       // Combine occurrence date with template's local time
       const localDateTime = `${occurrenceDateOnly}T${templateLocalTime}`;
