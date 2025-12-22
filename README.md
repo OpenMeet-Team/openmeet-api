@@ -104,39 +104,11 @@ The admin user is created during database seeding using:
 
 ### Local Setup
 
-**Option 1: Full Docker environment (recommended)**
-
-This starts PostgreSQL, Redis, Matrix, RabbitMQ, and the API with hot reload:
-```bash
-# Copy example config
-cp env-example-relational .env-local
-
-# Start all services
-docker compose -f docker-compose-dev.yml up --build
-
-# API available at http://localhost:3000
-# Swagger docs at http://localhost:3000/api/docs
-```
-
-**Option 2: API only (dependencies via Docker)**
-
-```bash
-# Start dependencies only
-docker compose -f docker-compose-dev.yml up -d postgres redis maildev
-
-# Copy example config (NestJS reads .env automatically)
-cp env-example-relational .env
-
-# Install dependencies
-npm install
-
-# Run migrations first, then seed data
-npm run migration:run:tenants
-npm run seed:run:prod
-
-# Start development server
-npm run start:dev
-```
+See **[DEVELOPER-SETUP.md](./DEVELOPER-SETUP.md)** for complete local development instructions including:
+- Quick start with Docker Compose
+- Services overview with ports
+- Debugging tools (psql, logs)
+- Troubleshooting guide
 
 ### Database Migrations
 

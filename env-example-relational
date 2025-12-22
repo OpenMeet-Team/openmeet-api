@@ -1,4 +1,5 @@
 NODE_ENV=development
+ENVIRONMENT=local
 APP_PORT=3000
 APP_NAME="NestJS API"
 API_PREFIX=api
@@ -7,7 +8,10 @@ APP_HEADER_LANGUAGE=x-custom-lang
 FRONTEND_DOMAIN=http://localhost:3000
 BACKEND_DOMAIN=http://localhost:3000
 
-TENANTS_B64=WwogIHsKICAgICJpZCI6ICIiLAogICAgIm5hbWUiOiAiUHVibGljIgogIH0sCiAgewogICAgImlkIjogIjEiLAogICAgIm5hbWUiOiAiT3Blbk1lZXQiCiAgfSwKICB7CiAgICAiaWQiOiAidGVzdGluZyIsCiAgICAibmFtZSI6ICJUZXN0aW5nIgogIH0KXQ==
+# TENANTS_B64 is base64 encoded JSON array of tenant configs
+# Each tenant needs: id, name, frontendDomain
+# Generate with: echo '[{...}]' | base64 -w0
+TENANTS_B64=W3siaWQiOiIiLCJuYW1lIjoiUHVibGljIiwiZnJvbnRlbmREb21haW4iOiJodHRwOi8vbG9jYWxob3N0OjkwMDUifSx7ImlkIjoiMSIsIm5hbWUiOiJPcGVuTWVldCIsImZyb250ZW5kRG9tYWluIjoiaHR0cDovL2xvY2FsaG9zdDo5MDA1In0seyJpZCI6InRlc3RpbmciLCJuYW1lIjoiVGVzdGluZyIsImZyb250ZW5kRG9tYWluIjoiaHR0cDovL2xvY2FsaG9zdDo5MDA1In1d
 
 # Test tenant, must exist in the TENANTS_B64 variable
 TEST_TENANT_ID=testing
@@ -21,7 +25,9 @@ TEST_USER_EMAIL=test@openmeet.net
 TEST_USER_PASSWORD=secret
 
 DATABASE_TYPE=postgres
-DATABASE_HOST=localhost
+# Use 'postgres' for Docker, 'localhost' for host-based development
+# TODO: This may cause issues when running migrations from host
+DATABASE_HOST=postgres
 DATABASE_PORT=5432
 DATABASE_USERNAME=root
 DATABASE_PASSWORD=secret
@@ -45,6 +51,7 @@ SECRET_ACCESS_KEY=None
 AWS_S3_REGION=None
 AWS_DEFAULT_S3_BUCKET=None
 
+# MAIL_HOST is for API inside Docker (container-to-container)
 MAIL_HOST=maildev
 MAIL_PORT=1025
 MAIL_USER=
@@ -55,6 +62,9 @@ MAIL_REQUIRE_TLS=false
 MAIL_DEFAULT_EMAIL=noreply@openmeet.net
 MAIL_DEFAULT_NAME=Api
 MAIL_CLIENT_PORT=1080
+MAIL_MODE=plain
+# TESTING_MAIL_HOST is for e2e tests running on host
+TESTING_MAIL_HOST=localhost
 
 AUTH_JWT_SECRET=secret
 AUTH_JWT_TOKEN_EXPIRES_IN=15m
@@ -64,6 +74,9 @@ AUTH_FORGOT_SECRET=secret_for_forgot
 AUTH_FORGOT_TOKEN_EXPIRES_IN=30m
 AUTH_CONFIRM_EMAIL_SECRET=secret_for_confirm_email
 AUTH_CONFIRM_EMAIL_TOKEN_EXPIRES_IN=1d
+
+# Service-to-service API keys (comma-separated) for external integrations (e.g., Bluesky processor)
+SERVICE_API_KEYS=local-dev-service-key-12345
 
 FACEBOOK_APP_ID=
 FACEBOOK_APP_SECRET=
@@ -121,10 +134,40 @@ SYNAPSE_MAX_UPLOAD_SIZE=50M
 SYNAPSE_URL_PREVIEW_ENABLED=false
 
 # MAS (Matrix Authentication Service) configuration
-MAS_ISSUER=http://api:3000
-MAS_CLIENT_SECRET=ci_test_mas_client_secret_for_synapse
-MAS_ADMIN_TOKEN=ci_test_matrix_admin_token
+# For local development with docker-compose-dev.yml
+MAS_ISSUER=http://matrix-auth-service:8080/
+MAS_CLIENT_SECRET=local-dev-mas-client-secret
+MAS_ADMIN_TOKEN=local-dev-mas-admin-token
+MAS_PUBLIC_BASE=http://localhost:8081
+MAS_DATABASE_HOST=postgres
+MAS_DATABASE_NAME=mas
+MAS_ENCRYPTION_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+MAS_MATRIX_HOMESERVER_URL=http://matrix:8448
+MAS_SERVICE_NAME=OpenMeet Local Development
+MAS_INTROSPECTION_ENDPOINT=http://matrix-auth-service:8080/oauth2/introspect
+MAS_ACCOUNT_MANAGEMENT_URL=http://localhost:8081/account
 
 # MAS Token TTL configuration (in seconds)
 MAS_ACCESS_TOKEN_TTL=300
 MAS_COMPAT_TOKEN_TTL=300
+
+# Template variables for config-renderer (all are required by gomplate templates)
+WEB_CLIENT_LOCATION=http://localhost:9005
+PROMETHEUS_ENABLED=false
+POLICY_ADMIN_USERS=admin@openmeet.net
+
+# MAS mail config (falls back to MAIL_HOST/MAIL_PORT but gomplate needs vars to exist)
+MAS_MAIL_HOST=maildev
+MAS_MAIL_PORT=1025
+
+# OAuth provider configuration (MAS uses this to authenticate users via OpenMeet API)
+OAUTH_PROVIDER_NAME=OpenMeet Local Development
+OAUTH_ISSUER=http://api:3000/oidc
+OAUTH_CLIENT_ID=mas_client
+OAUTH_CLIENT_SECRET=local-dev-mas-client-secret
+
+# Matrix Appservice configuration (for OpenMeet bot to interact with Matrix)
+MATRIX_APPSERVICE_ID=openmeet-bot-local
+MATRIX_APPSERVICE_URL=http://api:3000/api/matrix/appservice
+MATRIX_APPSERVICE_TOKEN=local-dev-appservice-token-971a507cac6945e1259b7d7377b7c497
+MATRIX_APPSERVICE_HS_TOKEN=local-dev-hs-token-df51b086825667040f89888d920641c44d
