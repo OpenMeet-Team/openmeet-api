@@ -6,7 +6,7 @@ The backend API powering [OpenMeet](https://platform.openmeet.net) — a **free,
 
 * **Platform:** [platform.openmeet.net](https://platform.openmeet.net)
 * **API:** [api.openmeet.net](https://api.openmeet.net)
-* **API Docs:** [api.openmeet.net/api/docs](https://api.openmeet.net/api/docs) (Swagger/OpenAPI)
+* **API Docs:** [api.openmeet.net/docs](https://api.openmeet.net/docs) (Swagger/OpenAPI)
 
 **[What is OpenMeet? →](ROADMAP.md)** — Features, roadmap, and how to contribute
 
