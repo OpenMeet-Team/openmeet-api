@@ -8,14 +8,19 @@ export class AddContactPermissions1748529522591 implements MigrationInterface {
 
     // Add new enum values to the groupPermissions_name_enum
     await queryRunner.query(`
-      ALTER TYPE "${schema}"."groupPermissions_name_enum" 
+      ALTER TYPE "${schema}"."groupPermissions_name_enum"
       ADD VALUE IF NOT EXISTS 'CONTACT_MEMBERS'
     `);
 
     await queryRunner.query(`
-      ALTER TYPE "${schema}"."groupPermissions_name_enum" 
+      ALTER TYPE "${schema}"."groupPermissions_name_enum"
       ADD VALUE IF NOT EXISTS 'CONTACT_ADMINS'
     `);
+
+    // Commit enum changes so they can be used by subsequent migrations
+    // PostgreSQL requires enum values to be committed before use
+    await queryRunner.commitTransaction();
+    await queryRunner.startTransaction();
   }
 
   public down(_queryRunner: QueryRunner): Promise<void> {
