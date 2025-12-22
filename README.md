@@ -1,5 +1,7 @@
 # OpenMeet API
 
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 The backend API powering [OpenMeet](https://platform.openmeet.net) — a **free, open-source event platform** for community organizers. Think Meetup, but free for communities and open source.
 
 * **Platform:** [platform.openmeet.net](https://platform.openmeet.net)
@@ -18,7 +20,7 @@ The backend API powering [OpenMeet](https://platform.openmeet.net) — a **free,
 | Database | PostgreSQL (multi-tenant via schemas) |
 | Cache | Redis |
 | Queue | RabbitMQ |
-| Auth | JWT + OAuth (Bluesky, Google, GitHub) |
+| Auth | JWT + OAuth (ATprotocol/Bluesky, Google, GitHub) |
 | Chat | Matrix (Synapse) |
 | AT Protocol | @atproto/* packages |
 
@@ -37,6 +39,10 @@ The backend API powering [OpenMeet](https://platform.openmeet.net) — a **free,
 ### Running Your Own Instance
 
 OpenMeet can be self-hosted. The production deployment uses Kubernetes with ArgoCD GitOps.
+There are 2 docker compose files that could be merged into one to run the whole thing on a single server.
+It is not resource intensive.
+
+*This section is incomplete presently. Do not be surprised if there are missing things you'll need to trace down. Please leave an issue for us if you do, thanks!*
 
 ### Prerequisites
 
@@ -118,12 +124,13 @@ docker compose -f docker-compose-dev.yml up --build
 # Start dependencies only
 docker compose -f docker-compose-dev.yml up -d postgres redis maildev
 
-# Configure environment
+# Copy example config (NestJS reads .env automatically)
 cp env-example-relational .env
-export $(grep -v "#" ".env" | xargs)
 
-# Install dependencies and run migrations
+# Install dependencies
 npm install
+
+# Run migrations first, then seed data
 npm run migration:run:tenants
 npm run seed:run:prod
 
@@ -145,12 +152,12 @@ npm run migration:reset
 
 ```bash
 # Unit tests
-npm run test:local
+npm run test
 
 # Run specific test file
 npm run test -- path/to/file.spec.ts
 
-# E2E tests (requires running API + database)
+# E2E tests (requires running API, database, matrix to succeed)
 npm run test:e2e
 
 # Type check
@@ -166,6 +173,7 @@ openmeet-api/
 ├── design-notes/        # Architecture and design documentation
 ├── grafana/             # Monitoring dashboards
 ├── matrix-config/       # Matrix/Synapse configuration templates
+├── pg-init-scripts/     # PostgreSQL init (PostGIS, Synapse DB, MAS DB)
 ├── scripts/             # Utility scripts
 ├── test/                # E2E tests
 └── src/                 # Application source code
@@ -192,6 +200,8 @@ We welcome contributions! Here's how to get started:
 
 See [CONTRIBUTORS.md](CONTRIBUTORS.md) for the people who have helped build OpenMeet.
 
+Please review our [Code of Conduct](CODE_OF_CONDUCT.md) before contributing.
+
 ---
 
 ## Community
@@ -205,3 +215,9 @@ See [CONTRIBUTORS.md](CONTRIBUTORS.md) for the people who have helped build Open
 ## Support OpenMeet
 
 OpenMeet is free for community groups, funded by the community. Help cover hosting costs (~$350/month) at [platform.openmeet.net/support](https://platform.openmeet.net/support).
+
+---
+
+## License
+
+[Apache 2.0](LICENSE)
