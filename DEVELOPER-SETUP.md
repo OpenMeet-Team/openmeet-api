@@ -19,9 +19,12 @@ curl http://localhost:3000/health/liveness
 # Expected: {"status":"ok","info":{"api":{"status":"up"}}}
 
 # 5. Run tests to verify setup
-npm run test                                       # Unit tests (~30s)
-npm run test:e2e -- --testPathPattern="auth.e2e"  # Auth e2e tests (~15s)
+npm run test                                  # Unit tests (~30s)
+npm run test:e2e -- --testPathPattern="auth"  # Auth e2e tests (~1m)
+npm run test:e2e                              # all e2e tests (~12m)
 ```
+
+Now you can run commands against the api, see the [api docs](http://localhost:3000/docs)
 
 ## Services Overview
 
