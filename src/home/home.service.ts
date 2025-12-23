@@ -25,12 +25,7 @@ export class HomeService {
   }
 
   getRootRedirect() {
-    const environment = this.configService.get('app.nodeEnv', { infer: true });
-    const isProd = environment === 'production';
-
-    const redirectUrl = isProd
-      ? 'https://platform.openmeet.net'
-      : 'https://platform-dev.openmeet.net';
+    const redirectUrl = this.configService.get('app.platformUrl', { infer: true })
 
     return {
       url: redirectUrl,

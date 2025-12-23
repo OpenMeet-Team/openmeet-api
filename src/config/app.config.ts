@@ -57,6 +57,7 @@ export default registerAs<AppConfig>('app', () => {
     name: process.env.APP_NAME || 'app',
     workingDirectory: process.env.PWD || process.cwd(),
     frontendDomain: process.env.FRONTEND_DOMAIN,
+    platformUrl: process.env.PLATFORM_URL,
     backendDomain: process.env.BACKEND_DOMAIN ?? 'http://localhost',
     oidcIssuerUrl: process.env.BACKEND_DOMAIN ?? 'http://localhost:3000',
     port: process.env.APP_PORT

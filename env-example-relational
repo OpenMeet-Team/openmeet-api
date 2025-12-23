@@ -7,6 +7,7 @@ APP_FALLBACK_LANGUAGE=en
 APP_HEADER_LANGUAGE=x-custom-lang
 FRONTEND_DOMAIN=http://localhost:3000
 BACKEND_DOMAIN=http://localhost:3000
+PLATFORM_URL=https://platform-dev.openmeet.net
 
 # TENANTS_B64 is base64 encoded JSON array of tenant configs
 # Each tenant needs: id, name, frontendDomain
