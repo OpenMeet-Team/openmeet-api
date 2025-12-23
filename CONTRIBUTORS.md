@@ -4,6 +4,7 @@ Thank you to everyone who has contributed to OpenMeet API!
 
 * [Stan Khatko](https://github.com/stanislavkhatko) - Implemented the initial NestJS architecture and multi-tenant foundation.
 * [Tom Scanlan](https://github.com/tompscanlan) - Contributed extensively across the lifecycle, including AT Protocol integration, event series, and ongoing features.
+* [Luis M. Valerio Castillo](https://github.com/lvalerio) - Contributions to developer onboarding
 
 ---
 
