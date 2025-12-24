@@ -66,7 +66,7 @@ services:
     image: node:24-alpine
     container_name: openmeet_migrate
     working_dir: /app
-    command: sh -c "npm install && npm run migration:run && npm run migration:run:tenants && npm run seed:run:relational"
+    command: sh -c "npm install && npm run migration:run:tenants && npm run seed:run:relational"
     volumes:
       - .:/app
       - /app/node_modules
@@ -125,7 +125,7 @@ services:
     container_name: openmeet_matrix
     ports:
       - "8448:8448"
-      - "9090:9090"  # Expose Prometheus metrics port
+      - "9091:9090"  # Expose Prometheus metrics port (9091 to avoid conflict with system Prometheus)
     environment:
       # Only set the host value that can't come from .env
       POSTGRES_HOST: postgres
