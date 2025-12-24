@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     container:
-      image: node:18.16.1
+      image: node:24-alpine
 
     steps:
       - uses: actions/checkout@v4
