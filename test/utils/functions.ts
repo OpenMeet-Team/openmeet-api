@@ -13,6 +13,7 @@ import {
   EventType,
   GroupStatus,
 } from '../../src/core/constants/constant';
+import { FileEntity } from '../../src/file/infrastructure/persistence/relational/entities/file.entity';
 import { EventEntity } from '../../src/event/infrastructure/persistence/relational/entities/event.entity';
 async function getAuthToken(
   app: string,
@@ -530,6 +531,42 @@ async function waitForEventProcessing(ms: number = 2000) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Create a file record for testing.
+ * Note: This creates the file metadata in the database but does not upload to S3.
+ * The file path will be valid for the test environment.
+ */
+async function createFile(
+  app: string,
+  token: string,
+  fileData?: { fileName?: string; fileSize?: number; mimeType?: string },
+): Promise<FileEntity> {
+  const defaultFileData = {
+    fileName: fileData?.fileName || `test-image-${Date.now()}.jpg`,
+    fileSize: fileData?.fileSize || 12345,
+    mimeType: fileData?.mimeType || 'image/jpeg',
+  };
+
+  const response = await request(app)
+    .post('/api/v1/files/upload')
+    .set('Authorization', `Bearer ${token}`)
+    .set('x-tenant-id', TESTING_TENANT_ID)
+    .send(defaultFileData);
+
+  if (response.status !== 201) {
+    console.error('Create file failed:', {
+      status: response.status,
+      body: response.body,
+    });
+  }
+
+  expect(response.status).toBe(201);
+  expect(response.body.file).toBeDefined();
+  expect(response.body.file.id).toBeDefined();
+
+  return response.body.file as FileEntity;
+}
+
 export {
   getAuthToken,
   createGroup,
@@ -557,4 +594,6 @@ export {
   // Chat-related functions removed - Matrix Application Service handles rooms directly
   // Utility functions
   waitForEventProcessing,
+  // File helper
+  createFile,
 };
