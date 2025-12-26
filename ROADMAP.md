@@ -1,7 +1,7 @@
 # OpenMeet Roadmap: January - June 2026
 
 **Status:** Living Document
-**Last Updated:** 2025-12-21
+**Last Updated:** 2025-12-26
 
 ---
 
@@ -106,11 +106,11 @@ OpenMeet is functional and being used by real groups as a Meetup replacement, th
 #### Critical Bug Fixes
 | Issue | Repo | Description |
 |-------|------|-------------|
-| [#421](https://github.com/OpenMeet-Team/openmeet-api/issues/421) | API | Series occurrence wrong date offset |
 | [#422](https://github.com/OpenMeet-Team/openmeet-api/issues/422) | API | Event image not reflecting on display |
 | [#317](https://github.com/OpenMeet-Team/openmeet-platform/issues/317) | Platform | Event image not reflecting (FE) |
 | [#424](https://github.com/OpenMeet-Team/openmeet-api/issues/424) | API | ATProto handle not updated after change |
 | [#119](https://github.com/OpenMeet-Team/openmeet-platform/issues/119) | Platform | Deleting series doesn't delete events |
+| [#321](https://github.com/OpenMeet-Team/openmeet-platform/issues/321) | Platform | Event duplication: location not showing initially |
 
 #### Survey Bot (Phase 3)
 
@@ -193,8 +193,6 @@ OpenMeet is functional and being used by real groups as a Meetup replacement, th
 #### Notification Improvements
 | Issue | Description |
 |-------|-------------|
-| [#423](https://github.com/OpenMeet-Team/openmeet-api/issues/423) | Option to suppress notification emails on event edit |
-| [#318](https://github.com/OpenMeet-Team/openmeet-platform/issues/318) | Toggle for notification emails (FE) |
 | [#394](https://github.com/OpenMeet-Team/openmeet-api/issues/394) | Notification when attendee removed |
 | [#180](https://github.com/OpenMeet-Team/openmeet-platform/issues/180) | Toggle email notifications by event type |
 
@@ -225,9 +223,7 @@ OpenMeet is functional and being used by real groups as a Meetup replacement, th
 | [#420](https://github.com/OpenMeet-Team/openmeet-api/issues/420) | Rate limiting documentation |
 | [#419](https://github.com/OpenMeet-Team/openmeet-api/issues/419) | OpenAPI descriptions for group endpoints |
 | [#389](https://github.com/OpenMeet-Team/openmeet-api/issues/389) | Replace hardcoded platform URLs |
-| [#316](https://github.com/OpenMeet-Team/openmeet-platform/issues/316) | Accessibility improvements |
 | [#182](https://github.com/OpenMeet-Team/openmeet-platform/issues/182) | Change Group Slug |
-| [#151](https://github.com/OpenMeet-Team/openmeet-platform/issues/151) | Group member list sorting |
 
 ---
 
@@ -242,6 +238,7 @@ OpenMeet is functional and being used by real groups as a Meetup replacement, th
 | E2E test suite | [#20](https://github.com/OpenMeet-Team/openmeet-platform/issues/20) | Ongoing |
 | ATProto group integration | — | Complex; threshold signing for group keys on AT Protocol |
 | No-show tracking | — | Nice-to-have; track RSVPs who don't attend |
+| Group Polls for Leaders | [Platform #125](https://github.com/OpenMeet-Team/openmeet-platform/issues/125) | High priority; let group leaders create polls for members |
 | OpenMeet + Survey integration | — | After bot complete; embed surveys in events |
 
 ---
@@ -261,8 +258,15 @@ Current hosting costs ~$350/month (AWS, databases, etc.). Reaching $500/month en
 - [ ] February: Private group/event invitations working
 - [ ] March: Waitlist promotion functional
 - [ ] April: RSVP deadlines complete
-- [ ] May: Notification controls, account linking
+- [ ] May: Remaining notification controls, account linking
 - [ ] June: Guest +1, polish complete
+
+### Pre-H1 Completed (Dec 2025)
+- [x] Series occurrence date offset fix (#421)
+- [x] Notification toggle on event edit (#423, #318)
+- [x] Accessibility improvements (#316)
+- [x] Group member list sorting (#151)
+- [x] Event duplication, dashboard pagination, sponsorship page
 
 ---
 
@@ -300,4 +304,4 @@ OpenMeet is open source and welcomes contributions!
 
 ---
 
-*Last updated: 2025-12-21*
+*Last updated: 2025-12-26*
