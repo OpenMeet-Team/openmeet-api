@@ -1,5 +1,5 @@
 # ---- Base Node ----
-FROM node:22.12.0-alpine3.20 AS base
+FROM node:24-alpine AS base
 # Set working directory
 WORKDIR /usr/src/app
 # Copy project file

@@ -63,10 +63,10 @@ services:
   # Database migrations and seeds - runs before api starts
   # Safe to run every time: migrations track state, seeds check before insert
   migrate:
-    image: node:22.18.0-alpine
+    image: node:24-alpine
     container_name: openmeet_migrate
     working_dir: /app
-    command: sh -c "npm install && npm run migration:run && npm run migration:run:tenants && npm run seed:run:relational"
+    command: sh -c "npm install && npm run migration:run:tenants && npm run seed:run:relational"
     volumes:
       - .:/app
       - /app/node_modules
@@ -125,7 +125,7 @@ services:
     container_name: openmeet_matrix
     ports:
       - "8448:8448"
-      - "9090:9090"  # Expose Prometheus metrics port
+      - "9091:9090"  # Expose Prometheus metrics port (9091 to avoid conflict with system Prometheus)
     environment:
       # Only set the host value that can't come from .env
       POSTGRES_HOST: postgres
@@ -185,7 +185,7 @@ services:
 
   # NestJS API with hot reload
   api:
-    image: node:22.18.0-alpine
+    image: node:24-alpine
     container_name: api
     hostname: api
     working_dir: /app
@@ -261,7 +261,7 @@ services:
 
   # Bluesky Firehose Consumer - connects to Bluesky and publishes to RabbitMQ
   bsky-firehose-consumer:
-    image: node:22.18.0-alpine
+    image: node:24-alpine
     container_name: bsky-firehose-consumer
     working_dir: /app
     command: sh -c "npm install && npm run start:dev"
@@ -294,7 +294,7 @@ services:
   #   BSKY_API_KEY - service API key for OpenMeet API auth
   #   BSKY_TENANT_ID - tenant ID (e.g., lsdfaopkljdfs for local dev)
   bsky-event-processor:
-    image: node:22.18.0-alpine
+    image: node:24-alpine
     container_name: bsky-event-processor
     working_dir: /app
     command: sh -c "npm install && npm run start:dev"

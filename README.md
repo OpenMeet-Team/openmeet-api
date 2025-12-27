@@ -104,7 +104,7 @@ The admin user is created during database seeding using:
 
 ### Local Setup
 
-See **[DEVELOPER-SETUP.md](./DEVELOPER-SETUP.md)** for complete local development instructions including:
+See **[DEVELOPMENT.md](./DEVELOPMENT.md)** for complete local development instructions including:
 - Quick start with Docker Compose
 - Services overview with ports
 - Debugging tools (psql, logs)
