@@ -7,6 +7,7 @@ Thank you to everyone who has contributed to OpenMeet API!
 * [Luis M. Valerio Castillo](https://github.com/lvalerio) - Contributions to developer onboarding
 * [Tanzeel Saleem ](https://github.com/codextech) - Event recommendations, pagination, pre-signed URLs, connection pooling, and group/event features.
 * [Ali Abbas](https://github.com/aliabbas12) - Swagger documentation improvements for health and metrics routes.
+* [b-comiter](https://github.com/b-comiter) - Environment-based redirect path configuration.
 
 ---
 
