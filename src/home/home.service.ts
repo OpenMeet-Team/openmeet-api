@@ -25,10 +25,8 @@ export class HomeService {
   }
 
   getRootRedirect() {
-    const redirectUrl = this.configService.get('app.platformUrl', { infer: true })
-
     return {
-      url: redirectUrl,
+      url: "/docs",
       statusCode: 302,
     };
   }
