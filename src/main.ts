@@ -34,6 +34,8 @@ async function bootstrap() {
           'https://localhost:9005',
           'http://localhost:8087',
           'https://localhost:8087',
+          'https://localhost', // Capacitor Android
+          'capacitor://localhost', // Capacitor iOS
           'https://api.dev.openmeet.net',
           'https://platform.openmeet.net',
           'https://platform-dev.openmeet.net',
