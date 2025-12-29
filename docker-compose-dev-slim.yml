@@ -1,0 +1,118 @@
+# to run in development use this command 
+# `` sudo docker-compose -f docker-compose-dev.yml up --build ``
+
+services:
+  postgres:
+    # use the db with postGIS extensions
+    image: postgis/postgis:16-3.4-alpine
+    container_name: openmeet_postgres
+    ports:
+      - ${DATABASE_PORT}:5432
+    env_file:
+      - .env
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+      # init scripts for PostGIS  
+      - ./pg-init-scripts:/docker-entrypoint-initdb.d
+    environment:
+      POSTGRES_USER: ${DATABASE_USERNAME}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    entrypoint: ["docker-entrypoint.sh", "-c", "max_connections=${DATABASE_MAX_CONNECTIONS}"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USERNAME} -d ${DATABASE_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - api-network
+
+  maildev:
+    build:
+      context: .
+      dockerfile: maildev.Dockerfile
+    ports:
+      - ${MAIL_CLIENT_PORT}:1080
+      - ${MAIL_PORT}:1025
+    networks:
+      - api-network
+
+  # Uncomment to use redis
+  redis:
+    image: redis:7-alpine
+    container_name: openmeet_redis
+    ports:
+      - "6379:6379"
+    restart: always
+    networks:
+      - api-network
+
+  # Database migrations and seeds - runs before api starts
+  # Safe to run every time: migrations track state, seeds check before insert
+  migrate:
+    image: node:24-alpine
+    container_name: openmeet_migrate
+    working_dir: /app
+    command: sh -c "npm install && npm run migration:run:tenants && npm run seed:run:relational"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - DATABASE_HOST=postgres
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - api-network
+    restart: "no"
+
+  # NestJS API with hot reload
+  api:
+    image: node:24-alpine
+    container_name: openmeet_api
+    hostname: api
+    working_dir: /app
+    command: sh -c "npm install && npm run start:dev:nodemon"
+    ports:
+      - ${APP_PORT}:${APP_PORT}
+    volumes:
+      - .:/app
+      - /app/node_modules  # Prevent overwriting node_modules
+    environment:
+      - NODE_ENV=development
+      - TZ=UTC
+      # Enable polling for file watching in Docker
+      - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=1000
+      # Override localhost hosts for container networking
+      - DATABASE_HOST=postgres
+      - ELASTICACHE_HOST=redis
+      - MAIL_HOST=maildev
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tracing:4318
+    env_file:
+      - .env
+    networks:
+      - api-network
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:${APP_PORT}/health/liveness || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  dbdata:
+
+networks:
+  api-network:
+    name: api-network  # Explicit name to avoid project prefix
+    driver: bridge
