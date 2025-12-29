@@ -1,6 +1,6 @@
 {
   "name": "openmeet-api",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "OpenMeet API server providing authentication, events, groups, and chat integration",
   "productName": "OpenMeet",
   "author": "OpenMeet Team <openmeet@openmeet.net>",
@@ -229,7 +229,7 @@
     "testTimeout": 30000
   },
   "engines": {
-    "node": ">=16.0.0",
-    "npm": ">=8.0.0"
+    "node": ">=24.0.0",
+    "npm": ">=11.0.0"
   }
 }
