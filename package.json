@@ -1,6 +1,6 @@
 {
   "name": "openmeet-api",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "OpenMeet API server providing authentication, events, groups, and chat integration",
   "productName": "OpenMeet",
   "author": "OpenMeet Team <openmeet@openmeet.net>",
@@ -58,8 +58,7 @@
     "perf:test:feed": "k6 run k6-tests/activity-feed.js",
     "perf:baseline": "mkdir -p k6-tests/results && MODE=baseline k6 run k6-tests/compare-index-impact.js --out json=k6-tests/results/baseline.json",
     "perf:compare": "mkdir -p k6-tests/results && MODE=comparison k6 run k6-tests/compare-index-impact.js --out json=k6-tests/results/latest.json",
-    "perf:report": "node k6-tests/compare-results.js",
-    "release": "release-it"
+    "perf:report": "node k6-tests/compare-results.js"
   },
   "dependencies": {
     "@atproto/api": "^0.13.31",
@@ -119,7 +118,7 @@
     "nestjs-i18n": "10.4.9",
     "node-fetch": "^3.3.2",
     "node-ical": "^0.20.1",
-    "nodemailer": "6.9.15",
+    "nodemailer": "^7.0.12",
     "passport": "0.7.0",
     "passport-anonymous": "1.0.1",
     "passport-jwt": "4.0.1",
@@ -149,7 +148,6 @@
     "@nestjs/cli": "10.4.8",
     "@nestjs/schematics": "10.1.4",
     "@nestjs/testing": "10.4.1",
-    "@release-it/conventional-changelog": "8.0.2",
     "@swc/cli": "0.5.2",
     "@swc/core": "1.7.26",
     "@types/bcryptjs": "2.4.6",
@@ -181,7 +179,6 @@
     "nodemon": "^3.1.7",
     "prettier": "3.3.3",
     "prompts": "2.4.2",
-    "release-it": "17.6.0",
     "supertest": "^7.1.4",
     "ts-jest": "29.2.5",
     "ts-loader": "9.5.1",
@@ -232,68 +229,7 @@
     "testTimeout": 30000
   },
   "engines": {
-    "node": ">=16.0.0",
-    "npm": ">=8.0.0"
-  },
-  "release-it": {
-    "git": {
-      "commitMessage": "chore: release v${version}"
-    },
-    "github": {
-      "release": true
-    },
-    "npm": {
-      "publish": false
-    },
-    "plugins": {
-      "@release-it/conventional-changelog": {
-        "infile": "CHANGELOG.md",
-        "preset": {
-          "name": "conventionalcommits",
-          "types": [
-            {
-              "type": "chore(deps)",
-              "section": "Dependency Upgrades"
-            },
-            {
-              "type": "fix(deps)",
-              "section": "Dependency Upgrades"
-            },
-            {
-              "type": "feat",
-              "section": "Features"
-            },
-            {
-              "type": "fix",
-              "section": "Bug Fixes"
-            },
-            {
-              "type": "perf",
-              "section": "Performance Improvements"
-            },
-            {
-              "type": "revert",
-              "section": "Reverts"
-            },
-            {
-              "type": "docs",
-              "section": "Documentation"
-            },
-            {
-              "type": "refactor",
-              "section": "Code Refactoring"
-            },
-            {
-              "type": "test",
-              "section": "Tests"
-            },
-            {
-              "type": "ci",
-              "section": "Continuous Integration"
-            }
-          ]
-        }
-      }
-    }
+    "node": ">=24.0.0",
+    "npm": ">=11.0.0"
   }
 }

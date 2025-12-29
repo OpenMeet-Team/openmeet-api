@@ -98,7 +98,7 @@ The admin user is created during database seeding using:
 ## Development
 
 ### Prerequisites
-- Node.js v22+
+- Node.js v24+
 - Docker and Docker Compose
 - PostgreSQL 16+ (or use Docker)
 
@@ -109,6 +109,8 @@ See **[DEVELOPMENT.md](./DEVELOPMENT.md)** for complete local development instru
 - Services overview with ports
 - Debugging tools (psql, logs)
 - Troubleshooting guide
+
+> **Low RAM?** Use `docker-compose-slim.yml` (~675MB) instead of the full dev compose. It includes only the essentials: API, PostgreSQL, Redis, and Maildev.
 
 ### Database Migrations
 
