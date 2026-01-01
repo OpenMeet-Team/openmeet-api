@@ -139,8 +139,8 @@ describe('AuthBlueskyService - Error Handling', () => {
     });
 
     it('should store platform in Redis when platform is provided', async () => {
-      // Arrange: Mock successful OAuth flow with state in URL
-      const mockUrl = new URL('https://bsky.social/oauth/authorize?state=test-state-123');
+      // Arrange: Mock successful OAuth flow
+      const mockUrl = new URL('https://bsky.social/oauth/authorize');
       const mockClient = {
         authorize: jest.fn().mockResolvedValue(mockUrl),
       };
@@ -153,9 +153,10 @@ describe('AuthBlueskyService - Error Handling', () => {
         'android',
       );
 
-      // Assert: Redis should be called with the state from the URL
+      // Assert: Redis should be called with a generated appState (random)
+      // The service generates its own appState via crypto.randomBytes
       expect(mockElastiCacheService.set).toHaveBeenCalledWith(
-        'auth:bluesky:platform:test-state-123',
+        expect.stringMatching(/^auth:bluesky:platform:.+$/),
         'android',
         600, // 10 minute TTL
       );
@@ -180,8 +181,8 @@ describe('AuthBlueskyService - Error Handling', () => {
     });
 
     it('should store ios platform in Redis when platform is ios', async () => {
-      // Arrange: Mock successful OAuth flow with state in URL
-      const mockUrl = new URL('https://bsky.social/oauth/authorize?state=ios-state');
+      // Arrange: Mock successful OAuth flow
+      const mockUrl = new URL('https://bsky.social/oauth/authorize');
       const mockClient = {
         authorize: jest.fn().mockResolvedValue(mockUrl),
       };
@@ -194,9 +195,9 @@ describe('AuthBlueskyService - Error Handling', () => {
         'ios',
       );
 
-      // Assert
+      // Assert: Redis should be called with a generated appState (random)
       expect(mockElastiCacheService.set).toHaveBeenCalledWith(
-        'auth:bluesky:platform:ios-state',
+        expect.stringMatching(/^auth:bluesky:platform:.+$/),
         'ios',
         600,
       );
