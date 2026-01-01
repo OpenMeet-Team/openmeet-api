@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { Agent } from '@atproto/api';
 import * as crypto from 'crypto';
 import { AuthService } from '../auth/auth.service';
+import { OAuthPlatform } from '../auth/types/oauth.types';
 import { ElastiCacheService } from '../elasticache/elasticache.service';
 import { BlueskyService } from '../bluesky/bluesky.service';
 import { UserService } from '../user/user.service';
@@ -74,6 +75,33 @@ export class AuthBlueskyService {
     }
   }
 
+  /**
+   * Build the redirect URL for OAuth callback based on platform.
+   * Mobile platforms (android/ios) use custom URL scheme for deep linking.
+   * Web uses the tenant's frontend domain.
+   */
+  public buildRedirectUrl(
+    tenantId: string,
+    params: URLSearchParams,
+    platform?: OAuthPlatform,
+  ): string {
+    const tenantConfig = this.tenantConnectionService.getTenantConfig(tenantId);
+    const isMobile = platform === 'android' || platform === 'ios';
+
+    let baseUrl: string;
+    if (isMobile) {
+      const customScheme = this.configService.get<string>(
+        'MOBILE_CUSTOM_URL_SCHEME',
+        'net.openmeet.platform',
+      );
+      baseUrl = `${customScheme}:`;
+    } else {
+      baseUrl = tenantConfig.frontendDomain;
+    }
+
+    return `${baseUrl}/auth/bluesky/callback?${params.toString()}`;
+  }
+
   async handleAuthCallback(
     query: any,
     tenantId: string,
@@ -89,8 +117,16 @@ export class AuthBlueskyService {
     this.logger.debug('tenantConfig', { tenantConfig });
 
     const callbackParams = new URLSearchParams(query);
-    const { session: oauthSession } = await client.callback(callbackParams);
-    this.logger.debug('Obtained OAuth session from callback');
+    // client.callback() returns our appState (passed to authorize()) as 'state'
+    const { session: oauthSession, state: appState } =
+      await client.callback(callbackParams);
+    this.logger.debug('Obtained OAuth session from callback', { appState });
+
+    // Retrieve stored platform using our appState (for mobile apps)
+    const platform = appState
+      ? await this.getStoredPlatform(appState)
+      : undefined;
+    this.logger.debug('Retrieved platform from appState', { appState, platform });
 
     const restoredSession = await client.restore(oauthSession.did);
     this.logger.debug('Restored session with tokens');
@@ -212,8 +248,8 @@ export class AuthBlueskyService {
       profile: Buffer.from(JSON.stringify(profileData)).toString('base64'),
     });
 
-    const redirectUrl = `${tenantConfig.frontendDomain}/auth/bluesky/callback?${newParams.toString()}`;
-    this.logger.debug('calling redirect to', redirectUrl);
+    const redirectUrl = this.buildRedirectUrl(tenantId, newParams, platform);
+    this.logger.debug('calling redirect to', { redirectUrl, platform });
 
     // Return both the redirect URL and session ID for cookie setting
     return {
@@ -222,11 +258,17 @@ export class AuthBlueskyService {
     };
   }
 
-  async createAuthUrl(handle: string, tenantId: string): Promise<string> {
+  async createAuthUrl(
+    handle: string,
+    tenantId: string,
+    platform?: OAuthPlatform,
+  ): Promise<string> {
     try {
       this.logger.debug('Creating auth URL for Bluesky OAuth', {
         handle,
         tenantId,
+        platform,
+        platformType: typeof platform,
       });
       const client = await this.initializeClient(tenantId);
 
@@ -234,13 +276,43 @@ export class AuthBlueskyService {
         throw new Error('OAuth client initialization returned undefined');
       }
 
-      this.logger.debug('Calling client.authorize');
+      // Generate our own appState to pass to authorize()
+      // AT Protocol uses PAR (Pushed Authorization Request) so state isn't in the URL
+      // The library stores our appState internally and returns it via client.callback()
+      const appState = crypto.randomBytes(16).toString('base64url');
+
+      this.logger.debug('Calling client.authorize', { appState });
       const url = await client.authorize(handle, {
-        state: crypto.randomBytes(16).toString('base64url'),
+        state: appState,
       });
 
       if (!url) {
         throw new Error('Failed to create authorization URL');
+      }
+
+      this.logger.debug('client.authorize returned URL', {
+        hasUrl: !!url,
+        urlString: url.toString(),
+      });
+
+      // Store platform in Redis keyed by appState if provided (for mobile apps)
+      const isMobilePlatform = platform === 'android' || platform === 'ios';
+      this.logger.debug('Checking platform for Redis storage', {
+        platform,
+        isMobilePlatform,
+        appState,
+      });
+
+      if (platform && isMobilePlatform) {
+        await this.elasticacheService.set(
+          `auth:bluesky:platform:${appState}`,
+          platform,
+          600, // 10 minute TTL (same as state store)
+        );
+        this.logger.debug('Stored platform in Redis for OAuth appState', {
+          appState,
+          platform,
+        });
       }
 
       this.logger.debug('Successfully created auth URL');
@@ -257,5 +329,20 @@ export class AuthBlueskyService {
 
   async resumeSession(tenantId: string, did: string) {
     return await this.blueskyService.tryResumeSession(tenantId, did);
+  }
+
+  /**
+   * Retrieve the stored platform for a given OAuth state.
+   * Used by the callback to determine if this is a mobile auth flow.
+   */
+  async getStoredPlatform(state: string): Promise<OAuthPlatform | undefined> {
+    const platform = await this.elasticacheService.get<string>(
+      `auth:bluesky:platform:${state}`,
+    );
+    // Clean up after retrieval
+    if (platform) {
+      await this.elasticacheService.del(`auth:bluesky:platform:${state}`);
+    }
+    return platform as OAuthPlatform | undefined;
   }
 }
