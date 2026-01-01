@@ -2,6 +2,45 @@
 
 This document explains how OAuth state and parameters are managed across different providers, particularly for mobile (Android/iOS) authentication flows.
 
+## Flow Diagram
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant App as Mobile App
+    participant Browser
+    participant Provider as OAuth Provider
+    participant API
+
+    User->>App: Tap Login with Google
+    App->>App: Build state with tenantId + platform
+    App->>Browser: Open OAuth URL with redirect_uri=api/callback
+    Browser->>Provider: Navigate to provider
+    Provider->>User: Show login screen
+    User->>Provider: Authenticate
+    Provider->>API: Redirect with code + state
+    API->>API: Parse state to get tenantId, platform
+    API->>Provider: Exchange code for tokens
+    Provider->>API: Return access_token
+    API->>API: Validate user, create JWT
+
+    alt Mobile platform
+        API->>Browser: Redirect to custom URL scheme
+        Browser->>App: Hand off via net.openmeet.platform://
+    else Web platform
+        API->>Browser: Redirect to frontend URL
+    end
+
+    App->>App: Extract token from URL
+    App->>App: Store tokens, complete login
+```
+
+**Key characteristics:**
+- API handles the OAuth callback (not frontend)
+- State parameter carries tenantId + platform (not in redirect_uri)
+- Custom URL scheme (`net.openmeet.platform:`) triggers app handoff on mobile
+- Works because browsers hand off custom schemes to registered apps
+
 ## Problem
 
 OAuth callbacks need to carry context (tenant ID, platform type) back to the API so we can:
