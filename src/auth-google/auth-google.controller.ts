@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
+  Query,
   SerializeOptions,
   Req,
   Res,
@@ -16,6 +18,9 @@ import { AuthGoogleOAuth2Dto } from './dto/auth-google-oauth2.dto';
 import { LoginResponseDto } from '../auth/dto/login-response.dto';
 import { Request, Response } from 'express';
 import { getOidcCookieOptions } from '../utils/cookie-config';
+import { Public } from '../core/decorators/public.decorator';
+import { TenantPublic } from '../tenant/tenant-public.decorator';
+import { OAuthPlatform, parseOAuthState } from '../auth/types/oauth.types';
 
 @ApiTags('Auth')
 @Controller({
@@ -95,5 +100,45 @@ export class AuthGoogleController {
     }
 
     return loginResult;
+  }
+
+  /**
+   * GET callback endpoint for server-side OAuth flow.
+   * Google redirects here after user authorizes.
+   * This endpoint exchanges the code for tokens and redirects to the frontend.
+   * For mobile platforms, redirects to custom URL scheme.
+   *
+   * The state parameter contains base64-encoded JSON with tenantId, platform, and nonce.
+   */
+  @Public()
+  @TenantPublic()
+  @Get('callback')
+  async callback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    // Parse tenantId and platform from state parameter
+    const stateData = parseOAuthState(state);
+    const tenantId = stateData?.tenantId;
+    const platform: OAuthPlatform | undefined = stateData?.platform;
+
+    if (!tenantId) {
+      // Redirect to error page if tenant not found in state
+      res.redirect('/auth/error?message=Missing+tenant+information');
+      return;
+    }
+
+    const { redirectUrl, sessionId } =
+      await this.authGoogleService.handleCallback(code, tenantId, platform);
+
+    // Set oidc_session cookie for cross-domain OIDC authentication
+    if (sessionId) {
+      const cookieOptions = getOidcCookieOptions();
+      res.cookie('oidc_session', sessionId, cookieOptions);
+      res.cookie('oidc_tenant', tenantId, cookieOptions);
+    }
+
+    res.redirect(redirectUrl);
   }
 }
