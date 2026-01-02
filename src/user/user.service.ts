@@ -34,6 +34,7 @@ import { SocialInterface } from '../social/interfaces/social.interface';
 import { StatusDto } from '../status/dto/status.dto';
 import { GlobalMatrixValidationService } from '../matrix/services/global-matrix-validation.service';
 import { BlueskyIdentityService } from '../bluesky/bluesky-identity.service';
+import { AtprotoHandleCacheService } from '../bluesky/atproto-handle-cache.service';
 import { AuthProvidersEnum } from '../auth/auth-providers.enum';
 import { ProfileSummaryDto } from './dto/profile-summary.dto';
 
@@ -54,6 +55,7 @@ export class UserService {
     private readonly fileService: FilesS3PresignedService,
     private readonly globalMatrixValidationService: GlobalMatrixValidationService,
     private readonly blueskyIdentityService: BlueskyIdentityService,
+    private readonly atprotoHandleCacheService: AtprotoHandleCacheService,
   ) {}
 
   async getTenantSpecificRepository(tenantId?: string) {
@@ -73,10 +75,16 @@ export class UserService {
 
   /**
    * Resolves the current Bluesky handle for a user from their DID.
-   * Tries resolveProfile() first, falls back to extractHandleFromDid(), then DID as last resort.
+   * Uses AtprotoHandleCacheService for efficient caching (15-min Redis TTL).
    *
    * Design: Handles are resolved dynamically, not stored. DID is the permanent identifier,
    * handles can change on Bluesky at any time. See commit c3e042f for rationale.
+   *
+   * Benefits of using AtprotoHandleCacheService:
+   * - Consistent 15-min Redis cache shared across all API nodes
+   * - Prometheus metrics and OpenTelemetry tracing built-in
+   * - Graceful fallback to DID on resolution failure
+   * - DRY - single code path for handle resolution (activity feed, profiles, etc.)
    *
    * @param user - The user entity with bluesky preferences
    * @returns The resolved handle (or undefined if not a Bluesky user)
@@ -88,34 +96,10 @@ export class UserService {
     }
 
     const did = user.preferences.bluesky.did;
-    let resolvedHandle: string | undefined;
 
-    // Try resolveProfile() first (full profile fetch)
-    try {
-      const profile = await this.blueskyIdentityService.resolveProfile(did);
-      resolvedHandle = profile.handle || did;
-      this.logger.debug(
-        `Resolved Bluesky profile for ${did}: handle=${profile.handle}`,
-      );
-    } catch (error) {
-      this.logger.warn(
-        `Failed to fetch full Bluesky profile for DID ${did}: ${error.message}`,
-      );
-
-      // Fallback: Extract handle directly from DID document (lightweight, always works)
-      try {
-        resolvedHandle =
-          await this.blueskyIdentityService.extractHandleFromDid(did);
-        this.logger.debug(
-          `Extracted handle from DID document: ${resolvedHandle}`,
-        );
-      } catch {
-        this.logger.warn(
-          `Failed to extract handle from DID document, using DID as fallback`,
-        );
-        resolvedHandle = did;
-      }
-    }
+    // Use cache service for handle resolution (handles caching and fallback internally)
+    const resolvedHandle =
+      await this.atprotoHandleCacheService.resolveHandle(did);
 
     // Update user object in-memory for display purposes (no database persistence)
     // This allows the response to include the current handle without storing stale data
