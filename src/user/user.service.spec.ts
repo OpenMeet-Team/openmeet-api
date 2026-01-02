@@ -1753,7 +1753,9 @@ describe('UserService', () => {
         interests: [],
       };
 
-      mockUsersRepository.findOne = jest.fn().mockResolvedValue(userWithBluesky);
+      mockUsersRepository.findOne = jest
+        .fn()
+        .mockResolvedValue(userWithBluesky);
 
       mockUsersRepository.manager = {
         createQueryBuilder: jest.fn().mockReturnValue({
