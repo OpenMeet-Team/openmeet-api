@@ -206,10 +206,11 @@ export class UserEntity extends EntityRelationalHelper {
   @BeforeInsert()
   generateSlug() {
     if (!this.slug) {
-      this.slug = `${slugify(
-        `${this.firstName} ${this.lastName}`.trim().toLowerCase(),
-        { strict: true, lower: true },
-      )}-${generateShortCode().toLowerCase()}`;
+      const name = `${this.firstName || ''} ${this.lastName || ''}`.trim();
+      this.slug = `${slugify(name.toLowerCase() || 'user', {
+        strict: true,
+        lower: true,
+      })}-${generateShortCode().toLowerCase()}`;
     }
   }
 
